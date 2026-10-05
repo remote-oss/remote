@@ -1,9 +1,9 @@
 # Binding rulings for the implementation (extract from the family register)
 
 Extracted by remote-development on 2026-10-05 from decisions.md (remote-oss/remote-development, private). Each entry is the
-register row in full: the decision or ruling text first, then its trailing cells (who asked, options, recommendation or
-source) after an em dash. The full register carries the lab process, which the clean side never needs. Cite these ids;
-ask remote-development for anything not here.
+register row: the decision or ruling text, then its trailing cells (who asked, options, recommendation or source) after an
+em dash. The full register carries the lab process, which the clean side never needs. Cite these ids; ask
+remote-development for anything not here.
 
 ## D-10
 
@@ -36,10 +36,6 @@ ask remote-development for anything not here.
 **DECIDED 2026-10-03 (the user, picker): family identity: display names mirror the reference verbatim ("Dev Containers", "Remote - SSH", "Remote - SSH: Editing Configuration Files", "Remote Explorer", "WSL", "Remote - Tunnels", "Remote Development"); description, icon (a family icon, never the reference's), README and marketplace listing are ours; licence MIT for all seven implementation repos and the monorepo (LICENSE files added, copyright "remote-oss contributors").**
 
 — the user, 2026-10-03
-
-— —
-
-— —
 
 ## R-21
 
@@ -127,9 +123,7 @@ ask remote-development for anything not here.
 
 ## R-68
 
-**No licence acceptance on the user's behalf (family).** The reference starts the VS Code Server with its licence terms pre-accepted and never asks. The reimplementation never accepts third-party server terms for the user: before a Microsoft-licensed server is installed (only on genuine VS Code through the explicit server URL, F-1402 / R-47), a modal once per profile names the terms with a link and offers "Accept and Continue"
-
-— "Cancel"; acceptance is remembered per profile; MIT/VSCodium servers need nothing. Applies to every room that installs a server (Dev Containers, Remote-SSH, WSL, Tunnels).
+**No licence acceptance on the user's behalf (family).** The reference starts the VS Code Server with its licence terms pre-accepted and never asks. The reimplementation never accepts third-party server terms for the user: before a Microsoft-licensed server is installed (only on genuine VS Code through the explicit server URL, F-1402 / R-47), a modal once per profile names the terms with a link and offers "Accept and Continue" | "Cancel"; acceptance is remembered per profile; MIT/VSCodium servers need nothing. Applies to every room that installs a server (Dev Containers, Remote-SSH, WSL, Tunnels).
 
 — remote-containers' recommendation (a), round-16 gap hunt, 2026-10-03; user may veto.
 

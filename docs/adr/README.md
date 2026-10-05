@@ -7,7 +7,7 @@ and does not re-decide it.
 
 | ADR | Title | Status |
 |---|---|---|
-| [0002](0002-language-and-toolchain.md) | TypeScript, npm workspaces and esbuild for every package | proposed |
+| [0002](0002-language-and-toolchain.md) | TypeScript, pnpm workspaces and esbuild for every package | accepted (D-49) |
 
 Planned, in this order (titles may change):
 
