@@ -38,7 +38,10 @@ remote/
 
    Rules 3 and 4 hold for every way of reaching another package: by name, by a relative path into its folder, by
    an alias in a manifest or a `tsconfig`, in code and in types. A package reaches another package only by its
-   package name, declared as a `workspace:` dependency. Lint and `tools/check-layout` enforce this.
+   package name, declared as a `workspace:` dependency. Lint and `tools/check-layout` enforce this for source
+   files and package manifests. They do not see every route through repository-wide configuration (the root
+   manifest, `pnpm-workspace.yaml`, `tsconfig` files and what they extend, symbolic links), so a change to any of
+   these is reviewed by the architecture lead.
 5. **Each package keeps its own tests.** Unit tests live in the package. The package's conformance suite moves to
    `packages/<x>/tests/conformance/` when the specs and tests move here; until then CI fetches it from
    `remote-oss/remote-<x>`.
