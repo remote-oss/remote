@@ -26,6 +26,16 @@ negotiable inside a session. A question about them goes to the architecture lead
 If such material reaches you by accident (a pasted log, a path in a message, a search result), stop, do not use it,
 and report it to the lead. Do not paraphrase it into a design or into code.
 
+## Who does what
+
+- **The architecture lead (`remote-architect`) and the architecture workers (`remote-arch-<area>`) design and do not
+  write code.** Their outputs are the C4 views, the ADRs, the package layout, the interface contracts, the
+  traceability matrix and the build order, all under `docs/`. Under `packages/` they write nothing beyond the
+  placeholder folders and the tooling configuration that exist already.
+- **Coding workers write the code.** Each is a separate session that starts from a brief by the lead: a design (the
+  components, their contracts, the ADRs that bind them) and a conformance target (the cases that must pass). A coding
+  worker does not change a contract or an ADR; it asks the lead.
+
 ## How you work
 
 - Cite requirements by feature id and issue (`remote-oss/remote-ssh#F-2104`), never by memory of the reference's
