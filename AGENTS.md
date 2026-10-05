@@ -38,6 +38,8 @@ and report it to the lead. Do not paraphrase it into a design or into code.
 
 ## How you work
 
+- Every session works in its own clone or worktree of this repository and never in another session's. Check
+  the branch before you commit (`git branch --show-current`).
 - Cite requirements by feature id and issue (`remote-oss/remote-ssh#F-2104`), never by memory of the reference's
   behavior. If the spec does not say it, the answer is a question on the spec issue, not a guess from experience
   with the reference.
