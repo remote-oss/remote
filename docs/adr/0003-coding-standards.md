@@ -112,18 +112,18 @@ the guide's sections:
 
 | Guide section | Rule |
 |---|---|
-| Exports: no default exports, no `export let`, no container classes | `import/no-default-export`, `no-restricted-syntax` |
+| Exports: no default exports, no `export let`, no container classes | `no-restricted-syntax` (`ExportDefaultDeclaration`; the configuration files whose tools read a default export are exempt by name) |
 | Modules, not namespaces; no `import x = require()` | `@typescript-eslint/no-namespace`, `no-require-imports` |
 | `import type` / `export type` for type-only use | `consistent-type-imports`, `consistent-type-exports` |
 | `const` and `let`, one per declaration, no `var` | `no-var`, `prefer-const`, `one-var: never` |
-| Classes: `readonly` where possible, parameter properties, no `#private`, no private static methods, `new X()` with parentheses | `prefer-readonly`, `parameter-properties`, `no-restricted-syntax`, `new-parens` |
+| Classes: `readonly` where possible, no `#private`, no private static methods, `new X()` with parentheses. **Deviation (ours):** no parameter properties; fields are declared in the class body and assigned in the constructor, because the toolchain runs tests and tools on Node's type stripping, which cannot erase them (ADR-0002, `erasableSyntaxOnly`) | `prefer-readonly`, `parameter-properties: {prefer: class-property}`, `no-restricted-syntax`, `new-parens` |
 | Functions: declarations, not expressions; arrow callbacks | `func-style: declaration`, `prefer-arrow-callback` |
 | Strings: single quotes, template literals, no line continuations | Prettier, `prefer-template`, `no-multi-str` |
 | `===` always, `== null` allowed | `eqeqeq: [error, always, {null: ignore}]` |
 | `switch`: `default` present and last, no fall-through | `default-case`, `default-case-last`, `no-fallthrough` |
 | Exceptions: throw `Error` only, no empty `catch` without a comment | `only-throw-error`, `prefer-promise-reject-errors`, `no-empty: {allowEmptyCatch: false}` |
 | Type assertions: `as`, not angle brackets; avoid; annotate literals | `consistent-type-assertions`, `non-nullable-type-assertion-style` |
-| `const enum`, `debugger`, `with`, `eval`, wrapper objects: banned | `no-restricted-syntax`, `no-debugger`, `no-with`, `no-eval`, `no-restricted-types` |
+| `const enum`, `debugger`, `with`, `eval`, wrapper objects: banned. **Deviation (ours):** no `enum` at all, for the same reason as parameter properties; a union of string literals or a `const` object with `as const` takes its place | `no-restricted-syntax`, `no-debugger`, `no-with`, `no-eval`, `no-restricted-types`, `erasableSyntaxOnly` in `tsc` |
 | `any`: avoid, prefer `unknown`; `{}` avoided | `no-explicit-any`, `no-unsafe-*`, `no-restricted-types` |
 | No `@ts-ignore`, `@ts-nocheck`; `@ts-expect-error` only in tests | `ban-ts-comment` as error, relaxed for test files |
 | Interfaces over type literal aliases; `T[]` for simple types | `consistent-type-definitions: interface`, `array-type: array-simple` |
