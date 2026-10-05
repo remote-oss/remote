@@ -44,7 +44,11 @@ This ADR is written before the specifications are read. It fixes what does not d
 8. **Dependencies:** as few runtime dependencies as possible; licences compatible with MIT; no dependency that sends
    telemetry; no native Node modules without their own ADR, because a native module forces one VSIX per platform.
    CI checks the licences.
-9. **Node.js:** current LTS for the tools. The bundle target is the Node.js version of the oldest editor version we
+9. **Relative imports carry the file extension** (`./parser.ts`, added 2026-10-05): Node's type stripping, which
+   runs the tests and the tools, resolves nothing else, and esbuild and `tsc` (`rewriteRelativeImportExtensions`)
+   accept it. A lint rule reports a relative import without `.ts`, `.mts` or `.json`. Independent of the
+   module-format question (package `type`, bundle file name), which stays open.
+10. **Node.js:** current LTS for the tools. The bundle target is the Node.js version of the oldest editor version we
    support.
 
 ## Options considered
