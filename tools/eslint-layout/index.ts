@@ -2,9 +2,16 @@
 //   rule 3  an extension never imports another extension;
 //   rule 4  a library never imports an extension, and the library graph has no cycles.
 // A package is a folder in packages/; a folder named lib-* is a library, every other folder is an extension.
-// Packages import each other by package name only (pnpm lets a package import only what it declares), so a relative
-// path into another package's folder is reported too. Cycles are found in the graph of declared workspace
-// dependencies, which is the graph pnpm links.
+// A package reaches another package only by its package name, declared as a `workspace:` dependency (layout.md,
+// rule 4), so a relative path into another package's folder is reported too. Cycles are found in the graph of
+// declared workspace dependencies, which is the graph pnpm links. Aliases in manifests and tsconfig `paths` are
+// checked by tools/check-workspace.ts, not here.
+//
+// Checked: import and export declarations, `import()` and `require()` with a string or a template literal without
+// substitutions, `import x = require()`, `import('...')` types and `declare module '...'`. A computed specifier in
+// `import()` or `require()` is reported on its own. Known and accepted gaps, left to code review: an inline
+// `eslint-disable` of this rule, `createRequire`, `require.resolve`, `import.meta.resolve` and triple-slash type
+// references.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -61,12 +68,26 @@ function readWorkspace(root: string): Workspace {
   return { byName, byFolder };
 }
 
-// The folder in packages/ that holds a path, or undefined outside packages/.
+// The first path segment below packages/ (a package folder, or a file directly in packages/), or undefined outside.
 function folderOf(root: string, file: string): string | undefined {
   const rel = path.relative(path.join(root, 'packages'), file);
   if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
-  const first = rel.split(path.sep)[0];
-  return first === undefined || first === rel ? undefined : first;
+  return rel.split(path.sep)[0];
+}
+
+interface SpecifierNode {
+  type: string;
+  value?: unknown;
+  expressions?: unknown[];
+  quasis?: { value: { cooked?: string | null | undefined } }[];
+}
+
+// The string a specifier node holds; null when it is computed. A template literal without substitutions counts as
+// a string.
+function specifierOf(node: SpecifierNode): string | null {
+  if (node.type === 'Literal') return typeof node.value === 'string' ? node.value : null;
+  if (node.type === 'TemplateLiteral' && node.expressions?.length === 0) return node.quasis?.[0]?.value.cooked ?? null;
+  return null;
 }
 
 // The package name a bare specifier names: `a/b` -> `a`, `@s/a/b` -> `@s/a`.
@@ -110,6 +131,7 @@ const packageImports: Rule.RuleModule = {
       libraryImportsExtension: 'Library {{from}} imports extension {{to}} (layout.md rule 4).',
       cycle: 'Import of {{to}} from {{from}} closes a package cycle: {{chain}} (layout.md rule 4).',
       relative: "Relative import into package folder '{{folder}}'; import the package by its name.",
+      computed: 'Computed module specifier; use a string so the package import rules can check it.',
     },
   },
   create(context) {
@@ -146,16 +168,37 @@ const packageImports: Rule.RuleModule = {
         context.report({ node, messageId: 'cycle', data: { ...data, chain: [own.name, ...back].join(' -> ') } });
     };
 
+    // import() and require(): a computed argument is reported, since its target cannot be checked.
+    const checkCall = (node: Rule.Node, arg: SpecifierNode): void => {
+      const source = specifierOf(arg);
+      if (source === null) context.report({ node, messageId: 'computed' });
+      else check(node, source);
+    };
+
+    // typescript-eslint nodes, which the ESLint listener types do not name.
+    const tsListeners: Record<string, (node: never) => void> = {
+      // import x = require('...')
+      TSExternalModuleReference: (node: Rule.Node & { expression: SpecifierNode }) => checkCall(node, node.expression),
+      // type T = import('...').T
+      TSImportType: (node: Rule.Node & { argument?: SpecifierNode & { literal?: SpecifierNode } }) => {
+        const arg = node.argument?.type === 'TSLiteralType' ? node.argument.literal : node.argument;
+        if (arg) checkCall(node, arg);
+      },
+      // declare module '...' { ... }
+      TSModuleDeclaration: (node: Rule.Node & { id: SpecifierNode }) => {
+        if (node.id.type === 'Literal') check(node, node.id.value);
+      },
+    };
+
     return {
+      ...tsListeners,
       ImportDeclaration: (node) => check(node, node.source.value),
       ExportNamedDeclaration: (node) => check(node, node.source?.value),
       ExportAllDeclaration: (node) => check(node, node.source.value),
-      ImportExpression: (node) => check(node, node.source.type === 'Literal' ? node.source.value : undefined),
+      ImportExpression: (node) => checkCall(node, node.source),
       CallExpression: (node) => {
         const [arg] = node.arguments;
-        if (node.callee.type === 'Identifier' && node.callee.name === 'require' && arg?.type === 'Literal') {
-          check(node, arg.value);
-        }
+        if (node.callee.type === 'Identifier' && node.callee.name === 'require' && arg) checkCall(node, arg);
       },
     };
   },

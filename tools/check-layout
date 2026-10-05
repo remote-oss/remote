@@ -29,10 +29,17 @@ for dir in packages/*/; do
   else
     err "packages/$name/package.json is missing (every package folder is a workspace)"
   fi
-  [[ -f "$dir/tsconfig.json" ]] || err "packages/$name/tsconfig.json is missing"
+  for cfg in tsconfig.json tsconfig.test.json; do
+    [[ -f "$dir/$cfg" ]] || err "packages/$name/$cfg is missing"
+  done
   grep -q "\"path\": \"packages/$name\"" tsconfig.json || err "tsconfig.json has no reference to packages/$name"
+  grep -q "\"path\": \"packages/$name/tsconfig.test.json\"" tsconfig.json ||
+    err "tsconfig.json has no reference to packages/$name/tsconfig.test.json"
 done
 grep -qE '^  - packages/\*$' pnpm-workspace.yaml || err "pnpm-workspace.yaml does not list packages/*"
+
+# Dependencies, aliases and tsconfig paths between packages (layout.md rules 3 and 4).
+node tools/check-workspace.ts || fail=1
 
 for f in docs/adr/*.md; do
   name=$(basename "$f")

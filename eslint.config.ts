@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
 import layout from './tools/eslint-layout/index.ts';
 
 export default defineConfig(
-  { ignores: ['**/node_modules/', '**/dist/', '**/.vscode-test/', 'tests/conformance/runner/'] },
+  { ignores: ['**/node_modules/', '**/dist/', '**/.vscode-test/', '**/.tsc/', 'tests/conformance/runner/'] },
   js.configs.recommended,
   tseslint.configs.strict,
   {

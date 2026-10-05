@@ -5,7 +5,8 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     // The ESLint config at the root is checked with the tools.
-    "rootDir": ".."
+    "rootDir": "..",
+    "types": ["node", "mocha"]
   },
   "include": ["**/*.ts", "../eslint.config.ts"],
   "exclude": ["**/fixtures"]
