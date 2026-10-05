@@ -42,8 +42,10 @@ comments `foo(/* enable= */ true)` where a literal argument's meaning is unclear
 "note that", no "we need to", no address to a reader of the conversation; no commented-out code; a `TODO`, `FIXME`
 or `HACK` carries an issue number as `TODO(#123)` or does not exist.
 
-Check: `jsdoc/require-jsdoc` (exports), `jsdoc/require-description`, `jsdoc/no-types`, `jsdoc/check-tag-names`,
-`jsdoc/no-blank-blocks`; three local rules with tests: `comments/no-commented-out-code` (a comment whose text
+Check: `jsdoc/require-jsdoc` (exports, and the public members of exported classes, which are exported API),
+`jsdoc/require-description`, `jsdoc/no-types`, `jsdoc/check-tag-names`, `jsdoc/no-blank-blocks`;
+`jsdoc/require-param` and `jsdoc/require-returns` stay off, because the guide wants `@param` and `@return` only
+where they add information; `multiline-comment-style: separate-lines` for implementation comments; three local rules with tests: `comments/no-commented-out-code` (a comment whose text
 parses as code), `comments/no-conversation` (a phrase denylist kept in one place in the config), `comments/todo-issue`
 (a warning term not followed by `(#NNN)`); review question R1.
 
@@ -54,7 +56,7 @@ decoration with information the type carries, no `_` prefix or suffix, and `_` i
 hole takes an unused array element). The guide allows single-letter names in scopes of ten lines or fewer; **(ours)
 this ADR does not**: every identifier, property names included, has at least four characters and says what it
 holds. The only exceptions: `i`, `j`, `k` inside a `for` statement of at most five lines; `x`, `y` as coordinates;
-`id` as a property name; single upper-case type parameters (`T`, `K`, `V`); and property keys that a third-party API
+`id` as a property name; single upper-case type parameters (`T`, `K`, `V`), checked by the local rule because `id-length` does not visit type parameters; and property keys that a third-party API
 imposes, each listed once in the ESLint config with the API that imposes it. Abbreviations are not words: `cfg`,
 `ctx`, `res`, `req`, `err`, `evt`, `fn`, `cb`, `tmp`, `val`, `idx`, `len`, `num`, `str`, `obj`, `arr`, `elem`, `msg`,
 `opts`, `args` are out. An unused trailing parameter is removed, not renamed; an unused leading parameter keeps its
