@@ -34,8 +34,11 @@ remote/
    internal: they are bundled into each extension's VSIX and are not published on their own.
 3. **An extension never imports another extension.** Extensions talk to each other only through the interfaces the
    specs define (commands, the companion interface of R-66, exported extension APIs). Shared code goes in a library.
-4. **A library never imports an extension**, and the library graph has no cycles. CI checks rules 3 and 4 once there
-   is code.
+4. **A library never imports an extension**, and the library graph has no cycles.
+
+   Rules 3 and 4 hold for every way of reaching another package: by name, by a relative path into its folder, by
+   an alias in a manifest or a `tsconfig`, in code and in types. A package reaches another package only by its
+   package name, declared as a `workspace:` dependency. Lint and `tools/check-layout` enforce this.
 5. **Each package keeps its own tests.** Unit tests live in the package. The package's conformance suite moves to
    `packages/<x>/tests/conformance/` when the specs and tests move here; until then CI fetches it from
    `remote-oss/remote-<x>`.

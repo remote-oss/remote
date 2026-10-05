@@ -26,8 +26,11 @@ This ADR is written before the specifications are read. It fixes what does not d
    published. The pnpm version is pinned in the root `package.json` (`packageManager`) and CI uses that version.
 3. **Bundling: esbuild.** Each extension is bundled into one file per entry point, with its libraries compiled in
    from source and `vscode` external. A VSIX contains no `node_modules`.
-4. **Type checking: `tsc --noEmit` with project references**, separate from bundling. esbuild does not check types;
-   CI runs both.
+4. **Type checking: `tsc --build` over project references**, separate from bundling. esbuild does not check
+   types; CI runs both. `tsc` emits declarations only, into a git-ignored folder, and never JavaScript.
+   (Wording corrected 2026-10-05: the proposal said `tsc --noEmit`, which TypeScript rejects for a project that
+   another project references, error TS6310. The decision is unchanged: `tsc` checks, esbuild writes all
+   JavaScript.)
 5. **Packaging: `@vscode/vsce package --no-dependencies`** per extension. Where and how the VSIX files are published
    is a later ADR and a decision for the user.
 6. **Lint and format: ESLint with typescript-eslint, and Prettier.** ESLint also enforces the import rules of
@@ -76,5 +79,5 @@ This ADR is written before the specifications are read. It fixes what does not d
 
 ## Check
 
-CI jobs: `tsc --noEmit`, ESLint with the import rules, unit tests, a build that fails if a VSIX contains
+CI jobs: `tsc --build`, ESLint with the import rules, unit tests, a build that fails if a VSIX contains
 `node_modules`, and the licence check. `tools/check-layout` checks that every package folder is a workspace.
