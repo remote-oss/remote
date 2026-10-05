@@ -48,7 +48,7 @@ and report it to the lead. Do not paraphrase it into a design or into code.
 - Every requirement maps to exactly one component, and every component has one owner (see
   `docs/architecture/`). A cross-cutting choice is an ADR in `docs/adr/` before it is code.
 - Code follows ADR-0003: Google TypeScript style; comments only where the guide requires them and never a
-  conversation; identifiers of four characters or more that say what they hold; no duplicated code, no dead code;
+  conversation; identifiers of four characters or more that say what they hold, no `_`; no duplicated code, no dead code;
   tests for every branch, error path and boundary; coverage gates that fail the build. A PR answers R1–R6.
 - "Done" for a feature means its conformance cases pass in the runner, not that the code looks right.
 - Decisions that change scope, money, licensing or public identity are not ours: the lead sends them to

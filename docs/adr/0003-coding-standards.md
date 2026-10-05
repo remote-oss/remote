@@ -1,7 +1,7 @@
 # ADR-0003: Google TypeScript style, enforced by lint and coverage gates
 
-- Status: accepted (the user, 2026-10-05, stated directly to the lead; the thresholds in the Decision are the lead's
-  choice and the user may change them)
+- Status: accepted (the user, 2026-10-05, D-50; enforcement R-74; the thresholds in the Decision are the lead's
+  choice and the user may change them). Revised 2026-10-05 after a check against the guide's text.
 - Date: 2026-10-05
 - Deciders: the user; enforcement designed by `remote-architect`
 - Scope: all packages, and the tooling under `tools/`
@@ -21,26 +21,121 @@ worst:
 5. Low coverage.
 
 A standard that lives only in a document is not followed by an agent under time pressure. Each rule below has a
-check that fails the build, or a review rule that names what the reviewer looks for.
+check that fails the build, or a review question that names what the reviewer looks for.
 
 ## Decision
 
-The code follows the [Google TypeScript style guide](https://google.github.io/styleguide/tsguide.html). Where
-this ADR is stricter than the guide, this ADR wins.
+The code follows the [Google TypeScript style guide](https://google.github.io/styleguide/tsguide.html) ("the
+guide"). This ADR adds rules of its own, marked **(ours)**; where it is stricter than the guide, this ADR wins. The
+guide names no tools; the tools here are our choice.
 
-| Rule | Check |
+### Comments
+
+The guide's rules, enforced as written: `/** JSDoc */` for documentation that a user of the code reads, `//` for
+implementation comments, multi-line comments as several `//` lines; JSDoc on every exported symbol and on every
+property or method whose purpose is not obvious from its name; descriptions that add information and never restate
+a name or a type; no types in `@param` or `@return`; a comment is required at an empty `catch`, a type or
+non-null assertion, a caught-and-rethrown non-Error, a suppressed `any`, and a `@deprecated` symbol; parameter-name
+comments `foo(/* enable= */ true)` where a literal argument's meaning is unclear.
+
+**(ours)** No other comment class exists. No comment narrates what the next line does; no apology, no
+"note that", no "we need to", no address to a reader of the conversation; no commented-out code; a `TODO`, `FIXME`
+or `HACK` carries an issue number as `TODO(#123)` or does not exist.
+
+Check: `jsdoc/require-jsdoc` (exports), `jsdoc/require-description`, `jsdoc/no-types`, `jsdoc/check-tag-names`,
+`jsdoc/no-blank-blocks`; three local rules with tests: `comments/no-commented-out-code` (a comment whose text
+parses as code), `comments/no-conversation` (a phrase denylist kept in one place in the config), `comments/todo-issue`
+(a warning term not followed by `(#NNN)`); review question R1.
+
+### Names
+
+The guide's rules: descriptive names, no ambiguous or unfamiliar abbreviations, no letters deleted inside a word, no
+decoration with information the type carries, no `_` prefix or suffix, and `_` is not an identifier (a destructuring
+hole takes an unused array element). The guide allows single-letter names in scopes of ten lines or fewer; **(ours)
+this ADR does not**: every identifier, property names included, has at least four characters and says what it
+holds. The only exceptions: `i`, `j`, `k` inside a `for` statement of at most five lines; `x`, `y` as coordinates;
+`id` as a property name; single upper-case type parameters (`T`, `K`, `V`); and property keys that a third-party API
+imposes, each listed once in the ESLint config with the API that imposes it. Abbreviations are not words: `cfg`,
+`ctx`, `res`, `req`, `err`, `evt`, `fn`, `cb`, `tmp`, `val`, `idx`, `len`, `num`, `str`, `obj`, `arr`, `elem`, `msg`,
+`opts`, `args` are out. An unused trailing parameter is removed, not renamed; an unused leading parameter keeps its
+descriptive name.
+
+Check: `id-length` (`min: 4`, `properties: always`, the exception list); `id-denylist` for the abbreviations; a local
+rule `names/scoped-exceptions` for the scoped cases; `@typescript-eslint/no-unused-vars` with `args: after-used`
+and `noUnusedLocals` in `tsc`, and no `_`-prefix allowance; review question R2.
+
+### No duplicated code **(ours)**
+
+The same logic exists once. A second copy with small changes is a parameter or a shared function; a copy across
+packages is a library candidate for the lead.
+
+Check: `jscpd` over `packages/` and `tools/`, one run, `minLines: 5` and `minTokens: 50`, `threshold: 0` (any clone
+fails); review question R3.
+
+### No dead code **(ours)**
+
+No unused exports, files, dependencies, parameters or locals; no unreachable code; no flag that is never on; no
+scaffolding "for later".
+
+Check: `tsc` `noUnusedLocals`; `knip` for unused exports, files and dependencies; `no-unreachable`; review
+question R4.
+
+### Tests cover every scenario **(ours)**
+
+Each function with branches has tests for each branch, each error path and each boundary; each acceptance criterion
+a component implements maps to a named unit or integration test and to its conformance case; a bug fix adds the
+test that would have caught it. A test states its scenario in its name, asserts one thing, and has no logic of its
+own.
+
+Check: the coverage gates; the traceability matrix (acceptance criterion → test name), checked by a lint once it
+exists; review question R5.
+
+### Coverage **(ours)**
+
+Line, branch and function coverage are measured per package, and for `tools/` as one unit, with `c8` on the unit and
+integration tests. Gates: **90 % lines, 85 % branches, 90 % functions**, failing CI. A ratchet per unit records the
+last passing numbers; CI fails when a number drops by more than 0.5 points below the record, and an update writes
+the maximum of record and current, so repeated small drops cannot creep. A file is excluded only by name in the
+unit's `coverage.json` with a one-line reason; the package README lists the exclusions; a stale or unexplained
+exclusion fails the check. A package without `src/` is skipped until it has code.
+
+Check: `c8 --check-coverage`, the ratchet script, the exclusion check; review question R6.
+
+### The rest of the guide, by lint
+
+`gts` (Google's open-source configuration; not an official Google product and thinner than the guide) is not
+installed, because it pins ESLint 9 and this repository runs ESLint 10. Its Prettier settings are copied
+(80 columns, single quotes, trailing commas everywhere, no bracket spacing, no parentheses around a single arrow
+parameter), with the `gts` version named in a comment, and the whole tree is reformatted once. The ESLint base is
+`@eslint/js` recommended plus `typescript-eslint` `strictTypeChecked` and `stylisticTypeChecked`, and these rules for
+the guide's sections:
+
+| Guide section | Rule |
 |---|---|
-| **Comments.** Only comments the Google guide calls for: JSDoc on every exported symbol, stating what it is for and its contract; a comment inside a body only where the code cannot say why (a workaround with its reference, a non-obvious invariant). No comments that narrate what the next line does, no apologies, no "note that", no TODO without an issue number, no commented-out code, no conversation. | ESLint: `jsdoc/require-jsdoc` for exports, `no-warning-comments` (TODO/FIXME without `#NNN`), `no-inline-comments`; the comment density per file is reported by lint; review rule R1 |
-| **Names.** Every identifier has at least four characters and says what it holds. Allowed exceptions, and no others: `_` for an ignored value; the loop indices `i`, `j`, `k` inside a `for` statement of at most five lines; `x`, `y` as coordinates; `id` as a property name of an object that has one id. Abbreviations are not words: `cfg`, `ctx`, `res`, `req`, `err`, `evt`, `fn`, `cb`, `tmp`, `val` are out. | ESLint `id-length` with `min: 4` and the exception list, plus `id-denylist` for the abbreviations; review rule R2 |
-| **No duplicated code.** The same logic exists once. A second copy with small changes is a parameter or a shared function; a copy across packages is a library candidate for the lead. | `jscpd` in CI: fails on any clone of 10 lines or 75 tokens or more across `packages/` and `tools/`; review rule R3 |
-| **No dead code.** No unused exports, files, dependencies, parameters or locals; no unreachable code; no feature flags left off forever; no "for later" scaffolding. | `tsc` `noUnusedLocals` and `noUnusedParameters`; `knip` in CI for unused exports, files and dependencies; ESLint `no-unreachable`; review rule R4 |
-| **Tests cover every scenario.** Each function with branches has tests for each branch, each error path and each boundary; each spec acceptance criterion a component implements maps to a named unit or integration test and to its conformance case; a bug fix adds the test that would have caught it. Tests have one assertion target per case, names that state the scenario, and no logic of their own. | Coverage gates below; the traceability matrix (AC → test name) checked by a lint; review rule R5 |
-| **Coverage.** Line, branch and function coverage are measured per package with `c8` on the unit and integration tests. Gates: **90 % lines, 85 % branches, 90 % functions** per package, failing CI; a ratchet file per package records the last passing numbers and CI fails when a number drops by more than 0.5 points. Files may be excluded only by name in the package's coverage config with a one-line reason, and the exclusions are listed in the package README. | `c8 --check-coverage` in CI; ratchet check script; review rule R6 |
-| **Formatting and the rest of the guide.** Prettier is the formatter; ESLint carries the guide's rules through `gts` (Google's own ESLint and Prettier configuration), adjusted only where this ADR says. | `format:check`, `lint` in CI |
+| Exports: no default exports, no `export let`, no container classes | `import/no-default-export`, `no-restricted-syntax` |
+| Modules, not namespaces; no `import x = require()` | `@typescript-eslint/no-namespace`, `no-require-imports` |
+| `import type` / `export type` for type-only use | `consistent-type-imports`, `consistent-type-exports` |
+| `const` and `let`, one per declaration, no `var` | `no-var`, `prefer-const`, `one-var: never` |
+| Classes: `readonly` where possible, parameter properties, no `#private`, no private static methods, `new X()` with parentheses | `prefer-readonly`, `parameter-properties`, `no-restricted-syntax`, `new-parens` |
+| Functions: declarations, not expressions; arrow callbacks | `func-style: declaration`, `prefer-arrow-callback` |
+| Strings: single quotes, template literals, no line continuations | Prettier, `prefer-template`, `no-multi-str` |
+| `===` always, `== null` allowed | `eqeqeq: [error, always, {null: ignore}]` |
+| `switch`: `default` present and last, no fall-through | `default-case`, `default-case-last`, `no-fallthrough` |
+| Exceptions: throw `Error` only, no empty `catch` without a comment | `only-throw-error`, `prefer-promise-reject-errors`, `no-empty: {allowEmptyCatch: false}` |
+| Type assertions: `as`, not angle brackets; avoid; annotate literals | `consistent-type-assertions`, `non-nullable-type-assertion-style` |
+| `const enum`, `debugger`, `with`, `eval`, wrapper objects: banned | `no-restricted-syntax`, `no-debugger`, `no-with`, `no-eval`, `no-restricted-types` |
+| `any`: avoid, prefer `unknown`; `{}` avoided | `no-explicit-any`, `no-unsafe-*`, `no-restricted-types` |
+| No `@ts-ignore`, `@ts-nocheck`; `@ts-expect-error` only in tests | `ban-ts-comment` as error, relaxed for test files |
+| Interfaces over type literal aliases; `T[]` for simple types | `consistent-type-definitions: interface`, `array-type: array-simple` |
+| Floating promises | `no-floating-promises`, `no-misused-promises` |
+| Undefined and null: no `\|null` in type aliases, prefer `?:` | review question R2 extended to types |
 
-Review rules, applied by the lead and by every reviewer of a coding PR, each a yes/no question:
+### Review questions
 
-- **R1** Can every comment be deleted without losing information a reader of the code needs? If yes, it goes.
+Applied by the lead and by every reviewer of a coding PR; the PR description answers each in one line.
+
+- **R1** Can every comment be deleted without losing information a reader of the code needs? Is every non-obvious
+  member documented?
 - **R2** Does every name say what the value is, without reading its definition?
 - **R3** Is any block of this PR a near-copy of another block in the repository?
 - **R4** Does everything added have a caller, and is every branch reachable?
@@ -53,25 +148,27 @@ A PR that fails a check or a review question is not merged; the author fixes it,
 
 | Option | For | Against |
 |---|---|---|
-| Google guide with lint and coverage gates (chosen) | One public, complete guide; every rule has a check; `gts` gives most of it ready-made | Some rules need custom lint configuration; coverage gates slow the first PRs |
-| Standards as a document and review only | No tooling work | Agents under pressure do not follow documents; the user's five points are exactly what review alone misses |
-| Another guide (Airbnb, StandardJS) | Also complete | The user named Google's; the others carry no JSDoc rule |
+| The guide, with lint and coverage gates (chosen) | One public, complete guide; every rule has a check | Custom lint rules for the comment classes; coverage gates slow the first PRs |
+| Standards as a document and review only | No tooling work | Agents under pressure do not follow documents; the user's five points are what review alone misses |
+| Install `gts` | Ready-made | Pins ESLint 9; enforces only a recommended set, none of the guide's export, namespace, enum, class or JSDoc rules |
+| Another guide (Airbnb, StandardJS) | Also complete | The user named Google's |
 | Mutation testing (Stryker) in the gates now | Catches tests that assert nothing | Slow on seven packages; adopted later for libraries if coverage proves hollow |
 
 ## Consequences
 
-- The first coding worker adds the tooling: `gts` configuration merged into the existing ESLint and Prettier setup,
-  the `id-length` and `id-denylist` rules, `jsdoc`, `jscpd`, `knip`, `c8` with the gates and the ratchet script, and
-  the CI jobs. The lead reviews it against this ADR.
-- Every coding-worker brief cites this ADR, and every coding PR description answers R1–R6 in one line each.
+- The first coding worker adds the tooling: the ESLint base and rule table, the three comment rules and the name
+  rule as local plugins with tests, `jsdoc`, `jscpd`, `knip`, `c8` with the gates, the ratchet and the exclusion
+  check, the Prettier settings and the one-time reformat, and the CI jobs. The lead reviews it against this ADR.
+- Every coding-worker brief cites this ADR, and every coding PR description answers R1–R6.
 - Coverage below the gate is a failed build, not a note. A package that cannot reach the gate because of untestable
   editor interaction isolates that interaction behind an adapter (ADR-0002) and tests the rest.
-- The tooling scripts under `tools/` meet the same rules; `tools/check-layout` and `tools/check-workspace.ts` are
-  brought up to them in the same PR that adds the checks.
+- The tooling under `tools/` meets the same rules: the bash layout check is ported to TypeScript behind a shim at
+  its old path, and the tooling has its own tests and coverage unit. `tools/spec-watch` stays a shell script and is
+  checked with `shellcheck` where available.
+- Third-party tools are checked for telemetry and update checks before they are added (ADR-0002 rule 8).
 
 ## Check
 
-CI: `lint` (gts rules, `id-length`, `id-denylist`, `jsdoc`, `no-warning-comments`, `no-inline-comments`,
-`no-unreachable`), `typecheck` (`noUnusedLocals`, `noUnusedParameters`), `dupes` (`jscpd`), `dead` (`knip`),
-`coverage` (`c8 --check-coverage` and the ratchet). Review: R1–R6 answered in the PR description and checked by the
-reviewer.
+CI: `lint` (the rule table, the comment and name rules, `jsdoc`), `format:check`, `typecheck` (`noUnusedLocals`),
+`dupes` (`jscpd`), `dead` (`knip`), `coverage` (`c8 --check-coverage`, the ratchet, the exclusion check). Review:
+R1–R6 answered in the PR description and checked by the reviewer.
