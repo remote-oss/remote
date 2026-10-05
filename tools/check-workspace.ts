@@ -163,6 +163,10 @@ class WorkspaceChecker {
   private readonly packagesByName: Map<string, WorkspacePackage>;
   private readonly workspaceFile: WorkspaceFile;
   private readonly rootManifest: Manifest;
+  private readonly dependencyGraph = new Map<
+    WorkspacePackage,
+    Set<WorkspacePackage>
+  >();
 
   constructor(root: string) {
     this.root = root;
@@ -188,6 +192,7 @@ class WorkspaceChecker {
     this.checkTsconfigs();
     this.checkSymbolicLinks();
     this.checkInstalledLinks();
+    this.checkDependencyCycles();
     return this.problems;
   }
 
@@ -386,6 +391,7 @@ class WorkspaceChecker {
             owner.directory,
           );
           this.checkReach(owner, target, label);
+          this.recordDependency(owner, target);
         }
       }
       for (const target of nestedStrings(manifest.imports)) {
@@ -550,6 +556,14 @@ class WorkspaceChecker {
     if (parsed === undefined) {
       return;
     }
+    for (const entry of parsed.options.types ?? []) {
+      const isPackageName = /^(@[^/.][^/]*\/)?[^/.][^/]*$/.test(entry);
+      if (!isPackageName) {
+        this.problems.push(
+          `${where}: types entry '${entry}' is a path; name a package`,
+        );
+      }
+    }
     for (const option of ['paths', 'baseUrl', 'rootDirs'] as const) {
       if (parsed.options[option] !== undefined) {
         this.problems.push(
@@ -650,6 +664,60 @@ class WorkspaceChecker {
           );
         }
         this.checkReach(owner, target, where);
+      }
+    }
+  }
+
+  private recordDependency(
+    owner: WorkspacePackage,
+    target: WorkspacePackage | undefined,
+  ): void {
+    if (target === undefined || target === owner) {
+      return;
+    }
+    const targets = this.dependencyGraph.get(owner) ?? new Set();
+    targets.add(target);
+    this.dependencyGraph.set(owner, targets);
+  }
+
+  /** A chain of declared dependencies from `start` back to `start`, or undefined when it is in no cycle. */
+  private cycleThrough(start: WorkspacePackage): string[] | undefined {
+    const visited = new Set<WorkspacePackage>();
+    const pending: Array<[WorkspacePackage, string[]]> = [
+      [start, [start.name]],
+    ];
+    for (
+      let next = pending.shift();
+      next !== undefined;
+      next = pending.shift()
+    ) {
+      const [current, chain] = next;
+      for (const target of this.dependencyGraph.get(current) ?? []) {
+        if (target === start) {
+          return [...chain, start.name];
+        }
+        if (!visited.has(target)) {
+          visited.add(target);
+          pending.push([target, [...chain, target.name]]);
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /** Reports each cycle of declared workspace dependencies once, at its member whose folder sorts first. */
+  private checkDependencyCycles(): void {
+    const reported = new Set<string>();
+    for (const owner of [...this.packages].sort((left, right) =>
+      left.folder < right.folder ? -1 : 1,
+    )) {
+      const chain = this.cycleThrough(owner);
+      const members = [...new Set(chain)].sort().join(' ');
+      if (chain !== undefined && !reported.has(members)) {
+        reported.add(members);
+        this.problems.push(
+          `packages/${owner.folder}/package.json: dependency cycle ${chain.join(' -> ')} (layout.md rule 4)`,
+        );
       }
     }
   }

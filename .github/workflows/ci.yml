@@ -25,6 +25,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm lint:shell # shellcheck is preinstalled on the runner
+      - run: pnpm run licences # `run`: a bare `pnpm licences` is pnpm's own command
       - run: pnpm format:check
       - run: pnpm test:unit
 
@@ -49,5 +50,4 @@ jobs:
 
   # build:        bundle and package each extension, fail on node_modules in a VSIX, after the packaging ADR
   # integration:  pnpm test:integration under xvfb, after the testing ADR
-  # licences:     dependency licence check (ADR-0002, decision 8), follow-up
   # conformance:  per package and profile, runner in tests/conformance/runner, after the testing ADR

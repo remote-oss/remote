@@ -1,6 +1,7 @@
 /**
  * @fileoverview ESLint rules for the comment classes of ADR-0003 that the guide's JSDoc rules do not cover:
- * commented-out code, conversational phrases, and warning terms without an issue number.
+ * commented-out code, conversational phrases, warning terms without an issue number, and `/* *\/` blocks used for
+ * implementation comments.
  */
 
 import type {AST, Rule} from 'eslint';
@@ -207,6 +208,40 @@ const noConversation: Rule.RuleModule = {
   },
 };
 
+// ESLint reads its directives from block comments too.
+const DIRECTIVE = /^\s*(eslint|global|exported)\b/;
+
+const lineComments: Rule.RuleModule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Require `//` for implementation comments; `/* */` only for JSDoc and parameter names',
+    },
+    schema: [],
+    messages: {
+      blockComment:
+        'Write implementation comments with `//`; `/* */` is for JSDoc and `/* name= */` only.',
+    },
+  },
+  create(context) {
+    return {
+      Program() {
+        for (const comment of context.sourceCode.getAllComments()) {
+          const isImplementationBlock =
+            comment.type === 'Block' &&
+            !isDocumentation(comment) &&
+            !PARAMETER_NAME_COMMENT.test(comment.value) &&
+            !DIRECTIVE.test(comment.value);
+          if (isImplementationBlock && comment.loc != null) {
+            context.report({loc: comment.loc, messageId: 'blockComment'});
+          }
+        }
+      },
+    };
+  },
+};
+
 const todoIssue: Rule.RuleModule = {
   meta: {
     type: 'problem',
@@ -235,10 +270,11 @@ const todoIssue: Rule.RuleModule = {
   },
 };
 
-/** The `comments` plugin: `no-commented-out-code`, `no-conversation` and `todo-issue`. */
+/** The `comments` plugin: `line-comments`, `no-commented-out-code`, `no-conversation` and `todo-issue`. */
 export const commentsPlugin = {
   meta: {name: 'comments'},
   rules: {
+    'line-comments': lineComments,
     'no-commented-out-code': noCommentedOutCode,
     'no-conversation': noConversation,
     'todo-issue': todoIssue,

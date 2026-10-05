@@ -70,6 +70,25 @@ ruleTester.run('no-conversation', rules['no-conversation'], {
   ],
 });
 
+ruleTester.run('line-comments', rules['line-comments'], {
+  valid: [
+    {code: '// Retries once.\nrun();'},
+    {code: '/** Returns the answer. */\nexport const answer = 42;'},
+    {code: 'configure(/* enabled= */ true);'},
+    {code: '/* eslint-disable no-console */\nrun();'},
+  ],
+  invalid: [
+    {
+      code: 'function start() {\n  /* Retries once. */\n  run();\n}',
+      errors: [{messageId: 'blockComment'}],
+    },
+    {
+      code: '/* A file comment. */\nrun();',
+      errors: [{messageId: 'blockComment'}],
+    },
+  ],
+});
+
 ruleTester.run('todo-issue', rules['todo-issue'], {
   valid: [
     {code: '// TODO(#123): drop the retry once the server is fixed.\nrun();'},

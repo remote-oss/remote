@@ -6,7 +6,19 @@ import {TemporaryWorkspace} from './temporary-workspace.ts';
 
 const remoteAManifest = 'packages/remote-a/package.json';
 
+const SHARED_FIXTURE = path.join(
+  import.meta.dirname,
+  'eslint-plugins',
+  'fixtures',
+);
+
 describe('check-workspace', () => {
+  it('agrees with the layout lint rule on the cycle of its fixture', () => {
+    deepStrictEqual(checkWorkspace(SHARED_FIXTURE), [
+      'packages/lib-x/package.json: dependency cycle lib-x -> @fixture/lib-y -> lib-x (layout.md rule 4)',
+    ]);
+  });
+
   let workspace: TemporaryWorkspace;
 
   function write(file: string, content: unknown): void {
@@ -305,6 +317,19 @@ describe('check-workspace', () => {
       ]);
     });
 
+    it('reports a types entry that is a path and accepts package names', () => {
+      write('packages/remote-a/tsconfig.json', {
+        compilerOptions: {
+          types: ['node', '@types/mocha', '../remote-b/src/globals', 'lib/x'],
+        },
+        files: [],
+      });
+      deepStrictEqual(problems(), [
+        `${tsconfig('tsconfig.json')}: types entry '../remote-b/src/globals' is a path; name a package`,
+        `${tsconfig('tsconfig.json')}: types entry 'lib/x' is a path; name a package`,
+      ]);
+    });
+
     it("reports another package's files, type roots and undeclared or extension references", () => {
       write('packages/remote-b/src/index.ts', 'export const b = 1;');
       write('packages/remote-b/tsconfig.json', {
@@ -327,6 +352,25 @@ describe('check-workspace', () => {
         `${tsconfig('tsconfig.json')}: references ${remoteB}: extension remote-a reaches extension remote-b (layout.md rule 3)`,
         `${tsconfig('tsconfig.json')}: references lib-x, which remote-a does not declare`,
       ]);
+    });
+  });
+
+  describe('dependency cycles', () => {
+    it('reports a cycle of three libraries once', () => {
+      manifest('lib-x', {dependencies: {'lib-y': 'workspace:*'}});
+      manifest('lib-y', {dependencies: {'lib-z': 'workspace:*'}});
+      manifest('lib-z', {dependencies: {'lib-x': 'workspace:*'}});
+      deepStrictEqual(problems(), [
+        'packages/lib-x/package.json: dependency cycle lib-x -> lib-y -> lib-z -> lib-x (layout.md rule 4)',
+      ]);
+    });
+
+    it('accepts a chain of libraries without a cycle', () => {
+      manifest('lib-y', {dependencies: {'lib-x': 'workspace:*'}});
+      manifest('remote-a', {
+        dependencies: {'lib-x': 'workspace:*', 'lib-y': 'workspace:*'},
+      });
+      deepStrictEqual(problems(), []);
     });
   });
 

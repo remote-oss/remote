@@ -1,8 +1,10 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {
   integrationConfigurations,
   runIntegrationTests,
+  testCliBinary,
 } from './integration-tests.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -24,6 +26,10 @@ describe('integration-tests', () => {
 
   afterEach(() => {
     workspace.remove();
+  });
+
+  it('finds the vscode-test binary of @vscode/test-cli', () => {
+    strictEqual(existsSync(testCliBinary()), true);
   });
 
   it('configures only the packages that have test/integration', () => {
