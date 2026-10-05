@@ -1,3 +1,5 @@
 {
-  "name": "remote-b"
+  "name": "remote-b",
+  "version": "0.0.0",
+  "private": true
 }

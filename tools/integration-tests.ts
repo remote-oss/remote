@@ -10,7 +10,12 @@
 import {spawnSync} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import path from 'node:path';
-import {isMainModule, packageFolders, REPOSITORY_ROOT} from './repository.ts';
+import {
+  isMainModule,
+  packageFolders,
+  REPOSITORY_ROOT,
+  resolveBinary,
+} from './repository.ts';
 
 /** One `@vscode/test-cli` configuration: the package under test and its compiled test files. */
 export interface IntegrationConfiguration {
@@ -47,11 +52,20 @@ export function integrationConfigurations(
     });
 }
 
+/**
+ * The file of the `vscode-test` binary. `@vscode/test-cli` exports no path to it; bin.mjs sits next to the module
+ * its main entry resolves to.
+ */
+export function testCliBinary(): string {
+  return path.join(path.dirname(resolveBinary('@vscode/test-cli')), 'bin.mjs');
+}
+
 function runTestCli(cliArguments: string[]): number {
-  const result = spawnSync('vscode-test', cliArguments, {
-    stdio: 'inherit',
-    shell: true,
-  });
+  const result = spawnSync(
+    process.execPath,
+    [testCliBinary(), ...cliArguments],
+    {cwd: REPOSITORY_ROOT, stdio: 'inherit'},
+  );
   return result.status ?? 1;
 }
 

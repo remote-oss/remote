@@ -10,6 +10,7 @@
         "tools/build.ts",
         "tools/coverage.ts",
         "tools/integration-tests.ts",
+        "tools/licences.ts",
         ".vscode-test.mjs",
       ],
       "project": ["tools/**/*.ts", "*.config.ts"],

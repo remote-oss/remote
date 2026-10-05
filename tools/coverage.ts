@@ -19,12 +19,12 @@ import {
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {
   isMainModule,
   messageOf,
   packageFolders,
   REPOSITORY_ROOT,
+  resolveBinary,
 } from './repository.ts';
 
 /** The three numbers the gates and the ratchet apply to, in percent. */
@@ -153,10 +153,6 @@ export function nextRatchet(
   };
 }
 
-function binaryOf(specifier: string): string {
-  return fileURLToPath(import.meta.resolve(specifier));
-}
-
 /** Runs the unit's tests under c8 from `root` and returns the measured numbers, or undefined when the tests fail. */
 export function measureUnit(
   root: string,
@@ -175,7 +171,7 @@ export function measureUnit(
     const result = spawnSync(
       process.execPath,
       [
-        binaryOf('c8/bin/c8.js'),
+        resolveBinary('c8/bin/c8.js'),
         '--all',
         '--extension=.ts',
         `--include=${unit.sources}`,
@@ -185,7 +181,7 @@ export function measureUnit(
         `--reports-dir=${reports}`,
         `--temp-directory=${path.join(reports, 'raw')}`,
         process.execPath,
-        binaryOf('mocha/bin/mocha.js'),
+        resolveBinary('mocha/bin/mocha.js'),
         '--no-config',
         '--extension=ts',
         ...unit.tests,

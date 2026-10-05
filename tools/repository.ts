@@ -68,6 +68,11 @@ export function isMainModule(moduleUrl: string): boolean {
   );
 }
 
+/** The file a package's binary lives in, `c8/bin/c8.js` for example, resolved from the tools' own dependencies. */
+export function resolveBinary(specifier: string): string {
+  return fileURLToPath(import.meta.resolve(specifier));
+}
+
 /** The message of a caught value, which is an Error in every case the tools expect. */
 export function messageOf(caught: unknown): string {
   return caught instanceof Error ? caught.message : String(caught);

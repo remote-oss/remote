@@ -83,7 +83,16 @@ const DEFAULT_EXPORT_FILES = [
   '.vscode-test.mjs',
 ];
 
+// ADR-0002, decision 9: Node's type stripping resolves a relative import only by its full file name.
+const RELATIVE_SOURCE_WITHOUT_EXTENSION =
+  'Literal.source[value=/^\\.\\.?\\//][value!=/\\.(ts|mts|json)$/]';
+
 const SYNTAX_BANS = [
+  {
+    selector: `:matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration, ImportExpression) > ${RELATIVE_SOURCE_WITHOUT_EXTENSION}`,
+    message:
+      'A relative import names its file with the extension: .ts, .mts or .json (ADR-0002, decision 9).',
+  },
   {
     selector: 'ExportNamedDeclaration > VariableDeclaration[kind="let"]',
     message: 'No `export let` (style guide: exports).',
@@ -140,6 +149,7 @@ export default defineConfig(
       'comments/no-commented-out-code': 'error',
       'comments/no-conversation': ['error', {phrases: CONVERSATION_PHRASES}],
       'comments/todo-issue': 'error',
+      'comments/line-comments': 'error',
       // The guide writes a multi-line implementation comment as several `//` lines; JSDoc is not affected.
       'multiline-comment-style': ['error', 'separate-lines'],
       'names/scoped-exceptions': 'error',
