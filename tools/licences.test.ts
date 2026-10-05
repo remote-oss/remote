@@ -100,6 +100,19 @@ describe('licences', () => {
   });
 
   describe('check', () => {
+    it('asks pnpm about every workspace package', () => {
+      const calls: string[][] = [];
+      const recording = fakePnpm({'GPL-3.0-only': [entry('copyleft')]});
+      checkLicences(pnpmArguments => {
+        calls.push(pnpmArguments);
+        return recording(pnpmArguments);
+      });
+      deepStrictEqual(
+        calls.map(call => call.includes('--recursive')),
+        [true, true, true],
+      );
+    });
+
     it('passes an allowed tree and an excepted dev dependency', () => {
       deepStrictEqual(
         checkLicences(

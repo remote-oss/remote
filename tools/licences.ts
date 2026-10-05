@@ -4,6 +4,9 @@
  *
  *     node tools/licences.ts
  *
+ * Every workspace package is checked (`--recursive`), so an extension's runtime dependencies count, not only the
+ * root's dev dependencies.
+ *
  * A package passes when its SPDX expression is allowed (an OR passes when one branch is allowed, an AND when every
  * part is) or when it has a named exception. A package without a licence, or `UNLICENSED`, always fails, and so
  * does an excepted package that appears among the runtime dependencies. A failure names the dependency chain
@@ -141,15 +144,16 @@ function listLicences(
 ): Map<string, LicensedPackage[]> {
   // `pnpm licenses list --json` maps each licence expression to the packages that carry it.
   const listing = JSON.parse(
-    runner(['licenses', 'list', '--json', ...extra]) || '{}',
+    runner(['licenses', 'list', '--json', '--recursive', ...extra]) || '{}',
   ) as Record<string, LicensedPackage[]>;
   return new Map(Object.entries(listing));
 }
 
 function chainOf(runner: PnpmRunner, name: string): string {
   // `pnpm why --json` returns one reverse dependency tree per installed version.
-  const trees = JSON.parse(runner(['why', name, '--json']) || '[]') as
-    DependentNode[] | undefined;
+  const trees = JSON.parse(
+    runner(['why', name, '--json', '--recursive']) || '[]',
+  ) as DependentNode[] | undefined;
   const tree = trees?.[0];
   return tree === undefined ? name : dependencyChain(tree);
 }

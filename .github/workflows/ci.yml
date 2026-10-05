@@ -25,7 +25,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm lint:shell # shellcheck is preinstalled on the runner
-      - run: pnpm run licences # `run`: a bare `pnpm licences` is pnpm's own command
+      - run: pnpm check-licences
       - run: pnpm format:check
       - run: pnpm test:unit
 

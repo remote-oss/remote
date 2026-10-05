@@ -21,7 +21,7 @@
     "coverage": "node tools/coverage.ts",
     "coverage:update": "node tools/coverage.ts --update",
     "lint:shell": "shellcheck tools/check-layout tools/spec-watch",
-    "licences": "node tools/licences.ts"
+    "check-licences": "node tools/licences.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
