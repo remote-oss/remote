@@ -1,0 +1,14 @@
+{
+  "minLines": 5,
+  "minTokens": 50,
+  "threshold": 0,
+  "exitCode": 1,
+  "format": ["typescript", "javascript"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/.tsc/**",
+    "**/dist/**",
+    "**/.vscode-test/**"
+  ],
+  "reporters": ["console"]
+}

@@ -1,5 +1,6 @@
-# Layout, typecheck, lint, format and unit tests (ADR-0002). Manual trigger until the testing ADR states the CI cost,
-# so the private repository uses no Actions minutes by default.
+# Layout, typecheck, lint, format and unit tests (ADR-0002); duplicated code, dead code and coverage (ADR-0003).
+# Manual trigger until the testing ADR states the CI cost, so the private repository uses no Actions minutes by
+# default.
 name: ci
 
 on:
@@ -23,8 +24,28 @@ jobs:
       - run: pnpm check-layout
       - run: pnpm typecheck
       - run: pnpm lint
+      - run: pnpm lint:shell # shellcheck is preinstalled on the runner
       - run: pnpm format:check
       - run: pnpm test:unit
+
+  # dupes: jscpd; dead: knip; coverage: c8 with the gates and the ratchet.
+  quality:
+    name: ${{ matrix.check }}
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [dupes, dead, coverage]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm ${{ matrix.check }}
 
   # build:        bundle and package each extension, fail on node_modules in a VSIX, after the packaging ADR
   # integration:  pnpm test:integration under xvfb, after the testing ADR

@@ -8,6 +8,6 @@
     "rootDir": "..",
     "types": ["node", "mocha"]
   },
-  "include": ["**/*.ts", "../eslint.config.ts"],
+  "include": ["**/*.ts", "../eslint.config.ts", "../prettier.config.ts"],
   "exclude": ["**/fixtures"]
 }

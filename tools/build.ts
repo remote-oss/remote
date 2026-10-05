@@ -1,55 +1,81 @@
-// build: bundle each package's entry point with esbuild (ADR-0002, decision 3).
-//
-//   node tools/build.ts                  every package in packages/
-//   node tools/build.ts remote-ssh ...   the named package folders
-//
-// A package without an entry point is skipped. Types are not checked here; that is `pnpm typecheck`.
+/**
+ * @fileoverview build: bundles each package's entry point with esbuild (ADR-0002, decision 3).
+ *
+ *     node tools/build.ts                  every package in packages/
+ *     node tools/build.ts remote-ssh ...   the named package folders
+ *
+ * A package without an entry point is skipped. Types are checked by `pnpm typecheck`, not here.
+ */
 
-import { existsSync, readdirSync } from 'node:fs';
+import {existsSync} from 'node:fs';
 import path from 'node:path';
-import { build } from 'esbuild';
+import {build} from 'esbuild';
+import {
+  isMainModule,
+  messageOf,
+  packageFolders,
+  REPOSITORY_ROOT,
+} from './repository.ts';
 
-// The Node.js version of the oldest editor version we support. That editor version is open until the
-// specifications are read (ADR-0002, "Open until the specifications are read"); the design sets this constant.
+/**
+ * The Node.js version of the oldest editor version we support. That editor version is open until the
+ * specifications are read (ADR-0002); the design sets this constant.
+ */
 export const NODE_TARGET = 'node22';
 
-// Where a package keeps its entry point and where its bundle goes. The manifest's `main` points at OUTFILE once
-// the design adds manifests.
-export const ENTRY = 'src/extension.ts';
-export const OUTFILE = 'dist/extension.js';
+/** Where a package keeps its entry point; the manifest's `main` points at BUNDLE_PATH once the design adds it. */
+export const ENTRY_PATH = 'src/extension.ts';
 
-const root = path.join(import.meta.dirname, '..');
-const packagesDir = path.join(root, 'packages');
+/** Where a package's bundle goes. */
+export const BUNDLE_PATH = 'dist/extension.js';
 
-const folders =
-  process.argv.length > 2
-    ? process.argv.slice(2)
-    : readdirSync(packagesDir, { withFileTypes: true })
-        .filter((e) => e.isDirectory())
-        .map((e) => e.name)
-        .sort();
-
-for (const folder of folders) {
-  const dir = path.join(packagesDir, folder);
-  if (!existsSync(dir)) {
-    console.error(`build: no package folder packages/${folder}`);
-    process.exit(1);
+/**
+ * Bundles the entry point of each named package folder under `<root>/packages`, or of every folder when `folders`
+ * is empty, and returns one line per folder saying what happened. Throws for a folder that does not exist.
+ */
+export async function buildPackages(
+  root: string,
+  folders: string[],
+): Promise<string[]> {
+  const selected = folders.length > 0 ? folders : packageFolders(root);
+  const outcomes: string[] = [];
+  for (const folder of selected) {
+    const directory = path.join(root, 'packages', folder);
+    if (!existsSync(directory)) {
+      throw new Error(`no package folder packages/${folder}`);
+    }
+    const entry = path.join(directory, ENTRY_PATH);
+    if (!existsSync(entry)) {
+      outcomes.push(`${folder}: no ${ENTRY_PATH}, skipped`);
+      continue;
+    }
+    await build({
+      entryPoints: [entry],
+      outfile: path.join(directory, BUNDLE_PATH),
+      bundle: true,
+      platform: 'node',
+      format: 'cjs',
+      target: NODE_TARGET,
+      external: ['vscode'],
+      sourcemap: true,
+      logLevel: 'warning',
+    });
+    outcomes.push(`${folder}: ${BUNDLE_PATH}`);
   }
-  const entry = path.join(dir, ENTRY);
-  if (!existsSync(entry)) {
-    console.log(`build: ${folder}: no ${ENTRY}, skipped`);
-    continue;
+  return outcomes;
+}
+
+if (isMainModule(import.meta.url)) {
+  try {
+    const outcomes = await buildPackages(
+      REPOSITORY_ROOT,
+      process.argv.slice(2),
+    );
+    for (const outcome of outcomes) {
+      console.log(`build: ${outcome}`);
+    }
+  } catch (error) {
+    console.error(`build: ${messageOf(error)}`);
+    process.exitCode = 1;
   }
-  await build({
-    entryPoints: [entry],
-    outfile: path.join(dir, OUTFILE),
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    target: NODE_TARGET,
-    external: ['vscode'],
-    sourcemap: true,
-    logLevel: 'warning',
-  });
-  console.log(`build: ${folder}: ${OUTFILE}`);
 }
