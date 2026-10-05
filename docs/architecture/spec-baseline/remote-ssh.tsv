@@ -1,0 +1,85 @@
+1	OPEN	2026-10-03T19:54:15Z	epic:E20,type:epic	E20 · Foundation, help and command surface
+2	OPEN	2026-10-03T19:54:16Z	epic:E21,type:epic	E21 · SSH client and connection mechanics
+3	OPEN	2026-10-03T19:54:17Z	epic:E22,type:epic	E22 · SSH configuration and hosts
+4	OPEN	2026-10-03T19:54:18Z	epic:E23,type:epic	E23 · Connecting and authenticating
+5	OPEN	2026-10-03T19:54:19Z	epic:E24,type:epic	E24 · VS Code Server on the host
+6	OPEN	2026-10-03T19:54:21Z	epic:E25,type:epic	E25 · The remote window
+7	OPEN	2026-10-03T19:54:22Z	epic:E26,type:epic	E26 · Errors and diagnostics
+8	OPEN	2026-10-03T19:54:23Z	epic:E27,type:epic	E27 · Remote platforms and shells
+9	OPEN	2026-10-03T19:54:24Z	epic:E39,type:epic	E39 · Decisions
+10	OPEN	2026-10-04T02:03:25Z	type:tracking	Feature inventory and coverage
+11	OPEN	2026-10-04T01:46:29Z	epic:E20,prio:P0,spec:draft,type:feature-spec	F-2001 · Activation, extension kind and workspace trust
+12	OPEN	2026-10-03T19:58:49Z	epic:E20,prio:P2,spec:pending,type:feature-spec	F-2002 · Localization of commands, settings and runtime strings
+13	OPEN	2026-10-03T19:58:51Z	epic:E20,prio:P1,spec:pending,type:feature-spec	F-2003 · The Remote - SSH log: output channel, Show Log and log level
+14	OPEN	2026-10-03T19:58:52Z	epic:E20,prio:P2,spec:pending,type:feature-spec	F-2004 · Help, Get Started, Provide Feedback and Settings commands; remote help links
+15	OPEN	2026-10-03T19:58:54Z	epic:E20,prio:P2,spec:pending,type:feature-spec	F-2005 · Report Issue...
+16	OPEN	2026-10-03T19:58:55Z	epic:E20,prio:P1,spec:pending,type:feature-spec	F-2006 · Command catalogue: palette visibility and out-of-context invocation
+17	OPEN	2026-10-03T19:58:57Z	epic:E20,prio:P2,spec:pending,type:feature-spec	F-2007 · Companions installed with the extension (extension pack)
+18	OPEN	2026-10-03T19:58:58Z	epic:E20,prio:P3,spec:pending,type:feature-spec	F-2008 · Boundary with VS Code core's own SSH features
+19	OPEN	2026-10-04T06:48:29Z	epic:E21,prio:P0,spec:draft,type:feature-spec	F-2101 · Finding and running the local ssh client
+20	OPEN	2026-10-03T19:59:02Z	epic:E21,prio:P0,spec:pending,type:feature-spec	F-2102 · Connection sharing: the local connection server and Kill Local Connection Server
+21	OPEN	2026-10-03T19:59:04Z	epic:E21,prio:P1,spec:pending,type:feature-spec	F-2103 · Exec server bootstrap mode
+22	OPEN	2026-10-03T19:59:05Z	epic:E21,prio:P0,spec:pending,type:feature-spec	F-2104 · The SSH tunnel to the server, dynamic forwarding and the local port range
+23	OPEN	2026-10-03T19:59:07Z	epic:E21,prio:P2,spec:pending,type:feature-spec	F-2105 · Connection timeouts
+24	OPEN	2026-10-03T19:59:08Z	epic:E21,prio:P2,spec:pending,type:feature-spec	F-2106 · PTY allocation
+25	OPEN	2026-10-03T19:59:10Z	epic:E21,prio:P2,spec:pending,type:feature-spec	F-2107 · RemoteCommand support
+26	OPEN	2026-10-03T19:59:11Z	epic:E21,prio:P2,spec:pending,type:feature-spec	F-2108 · Pre-connection script
+27	OPEN	2026-10-03T19:59:13Z	epic:E21,prio:P3,spec:pending,type:feature-spec	F-2109 · ssh_config keywords passed through to ssh
+28	OPEN	2026-10-03T19:59:14Z	epic:E22,prio:P0,spec:pending,type:feature-spec	F-2201 · Which SSH configuration files are read; remote.SSH.configFile; parse errors
+29	OPEN	2026-10-03T19:59:16Z	epic:E22,prio:P0,spec:pending,type:feature-spec	F-2202 · Host list from the configuration: Host patterns, Include and Match
+30	OPEN	2026-10-03T19:59:17Z	epic:E22,prio:P1,spec:pending,type:feature-spec	F-2203 · Open SSH Configuration File...
+31	OPEN	2026-10-03T19:59:19Z	epic:E22,prio:P1,spec:pending,type:feature-spec	F-2204 · Add New SSH Host...
+32	OPEN	2026-10-03T19:59:20Z	epic:E22,prio:P1,spec:pending,type:feature-spec	F-2205 · Host and user name validation
+33	OPEN	2026-10-03T19:59:22Z	epic:E22,prio:P1,spec:pending,type:feature-spec	F-2206 · Remote platform per host: detection, the platform picker and remotePlatform
+34	OPEN	2026-10-03T19:59:24Z	epic:E23,prio:P0,spec:pending,type:feature-spec	F-2301 · Connect to Host... (new window): the host picker and user@host input
+35	OPEN	2026-10-03T19:59:26Z	epic:E23,prio:P1,spec:pending,type:feature-spec	F-2302 · Connect Current Window to Host...
+36	OPEN	2026-10-03T19:59:27Z	epic:E23,prio:P1,spec:pending,type:feature-spec	F-2303 · New Window on Active Host
+37	OPEN	2026-10-03T19:59:28Z	epic:E23,prio:P0,spec:pending,type:feature-spec	F-2304 · Connection progress, phases and cancel
+38	OPEN	2026-10-03T19:59:29Z	epic:E23,prio:P0,spec:pending,type:feature-spec	F-2305 · Host-key verification
+39	OPEN	2026-10-03T19:59:31Z	epic:E23,prio:P0,spec:pending,type:feature-spec	F-2306 · Password and keyboard-interactive (two-factor) prompts
+40	OPEN	2026-10-03T19:59:34Z	epic:E23,prio:P0,spec:pending,type:feature-spec	F-2307 · Keys, passphrases, certificates and the local SSH agent
+41	OPEN	2026-10-03T19:59:36Z	epic:E23,prio:P1,spec:pending,type:feature-spec	F-2308 · The login terminal and unrecognized prompts
+42	OPEN	2026-10-03T19:59:38Z	epic:E23,prio:P2,spec:pending,type:feature-spec	F-2309 · External SSH_ASKPASS
+43	OPEN	2026-10-03T19:59:39Z	epic:E23,prio:P1,spec:pending,type:feature-spec	F-2310 · Jump hosts and proxy commands
+44	OPEN	2026-10-03T19:59:41Z	epic:E23,prio:P2,spec:pending,type:feature-spec	F-2311 · SSH agent forwarding into the remote environment
+45	OPEN	2026-10-03T19:59:42Z	epic:E23,prio:P2,spec:pending,type:feature-spec	F-2312 · X11 forwarding into the remote environment
+46	OPEN	2026-10-03T19:59:44Z	epic:E24,prio:P0,spec:pending,type:feature-spec	F-2401 · Host prerequisites: glibc, libstdc++, architecture and legacy servers
+47	OPEN	2026-10-03T19:59:45Z	epic:E24,prio:P1,spec:pending,type:feature-spec	F-2402 · Required commands on the host (curl/wget, tar and others)
+48	OPEN	2026-10-03T19:59:47Z	epic:E24,prio:P0,spec:pending,type:feature-spec	F-2403 · Server download and install on the host
+49	OPEN	2026-10-03T19:59:49Z	epic:E24,prio:P1,spec:pending,type:feature-spec	F-2404 · HTTP(S) proxy for the server install and launch
+50	OPEN	2026-10-03T19:59:50Z	epic:E24,prio:P1,spec:pending,type:feature-spec	F-2405 · Client-side download and transfer with scp
+51	OPEN	2026-10-03T19:59:52Z	epic:E24,prio:P3,spec:pending,type:feature-spec	F-2406 · Manual local bootstrap of the server
+52	OPEN	2026-10-03T19:59:53Z	epic:E24,prio:P1,spec:pending,type:feature-spec	F-2407 · Server install location: remote.SSH.serverInstallPath
+53	OPEN	2026-10-03T19:59:54Z	epic:E24,prio:P2,spec:pending,type:feature-spec	F-2408 · Install lock files and concurrent connects
+54	OPEN	2026-10-03T19:59:56Z	epic:E24,prio:P0,spec:pending,type:feature-spec	F-2409 · Server start: ports, bind host and start failures
+55	OPEN	2026-10-03T19:59:57Z	epic:E24,prio:P2,spec:pending,type:feature-spec	F-2410 · Server listening on a socket (multi-user hosts)
+56	OPEN	2026-10-03T19:59:59Z	epic:E24,prio:P1,spec:pending,type:feature-spec	F-2411 · Kill VS Code Server on Host... and Kill Current VS Code Server
+57	OPEN	2026-10-03T20:00:00Z	epic:E24,prio:P1,spec:pending,type:feature-spec	F-2412 · Uninstall VS Code Server from Host...
+58	OPEN	2026-10-03T20:00:02Z	epic:E24,prio:P2,spec:pending,type:feature-spec	F-2413 · Server lifetime, reconnection grace time, updates and old-version clean-up
+59	OPEN	2026-10-03T20:00:03Z	epic:E25,prio:P0,spec:pending,type:feature-spec	F-2501 · Resolving the ssh-remote authority
+60	OPEN	2026-10-03T20:00:04Z	epic:E25,prio:P0,spec:pending,type:feature-spec	F-2502 · Remote indicator and resource labels in an SSH window
+61	OPEN	2026-10-03T20:00:06Z	epic:E25,prio:P1,spec:pending,type:feature-spec	F-2503 · Internal commands for the Remotes view
+62	OPEN	2026-10-03T20:00:07Z	epic:E25,prio:P1,spec:pending,type:feature-spec	F-2504 · Opening folders, workspaces and links on an SSH host
+63	OPEN	2026-10-03T20:00:09Z	epic:E25,prio:P1,spec:pending,type:feature-spec	F-2505 · Disconnect, reconnection and reconnection attempts
+64	OPEN	2026-10-03T20:00:11Z	epic:E25,prio:P1,spec:pending,type:feature-spec	F-2506 · Extensions on the SSH host and default extensions
+65	OPEN	2026-10-03T20:00:12Z	epic:E25,prio:P1,spec:pending,type:feature-spec	F-2507 · Port forwarding over the SSH connection
+66	OPEN	2026-10-03T20:00:14Z	epic:E25,prio:P3,spec:pending,type:feature-spec	F-2508 · VS Code core features in an SSH window
+67	OPEN	2026-10-03T20:00:15Z	epic:E25,prio:P3,spec:pending,type:feature-spec	F-2509 · Open Web UI
+68	OPEN	2026-10-03T20:00:17Z	epic:E26,prio:P0,spec:pending,type:feature-spec	F-2601 · Connection failure notification and its buttons
+69	OPEN	2026-10-03T20:00:19Z	epic:E26,prio:P1,spec:pending,type:feature-spec	F-2602 · Mitigation picker: More Actions..., settings fixes and resources
+70	OPEN	2026-10-03T20:00:20Z	epic:E26,prio:P1,spec:pending,type:feature-spec	F-2603 · Network-level connection errors
+71	OPEN	2026-10-03T20:00:22Z	epic:E26,prio:P1,spec:pending,type:feature-spec	F-2604 · TCP forwarding disabled on the server
+72	OPEN	2026-10-03T20:00:23Z	epic:E26,prio:P2,spec:pending,type:feature-spec	F-2605 · Enhanced session logs and session hints
+73	OPEN	2026-10-03T20:00:25Z	epic:E26,prio:P3,spec:pending,type:feature-spec	F-2606 · The @remote-ssh chat participant
+74	OPEN	2026-10-04T06:47:06Z	epic:E27,prio:P1,spec:needs-revision,type:feature-spec	F-2701 · Windows SSH hosts
+75	OPEN	2026-10-04T06:36:27Z	epic:E27,prio:P2,spec:draft,type:feature-spec	F-2702 · macOS SSH hosts
+76	OPEN	2026-10-03T20:00:30Z	epic:E27,prio:P2,spec:pending,type:feature-spec	F-2703 · Minimal and non-glibc hosts: Alpine, BusyBox, no bash
+77	OPEN	2026-10-03T20:00:31Z	epic:E27,prio:P2,spec:pending,type:feature-spec	F-2704 · Login shells and profile scripts on the host
+78	OPEN	2026-10-03T20:00:46Z	epic:E39,prio:P0,spec:pending,type:decision	F-3901 · Decision: identity card and reference identifiers
+79	OPEN	2026-10-03T20:00:35Z	epic:E39,prio:P0,spec:pending,type:decision	F-3902 · Decision: where the server comes from for SSH hosts
+80	OPEN	2026-10-03T20:00:37Z	epic:E39,prio:P0,spec:pending,type:decision	F-3903 · Decision: proposed APIs
+81	OPEN	2026-10-03T20:00:39Z	epic:E39,prio:P1,spec:pending,type:decision	F-3904 · Decision: companions, marketplaces and pre-release channel
+82	OPEN	2026-10-03T20:00:41Z	epic:E39,prio:P2,spec:pending,type:decision	F-3905 · Decision: telemetry
+83	OPEN	2026-10-03T20:00:43Z	epic:E39,prio:P1,spec:pending,type:decision	F-3906 · Decision: interface with the Remotes view
+84	OPEN	2026-10-03T20:00:45Z	epic:E39,prio:P3,spec:pending,type:decision	F-3907 · Decision: the Copilot chat participant and AI-assisted diagnosis
+85	OPEN	2026-10-04T02:03:24Z	epic:E39,prio:P3,spec:pending,type:decision	F-3908 · Decision: connecting to a Windows host without a WMI process query

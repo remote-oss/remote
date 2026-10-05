@@ -1,0 +1,39 @@
+1	OPEN	2026-10-03T19:38:58Z	epic:E60,type:epic	E60 · Foundation and cross-cutting behaviour
+2	OPEN	2026-10-03T19:38:59Z	epic:E61,type:epic	E61 · WSL presence and distros
+3	OPEN	2026-10-03T19:39:00Z	epic:E62,type:epic	E62 · Connecting to a distro
+4	OPEN	2026-10-03T19:39:01Z	epic:E63,type:epic	E63 · VS Code Server in the distro
+5	OPEN	2026-10-03T19:39:02Z	epic:E64,type:epic	E64 · The code command
+6	OPEN	2026-10-03T19:39:03Z	epic:E65,type:epic	E65 · Remote Explorer: WSL Targets
+7	OPEN	2026-10-03T19:39:04Z	epic:E66,type:epic	E66 · Working in a WSL window
+8	OPEN	2026-10-03T19:39:06Z	epic:E67,type:epic	E67 · Interop with other remotes
+9	OPEN	2026-10-03T19:39:07Z	epic:E79,type:epic	E79 · OSS adaptation decisions
+10	OPEN	2026-10-03T19:59:51Z	type:tracking	Feature inventory and coverage
+11	OPEN	2026-10-03T19:57:17Z	epic:E79,prio:P0,spec:draft,type:decision	F-7901 · Decision: extension identity and reference identifiers
+12	OPEN	2026-10-03T19:55:55Z	epic:E60,prio:P1,spec:pending,type:feature-spec	F-6001 · Activation, platforms, the web and workspace trust
+13	OPEN	2026-10-03T19:55:57Z	epic:E60,prio:P2,spec:pending,type:feature-spec	F-6002 · The WSL log and debug logging
+14	OPEN	2026-10-03T19:55:58Z	epic:E60,prio:P2,spec:pending,type:feature-spec	F-6003 · Help, feedback and issue reporting
+15	OPEN	2026-10-03T19:56:00Z	epic:E60,prio:P3,spec:pending,type:feature-spec	F-6004 · Get Started walkthrough
+16	OPEN	2026-10-03T19:56:01Z	epic:E60,prio:P3,spec:pending,type:feature-spec	F-6005 · Package identity, localization, documentation and telemetry names
+17	OPEN	2026-10-03T19:56:03Z	epic:E61,prio:P1,spec:pending,type:feature-spec	F-6101 · WSL presence, version checks and distro enumeration
+18	OPEN	2026-10-03T19:56:04Z	epic:E61,prio:P2,spec:pending,type:feature-spec	F-6102 · Adding a distro
+19	OPEN	2026-10-03T19:56:06Z	epic:E61,prio:P3,spec:pending,type:feature-spec	F-6103 · Default distro on old WSL builds
+20	OPEN	2026-10-03T19:56:08Z	epic:E62,prio:P0,spec:pending,type:feature-spec	F-6201 · The wsl authority, resolver and connection lifecycle
+21	OPEN	2026-10-03T19:56:10Z	epic:E62,prio:P0,spec:pending,type:feature-spec	F-6202 · Connect to WSL and the distro picker
+22	OPEN	2026-10-03T19:56:11Z	epic:E62,prio:P2,spec:pending,type:feature-spec	F-6203 · Open Folder in WSL
+23	OPEN	2026-10-03T19:56:13Z	epic:E62,prio:P1,spec:pending,type:feature-spec	F-6204 · Reopen Folder in WSL and Reopen Folder in Windows
+24	OPEN	2026-10-03T19:56:14Z	epic:E62,prio:P1,spec:pending,type:feature-spec	F-6205 · Window title, remote indicator and resource labels
+25	OPEN	2026-10-03T19:56:16Z	epic:E62,prio:P2,spec:pending,type:feature-spec	F-6206 · Recommendations: open in WSL, WSL file system, WSL 2
+26	OPEN	2026-10-03T19:56:18Z	epic:E62,prio:P2,spec:pending,type:feature-spec	F-6207 · Reveal in File Explorer
+27	OPEN	2026-10-03T19:56:19Z	epic:E62,prio:P1,spec:pending,type:feature-spec	F-6208 · Connection failures and recovery
+28	OPEN	2026-10-03T19:56:21Z	epic:E63,prio:P0,spec:pending,type:feature-spec	F-6301 · Server download and install
+29	OPEN	2026-10-03T19:56:23Z	epic:E63,prio:P2,spec:pending,type:feature-spec	F-6302 · Server prerequisites and supported distros
+30	OPEN	2026-10-03T19:56:24Z	epic:E63,prio:P1,spec:pending,type:feature-spec	F-6303 · Server environment
+31	OPEN	2026-10-03T19:56:26Z	epic:E63,prio:P2,spec:pending,type:feature-spec	F-6304 · Server start methods
+32	OPEN	2026-10-03T19:56:27Z	epic:E64,prio:P1,spec:pending,type:feature-spec	F-6401 · The code command in a WSL shell
+33	OPEN	2026-10-03T19:56:29Z	epic:E64,prio:P2,spec:pending,type:feature-spec	F-6402 · Opening WSL windows from the Windows command line
+34	OPEN	2026-10-03T19:56:31Z	epic:E65,prio:P1,spec:pending,type:feature-spec	F-6501 · WSL Targets view
+35	OPEN	2026-10-03T19:56:33Z	epic:E65,prio:P1,spec:pending,type:feature-spec	F-6502 · Distro actions in the WSL Targets view
+36	OPEN	2026-10-03T19:56:34Z	epic:E65,prio:P1,spec:pending,type:feature-spec	F-6503 · Recent folders in the WSL Targets view
+37	OPEN	2026-10-03T19:56:36Z	epic:E66,prio:P2,spec:pending,type:feature-spec	F-6601 · File watching in WSL
+38	OPEN	2026-10-03T19:56:37Z	epic:E66,prio:P3,spec:pending,type:feature-spec	F-6602 · VS Code core behaviour in a WSL window
+39	OPEN	2026-10-03T20:00:01Z	epic:E67,prio:P2,spec:pending,type:feature-spec	F-6701 · Interop: WSL over SSH and dev containers from a WSL window
