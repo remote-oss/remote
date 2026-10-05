@@ -1,0 +1,130 @@
+import {deepStrictEqual} from 'node:assert';
+import {rmSync} from 'node:fs';
+import path from 'node:path';
+import {checkLayout} from './check-layout.ts';
+import {EXTENSION_FOLDERS, expectedPackageName} from './repository.ts';
+import {TemporaryWorkspace} from './temporary-workspace.ts';
+
+describe('check-layout', () => {
+  let workspace: TemporaryWorkspace;
+
+  function writePackage(folder: string): void {
+    workspace.writeManifest(folder, {name: expectedPackageName(folder)});
+    workspace.write(`packages/${folder}/README.md`, `# ${folder}\n`);
+    workspace.write(`packages/${folder}/tsconfig.json`, {files: []});
+    workspace.write(`packages/${folder}/tsconfig.test.json`, {files: []});
+  }
+
+  function writeSolution(folders: readonly string[]): void {
+    workspace.write('tsconfig.json', {
+      files: [],
+      references: folders.flatMap(folder => [
+        {path: `packages/${folder}`},
+        {path: `packages/${folder}/tsconfig.test.json`},
+      ]),
+    });
+  }
+
+  beforeEach(() => {
+    workspace = new TemporaryWorkspace('check-layout');
+    workspace.write('package.json', {name: 'root', private: true});
+    workspace.write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    for (const file of [
+      'AGENTS.md',
+      'LICENSE',
+      'docs/architecture/layout.md',
+      'tests/conformance/README.md',
+      'docs/adr/README.md',
+      'docs/adr/0002-language-and-toolchain.md',
+    ]) {
+      workspace.write(file, 'text\n');
+    }
+    for (const folder of EXTENSION_FOLDERS) {
+      writePackage(folder);
+    }
+    writeSolution(EXTENSION_FOLDERS);
+  });
+
+  afterEach(() => {
+    workspace.remove();
+  });
+
+  it('accepts a complete layout', () => {
+    deepStrictEqual(checkLayout(workspace.root), []);
+  });
+
+  it('reports a folder that is neither an extension nor a library', () => {
+    writePackage('helpers');
+    writeSolution([...EXTENSION_FOLDERS, 'helpers']);
+    deepStrictEqual(checkLayout(workspace.root), [
+      'packages/helpers is neither an extension nor a lib-<name> folder',
+    ]);
+  });
+
+  it('reports the missing files of a package folder', () => {
+    workspace.write('packages/lib-empty/.keep', '');
+    writeSolution(EXTENSION_FOLDERS);
+    deepStrictEqual(checkLayout(workspace.root), [
+      'packages/lib-empty/README.md is missing',
+      'packages/lib-empty/package.json is missing (every package folder is a workspace)',
+      'packages/lib-empty/tsconfig.json is missing',
+      'packages/lib-empty/tsconfig.test.json is missing',
+      'tsconfig.json has no reference to packages/lib-empty',
+      'tsconfig.json has no reference to packages/lib-empty/tsconfig.test.json',
+    ]);
+  });
+
+  it('reports a package name that differs from the folder, the pack included', () => {
+    workspace.writeManifest('remote-ssh', {name: 'ssh'});
+    workspace.writeManifest('remote-extensionpack');
+    deepStrictEqual(checkLayout(workspace.root), [
+      "packages/remote-extensionpack/package.json has name 'remote-extensionpack', expected 'vscode-remote-extensionpack'",
+      "packages/remote-ssh/package.json has name 'ssh', expected 'remote-ssh'",
+    ]);
+  });
+
+  it('reports a missing extension folder and missing repository files', () => {
+    rmSync(path.join(workspace.root, 'packages/remote-wsl'), {recursive: true});
+    writeSolution(EXTENSION_FOLDERS.filter(folder => folder !== 'remote-wsl'));
+    rmSync(path.join(workspace.root, 'LICENSE'));
+    deepStrictEqual(checkLayout(workspace.root), [
+      'packages/remote-wsl is missing',
+      'LICENSE is missing',
+    ]);
+  });
+
+  it('reports decision records that are misnamed or share a number', () => {
+    workspace.write('docs/adr/0002-other.md', 'text\n');
+    workspace.write('docs/adr/notes.md', 'text\n');
+    deepStrictEqual(checkLayout(workspace.root), [
+      'docs/adr/notes.md is not NNNN-title.md',
+      'ADR numbers used twice: 0002',
+    ]);
+  });
+
+  it('reports every reference as missing when the solution tsconfig cannot be read', () => {
+    workspace.write('tsconfig.json', '{');
+    const problems = checkLayout(workspace.root);
+    deepStrictEqual(
+      [
+        problems.length,
+        problems[0]?.startsWith('tsconfig.json: cannot be read'),
+      ],
+      [1 + 2 * EXTENSION_FOLDERS.length, true],
+    );
+  });
+
+  it('reports an unreadable package name as empty', () => {
+    workspace.write('packages/remote-ssh/package.json', '{');
+    deepStrictEqual(checkLayout(workspace.root).slice(0, 1), [
+      "packages/remote-ssh/package.json has name '', expected 'remote-ssh'",
+    ]);
+  });
+
+  it('adds the problems of check-workspace with their prefix', () => {
+    workspace.writeManifest('remote-ssh', {private: false});
+    deepStrictEqual(checkLayout(workspace.root), [
+      'check-workspace: packages/remote-ssh/package.json: "private" is not true',
+    ]);
+  });
+});

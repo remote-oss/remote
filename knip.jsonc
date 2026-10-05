@@ -1,0 +1,33 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "includeEntryExports": true,
+  "workspaces": {
+    ".": {
+      // The scripts package.json runs (tools/check-layout is a shim to check-layout.ts) and the test-cli
+      // configuration; their exports are checked like any other module's.
+      "entry": [
+        "tools/check-layout.ts",
+        "tools/build.ts",
+        "tools/coverage.ts",
+        "tools/integration-tests.ts",
+        ".vscode-test.mjs",
+      ],
+      "project": ["tools/**/*.ts", "*.config.ts"],
+    },
+    // Each package's entry point is the one tools/build.ts bundles; its tests are entries of their own.
+    "packages/*": {
+      "entry": ["src/extension.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+    },
+  },
+  // A system tool: preinstalled on the CI runner, installed with Homebrew or the package manager elsewhere.
+  // @vscode/test-cli reads the default export of its configuration file.
+  "ignoreIssues": {".vscode-test.mjs": ["exports"]},
+  "ignoreBinaries": ["shellcheck"],
+  "ignoreDependencies": [
+    // @vscode/test-cli loads it to download and start the editor.
+    "@vscode/test-electron",
+    // tools/coverage.ts starts it through import.meta.resolve, which knip does not follow.
+    "c8",
+  ],
+}
