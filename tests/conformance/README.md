@@ -14,8 +14,13 @@ edited here. A case that looks wrong is a question on its spec issue.
 One runner for all packages is the reason for the monorepo. Until the move, CI checks out the suite of the package
 under test from its repo at a pinned commit and runs it with the runner here.
 
+## Who owns the runner (R-73)
+
+While the specification rooms run, the kit is the source of the runner and its owner syncs the copy in
+`tests/conformance/runner/` on each runner change. Nobody edits that copy here. When the rooms close, this
+repository becomes the source.
+
 ## Open
 
-- Which copy of the runner is the source, and who maintains it after the move (the kit's owner or this repository).
 - The environment profiles CI can provide (Linux containers first; Windows and macOS need hosts).
 - How a build under test is installed into a profile (`under-test` in the cases).

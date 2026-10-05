@@ -5,6 +5,7 @@ published.
 
 Now:
 
+- [binding-rulings.md](binding-rulings.md): the rulings of the family register that bind the design and the code.
 - [layout.md](layout.md): the repository layout proposal.
 - [reading-plan.md](reading-plan.md): how the specs are read once the design starts.
 - [spec-baseline/](spec-baseline/): the state of the spec issues the design has taken in (`tools/spec-watch`).
