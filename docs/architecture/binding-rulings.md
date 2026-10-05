@@ -21,21 +21,23 @@ remote-development for anything not here.
 
 — the user
 
-— |
-
 ## D-27
 
 **DECIDED 2026-10-01 20:49 (the user): where the conformance tests go.** Cases cross the wall like specs: case files, fixture scripts and the catalogue are published from the dirty room into the implementation repo (`remote-oss/remote-<x>`, `tests/conformance/`) through the same gate as specs (lint, review, R-34 audit, secret gate) by a `publish-tests` step next to `publish-spec`; each case cites its feature and acceptance criterion by issue number. Recordings, transcripts and raw observations stay in the `-dirty` repo; the dirty room keeps the suite green against the reference. The runner (lab driver, fixture plugins, environment profiles) is a standalone package the implementers install without guard or pipeline parts (a sub-package of `cleanroom-kit` or `remote-oss/conformance-kit`), so their CI runs the same profiles against their builds. Cases that depend on reference-only artefacts (state the reference wrote in its own format, anything touching the identity card) carry a `reference-only` flag, stay in the dirty repo, and the crossing suite uses fixtures built from public inputs only; the coverage lint reports cases recorded and cases that cross, per feature.
 
 — remote-development
 
-— |
-
 ## D-41
 
 **DECIDED 2026-10-03 (the user, picker): family identity: display names mirror the reference verbatim ("Dev Containers", "Remote - SSH", "Remote - SSH: Editing Configuration Files", "Remote Explorer", "WSL", "Remote - Tunnels", "Remote Development"); description, icon (a family icon, never the reference's), README and marketplace listing are ours; licence MIT for all seven implementation repos and the monorepo (LICENSE files added, copyright "remote-oss contributors").**
 
 — the user, 2026-10-03
+
+## D-49
+
+**DECIDED 2026-10-05 16:15 (the user, picker): ADR-0002 (toolchain) approved with one change: pnpm workspaces instead of npm workspaces; the rest as proposed (TypeScript strict, esbuild bundling with tsc type checks, vsce packaging with the publishing location a later ADR, ESLint enforcing the layout's import rules and Prettier, tests on three levels with the conformance runner as the only definition of done, few MIT-compatible dependencies, no telemetry, no native modules without an ADR, manual CI).**
+
+— the user, 2026-10-05
 
 ## R-21
 
