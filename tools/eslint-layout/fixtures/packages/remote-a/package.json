@@ -1,0 +1,6 @@
+{
+  "name": "remote-a",
+  "dependencies": {
+    "lib-x": "workspace:*"
+  }
+}

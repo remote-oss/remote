@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "types": ["node", "mocha"],
+    // Project references need emit; only declarations are written, to a folder git ignores. esbuild writes the JS.
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "outDir": "${configDir}/.tsc",
+    "composite": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  // An empty "files" list lets a package without sources pass; "include" still picks them up once they exist.
+  "files": [],
+  "include": ["${configDir}/src", "${configDir}/test"]
+}
