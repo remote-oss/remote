@@ -51,6 +51,14 @@ describe('coverage', () => {
   });
 
   describe('units', () => {
+    it('measure the unit and integration tests of a package', () => {
+      workspace.write('packages/remote-a/test/integration/.keep', '');
+      deepStrictEqual(packageUnit().tests, [
+        'packages/remote-a/test/unit/**/*.test.ts',
+        'packages/remote-a/test/integration/**/*.test.ts',
+      ]);
+    });
+
     it('are tools/ and each package with src/', () => {
       deepStrictEqual(
         coverageUnits(workspace.root).map(unit => unit.name),

@@ -140,6 +140,8 @@ export default defineConfig(
       'comments/no-commented-out-code': 'error',
       'comments/no-conversation': ['error', {phrases: CONVERSATION_PHRASES}],
       'comments/todo-issue': 'error',
+      // The guide writes a multi-line implementation comment as several `//` lines; JSDoc is not affected.
+      'multiline-comment-style': ['error', 'separate-lines'],
       'names/scoped-exceptions': 'error',
       'id-length': [
         'error',

@@ -17,7 +17,7 @@
     "test:integration": "node tools/integration-tests.ts",
     "check-layout": "tools/check-layout",
     "dupes": "jscpd -c .jscpd.json packages tools",
-    "dead": "knip --no-progress",
+    "dead": "knip --no-progress --no-config-hints",
     "coverage": "node tools/coverage.ts",
     "coverage:update": "node tools/coverage.ts --update",
     "lint:shell": "shellcheck tools/check-layout tools/spec-watch"

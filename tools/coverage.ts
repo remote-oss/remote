@@ -45,19 +45,19 @@ export interface CoverageUnit {
   name: string;
   directory: string;
   sources: string;
-  tests: string;
+  tests: string[];
   readme?: string;
 }
 
 /** The minimum numbers of ADR-0003, per unit. */
-export const COVERAGE_GATES: CoverageNumbers = {
+const COVERAGE_GATES: CoverageNumbers = {
   lines: 90,
   branches: 85,
   functions: 90,
 };
 
 /** How far a number may fall below its ratchet record before the check fails, in percentage points. */
-export const RATCHET_TOLERANCE = 0.5;
+const RATCHET_TOLERANCE = 0.5;
 
 const METRICS = ['lines', 'branches', 'functions'] as const;
 
@@ -69,7 +69,11 @@ export function coverageUnits(root: string): CoverageUnit[] {
       name: folder,
       directory: path.join(root, 'packages', folder),
       sources: `packages/${folder}/src/**/*.ts`,
-      tests: `packages/${folder}/test/unit/**/*.test.ts`,
+      tests: ['unit', 'integration']
+        .filter(kind =>
+          existsSync(path.join(root, 'packages', folder, 'test', kind)),
+        )
+        .map(kind => `packages/${folder}/test/${kind}/**/*.test.ts`),
       readme: path.join(root, 'packages', folder, 'README.md'),
     }));
   return [
@@ -77,7 +81,7 @@ export function coverageUnits(root: string): CoverageUnit[] {
       name: 'tools',
       directory: path.join(root, 'tools'),
       sources: 'tools/**/*.ts',
-      tests: 'tools/**/*.test.ts',
+      tests: ['tools/**/*.test.ts'],
     },
     ...packages,
   ];
@@ -184,7 +188,7 @@ export function measureUnit(
         binaryOf('mocha/bin/mocha.js'),
         '--no-config',
         '--extension=ts',
-        unit.tests,
+        ...unit.tests,
       ],
       {cwd: root, stdio: ['ignore', 'inherit', 'inherit']},
     );

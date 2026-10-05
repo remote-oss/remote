@@ -21,13 +21,13 @@ import {
  * The Node.js version of the oldest editor version we support. That editor version is open until the
  * specifications are read (ADR-0002); the design sets this constant.
  */
-export const NODE_TARGET = 'node22';
+const NODE_TARGET = 'node22';
 
 /** Where a package keeps its entry point; the manifest's `main` points at BUNDLE_PATH once the design adds it. */
-export const ENTRY_PATH = 'src/extension.ts';
+const ENTRY_PATH = 'src/extension.ts';
 
 /** Where a package's bundle goes. */
-export const BUNDLE_PATH = 'dist/extension.js';
+const BUNDLE_PATH = 'dist/extension.js';
 
 /**
  * Bundles the entry point of each named package folder under `<root>/packages`, or of every folder when `folders`

@@ -13,6 +13,9 @@ ruleTester.run('no-commented-out-code', rules['no-commented-out-code'], {
     {code: '/** Returns the answer (a number). */\nexport const answer = 42;'},
     {code: 'configure(/* enabled= */ true);'},
     {code: '// see check-layout\nrun();'},
+    {code: '// (none)\nrun();'},
+    {code: '// Options: {cwd}\nrun();'},
+    {code: '// e.g. spawn(command)\nrun();'},
   ],
   invalid: [
     {

@@ -41,13 +41,71 @@ function groupComments(comments: Comment[]): CommentGroup[] {
   return groups;
 }
 
+/** A parsed statement, reduced to the fields that tell code from prose that happens to parse. */
+interface ParsedStatement {
+  type: string;
+  range?: [number, number];
+  body?: ParsedStatement | ParsedStatement[];
+  expression?: {type: string};
+}
+
+// Statements that only code produces; a label, a block or a bare identifier also come out of prose such as
+// `(none)` or `Options: {cwd}`.
+const CODE_STATEMENTS = new Set([
+  'VariableDeclaration',
+  'FunctionDeclaration',
+  'ClassDeclaration',
+  'ImportDeclaration',
+  'ExportNamedDeclaration',
+  'ExportDefaultDeclaration',
+  'ExportAllDeclaration',
+  'ReturnStatement',
+  'IfStatement',
+  'ForStatement',
+  'ForInStatement',
+  'ForOfStatement',
+  'WhileStatement',
+  'DoWhileStatement',
+  'SwitchStatement',
+  'ThrowStatement',
+  'TryStatement',
+  'TSInterfaceDeclaration',
+  'TSTypeAliasDeclaration',
+]);
+const CODE_EXPRESSIONS = new Set(['AssignmentExpression', 'UpdateExpression']);
+const CALL_EXPRESSIONS = new Set([
+  'CallExpression',
+  'NewExpression',
+  'AwaitExpression',
+]);
+
+function isCodeStatement(statement: ParsedStatement, text: string): boolean {
+  if (CODE_STATEMENTS.has(statement.type)) {
+    return true;
+  }
+  if (statement.body !== undefined) {
+    const inner = Array.isArray(statement.body)
+      ? statement.body
+      : [statement.body];
+    return inner.some(child => isCodeStatement(child, text));
+  }
+  const expression = statement.expression?.type ?? '';
+  const source = text.slice(...(statement.range ?? [0, 0]));
+  return (
+    CODE_EXPRESSIONS.has(expression) ||
+    (CALL_EXPRESSIONS.has(expression) && source.trimEnd().endsWith(';'))
+  );
+}
+
 function parsesAsCode(text: string): boolean {
   if (!CODE_PUNCTUATION.test(text)) {
     return false;
   }
   try {
-    tseslint.parser.parseForESLint(text);
-    return true;
+    const parsed = tseslint.parser.parseForESLint(text);
+    // The parser returns an ESTree program with ranges; only its statements' types and ranges are read.
+    const statements = (parsed.ast as {body: ParsedStatement[]}).body;
+    return statements.some(statement => isCodeStatement(statement, text));
   } catch {
     // A parse error means prose, which is what a comment should hold.
     return false;
