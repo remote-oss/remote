@@ -36,7 +36,6 @@ for dir in packages/*/; do
   grep -q "\"path\": \"packages/$name/tsconfig.test.json\"" tsconfig.json ||
     err "tsconfig.json has no reference to packages/$name/tsconfig.test.json"
 done
-grep -qE '^  - packages/\*$' pnpm-workspace.yaml || err "pnpm-workspace.yaml does not list packages/*"
 
 # Dependencies, aliases and tsconfig paths between packages (layout.md rules 3 and 4).
 node tools/check-workspace.ts || fail=1

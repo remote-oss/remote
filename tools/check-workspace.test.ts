@@ -84,8 +84,8 @@ describe('check-workspace', () => {
       });
       deepStrictEqual(checkWorkspace(root), [
         `${a}: dependencies.n aliases workspace package lib-x through npm:`,
-        `${a}: dependencies.l points into packages/ with link:; use workspace:`,
-        `${a}: dependencies.f points into packages/ with file:; use workspace:`,
+        `${a}: dependencies.l uses link:; dependencies are workspace: or registry packages`,
+        `${a}: dependencies.f uses file:; dependencies are workspace: or registry packages`,
         `${a}: dependencies.f: extension remote-a reaches extension remote-b (layout.md rule 3)`,
         `${a}: dependencies.lib-x names a workspace package without the workspace: protocol`,
       ]);
@@ -95,10 +95,29 @@ describe('check-workspace', () => {
       write('pnpm-workspace.yaml', 'packages:\n  - packages/*\ncatalogs:\n  tools:\n    wsl: link:packages/remote-b\n');
       manifest('remote-a', { dependencies: { wsl: 'catalog:tools' } });
       deepStrictEqual(checkWorkspace(root), [
-        `${a}: dependencies.wsl (catalog tools) points into packages/ with link:; use workspace:`,
+        `${a}: dependencies.wsl (catalog tools) uses link:; dependencies are workspace: or registry packages`,
         `${a}: dependencies.wsl: extension remote-a reaches extension remote-b (layout.md rule 3)`,
-        "pnpm-workspace.yaml: catalogs.tools.wsl: 'link:packages/remote-b' routes to workspace package in packages/",
+        "pnpm-workspace.yaml: catalogs.tools.wsl: 'link:packages/remote-b' uses link:",
       ]);
+    });
+
+    it('reports a link: to a folder outside packages/, and its installed link', () => {
+      write('shared/bridge/index.ts', "export * from '../../packages/remote-b/src/index.ts';");
+      manifest('remote-a', { dependencies: { bridge: 'link:../../shared/bridge' } });
+      link('packages/remote-a/node_modules/bridge', 'shared/bridge');
+      deepStrictEqual(checkWorkspace(root), [
+        `${a}: dependencies.bridge uses link:; dependencies are workspace: or registry packages`,
+        `packages/remote-a/node_modules/bridge: links ${path.join('shared', 'bridge')}, which is not a workspace package`,
+      ]);
+    });
+
+    it('reports a manifest that cannot be parsed', () => {
+      write(a, '{ "name": "remote-a", ');
+      write('package.json', '{');
+      deepStrictEqual(
+        checkWorkspace(root).map((e) => e.replace(/: cannot be read: .*/, ': cannot be read')),
+        [`${a}: cannot be read`, 'package.json: cannot be read'],
+      );
     });
 
     it('reports a workspace: dependency that names no package', () => {
@@ -151,10 +170,39 @@ describe('check-workspace', () => {
         ].join('\n'),
       );
       deepStrictEqual(checkWorkspace(root), [
-        "package.json: pnpm.overrides.some-dep: 'link:packages/remote-b' routes to workspace package in packages/",
+        "package.json: pnpm.overrides.some-dep: 'link:packages/remote-b' uses link:",
         "pnpm-workspace.yaml: overrides.foo>bar: 'workspace:remote-b@*' routes to workspace package remote-b",
         "pnpm-workspace.yaml: packageExtensions: key 'remote-a@*' names workspace package remote-a",
         "pnpm-workspace.yaml: packageExtensions.remote-a@*.dependencies: key 'lib-x' names workspace package lib-x",
+      ]);
+    });
+
+    it('reports a workspace beyond packages/* and linkWorkspacePackages', () => {
+      write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n  - extras/*\nlinkWorkspacePackages: true\n');
+      deepStrictEqual(checkWorkspace(root), [
+        'pnpm-workspace.yaml: packages is ["packages/*","extras/*"], expected ["packages/*"]',
+        'pnpm-workspace.yaml: sets linkWorkspacePackages',
+      ]);
+    });
+
+    it('reports a missing pnpm-workspace.yaml', () => {
+      rmSync(path.join(root, 'pnpm-workspace.yaml'));
+      deepStrictEqual(
+        checkWorkspace(root).map((e) => e.replace(/: cannot be read: .*/, ': cannot be read')),
+        ['pnpm-workspace.yaml: cannot be read', 'pnpm-workspace.yaml: packages is undefined, expected ["packages/*"]'],
+      );
+    });
+
+    it('reports pnpm hook files and pnpmfile settings', () => {
+      write('.pnpmfile.cjs', 'module.exports = {};');
+      write('packages/remote-a/pnpmfile.mjs', 'export default {};');
+      write('pnpm-workspace.yaml', 'packages:\n  - packages/*\npnpmfile: hooks.cjs\n');
+      write('.npmrc', 'global-pnpmfile=/tmp/hooks.cjs\n');
+      deepStrictEqual(checkWorkspace(root), [
+        '.pnpmfile.cjs: pnpm hook file',
+        `${path.join('packages', 'remote-a', 'pnpmfile.mjs')}: pnpm hook file`,
+        'pnpm-workspace.yaml: sets pnpmfile',
+        '.npmrc: sets global-pnpmfile',
       ]);
     });
 
@@ -163,12 +211,13 @@ describe('check-workspace', () => {
         'pnpm-workspace.yaml',
         'packages:\n  - packages/*\nnodeLinker: hoisted\nshamefullyHoist: true\npublicHoistPattern: ["*"]\n',
       );
-      write('.npmrc', 'shamefully-hoist=true\n');
+      write('.npmrc', 'shamefully-hoist=true\npublic-hoist-pattern[]=*\n');
       deepStrictEqual(checkWorkspace(root), [
         "pnpm-workspace.yaml: nodeLinker 'hoisted'; only 'isolated' keeps packages apart",
         'pnpm-workspace.yaml: shamefullyHoist hoists into the root',
         'pnpm-workspace.yaml: publicHoistPattern hoists into the root',
         '.npmrc: sets shamefully-hoist',
+        '.npmrc: sets public-hoist-pattern',
       ]);
     });
   });
@@ -202,7 +251,7 @@ describe('check-workspace', () => {
       });
       const b = path.join('packages', 'remote-b');
       deepStrictEqual(checkWorkspace(root), [
-        `${tsconfig('tsconfig.json')}: compiles ${path.join(b, 'src', 'index.ts')} from outside the package`,
+        `${tsconfig('tsconfig.json')}: compiles ${path.join(b, 'src', 'index.ts')} from outside the package (shared types go in a library)`,
         `${tsconfig('tsconfig.json')}: typeRoots entry ${path.join(b, 'types')}`,
         `${tsconfig('tsconfig.json')}: references ${b}: extension remote-a reaches extension remote-b (layout.md rule 3)`,
         `${tsconfig('tsconfig.json')}: references lib-x, which remote-a does not declare`,

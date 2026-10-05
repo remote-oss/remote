@@ -37,6 +37,10 @@ type Manifest = Partial<Record<(typeof FIELDS)[number], Deps>> & {
 };
 
 interface WorkspaceFile {
+  packages?: unknown;
+  linkWorkspacePackages?: unknown;
+  pnpmfile?: unknown;
+  globalPnpmfile?: unknown;
   catalog?: Deps;
   catalogs?: Record<string, Deps>;
   overrides?: unknown;
@@ -54,22 +58,23 @@ interface Package {
   manifest: Manifest;
 }
 
-const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, 'utf8')) as T;
-
 // Directory entries in a fixed order, so reports are the same on every platform.
 const entries = (dir: string) => readdirSync(dir, { withFileTypes: true }).sort((x, y) => (x.name < y.name ? -1 : 1));
 
-function readPackages(root: string): Package[] {
+function readPackages(root: string, errors: string[]): Package[] {
   const packagesDir = path.join(root, 'packages');
   const result: Package[] = [];
   for (const entry of entries(packagesDir)) {
     if (!entry.isDirectory()) continue;
     const dir = path.join(packagesDir, entry.name);
+    const file = path.join(dir, 'package.json');
+    if (!existsSync(file)) continue; // check-layout reports a folder without a package.json
     let manifest: Manifest;
     try {
-      manifest = readJson<Manifest>(path.join(dir, 'package.json'));
-    } catch {
-      continue; // check-layout reports a folder without a package.json
+      manifest = JSON.parse(readFileSync(file, 'utf8')) as Manifest;
+    } catch (e) {
+      errors.push(`packages/${entry.name}/package.json: cannot be read: ${(e as Error).message}`);
+      continue;
     }
     result.push({
       folder: entry.name,
@@ -110,16 +115,39 @@ function* walk(dir: string): Generator<string> {
 
 export function checkWorkspace(root: string): string[] {
   const errors: string[] = [];
-  const packages = readPackages(root);
+  const packages = readPackages(root, errors);
   const byName = new Map(packages.map((p) => [p.name, p]));
   const packagesDir = path.join(root, 'packages');
   const rel = (file: string): string => path.relative(root, file);
   const packageAt = (file: string): Package | undefined => packages.find((p) => inside(p.dir, file));
 
-  const workspaceFile = path.join(root, 'pnpm-workspace.yaml');
-  const workspace = (existsSync(workspaceFile) ? parseYaml(readFileSync(workspaceFile, 'utf8')) : {}) as
-    WorkspaceFile | undefined;
-  const catalogs: Record<string, Deps> = { default: workspace?.catalog ?? {}, ...workspace?.catalogs };
+  const read = <T>(file: string, parse: (text: string) => unknown): T | undefined => {
+    try {
+      return parse(readFileSync(path.join(root, file), 'utf8')) as T;
+    } catch (e) {
+      errors.push(`${file}: cannot be read: ${(e as Error).message}`);
+      return undefined;
+    }
+  };
+  const workspace = read<WorkspaceFile>('pnpm-workspace.yaml', parseYaml) ?? {};
+
+  // The workspace is packages/* and nothing else: an extra glob would let a package outside packages/ bridge two
+  // packages, and linkWorkspacePackages links a workspace package for a plain version range.
+  if (JSON.stringify(workspace.packages) !== JSON.stringify(['packages/*'])) {
+    errors.push(`pnpm-workspace.yaml: packages is ${JSON.stringify(workspace.packages)}, expected ["packages/*"]`);
+  }
+  if (workspace.linkWorkspacePackages !== undefined) errors.push('pnpm-workspace.yaml: sets linkWorkspacePackages');
+
+  // pnpm hooks rewrite manifests at install time, out of reach of every check before the install.
+  for (const dir of [root, ...packages.map((p) => p.dir)]) {
+    for (const e of entries(dir)) {
+      if (/^\.?pnpmfile\.[cm]?js$/.test(e.name)) errors.push(`${rel(path.join(dir, e.name))}: pnpm hook file`);
+    }
+  }
+  for (const key of ['pnpmfile', 'globalPnpmfile'] as const) {
+    if (workspace[key] !== undefined) errors.push(`pnpm-workspace.yaml: sets ${key}`);
+  }
+  const catalogs: Record<string, Deps> = { default: workspace.catalog ?? {}, ...workspace.catalogs };
 
   // The workspace package a dependency `key: spec` declared in `fromDir` resolves to, and whether that route is
   // the allowed one (`workspace:` under the target's own name). `where` prefixes the problems it reports.
@@ -144,10 +172,9 @@ export function checkWorkspace(root: string): string[] {
       return target;
     }
     if (spec.startsWith('link:') || spec.startsWith('file:')) {
-      const resolved = path.resolve(fromDir, spec.slice(5));
-      if (!inside(packagesDir, resolved)) return undefined;
-      errors.push(`${where} points into packages/ with ${spec.slice(0, 5)}; use workspace:`);
-      return packageAt(resolved);
+      // A folder outside packages/ could re-export any package's source, so these protocols are not used at all.
+      errors.push(`${where} uses ${spec.slice(0, 5)}; dependencies are workspace: or registry packages`);
+      return packageAt(path.resolve(fromDir, spec.slice(5)));
     }
     if (byName.has(key)) {
       errors.push(`${where} names a workspace package without the workspace: protocol`);
@@ -186,7 +213,7 @@ export function checkWorkspace(root: string): string[] {
   }
 
   // The root manifest: nothing in it may route to a workspace package.
-  const rootManifest = readJson<Manifest>(path.join(root, 'package.json'));
+  const rootManifest = read<Manifest>('package.json', JSON.parse) ?? {};
   for (const field of FIELDS) {
     for (const [key, spec] of Object.entries(rootManifest[field] ?? {})) {
       const target = route(`package.json: ${field}.${key}`, key, spec, root);
@@ -200,10 +227,10 @@ export function checkWorkspace(root: string): string[] {
     ['package.json: pnpm', rootManifest.pnpm],
     ['package.json: resolutions', rootManifest.resolutions],
     ['package.json: overrides', rootManifest.overrides],
-    ['pnpm-workspace.yaml: overrides', workspace?.overrides],
-    ['pnpm-workspace.yaml: packageExtensions', workspace?.packageExtensions],
-    ['pnpm-workspace.yaml: catalog', workspace?.catalog],
-    ['pnpm-workspace.yaml: catalogs', workspace?.catalogs],
+    ['pnpm-workspace.yaml: overrides', workspace.overrides],
+    ['pnpm-workspace.yaml: packageExtensions', workspace.packageExtensions],
+    ['pnpm-workspace.yaml: catalog', workspace.catalog],
+    ['pnpm-workspace.yaml: catalogs', workspace.catalogs],
   ];
   const names = [...byName.keys()].sort((a, b) => b.length - a.length);
   const namesIn = (text: string): string | undefined =>
@@ -211,8 +238,8 @@ export function checkWorkspace(root: string): string[] {
   const visit = (where: string, value: unknown): void => {
     if (typeof value === 'string') {
       const named = namesIn(value.replace(/^(workspace|npm|catalog):/, ' '));
-      const pathSpec = /^(link|file):/.test(value) && inside(packagesDir, path.resolve(root, value.slice(5)));
-      if (named || pathSpec) errors.push(`${where}: '${value}' routes to workspace package ${named ?? 'in packages/'}`);
+      if (named) errors.push(`${where}: '${value}' routes to workspace package ${named}`);
+      else if (/^(link|file):/.test(value)) errors.push(`${where}: '${value}' uses ${value.slice(0, 5)}`);
     } else if (value && typeof value === 'object') {
       for (const [k, v] of Object.entries(value)) {
         const named = namesIn(k);
@@ -224,20 +251,21 @@ export function checkWorkspace(root: string): string[] {
   for (const [where, value] of configRoutes) visit(where, value);
 
   // Hoisting into the root's node_modules makes every hoisted package importable from every package.
-  if (workspace?.nodeLinker !== undefined && workspace.nodeLinker !== 'isolated') {
+  if (workspace.nodeLinker !== undefined && workspace.nodeLinker !== 'isolated') {
     errors.push(
       `pnpm-workspace.yaml: nodeLinker '${String(workspace.nodeLinker)}'; only 'isolated' keeps packages apart`,
     );
   }
-  if (workspace?.shamefullyHoist === true) errors.push('pnpm-workspace.yaml: shamefullyHoist hoists into the root');
-  if (workspace?.publicHoistPattern !== undefined) {
+  if (workspace.shamefullyHoist === true) errors.push('pnpm-workspace.yaml: shamefullyHoist hoists into the root');
+  if (workspace.publicHoistPattern !== undefined) {
     errors.push('pnpm-workspace.yaml: publicHoistPattern hoists into the root');
   }
   for (const npmrc of [root, ...packages.map((p) => p.dir)].map((d) => path.join(d, '.npmrc'))) {
     if (!existsSync(npmrc)) continue;
     const text = readFileSync(npmrc, 'utf8');
-    for (const key of ['node-linker', 'shamefully-hoist', 'public-hoist-pattern']) {
-      if (new RegExp(`^\\s*${key}\\s*=`, 'm').test(text)) errors.push(`${rel(npmrc)}: sets ${key}`);
+    for (const key of ['node-linker', 'shamefully-hoist', 'public-hoist-pattern', 'pnpmfile', 'global-pnpmfile']) {
+      // `key=value` and the array spelling `key[]=value`
+      if (new RegExp(`^\\s*${key}(\\[\\])?\\s*=`, 'm').test(text)) errors.push(`${rel(npmrc)}: sets ${key}`);
     }
   }
 
@@ -268,7 +296,10 @@ export function checkWorkspace(root: string): string[] {
     const pkg = packageAt(file);
     if (!pkg) continue;
     const foreign = parsed.fileNames.filter((f) => !inside(pkg.dir, path.resolve(f)));
-    for (const f of foreign) errors.push(`${rel(file)}: compiles ${rel(path.resolve(f))} from outside the package`);
+    for (const f of foreign)
+      errors.push(
+        `${rel(file)}: compiles ${rel(path.resolve(f))} from outside the package (shared types go in a library)`,
+      );
     for (const dir of parsed.options.typeRoots ?? []) {
       if (inside(packagesDir, dir) && !inside(pkg.dir, dir)) errors.push(`${rel(file)}: typeRoots entry ${rel(dir)}`);
     }
@@ -313,18 +344,26 @@ export function checkWorkspace(root: string): string[] {
     }
     return result;
   };
-  const realPackagesDir = existsSync(packagesDir) ? realpathSync(packagesDir) : packagesDir;
-  const linkTarget = (real: string): Package | undefined =>
-    inside(realPackagesDir, real) ? packages.find((p) => inside(realpathSync(p.dir), real)) : undefined;
+  // A link may resolve into pnpm's store (the root's node_modules) or outside the repository; inside the repository
+  // it may only resolve to a workspace package, under the rules above.
+  const realRoot = realpathSync(root);
+  const realStore = path.join(realRoot, 'node_modules');
+  const packageDirs = packages.map((p) => [p, realpathSync(p.dir)] as const);
+  const linkTarget = (where: string, real: string): Package | undefined => {
+    if (!inside(realRoot, real) || inside(realStore, real)) return undefined;
+    const found = packageDirs.find(([, dir]) => inside(dir, real))?.[0];
+    if (!found) errors.push(`${where}: links ${path.relative(realRoot, real)}, which is not a workspace package`);
+    return found;
+  };
   for (const [name, real] of links(root)) {
-    const target = linkTarget(real);
+    const target = linkTarget(`node_modules/${name}`, real);
     if (target) errors.push(`node_modules/${name}: links workspace package ${target.name} into the root`);
   }
   for (const pkg of packages) {
     for (const [name, real] of links(pkg.dir)) {
-      const target = linkTarget(real);
-      if (!target || target === pkg) continue;
       const where = `packages/${pkg.folder}/node_modules/${name}`;
+      const target = linkTarget(where, real);
+      if (!target || target === pkg) continue;
       if (name !== target.name) errors.push(`${where}: links ${target.name} under another name`);
       allowTarget(pkg, target, where);
     }
