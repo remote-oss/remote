@@ -1,5 +1,5 @@
-# Stub. It checks the repository layout only. Build, unit-test and conformance jobs are added by the toolchain
-# and testing ADRs. Manual trigger until then, so the private repository uses no Actions minutes by default.
+# Layout, typecheck, lint, format and unit tests (ADR-0002). Manual trigger until the testing ADR states the CI cost,
+# so the private repository uses no Actions minutes by default.
 name: ci
 
 on:
@@ -9,13 +9,24 @@ permissions:
   contents: read
 
 jobs:
-  layout:
+  checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - run: tools/check-layout
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6 # the version comes from packageManager in package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check-layout
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test:unit
 
-  # build:        per package, after the toolchain ADR
-  # unit:         per package, after the toolchain ADR
+  # build:        bundle and package each extension, fail on node_modules in a VSIX, after the packaging ADR
+  # integration:  pnpm test:integration under xvfb, after the testing ADR
+  # licences:     dependency licence check (ADR-0002, decision 8), follow-up
   # conformance:  per package and profile, runner in tests/conformance/runner, after the testing ADR

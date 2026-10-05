@@ -1,0 +1,50 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "tools"
+    },
+    {
+      "path": "packages/remote-containers"
+    },
+    {
+      "path": "packages/remote-containers/tsconfig.test.json"
+    },
+    {
+      "path": "packages/remote-explorer"
+    },
+    {
+      "path": "packages/remote-explorer/tsconfig.test.json"
+    },
+    {
+      "path": "packages/remote-extensionpack"
+    },
+    {
+      "path": "packages/remote-extensionpack/tsconfig.test.json"
+    },
+    {
+      "path": "packages/remote-server"
+    },
+    {
+      "path": "packages/remote-server/tsconfig.test.json"
+    },
+    {
+      "path": "packages/remote-ssh"
+    },
+    {
+      "path": "packages/remote-ssh/tsconfig.test.json"
+    },
+    {
+      "path": "packages/remote-ssh-edit"
+    },
+    {
+      "path": "packages/remote-ssh-edit/tsconfig.test.json"
+    },
+    {
+      "path": "packages/remote-wsl"
+    },
+    {
+      "path": "packages/remote-wsl/tsconfig.test.json"
+    }
+  ]
+}

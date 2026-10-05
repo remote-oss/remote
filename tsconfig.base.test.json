@@ -1,0 +1,10 @@
+// Tests: packages/<x>/test (unit and integration). A package's tsconfig.test.json extends this and references the
+// package's tsconfig.json, so tests see product source through its declarations.
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "mocha"],
+    "tsBuildInfoFile": "${configDir}/.tsc/test.tsbuildinfo"
+  },
+  "include": ["${configDir}/test"]
+}

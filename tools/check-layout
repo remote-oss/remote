@@ -18,7 +18,28 @@ for dir in packages/*/; do
   for x in "${extensions[@]}"; do [[ "$name" == "$x" ]] && known=1; done
   [[ $known -eq 1 || "$name" == lib-* ]] || err "packages/$name is neither an extension nor a lib-<name> folder"
   [[ -f "$dir/README.md" ]] || err "packages/$name/README.md is missing"
+
+  # ADR-0002: every package folder is a workspace whose name is its folder name (layout.md rule 1); the pack's name
+  # is the <x> of its id, vscode-remote-extensionpack.
+  want=$name
+  [[ "$name" == remote-extensionpack ]] && want=vscode-remote-extensionpack
+  if [[ -f "$dir/package.json" ]]; then
+    got=$(node -p "require('./${dir}package.json').name ?? ''")
+    [[ "$got" == "$want" ]] || err "packages/$name/package.json has name '$got', expected '$want'"
+  else
+    err "packages/$name/package.json is missing (every package folder is a workspace)"
+  fi
+  for cfg in tsconfig.json tsconfig.test.json; do
+    [[ -f "$dir/$cfg" ]] || err "packages/$name/$cfg is missing"
+  done
+  grep -q "\"path\": \"packages/$name\"" tsconfig.json || err "tsconfig.json has no reference to packages/$name"
+  grep -q "\"path\": \"packages/$name/tsconfig.test.json\"" tsconfig.json ||
+    err "tsconfig.json has no reference to packages/$name/tsconfig.test.json"
 done
+grep -qE '^  - packages/\*$' pnpm-workspace.yaml || err "pnpm-workspace.yaml does not list packages/*"
+
+# Dependencies, aliases and tsconfig paths between packages (layout.md rules 3 and 4).
+node tools/check-workspace.ts || fail=1
 
 for f in docs/adr/*.md; do
   name=$(basename "$f")

@@ -1,0 +1,6 @@
+{
+  "name": "lib-x",
+  "dependencies": {
+    "@fixture/lib-y": "workspace:*"
+  }
+}

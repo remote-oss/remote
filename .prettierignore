@@ -1,0 +1,7 @@
+# Prose and generated or synced files keep their own form.
+*.md
+docs/
+tests/conformance/runner/
+pnpm-lock.yaml
+dist/
+.vscode-test/

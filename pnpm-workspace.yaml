@@ -1,0 +1,6 @@
+packages:
+  - packages/*
+
+# esbuild's install script only checks that its platform binary is present.
+allowBuilds:
+  esbuild: true

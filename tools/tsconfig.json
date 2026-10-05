@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // Tools run on Node directly (type stripping), so they resolve modules the way Node does.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    // The ESLint config at the root is checked with the tools.
+    "rootDir": "..",
+    "types": ["node", "mocha"]
+  },
+  "include": ["**/*.ts", "../eslint.config.ts"],
+  "exclude": ["**/fixtures"]
+}
