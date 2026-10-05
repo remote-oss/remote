@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# spec-watch: show which spec issues changed since the design last took them in.
+#
+#   tools/spec-watch            list new, changed and removed issues per repo against the baseline
+#   tools/spec-watch --ack      record the current state as the baseline (commit the result)
+#   tools/spec-watch --ack remote-ssh    the same for one repo
+#
+# GitHub sends no notification when an issue body is edited, so watching the repos is not enough.
+# This compares each issue's updatedAt and labels with docs/architecture/spec-baseline/<repo>.tsv.
+# It reads issue metadata only (number, state, updatedAt, labels, title), never the bodies.
+set -euo pipefail
+
+ORG=remote-oss
+REPOS=(remote-containers remote-ssh remote-ssh-edit remote-explorer remote-wsl remote-server remote-extensionpack)
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+BASE="$ROOT/docs/architecture/spec-baseline"
+
+ack=0
+if [[ "${1:-}" == "--ack" ]]; then ack=1; shift; fi
+if [[ $# -gt 0 ]]; then REPOS=("$@"); fi
+
+mkdir -p "$BASE"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+fetch() {
+  gh issue list --repo "$ORG/$1" --state all --limit 1000 \
+    --json number,state,updatedAt,labels,title \
+    --jq 'sort_by(.number)[] | [.number, .state, .updatedAt, ([.labels[].name] | sort | join(",")), .title] | @tsv'
+}
+
+changed=0
+for repo in "${REPOS[@]}"; do
+  fetch "$repo" > "$tmp/$repo.tsv"
+  if [[ $ack -eq 1 ]]; then
+    cp "$tmp/$repo.tsv" "$BASE/$repo.tsv"
+    printf '%-22s baseline: %s issues\n' "$repo" "$(wc -l < "$tmp/$repo.tsv" | tr -d ' ')"
+    continue
+  fi
+  old="$BASE/$repo.tsv"
+  [[ -f "$old" ]] || : > "$tmp/empty.tsv"
+  [[ -f "$old" ]] || old="$tmp/empty.tsv"
+  out=$(awk -F'\t' '
+    NR == FNR { state[$1] = $2; upd[$1] = $3; lab[$1] = $4; next }
+    { seen[$1] = 1 }
+    !($1 in upd) { printf "  new      #%s  [%s]  %s\n", $1, $4, $5; next }
+    upd[$1] != $3 || state[$1] != $2 {
+      note = ""
+      if (lab[$1] != $4) note = "  labels: " lab[$1] " -> " $4
+      if (state[$1] != $2) note = note "  state: " state[$1] " -> " $2
+      printf "  changed  #%s  %s%s\n", $1, $5, note
+    }
+    END { for (n in upd) if (!(n in seen)) printf "  removed  #%s\n", n }
+  ' "$old" "$tmp/$repo.tsv")
+  if [[ -n "$out" ]]; then
+    changed=1
+    printf '%s (%s)\n%s\n' "$repo" "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "$out"
+  fi
+done
+
+if [[ $ack -eq 0 && $changed -eq 0 ]]; then echo "no changes against the baseline"; fi

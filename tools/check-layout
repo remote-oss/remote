@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# check-layout: the rules of docs/architecture/layout.md that can be checked without code.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+fail=0
+err() { echo "check-layout: $*" >&2; fail=1; }
+
+extensions=(remote-containers remote-ssh remote-ssh-edit remote-explorer remote-wsl remote-server remote-extensionpack)
+
+for x in "${extensions[@]}"; do
+  [[ -f "packages/$x/README.md" ]] || err "packages/$x/README.md is missing"
+done
+
+for dir in packages/*/; do
+  name=$(basename "$dir")
+  known=0
+  for x in "${extensions[@]}"; do [[ "$name" == "$x" ]] && known=1; done
+  [[ $known -eq 1 || "$name" == lib-* ]] || err "packages/$name is neither an extension nor a lib-<name> folder"
+  [[ -f "$dir/README.md" ]] || err "packages/$name/README.md is missing"
+done
+
+for f in docs/adr/*.md; do
+  name=$(basename "$f")
+  [[ "$name" == README.md || "$name" =~ ^[0-9]{4}-[a-z0-9-]+\.md$ ]] || err "docs/adr/$name is not NNNN-title.md"
+done
+dupes=$(ls docs/adr | grep -oE '^[0-9]{4}' | sort | uniq -d)
+[[ -z "$dupes" ]] || err "ADR numbers used twice: $dupes"
+
+for f in AGENTS.md LICENSE docs/architecture/layout.md tests/conformance/README.md; do
+  [[ -f "$f" ]] || err "$f is missing"
+done
+
+[[ $fail -eq 0 ]] && echo "check-layout: ok"
+exit $fail

@@ -1,0 +1,10 @@
+1	OPEN	2026-10-03T19:36:07Z	epic:E90,type:epic	E90 · Package identity and listing
+2	OPEN	2026-10-03T19:36:08Z	epic:E91,type:epic	E91 · Membership and pack behaviour in the editor
+3	OPEN	2026-10-03T19:36:09Z	epic:E99,type:epic	E99 · Decisions
+4	OPEN	2026-10-03T19:37:49Z	type:tracking	Feature inventory and coverage
+5	OPEN	2026-10-03T19:37:30Z	epic:E90,prio:P2,spec:pending,type:feature-spec	F-9001 · Package data: display name, description, categories, keywords, localization, engine and links
+6	OPEN	2026-10-03T19:37:33Z	epic:E90,prio:P3,spec:pending,type:feature-spec	F-9002 · Gallery listing and readme: overview, member summary, requirements and links
+7	OPEN	2026-10-04T06:09:52Z	epic:E91,prio:P0,spec:draft,type:feature-spec	F-9101 · Members and installing the pack
+8	OPEN	2026-10-04T00:57:04Z	epic:E91,prio:P1,spec:draft,type:feature-spec	F-9102 · Managing an installed pack: uninstall, disable, enable, update, and members on their own
+9	OPEN	2026-10-03T19:37:43Z	epic:E91,prio:P2,spec:pending,type:feature-spec	F-9103 · The pack in remote windows, in the browser and on each platform
+10	OPEN	2026-10-04T00:54:34Z	epic:E99,prio:P0,spec:draft,type:decision	F-9901 · Decision: identity of the reimplemented pack and the member ids it lists

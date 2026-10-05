@@ -1,0 +1,21 @@
+# Stub. It checks the repository layout only. Build, unit-test and conformance jobs are added by the toolchain
+# and testing ADRs. Manual trigger until then, so the private repository uses no Actions minutes by default.
+name: ci
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/check-layout
+
+  # build:        per package, after the toolchain ADR
+  # unit:         per package, after the toolchain ADR
+  # conformance:  per package and profile, runner in tests/conformance/runner, after the testing ADR
