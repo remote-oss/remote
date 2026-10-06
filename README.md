@@ -15,6 +15,22 @@ Status: **in development**; the repository is private until the first release (`
 | `tests/conformance/` | The conformance runner and how the suites are run against our builds. |
 | `tools/` | Repository tools (`spec-watch`, `check-layout`). |
 
+## Tooling
+
+Node.js (the version in `.node-version`) and pnpm (the version in `package.json`). From a fresh clone:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm check-layout && pnpm check-identifiers && pnpm check-licences && pnpm lint:shell   # shellcheck
+pnpm typecheck && pnpm lint && pnpm format:check
+pnpm test:unit && pnpm dupes && pnpm dead && pnpm coverage
+pnpm package
+```
+
+`pnpm identifiers` writes each extension's git-ignored `src/identifiers.generated.ts`. The scripts that read it
+(`typecheck`, `lint`, `test:unit`, `build`, `dead`, `coverage`) run it first, and `package` runs `build` first, so
+every script works on a cold tree. CI runs the same scripts.
+
 The specifications and the conformance suites live in the seven repos `remote-oss/remote-<x>` until they move here;
 `docs/architecture` and `docs/adr` are private working documents (ADR-0008) and leave this repository before it
 is published.
