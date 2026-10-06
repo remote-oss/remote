@@ -62,8 +62,14 @@ I propose removing both edges.
 
 ## Open before coding (through the lead)
 
-1. **The WSL row model.** F-5202 §3.3 has one "WSL" row per machine. F-5104 6.12 and F-5002 3.1 have one row per
-   distro.
-2. **F-3906 RR-1 to RR-5 and F-8201's two conflicts** (who pushes `setActiveFolders`; history order). These fix
-   `docs/companion-interface.md` version 1.0, and the interface document cannot be frozen before they are answered.
-3. **The standing-down key's name**, from the polarity revision of F-5901 step 6 and F-5001 BR-11.
+Settled by the explorer room's republication (2026-10-06):
+
+- WSL rows follow F-5202 3.3: one "WSL" row per online Windows tunnel machine. The generic connect pair uses the
+  default distro, and the distro pair asks for one. F-5104, F-5002, F-5201 and F-5301 are aligned.
+- The companion interface, explorer side: see `contracts.md` §6 (two `setActiveFolders` callers, host key, no
+  configFile signal, first-recorded tunnel history, the `folder-active` mark from `getActiveRemote`).
+- The key is `remote-explorer.standingDown`. Every gated entry is `when: <reference clause> &&
+  !remote-explorer.standingDown`, visible by default, with no added activation.
+
+Still open: the F-3906 side of the interface (remote-ssh#83). The interface document is frozen at 1.0 when it
+lands.

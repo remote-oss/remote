@@ -58,13 +58,13 @@ The workspace-trust gate moved to area C with F-0106 (lead, 2026-10-06).
 
 | Component | Responsibility | Owns | Uses |
 |---|---|---|---|
-| `explorer.package` | Manifest, activation (lazy: view or internal command), stand-down with key `remote-explorer.standingDown` (rename of F-5001's `serving`, ADR draft), command catalogue, 14 locales, desktop and web entries | F-5001, F-5002, F-5901 | `standdown.guard`, `identifiers.*` |
+| `explorer.package` | Manifest, activation (lazy: view or internal command), stand-down with key `remote-explorer.standingDown` (spec text since the 2026-10-06 republication), command catalogue, 14 locales, desktop and web entries | F-5001, F-5002, F-5901 | `standdown.guard`, `identifiers.*` |
 | `explorer.targets-view` | `remoteTargets` tree: groups present by companion, build order (pull first, render when all answered or failed), refresh, empty states, both settings | F-5101, F-5301 | `companion.detector`, tree adapter |
 | `explorer.ssh-group` | Host rows from `getConfiguredHostnames`; "Open SSH Config File" and "New Remote" hand-overs; rebuild on `sshHostsChanged` and on `remote.SSH.configFile` changes | F-5102 | `companion.protocol` |
 | `explorer.connect-actions` | The current-window and new-window actions on host, tunnel and folder rows through the companion's open command; path kind decided by the row | F-5103 | `companion.protocol` |
 | `explorer.recent-folders` | Folder rows from the companion's history, sorted and collapsed by the view's settings; "Remove from Recent List" | F-5104 | `companion.protocol` |
 | `explorer.tunnels-group` | Sign-in rows, tunnel machines, the WSL row, unregister; rebuild on `authentication.onDidChangeSessions` | F-5201, F-5202 | `companion.protocol`, `companion.detector` |
-| `explorer.inbox` | Serves `setActiveFolders` (wake only, nothing stored) and `sshHostsChanged` | none (contributor of F-5902) | `companion.protocol` |
+| `explorer.inbox` | Serves `setActiveFolders` (wake only, nothing stored; callers remote-ssh and remote-server) and `sshHostsChanged` | none (contributor of F-5902) | `companion.protocol` |
 
 ### remote-ssh-edit (all of it is area B)
 
