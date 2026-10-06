@@ -289,6 +289,7 @@ setting at run time are filled in by the extension's adapter before the call.
 | `allowedExtraStartOptions` | a list from an allow-list | none | none | `fileWatcherPolling` for WSL 1 (F-6601) |
 | `cleanup` | `keepNewest(n)`; `onlyCurrentRemoveLeftovers`; `onlyCurrentKeepLeftovers` | `keepNewest(5)` (F-2413 BR-9) | to be set by area C | stepwise: `onlyCurrentRemoveLeftovers` (F-6304 BR-8, AC-9); single script: `onlyCurrentKeepLeftovers` (BR-7) |
 | `installMode` | `singleScript`; `stepwise` | `singleScript` | `singleScript` | from `remote.WSL.experimental.scriptLessStartup`, read by the WSL package and passed in (F-6304) |
+| `prefetch` | `none`; `onProductUpdate` with setting key, feed check interval, platform window, licence handling | `none` | `none` | `onProductUpdate`: `remote.WSL.downloadInBackground`, hourly, platforms used in the last 14 days, `skipUnaccepted` (F-6301 6.6, BR-13) |
 
 
 ### V1 bootstrap-scripts
@@ -435,6 +436,37 @@ Rules:
   `serverInstallPath`, tolerates a missing `.log`, and never prunes the reused CLI layout's folders;
   `onlyCurrentRemoveLeftovers` removes every other 40-character commit folder and every `<commit>-<suffix>`
   leftover, keeping other names (F-6304 BR-8, AC-9); `onlyCurrentKeepLeftovers` keeps the leftovers (F-6304 BR-7).
+
+### V10 server-prefetch
+
+Downloads the next server into the kept cache before it is needed, for an extension whose record says
+`onProductUpdate` (remote-wsl F-6301 6.6, BR-13, Q4; agreed with area D, 2026-10-06). It is one component driven by
+the record, never a per-extension branch.
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `run` | the record's `prefetch` values, profile, the download port, V9's folders, the settings snapshot, cancellation | runs while gated, and shows nothing; log lines only | none raised; every failure is logged and skipped |
+
+Rules:
+1. **The gate.** The extension's setting is on, and core's `update.mode` is not `none`.
+2. **Source first.** Before any network request, P3 must be able to resolve a source for the product at all, by
+   override, product template or built-in table. If it cannot, nothing is queried. On genuine VS Code without the
+   user's template this means "never", so nothing goes to Microsoft's update service for no purpose (ADR-0006
+   decision 2).
+3. **The feed.** It is queried at most once per feed check interval, with the time kept in global state. The feed
+   shape is product data in P4, for example the OSS shape
+   `{updateUrl}/api/update/{platform}/{quality}/{commit}` ([oss]
+   `src/vs/platform/update/electron-main/abstractUpdateService.ts`). A product without a known feed shape gets
+   `none`, logged once.
+4. **Licence.** With `skipUnaccepted`, a Microsoft-licensed source (R-80) without a stored acceptance is skipped and
+   logged. The modal is never shown from a prefetch (R-68).
+5. **Download.** For each platform used within the window, P3 resolves with the new commit, version and release. V4
+   downloads with the same verification and atomic rename as a connect.
+6. **One prefetch per user at a time.** A lock file next to the kept cache, with V5's client-lock rules and a
+   30-minute age takeover. Global state is per profile, so it cannot serve as this lock.
+7. **Cancel.** The setting turned off or the window closing aborts an in-flight download, which leaves only the
+   temporary name. A connect that needs the same archive waits for the in-flight download under R-79's bound instead
+   of starting a second one; the atomic rename makes either outcome safe.
 
 ### V9 server-cache
 
