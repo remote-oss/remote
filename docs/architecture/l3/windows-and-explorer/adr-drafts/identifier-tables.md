@@ -3,7 +3,7 @@
 - Status: proposed. Draft by `remote-architect-worker-2`. The approach was agreed by the lead on 2026-10-06; the lead
   assigns the number
 - Date: 2026-10-06
-- Deciders: the lead. The reference-inventory input (Decision 5) is with `remote-development` (dossier question 2).
+- Deciders: the lead. The reference-inventory input (Decision 5) is ruled: R-81.
 - Scope: every extension package; `lib-identifiers`; `tools/`
 - Requirements: D-14, R-27, R-29, R-46; the identity decisions F-1406 and F-1401 (remote-containers), F-3901
   (remote-ssh), F-4901 (remote-ssh-edit), F-5901 (remote-explorer), F-9901 (pack), and those of remote-wsl and
@@ -49,7 +49,7 @@ indicator menu by category, so titles are as binding as ids.
    - a ledger entry is missing from the manifest or companion list, or an invented id sits outside its kind's
      reference namespace (R-27);
    - a stand-down-gated entry's `when` does not end in the gating clause (stand-down gating ADR);
-   - once the rooms publish their identifier inventories (dossier question 2, routed by the lead), an id that is in
+   - against the rooms' published identifier inventories (R-81), an id that is in
      neither the inventory nor the ledger, or a ledger id that is in the inventory. Until then this part is skipped
      and the CI job says so.
 6. **`lib-identifiers` holds the behaviour shared over the tables**, never the tables themselves (a library never

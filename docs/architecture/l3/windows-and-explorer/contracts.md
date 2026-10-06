@@ -56,7 +56,8 @@ Effects, in this order:
 3. `serving`: set the key to false, clearing any value an earlier host run left in the window, and return. The caller
    goes on.
 
-No check runs mid-session, family-wide (lead, 2026-10-06; F-1406 §6 revision requested). Unit
+No check runs mid-session, family-wide (R-78). R-77 adds Remote Explorer and ssh-edit to the packages that call the
+guard. Unit
 tests cover present, absent, a stale key, and exactly one warning per standing activation.
 
 ## 3. lib-authority
@@ -75,7 +76,7 @@ Target shapes:
 
 | Family | Target | Spec |
 |---|---|---|
-| `ssh-remote` | `{alias}` or `{hostName, user?, port?}`, and `rawHostString` | F-2501, F-2301 BR-3/BR-4, F-2303 BR-2 |
+| `ssh-remote` | `{alias}` or `{hostName, user?, port?}`, and `rawHostString`. Windows client user-name forms are provisional (lab) | F-2501, F-2301 BR-3/BR-4, F-2303 BR-2 |
 | `dev-container`, `attached-container`, `k8s-container` | the decoded payload of F-0501, plus an optional outer hop (`@ssh-remote+…`, `@wsl+…`, `@tunnel+…`) that is itself a `DecodedTarget` | F-0501, F-0502, F-1302 |
 | `tunnel` | `{tunnelName, distro?}` | F-8103, F-5902 §5 |
 | `wsl` | `{distro}` | remote-wsl drafts (pending) |
@@ -139,7 +140,7 @@ stable `vscode.openFolder` (`forceNewWindow`, `forceReuseWindow`) and `vscode.ne
 
 Family-wide coordination: each extension runs its own gate, but only one notification may show. The gate claims the
 window through a context key that an R-27 ledger entry names. The first extension to claim it shows the notification
-for all, and the others stay silent. Whether F-1403's ACs allow this is with the containers room (lead, 2026-10-06).
+for all, and the others stay silent. F-1403 allows this one family-wide flow (containers room, through the lead).
 
 ## 4. lib-companion
 
@@ -213,5 +214,8 @@ C-14.
 - F-8201 BR-7 and Q5: the tunnel folder history comes in first-recorded order, but F-5902 §5 says most-recent-first.
   The contract carries the order as delivered, and the view sorts by its own setting. Only the delivered order is
   open.
-- F-8201 Q1 (fix three reference quirks) decides what `currentConnection` must answer in a tunnel window that reuses
-  a relay. This draft follows the spec's "fix" choice.
+- F-8201 Q1 is decided as "three quirks fixed": `currentConnection` answers from the window's own connection in every
+  tunnel window, and the history is read from storage on every query.
+- Provisional (lab), held under D-60: the `ssh-remote` codec's handling of Windows client user names (F-2301 Q2) and
+  any Windows-only encoding; the WSL row of a Windows tunnel machine (F-5202 Q2 class); the F-2304 retry counter
+  (STR:S026). Each keeps the spec's provisional default until the lab run.
