@@ -58,16 +58,20 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
    the editor ships in its own bin folder, named by `tunnelApplicationName` (F-8902 rule 4, constraint 44); the host
    side of a tunnel is the editor's own. So there is no `cliDownloadUrlTemplate`, no CLI table and no CLI dialog.
    The profile still carries `tunnelApplicationName` for Tunnels to locate the shipped executable.
-4. **Remote-side names follow the profile**: the server runs as `serverApplicationName` in `~/<serverDataFolderName>/`
+4. **Caches are keyed by product as well as commit** (added 2026-10-06 from the WSL dossier): VS Code and VSCodium
+   share commit ids, so a client-side archive cache keyed by commit alone would hand one product's server to the
+   other; the key is `applicationName` plus commit for every product except genuine VS Code, which keeps the
+   reference layout (R-58).
+5. **Remote-side names follow the profile**: the server runs as `serverApplicationName` in `~/<serverDataFolderName>/`
    keyed by `commit`; the CLI runs as `tunnelApplicationName`; caches are per product (R-58); the editor's URI scheme
    is `urlProtocol` (R-32); the gallery is the product's own (R-47 rule 3). Two products never share state on a
    remote.
-5. **Settings for the overrides** follow D-14 where the reference has them and R-27 where they are invented. The
+6. **Settings for the overrides** follow D-14 where the reference has them and R-27 where they are invented. The
    specs give each extension its own override policy (Dev Containers: `remote.serverDownloadBaseUrl`, any settings
    layer, a base URL or a template, F-1402; Remote-SSH: `remote.SSH.serverDownloadUrlTemplate`, user layer only,
    F-3902), so `lib-product` takes a per-extension override policy (key, allowed layers, accepted forms) from one
    table and applies the same resolution order to all. (Revised 2026-10-06.)
-6. **Conformance**: the suite's profiles include at least two real products (genuine VS Code with the explicit
+7. **Conformance**: the suite's profiles include at least two real products (genuine VS Code with the explicit
    server URL; VSCodium) and one synthetic `product.json` with made-up names and both templates, so a build that
    hard-codes any product fails a case.
 

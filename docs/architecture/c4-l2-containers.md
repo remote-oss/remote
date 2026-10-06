@@ -36,6 +36,7 @@ A library exists only when at least two packages need the same behaviour; everyt
 | `lib-host` | The host channel: `runScript`, `copyToHost`, `identity`, `platformHint`, with the failure kinds `lib-server` maps; no implementation of its own | ssh (over `lib-ssh`), containers (over `docker exec`), wsl (over `wsl.exe`), `lib-server` | none |
 | `lib-ssh` | `ssh`/`scp` discovery and checks; argument building and spawning; the local connection server (one `ssh` per host string across windows); prompt relay and the hidden login terminal; the `ssh_config` model (files in effect, host list, `ssh -G`, Host-block writer); stderr classification into failure kinds and hints; the host-channel implementation over `ssh` | ssh; containers for its over-SSH hop (F-1302, placement open); ssh-edit does not use it | `lib-host`, `lib-identifiers`, `lib-log` |
 | `lib-server` | Host bootstrap (POSIX `sh` and PowerShell scripts shipped as text); server download (host-first, client fallback), install, locks, commit rewrite, licence gate (R-68, one rule pending K5), caches (R-58); server start, reuse, socket mode, kill, uninstall, lifetime; default extensions handed to a starting server | ssh, wsl, containers (install into a container, F-0503/F-0419/F-0505) | `lib-host`, `lib-product`, `lib-log` |
+| `lib-wsl` | The `wsl.exe` runner, distro inventory, path mapper and the WSL host-channel implementation (added 2026-10-06, area D dossier) | wsl; containers for Docker-in-WSL (F-0204, F-0207, F-1301) | `lib-host`, `lib-log` |
 | `lib-forwarding` | The window tunnel to the server (local port range search, relay or socket); the resolver's tunnel factory; default and static forwards (`tunnels` proposal); port attributes | ssh, wsl, containers, server | `lib-log` |
 
 Not a library, by the two-consumer rule: the tunnel client (service calls through the shipped executable, sign-in
@@ -51,13 +52,13 @@ remote-ssh-edit       ->  lib-identifiers   (no log by F-4002 AC-14; no stand-do
 remote-explorer       ->  lib-identifiers, lib-standdown, lib-companion, lib-authority (gate only)   (no log by F-5901 §6; no product use)
 remote-server         ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-forwarding, lib-companion, lib-log
 remote-ssh            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-ssh, lib-server, lib-forwarding, lib-companion, lib-log
-remote-wsl            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-server, lib-forwarding, lib-companion, lib-log
-remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-server, lib-forwarding, lib-companion, lib-log  (+ lib-ssh if F-1302 lands the hop here)
+remote-wsl            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-log
+remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-log  (+ lib-ssh if F-1302 lands the hop here)
 
 lib-ssh -> lib-host, lib-identifiers, lib-log        lib-server -> lib-host, lib-product, lib-log
 lib-authority -> lib-identifiers, lib-standdown, lib-log       lib-companion -> lib-identifiers, lib-log
 lib-standdown -> lib-identifiers           lib-product -> (nothing)       lib-forwarding -> lib-log
-lib-host -> (nothing)       lib-identifiers -> (nothing)       lib-log -> (nothing)
+lib-host -> (nothing)       lib-identifiers -> (nothing)       lib-log -> (nothing)       lib-wsl -> lib-host, lib-log
 ```
 
 No cycles; `lib-log`, `lib-identifiers`, `lib-host` and `lib-product` are the roots (neither identifiers nor stand-down logs anything under the specs: the warning and the R-46 line are UI, 2026-10-06). The lint of ADR-0002 enforces the edges once the packages exist.
@@ -65,7 +66,8 @@ No cycles; `lib-log`, `lib-identifiers`, `lib-host` and `lib-product` are the ro
 ## 2. Server-side pieces
 
 Our only code that runs on a remote side is text shipped in the VSIX: the POSIX bootstrap script and the PowerShell
-bootstrap script of `lib-server`, run through the host channel. Everything else on the remote side is the product's
+bootstrap script of `lib-server`, run through the host channel, plus two WSL scripts of `lib-wsl` (the stream relay
+run by the server's Node, and the `code` shim for a distro). Everything else on the remote side is the product's
 own server, its tunnel executable, or the dev container CLI's work inside the engine. There is no agent, daemon or
 service of ours on any host.
 
@@ -81,8 +83,8 @@ the browser bundle of each excludes `lib-ssh`, `lib-host`, `lib-server` and `lib
 |---|---|---|---|---|
 | A transport and server lifecycle | `remote-architect-worker-1` | `lib-host`, `lib-ssh`, `lib-server`, `lib-forwarding`, `lib-product`, the A part of `remote-ssh`, the tunnel client of `remote-server` | 73 | dossier and draft contracts merged |
 | B resolvers, windows, explorer, companions | `remote-architect-worker-2` | `lib-identifiers`, `lib-standdown`, `lib-authority`, `lib-companion`, `remote-explorer`, `remote-ssh-edit`, `remote-extensionpack`, the B parts of `remote-ssh`, `remote-server`, `remote-containers`, `remote-wsl` | 57 | dossier, draft contracts and two ADR drafts merged |
-| C containers engine | to assign | the engine side of `remote-containers`: dev container CLI bridge, engine CLI, volumes, features, compose, recovery, attach, Kubernetes, Remote Explorer data | 85 | catalogue rows only |
-| D WSL | to assign after the 16 drafts | the engine side of `remote-wsl`: `wsl.exe`, distros, paths, the WSL server install over `lib-host` | 13 + 16 pending | catalogue rows only |
+| C containers engine | `remote-architect-worker-3` | the engine side of `remote-containers`: dev container CLI bridge, engine CLI, volumes, features, compose, recovery, attach, Kubernetes, Remote Explorer data | 85 | catalogue rows only |
+| D WSL | `remote-architect-worker-4` | `lib-wsl`, the engine side of `remote-wsl`, the WSL server install and start over `lib-server` (A contributes) | 25 published + 4 pending | dossier merged |
 | lead | `remote-architect` | `lib-log`, the traceability matrix, the build order, ADRs | — | this document |
 
 ## 5. Decisions this view takes (each a line in the ADR list or a revision already on main)
