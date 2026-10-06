@@ -1,6 +1,7 @@
 # ADR-NNNN: Gate static contributions with a stand-down key that defaults to visible
 
-- Status: proposed (draft by `remote-architect-worker-2` for the lead, who assigns the number)
+- Status: proposed. Draft by `remote-architect-worker-2`. Option A was accepted by the lead on 2026-10-06 and sent to
+  `remote-development` with the polarity revision list. The lead assigns the number when the rooms have revised
 - Date: 2026-10-06
 - Deciders: the lead. The polarity of the key changes wording in five spec issues, so those revisions go through
   `remote-development` to the rooms. R-54 itself does not fix the polarity.
@@ -56,18 +57,22 @@ after a window reload [oss] (`contextKeyService.ts`, F-5901 step 2).
 |---|---|---|
 | A: "standing down" key, default visible, no extra activation (chosen) | Every single-install AC holds (F-2006 AC-1, AC-2, AC-12; F-5001; F-0101). Activation ACs hold (F-2001, F-4002 AC-23, F-5901 AC-6, F-5902 AC-30). One rule for the family | Duplicates before the first activation in the unsupported both-enabled case. F-1406 §5's acceptance ("each entry exactly once with both enabled") holds only after activation, so the specs need a wording revision |
 | B: "serving" key, as F-1406 §5 and F-5901 step 6 are written | No duplicates at any time in the both-enabled case | Fails F-2006 AC-1, AC-2, AC-12 in the supported single-install case. Hides the Remote-SSH palette entries in every fresh window. Trades the common case for the unsupported one |
-| C: A, plus an `onStartupFinished` activation that runs only the guard (the lead's preference) | Closes the duplicate window in the both-enabled case | An extension cannot activate "only the guard". Activation is all or nothing, and the activation time becomes visible. It breaks F-2001's exact activation list, F-4002 AC-23 ("never a startup activation") and F-5901 AC-6 and F-5902 AC-30 (explorer inactive before the view is shown), and adds startup cost to every window for the unsupported case |
+| C: A, plus an `onStartupFinished` activation that runs only the guard | Closes the duplicate window in the both-enabled case | An extension cannot activate "only the guard". Activation is all or nothing, and the activation time becomes visible. It breaks F-2001's exact activation list, F-4002 AC-23 ("never a startup activation") and F-5901 AC-6 and F-5902 AC-30 (explorer inactive before the view is shown), and adds startup cost to every window for the unsupported case |
 | D: B plus C | No duplicates, entries visible after startup | Inherits C's AC failures. Entries still missing in the first moments after start, which F-2006 AC-1 can catch |
 | E: no gating; rely on R-54's run-time stand-down only | Simplest | Every gated entry is duplicated for the whole session when both are enabled. Contradicts F-1406 §5, which the user's ruling R-54 builds on |
 
 Option C would remove the duplicates only where the user already runs an unsupported combination. It would cost
 three spec-fixed activation contracts that conformance checks in every window. Option A keeps the supported case
-exact and leaves only a timing residual in the unsupported one. I recommend A over the lead's preference for this
-reason.
+exact and leaves only a timing residual in the unsupported one.
+
+Remote - Tunnels is the one exception: its own spec keeps a startup activation limited to the check (F-8901,
+constraint 26, K9). Decision 3 does not remove it. It forbids only adding one where the spec has none.
 
 ## Consequences
 
-- Revisions through `remote-development`: F-1406 §5 and F-0101 BR-10 (polarity, and acceptance "after the
+- The binding constraints file states a positive key (constraint 21). It changes with these revisions.
+- Revisions through `remote-development`: F-8901 §5 (the key's polarity, keeping its startup check), F-1406 §5 and
+  F-0101 BR-10 (polarity, and acceptance "after the
   reimplementation's first activation"), F-5901 §5 step 6 and AC-4, F-5001 BR-11 (rename `remote-explorer.serving` to
   a standing-down key), F-3901 §5 and F-2006 §16 and Q1 (answered with option (b)). The R-27 ledgers take the new
   names.
