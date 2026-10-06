@@ -1,9 +1,9 @@
 # ADR-NNNN: One licence gate for every server install, with the "Microsoft-licensed" test as data
 
 - Status: proposed (draft by `remote-architect-worker-1` for the lead, who assigns the number). The active rule is
-  K5 in the register.
+  decided: R-80, the source-based test alone (2026-10-06).
 - Date: 2026-10-06
-- Deciders: the user through the register (K5) for the test; the lead for the gate's shape
+- Deciders: the register (R-80, answering K5) for the test; the lead for the gate's shape
 - Scope: `lib-product` (the rules and `classifyLicence`), `lib-server` (V6: store and modal), every package that
   installs or starts a server: remote-ssh, remote-containers, remote-wsl, remote-server where it applies
 - Requirements:
@@ -37,7 +37,7 @@ Checked against every licence acceptance criterion of both specs:
 |---|---|---|
 | `clientLicence` | all pass | fails AC-14 and AC-15 |
 | `sourceBased` | all pass: AC-1 by (i), AC-4 free, AC-5 by (iii) | all pass |
-| either (`any`), as provisionally accepted | all pass | fails AC-15 |
+| either (`any`), provisional, withdrawn by R-80 | all pass | fails AC-15 |
 
 ## Decision
 
@@ -46,9 +46,8 @@ Checked against every licence acceptance criterion of both specs:
      whether this is a reuse, and the terms URL.
    - The rules are entries in the product table: `clientLicence` and `sourceBased`, with their host and prefix lists.
    - The active set is one table line, so K5 lands as a one-line change.
-2. **The recommended active set is `sourceBased` alone.** It is the only set that passes every acceptance criterion
-   of both specs. Until K5 is ruled, the table carries the set the lead accepted provisionally (`any`), and the
-   known failure of F-3902.AC-15 is recorded against it.
+2. **The active set is `sourceBased` alone (R-80).** It is the only set that passes every acceptance criterion of
+   both specs. `clientLicence` stays in the table as an inactive entry.
 3. **One gate.** `lib-server`'s V6 is the one gate. It is asked before any download or copy (cases i and ii) and
    before any start of a reused server (case iii; F-1402 AC-5). It shows the modal through its UI port: own wording,
    the terms link, and "Accept and Continue" or "Cancel".
@@ -63,16 +62,16 @@ Checked against every licence acceptance criterion of both specs:
 
 | Option | For | Against |
 |---|---|---|
-| `sourceBased` as data (recommended) | Passes all eleven acceptance criteria; decides by what is actually installed | Needs host and prefix lists kept current in the product table |
+| `sourceBased` as data (chosen, R-80) | Passes all eleven acceptance criteria; decides by what is actually installed | Needs host and prefix lists kept current in the product table |
 | `clientLicence` | Simplest fact | Fails F-3902.AC-14 (a Microsoft server on VSCodium goes unasked, against R-68's intent) and AC-15 |
-| `any` (provisional) | Never misses a Microsoft server | Fails F-3902.AC-15: asks for a MIT server on genuine VS Code |
+| `any` (withdrawn by R-80) | Never misses a Microsoft server | Fails F-3902.AC-15: asks for a MIT server on genuine VS Code |
 | A rule per extension | Each spec passes as written | Two behaviours in one family for the same server, against R-47's "siblings do not diverge" |
 | The test in code per package | None | Three copies; K5 would be a code change in three places |
 
 ## Consequences
 
-- K5's ruling is one data line plus, if `sourceBased` wins, a wording revision of F-1402 rule 5 through the
-  containers room. No containers acceptance criterion changes.
+- R-80 is one data line plus a wording revision of F-1402 rule 5 through the containers room. No containers
+  acceptance criterion changes.
 - The product table gains the licence host list, the VSCodium release prefixes and the Microsoft terms URL. The
   ADR-0006 literal check covers them.
 - Every server-installing package gets the same modal, store and cancel semantics from V6.
@@ -81,4 +80,4 @@ Checked against every licence acceptance criterion of both specs:
 
 - Unit tests of `classifyLicence` per rule against every case above.
 - The conformance cases F-1402 AC-1 to AC-5 and F-3902.AC-10 to AC-15 on the active set.
-- A test that pins the active set to the table line K5 names.
+- A test that pins the active set to `[sourceBased]`.

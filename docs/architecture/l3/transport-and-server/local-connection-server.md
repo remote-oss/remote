@@ -56,7 +56,7 @@ A helper is never orphaned by a crashed extension host, because a crash closes t
 **Open points.**
 1. **Grace length.** The value must carry a reload without exceeding F-2102 BR-3. It needs a timing case in the
    SSH suite.
-2. **Windows clients (F-2102 Q1).** Unix sockets in a runtime folder do not exist there. The control and askpass
+2. **Windows clients (F-2102 Q1), provisional (lab) under D-60.** Unix sockets in a runtime folder do not exist there. The control and askpass
    endpoints become named pipes restricted to the current user. Several things need a Windows lab run before this
    contract is final:
    - whether Windows OpenSSH runs an `SSH_ASKPASS` program that is a script rather than an `.exe`;

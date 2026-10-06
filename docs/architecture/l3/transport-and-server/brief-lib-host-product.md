@@ -24,7 +24,7 @@ coding worker.
 | Resolver | `packages/lib-product` | `resolveServerArchive(profile, hostTokens, policy, override)` per P3. The override comes in as a value plus the settings layer it was read from; the caller's adapter reads settings, not this library |
 | Policy table | `packages/lib-product` | One entry per extension: setting key, allowed layers, accepted forms, allowed placeholders. Rows: remote-ssh (F-3902 rules 1 to 3), remote-containers (F-1402 rule 4, base-URL form included), remote-wsl (pending; a test pins that it is absent) |
 | Product table | `packages/lib-product`, one file | The built-in entries `codium` and `codium-insiders` (F-3902 rule 1(c), F-1402); the licence hosts of F-3902 rule 11(i); the VSCodium release prefixes of rule 11(ii); the licence rules (below). The dev tunnels domain is left out until the Tunnels ruling |
-| Licence rules as data | `packages/lib-product` | `classifyLicence(facts, activeRules)`, where facts are the step, the URL host, whether the client's `serverLicense` is empty, and whether this is a reuse. Two rule entries: `clientLicence` (F-1402 rule 5) and `sourceBased` (F-3902 rule 11 (i) to (iii)). The active set is `[clientLicence, sourceBased]` with "any" until K5 is ruled. K5 then changes one table line. The acceptance store and the modal stay in lib-server (V6) |
+| Licence rules as data | `packages/lib-product` | `classifyLicence(facts, activeRules)`, where facts are the step, the URL host, whether the client's `serverLicense` is empty, and whether this is a reuse. Two rule entries: `clientLicence` (F-1402 rule 5) and `sourceBased` (F-3902 rule 11 (i) to (iii)). The active set is `[sourceBased]` (R-80). The acceptance store and the modal stay in lib-server (V6) |
 | Literal check | `tools/` (the lead names where) | ADR-0006 Check: product names, Microsoft hosts and VSCodium prefixes may appear only in the product-table file and its tests |
 
 ## Behaviour to get right (each a named unit test)
@@ -46,8 +46,7 @@ coding worker.
 - **Results, not UI.** `noSource` carries the `applicationName` and the setting key. `invalidOverride` carries the
   key and the problem. The extension packages render the dialogs of F-3902 rule 8 and F-1402.
 - **Licence rules.** Every case of F-3902 rule 11 (i) to (iii) and F-3902.AC-10, AC-12, AC-14 and AC-15 is checked
-  against `sourceBased`. F-1402 AC-1 to AC-5's classification is checked against `clientLicence`. The "any"
-  combination has its own test.
+  against `sourceBased`. F-1402 AC-1 to AC-5 are also checked against `sourceBased`, the only active rule (R-80). A test pins the active set to `[sourceBased]`.
 - **Profile reading.** Missing optional fields give their documented empty values. A missing `serverDataFolderName`
   is not defaulted here; P1 reports it absent and the caller applies its spec's fallback (F-0503). Malformed JSON
   gives `unreadable`.
@@ -84,5 +83,5 @@ Kept under `packages/lib-product/test/fixtures/`, each with a header naming its 
 ## Open before coding (through the lead)
 
 1. Dropping the `lib-log` edges of `lib-host` and `lib-product`.
-2. K5: nothing blocks. The active rule set is one table line.
+2. K5 is ruled (R-80): the active set is `sourceBased` alone; `clientLicence` stays as an inactive table entry.
 3. Where the literal check lives: `tools/check-layout` or an ESLint `no-restricted-syntax` list.

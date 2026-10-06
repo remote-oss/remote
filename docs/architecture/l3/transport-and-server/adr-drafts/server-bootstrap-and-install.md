@@ -40,15 +40,17 @@ The reference's scripts may not be read. Our own must therefore be written from 
    5. Download on the host first, with the client fallback by `localServerDownload` (rule 6).
    6. Unpack into `<data folder>/bin/<client commit>/`.
    7. Check `--version` and rewrite a differing commit (rule 9).
-4. **Start.** The launcher from `product.json` (rule 7), with the start options of the contracts (V7). Readiness is
+4. **Start.** The launcher from `product.json` (rule 7), with the start options of the contracts (V7), telemetry
+   off on every start (R-83). Readiness is
    the server's own "Extension host agent listening on" line. `--accept-server-license-terms` is passed only after
    acceptance (R-68).
 5. **No editor CLI.** `remote.SSH.useExecServer` is logged as not applied (F-2103 BR-13).
 6. **Shell choice, pending the room.** A POSIX login shell receives the script on standard input. Any other login
    shell gets `sh` after sourcing `~/.profile`. This keeps F-2508's login environment and works on fish and bash-less
    hosts (F-2703 Q2, F-2704 Q1).
-7. **Windows hosts.** PowerShell with a command line under 8192 characters and no WMI process query (F-2701,
-   F-3908).
+7. **Windows hosts.** PowerShell with a command line under 8192 characters and no WMI process query. A standard
+   user is not failed on purpose (R-86, F-3908). The script is provisional (lab) until F-2701's capture runs
+   (D-60).
 
 ## Options considered
 

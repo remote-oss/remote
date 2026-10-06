@@ -8,7 +8,9 @@
   - ADR-0003, ADR-0004, and ADR-0005 and ADR-0006 as revised on 2026-10-06 (no CLI download, CLI for Tunnels only,
     no VS Code entry in the server table);
   - R-28 and F-3905 (no telemetry, no payload lines in logs);
-  - R-47, R-58, R-68 (one licence test pending K5).
+  - R-47, R-58, R-68 with R-80 (the source-based licence test alone);
+  - R-79 (one hang rule), R-83 (servers start with telemetry off), R-86 (F-3908: no deliberate failure), D-60
+    (clauses that need a lab run are marked "provisional (lab)" and keep their defaults).
 - Component ids are those of `components.md`.
 
 How to read a contract: each lists the operations with their inputs, outputs and failure states, the rules with
@@ -195,6 +197,9 @@ Rules:
 
 ### S7 prompt-ui
 
+Provisional (lab) for Windows clients: the surfaces and askpass route under Windows OpenSSH wait for the run of
+F-2305, F-2306 and F-2307 Q1 (D-60).
+
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `askpassEnvironment` | lease or session, `remote.SSH.externalSSH_ASKPASS` | variables that make `ssh` call our askpass endpoint; none when the external askpass applies (F-2309) | none |
@@ -219,6 +224,9 @@ Rules:
 - It is never created trust-exempt (F-3903 rule 1).
 
 ### S9 connection-server
+
+Provisional (lab) for Windows clients: named pipes, a script as `SSH_ASKPASS`, and the detached helper's survival
+wait for the run of F-2102 Q1 (D-60).
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
@@ -265,7 +273,9 @@ Rules inside the scripts:
   wins (F-2404 BR-10).
 - Locks use `flock` or atomic `ln` (F-2408, F-2702).
 - macOS sockets go in `TMPDIR` (F-2702).
-- Windows uses no WMI process query (F-3908).
+- Windows uses no WMI process query, and a standard Windows user is not failed on purpose: no setting, and the
+  reference's recorded failure is drift (R-86, F-3908). The PowerShell script's details are provisional (lab) until
+  F-2701's capture runs (D-60).
 - The scripts are written from the specs only.
 
 ### V2 host-probe
@@ -314,8 +324,8 @@ Rule: a client lock whose owner process is gone counts as free (F-2408 Q1, recom
 | `ensureAccepted` | the classification, the profile's store, a UI port | `accepted` | `licenceDeclined` (reason STR:S027, "Connecting was canceled") |
 
 Rules:
-- The two candidate tests are the P4 rule entries `clientLicence` (F-1402 rule 5) and `sourceBased` (F-3902 rule
-  11); until K5 is ruled both are active with "any". K5 changes one table line.
+- The active rule is the P4 entry `sourceBased` (F-3902 rule 11) alone (R-80). `clientLicence` (F-1402 rule 5)
+  stays in the table as an inactive entry.
 - An acceptance is stored per profile under a key derived from the terms URL, and is never synced.
 - The modal offers "Accept and Continue" and "Cancel" (R-68).
 
@@ -332,7 +342,7 @@ Start options:
 - `--start-server`, `--host`, and `--port` or `--socket-path`;
 - `--connection-token-file`;
 - `--accept-server-license-terms` only after `accepted`;
-- `--telemetry-level off`;
+- `--telemetry-level off` on every start (R-83);
 - `--reconnection-grace-time` when set and not 0;
 - `--enable-remote-auto-shutdown`;
 - `--install-extension` per default id.
@@ -424,7 +434,8 @@ Rules:
   (F-2304 BR-2), and a running host-side download is not stopped (F-2304 BR-8).
 - Connected carries `tunnelFeatures` from W3 next to the tunnel factory (F-8202).
 - Every attempt makes a fresh connection when S9 reports the transport lost (F-2505 BR-1).
-- A bound wait replaces each recorded hang, pending the family rule of dossier question 7.
+- Every recorded hang becomes a bound wait followed by F-2601's dialog (R-79). This covers F-2103 Q1, F-2104 Q1,
+  F-2304 Q2, F-2308 Q3 and Q4, F-2405 Q3 and F-2408 Q1.
 
 ### R2 ssh-diagnostics
 
@@ -448,6 +459,10 @@ R4:
 ---
 
 ## 8. remote-server tunnel client: blocked
+
+Frozen pending D-55 (the user). F-8902 is accepted: sign-in through `vscode.authentication` only. F-8201 Q1 is
+ruled "three quirks fixed", which T4 and B's `currentConnection` follow. A spike of option (c) runs as an
+investigation by `remote-coding-worker-1`.
 
 The `[cli]` reading of 2026-10-06 (crate at commit 2c1d4c1a) shows that option (a), the shipped tunnel executable
 as the relay, cannot meet F-8103 and F-8902 as the specs stand. The contract for T2 to T5 is therefore not written.

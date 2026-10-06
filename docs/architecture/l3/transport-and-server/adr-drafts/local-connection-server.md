@@ -44,7 +44,7 @@ restarts it.
      (F-2505 BR-1).
    - When the editor quits, through the leases closing.
 7. **Endpoints.** Unix sockets with mode 0600 in the user runtime folder. On Windows, named pipes restricted to the
-   current user, pending the lab run of F-2102 Q1.
+   current user: provisional (lab) until the run of F-2102 Q1 (D-60).
 
 ## Options considered
 
