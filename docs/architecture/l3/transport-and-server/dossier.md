@@ -155,7 +155,11 @@ Needed by A:
    watch and the `remote-internal.sshHostsChanged` signal; A owns the file list, the parser and the Host-block
    writer. For the one-owner rule I traced F-2203 to B and F-2204 to A5. Confirm, or allow a split row in the
    traceability matrix.
-10. **ctr#103 F-1302.** Where the server download runs for containers over SSH: on the client and copied, or on the
+10. **ssh#76 F-2703 Q2 and ssh#77 F-2704 Q1 (bootstrap shell).** Our build always installs directly, which is the
+    reference's legacy path, and that path needs `bash` (F-2703 7.E1) and times out under a fish login shell. I
+    recommend that A8's POSIX script runs under `sh` started explicitly, so BusyBox, ash, dash and fish hosts work
+    as in the reference's default mode. This needs the spec's decision.
+11. **ctr#103 F-1302.** Where the server download runs for containers over SSH: on the client and copied, or on the
     remote host.
 
 ## 6. The conformance picture
