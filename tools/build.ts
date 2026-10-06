@@ -11,6 +11,7 @@ import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {build} from 'esbuild';
 import {NODE_TARGET} from './editor-floor.ts';
+import {checkStringTables} from './string-tables.ts';
 import {
   isMainModule,
   messageOf,
@@ -38,6 +39,10 @@ export async function buildPackages(
     const directory = path.join(root, 'packages', folder);
     if (!existsSync(directory)) {
       throw new Error(`no package folder packages/${folder}`);
+    }
+    const stringProblems = checkStringTables(root, folder);
+    if (stringProblems.length > 0) {
+      throw new Error(`${folder}: ${stringProblems.join('; ')}`);
     }
     const entry = path.join(directory, ENTRY_PATH);
     if (!existsSync(entry)) {

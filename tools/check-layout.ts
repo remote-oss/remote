@@ -7,6 +7,7 @@ import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {checkWorkspace} from './check-workspace.ts';
 import {EDITOR_ENGINE} from './editor-floor.ts';
+import {checkStringTables} from './string-tables.ts';
 import {
   EXTENSION_FOLDERS,
   expectedPackageName,
@@ -137,6 +138,16 @@ function checkPackagingTool(root: string, problems: string[]): void {
   }
 }
 
+function stringTableProblems(root: string, folder: string): string[] {
+  try {
+    return checkStringTables(root, folder).map(
+      problem => `string-tables: ${problem}`,
+    );
+  } catch (error) {
+    return [`string-tables: ${messageOf(error)}`];
+  }
+}
+
 function checkDecisionRecords(root: string, problems: string[]): void {
   const records = sortedEntries(path.join(root, 'docs', 'adr'))
     .map(entry => entry.name)
@@ -170,6 +181,9 @@ export function checkLayout(root: string): string[] {
   const references = rootReferences(root, problems);
   for (const folder of packageFolders(root)) {
     checkPackageFolder(root, folder, references, problems);
+    if (existsSync(path.join(root, 'packages', folder, 'package.json'))) {
+      problems.push(...stringTableProblems(root, folder));
+    }
   }
   checkDecisionRecords(root, problems);
   checkPackagingTool(root, problems);

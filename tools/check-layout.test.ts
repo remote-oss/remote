@@ -156,6 +156,14 @@ describe('check-layout', () => {
     );
   });
 
+  it('adds the string-table problems of each package with their prefix', () => {
+    workspace.writeManifest('remote-ssh', {description: '%description%'});
+    deepStrictEqual(
+      checkLayout(workspace.root).map(problem => problem.split('/')[0]),
+      ['string-tables: packages'],
+    );
+  });
+
   it('reports an unreadable package name as empty', () => {
     workspace.write('packages/remote-ssh/package.json', '{');
     deepStrictEqual(checkLayout(workspace.root).slice(0, 1), [
