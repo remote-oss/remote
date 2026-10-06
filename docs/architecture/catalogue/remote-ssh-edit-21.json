@@ -1,16 +1,113 @@
 [
-{"id":"F-4901","issue":6,"repo":"remote-ssh-edit","kind":"decision","label":"spec:reviewed","title":"Decision: extension identity and reference identifiers","epic":"E49","acCount":0,
-"surfaces":{"commands":[],"settings":[],"views":[],"menus":[],"contextKeys":[],"authorities":[],"other":["language id ssh_config","aliases SSH Config / ssh_config","file patterns **/.ssh/config, /etc/ssh/ssh_config, ssh.config","grammar scope source.config.ssh","extension id remote-oss.remote-ssh-edit"]},
-"external":{"stableApi":[],"proposedApi":[],"processes":[],"network":[],"remoteFiles":[],"localFiles":["~/.ssh/config","/etc/ssh/ssh_config"]},
-"cites":["remote-ssh-edit#F-4001","remote-ssh-edit#F-4002","remote-ssh-edit#F-4003","remote-ssh-edit#F-4101","remote-ssh-edit#F-4201","remote-ssh-edit#F-4202","remote-containers#F-1401","remote-containers#F-1405","remote-containers#F-1406"],
-"coreUi":false,"candidateComponent":"ssh-edit.identity-manifest","candidateLibrary":"lib-identifiers","area":"B","reuse":[],"errorPaths":0,
-"notes":"Manifest-level identity decision: keeps reference language id, aliases, patterns and scopes verbatim; new publisher and id. No runtime behaviour, no telemetry. Side-loading beside reference unsupported.",
-"questions":["Which identifiers does remote-ssh use to depend on remote-oss.remote-ssh-edit, and who decides that?","Is the spec citing material not for the clean side? Provenance names extracted manifest sources; confirm only identifiers are needed.","Should lib-identifiers hold these language ids and scopes, shared with the pack room?"]},
-{"id":"F-4902","issue":7,"repo":"remote-ssh-edit","kind":"decision","label":"spec:reviewed","title":"Decision: which OpenSSH keyword list the reimplementation follows","epic":"E49","acCount":0,
-"surfaces":{"commands":[],"settings":[],"views":[],"menus":[],"contextKeys":[],"authorities":[],"other":["completion items of kind symbol-property (95 keywords)","one snippet","documentation in details pane"]},
-"external":{"stableApi":[],"proposedApi":[],"processes":[],"network":[],"remoteFiles":[],"localFiles":["ssh_config(5) manual text, OpenSSH 10.2p1, as documentation source"]},
-"cites":["remote-ssh-edit#F-4201","remote-ssh-edit#F-4202","remote-ssh-edit#F-4203"],
-"coreUi":false,"candidateComponent":"ssh-edit.keyword-catalogue","candidateLibrary":"none","area":"B","reuse":["openssh"],"errorPaths":0,
-"notes":"Fixes the completion keyword list at the reference's 95 items in observed order, docs written from ssh_config(5); seven keywords get own text. Option C superset deferred as an adaptation setting, not specified.",
-"questions":["Which older OpenSSH manual version matches the reference wording, and where is the identification recorded?","Is the 95-item ordered list published as data in conformance files, or must implementers derive it?","What is the first-sentence comparison rule for conformance: normalisation, case, punctuation?"]}
+ {
+  "id": "F-4901",
+  "issue": 6,
+  "repo": "remote-ssh-edit",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: extension identity and reference identifiers",
+  "epic": "E49",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "language id ssh_config",
+    "aliases SSH Config / ssh_config",
+    "file patterns **/.ssh/config, /etc/ssh/ssh_config, ssh.config",
+    "grammar scope source.config.ssh",
+    "extension id remote-oss.remote-ssh-edit"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "~/.ssh/config",
+    "/etc/ssh/ssh_config"
+   ]
+  },
+  "cites": [
+   "remote-ssh-edit#F-4001",
+   "remote-ssh-edit#F-4002",
+   "remote-ssh-edit#F-4003",
+   "remote-ssh-edit#F-4101",
+   "remote-ssh-edit#F-4201",
+   "remote-ssh-edit#F-4202",
+   "remote-containers#F-1401",
+   "remote-containers#F-1405",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh-edit.identity-manifest",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 0,
+  "notes": "Manifest-level identity decision: keeps reference language id, aliases, patterns and scopes verbatim; new publisher and id. No runtime behaviour, no telemetry. Side-loading beside reference unsupported.",
+  "questions": [
+   "Which identifiers does remote-ssh use to depend on remote-oss.remote-ssh-edit, and who decides that?",
+   "Is the spec citing material not for the clean side? Provenance names extracted manifest sources; confirm only identifiers are needed.",
+   "Should lib-identifiers hold these language ids and scopes, shared with the pack room?"
+  ]
+ },
+ {
+  "id": "F-4902",
+  "issue": 7,
+  "repo": "remote-ssh-edit",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: which OpenSSH keyword list the reimplementation follows",
+  "epic": "E49",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "completion items of kind symbol-property (95 keywords)",
+    "one snippet",
+    "documentation in details pane"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "ssh_config(5) manual text, OpenSSH 10.2p1, as documentation source"
+   ]
+  },
+  "cites": [
+   "remote-ssh-edit#F-4201",
+   "remote-ssh-edit#F-4202",
+   "remote-ssh-edit#F-4203"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh-edit.keyword-catalogue",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 0,
+  "notes": "Fixes the completion keyword list at the reference's 95 items in observed order, docs written from ssh_config(5); seven keywords get own text. Option C superset deferred as an adaptation setting, not specified.",
+  "questions": [
+   "Which older OpenSSH manual version matches the reference wording, and where is the identification recorded?",
+   "Is the 95-item ordered list published as data in conformance files, or must implementers derive it?",
+   "What is the first-sentence comparison rule for conformance: normalisation, case, punctuation?"
+  ]
+ }
 ]

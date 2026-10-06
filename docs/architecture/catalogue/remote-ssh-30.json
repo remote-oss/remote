@@ -33,7 +33,9 @@
    "stableApi": [
     "window.showErrorMessage (modal)"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "ssh"
    ],
@@ -55,7 +57,16 @@
    "remote-ssh#F-2105",
    "remote-ssh#F-2305",
    "remote-ssh#F-2411",
-   "remote-ssh#F-2505"
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2401",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-3907"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.failure-dialog",
@@ -130,7 +141,19 @@
    "remote-ssh#F-2301",
    "remote-ssh#F-2203",
    "remote-ssh#F-2108",
-   "remote-ssh#F-2201"
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2404",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2406",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2603",
+   "remote-ssh#F-2604",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3908"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.mitigation-picker",
@@ -176,8 +199,14 @@
    ]
   },
   "external": {
-   "stableApi": [],
-   "proposedApi": [],
+   "stableApi": [
+    "window.createOutputChannel",
+    "window.showErrorMessage",
+    "window.showQuickPick"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "ssh"
    ],
@@ -195,7 +224,16 @@
    "remote-ssh#F-2605",
    "remote-ssh#F-2105",
    "remote-ssh#F-2505",
-   "remote-ssh#F-2411"
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2604",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3907"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.error-classifier.network",
@@ -245,8 +283,16 @@
    ]
   },
   "external": {
-   "stableApi": [],
-   "proposedApi": [],
+   "stableApi": [
+    "l10n.t",
+    "window.createOutputChannel",
+    "window.createTerminal",
+    "window.showErrorMessage",
+    "window.withProgress"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "ssh",
     "sshd",
@@ -271,7 +317,14 @@
    "remote-ssh#F-2305",
    "remote-ssh#F-2410",
    "remote-ssh#F-2601",
-   "remote-ssh#F-2602"
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2603",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3907"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.error-classifier.forwarding",
@@ -349,7 +402,9 @@
    "remote-ssh#F-2603",
    "remote-ssh#F-2604",
    "remote-ssh#F-2606",
-   "remote-ssh#F-2006"
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3907"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.session-hints",
@@ -395,7 +450,11 @@
   "external": {
    "stableApi": [
     "chat.createChatParticipant",
-    "chat.disableAIFeatures setting read"
+    "chat.disableAIFeatures setting read",
+    "lm.selectChatModels",
+    "window.registerTerminalLinkProvider",
+    "window.createTerminal",
+    "window.showErrorMessage"
    ],
    "proposedApi": [],
    "processes": [],
@@ -470,7 +529,9 @@
   },
   "external": {
    "stableApi": [],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "ssh",
     "powershell",
@@ -499,7 +560,10 @@
    "remote-ssh#F-2411",
    "remote-ssh#F-2702",
    "remote-ssh#F-2703",
-   "remote-ssh#F-2704"
+   "remote-ssh#F-2704",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-3903"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.host-profile.windows",
@@ -556,7 +620,9 @@
   },
   "external": {
    "stableApi": [],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "ssh",
     "zsh",
@@ -595,7 +661,8 @@
    "remote-ssh#F-2602",
    "remote-ssh#F-2701",
    "remote-ssh#F-2703",
-   "remote-ssh#F-2704"
+   "remote-ssh#F-2704",
+   "remote-ssh#F-3901"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.host-profile.macos",
@@ -642,7 +709,9 @@
   },
   "external": {
    "stableApi": [],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "ssh",
     "bash",
@@ -678,7 +747,8 @@
    "remote-ssh#F-2701",
    "remote-ssh#F-2702",
    "remote-ssh#F-2704",
-   "remote-ssh#F-3902"
+   "remote-ssh#F-3902",
+   "remote-ssh#F-2003"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.host-profile.minimal",
@@ -733,7 +803,9 @@
   },
   "external": {
    "stableApi": [],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "ssh",
     "zsh",

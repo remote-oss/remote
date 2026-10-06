@@ -1,37 +1,450 @@
 [
-{"id":"F-0601","issue":64,"repo":"remote-containers","kind":"feature","label":"spec:draft","title":"Attach to Running Container","epic":"E06","acCount":68,
-"surfaces":{"commands":["remote-containers.attachToRunningContainer"],"settings":[],"views":[],"menus":["remote_30_dev-container_2_actions@2"],"contextKeys":["hideConnectCommands","remoteName"],"authorities":["attached-container"],"other":["container quick pick","resource label formatter for attached authority","modal error dialogs with recovery buttons","connect progress notification"]},
-"external":{"stableApi":["commands.registerCommand","window.showQuickPick","window.showErrorMessage","window.withProgress","contributes.menus"],"proposedApi":["resolvers"],"processes":["docker","docker ps","docker inspect","docker exec","docker start","devcontainers CLI (set-up of existing container)"],"network":["VS Code Server download host (F-1402 template)","Alpine package mirror"],"remoteFiles":["VS Code Server install dir in remote user home","system data folder marker files","profile/env patch files"],"localFiles":["dev.containers.dockerPath CLI","attached-container config files (F-0602)"]},
-"cites":["F-0101","F-0106","F-0201","F-0203","F-0204","F-0408","F-0503","F-1402","F-0306","F-0602","F-0604","F-0605","F-0603","F-0901","F-0902","F-0410","F-1403","F-1406"],
-"coreUi":true,"candidateComponent":"containers.attach-running","candidateLibrary":"lib-authority","area":"C","reuse":["devcontainers-cli","editor-cli"],"errorPaths":12,
-"notes":"Largest of the five. Lists running containers via Docker, opens new window on an attached-container authority, installs server, one-time container prep as root. Many race and platform error cases; Docker-gate dialogs belong to F-0201.",
-"questions":["Numeric user without passwd entry: which of options a, b, c is preferred for server placement and error text?","Which feature owns container preparation marker files and Alpine prerequisite install, this one or the set-up component?","Who owns the shared recovery picker and button set across attach kinds?"]},
-{"id":"F-0603","issue":83,"repo":"remote-containers","kind":"feature","label":"spec:reviewed","title":"Integration with the Docker and Container Tools extensions","epic":"E06","acCount":25,
-"surfaces":{"commands":["remote-containers.attachToRunningContainerFromViewlet","remote-containers.inspectVolumeFromViewlet","remote-containers.cloneInVolumeFromViewlet","remote-containers.newContainer"],"settings":[],"views":["vscode-containers.views.containers","vscode-containers.views.volumes","dockerContainers","dockerVolumes"],"menus":["view/title#3","view/item/context#0","view/item/context#1"],"contextKeys":["hideConnectCommands","viewItem"],"authorities":[],"other":["menu items placed in a partner extension's views","declared command with no runtime handler"]},
-"external":{"stableApi":["contributes.menus","commands.registerCommand"],"proposedApi":[],"processes":["docker"],"network":[],"remoteFiles":[],"localFiles":["containers.environment and docker.environment settings of partner extensions"]},
-"cites":["F-0601","F-0705","F-0806","F-0106","F-0201","F-0205","F-0602","F-0604","F-0901","F-0902","F-1404","F-1406","F-0107","F-0703","F-0408","F-0203"],
-"coreUi":true,"candidateComponent":"containers.partner-menus","candidateLibrary":"none","area":"C","reuse":[],"errorPaths":9,
-"notes":"Pure manifest menu contributions into ms-azuretools.vscode-containers views, row commands hand off to F-0601 and F-0705 flows. Clone-in-volume command declared but deliberately unregistered. Depends on partner extension availability.",
-"questions":["Should the unregistered cloneInVolumeFromViewlet id stay declared without handler, or be given a handler?","Which feature owns the hideConnectCommands context key setting logic?","Is the older dockerContainers/dockerVolumes view id targeting required or optional?"]},
-{"id":"F-0602","issue":85,"repo":"remote-containers","kind":"feature","label":"spec:draft","title":"Attached container configuration files","epic":"E06","acCount":54,
-"surfaces":{"commands":["remote-containers.openAttachConfigByNameFile","remote-containers.openAttachDevContainerFile"],"settings":[],"views":[],"menus":[],"contextKeys":["remoteName"],"authorities":["attached-container"],"other":["imageConfigs and nameConfigs JSON files in global storage","contributed JSON schema validation for those files","config property set workspaceFolder extensions settings forwardPorts portsAttributes otherPortsAttributes remoteEnv remoteUser userEnvProbe postAttachCommand","quick pick of saved files"]},
-"external":{"stableApi":["window.showQuickPick","window.showInformationMessage","workspace.openTextDocument","window.showTextDocument","ExtensionContext.globalStorageUri","contributes.jsonValidation"],"proposedApi":[],"processes":["docker exec (postAttachCommand, probe)"],"network":[],"remoteFiles":["container machine settings file","server folder under remoteUser home"],"localFiles":["globalStorage/<ext id>/imageConfigs/*.json","globalStorage/<ext id>/nameConfigs/*.json"]},
-"cites":["F-0601","F-0502","F-0503","F-0505","F-0506","F-0408","F-0812","F-0604","F-0605","F-1101","F-0415","F-1401","F-1406","F-1403","F-1008","F-0804","F-0416"],
-"coreUi":true,"candidateComponent":"containers.attach-config-store","candidateLibrary":"lib-identifiers","area":"C","reuse":["devcontainers-cli"],"errorPaths":7,
-"notes":"Per-image and per-name JSONC files merged over the image metadata label with the file last, applied on every attach. Needs own schema binding, tolerant JSON edit, write-back of settings and extensions. Several reference defects with accepted outcomes.",
-"questions":["Which component owns the merge of image label and file, this one or the shared configuration merge?","Is a name-level file created mid-session expected to take effect immediately?","Spec cites lab recordings and observation paths; noted: spec cites material not for the clean side."]},
-{"id":"F-0604","issue":110,"repo":"remote-containers","kind":"feature","label":"spec:reviewed","title":"Attach to Kubernetes containers","epic":"E06","acCount":36,
-"surfaces":{"commands":["remote-containers.attachToK8sContainer","remote-containers.attachToK8sContainerFromViewlet"],"settings":[],"views":["extension.vsKubernetesExplorer"],"menus":["view/item/context#3"],"contextKeys":["hideConnectCommands","remoteName"],"authorities":["k8s-container"],"other":["pod quick pick","container quick pick","modal dialogs"]},
-"external":{"stableApi":["window.showQuickPick","window.showErrorMessage","window.showInformationMessage","contributes.menus"],"proposedApi":["resolvers"],"processes":["kubectl"],"network":["Kubernetes API server (via kubectl)","VS Code Server download host"],"remoteFiles":["VS Code Server install dir in container user home"],"localFiles":["kubeconfig (read by kubectl)"]},
-"cites":["F-0601","F-0106","F-0603","F-0602","F-0605","F-0201","F-0503","F-0905","F-0408","F-0101","F-1402","F-1403","F-1404","F-1406"],
-"coreUi":true,"candidateComponent":"containers.k8s-attach","candidateLibrary":"lib-authority","area":"C","reuse":["undecided kubectl-delegation"],"errorPaths":8,
-"notes":"kubectl-driven pod and container pickers, attach via k8s-container authority, no Docker, no metadata label, no root prep, runs as container user. Runs on the SSH host in Remote-SSH windows. Kubernetes explorer entry depends on partner extension.",
-"questions":["Which kubectl arguments and output format should listing and exec use? Spec leaves them to the clean side.","Should a hung pod listing get a timeout or cancel affordance?","Is kubectl resolution expected from PATH only, or from a setting?"]},
-{"id":"F-0605","issue":111,"repo":"remote-containers","kind":"feature","label":"spec:reviewed","title":"Attach to Apple containers (experimental)","epic":"E06","acCount":19,
-"surfaces":{"commands":["remote-containers.attachToAppleContainer"],"settings":["dev.containers.experimentalAppleContainerSupport"],"views":[],"menus":[],"contextKeys":["hideConnectCommands","remoteName","config.dev.containers.experimentalAppleContainerSupport"],"authorities":["apple-container"],"other":["Apple container quick pick","modal error dialogs"]},
-"external":{"stableApi":["window.showQuickPick","window.showErrorMessage","window.showInformationMessage","workspace.getConfiguration"],"proposedApi":["resolvers"],"processes":["container (Apple Containerization CLI)"],"network":["VS Code Server download host"],"remoteFiles":["VS Code Server install dir in container"],"localFiles":[]},
-"cites":["F-0601","F-0604","F-0106","F-0501","F-0408","F-0503","F-1402","F-0108","F-0602","F-0410","F-0406","F-1403","F-1406"],
-"coreUi":true,"candidateComponent":"containers.apple-attach","candidateLibrary":"lib-authority","area":"C","reuse":[],"errorPaths":5,
-"notes":"Experimental, setting-gated, macOS-only. Only the non-macOS and missing-CLI paths were observed; listing, picking and attach are closed by analogy with F-0604 and F-0601, including metadata label merge.",
-"questions":["Which CLI subcommands and output format should listing and exec use, given they were never observed?","Is the metadata label merge decision acceptable without observation on a real Apple-Silicon host?","Does the apple-container authority share the F-0601 server install path unchanged?"]}
+ {
+  "id": "F-0601",
+  "issue": 64,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Attach to Running Container",
+  "epic": "E06",
+  "acCount": 68,
+  "surfaces": {
+   "commands": [
+    "remote-containers.attachToRunningContainer"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "remote_30_dev-container_2_actions@2"
+   ],
+   "contextKeys": [
+    "hideConnectCommands",
+    "remoteName"
+   ],
+   "authorities": [
+    "attached-container"
+   ],
+   "other": [
+    "container quick pick",
+    "resource label formatter for attached authority",
+    "modal error dialogs with recovery buttons",
+    "connect progress notification"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "window.showQuickPick",
+    "window.showErrorMessage",
+    "window.withProgress",
+    "contributes.menus"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "docker",
+    "docker ps",
+    "docker inspect",
+    "docker exec",
+    "docker start",
+    "devcontainers CLI (set-up of existing container)"
+   ],
+   "network": [
+    "VS Code Server download host (F-1402 template)",
+    "Alpine package mirror"
+   ],
+   "remoteFiles": [
+    "VS Code Server install dir in remote user home",
+    "system data folder marker files",
+    "profile/env patch files"
+   ],
+   "localFiles": [
+    "dev.containers.dockerPath CLI",
+    "attached-container config files (F-0602)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0106",
+   "remote-containers#F-0201",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0408",
+   "remote-containers#F-0503",
+   "remote-containers#F-1402",
+   "remote-containers#F-0306",
+   "remote-containers#F-0602",
+   "remote-containers#F-0604",
+   "remote-containers#F-0605",
+   "remote-containers#F-0603",
+   "remote-containers#F-0901",
+   "remote-containers#F-0902",
+   "remote-containers#F-0410",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406",
+   "remote-containers#F-0202",
+   "remote-containers#F-0205",
+   "remote-containers#F-0415",
+   "remote-containers#F-0504",
+   "remote-containers#F-0903",
+   "remote-containers#F-1302",
+   "remote-containers#F-1401"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.attach-running",
+  "candidateLibrary": "lib-authority",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "editor-cli"
+  ],
+  "errorPaths": 12,
+  "notes": "Largest of the five. Lists running containers via Docker, opens new window on an attached-container authority, installs server, one-time container prep as root. Many race and platform error cases; Docker-gate dialogs belong to F-0201.",
+  "questions": [
+   "Numeric user without passwd entry: which of options a, b, c is preferred for server placement and error text?",
+   "Which feature owns container preparation marker files and Alpine prerequisite install, this one or the set-up component?",
+   "Who owns the shared recovery picker and button set across attach kinds?"
+  ]
+ },
+ {
+  "id": "F-0603",
+  "issue": 83,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Integration with the Docker and Container Tools extensions",
+  "epic": "E06",
+  "acCount": 25,
+  "surfaces": {
+   "commands": [
+    "remote-containers.attachToRunningContainerFromViewlet",
+    "remote-containers.inspectVolumeFromViewlet",
+    "remote-containers.cloneInVolumeFromViewlet",
+    "remote-containers.newContainer"
+   ],
+   "settings": [],
+   "views": [
+    "vscode-containers.views.containers",
+    "vscode-containers.views.volumes",
+    "dockerContainers",
+    "dockerVolumes"
+   ],
+   "menus": [
+    "view/title#3",
+    "view/item/context#0",
+    "view/item/context#1"
+   ],
+   "contextKeys": [
+    "hideConnectCommands",
+    "viewItem"
+   ],
+   "authorities": [],
+   "other": [
+    "menu items placed in a partner extension's views",
+    "declared command with no runtime handler"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "contributes.menus",
+    "commands.registerCommand"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "containers.environment and docker.environment settings of partner extensions"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0601",
+   "remote-containers#F-0705",
+   "remote-containers#F-0806",
+   "remote-containers#F-0106",
+   "remote-containers#F-0201",
+   "remote-containers#F-0205",
+   "remote-containers#F-0602",
+   "remote-containers#F-0604",
+   "remote-containers#F-0901",
+   "remote-containers#F-0902",
+   "remote-containers#F-1404",
+   "remote-containers#F-1406",
+   "remote-containers#F-0107",
+   "remote-containers#F-0703",
+   "remote-containers#F-0408",
+   "remote-containers#F-0203"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.partner-menus",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 9,
+  "notes": "Pure manifest menu contributions into ms-azuretools.vscode-containers views, row commands hand off to F-0601 and F-0705 flows. Clone-in-volume command declared but deliberately unregistered. Depends on partner extension availability.",
+  "questions": [
+   "Should the unregistered cloneInVolumeFromViewlet id stay declared without handler, or be given a handler?",
+   "Which feature owns the hideConnectCommands context key setting logic?",
+   "Is the older dockerContainers/dockerVolumes view id targeting required or optional?"
+  ]
+ },
+ {
+  "id": "F-0602",
+  "issue": 85,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Attached container configuration files",
+  "epic": "E06",
+  "acCount": 54,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openAttachConfigByNameFile",
+    "remote-containers.openAttachDevContainerFile"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "remoteName"
+   ],
+   "authorities": [
+    "attached-container"
+   ],
+   "other": [
+    "imageConfigs and nameConfigs JSON files in global storage",
+    "contributed JSON schema validation for those files",
+    "config property set workspaceFolder extensions settings forwardPorts portsAttributes otherPortsAttributes remoteEnv remoteUser userEnvProbe postAttachCommand",
+    "quick pick of saved files"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.showInformationMessage",
+    "workspace.openTextDocument",
+    "window.showTextDocument",
+    "ExtensionContext.globalStorageUri",
+    "contributes.jsonValidation"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker exec (postAttachCommand, probe)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "container machine settings file",
+    "server folder under remoteUser home"
+   ],
+   "localFiles": [
+    "globalStorage/<ext id>/imageConfigs/*.json",
+    "globalStorage/<ext id>/nameConfigs/*.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0601",
+   "remote-containers#F-0502",
+   "remote-containers#F-0503",
+   "remote-containers#F-0505",
+   "remote-containers#F-0506",
+   "remote-containers#F-0408",
+   "remote-containers#F-0812",
+   "remote-containers#F-0604",
+   "remote-containers#F-0605",
+   "remote-containers#F-1101",
+   "remote-containers#F-0415",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406",
+   "remote-containers#F-1403",
+   "remote-containers#F-1008",
+   "remote-containers#F-0804",
+   "remote-containers#F-0416"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.attach-config-store",
+  "candidateLibrary": "lib-identifiers",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Per-image and per-name JSONC files merged over the image metadata label with the file last, applied on every attach. Needs own schema binding, tolerant JSON edit, write-back of settings and extensions. Several reference defects with accepted outcomes.",
+  "questions": [
+   "Which component owns the merge of image label and file, this one or the shared configuration merge?",
+   "Is a name-level file created mid-session expected to take effect immediately?",
+   "Spec cites lab recordings and observation paths; noted: spec cites material not for the clean side."
+  ]
+ },
+ {
+  "id": "F-0604",
+  "issue": 110,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Attach to Kubernetes containers",
+  "epic": "E06",
+  "acCount": 36,
+  "surfaces": {
+   "commands": [
+    "remote-containers.attachToK8sContainer",
+    "remote-containers.attachToK8sContainerFromViewlet"
+   ],
+   "settings": [],
+   "views": [
+    "extension.vsKubernetesExplorer"
+   ],
+   "menus": [
+    "view/item/context#3"
+   ],
+   "contextKeys": [
+    "hideConnectCommands",
+    "remoteName"
+   ],
+   "authorities": [
+    "k8s-container"
+   ],
+   "other": [
+    "pod quick pick",
+    "container quick pick",
+    "modal dialogs"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.showErrorMessage",
+    "window.showInformationMessage",
+    "contributes.menus"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "kubectl"
+   ],
+   "network": [
+    "Kubernetes API server (via kubectl)",
+    "VS Code Server download host"
+   ],
+   "remoteFiles": [
+    "VS Code Server install dir in container user home"
+   ],
+   "localFiles": [
+    "kubeconfig (read by kubectl)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0601",
+   "remote-containers#F-0106",
+   "remote-containers#F-0603",
+   "remote-containers#F-0602",
+   "remote-containers#F-0605",
+   "remote-containers#F-0201",
+   "remote-containers#F-0503",
+   "remote-containers#F-0905",
+   "remote-containers#F-0408",
+   "remote-containers#F-0101",
+   "remote-containers#F-1402",
+   "remote-containers#F-1403",
+   "remote-containers#F-1404",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.k8s-attach",
+  "candidateLibrary": "lib-authority",
+  "area": "C",
+  "reuse": [
+   "undecided kubectl-delegation"
+  ],
+  "errorPaths": 8,
+  "notes": "kubectl-driven pod and container pickers, attach via k8s-container authority, no Docker, no metadata label, no root prep, runs as container user. Runs on the SSH host in Remote-SSH windows. Kubernetes explorer entry depends on partner extension.",
+  "questions": [
+   "Which kubectl arguments and output format should listing and exec use? Spec leaves them to the clean side.",
+   "Should a hung pod listing get a timeout or cancel affordance?",
+   "Is kubectl resolution expected from PATH only, or from a setting?"
+  ]
+ },
+ {
+  "id": "F-0605",
+  "issue": 111,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Attach to Apple containers (experimental)",
+  "epic": "E06",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [
+    "remote-containers.attachToAppleContainer"
+   ],
+   "settings": [
+    "dev.containers.experimentalAppleContainerSupport"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "hideConnectCommands",
+    "remoteName",
+    "config.dev.containers.experimentalAppleContainerSupport"
+   ],
+   "authorities": [
+    "apple-container"
+   ],
+   "other": [
+    "Apple container quick pick",
+    "modal error dialogs"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.showErrorMessage",
+    "window.showInformationMessage",
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "container (Apple Containerization CLI)"
+   ],
+   "network": [
+    "VS Code Server download host"
+   ],
+   "remoteFiles": [
+    "VS Code Server install dir in container"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0601",
+   "remote-containers#F-0604",
+   "remote-containers#F-0106",
+   "remote-containers#F-0501",
+   "remote-containers#F-0408",
+   "remote-containers#F-0503",
+   "remote-containers#F-1402",
+   "remote-containers#F-0108",
+   "remote-containers#F-0602",
+   "remote-containers#F-0410",
+   "remote-containers#F-0406",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.apple-attach",
+  "candidateLibrary": "lib-authority",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Experimental, setting-gated, macOS-only. Only the non-macOS and missing-CLI paths were observed; listing, picking and attach are closed by analogy with F-0604 and F-0601, including metadata label merge.",
+  "questions": [
+   "Which CLI subcommands and output format should listing and exec use, given they were never observed?",
+   "Is the metadata label merge decision acceptable without observation on a real Apple-Silicon host?",
+   "Does the apple-container authority share the F-0601 server install path unchanged?"
+  ]
+ }
 ]

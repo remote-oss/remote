@@ -546,7 +546,7 @@
     "window.showInformationMessage"
    ],
    "proposedApi": [
-    "workspace trust request (proposal-gated)"
+    "workspaceTrust"
    ],
    "processes": [
     "wsl.exe (list distros, run commands in distro)",

@@ -1,20 +1,234 @@
 [
-{"id":"F-5901","issue":7,"repo":"remote-explorer","kind":"decision","label":"type:decision","title":"Decision: identity of the reimplementation and invented identifiers","epic":"E59","acCount":19,
-"surfaces":{"commands":["remote-explorer.signIntoTunnelGithub","remote-explorer.signIntoTunnelMicrosoft","remote-explorer.add","remote-explorer.configureSsh","remote-explorer.refresh","remote-explorer.connectToRemoteInNewWindow","remote-explorer.connectToRemoteInCurrentWindow","remote-explorer.connectToFolderInNewWindow","remote-explorer.connectToFolderInCurrentWindow","remote-explorer.connectToWslUsingDistro","remote-explorer.connectToWslUsingDistroInNewWindow","remote-explorer.deleteFolderHistoryItem","remote-explorer.unregisterTunnel","remote-internal.setActiveFolders"],
-"settings":["remote-explorer.foldersSortOrder","remote-explorer.collapseRecentFolders"],"views":["remoteTargets"],"menus":["navigation","inline","management","wsl","view/title"],
-"contextKeys":["remote-explorer.remoteTunnelSignInGithub","remote-explorer.remoteTunnelSignInMicrosoft","remote-explorer.tunnelGroup","remote-explorer.sshGroup","remote-explorer.tunnelRemoteTarget","remote-explorer.sshRemoteTarget","remote-explorer.remoteFolder","remote-explorer.tunnelWsl","menu-gating context key (name in spec section 5, step 6)"],
-"authorities":["tunnel","ssh-remote"],"other":["extension id remote-oss.remote-explorer","identity card (name, icon, keywords, MIT licence)","extensionKind ui","14 l10n bundles and nls files","activation event onCommand:remote-internal.setActiveFolders","R-54 coexistence stand-down at activation","no telemetry"]},
-"external":{"stableApi":["extensions.getExtension","commands.registerCommand","window message API","setContext"],"proposedApi":["contribViewsRemote","extensionsAny"],"processes":[],"network":[],"remoteFiles":[],"localFiles":["package.json manifest","package.nls.*.json","l10n bundles","README","LICENSE","icon PNG","extension global-storage and log folders"]},
-"cites":["remote-containers#F-1406","remote-containers#F-1401","remote-containers#F-1403","remote-containers#F-1404","remote-containers#F-0906","remote-explorer#F-5001","remote-explorer#F-5002","remote-explorer#F-5101","remote-explorer#F-5102","remote-explorer#F-5103","remote-explorer#F-5104","remote-explorer#F-5201","remote-explorer#F-5202","remote-explorer#F-5902"],
-"coreUi":true,"candidateComponent":"explorer.identity-and-standdown","candidateLibrary":"lib-standdown","area":"B","reuse":[],"errorPaths":4,
-"notes":"Fixes ids, identity card and package properties; defines activation-time detection of the reference extension and full stand-down (nothing registered, gating key false). Much of the content is manifest data, not logic. Core UI surfaces (Issue Reporter, trust prompt) are only verified.",
-"questions":["Which context key name gates menus after stand-down, and which libraries own the stand-down step across all family extensions (lib-standdown vs lib-identifiers)?","Is the R-54 warning text and its Manage Extension action specified per extension or shared, so it can live in one library?","Do the invented identifiers table in section 6 and the F-5902 ids form the complete list lib-identifiers must export?"]},
-{"id":"F-5902","issue":14,"repo":"remote-explorer","kind":"decision","label":"type:decision","title":"Decision: interface between Remote Explorer and its family companions","epic":"E59","acCount":36,
-"surfaces":{"commands":["remote-internal.getActiveSshRemote","remote-internal.getConfiguredHostnames","remote-internal.getSshFoldersHistory","remote-internal.deleteSshFolderFromHistory","remote-internal.openRemoteSshTarget","remote-internal.setActiveFolders","remote-internal.sshHostsChanged","opensshremotes.openConfigFile","opensshremotes.addNewSshHost","remote-tunnels.internal.isAuthenticated","remote-tunnels.internal.getActiveRemote","remote-tunnels.internal.getTunnelsList","remote-tunnels.internal.getFoldersHistory","remote-tunnels.internal.deleteFolderFromHistory","remote-tunnels.internal.connectToRemote","remote-tunnels.internal.unregisterTunnel","remote-tunnels.isConnectedToRemote","remote-tunnels.connectNewWindowToTunnel"],
-"settings":["remote.SSH.configFile","remote-explorer.foldersSortOrder","remote.extensionKind"],"views":["remoteTargets"],"menus":[],"contextKeys":[],"authorities":["ssh-remote","tunnel"],"other":["interface version field in every payload (major.minor)","10 second per-call timeout","parallel build of calls, first call getActiveSshRemote","partial build on change signal","no retry or back-off","no file watching (R-66)","companion interface document copied into both repos","web worker extension host behaviour","companion absent detection, group appears within 10 s"]},
-"external":{"stableApi":["commands.executeCommand","extensions.getExtension","extensions.onDidChange","extensions.all"],"proposedApi":["extensionsAny"],"processes":[],"network":[],"remoteFiles":[],"localFiles":["SSH config file (via companion only)"]},
-"cites":["remote-explorer#F-5901","remote-explorer#F-5101","remote-explorer#F-5102","remote-explorer#F-5103","remote-explorer#F-5104","remote-explorer#F-5201","remote-explorer#F-5202","remote-explorer#F-5002","remote-containers#F-1403","remote-containers#F-1406","remote-ssh#F-3906","remote-ssh#F-2503","remote-ssh#F-2202","remote-server#F-8201","remote-server#F-8901"],
-"coreUi":false,"candidateComponent":"companion.internal-command-contract","candidateLibrary":"lib-companion","area":"B","reuse":[],"errorPaths":9,
-"notes":"Defines the cross-extension command contract: who serves, who calls, versioned plain-data payloads, 10 s timeouts, parallel builds, pull-authoritative marker, push wake-up, change signal. Payload fields are provisional until remote-ssh observes them. Candidate for a shared typed client plus server-side registration helper.",
-"questions":["What are the exact payload field names and the version field name? The spec defers them to a companion interface document.","Which repository owns the interface document, given it is copied identically into remote-explorer, remote-ssh and remote-server?","Should lib-companion also provide the 10 s timeout, version-mismatch handling and absent-companion detection, or does each view keep its own?"]}
+ {
+  "id": "F-5901",
+  "issue": 7,
+  "repo": "remote-explorer",
+  "kind": "decision",
+  "label": "type:decision",
+  "title": "Decision: identity of the reimplementation and invented identifiers",
+  "epic": "E59",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [
+    "remote-explorer.signIntoTunnelGithub",
+    "remote-explorer.signIntoTunnelMicrosoft",
+    "remote-explorer.add",
+    "remote-explorer.configureSsh",
+    "remote-explorer.refresh",
+    "remote-explorer.connectToRemoteInNewWindow",
+    "remote-explorer.connectToRemoteInCurrentWindow",
+    "remote-explorer.connectToFolderInNewWindow",
+    "remote-explorer.connectToFolderInCurrentWindow",
+    "remote-explorer.connectToWslUsingDistro",
+    "remote-explorer.connectToWslUsingDistroInNewWindow",
+    "remote-explorer.deleteFolderHistoryItem",
+    "remote-explorer.unregisterTunnel",
+    "remote-internal.setActiveFolders",
+    "remote-internal.sshHostsChanged",
+    "remote-internal.getActiveSshRemote",
+    "remote-internal.getConfiguredHostnames",
+    "remote-internal.getSshFoldersHistory",
+    "remote-internal.deleteSshFolderFromHistory",
+    "remote-internal.openRemoteSshTarget",
+    "workbench.action.openIssueReporter"
+   ],
+   "settings": [
+    "remote-explorer.foldersSortOrder",
+    "remote-explorer.collapseRecentFolders"
+   ],
+   "views": [
+    "remoteTargets"
+   ],
+   "menus": [
+    "navigation",
+    "inline",
+    "management",
+    "wsl",
+    "view/title"
+   ],
+   "contextKeys": [
+    "remote-explorer.remoteTunnelSignInGithub",
+    "remote-explorer.remoteTunnelSignInMicrosoft",
+    "remote-explorer.tunnelGroup",
+    "remote-explorer.sshGroup",
+    "remote-explorer.tunnelRemoteTarget",
+    "remote-explorer.sshRemoteTarget",
+    "remote-explorer.remoteFolder",
+    "remote-explorer.tunnelWsl",
+    "menu-gating context key (name in spec section 5, step 6)"
+   ],
+   "authorities": [
+    "tunnel",
+    "ssh-remote"
+   ],
+   "other": [
+    "extension id remote-oss.remote-explorer",
+    "identity card (name, icon, keywords, MIT licence)",
+    "extensionKind ui",
+    "14 l10n bundles and nls files",
+    "activation event onCommand:remote-internal.setActiveFolders",
+    "R-54 coexistence stand-down at activation",
+    "no telemetry"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "extensions.getExtension",
+    "commands.registerCommand",
+    "window message API",
+    "setContext"
+   ],
+   "proposedApi": [
+    "contribViewsRemote",
+    "extensionsAny"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.json manifest",
+    "package.nls.*.json",
+    "l10n bundles",
+    "README",
+    "LICENSE",
+    "icon PNG",
+    "extension global-storage and log folders"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-1406",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1404",
+   "remote-containers#F-0906",
+   "remote-explorer#F-5001",
+   "remote-explorer#F-5002",
+   "remote-explorer#F-5101",
+   "remote-explorer#F-5102",
+   "remote-explorer#F-5103",
+   "remote-explorer#F-5104",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-explorer#F-5902",
+   "remote-explorer#F-5301"
+  ],
+  "coreUi": true,
+  "candidateComponent": "explorer.identity-and-standdown",
+  "candidateLibrary": "lib-standdown",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Fixes ids, identity card and package properties; defines activation-time detection of the reference extension and full stand-down (nothing registered, gating key false). Much of the content is manifest data, not logic. Core UI surfaces (Issue Reporter, trust prompt) are only verified. contribRemoteHelp is deliberately not requested.",
+  "questions": [
+   "Which context key name gates menus after stand-down, and which libraries own the stand-down step across all family extensions (lib-standdown vs lib-identifiers)?",
+   "Is the R-54 warning text and its Manage Extension action specified per extension or shared, so it can live in one library?",
+   "Do the invented identifiers table in section 6 and the F-5902 ids form the complete list lib-identifiers must export?"
+  ]
+ },
+ {
+  "id": "F-5902",
+  "issue": 14,
+  "repo": "remote-explorer",
+  "kind": "decision",
+  "label": "type:decision",
+  "title": "Decision: interface between Remote Explorer and its family companions",
+  "epic": "E59",
+  "acCount": 36,
+  "surfaces": {
+   "commands": [
+    "remote-internal.getActiveSshRemote",
+    "remote-internal.getConfiguredHostnames",
+    "remote-internal.getSshFoldersHistory",
+    "remote-internal.deleteSshFolderFromHistory",
+    "remote-internal.openRemoteSshTarget",
+    "remote-internal.setActiveFolders",
+    "remote-internal.sshHostsChanged",
+    "opensshremotes.openConfigFile",
+    "opensshremotes.addNewSshHost",
+    "remote-tunnels.internal.isAuthenticated",
+    "remote-tunnels.internal.getActiveRemote",
+    "remote-tunnels.internal.getTunnelsList",
+    "remote-tunnels.internal.getFoldersHistory",
+    "remote-tunnels.internal.deleteFolderFromHistory",
+    "remote-tunnels.internal.connectToRemote",
+    "remote-tunnels.internal.unregisterTunnel",
+    "remote-tunnels.isConnectedToRemote",
+    "remote-tunnels.connectNewWindowToTunnel"
+   ],
+   "settings": [
+    "remote.SSH.configFile",
+    "remote-explorer.foldersSortOrder",
+    "remote.extensionKind"
+   ],
+   "views": [
+    "remoteTargets"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote",
+    "tunnel"
+   ],
+   "other": [
+    "interface version field in every payload (major.minor)",
+    "10 second per-call timeout",
+    "parallel build of calls, first call getActiveSshRemote",
+    "partial build on change signal",
+    "no retry or back-off",
+    "no file watching (R-66)",
+    "companion interface document copied into both repos",
+    "web worker extension host behaviour",
+    "companion absent detection, group appears within 10 s"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.executeCommand",
+    "extensions.getExtension",
+    "extensions.onDidChange",
+    "extensions.all"
+   ],
+   "proposedApi": [
+    "extensionsAny"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "SSH config file (via companion only)"
+   ]
+  },
+  "cites": [
+   "remote-explorer#F-5901",
+   "remote-explorer#F-5101",
+   "remote-explorer#F-5102",
+   "remote-explorer#F-5103",
+   "remote-explorer#F-5104",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-explorer#F-5002",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406",
+   "remote-ssh#F-3906",
+   "remote-ssh#F-2503",
+   "remote-ssh#F-2202",
+   "remote-server#F-8201",
+   "remote-server#F-8901",
+   "remote-explorer#F-5301",
+   "remote-server#F-8302",
+   "remote-server#F-8902"
+  ],
+  "coreUi": false,
+  "candidateComponent": "companion.internal-command-contract",
+  "candidateLibrary": "lib-companion",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 9,
+  "notes": "Defines the cross-extension command contract: who serves, who calls, versioned plain-data payloads, 10 s timeouts, parallel builds, pull-authoritative marker, push wake-up, change signal. Payload fields are provisional until remote-ssh observes them. Candidate for a shared typed client plus server-side registration helper.",
+  "questions": [
+   "What are the exact payload field names and the version field name? The spec defers them to a companion interface document.",
+   "Which repository owns the interface document, given it is copied identically into remote-explorer, remote-ssh and remote-server?",
+   "Should lib-companion also provide the 10 s timeout, version-mismatch handling and absent-companion detection, or does each view keep its own?"
+  ]
+ }
 ]

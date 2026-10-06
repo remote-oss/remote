@@ -241,7 +241,8 @@
    "remote-ssh#F-2702",
    "remote-ssh#F-3903",
    "remote-ssh#F-3902",
-   "remote-ssh#F-2305"
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2006"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.exec-bootstrap",
@@ -332,8 +333,7 @@
    "remote-ssh#F-3903",
    "remote-ssh#F-2109",
    "remote-ssh#F-2303",
-   "remote-ssh#F-2601",
-   "remote-ssh#F-2507"
+   "remote-ssh#F-2601"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.tunnel-manager",
@@ -549,7 +549,8 @@
    "remote-ssh#F-2601",
    "remote-ssh#F-2602",
    "remote-ssh#F-2411",
-   "remote-ssh#F-2003"
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.remote-command-gate",
@@ -709,7 +710,8 @@
    "remote-ssh#F-2410",
    "remote-ssh#F-2507",
    "remote-ssh#F-2603",
-   "remote-ssh#F-2306"
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2006"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.config-passthrough",

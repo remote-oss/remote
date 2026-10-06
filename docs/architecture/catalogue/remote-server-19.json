@@ -12,11 +12,14 @@
    "commands": [
     "remote-tunnels.openOnDesktop"
    ],
-   "settings": [],
+   "settings": [
+    "security.promptForRemoteFileProtocolHandling (core)"
+   ],
    "views": [],
    "menus": [
     "commandPalette",
-    "statusBar/remoteIndicator"
+    "statusBar/remoteIndicator",
+    "remote_10_tunnel_0_remote@1"
    ],
    "contextKeys": [
     "remoteName",
@@ -90,7 +93,8 @@
    ],
    "settings": [],
    "views": [
-    "explorer"
+    "explorer",
+    "workbench.explorer.emptyView"
    ],
    "menus": [],
    "contextKeys": [
@@ -175,7 +179,10 @@
    "settings": [
     "remote.tunnels.defaultExtensions",
     "remote.tunnels.alwaysUpdateCLI",
-    "remote.tunnels.tunnelCredentialCommand"
+    "remote.tunnels.tunnelCredentialCommand",
+    "remote.tunnels.access.hostNameOverride (reserved core)",
+    "remote.tunnels.access.preventSleep (reserved core)",
+    "workbench.remoteIndicator.showExtensionRecommendations (core)"
    ],
    "views": [
     "explorer (welcome)"
@@ -200,7 +207,11 @@
     "extensionPack remote-oss.remote-explorer",
     "14 locales",
     "webOpener vscode-remote",
-    "no telemetry"
+    "no telemetry",
+    "product key remoteExtensionTips.tunnel",
+    "product key tunnelApplicationConfig",
+    "product key extensionEnabledApiProposals",
+    "product key trustedExtensionAuthAccess"
    ]
   },
   "external": {
@@ -250,7 +261,7 @@
   "area": "B",
   "reuse": [],
   "errorPaths": 5,
-  "notes": "Identity card, verbatim identifier tables, telemetry ban and the R-54 stand-down protocol with positive gating key and a light startup activation. Anchor for lib-identifiers and lib-standdown shared across the family. Name and id tables belong in generated data.",
+  "notes": "Identity card, verbatim identifier tables, telemetry ban and the R-54 stand-down protocol with positive gating key and a light startup activation. Anchor for lib-identifiers and lib-standdown shared across the family. Name and id tables belong in generated data. Proposals tunnels and contribViewsWelcome are grants in the reference product configuration; the 1.5.3 manifest requests only resolvers.",
   "questions": [
    "Should lib-standdown be one shared library for all family extensions, given F-5901 omits startup activation while this adds it?",
    "Who owns the 14-locale string reuse and the per-language identity substitution in conformance cases?",
@@ -278,7 +289,9 @@
    "other": [
     "account-type pick GitHub or Microsoft Account",
     "product configuration keys per build",
-    "Windows dev tunnels group policies (pending)"
+    "Windows dev tunnels group policies (pending)",
+    "product key tunnelApplicationName",
+    "product key tunnelApplicationConfig (authenticationProviders inside)"
    ]
   },
   "external": {
@@ -317,7 +330,8 @@
    "remote-server#F-8302",
    "remote-containers#F-1402",
    "remote-containers#F-1403",
-   "remote-containers#F-1404"
+   "remote-containers#F-1404",
+   "remote-containers#F-1406"
   ],
   "coreUi": true,
   "candidateComponent": "server.tunnel-service-client",

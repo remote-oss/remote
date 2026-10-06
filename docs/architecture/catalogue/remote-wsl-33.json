@@ -27,7 +27,12 @@
     "env WSL_DISTRO_NAME",
     "env VSCODE_CLIENT_COMMAND / VSCODE_CLIENT_COMMAND_CWD / VSCODE_CLI_AUTHORITY",
     "activation event onResolveRemoteAuthority:wsl",
-    "shell progress lines on first install"
+    "shell progress lines on first install",
+    "env input VSCODE_APPDATA",
+    "env input VSCODE_EXTENSIONS",
+    "env input WSLENV",
+    "env input PATH",
+    "wsl.conf [interop] appendWindowsPath"
    ]
   },
   "external": {
@@ -82,7 +87,7 @@
    "editor-cli",
    "openssh"
   ],
-  "errorPaths": 8,
+  "errorPaths": 9,
   "notes": "Distro-side hand-off: ensures server (wget download, progress lines), records shell env, sets authority inputs, runs server CLI. Stock launcher finds extension by reference id, so the reimplementation may be unreachable (Q1). AC-22 removed, so 35 active ACs.",
   "questions": [
    "Q1: how does a stock launcher reach remote-oss.remote-wsl: derivative launchers only, own distro-side code entry, or both?",
@@ -108,7 +113,8 @@
    ],
    "settings": [
     "window.openFoldersInNewWindow",
-    "workbench.view.alwaysShowHeaderActions"
+    "workbench.view.alwaysShowHeaderActions",
+    "security.allowedUNCHosts"
    ],
    "views": [
     "targetsWsl"
@@ -173,12 +179,13 @@
   "reuse": [
    "editor-cli"
   ],
-  "errorPaths": 4,
+  "errorPaths": 5,
   "notes": "Filtered view over core recently-opened list; uses internal _workbench.getRecentlyOpened, vscode.removeFromRecentlyOpened and vscode.openFolder. No own storage. Active row marking per window, case-insensitive distro match, stale until Refresh.",
   "questions": [
    "Is relying on the internal command _workbench.getRecentlyOpened acceptable, or is a fallback needed if it disappears?",
    "Should out-of-context invocation stay silent or show the R-46 information notification?",
-   "Do recent folders under SSH-nested WSL targets belong to this feature or to F-6501?"
+   "Do recent folders under SSH-nested WSL targets belong to this feature or to F-6501?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {

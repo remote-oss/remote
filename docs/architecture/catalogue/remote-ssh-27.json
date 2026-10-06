@@ -26,7 +26,9 @@
    "stableApi": [
     "window.showErrorMessage"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "uname",
     "ldd",
@@ -101,7 +103,9 @@
    "stableApi": [
     "window.createTerminal"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "curl",
     "wget",
@@ -186,7 +190,9 @@
    "stableApi": [
     "window.withProgress"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "curl",
     "wget",
@@ -220,7 +226,6 @@
    "remote-ssh#F-2411",
    "remote-ssh#F-2412",
    "remote-ssh#F-2413",
-   "remote-ssh#F-2103",
    "remote-ssh#F-2602",
    "remote-ssh#F-2606",
    "remote-ssh#F-2701",
@@ -276,7 +281,9 @@
   },
   "external": {
    "stableApi": [],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "curl",
     "wget"
@@ -442,7 +449,9 @@
     "window.withProgress",
     "workspace.getConfiguration"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "scp"
    ],
@@ -475,7 +484,7 @@
    "remote-ssh#F-2606",
    "remote-ssh#F-2701",
    "remote-ssh#F-3902",
-   "remote-ssh#F-0109",
+   "remote-containers#F-0109",
    "remote-ssh#F-2603",
    "remote-ssh#F-3903"
   ],
@@ -520,7 +529,9 @@
   },
   "external": {
    "stableApi": [],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "ssh"
    ],
@@ -598,7 +609,9 @@
    "stableApi": [
     "window.withProgress"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "flock",
     "ln",
@@ -633,8 +646,8 @@
    "remote-ssh#F-2606",
    "remote-ssh#F-2702",
    "remote-ssh#F-2701",
-   "remote-ssh#F-1403",
-   "remote-ssh#F-1406",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406",
    "remote-ssh#F-2003",
    "remote-ssh#F-2006",
    "remote-ssh#F-2301"

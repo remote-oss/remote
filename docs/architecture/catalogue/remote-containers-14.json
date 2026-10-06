@@ -5,7 +5,7 @@
   "repo": "remote-containers",
   "kind": "decision",
   "label": "spec:reviewed",
-  "title": "Decision: extension id and namespace compatibility",
+  "title": "Decision: extension identity and namespace compatibility",
   "epic": "E14",
   "acCount": 0,
   "surfaces": {
@@ -69,7 +69,7 @@
   "issue": 39,
   "repo": "remote-containers",
   "kind": "decision",
-  "label": "spec:reviewed",
+  "label": "spec:draft",
   "title": "Decision: proposed API enablement on Code-OSS builds",
   "epic": "E14",
   "acCount": 0,

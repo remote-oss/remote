@@ -41,7 +41,10 @@
   "external": {
    "stableApi": [
     "commands.executeCommand",
-    "workspace.getConfiguration"
+    "workspace.getConfiguration",
+    "window.registerUriHandler",
+    "workspace.isTrusted",
+    "workspace.onDidGrantWorkspaceTrust"
    ],
    "proposedApi": [
     "resolvers",
@@ -58,18 +61,18 @@
   },
   "cites": [
    "remote-ssh#F-2501",
-   "remote-development#F-3903",
-   "remote-development#F-3901",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-3901",
    "remote-ssh#F-2003",
    "remote-ssh#F-2006",
    "remote-ssh#F-2007",
    "remote-ssh#F-2301",
    "remote-ssh#F-2502",
-   "remote-explorer#F-2503",
+   "remote-ssh#F-2503",
    "remote-ssh#F-2504",
    "remote-ssh#F-2606",
-   "remote-development#F-3904",
-   "remote-development#F-3906",
+   "remote-ssh#F-3904",
+   "remote-ssh#F-3906",
    "remote-ssh#F-2002"
   ],
   "coreUi": true,
@@ -125,7 +128,7 @@
   },
   "cites": [
    "remote-ssh#F-2006",
-   "remote-development#F-3901",
+   "remote-ssh#F-3901",
    "remote-ssh#F-2101",
    "remote-ssh#F-2102",
    "remote-ssh#F-2201",
@@ -133,7 +136,9 @@
    "remote-ssh#F-2501",
    "remote-ssh#F-2601",
    "remote-ssh#F-2602",
-   "remote-ssh#F-2403"
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2003"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.l10n-bundles",
@@ -209,10 +214,10 @@
    "remote-ssh#F-2601",
    "remote-ssh#F-2605",
    "remote-ssh#F-2606",
-   "remote-development#F-3901",
-   "remote-development#F-3905",
-   "remote-development#F-3906",
-   "remote-development#F-3907",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3905",
+   "remote-ssh#F-3906",
+   "remote-ssh#F-3907",
    "remote-ssh#F-2005"
   ],
   "coreUi": true,
@@ -231,60 +236,82 @@
   ]
  },
  {
-  "id": "F-4102",
+  "id": "F-2004",
   "issue": 14,
   "repo": "remote-ssh",
   "kind": "feature",
-  "label": "spec:reviewed",
-  "title": "Language configuration: comments, brackets, auto-closing, folding, indentation",
-  "epic": "E41",
-  "acCount": 49,
+  "label": "spec:draft",
+  "title": "Help, Get Started, Provide Feedback and Settings commands; remote help links",
+  "epic": "E20",
+  "acCount": 16,
   "surfaces": {
-   "commands": [],
+   "commands": [
+    "opensshremotes.getHelp",
+    "opensshremotes.getStarted",
+    "opensshremotes.settings",
+    "opensshremotes.provideFeedback",
+    "workbench.action.openSettings (core)"
+   ],
    "settings": [],
-   "views": [],
-   "menus": [],
-   "contextKeys": [],
-   "authorities": [],
+   "views": [
+    "Help and feedback (core view fed by remoteHelp)"
+   ],
+   "menus": [
+    "commandPalette"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "remoteConnectionState",
+    "virtualWorkspace"
+   ],
+   "authorities": [
+    "ssh-remote"
+   ],
    "other": [
-    "language configuration for ssh_config",
-    "line comment #",
-    "3 bracket pairs",
-    "5 auto-closing pairs",
-    "indentation rules for Host",
-    "core indentation folding"
+    "HELP:remoteHelp",
+    "manifest contributes.remoteHelp: getStarted, documentation, issues, feedback",
+    "remoteName ssh-remote",
+    "one table of four project URLs"
    ]
   },
   "external": {
    "stableApi": [
-    "contributes.languages configuration"
+    "env.openExternal"
    ],
-   "proposedApi": [],
-   "processes": [],
-   "network": [],
+   "proposedApi": [
+    "contribRemoteHelp"
+   ],
+   "processes": [
+    "default browser"
+   ],
+   "network": [
+    "project help URLs (https)"
+   ],
    "remoteFiles": [],
    "localFiles": []
   },
   "cites": [
-   "remote-ssh-edit#F-4001",
-   "remote-ssh-edit#F-4101",
-   "remote-ssh-edit#F-4002",
-   "remote-ssh-edit#F-4201",
-   "remote-development#F-4901"
+   "remote-ssh#F-2001",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2005",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2007",
+   "remote-ssh#F-3904",
+   "remote-containers#F-1403"
   ],
   "coreUi": true,
-  "candidateComponent": "ssh-edit.language-configuration",
+  "candidateComponent": "ssh.help-commands",
   "candidateLibrary": "none",
   "area": "B",
-  "reuse": [
-   "vscode-language-configuration"
-  ],
-  "errorPaths": 8,
-  "notes": "Declarative JSON only, no code. Note the issue is F-4102 (ssh-edit syntax epic E41), not F-2004 as the task stated. Belongs to the ssh-edit companion, not to the SSH extension.",
+  "reuse": [],
+  "errorPaths": 3,
+  "notes": "Four palette commands open project help pages or the extension settings; manifest remoteHelp feeds the core Help and feedback view. No own UI. Settings are only displayed, none owned. Core trusted-domain prompt is not ours.",
   "questions": [
-   "Issue 14 in remote-ssh is F-4102, not F-2004; is it misfiled or is F-2004 elsewhere?",
-   "Should F-4102 move to the remote-ssh-edit repo?",
-   "Where does F-2004 (Help and feedback view) live, since F-2005 and F-2006 cite it?"
+   "Q3: which domain and addresses are the project's four help URLs (decision, F-3904 owns the record)?",
+   "Q1/Q2: Windows and macOS clients still to be checked for the same URLs and settings filter.",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -326,7 +353,7 @@
   },
   "cites": [
    "remote-ssh#F-2001",
-   "remote-development#F-3901",
+   "remote-ssh#F-3901",
    "remote-ssh#F-2003",
    "remote-ssh#F-2004",
    "remote-ssh#F-2006",
@@ -438,7 +465,7 @@
    "remote-ssh#F-2601",
    "remote-ssh#F-2602",
    "remote-ssh#F-2605",
-   "remote-development#F-3901"
+   "remote-ssh#F-3901"
   ],
   "coreUi": true,
   "candidateComponent": "ssh.command-catalogue",
@@ -490,19 +517,19 @@
    "localFiles": []
   },
   "cites": [
-   "remote-development#F-3904",
-   "remote-development#F-3901",
+   "remote-ssh#F-3904",
+   "remote-ssh#F-3901",
    "remote-ssh#F-2001",
    "remote-ssh#F-2006",
    "remote-ssh#F-2201",
    "remote-ssh#F-2204",
    "remote-ssh#F-2301",
    "remote-ssh#F-2302",
-   "remote-explorer#F-2503",
-   "remote-development#F-3906",
+   "remote-ssh#F-2503",
+   "remote-ssh#F-3906",
    "remote-ssh#F-2004",
-   "remote-development#F-4901",
-   "remote-development#F-5901"
+   "remote-ssh-edit#F-4901",
+   "remote-explorer#F-5901"
   ],
   "coreUi": true,
   "candidateComponent": "ssh.extension-pack-manifest",
@@ -540,7 +567,11 @@
     "chat.remoteAgentHostsAutoConnect",
     "chat.remoteAgentHosts",
     "chat.sshRemoteAgentHostCommand",
-    "chat.agentHost.forwardSSHAgent"
+    "chat.agentHost.forwardSSHAgent",
+    "chat.remoteAgentHost (core, read)",
+    "chat.remoteAgentHosts (core, read)",
+    "chat.remoteAgentHostsAutoConnect (core, read)",
+    "chat.remoteAgentHostsEnabled (core, read)"
    ],
    "views": [],
    "menus": [],
@@ -558,7 +589,9 @@
   },
   "external": {
    "stableApi": [],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "VS Code CLI / server install script",
     "agent-host supervisor"
@@ -585,8 +618,8 @@
    "remote-ssh#F-2412",
    "remote-ssh#F-2508",
    "remote-ssh#F-2606",
-   "remote-development#F-3902",
-   "remote-development#F-3907"
+   "remote-ssh#F-3902",
+   "remote-ssh#F-3907"
   ],
   "coreUi": true,
   "candidateComponent": "ssh.core-boundary",

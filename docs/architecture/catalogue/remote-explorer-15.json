@@ -22,7 +22,8 @@
     "remote-explorer.connectToWslUsingDistroInNewWindow",
     "remote-explorer.connectToFolderInCurrentWindow",
     "remote-explorer.deleteFolderHistoryItem",
-    "remote-explorer.unregisterTunnel"
+    "remote-explorer.unregisterTunnel",
+    "opensshremotes.openConfigFile"
    ],
    "settings": [],
    "views": [],
@@ -32,7 +33,15 @@
     "view/item/context"
    ],
    "contextKeys": [
-    "viewItem"
+    "viewItem",
+    "sshGroup",
+    "tunnelGroup",
+    "sshRemoteTarget",
+    "tunnelRemoteTarget",
+    "remoteFolder",
+    "tunnelWsl",
+    "remote-explorer.remoteTunnelSignInGithub",
+    "remote-explorer.remoteTunnelSignInMicrosoft"
    ],
    "authorities": [],
    "other": [
@@ -73,7 +82,7 @@
   "questions": [
    "Which component owns the shared no-row guard for all 13 handlers?",
    "Are sign-in commands out-of-context safety untested by design (R-56), and is a guard still required?",
-   "Is the dangling reference to section 19 (R-46) defined in an issue we can read?"
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -134,7 +143,12 @@
    "remote-containers#F-1406",
    "remote-containers#F-0101",
    "remote-containers#F-1403",
-   "remote-explorer#F-5301"
+   "remote-explorer#F-5301",
+   "remote-explorer#F-5102",
+   "remote-explorer#F-5103",
+   "remote-explorer#F-5104",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202"
   ],
   "coreUi": true,
   "candidateComponent": "explorer.package-and-activation",
@@ -194,11 +208,11 @@
     "TreeDataProvider",
     "workspace.getConfiguration",
     "workspace.onDidChangeConfiguration",
-    "workspace.createFileSystemWatcher",
     "extensions.onDidChange"
    ],
    "proposedApi": [
-    "contribViewsRemote"
+    "contribViewsRemote",
+    "extensionsAny"
    ],
    "processes": [],
    "network": [],
@@ -252,7 +266,9 @@
     "remote-explorer.configureSsh",
     "remote-explorer.add",
     "opensshremotes.openConfigFile",
-    "opensshremotes.addNewSshHost"
+    "opensshremotes.addNewSshHost",
+    "remote-internal.getConfiguredHostnames",
+    "remote-internal.sshHostsChanged"
    ],
    "settings": [
     "remote.SSH.configFile"
@@ -279,7 +295,8 @@
    "stableApi": [
     "TreeItem",
     "commands.executeCommand",
-    "workspace.fs"
+    "workspace.fs",
+    "workspace.onDidChangeConfiguration"
    ],
    "proposedApi": [],
    "processes": [],
@@ -300,7 +317,7 @@
    "remote-explorer#F-5002",
    "remote-explorer#F-5001",
    "remote-explorer#F-5201",
-   "remote-ssh#config-parsing",
+   "remote-ssh#F-2202",
    "remote-containers#F-0906",
    "remote-containers#F-1403"
   ],
@@ -417,13 +434,14 @@
    "settings": [
     "remote-explorer.foldersSortOrder",
     "remote-explorer.collapseRecentFolders",
-    "remote.SSH.foldersSortOrder"
+    "remote.SSH.foldersSortOrder (legacy key, no effect)"
    ],
    "views": [
     "remoteTargets"
    ],
    "menus": [
-    "view/item/context folder row inline and navigation@1-3"
+    "view/item/context folder row inline and navigation@1-3",
+    "view/item/context#19"
    ],
    "contextKeys": [
     "remote-explorer.remoteFolder",
@@ -480,8 +498,7 @@
   "notes": "History is recorded and owned by the SSH companion; view reads, sorts, and deletes entries via the interface. Open uses vscode.openFolder with a remote URI. Two application-scoped settings, not live.",
   "questions": [
    "Who stores the folder history and is deletion a companion call in F-5902?",
-   "Does the reimplementation read the history from the companion or share a store?",
-   "Is remote.SSH.foldersSortOrder related to remote-explorer.foldersSortOrder or a typo?"
+   "Does the reimplementation read the history from the companion or share a store?"
   ]
  },
  {
@@ -528,7 +545,10 @@
     "commands.executeCommand",
     "extensions.getExtension"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "contribViewsRemote",
+    "extensionsAny"
+   ],
    "processes": [],
    "network": [
     "GitHub account provider",
@@ -618,11 +638,10 @@
     "commands.executeCommand",
     "TreeItem"
    ],
-   "proposedApi": [],
-   "processes": [
-    "remote-oss.remote-wsl companion",
-    "tunnels companion"
+   "proposedApi": [
+    "extensionsAny"
    ],
+   "processes": [],
    "network": [
     "tunneling service list and unregister"
    ],
@@ -640,7 +659,7 @@
    "remote-explorer#F-5902",
    "remote-explorer#F-5002",
    "remote-explorer#F-5102",
-   "remote-explorer#F-8201",
+   "remote-server#F-8201",
    "remote-containers#F-0906",
    "remote-containers#F-1403"
   ],
@@ -694,7 +713,10 @@
     "Switch Remote dropdown options and order (core)",
     "stored remote.explorerType value",
     "no Help and feedback content contributed",
-    "stored value matching no option"
+    "stored value matching no option",
+    "stored view state ~remote.forwardedPortsContainer (and .hidden)",
+    "stored view state workbench.view.remote.state.hidden",
+    "stored view state workbench.explorer.views.state.hidden"
    ]
   },
   "external": {

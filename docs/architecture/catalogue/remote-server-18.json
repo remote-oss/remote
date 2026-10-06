@@ -4,7 +4,7 @@
   "issue": 8,
   "repo": "remote-server",
   "kind": "feature",
-  "label": "spec:needs-revision",
+  "label": "spec:reviewed",
   "title": "Package, activation, extension kind and web entry",
   "epic": "E80",
   "acCount": 26,
@@ -18,11 +18,14 @@
     "remote-tunnels.signIntoTunnelWithDifferentAccount",
     "remote-tunnels.openOnDesktop"
    ],
-   "settings": [],
+   "settings": [
+    "security.workspace.trust.enabled (core)"
+   ],
    "views": [],
    "menus": [
     "statusBar/remoteIndicator",
-    "commandPalette"
+    "commandPalette",
+    "remote_10_tunnel_0_remote@1"
    ],
    "contextKeys": [
     "remote-tunnels.entriesEnabled",
@@ -49,7 +52,8 @@
     "commands.executeCommand",
     "window.createOutputChannel",
     "window.showWarningMessage",
-    "ExtensionContext.globalState"
+    "ExtensionContext.globalState",
+    "commands.executeCommand workbench.extensions.search (core)"
    ],
    "proposedApi": [
     "resolvers"
@@ -78,7 +82,12 @@
    "remote-server#F-8301",
    "remote-server#F-8302",
    "remote-containers#F-1406",
-   "remote-containers#F-0101"
+   "remote-containers#F-0101",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-explorer#F-5902",
+   "remote-server#F-8104",
+   "remote-server#F-8203"
   ],
   "coreUi": true,
   "candidateComponent": "tunnels.extension-shell",
@@ -110,7 +119,12 @@
     "remote-tunnels.settings",
     "remote-tunnels.reportIssue"
    ],
-   "settings": [],
+   "settings": [
+    "remote.tunnels.alwaysUpdateCLI (read)",
+    "remote.tunnels.defaultExtensions (read)",
+    "remote.tunnels.tunnelCredentialCommand (read)",
+    "workbench.editor.useModal (core)"
+   ],
    "views": [],
    "menus": [],
    "contextKeys": [],
@@ -121,7 +135,8 @@
   },
   "external": {
    "stableApi": [
-    "env.openExternal"
+    "env.openExternal",
+    "workbench.action.openSettings (core)"
    ],
    "proposedApi": [],
    "processes": [
@@ -141,7 +156,12 @@
    "remote-server#F-8104",
    "remote-server#F-8102",
    "remote-server#F-8101",
-   "remote-server#F-8103"
+   "remote-server#F-8103",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-server#F-8201",
+   "remote-server#F-8203",
+   "remote-server#F-8301"
   ],
   "coreUi": true,
   "candidateComponent": "tunnels.help-commands",
@@ -154,7 +174,8 @@
   "notes": "Three stateless hand-offs: browser, filtered Settings editor, core Issue Reporter. Writes nothing. Needs only project identity values; trivial component.",
   "questions": [
    "Is the project documentation URL a build-time constant from the identity card or a runtime config value?",
-   "Settings and reporter behavior in a signed-in tunnel window is unobserved; is that a blocker?"
+   "Settings and reporter behavior in a signed-in tunnel window is unobserved; is that a blocker?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -162,21 +183,29 @@
   "issue": 10,
   "repo": "remote-server",
   "kind": "feature",
-  "label": "spec:needs-revision",
+  "label": "spec:draft",
   "title": "Connect to Tunnel: command, entry points and the tunnel picker",
   "epic": "E81",
   "acCount": 26,
   "surfaces": {
    "commands": [
-    "remote-tunnels.connectCurrentWindowToTunnel"
+    "remote-tunnels.connectCurrentWindowToTunnel",
+    "remote-tunnels.connectNewWindowToTunnel",
+    "workbench.remoteTunnel.actions.turnOn (core, optional)"
    ],
-   "settings": [],
+   "settings": [
+    "remote.tunnels.tunnelCredentialCommand",
+    "remote.tunnels.alwaysUpdateCLI",
+    "remote.tunnels.defaultExtensions"
+   ],
    "views": [],
    "menus": [
     "statusBar/remoteIndicator group remote_10_tunnel_0_local@1",
     "commandPalette"
    ],
-   "contextKeys": [],
+   "contextKeys": [
+    "remote-tunnels.entriesEnabled"
+   ],
    "authorities": [
     "tunnel"
    ],
@@ -220,7 +249,9 @@
    "remote-server#F-8902",
    "remote-explorer#F-5201",
    "remote-explorer#F-5202",
-   "remote-explorer#F-5902"
+   "remote-explorer#F-5902",
+   "remote-containers#F-1403",
+   "remote-server#F-8001"
   ],
   "coreUi": false,
   "candidateComponent": "tunnels.connect-picker",
@@ -234,7 +265,8 @@
   "questions": [
    "How does the clean team list tunnels: which client and service does F-8902 choose for Code-OSS builds?",
    "What does picking an Offline tunnel do, and is Create a Tunnel real?",
-   "Is Last used also shown on tunnel rows?"
+   "Is Last used also shown on tunnel rows?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -242,10 +274,10 @@
   "issue": 11,
   "repo": "remote-server",
   "kind": "feature",
-  "label": "spec:needs-revision",
+  "label": "spec:draft",
   "title": "Tunnel sign-in: GitHub or Microsoft account and switching accounts",
   "epic": "E81",
-  "acCount": 24,
+  "acCount": 26,
   "surfaces": {
    "commands": [
     "remote-tunnels.signIntoTunnelWithDifferentAccount"
@@ -292,7 +324,8 @@
    "remote-server#F-8901",
    "remote-server#F-8902",
    "remote-explorer#F-5201",
-   "remote-explorer#F-5902"
+   "remote-explorer#F-5902",
+   "remote-server#F-8001"
   ],
   "coreUi": false,
   "candidateComponent": "tunnels.account-session",
@@ -306,7 +339,8 @@
   "questions": [
    "What value shape does remote.tunnels.tunnelCredentialCommand expect for delegated web authentication?",
    "What exactly does the different-account command do, given it was never run?",
-   "Which scopes are required for the Microsoft provider session?"
+   "Which scopes are required for the Microsoft provider session?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -319,7 +353,10 @@
   "epic": "E81",
   "acCount": 30,
   "surfaces": {
-   "commands": [],
+   "commands": [
+    "workbench.action.remote.close (core)",
+    "workbench.action.closeRemoteConnection (not in core)"
+   ],
    "settings": [],
    "views": [],
    "menus": [],
@@ -374,7 +411,8 @@
    "remote-server#F-8902",
    "remote-explorer#F-5201",
    "remote-explorer#F-5202",
-   "remote-containers#F-1403"
+   "remote-containers#F-1403",
+   "remote-server#F-8001"
   ],
   "coreUi": false,
   "candidateComponent": "tunnels.resolver-relay",
@@ -389,7 +427,8 @@
   "questions": [
    "Should Close Connection run core close-remote (option b) or match the reference no-op?",
    "What triggers the outdated-connection error and what does Upgrade do?",
-   "Where do relay sockets live on Windows and macOS, and does the relay outlive the editor there?"
+   "Where do relay sockets live on Windows and macOS, and does the relay outlive the editor there?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -397,15 +436,17 @@
   "issue": 13,
   "repo": "remote-server",
   "kind": "feature",
-  "label": "spec:needs-revision",
+  "label": "spec:draft",
   "title": "VS Code Server and CLI on the tunnel host: download, CLI updates, default extensions",
   "epic": "E81",
-  "acCount": 25,
+  "acCount": 30,
   "surfaces": {
    "commands": [],
    "settings": [
     "remote.tunnels.defaultExtensions",
-    "remote.tunnels.alwaysUpdateCLI"
+    "remote.tunnels.alwaysUpdateCLI",
+    "remote.tunnels.access.hostNameOverride (core)",
+    "remote.tunnels.access.preventSleep (core)"
    ],
    "views": [],
    "menus": [],
@@ -451,7 +492,10 @@
    "remote-server#F-8201",
    "remote-server#F-8901",
    "remote-server#F-8902",
-   "remote-containers#F-1403"
+   "remote-containers#F-1403",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-server#F-8001"
   ],
   "coreUi": false,
   "candidateComponent": "tunnels.host-software",
@@ -473,10 +517,10 @@
   "issue": 14,
   "repo": "remote-server",
   "kind": "feature",
-  "label": "spec:needs-revision",
+  "label": "spec:draft",
   "title": "Tunnel data and actions behind the Remotes view",
   "epic": "E82",
-  "acCount": 26,
+  "acCount": 34,
   "surfaces": {
    "commands": [
     "remote-tunnels.internal.isAuthenticated",
@@ -490,7 +534,12 @@
     "remote-tunnels.connectNewWindowToTunnel",
     "remote-internal.setActiveFolders"
    ],
-   "settings": [],
+   "settings": [
+    "remote-explorer.foldersSortOrder (read)",
+    "remote-explorer.collapseRecentFolders (read)",
+    "workbench.iconTheme (core)",
+    "security.workspace.trust.enabled (core)"
+   ],
    "views": [
     "remoteTargets"
    ],
@@ -516,7 +565,8 @@
    ],
    "proposedApi": [],
    "processes": [
-    "dev-tunnels client"
+    "dev-tunnels client",
+    "code tunnel unregister"
    ],
    "network": [
     "dev-tunnels service"
@@ -536,7 +586,11 @@
    "remote-server#F-8101",
    "remote-server#F-8202",
    "remote-server#F-8203",
-   "remote-server#F-8901"
+   "remote-server#F-8901",
+   "remote-containers#F-1403",
+   "remote-server#F-8001",
+   "remote-server#F-8104",
+   "remote-server#F-8902"
   ],
   "coreUi": false,
   "candidateComponent": "tunnels.explorer-data-api",
@@ -550,7 +604,8 @@
   "questions": [
    "Confirm fixing the three reference quirks: connected state, folder-active flag, per-window history copies?",
    "Who owns the hover texts: Remote Explorer or this extension?",
-   "What are the purpose and argument of isConnectedToRemote, which nothing calls?"
+   "What are the purpose and argument of isConnectedToRemote, which nothing calls?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -567,9 +622,16 @@
     "remote.tunnel.privacyprivate",
     "remote.tunnel.privacypublic",
     "remote.tunnel.forwardCommandPalette",
-    "remote.tunnel.forwardInline"
+    "remote.tunnel.forwardInline",
+    "remote.tunnelsView.makePublic (core)"
    ],
-   "settings": [],
+   "settings": [
+    "remote.autoForwardPorts",
+    "remote.autoForwardPortsSource",
+    "remote.portsAttributes",
+    "remote.otherPortsAttributes",
+    "remote.restoreForwardedPorts"
+   ],
    "views": [
     "Ports view (core)"
    ],
@@ -602,7 +664,10 @@
     "dev-tunnels service"
    ],
    "remoteFiles": [],
-   "localFiles": []
+   "localFiles": [
+    "core global storage remote.tunnels.toRestore.*",
+    "core global storage remote.tunnels.toRestoreExpiration.*"
+   ]
   },
   "cites": [
    "remote-server#F-8103",
@@ -610,7 +675,9 @@
    "remote-server#F-8201",
    "remote-server#F-8203",
    "remote-server#F-8001",
-   "remote-server#F-8901"
+   "remote-server#F-8901",
+   "remote-containers#F-1403",
+   "remote-server#F-8902"
   ],
   "coreUi": true,
   "candidateComponent": "tunnels.port-forwarder",
@@ -678,7 +745,8 @@
    "remote-server#F-8101",
    "remote-server#F-8103",
    "remote-server#F-8202",
-   "remote-server#F-8901"
+   "remote-server#F-8901",
+   "remote-server#F-8902"
   ],
   "coreUi": false,
   "candidateComponent": "tunnels.usage-limits",
@@ -692,7 +760,8 @@
   "questions": [
    "What replaces No limits are currently in place when a tunnel or bandwidth limit is reached?",
    "What does Show Limits run, and what carries it?",
-   "Is the Learn more link a project URL or the service documentation link?"
+   "Is the Learn more link a project URL or the service documentation link?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  }
 ]

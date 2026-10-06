@@ -177,7 +177,7 @@
    "remote-ssh#F-2701",
    "remote-ssh#F-2506",
    "remote-ssh#F-3901",
-   "remote-ssh#F-1406"
+   "remote-containers#F-1406"
   ],
   "coreUi": true,
   "candidateComponent": "ssh.server-source-resolver",
@@ -326,7 +326,6 @@
    "remote-ssh#F-3903",
    "remote-ssh#F-3906",
    "remote-ssh#F-3907",
-   "remote-ssh#F-3905",
    "remote-ssh#F-2001",
    "remote-ssh#F-2007",
    "remote-ssh-edit#F-4901",
@@ -369,7 +368,10 @@
     "no aiKey",
     "no telemetry.json",
     "README no-telemetry line",
-    "server started with telemetry disabled"
+    "server started with telemetry disabled",
+    "TEL:resolver",
+    "TEL:copilotChat",
+    "TEL:extraInfo"
    ]
   },
   "external": {

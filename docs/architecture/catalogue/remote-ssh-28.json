@@ -1,42 +1,478 @@
 [
-{"id":"F-2409","issue":54,"repo":"remote-ssh","kind":"feature","label":"spec:draft","title":"Server start: ports, bind host and start failures","epic":"E24","acCount":30,
-"surfaces":{"commands":[],"settings":["remote.SSH.serverPickPortsFromRange","remote.SSH.bindHost"],"views":[],"menus":[],"contextKeys":[],"authorities":["ssh-remote"],"other":["error notification STR:S168","failure dialog reasons STR:S135/S136/S149/S156","settings dump in log"]},
-"external":{"stableApi":["workspace.getConfiguration","window.showErrorMessage"],"proposedApi":["resolvers"],"processes":["ssh","VS Code CLI (exec server)","VS Code Server launcher"],"network":["127.0.0.1 loopback port on host","optional 0.0.0.0 bind"],"remoteFiles":["/tmp/code-<uuid> socket","~/.vscode-server/cli/servers/Stable-<commit>","~/.vscode-server/bin/<commit>","~/.vscode-server/.<commit>.log"],"localFiles":["global storage data.json per host","global state key remote.ssh.hints"]},
-"cites":["remote-ssh#F-2501","remote-ssh#F-2403","remote-ssh#F-2104","remote-ssh#F-2601","remote-ssh#F-2003","remote-ssh#F-2102","remote-ssh#F-2410","remote-ssh#F-2411","remote-ssh#F-2413","remote-ssh#F-2602","remote-ssh#F-2605","remote-ssh#F-2606","remote-ssh#F-3901","remote-ssh#F-3902","remote-ssh#F-3903"],
-"coreUi":true,"candidateComponent":"ssh.server-launcher","candidateLibrary":"lib-server","area":"A","reuse":["editor-cli","openssh"],
-"errorPaths":12,
-"notes":"Port and bind-host selection for the host server, with two start modes (exec-server default, legacy) that fail differently. Bind host validation is client-side; range handled by the launcher. Start wait about 15 s in legacy mode.",
-"questions":["Q1: fill the unfilled placeholder of the bind-host error with the configured value, or keep the literal text?","Q2: full port range falls back silently in exec mode but errors in legacy mode; which behaviour is intended?","Q5: where are the two CVE termination strings placed, given the condition is untestable in the lab?"]},
-{"id":"F-2410","issue":55,"repo":"remote-ssh","kind":"feature","label":"spec:draft","title":"Server listening on a socket (multi-user hosts)","epic":"E24","acCount":33,
-"surfaces":{"commands":[],"settings":["remote.SSH.remoteServerListenOnSocket","remote.SSH.useLocalServer","remote.SSH.remotePlatform"],"views":[],"menus":[],"contextKeys":[],"authorities":["ssh-remote"],"other":["ssh_config keywords StreamLocalBindMask and StreamLocalBindUnlink (no effect)","platform quick pick when no stored platform","two ssh connections per window"]},
-"external":{"stableApi":["workspace.getConfiguration"],"proposedApi":["resolvers"],"processes":["ssh (install/launch connection)","ssh (forward to socket)","VS Code CLI"],"network":["127.0.0.1 random local port forwarded to remote unix socket"],"remoteFiles":["/tmp/code-<uuid> socket (0755)","per-user temp folder on macOS"],"localFiles":["user settings remote.SSH.remotePlatform entries"]},
-"cites":["remote-ssh#F-2501","remote-ssh#F-2403","remote-ssh#F-2104","remote-ssh#F-2102","remote-ssh#F-2206","remote-ssh#F-2304","remote-ssh#F-2306","remote-ssh#F-2601","remote-ssh#F-2409","remote-ssh#F-2411","remote-ssh#F-2413","remote-ssh#F-2602","remote-ssh#F-2701","remote-ssh#F-2702","remote-ssh#F-2003","remote-ssh#F-2006"],
-"coreUi":true,"candidateComponent":"ssh.socket-endpoint","candidateLibrary":"lib-forwarding","area":"A","reuse":["openssh","editor-cli"],
-"errorPaths":7,
-"notes":"Setting-only mode switch: endpoint becomes a unix socket, local useLocalServer is forced off, tunnel forwards a local port to the socket. No version or sshd checks. Failure when sshd refuses stream-local forwarding yields a generic dialog.",
-"questions":["Q2: does the 0755 socket actually refuse other users? Keep login-user-only ownership as the requirement, or arrange a sanctioned check?","Q1: what do Windows and macOS clients do in socket mode (local port holder, login count)?","Should socket mode be a distinct endpoint kind in the tunnel library, separate from the TCP port path?"]},
-{"id":"F-2411","issue":56,"repo":"remote-ssh","kind":"feature","label":"spec:draft","title":"Kill VS Code Server on Host... and Kill Current VS Code Server","epic":"E24","acCount":33,
-"surfaces":{"commands":["opensshremotes.cleanRemoteServer","opensshremotes.cleanCurrentRemoteServer"],"settings":[],"views":[],"menus":["commandPalette"],"contextKeys":["remoteName","remoteConnectionState"],"authorities":["ssh-remote"],"other":["host picker quick pick (F-2301)","information notifications STR:S085/S076 with Open Logs button","core Cannot reconnect dialog in other windows"]},
-"external":{"stableApi":["commands.registerCommand","window.createQuickPick","window.showInformationMessage"],"proposedApi":["resolvers"],"processes":["ssh","POSIX process listing and kill on host"],"network":["ssh to chosen host"],"remoteFiles":["login user server processes","~/.vscode-server/bin (legacy mode removal)","/tmp/code-<uuid> stays"],"localFiles":["per-host stored connection data in global storage","known_hosts (ssh appends)"]},
-"cites":["remote-ssh#F-2301","remote-ssh#F-2201","remote-ssh#F-2202","remote-ssh#F-2102","remote-ssh#F-2306","remote-ssh#F-2307","remote-ssh#F-2603","remote-ssh#F-2003","remote-ssh#F-2601","remote-ssh#F-3902","remote-ssh#F-2006","remote-ssh#F-2104","remote-ssh#F-2203","remote-ssh#F-2204","remote-ssh#F-2403","remote-ssh#F-2404","remote-ssh#F-2409","remote-ssh#F-2410","remote-ssh#F-2412","remote-ssh#F-2413","remote-ssh#F-2501","remote-ssh#F-2703","remote-ssh#F-3908","remote-ssh#F-2105","remote-ssh#F-2101","remote-ssh#F-2206"],
-"coreUi":true,"candidateComponent":"ssh.server-kill","candidateLibrary":"lib-server","area":"A","reuse":["openssh"],
-"errorPaths":9,
-"notes":"Two commands that open a fresh ssh connection and stop the login user's server processes. Own-host kill in default mode does not stop the server and turns the window local. Failure surfaces as an info notification, not an error. Fish login shell gives silence.",
-"questions":["Q1: reproduce default-mode Kill Current not stopping the server, or really stop it then switch the window?","Q2: fish login shell ends silently; reproduce or show the failure notification?","Is the host-side kill step a shared lib-server operation reused by uninstall and old-version clean-up?"]},
-{"id":"F-2412","issue":57,"repo":"remote-ssh","kind":"feature","label":"spec:draft","title":"Uninstall VS Code Server from Host...","epic":"E24","acCount":37,
-"surfaces":{"commands":["opensshremotes.cleanDevBox"],"settings":["remote.SSH.useLocalServer","remote.SSH.remotePlatform","remote.SSH.connectTimeout","remote.SSH.serverInstallPath"],"views":[],"menus":["commandPalette"],"contextKeys":[],"authorities":["ssh-remote"],"other":["host picker quick pick (F-2301)","host-key fingerprint pick placeholder STR:S013","silent success","hidden terminal when useLocalServer false","core command-error dialog Failed to run command"]},
-"external":{"stableApi":["commands.registerCommand","window.createQuickPick","window.createTerminal"],"proposedApi":["resolvers"],"processes":["ssh","POSIX stop and recursive remove on host"],"network":["ssh to chosen host, possibly via ProxyJump"],"remoteFiles":["~/.vscode-server (deleted)","server processes of login user"],"localFiles":["per-host stored connection data in global storage","known_hosts (ssh appends)"]},
-"cites":["remote-ssh#F-2301","remote-ssh#F-2202","remote-ssh#F-2102","remote-ssh#F-2305","remote-ssh#F-2306","remote-ssh#F-2307","remote-ssh#F-2105","remote-ssh#F-2206","remote-ssh#F-2411","remote-ssh#F-2403","remote-ssh#F-2407","remote-ssh#F-2409","remote-ssh#F-2413","remote-ssh#F-2103","remote-ssh#F-2203","remote-ssh#F-2204","remote-ssh#F-2501","remote-ssh#F-2703","remote-ssh#F-2006","remote-ssh#F-3902","remote-ssh#F-3908"],
-"coreUi":true,"candidateComponent":"ssh.server-uninstall","candidateLibrary":"lib-server","area":"A","reuse":["openssh"],
-"errorPaths":11,
-"notes":"Command removes the server folder and stops processes over a new ssh connection, with no confirmation or result message. Own-host in default mode only turns the window local. Custom install path not honoured. Unknown host key hangs when useLocalServer is false.",
-"questions":["Q2: delete only the default server folder, or also the folder set by serverInstallPath?","Q4: unknown host key with useLocalServer false hangs forever with no UI; reproduce or route the question to quick input?","Q9: stop servers from other server folders of the user (insiders, derivatives), or only this client's folders?"]},
-{"id":"F-2413","issue":58,"repo":"remote-ssh","kind":"feature","label":"spec:draft","title":"Server lifetime, reconnection grace time, updates and old-version clean-up","epic":"E24","acCount":38,
-"surfaces":{"commands":[],"settings":["remote.SSH.reconnectionGraceTime","remote.SSH.useExecServer","remote.SSH.useLocalServer","remote.SSH.maxReconnectionAttempts","remote.SSH.serverInstallPath","remote.SSH.useFlock","remote.SSH.lockfilesInTmp"],"views":[],"menus":[],"contextKeys":[],"authorities":["ssh-remote"],"other":["server start option for grace time in seconds","legacy clean-up keeps five most recent installs","core reconnection dialogs"]},
-"external":{"stableApi":["workspace.getConfiguration"],"proposedApi":["resolvers"],"processes":["VS Code CLI launcher (validates value)","VS Code Server (grace time option)"],"network":[],"remoteFiles":["~/.vscode-server/bin/<commit>","~/.vscode-server/.<commit>.log","~/.vscode-server/.<commit>.pid","~/.vscode-server/cli/servers","install lock file"],"localFiles":[]},
-"cites":["remote-ssh#F-2403","remote-ssh#F-2103","remote-ssh#F-2409","remote-ssh#F-2501","remote-ssh#F-2601","remote-ssh#F-2408","remote-ssh#F-2505","remote-ssh#F-2304","remote-ssh#F-2206","remote-ssh#F-2411","remote-ssh#F-2412","remote-ssh#F-2407","remote-ssh#F-2410","remote-ssh#F-2102","remote-ssh#F-2701","remote-ssh#F-2702","remote-ssh#F-3902","remote-ssh#F-3903"],
-"coreUi":true,"candidateComponent":"ssh.server-lifetime","candidateLibrary":"lib-server","area":"A","reuse":["editor-cli"],
-"errorPaths":7,
-"notes":"One global setting passed to the server only when it starts; running servers keep their value. Exec mode rejects invalid values, legacy tolerates. Legacy mode prunes old install folders every connect, lock-only protection. Release notes claim per-host value, reference does not.",
-"questions":["Q1: legacy clean-up spares only locked installs; should it also spare installs with a live server process?","Should the setting be a single number as observed, or per-host as the release note says?","Which component owns legacy install pruning: lib-server install step or this feature?"]}
+ {
+  "id": "F-2409",
+  "issue": 54,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Server start: ports, bind host and start failures",
+  "epic": "E24",
+  "acCount": 30,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.serverPickPortsFromRange",
+    "remote.SSH.bindHost"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "error notification STR:S168",
+    "failure dialog reasons STR:S135/S136/S149/S156",
+    "settings dump in log"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration",
+    "window.showErrorMessage"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "VS Code CLI (exec server)",
+    "VS Code Server launcher"
+   ],
+   "network": [
+    "127.0.0.1 loopback port on host",
+    "optional 0.0.0.0 bind"
+   ],
+   "remoteFiles": [
+    "/tmp/code-<uuid> socket",
+    "~/.vscode-server/cli/servers/Stable-<commit>",
+    "~/.vscode-server/bin/<commit>",
+    "~/.vscode-server/.<commit>.log"
+   ],
+   "localFiles": [
+    "global storage data.json per host",
+    "global state key remote.ssh.hints"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2413",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2401",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2408",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.server-launcher",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli",
+   "openssh"
+  ],
+  "errorPaths": 12,
+  "notes": "Port and bind-host selection for the host server, with two start modes (exec-server default, legacy) that fail differently. Bind host validation is client-side; range handled by the launcher. Start wait about 15 s in legacy mode.",
+  "questions": [
+   "Q1: fill the unfilled placeholder of the bind-host error with the configured value, or keep the literal text?",
+   "Q2: full port range falls back silently in exec mode but errors in legacy mode; which behaviour is intended?",
+   "Q5: where are the two CVE termination strings placed, given the condition is untestable in the lab?"
+  ]
+ },
+ {
+  "id": "F-2410",
+  "issue": 55,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Server listening on a socket (multi-user hosts)",
+  "epic": "E24",
+  "acCount": 33,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.remoteServerListenOnSocket",
+    "remote.SSH.useLocalServer",
+    "remote.SSH.remotePlatform"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "ssh_config keywords StreamLocalBindMask and StreamLocalBindUnlink (no effect)",
+    "platform quick pick when no stored platform",
+    "two ssh connections per window"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh (install/launch connection)",
+    "ssh (forward to socket)",
+    "VS Code CLI"
+   ],
+   "network": [
+    "127.0.0.1 random local port forwarded to remote unix socket"
+   ],
+   "remoteFiles": [
+    "/tmp/code-<uuid> socket (0755)",
+    "per-user temp folder on macOS"
+   ],
+   "localFiles": [
+    "user settings remote.SSH.remotePlatform entries"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2413",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.socket-endpoint",
+  "candidateLibrary": "lib-forwarding",
+  "area": "A",
+  "reuse": [
+   "openssh",
+   "editor-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Setting-only mode switch: endpoint becomes a unix socket, local useLocalServer is forced off, tunnel forwards a local port to the socket. No version or sshd checks. Failure when sshd refuses stream-local forwarding yields a generic dialog.",
+  "questions": [
+   "Q2: does the 0755 socket actually refuse other users? Keep login-user-only ownership as the requirement, or arrange a sanctioned check?",
+   "Q1: what do Windows and macOS clients do in socket mode (local port holder, login count)?",
+   "Should socket mode be a distinct endpoint kind in the tunnel library, separate from the TCP port path?"
+  ]
+ },
+ {
+  "id": "F-2411",
+  "issue": 56,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Kill VS Code Server on Host... and Kill Current VS Code Server",
+  "epic": "E24",
+  "acCount": 33,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.cleanRemoteServer",
+    "opensshremotes.cleanCurrentRemoteServer"
+   ],
+   "settings": [
+    "remote.SSH.configFile",
+    "remote.SSH.connectTimeout",
+    "remote.SSH.httpProxy",
+    "remote.SSH.httpsProxy",
+    "remote.SSH.path",
+    "remote.SSH.remotePlatform",
+    "remote.SSH.remoteServerListenOnSocket",
+    "remote.SSH.useExecServer",
+    "remote.SSH.useLocalServer"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "remoteConnectionState"
+   ],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "host picker quick pick (F-2301)",
+    "information notifications STR:S085/S076 with Open Logs button",
+    "core Cannot reconnect dialog in other windows"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "window.createQuickPick",
+    "window.showInformationMessage"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "POSIX process listing and kill on host"
+   ],
+   "network": [
+    "ssh to chosen host"
+   ],
+   "remoteFiles": [
+    "login user server processes",
+    "~/.vscode-server/bin (legacy mode removal)",
+    "/tmp/code-<uuid> stays"
+   ],
+   "localFiles": [
+    "per-host stored connection data in global storage",
+    "known_hosts (ssh appends)"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2603",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2203",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2404",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2413",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2703",
+   "remote-ssh#F-3908",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2206"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.server-kill",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 9,
+  "notes": "Two commands that open a fresh ssh connection and stop the login user's server processes. Own-host kill in default mode does not stop the server and turns the window local. Failure surfaces as an info notification, not an error. Fish login shell gives silence.",
+  "questions": [
+   "Q1: reproduce default-mode Kill Current not stopping the server, or really stop it then switch the window?",
+   "Q2: fish login shell ends silently; reproduce or show the failure notification?",
+   "Is the host-side kill step a shared lib-server operation reused by uninstall and old-version clean-up?"
+  ]
+ },
+ {
+  "id": "F-2412",
+  "issue": 57,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Uninstall VS Code Server from Host...",
+  "epic": "E24",
+  "acCount": 37,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.cleanDevBox"
+   ],
+   "settings": [
+    "remote.SSH.useLocalServer",
+    "remote.SSH.remotePlatform",
+    "remote.SSH.connectTimeout",
+    "remote.SSH.serverInstallPath"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "host picker quick pick (F-2301)",
+    "host-key fingerprint pick placeholder STR:S013",
+    "silent success",
+    "hidden terminal when useLocalServer false",
+    "core command-error dialog Failed to run command"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "window.createQuickPick",
+    "window.createTerminal"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "POSIX stop and recursive remove on host"
+   ],
+   "network": [
+    "ssh to chosen host, possibly via ProxyJump"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server (deleted)",
+    "server processes of login user"
+   ],
+   "localFiles": [
+    "per-host stored connection data in global storage",
+    "known_hosts (ssh appends)"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2413",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2203",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2703",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-3908"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.server-uninstall",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 11,
+  "notes": "Command removes the server folder and stops processes over a new ssh connection, with no confirmation or result message. Own-host in default mode only turns the window local. Custom install path not honoured. Unknown host key hangs when useLocalServer is false.",
+  "questions": [
+   "Q2: delete only the default server folder, or also the folder set by serverInstallPath?",
+   "Q4: unknown host key with useLocalServer false hangs forever with no UI; reproduce or route the question to quick input?",
+   "Q9: stop servers from other server folders of the user (insiders, derivatives), or only this client's folders?"
+  ]
+ },
+ {
+  "id": "F-2413",
+  "issue": 58,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Server lifetime, reconnection grace time, updates and old-version clean-up",
+  "epic": "E24",
+  "acCount": 38,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.reconnectionGraceTime",
+    "remote.SSH.useExecServer",
+    "remote.SSH.useLocalServer",
+    "remote.SSH.maxReconnectionAttempts",
+    "remote.SSH.serverInstallPath",
+    "remote.SSH.useFlock",
+    "remote.SSH.lockfilesInTmp"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "server start option for grace time in seconds",
+    "legacy clean-up keeps five most recent installs",
+    "core reconnection dialogs"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "VS Code CLI launcher (validates value)",
+    "VS Code Server (grace time option)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "~/.vscode-server/bin/<commit>",
+    "~/.vscode-server/.<commit>.log",
+    "~/.vscode-server/.<commit>.pid",
+    "~/.vscode-server/cli/servers",
+    "install lock file"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2408",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-3903"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.server-lifetime",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "One global setting passed to the server only when it starts; running servers keep their value. Exec mode rejects invalid values, legacy tolerates. Legacy mode prunes old install folders every connect, lock-only protection. Release notes claim per-host value, reference does not.",
+  "questions": [
+   "Q1: legacy clean-up spares only locked installs; should it also spare installs with a live server process?",
+   "Should the setting be a single number as observed, or per-host as the release note says?",
+   "Which component owns legacy install pruning: lib-server install step or this feature?"
+  ]
+ }
 ]

@@ -13,9 +13,23 @@
     "remote-wsl.showLog (availability only)",
     "remote-wsl.connect",
     "remote-wsl.reopenInWSL",
-    "remote-wsl.openFolder"
+    "remote-wsl.openFolder",
+    "remote-wsl.connectInNewWindow",
+    "remote-wsl.connectUsingDistro",
+    "remote-wsl.connectUsingDistroInNewWindow",
+    "remote-wsl.getHelp",
+    "remote-wsl.provideFeedback",
+    "remote-wsl.reportIssue",
+    "remote-wsl.reopenInWindows"
    ],
-   "settings": [],
+   "settings": [
+    "security.workspace.trust.enabled",
+    "extensions.supportUntrustedWorkspaces",
+    "extensions.supportVirtualWorkspaces",
+    "extensions.webWorker",
+    "remote.extensionKind",
+    "terminal.integrated.allowInUntrustedWorkspace"
+   ],
    "views": [
     "targetsWsl"
    ],
@@ -52,8 +66,7 @@
    "proposedApi": [
     "resolvers",
     "contribRemoteHelp",
-    "contribViewsRemote",
-    "telemetry"
+    "contribViewsRemote"
    ],
    "processes": [
     "wsl.exe (presence check, owned elsewhere)"
@@ -81,8 +94,8 @@
    "remote-wsl#F-6205",
    "remote-wsl#F-6207",
    "remote-wsl#F-6005",
-   "remote-wsl#F-1403",
-   "containers#F-0109"
+   "remote-containers#F-1403",
+   "remote-containers#F-0109"
   ],
   "coreUi": false,
   "candidateComponent": "wsl.activation-gate",
@@ -90,11 +103,12 @@
   "area": "D",
   "reuse": [],
   "errorPaths": 7,
-  "notes": "Pure manifest and context-key feature: where the extension runs, when it activates, what is hidden off Windows, in virtual workspaces and on web. Commands must stay registered everywhere but inert. Candidate shared pattern for platform stand-down across rooms.",
+  "notes": "Pure manifest and context-key feature: where the extension runs, when it activates, what is hidden off Windows, in virtual workspaces and on web. Commands must stay registered everywhere but inert. Candidate shared pattern for platform stand-down across rooms. telemetry appears in the manifest inventory only; not needed (R-28).",
   "questions": [
    "Does the reimplementation ship the browser build at all (decision pending for S061)?",
    "Should the S041 dev-build guard be implemented or omitted?",
-   "Is the inert-outside-Windows contract (R-46) one shared helper for all remote families?"
+   "Is the inert-outside-Windows contract (R-46) one shared helper for all remote families?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -111,7 +125,8 @@
     "remote-wsl.showLog"
    ],
    "settings": [
-    "remote.WSL.debug"
+    "remote.WSL.debug",
+    "terminal.integrated.allowInUntrustedWorkspace"
    ],
    "views": [],
    "menus": [
@@ -160,7 +175,9 @@
    "remote-wsl#F-6401",
    "remote-wsl#F-6701",
    "remote-wsl#F-6003",
-   "remote-wsl#F-7901"
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6204",
+   "remote-containers#F-1403"
   ],
   "coreUi": false,
   "candidateComponent": "wsl.log-terminal",
@@ -236,8 +253,9 @@
    "remote-wsl#F-6101",
    "remote-wsl#F-6501",
    "remote-wsl#F-6002",
-   "remote-wsl#F-1403",
-   "containers#F-0109"
+   "remote-containers#F-1403",
+   "remote-containers#F-0109",
+   "remote-wsl#F-6201"
   ],
   "coreUi": true,
   "candidateComponent": "wsl.help-contrib",
@@ -249,7 +267,8 @@
   "questions": [
    "Which hosts will our help, feedback and issue URLs use given the link-protection dialog (Q3)?",
    "Is contribRemoteHelp enabled via argv.json route, and do the commands work without it?",
-   "Is one shared help-contribution template wanted across all rooms?"
+   "Is one shared help-contribution template wanted across all rooms?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -262,8 +281,17 @@
   "epic": "E62",
   "acCount": 26,
   "surfaces": {
-   "commands": [],
-   "settings": [],
+   "commands": [
+    "remote-wsl.showLog"
+   ],
+   "settings": [
+    "remote.WSL.debug",
+    "remote.WSL.downloadInBackground",
+    "remote.WSL.experimental.scriptLessStartup",
+    "remote.WSL.useShellEnvironment",
+    "remote.WSL1.connectionMethod (deprecated, no effect)",
+    "remote.WSL2.connectionMethod (deprecated, no effect)"
+   ],
    "views": [],
    "menus": [],
    "contextKeys": [],
@@ -317,10 +345,10 @@
    "remote-wsl#F-6208",
    "remote-wsl#F-6701",
    "remote-wsl#F-7901",
-   "remote-wsl#F-1403",
+   "remote-containers#F-1403",
    "remote-wsl#F-6203",
    "remote-wsl#F-6204",
-   "remote-wsl#F-6002"
+   "remote-containers#F-0109"
   ],
   "coreUi": false,
   "candidateComponent": "wsl.resolver",
@@ -335,7 +363,8 @@
   "questions": [
    "Should wsl+ with empty name keep meaning default distro (Q2)?",
    "On re-resolve after distro termination, restart the server (option b) or reproduce reference?",
-   "What are non-distro WSL targets and the minimum WSL version for S051?"
+   "What are non-distro WSL targets and the minimum WSL version for S051?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -351,7 +380,12 @@
    "commands": [
     "remote-wsl.openFolder"
    ],
-   "settings": [],
+   "settings": [
+    "security.allowedUNCHosts",
+    "window.openFoldersInNewWindow",
+    "files.simpleDialog.enable",
+    "window.dialogStyle"
+   ],
    "views": [],
    "menus": [
     "commandPalette#5"
@@ -378,13 +412,12 @@
    "processes": [
     "wsl.exe --list --verbose"
    ],
-   "network": [
-    "\\\\wsl.localhost\\<distro>\\ share",
-    "\\\\wsl$\\<distro>\\ share"
-   ],
+   "network": [],
    "remoteFiles": [],
    "localFiles": [
-    "UNC share of default distro (read via dialog)"
+    "UNC share of default distro (read via dialog)",
+    "\\\\wsl.localhost\\<distro>\\ share",
+    "\\\\wsl$\\<distro>\\ share"
    ]
   },
   "cites": [
@@ -399,7 +432,8 @@
    "remote-wsl#F-6004",
    "remote-wsl#F-6001",
    "remote-wsl#F-7901",
-   "remote-wsl#F-6701"
+   "remote-wsl#F-6701",
+   "remote-containers#F-1403"
   ],
   "coreUi": false,
   "candidateComponent": "wsl.open-folder",
@@ -430,7 +464,11 @@
     "remote-wsl.reopenInWSL",
     "remote-wsl.reopenInWindows"
    ],
-   "settings": [],
+   "settings": [
+    "security.allowedUNCHosts",
+    "security.restrictUNCAccess",
+    "window.openFoldersInNewWindow"
+   ],
    "views": [],
    "menus": [
     "commandPalette#6",
@@ -459,7 +497,8 @@
     "workspace.workspaceFile",
     "workspace.workspaceFolders",
     "env.remoteName",
-    "commands.executeCommand vscode.openFolder"
+    "commands.executeCommand vscode.openFolder",
+    "commands.executeCommand remote-containers.reopenInWSL (F-0406 boundary)"
    ],
    "proposedApi": [],
    "processes": [
@@ -486,8 +525,10 @@
    "remote-wsl#F-6001",
    "remote-wsl#F-6203",
    "remote-wsl#F-7901",
-   "containers#F-0406",
-   "containers#F-0109"
+   "remote-containers#F-0406",
+   "remote-containers#F-0109",
+   "remote-wsl#F-6301",
+   "remote-containers#F-1403"
   ],
   "coreUi": false,
   "candidateComponent": "wsl.reopen-translate",
@@ -501,7 +542,8 @@
   "questions": [
    "Untitled workspace: reopen saved file, refuse, or first folder only (Q3)?",
    "What does UNC allow-list refusal do after Reopen in Windows?",
-   "Shared reopen-in-X helper across WSL, SSH and containers rooms?"
+   "Shared reopen-in-X helper across WSL, SSH and containers rooms?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -515,7 +557,10 @@
   "acCount": 20,
   "surfaces": {
    "commands": [],
-   "settings": [],
+   "settings": [
+    "window.title",
+    "window.titleSeparator"
+   ],
    "views": [],
    "menus": [],
    "contextKeys": [],
@@ -551,7 +596,8 @@
    "remote-wsl#F-6204",
    "remote-wsl#F-6206",
    "remote-wsl#F-6208",
-   "remote-wsl#F-7901"
+   "remote-wsl#F-7901",
+   "remote-containers#F-1403"
   ],
   "coreUi": true,
   "candidateComponent": "wsl.label-formatters",
@@ -576,8 +622,15 @@
   "epic": "E62",
   "acCount": 30,
   "surfaces": {
-   "commands": [],
-   "settings": [],
+   "commands": [
+    "remote-wsl.showLog"
+   ],
+   "settings": [
+    "remote.WSL.debug",
+    "remote.WSL.downloadInBackground",
+    "remote.WSL.experimental.scriptLessStartup",
+    "window.dialogStyle"
+   ],
    "views": [],
    "menus": [],
    "contextKeys": [],
@@ -623,7 +676,11 @@
    "remote-wsl#F-6304",
    "remote-wsl#F-6003",
    "remote-wsl#F-7901",
-   "containers#F-0109"
+   "remote-containers#F-0109",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6701",
+   "remote-containers#F-1403"
   ],
   "coreUi": false,
   "candidateComponent": "wsl.failure-dialog",
@@ -648,9 +705,14 @@
   "epic": "E63",
   "acCount": 24,
   "surfaces": {
-   "commands": [],
+   "commands": [
+    "remote-wsl.showLog"
+   ],
    "settings": [
-    "remote.WSL.downloadInBackground"
+    "remote.WSL.downloadInBackground",
+    "http.proxy",
+    "http.proxyStrictSSL",
+    "remote.WSL.experimental.scriptLessStartup"
    ],
    "views": [],
    "menus": [],
@@ -662,7 +724,10 @@
     "progress stages Downloading server..., Unpacking server...",
     "cache of server archives per commit on Windows",
     "background download every ~30 s per window",
-    "global state keys wsl.lastUpdateCheck, wsl.downloadInProgress, wsl.usageTime.<platform>"
+    "global state keys wsl.lastUpdateCheck, wsl.downloadInProgress, wsl.usageTime.<platform>",
+    "env input http_proxy",
+    "env input https_proxy",
+    "env input NODE_EXTRA_CA_CERTS"
    ]
   },
   "external": {
@@ -706,7 +771,11 @@
    "remote-wsl#F-6401",
    "remote-wsl#F-6701",
    "remote-wsl#F-7901",
-   "remote-ssh#server-install (remote-ssh room)"
+   "remote-ssh#F-2403",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6205",
+   "remote-containers#F-1403"
   ],
   "coreUi": false,
   "candidateComponent": "wsl.server-installer",
@@ -722,7 +791,8 @@
   "questions": [
    "Report specific reasons S019, S020, S023 in the log before fallback (Q1)?",
    "Quality checks S007/S056 for Code-OSS derivatives: only when URL comes from updateUrl (Q3)?",
-   "Is the server cache layout shared with other rooms through lib-server?"
+   "Is the server cache layout shared with other rooms through lib-server?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -735,9 +805,14 @@
   "epic": "E63",
   "acCount": 28,
   "surfaces": {
-   "commands": [],
+   "commands": [
+    "remote-wsl.showLog"
+   ],
    "settings": [
-    "remote.WSL.useShellEnvironment"
+    "remote.WSL.useShellEnvironment",
+    "terminal.integrated.inheritEnv",
+    "terminal.integrated.env.linux",
+    "application.shellEnvironmentResolutionTimeout"
    ],
    "views": [],
    "menus": [],
@@ -780,7 +855,11 @@
    "remote-wsl#F-6302",
    "remote-wsl#F-6602",
    "remote-wsl#F-6701",
-   "remote-wsl#F-7901"
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6206",
+   "remote-containers#F-1403",
+   "remote-containers#F-0109"
   ],
   "coreUi": false,
   "candidateComponent": "wsl.server-env",

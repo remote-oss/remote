@@ -90,7 +90,14 @@
    "remote-containers#F-0701",
    "remote-containers#F-0702",
    "remote-containers#F-0902",
-   "remote-containers#F-1406"
+   "remote-containers#F-1406",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0407",
+   "remote-containers#F-0410",
+   "remote-containers#F-0413",
+   "remote-containers#F-0501",
+   "remote-containers#F-1401"
   ],
   "coreUi": true,
   "candidateComponent": "containers.workspace-opener",
@@ -174,7 +181,6 @@
    "remote-containers#F-0701",
    "remote-containers#F-0704",
    "remote-containers#F-0108",
-   "remote-containers#F-0505",
    "remote-containers#F-1406"
   ],
   "coreUi": false,

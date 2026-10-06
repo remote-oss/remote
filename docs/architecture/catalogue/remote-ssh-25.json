@@ -33,7 +33,9 @@
     "commands.executeCommand vscode.newWindow",
     "window.showInformationMessage"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [],
    "network": [],
    "remoteFiles": [],
@@ -107,7 +109,9 @@
     "window.createQuickPick",
     "commands.executeCommand vscode.newWindow reuseWindow=true"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [],
    "network": [],
    "remoteFiles": [],
@@ -179,7 +183,9 @@
     "env.remoteAuthority",
     "commands.executeCommand vscode.newWindow"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [],
    "network": [],
    "remoteFiles": [],
@@ -396,8 +402,8 @@
    "remote-ssh#F-2201",
    "remote-ssh#F-2502",
    "remote-ssh#F-2003",
-   "unknown#F-3901",
-   "unknown#F-3903",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3903",
    "remote-ssh#F-2006"
   ],
   "coreUi": true
@@ -484,7 +490,7 @@
    "remote-ssh#F-2502",
    "remote-ssh#F-2003",
    "remote-ssh#F-2201",
-   "unknown#F-3901"
+   "remote-ssh#F-3901"
   ],
   "coreUi": true
  },
@@ -583,10 +589,10 @@
    "remote-ssh#F-2003",
    "remote-ssh#F-2101",
    "remote-ssh#F-2206",
-   "unknown#F-0109",
-   "unknown#F-3901",
-   "unknown#F-3903",
-   "unknown#F-3905"
+   "remote-containers#F-0109",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-3905"
   ],
   "coreUi": true
  },
@@ -660,7 +666,7 @@
    "remote-ssh#F-2304",
    "remote-ssh#F-2306",
    "remote-ssh#F-2601",
-   "unknown#F-3903",
+   "remote-ssh#F-3903",
    "remote-ssh#F-2104",
    "remote-ssh#F-2305",
    "remote-ssh#F-2307",

@@ -148,8 +148,7 @@
    "remote-ssh#F-2403",
    "remote-ssh#F-2603",
    "remote-ssh#F-2006",
-   "remote-ssh#F-1403",
-   "remote-ssh#F-3903"
+   "remote-containers#F-1403"
   ],
   "coreUi": true,
   "candidateComponent": "ssh.hop-prompt-relay",
@@ -231,9 +230,9 @@
    "remote-ssh#F-2003",
    "remote-ssh#F-2001",
    "remote-ssh#F-2006",
-   "remote-ssh#F-1403",
+   "remote-containers#F-1403",
    "remote-ssh#F-3903",
-   "remote-ssh#F-1406",
+   "remote-containers#F-1406",
    "remote-ssh#F-2104"
   ],
   "coreUi": true,
@@ -315,9 +314,9 @@
    "remote-ssh#F-2101",
    "remote-ssh#F-2301",
    "remote-ssh#F-2601",
-   "remote-ssh#F-1403",
+   "remote-containers#F-1403",
    "remote-ssh#F-3903",
-   "remote-ssh#F-1406"
+   "remote-containers#F-1406"
   ],
   "coreUi": true,
   "candidateComponent": "ssh.display-env-fixer",

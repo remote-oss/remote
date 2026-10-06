@@ -10,7 +10,16 @@
   "acCount": 35,
   "surfaces": {
    "commands": [],
-   "settings": [],
+   "settings": [
+    "remote.SSH.configFile",
+    "remote.SSH.connectTimeout",
+    "remote.SSH.maxReconnectionAttempts",
+    "remote.SSH.preconnect",
+    "remote.SSH.reconnectionGraceTime",
+    "remote.SSH.remotePlatform",
+    "remote.SSH.remoteServerListenOnSocket",
+    "remote.SSH.useLocalServer"
+   ],
    "views": [],
    "menus": [],
    "contextKeys": [
@@ -26,9 +35,14 @@
    ]
   },
   "external": {
-   "stableApi": [],
+   "stableApi": [
+    "workspace.registerRemoteAuthorityResolver",
+    "workspace.getConfiguration"
+   ],
    "proposedApi": [
-    "resolvers"
+    "resolvers",
+    "tunnels",
+    "tunnelFactory"
    ],
    "processes": [
     "ssh",
@@ -53,7 +67,14 @@
    "remote-ssh#F-3903",
    "remote-ssh#F-2301",
    "remote-ssh#F-2502",
-   "remote-ssh#F-2505"
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2503",
+   "remote-ssh#F-2504",
+   "remote-ssh#F-2506",
+   "remote-ssh#F-2507",
+   "remote-ssh#F-2508",
+   "remote-ssh#F-3901"
   ],
   "coreUi": true,
   "candidateComponent": "ssh.authority-resolver",
@@ -120,7 +141,8 @@
    "remote-ssh#F-2505",
    "remote-ssh#F-2506",
    "remote-ssh#F-2508",
-   "remote-ssh#F-3901"
+   "remote-ssh#F-3901",
+   "remote-containers#F-1403"
   ],
   "coreUi": true,
   "candidateComponent": "ssh.label-formatter",
@@ -186,7 +208,8 @@
    "remote-explorer#F-5102",
    "remote-explorer#F-5103",
    "remote-explorer#F-5104",
-   "remote-explorer#F-5902"
+   "remote-explorer#F-5902",
+   "remote-ssh#F-2001"
   ],
   "coreUi": false,
   "candidateComponent": "ssh.history-service",
@@ -236,9 +259,12 @@
   },
   "external": {
    "stableApi": [
-    "vscode.env.uriScheme"
+    "vscode.env.uriScheme",
+    "window.registerUriHandler"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "code CLI"
    ],
@@ -256,8 +282,9 @@
    "remote-ssh#F-2001",
    "remote-ssh#F-3901",
    "remote-ssh#F-3902",
-   "remote-ssh#F-1406",
-   "remote-ssh#F-2701"
+   "remote-containers#F-1406",
+   "remote-ssh#F-2701",
+   "remote-containers#F-1403"
   ],
   "coreUi": true,
   "candidateComponent": "ssh.open-targets",
@@ -300,8 +327,12 @@
    ]
   },
   "external": {
-   "stableApi": [],
-   "proposedApi": [],
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "ssh (new process per attempt)"
    ],
@@ -369,7 +400,9 @@
   },
   "external": {
    "stableApi": [],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "VS Code Server install"
    ],
@@ -437,9 +470,13 @@
    ]
   },
   "external": {
-   "stableApi": [],
+   "stableApi": [
+    "workspace.openTunnel",
+    "workspace.getConfiguration"
+   ],
    "proposedApi": [
-    "resolvers (tunnelFactory, port source)"
+    "resolvers (tunnelFactory, port source)",
+    "tunnels"
    ],
    "processes": [
     "ssh SOCKS forward"
@@ -514,7 +551,9 @@
   },
   "external": {
    "stableApi": [],
-   "proposedApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
    "processes": [
     "host shell",
     "code CLI",

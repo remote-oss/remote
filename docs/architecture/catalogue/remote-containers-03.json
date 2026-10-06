@@ -230,7 +230,10 @@
     "window.withProgress",
     "commands.executeCommand"
    ],
-   "proposedApi": [],
+   "proposedApi": [
+    "workspaceTrust",
+    "resolvers"
+   ],
    "processes": [
     "docker",
     "docker compose",
@@ -300,7 +303,7 @@
   "issue": 23,
   "repo": "remote-containers",
   "kind": "feature",
-  "label": "spec:draft",
+  "label": "spec:reviewed",
   "title": "Existing container discovery, reuse and state handling",
   "epic": "E04",
   "acCount": 47,
@@ -478,7 +481,15 @@
    "remote-containers#F-0303",
    "remote-containers#F-0402",
    "remote-containers#F-0404",
-   "remote-containers#F-0109"
+   "remote-containers#F-0109",
+   "remote-containers#F-0406",
+   "remote-containers#F-0410",
+   "remote-containers#F-0411",
+   "remote-containers#F-0417",
+   "remote-containers#F-0419",
+   "remote-containers#F-0504",
+   "remote-containers#F-0601",
+   "remote-containers#F-1406"
   ],
   "coreUi": true,
   "candidateComponent": "containers.rebuild-commands",
@@ -560,7 +571,20 @@
    "remote-containers#F-0504",
    "remote-containers#F-0701",
    "remote-containers#F-0405",
-   "remote-containers#F-1405"
+   "remote-containers#F-1405",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0406",
+   "remote-containers#F-0407",
+   "remote-containers#F-0411",
+   "remote-containers#F-0413",
+   "remote-containers#F-0414",
+   "remote-containers#F-0417",
+   "remote-containers#F-0418",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406"
   ],
   "coreUi": true,
   "candidateComponent": "containers.startup-orchestrator",
@@ -663,7 +687,15 @@
    "remote-containers#F-0419",
    "remote-containers#F-0704",
    "remote-containers#F-0202",
-   "remote-containers#F-0108"
+   "remote-containers#F-0108",
+   "remote-containers#F-0105",
+   "remote-containers#F-0303",
+   "remote-containers#F-0407",
+   "remote-containers#F-0701",
+   "remote-containers#F-0906",
+   "remote-containers#F-1401",
+   "remote-containers#F-1405",
+   "remote-containers#F-1406"
   ],
   "coreUi": false,
   "candidateComponent": "containers.recovery-handler",

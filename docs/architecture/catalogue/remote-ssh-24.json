@@ -365,7 +365,7 @@
    "remote-ssh#F-2606",
    "remote-ssh#F-2003",
    "remote-ssh#F-2006",
-   "remote-ssh#F-1403",
+   "remote-containers#F-1403",
    "remote-ssh#F-3901"
   ],
   "coreUi": true,
@@ -458,7 +458,10 @@
    "remote-ssh#F-2412",
    "remote-ssh#F-2303",
    "remote-ssh#F-2001",
-   "remote-ssh#F-2101"
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3908"
   ],
   "coreUi": true,
   "candidateComponent": "ssh.platform-resolver",

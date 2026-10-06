@@ -162,7 +162,13 @@
    "remote-containers#F-1401",
    "remote-containers#F-1406",
    "remote-containers#F-1403",
-   "remote-containers#F-1103"
+   "remote-containers#F-1103",
+   "remote-containers#F-0805",
+   "remote-containers#F-0806",
+   "remote-containers#F-0808",
+   "remote-containers#F-0809",
+   "remote-containers#F-0811",
+   "remote-containers#F-0812"
   ],
   "coreUi": true,
   "candidateComponent": "containers.feature-config-command",
@@ -251,7 +257,6 @@
    "remote-containers#F-0601",
    "remote-containers#F-0410",
    "remote-containers#F-0204",
-   "remote-containers#F-0207",
    "remote-containers#F-1401",
    "remote-containers#F-1406",
    "remote-containers#F-1403"

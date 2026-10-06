@@ -10,7 +10,12 @@
   "acCount": 22,
   "surfaces": {
    "commands": [],
-   "settings": [],
+   "settings": [
+    "http.proxy (core)",
+    "http.proxySupport (core)",
+    "extensions.autoUpdate (core)",
+    "extensions.autoCheckUpdates (core)"
+   ],
    "views": [],
    "menus": [],
    "contextKeys": [],
@@ -18,7 +23,8 @@
    "other": [
     "manifest fields displayName, description, categories, keywords, engines.vscode, repository, bugs",
     "14 package.nls bundles plus default",
-    "no commands, settings or views"
+    "no commands, settings or views",
+    "product key extensionsGallery"
    ]
   },
   "external": {
@@ -42,7 +48,7 @@
    "remote-extensionpack#F-9101",
    "remote-extensionpack#F-9102",
    "remote-extensionpack#F-9103",
-   "remote-extensionpack#F-5901"
+   "remote-explorer#F-5901"
   ],
   "coreUi": true,
   "candidateComponent": "pack.manifest-data",
@@ -52,10 +58,11 @@
    "editor-core-extensions-view"
   ],
   "errorPaths": 5,
-  "notes": "Declarative only; no code. Engine floor must be computed as highest floor among members (^1.133.0 at pin). Needs a build-time check of manifest and bundles.",
+  "notes": "Declarative only; no code. Engine floor must be computed as highest floor among members (^1.133.0 at pin). Needs a build-time check of manifest and bundles. Cite F-5901 is inherited from F-9901; issue 5 does not name it.",
   "questions": [
    "Is the engine-floor rule BR-7 meant to be a release-time script that reads member manifests?",
-   "Language pack path for META:l10n unobserved; will reimplementation test cover bundle resolution?"
+   "Language pack path for META:l10n unobserved; will reimplementation test cover bundle resolution?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -63,13 +70,16 @@
   "issue": 6,
   "repo": "remote-extensionpack",
   "kind": "feature",
-  "label": "spec:needs-revision",
+  "label": "spec:draft",
   "title": "Gallery listing and readme: overview, member summary, requirements and links",
   "epic": "E90",
-  "acCount": 19,
+  "acCount": 22,
   "surfaces": {
    "commands": [],
-   "settings": [],
+   "settings": [
+    "http.proxy (core)",
+    "http.proxySupport (core)"
+   ],
    "views": [],
    "menus": [],
    "contextKeys": [],
@@ -77,7 +87,8 @@
    "other": [
     "README.md at package root",
     "gallery listing properties: Links.*, GitHubFlavoredMarkdown, Pricing=Free",
-    "no markdown or pricing manifest field"
+    "no markdown or pricing manifest field",
+    "product key extensionsGallery"
    ]
   },
   "external": {
@@ -98,7 +109,9 @@
    "remote-extensionpack#F-9001",
    "remote-extensionpack#F-9101",
    "remote-extensionpack#F-9102",
-   "remote-extensionpack#F-9103"
+   "remote-extensionpack#F-9103",
+   "remote-containers#F-0109",
+   "remote-containers#F-1403"
   ],
   "coreUi": true,
   "candidateComponent": "pack.readme-listing",
@@ -110,7 +123,6 @@
   "errorPaths": 6,
   "notes": "Content spec for README and listing links; verifiable by file checks. Label says needs-revision though open questions list none.",
   "questions": [
-   "Label is needs-revision but section 17 says none; what revision is outstanding?",
    "Which README parts are conformance-checked: headings, links, or member summary text?"
   ]
  },
@@ -124,8 +136,12 @@
   "epic": "E91",
   "acCount": 33,
   "surfaces": {
-   "commands": [],
-   "settings": [],
+   "commands": [
+    "workbench.action.showWindowLog (core)"
+   ],
+   "settings": [
+    "http.proxy (core)"
+   ],
    "views": [],
    "menus": [],
    "contextKeys": [],
@@ -133,7 +149,8 @@
    "other": [
     "manifest extensionPack list of 4 member ids in fixed order",
     "categories include Extension Packs",
-    "install paths: Extensions view, CLI, Quick Open ext install, VSIX"
+    "install paths: Extensions view, CLI, Quick Open ext install, VSIX",
+    "product config: gallery entry and trusted publishers"
    ]
   },
   "external": {
@@ -170,10 +187,11 @@
    "editor-core-extension-management"
   ],
   "errorPaths": 13,
-  "notes": "Only functional content is the four-id extensionPack list; install behaviour belongs to the editor. Primary risk is members missing from the gallery.",
+  "notes": "Only functional content is the four-id extensionPack list; install behaviour belongs to the editor. Primary risk is members missing from the gallery. Cites F-7901, F-1406, F-3901, F-8901 are inherited from F-9901; issue 7 does not name them.",
   "questions": [
    "Decision pending: what to do when gallery lacks members or has no gallery at all (recommendation a)?",
-   "Will release tooling verify all four member ids on Open VSX before publishing the pack?"
+   "Will release tooling verify all four member ids on Open VSX before publishing the pack?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -191,18 +209,22 @@
     "extensions.autoUpdate",
     "extensions.autoCheckUpdates",
     "extensions.autoUpdateDelay",
-    "extensions.autoRestart"
+    "extensions.autoRestart",
+    "http.proxy (core)"
    ],
    "views": [],
    "menus": [
     "Manage menu of pack row (editor core)",
     "details page header (editor core)",
-    "restart banner (editor core)"
+    "restart banner (editor core)",
+    "Developer: Restart Extension Host (core action)"
    ],
    "contextKeys": [],
    "authorities": [],
    "other": [
-    "pack contributes nothing of its own"
+    "pack contributes nothing of its own",
+    "core global-state key extensions.dismissedNotifications",
+    "CLI --install-extension"
    ]
   },
   "external": {
@@ -236,7 +258,8 @@
   "notes": "No owned atoms; pure editor behaviour recorded as conformance data. Largest AC count of the set, so mostly verification scenarios not code.",
   "questions": [
    "Q3 decision: should README mention that uninstalling the pack removes members the user installed alone?",
-   "Windows, macOS and WSL passes are outstanding; who runs them and when?"
+   "Windows, macOS and WSL passes are outstanding; who runs them and when?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -244,10 +267,10 @@
   "issue": 9,
   "repo": "remote-extensionpack",
   "kind": "feature",
-  "label": "spec:needs-revision",
+  "label": "spec:draft",
   "title": "The pack in remote windows, in the browser and on each platform",
   "epic": "E91",
-  "acCount": 23,
+  "acCount": 29,
   "surfaces": {
    "commands": [],
    "settings": [
@@ -267,7 +290,9 @@
    ],
    "other": [
     "manifest extensionKind [ui]",
-    "listing property Microsoft.VisualStudio.Code.ExtensionKind"
+    "listing property Microsoft.VisualStudio.Code.ExtensionKind",
+    "row button Install Locally",
+    "workspace trust input (Restricted Mode)"
    ]
   },
   "external": {
@@ -285,7 +310,10 @@
    "remote-extensionpack#F-9901",
    "remote-extensionpack#F-9102",
    "remote-extensionpack#F-9001",
-   "remote-extensionpack#F-9002"
+   "remote-extensionpack#F-9002",
+   "remote-containers#F-0505",
+   "remote-wsl#F-6001",
+   "remote-server#F-8104"
   ],
   "coreUi": true,
   "candidateComponent": "pack.extension-kind",
@@ -298,7 +326,7 @@
   "notes": "Pack stays UI-kind so it installs locally with members; browser editor and Windows/macOS not observed. Placement logic is the editor's.",
   "questions": [
    "Does the gallery offer the pack in browser editors, and what dialog text appears (Q3)?",
-   "Needs-revision label: which sections are to be revised before architecture relies on it?"
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  },
  {
@@ -328,7 +356,11 @@
   },
   "external": {
    "stableApi": [],
-   "proposedApi": [],
+   "proposedApi": [
+    "product key extensionEnabledApiProposals (enablement route F-1403)",
+    "product key remoteExtensionTips",
+    "product key exeBasedExtensionTips"
+   ],
    "processes": [],
    "network": [
     "open-vsx.org namespace remote-oss",
@@ -354,7 +386,10 @@
    "remote-extensionpack#F-9002",
    "remote-extensionpack#F-9101",
    "remote-extensionpack#F-9102",
-   "remote-extensionpack#F-9103"
+   "remote-extensionpack#F-9103",
+   "remote-containers#F-1403",
+   "remote-containers#F-1405",
+   "remote-ssh-edit#F-4901"
   ],
   "coreUi": true,
   "candidateComponent": "pack.identity",
@@ -367,7 +402,8 @@
   "notes": "Fixes the pack identity and member list; ids feed the shared identifier table. Published on Open VSX only. remote-ssh pack contents still pending its own decision.",
   "questions": [
    "Remote-ssh F-3901 was still proposed; has it ruled on its extensionPack contents (ssh-edit and explorer)?",
-   "Which component owns the family-wide member id table that this list and other packs share?"
+   "Which component owns the family-wide member id table that this list and other packs share?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
   ]
  }
 ]
