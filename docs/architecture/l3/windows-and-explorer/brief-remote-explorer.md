@@ -1,3 +1,11 @@
+> Issued by `remote-architect` 2026-10-06 to `remote-coding-worker-1`. Settled since drafting: the explorer room republished
+> ten issues (F-5902 §5 with RR-1–RR-5 folded; one WSL row per online tunnel machine, F-5202 3.3; extensionsAny always
+> requested with the stable same-host fallback; two callers of setActiveFolders; tunnel history first-recorded;
+> standing-down key `remote-explorer.standingDown`, `when: <clause> && !remote-explorer.standingDown`, visible by
+> default, no added activation). Order: lib-companion first (its PR alone), then the explorer. The F-3906 side of the
+> interface (ssh#83) lands as an edit; code the SSH companion calls from F-5902 §5 as republished. Shipped prose per
+> ADR-0008; D-59 voice in README, strings, comments.
+
 # Coding brief (draft): remote-explorer and lib-companion
 
 Status: draft by `remote-architect-worker-2`, 2026-10-06. It is ready for the lead's review and is meant to start
