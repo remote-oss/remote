@@ -257,8 +257,9 @@ Rules:
 - The record is written only after the connection completes.
 - `acquire` is not used when `remote.SSH.useLocalServer` is off or socket mode is on (F-2102 BR-10, F-2410).
 
-Lifetime, ownership and how it dies are in [local-connection-server.md](local-connection-server.md) and the ADR
-draft `adr-drafts/local-connection-server.md`.
+S9 is built on lib-helper (§9): a per-profile registry, the end policy `graceAfterLastLease`, and the oldest-first
+lease list that S9 uses for login ownership. Lifetime, ownership and how it dies are in
+[local-connection-server.md](local-connection-server.md) and the ADR draft `adr-drafts/local-connection-server.md`.
 
 ### S10 ssh-host-channel
 
@@ -392,6 +393,7 @@ Never: accept for the user.
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `startOrReuse` | H1, installed server, options (bind host, port range, socket mode, grace time, default extensions, licence accepted, extra start options from the record's allow-list, environment setup) | port or socket, connection token, process id, remote environment additions | `serverStart` (STR:S135 at the end of the start wait), `invalidPortRange` (before any ssh), `cancelled` |
+| `serverPort` | the connection | the TCP port the running server listens on at the host's loopback, or `none` in socket mode or when no server runs; it never contacts the host (F-2509 option (a), ruled by the lead 2026-10-06, for B's Open Web UI) | none |
 | `installExtensions` | H1, server, ids filtered by F-2506 BR-2 | done; failures are logged per id (F-2506 Q1 (b)) | none raised |
 
 Start options:
@@ -438,7 +440,7 @@ Rules:
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `cacheFolders` | profile | the volume tree for servers, and the extension cache folder: `extensionsCache/` for `code` and `code-insiders`, `extensionsCache-<applicationName>/` for every other product | none |
+| `cacheFolders` | product, commit, platform, whether a volume is mounted at `/vscode` (area C decides the mount, F-0419) | a pure function giving the volume tree for servers, and the extension cache folder: `extensionsCache/` for `code` and `code-insiders`, `extensionsCache-<applicationName>/` for every other product | none |
 | `clientArchiveFolder` | profile, quality, commit, the extension's cache root | the kept client archive folder: the reference layout for `code` and `code-insiders`, with an `<applicationName>` level for every other product, so two products never share a name | none |
 
 Rule: an entry downloaded from another gallery is never reused (R-58, F-0419 BR-18). The container transport's
@@ -501,6 +503,9 @@ Rules:
   `cancelled`, `unknown`. B's presenter maps every kind.
 - R1 decides `remoteCommandInEffect`: `remote.SSH.enableRemoteCommand` on, shared mode, and the host not excluded by
   the platform match of F-2107 BR-1. S2 only applies it.
+- `Failed` also carries `silent` (boolean): `NotAvailable`, not handled, no dialog. Remote-SSH never sets it. Dev
+  Containers sets it for a stopped or removed container (F-0502, lead's ruling relayed by area C on 2026-10-06), and
+  B maps it.
 - `connect` shows no dialog of its own for a failure. B's per-extension presenter renders `noServerSource` and
   `invalidServerTemplate` (F-3902 rule 8) and `licenceDeclined` (F-2601 with STR:S027). `userAlreadyNotified` is
   true only after the pre-connection script's own dialog (F-2108). The licence modal itself (V6) and the
@@ -591,3 +596,67 @@ Fixed regardless of the choice:
 - **T1.** P1 gives `tunnelApplicationName`; a missing executable is F-8103 7.E10.
 - **T3.** Tokens come only from `vscode.authentication` with F-8102's provider ids and scopes.
 - **T2.** One relay per profile with F-8103 BR-6's lifetime.
+
+---
+
+## 9. lib-helper (draft for area C's review; lead's ruling 2026-10-06)
+
+One pattern for every detached helper process the family runs on the client. A helper outlives the extension host
+that starts it, is shared by leases from several windows, and ends by a policy.
+
+Consumers:
+- S9, the SSH local connection server: per host string, per profile (F-2102);
+- area C's container watchdog: stops containers once every window is gone, after a delayed check of about 10 s,
+  with a registry shared across profiles (F-0417 AC-43);
+- the Tunnels relay (T2), if the frozen design keeps one: per profile, idle end after 30 to 60 s (F-8103 BR-6).
+
+The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
+
+### X1 helper-client (in the extension host)
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `acquire` | registry folder (per profile from global storage, or per user; the caller chooses), namespace (extension and kind), key, start specification (the bundled helper script and its parameters), end policy, cancellation | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed`, `endpointUnreachable` (after replacing a stale record once), `cancelled` |
+| `release` | lease | none; closing the lease's connection has the same effect, so a crashed extension host releases by itself | none |
+| `request` | lease, message (plain data) | reply (plain data) | `helperGone`, `timeout` (the caller's limit) |
+| `events` | lease | helper messages, `leaseListChanged`, `helperGone` | none |
+| `stop` | registry folder, namespace, key | done, also when nothing runs | none |
+
+### X2 helper-runtime (bundled into each helper script)
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `serve` | endpoint, record payload, end policy, message handler | runs until the end policy fires or `stop` arrives | none raised; the helper logs to its own file and exits |
+
+End policies (data, no per-consumer branches):
+- `graceAfterLastLease(ms)`: end this long after the last lease closes. A new lease within the grace cancels it. SSH
+  uses 2 to 4 s (F-2102 BR-3), and the value must also carry a reload.
+- `delayedCheckAfterLastLease(ms, action)`: after the last lease closes, wait, check again, then run the consumer's
+  action (for example "stop these containers") and end. Area C uses about 10 s (F-0417 AC-43).
+- `idleAfterLastLease(ms)`: as the grace, for the relay's 30 to 60 s (F-8103 BR-6).
+
+### X3 registry (pure decisions, file access through a port)
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `claim` | folder, namespace, key, record | `claimed`, or `existing` with the record | none |
+| `isStale` | record, result of one hello exchange | true when the helper does not answer within a short limit | none |
+
+Rules:
+- **Atomic claim.** A record is claimed by an atomic exclusive create. The loser of a race joins the winner. A stale
+  record is replaced once, never in a loop.
+- **Endpoint.** A Unix socket with mode 0600 in the user's runtime folder (temp folder on macOS), or a named pipe
+  restricted to the current user on Windows. The Windows form is provisional (lab), D-60.
+- **Authentication.** A per-helper nonce in the record must be presented in the hello. A per-user registry holds no
+  secret beyond that nonce.
+- **The process.** The helper is a script bundled in the VSIX and run on the editor's own runtime, detached, with no
+  console window and stdio closed. There is no TCP listener and no network of its own. It never runs as another user.
+- **Lease order.** Leases are numbered in arrival order. The oldest live lease is first. Consumers build ownership on
+  this, for example S9's login owner and its hand-over (F-2102 BR-5).
+- **Tests.** The lease state machine and the end policies are pure, with a fake clock and a fake endpoint.
+
+Never:
+- store prompt answers or credentials in a record;
+- leave a helper without an end policy;
+- share a registry across users.
+

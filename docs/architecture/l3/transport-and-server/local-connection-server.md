@@ -19,6 +19,10 @@ the control endpoint, the SOCKS port, and what a later window needs to reuse the
 system and architecture, temp folder and connection token (F-2102 BR-6). The record is written when the first connect
 completes, never while the login is pending (F-2102 BR-6, 7.E7).
 
+**Built on lib-helper** (lead's ruling 2026-10-06): the helper, leases, registry and grace are lib-helper's
+(`contracts.md` §9). This note keeps what is SSH's own: one helper per host string, the record's contents, login
+ownership and the prompt hand-over.
+
 **Lifetime.**
 - *Leases.* Every window that uses the connection holds a lease, which is an open connection to the control endpoint.
 - *Starting.* The first window starts the helper.

@@ -68,6 +68,18 @@ Mocha unit tests (ADR-0002 rule 7). Those components are the first coding candid
 | V8 | server-maintenance | Kill, uninstall, old-version clean-up | over H1 |
 | V9 | server-cache | The R-58 cache keys and folders for the container transport (F-0419) | pure keys; over H1 |
 
+## lib-helper (lead's ruling 2026-10-06; draft for area C's review)
+
+| Id | Component | Responsibility | Kind |
+|---|---|---|---|
+| X1 | helper-client | Acquire, release, request, events, stop: the extension host's side of a detached helper | process and socket |
+| X2 | helper-runtime | Bundled into each helper script: endpoint, leases in arrival order, end policies as data | socket |
+| X3 | registry | Atomic claim, stale detection, per-profile or per-user folders | pure plus a file port |
+
+Consumers: S9 (SSH local connection server), area C's container watchdog (F-0417), T2 if the Tunnels relay stays.
+Depends on `lib-log` only for the helper's own log file. The container view needs a new edge from `lib-ssh`, and
+from `remote-containers`, to `lib-helper`.
+
 ## lib-forwarding
 
 | Id | Component | Responsibility | Kind |
