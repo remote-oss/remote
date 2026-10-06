@@ -43,20 +43,21 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
    `updateUrl`, `downloadUrl`, `urlProtocol`, the gallery, the licence fields, and the two templates below. Every
    resolver and the Tunnels extension take their names, folders, URLs and scheme from the profile; none of them
    reads `product.json` itself or knows a product by name.
-2. **Server (REH) archive URL**, R-47 rule 4 unchanged: (a) a user-set override setting; (b) the product's
-   `serverDownloadUrlTemplate`; (c) the built-in table for products that declare none, keyed by `applicationName`
-   (VS Code and VS Code Insiders through the explicit Microsoft URL behind the R-68 gate; `codium`,
-   `codium-insiders`); (d) the no-default dialog. Placeholders in every template: `${os}`, `${arch}`, `${commit}`,
-   `${quality}`, `${version}`, `${release}` (the specs' name for the product's release tag, F-3902 rule 3 and
-   F-1402) and `${applicationName}`. An unknown placeholder or an unexpandable template is never an empty string:
-   in the product's template it is logged and resolution falls through to the next source (F-3902 rule 3); in the
-   user's override setting it is the dialog. (Revised 2026-10-06 from the area A dossier.)
-3. **CLI archive URL**, same shape: (a) a user-set override setting; (b) the product's `cliDownloadUrlTemplate`, a
-   field we define and document so that any product can declare it next to `serverDownloadUrlTemplate` (proposed
-   to VSCodium as a one-line addition to its patch); (c) the built-in table, which for a product that only
-   declares `updateUrl` + `commit` + `quality` uses the OSS CLI's own shape
-   `${updateUrl}/commit:${commit}/cli-${os}-${arch}/${quality}` (Microsoft-licensed on genuine VS Code, R-68 gate),
-   and for VSCodium its release assets; (d) the no-default dialog.
+2. **Server (REH) archive URL**, R-47 rule 4 unchanged: (a) the extension's user-override setting (F-1402,
+   F-3902); (b) the product's `serverDownloadUrlTemplate`; (c) the built-in table for products that declare none,
+   keyed by exact `applicationName` (`codium`, `codium-insiders`; genuine VS Code and VS Code Insiders have NO
+   entry: Microsoft's artefacts are reached only through a URL the user sets, F-1402 rule 4, F-3902 rule 1); (d)
+   the no-default dialog. Placeholders in every template: `${os}`, `${arch}`, `${commit}`, `${quality}`,
+   `${version}`, `${release}` (the product's release tag, empty when the product has none; F-3902 rule 3, F-1402)
+   and, where a spec allows it, `${applicationName}`; containers also keeps the reference's base-URL form (F-1402).
+   An unknown placeholder or an unexpandable template is never an empty string: in the product's template it is
+   logged and resolution falls through to the next source (F-3902 rule 3); in the user's setting it is the dialog.
+   (Revised 2026-10-06 from the area A dossier and the constraints list, items A1 and A2.)
+3. **The editor CLI is not downloaded by the family.** Withdrawn 2026-10-06: Remote-SSH never uses the CLI
+   (F-3902 rule 5, constraint 43); Remote - Tunnels downloads nothing on the client and uses the tunnel executable
+   the editor ships in its own bin folder, named by `tunnelApplicationName` (F-8902 rule 4, constraint 44); the host
+   side of a tunnel is the editor's own. So there is no `cliDownloadUrlTemplate`, no CLI table and no CLI dialog.
+   The profile still carries `tunnelApplicationName` for Tunnels to locate the shipped executable.
 4. **Remote-side names follow the profile**: the server runs as `serverApplicationName` in `~/<serverDataFolderName>/`
    keyed by `commit`; the CLI runs as `tunnelApplicationName`; caches are per product (R-58); the editor's URI scheme
    is `urlProtocol` (R-32); the gallery is the product's own (R-47 rule 3). Two products never share state on a
@@ -84,8 +85,6 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
 - `lib-product` joins the library candidates (ADR-0002 layout); `lib-server` and the Tunnels design build on it.
 - The built-in table is a list of exceptions that should shrink: each entry names the product and the reason it
   cannot declare its templates yet.
-- A VSCodium contribution (declaring `cliDownloadUrlTemplate`) is a public action and goes through the register
-  before it is filed.
 - Open until the specs are read: the exact override setting names and their reference counterparts, and whether
   the Dev Containers decisions (F-1402) need a wording update for the CLI.
 
@@ -93,4 +92,6 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
 
 Lint: the strings `codium`, `vscodium`, `code.visualstudio.com`, `vscode-server`, `.vscode-server` and
 `update.code.visualstudio.com` may appear only in `lib-product`'s table file and its tests (a `no-restricted-syntax`
-literal check or a grep in `tools/check-layout`). Conformance: the synthetic-product profile passes.
+literal check or a grep in `tools/check-layout`). That table therefore also holds the licence-host list of F-3902
+rule 11, the VSCodium release prefixes and the dev tunnels service domain (constraint A7). Conformance: the
+synthetic-product profile passes.

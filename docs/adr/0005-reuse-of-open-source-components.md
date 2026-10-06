@@ -33,11 +33,14 @@ open, which is the user's decision through the register.
    (commands, pickers, views, the remote authority, the server install into the container, port forwarding, the
    recovery and error flows the specs name). The CLI is driven as a library or as a spawned program; the component
    view decides, and the conformance cases decide whether its observable behaviour matches the recorded one.
-2. **The editor's CLI is the remote-side launcher candidate** wherever a design needs the server started on a
-   machine: Remote - Tunnels by definition, and Remote-SSH and WSL where the specs' observable behaviour allows it.
-   Per R-47 the binary follows the running editor's product: VSCodium's CLI with VSCodium, VS Code's with VS Code, from
-   the product's own download location, with the R-68 licence gate for Microsoft-licensed artefacts. The design states,
-   per resolver, which steps the CLI performs and which the extension performs itself.
+2. **The editor's CLI serves Remote - Tunnels only.** Scoped 2026-10-06 after the specs were read: Remote-SSH
+   installs every templated server source as one archive and never runs the CLI (F-3902 rule 5), and WSL and
+   Dev Containers install the server themselves through the host channel; so the CLI is not a launcher for the
+   resolvers. For Tunnels the local relay is the tunnel executable the running editor ships (`tunnelApplicationName`
+   in its bin folder, F-8902); the family downloads no CLI (ADR-0006 decision 3). The alternative, the dev tunnels
+   client library, is excluded because it carries a JavaScript SSH implementation (ADR-0004). The CLI's sign-in
+   must take the editor's `vscode.authentication` token without storing its own (F-8902); how is area A's design,
+   read from `[cli]`.
 3. **Admissibility (R-76)**: the clean side may depend on both and read their source and documentation, cited
    `[devcontainers-cli] path` and `[cli] path`. The `cli/` crate is part of VS Code OSS, already allowed as `[oss]`;
    `@devcontainers/cli` is MIT open source distinct from the reference extensions. The wall stays around the
