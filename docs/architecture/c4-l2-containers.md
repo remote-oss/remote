@@ -67,7 +67,10 @@ No cycles; `lib-log`, `lib-identifiers`, `lib-host` and `lib-product` are the ro
 
 Our only code that runs on a remote side is text shipped in the VSIX: the POSIX bootstrap script and the PowerShell
 bootstrap script of `lib-server`, run through the host channel, plus two WSL scripts of `lib-wsl` (the stream relay
-run by the server's Node, and the `code` shim for a distro). Everything else on the remote side is the product's
+run by the server's Node, and the `code` shim for a distro), and the containers relay and probe scripts (port relays
+F-1002–F-1005/F-1008, the exec dialer, the F-0417 shutdown probes), likewise text run by the installed server's Node
+(area C dossier, 2026-10-06). Rule: a remote-side piece is a script shipped as text and run by a program already
+there (`sh`, PowerShell, the server's Node); never a binary of ours. Everything else on the remote side is the product's
 own server, its tunnel executable, or the dev container CLI's work inside the engine. There is no agent, daemon or
 service of ours on any host.
 
@@ -83,7 +86,7 @@ the browser bundle of each excludes `lib-ssh`, `lib-host`, `lib-server` and `lib
 |---|---|---|---|---|
 | A transport and server lifecycle | `remote-architect-worker-1` | `lib-host`, `lib-ssh`, `lib-server`, `lib-forwarding`, `lib-product`, the A part of `remote-ssh`, the tunnel client of `remote-server` | 73 | dossier and draft contracts merged |
 | B resolvers, windows, explorer, companions | `remote-architect-worker-2` | `lib-identifiers`, `lib-standdown`, `lib-authority`, `lib-companion`, `remote-explorer`, `remote-ssh-edit`, `remote-extensionpack`, the B parts of `remote-ssh`, `remote-server`, `remote-containers`, `remote-wsl` | 57 | dossier, draft contracts and two ADR drafts merged |
-| C containers engine | `remote-architect-worker-3` | the engine side of `remote-containers`: dev container CLI bridge, engine CLI, volumes, features, compose, recovery, attach, Kubernetes, Remote Explorer data | 85 | catalogue rows only |
+| C containers engine | `remote-architect-worker-3` | the engine side of `remote-containers`: 19 components around the dev container CLI (0.89.0, spawned), the engine CLIs, the exec host channel, volumes, features, compose, recovery, attach, Kubernetes, Remote Explorer data, trust gate | 85 | dossier merged |
 | D WSL | `remote-architect-worker-4` | `lib-wsl`, the engine side of `remote-wsl`, the WSL server install and start over `lib-server` (A contributes) | 25 published + 4 pending | dossier merged |
 | lead | `remote-architect` | `lib-log`, the traceability matrix, the build order, ADRs | — | this document |
 
@@ -108,6 +111,9 @@ R-83: every room's spec starts servers with telemetry off. D-55 (Tunnels) pendin
 runs as investigation; Tunnels last in the build order. D-59/R-85: ADR-0008.
 
 ## 7. Open at this level
+
+- A shared detached-helper pattern (A3's local connection server and C's F-0417 watchdog): one library if the
+  contract is the same (`lib-helper`, two consumers); area A drafts it, area C reviews.
 
 - F-1302 (containers over an SSH host): where the hop and the download run; decides whether `remote-containers`
   imports `lib-ssh`.
