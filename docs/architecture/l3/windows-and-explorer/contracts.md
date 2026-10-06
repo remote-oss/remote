@@ -1,7 +1,8 @@
-# Area B contracts (draft): lib-authority and lib-companion
+# Area B contracts: lib-identifiers, lib-standdown, lib-authority, lib-companion
 
-Status: draft by `remote-architect-worker-2`, 2026-10-06. This is written ahead of the container view at the lead's
-request. It covers the two shared libraries of area B. The extension-internal contracts follow in deliverable 2. A
+Status: deliverable 2 by `remote-architect-worker-2`, 2026-10-06, against `c4-l2-containers.md` (b007348). The first
+draft (PR #10) covered lib-authority and lib-companion. This version adds lib-identifiers and lib-standdown, and what
+area B needs from `lib-log`. Components are named as in `components.md`. A
 contract here is a set of named operations with inputs, outputs and failure states, with no code. Types are
 described, not declared. A coding worker turns each table into TypeScript under ADR-0003 and may not change a contract
 without the lead (AGENTS.md).
@@ -15,9 +16,52 @@ Common rules for both libraries:
 - Every operation that waits on something outside the library takes a cancellation and has a stated time limit or
   states that it has none.
 
-## 1. lib-authority
+## 1. lib-identifiers
 
-### 1.1 Authority codecs
+The tables are per package and generated from its manifest (ADR draft "Identifier tables"). The library holds only the
+behaviour over a table, because a library never imports an extension (layout rule 4).
+
+### 1.1 The table (data contract, produced by the generator)
+
+| Kind | Entry | Source |
+|---|---|---|
+| commands | descriptive name, id, whether the palette lists it, the R-46 policy (`silent` or `infoLine`) | `contributes.commands`, `menus.commandPalette`, the package's spec (F-2006 BR-9, F-5002, F-0107) |
+| settings | name, key, scope, legacy twin key and the winning side if any | `contributes.configuration`, F-0102 BR-4 |
+| contextKeys | name, key, `extensionSet` or `core` | the identity decision's list |
+| views, authorities, languages | name, id | `contributes.views`, `activationEvents`, `contributes.languages` |
+| internalCommands | id, `served` or `called`, kind `query`, `change` or `push` | the companion and internal list (F-5902 §5) |
+| invented | id, kind, spec, date | the ledger (R-27) |
+
+### 1.2 Operations
+
+| Operation | Input | Output | Failure |
+|---|---|---|---|
+| `registerCommands` | the table's commands, a handler per name | one disposable | `MissingHandler {name}` at startup. It is a programming error that fails the unit test which loads every package's table. Never seen by a user |
+| (each guarded handler) | the command's arguments and the window context (`remoteName`, connection state, the precondition the spec names) | the handler's result | out of context: does nothing and, for `infoLine` commands, shows "'{0}' is not possible in the current context." ({0} = the title) once per invocation (R-46). Internal ids never show anything (F-3906 rule 11, F-5902) |
+| `readSetting` | the table's setting name | the effective value after legacy precedence | none. A missing value yields the declared default |
+| `setContextKey` | the table's context-key name, a value | none | `NotExtensionSet {name}` (a programming error) |
+| `checkStringTables` (build tool) | a package folder | pass, or the list of keys missing or extra per locale | fails the build |
+
+## 2. lib-standdown
+
+| Operation | Input | Output | Failure |
+|---|---|---|---|
+| `standDownIfReferencePresent` | the reference id (from the package's identity decision), the standing-down key, the warning text and button label (the package's own strings: F-0101, F-3901, F-5001, F-8901) | `standing` or `serving` | none. The lookup is the stable `extensions.getExtension(id)` in the extension's own host. It sees the reference only while core runs it, and a disabled reference is invisible [oss], as R-54 requires (F-5901 step 1) |
+
+Effects, in this order:
+
+1. The lookup, before anything is registered.
+2. `standing`: set the key to true, show one warning whose button opens the Extensions view on the reference id, and
+   return. The caller registers nothing and returns from activation.
+3. `serving`: set the key to false, clearing any value an earlier host run left in the window, and return. The caller
+   goes on.
+
+No check runs mid-session (F-5901 step 5, F-8901). Containers' timing (b) is question 2 of `components.md`. Unit
+tests cover present, absent, a stale key, and exactly one warning per standing activation.
+
+## 3. lib-authority
+
+### 3.1 Authority codecs
 
 One codec module per authority family. The transport never parses an authority string (lead's ruling, 2026-10-06).
 
@@ -39,11 +83,11 @@ Target shapes:
 Rule: `decode(encode(target))` returns `target`, and `encode(decode(authority))` returns `authority` for every form a
 spec fixes. A property test per family checks both directions.
 
-### 1.2 Resolver host
+### 3.2 Resolver host
 
 | Operation | Input | Output | Failure |
 |---|---|---|---|
-| `registerResolver` | `family`, `connector` (area A's `connect`, `cancel`, phase events), the family's codec, the extension's failure presenter | a disposable | `GuardStandingDown`: nothing is registered (`lib-standdown` ran first and said "standing"). `ProposalMissing`: `resolvers` is not granted. The gate (1.4) is told and nothing is registered |
+| `registerResolver` | `family`, `connector` (area A's `connect`, `cancel`, phase events), the family's codec, the extension's failure presenter | a disposable | `GuardStandingDown`: nothing is registered (`lib-standdown` ran first and said "standing"). `ProposalMissing`: `resolvers` is not granted. The gate (3.4) is told and nothing is registered |
 | on each core resolve (internal) | the authority and core's attempt number | core's resolved authority: `Connected.address`, `connectionToken`, `extensionHostEnv`, plus `environmentTunnels` and `tunnelFactory` handed to core unchanged | from `Failed`: `TemporarilyNotAvailable` when `retryable`; else `NotAvailable(handled)` when `userAlreadyNotified`; else the presenter shows the extension's failure dialog (F-2601, F-0502 7.E4) and the result is `NotAvailable(handled)` |
 | `currentConnection` | none | `none` or `{decodedTarget, state: resolving | connected | failed | transportLost}` for this window | none. This is what companion queries answer from, for example `getActiveSshRemote` and F-8201 BR-3 |
 | `onFirstResolveSettled` | listener | fires once per extension-host session when the first resolve attempt ends, success or failure | none. It feeds the `setActiveFolders` push (F-3906 rule 7) |
@@ -59,7 +103,7 @@ Requirements: `extensionKind` `["ui"]` for every resolver extension, because cor
 extensions only [oss]. `onResolveRemoteAuthority:<family>` is declared in the manifest. The `resolvers` proposal is
 needed (F-1403).
 
-### 1.3 Window opener
+### 3.3 Window opener
 
 | Operation | Input | Output | Failure |
 |---|---|---|---|
@@ -71,7 +115,7 @@ Semantics fixed by the specs: "current" reloads the calling window, even on the 
 one new window and never reuses one (F-5103, F-8201 BR-12). A target with no path opens no folder. Built on core's
 stable `vscode.openFolder` (`forceNewWindow`, `forceReuseWindow`) and `vscode.newWindow` (`remoteAuthority`) [oss].
 
-### 1.4 Proposed-API gate (family-wide; lead's decision 2026-10-06)
+### 3.4 Proposed-API gate (family-wide; lead's decision 2026-10-06)
 
 | Operation | Input | Output | Failure |
 |---|---|---|---|
@@ -83,12 +127,12 @@ Family-wide coordination: each extension runs its own gate, but only one notific
 window through a context key that an R-27 ledger entry names. The first extension to claim it shows the notification
 for all, and the others stay silent. Whether F-1403's ACs allow this is with the containers room (lead, 2026-10-06).
 
-## 2. lib-companion
+## 4. lib-companion
 
 The one implementation of the F-5902 §5 contract. `docs/companion-interface.md` in this package is the single copy of
 the interface document (lead, 2026-10-06; F-3906 RR-5).
 
-### 2.1 Envelope
+### 4.1 Envelope
 
 Every argument and every result is a plain-data object carrying `interfaceVersion {major, minor}` (the field name is
 fixed by the interface document). Within a major version, fields are only added.
@@ -99,7 +143,7 @@ fixed by the interface document). Within a major version, fields are only added.
 | `serve` (server side) | command id, handler, the kind of the id (`query | change | push`) | registers the command (never contributed, never in a menu) | an argument without the envelope or with an unknown major version never reaches the handler. Queries return an empty result, changes and pushes return nothing, and nothing is shown or written (F-5902 "Foreign callers and payloads"). On the first unknown-major payload of a session, the optional `onVersionMismatch` hook fires once. The SSH and tunnels companions log one line there, and the explorer passes no hook |
 | `fireAndForget` | command id, argument | none | swallows every rejection with no UI and no log (F-3906 rule 7) |
 
-### 2.2 Companion detection
+### 4.2 Companion detection
 
 | Operation | Input | Output | Failure |
 |---|---|---|---|
@@ -109,7 +153,7 @@ fixed by the interface document). Within a major version, fields are only added.
 Microsoft ids and community forks never count (R-21, R-22). Detection uses ids only and never calls a command to find
 out.
 
-### 2.3 Per-companion endpoint sets
+### 4.3 Per-companion endpoint sets
 
 These hold the ids of F-5902 §5. The payload fields belong to the interface document. The table says only who
 serves which id.
@@ -120,7 +164,7 @@ serves which id.
 | SSH endpoints | remote-ssh | `getActiveSshRemote`, `getConfiguredHostnames`, `getSshFoldersHistory` (queries), `deleteSshFolderFromHistory`, `openRemoteSshTarget` (changes), all `remote-internal.` | remote-explorer |
 | Tunnels endpoints | remote-server | `remote-tunnels.internal.` `isAuthenticated`, `getTunnelsList`, `getActiveRemote`, `getFoldersHistory` (queries), `connectToRemote`, `deleteFolderFromHistory`, `unregisterTunnel` (changes), plus `remote-tunnels.isConnectedToRemote` and `remote-tunnels.connectNewWindowToTunnel` (F-8201's own) | remote-explorer |
 
-### 2.4 Test fixture
+### 4.4 Test fixture
 
 A recording fake of each endpoint set (an R-26-class test build). It records each call's id and interface version and
 the push's outcome field, can be told to reject, never answer, or answer with a foreign or newer-major payload, and
@@ -128,7 +172,28 @@ lives in the package's test fixtures. It is never bundled into a VSIX (lead, 202
 F-5902 AC-5, AC-9, AC-15, AC-16, AC-18 to AC-22, AC-29, AC-30, AC-32 and AC-34, and F-3906 C-6, C-10, C-11, C-13 and
 C-14.
 
-## 3. Open points against the specs
+## 5. What area B needs from lib-log (owned by the lead)
+
+1. **A logger passed in, never global.** Every library operation that may log takes the package's logger as a
+   parameter, so a package without a log sends nothing. Remote Explorer and ssh-edit have no output channel by spec
+   (F-5901 §6, F-4002 AC-14).
+2. **A channel only where the spec has one**, created lazily under the package's own name: remote-ssh (F-2003),
+   containers (F-0104), server and wsl per their specs.
+3. **A once-per-session line** for the companion version mismatch (F-5902 "Version mismatch", F-3906 rule 9, C-14):
+   `logOncePerSession(key, line)`, reset with the extension host.
+4. **A redaction rule that libraries cannot bypass**: no prompt answers, tokens, payload contents, or authority
+   strings beyond what the spec's log lines show (L2 `lib-log`; R-28).
+5. **Levels** that follow each package's log-level setting (F-2003 for ssh). lib-authority logs resolve attempts and
+   their outcome kind at the level the package's log spec names, and nothing else.
+
+## 6. Open points against the specs
+
+- Label formatters (container view): `authority.codecs.label` gives the host part, and each package declares its
+  `resourceLabelFormatters` in its manifest. The runtime suffix cache of F-0501 stays in remote-containers (area C).
+- The workspace-trust gate the container view lists under lib-authority has no area-B consumer (`components.md`
+  question 3), so it has no contract here.
+- Setup-flow caching follows F-3903 (success cached per machine and product, failure never cached), pending K3
+  (`components.md` question 6).
 
 - F-8201 BR-8 and §16 have the tunnels companion push `remote-internal.setActiveFolders`, while F-5902 §5 names only
   `remote-oss.remote-ssh` as its caller. The envelope accepts both. The interface document needs one answer (to the

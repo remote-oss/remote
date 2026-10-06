@@ -1,6 +1,7 @@
 # ADR-NNNN: The manifest is the single source of identifiers; code reads generated tables
 
-- Status: proposed (draft by `remote-architect-worker-2` for the lead, who assigns the number)
+- Status: proposed. Draft by `remote-architect-worker-2`. The approach was agreed by the lead on 2026-10-06; the lead
+  assigns the number
 - Date: 2026-10-06
 - Deciders: the lead. The reference-inventory input (Decision 5) is with `remote-development` (dossier question 2).
 - Scope: every extension package; `lib-identifiers`; `tools/`
@@ -42,7 +43,7 @@ indicator menu by category, so titles are as binding as ids.
    the spec that introduces it and its `[adaptation]` tag, the R-27 citation, and the date. The ledger copies the
    identity decision's list, and a mismatch is a question to the room, not an edit here. Examples today:
    `remote-internal.sshHostsChanged` (F-5901 §6), the stand-down keys (stand-down gating ADR draft),
-   `remote.SSH.serverDownloadUrlTemplate` (F-3901), and the proposed-API gate's window-claim key (contracts §1.4).
+   `remote.SSH.serverDownloadUrlTemplate` (F-3901), and the proposed-API gate's window-claim key (contracts §3.4).
 5. **CI check `identifiers`** fails when:
    - the generated table is stale against the manifest;
    - a ledger entry is missing from the manifest or companion list, or an invented id sits outside its kind's
@@ -58,6 +59,10 @@ indicator menu by category, so titles are as binding as ids.
    - `readSetting(table, key)` with the declared legacy pairs and their precedence as data (F-0102 BR-4: the new key
      wins, except the three `dotfiles` pairs where the legacy key wins).
    - `setContextKey(table, key, value)`, only for keys the table declares as extension-set.
+   - `checkStringTables(package)`, a build check of key parity across the 14 locales of `package.nls*.json` and
+     `l10n/bundle.l10n.*.json`. These are the string tables conformance addresses (container view, `lib-identifiers`;
+     F-0103, F-2002, F-4003, F-5001). The bundles stay in their package.
+   The operations' contracts are in `l3/windows-and-explorer/contracts.md` §1.
 
 ## Options considered
 
@@ -74,6 +79,8 @@ indicator menu by category, so titles are as binding as ids.
   manifest against the spec's verbatim list, which is the only place an id is typed.
 - The ledger makes the R-27 duties visible per package, and the CI job keeps it honest.
 - Settings precedence and out-of-context behaviour are written once, in `lib-identifiers`, and tested there.
+- Remote Explorer and ssh-edit have no log by spec. `lib-identifiers` therefore logs nothing itself and takes a
+  logger only where a caller passes one (contracts §5).
 - The generator is a tool under `tools/` and meets ADR-0003 like any tool (tests, coverage).
 
 ## Check
