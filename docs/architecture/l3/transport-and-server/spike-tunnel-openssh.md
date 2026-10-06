@@ -124,7 +124,8 @@ order:
    control RPC's `version` message.
 5. **Optionally,** `serve` and one `servermsg` round trip, which shows that the application protocol works over the
    OpenSSH transport.
-6. **The behaviour around the edges:** keepalive replies, rekey after 1 GiB or an hour, channel close, and what
+6. **The behaviour around the edges:** keepalive replies, a client-initiated rekey (the host sets its own rekey limits to the maximum,
+   `relay_tunnel_host.rs:332-352`), channel close, and what
    happens when the WebSocket drops.
 
 Step 1 is the only step the reading cannot settle on its own. Steps 2 to 5 follow from code that the host and
