@@ -46,7 +46,7 @@ behaviour over a table, because a library never imports an extension (layout rul
 
 | Operation | Input | Output | Failure |
 |---|---|---|---|
-| `standDownIfReferencePresent` | the reference id (from the package's identity decision), the standing-down key, the warning text and button label (the package's own strings: F-0101, F-3901, F-5001, F-8901) | `standing` or `serving` | none. The lookup is the stable `extensions.getExtension(id)` in the extension's own host. It sees the reference only while core runs it, and a disabled reference is invisible [oss], as R-54 requires (F-5901 step 1) |
+| `standDownIfReferencePresent` | the reference id (from the package's identity decision), the standing-down key (optional: a package that gates nothing passes none, and no context key is set; ssh-edit, pending its F-4901 revision), the warning text and button label (the package's own strings: F-0101, F-3901, F-5001, F-8901) | `standing` or `serving` | none. The lookup is the stable `extensions.getExtension(id)` in the extension's own host. It sees the reference only while core runs it, and a disabled reference is invisible [oss], as R-54 requires (F-5901 step 1) |
 
 Effects, in this order:
 
@@ -190,7 +190,7 @@ serves which id.
 
 | Set | Served by | Ids | Called by |
 |---|---|---|---|
-| Explorer inbox | remote-explorer | `remote-internal.setActiveFolders` (push), `remote-internal.sshHostsChanged` `[adaptation]` (push) | remote-ssh |
+| Explorer inbox | remote-explorer | `remote-internal.setActiveFolders` (push, wake only), `remote-internal.sshHostsChanged` `[adaptation]` (push) | `setActiveFolders`: remote-ssh and remote-server; `sshHostsChanged`: remote-ssh only |
 | SSH endpoints | remote-ssh | `getActiveSshRemote`, `getConfiguredHostnames`, `getSshFoldersHistory` (queries), `deleteSshFolderFromHistory`, `openRemoteSshTarget` (changes), all `remote-internal.` | remote-explorer |
 | Tunnels endpoints | remote-server | `remote-tunnels.internal.` `isAuthenticated`, `getTunnelsList`, `getActiveRemote`, `getFoldersHistory` (queries), `connectToRemote`, `deleteFolderFromHistory`, `unregisterTunnel` (changes), plus `remote-tunnels.isConnectedToRemote` and `remote-tunnels.connectNewWindowToTunnel` (F-8201's own) | remote-explorer |
 
@@ -223,12 +223,21 @@ C-14.
 - The workspace-trust gate moved to area C (F-0106).
 - Setup-flow caching follows F-1403 §6 (lead, 2026-10-06).
 
-- F-8201 BR-8 and §16 have the tunnels companion push `remote-internal.setActiveFolders`, while F-5902 §5 names only
-  `remote-oss.remote-ssh` as its caller. The envelope accepts both. The interface document needs one answer (to the
-  explorer and server rooms).
-- F-8201 BR-7 and Q5: the tunnel folder history comes in first-recorded order, but F-5902 §5 says most-recent-first.
-  The contract carries the order as delivered, and the view sorts by its own setting. Only the delivered order is
-  open.
+- **Companion interface 1.0, explorer side settled** by F-5902 §5 as republished (remote-explorer#14, reviewed
+  2026-10-06):
+  - `setActiveFolders` has two callers. remote-ssh pushes once per extension-host session in windows with a folder or
+    workspace, local or SSH (RR-1), and never in an empty window (RR-4). remote-server pushes in tunnel windows with a
+    folder. Nobody pushes in empty or `.code-workspace`-only windows. The push only wakes Remote Explorer.
+  - The SSH host key in every SSH payload is the authority's host part as written (RR-2).
+  - A `remote.SSH.configFile` change reaches the view through the explorer's own configuration listener, with no
+    signal (RR-3).
+  - The tunnel folder history is delivered in first-recorded order, and the view sorts by its setting. The
+    `folder-active` mark comes from `getActiveRemote`.
+  - `docs/companion-interface.md`: the explorer room's copy is authoritative in the spec repos. In the monorepo,
+    `lib-companion` holds the one copy (RR-5).
+  - `extensionsAny` is always requested (Option B), with the stable same-host lookup as the silent fallback.
+  - Still open: the F-3906 side, which lands when remote-ssh#83 is edited. The interface document is frozen at
+    1.0 then.
 - F-8201 Q1 is decided as "three quirks fixed": `currentConnection` answers from the window's own connection in every
   tunnel window, and the history is read from storage on every query.
 - Provisional (lab), held under D-60: the `ssh-remote` codec's handling of Windows client user names (F-2301 Q2) and

@@ -71,7 +71,9 @@ constraint 26, K9). Decision 3 does not remove it. It forbids only adding one wh
 ## Consequences
 
 - The binding constraints file states a positive key (constraint 21). It changes with these revisions.
-- R-77 (2026-10-06) adopts option A and extends R-54 to Remote Explorer and ssh-edit. It also revises F-8901 §5 and
+- R-77 (2026-10-06) adopts option A and extends R-54 to Remote Explorer and ssh-edit. The explorer's specs carry it
+  since their republication (`remote-explorer.standingDown`, F-5901, F-5001). ssh-edit gates nothing, so it may pass
+  no key (`brief-remote-ssh-edit-standdown.md`). It also revises F-8901 §5 and
   F-8001.
 - Revisions through `remote-development`: F-8901 §5 (the key's polarity, keeping its startup check), F-1406 §5 and
   F-0101 BR-10 (polarity, and acceptance "after the
