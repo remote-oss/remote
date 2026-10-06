@@ -1,6 +1,6 @@
 {
   "source": "remote-oss/remote-ssh-edit#6 (F-4901)",
-  "reference": "ms-vscode-remote.remote-ssh-edit",
+  "standsDownFor": "ms-vscode-remote.remote-ssh-edit",
   "locales": [
     "cs",
     "de",

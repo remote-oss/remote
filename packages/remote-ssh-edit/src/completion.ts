@@ -1,11 +1,11 @@
 /**
- * @fileoverview The completion items of F-4201 and F-4202 as plain data, and the keyword position of F-4201 BR-11.
+ * @fileoverview The completion items as plain data, and the rule for where keywords are offered.
  * Nothing here talks to the editor; completion-adapter.ts does.
  */
 
 import {KEYWORDS} from './keywords.ts';
 
-/** The characters that end the keyword position and count as blank before it (F-4201 BR-11). */
+/** The characters that end a line's first word and count as blank before it. */
 const SEPARATORS = new Set(
   [
     0x0020, 0x0009, 0x000b, 0x000c, 0x00a0, 0x1680, 0x2000, 0x2001, 0x2002,
@@ -14,7 +14,7 @@ const SEPARATORS = new Set(
   ].map(codePoint => String.fromCodePoint(codePoint)),
 );
 
-/** The template of F-4202 BR-5 with the tab stops of BR-6; the editor adapts its indentation and line ends. */
+/** The "Configure tunnel" template with its tab stops; the editor adapts its indentation and line ends. */
 export const TUNNEL_TEMPLATE =
   'Host ${1:alias}\n    HostName ${2:hostname}\n    LocalForward ${3:port} ${4:localhost}:${3:port}\n    User ${5:user}';
 
@@ -27,7 +27,7 @@ export interface CompletionEntry {
   snippet?: string;
 }
 
-/** The snippet's two strings, already in the display language (F-4202 BR-8). */
+/** The snippet's two strings, already in the display language. */
 export interface SnippetTexts {
   label: string;
   documentation: string;
@@ -35,7 +35,7 @@ export interface SnippetTexts {
 
 /**
  * Whether the text of a line up to the cursor is a keyword position: after its leading separators, it holds no
- * separator (F-4201 BR-11, F-4203 BR-1). The text after the cursor never matters.
+ * separator. The text after the cursor never matters.
  */
 export function isKeywordPosition(textBeforeCursor: string): boolean {
   let position = 0;
@@ -55,7 +55,7 @@ export function isKeywordPosition(textBeforeCursor: string): boolean {
 
 /**
  * The 96 items offered at every keyword position: the keywords and the "Configure tunnel" snippet, each with a sort
- * key that orders like its label lower-cased, so the editor keeps the case-insensitive order (F-4201 BR-2).
+ * key that orders like its label lower-cased, so the editor keeps the case-insensitive order.
  */
 export function completionEntries(snippet: SnippetTexts): CompletionEntry[] {
   const keywordEntries = KEYWORDS.map((keyword): CompletionEntry => ({

@@ -1,10 +1,8 @@
 /**
- * @fileoverview The 95 keyword items of F-4201 (R-53, F-4902) in their order, each with its documentation.
- *
- * Each text begins with the first sentence that F-4201 section 3.4 quotes; the rest is taken from the KEYWORDS
- * entry of OpenSSH 10.2p1 ssh_config(5) (BSD licence, see ThirdPartyNotices.txt). Keywords without such an entry
- * keep the first sentence alone; AskPassGUI, KeychainIntegration and the five GSSAPI keywords have texts of our own
- * (F-4201 BR-6). Paragraphs are separated by one line feed (F-4201 BR-3).
+ * @fileoverview The 95 ssh_config keywords the completion list offers, in their order, each with its
+ * documentation. Most texts are taken from the KEYWORDS section of the OpenSSH 10.2p1 ssh_config(5) manual page
+ * (BSD licence, see ThirdPartyNotices.txt); keywords the current manual no longer describes have shorter texts.
+ * Paragraphs are separated by one line feed.
  */
 
 /** A keyword item: its label, exactly as offered, and its plain-text documentation. */
@@ -13,7 +11,7 @@ export interface KeywordEntry {
   documentation: string;
 }
 
-/** The keyword items in the order of F-4201 section 3.4, the snippet of F-4202 left out. */
+/** The keyword items in the order the completion list shows them. */
 export const KEYWORDS: readonly KeywordEntry[] = [
   {
     label: 'AddKeysToAgent',

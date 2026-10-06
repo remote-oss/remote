@@ -1,6 +1,6 @@
 /**
  * @fileoverview The extension's entry point. Activation registers the completion provider and does nothing else:
- * no output, no storage, no message (F-4002 AC-14).
+ * no output, no storage, no message.
  */
 
 import * as vscode from 'vscode';

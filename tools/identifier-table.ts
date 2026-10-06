@@ -197,13 +197,13 @@ export function tableKinds(sources: PackageSources): TableKind[] {
       ),
     ),
   ];
-  if (standingDownKey !== undefined && declared.reference !== '') {
+  if (standingDownKey !== undefined && declared.standsDownFor !== '') {
     kinds.push({
       name: 'standDown',
       documentation:
-        'The reference extension and the standing-down key, empty while the room has not named it (R-54).',
+        'The extension this package stands down for, and the key set while it does; the key is empty until it is named.',
       entries: new Map<string, TableValue>([
-        ['reference', declared.reference],
+        ['standsDownFor', declared.standsDownFor],
         ['contextKey', standingDownKey],
       ]),
     });

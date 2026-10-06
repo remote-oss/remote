@@ -1,6 +1,6 @@
 /**
  * @fileoverview The one adapter between the completion data and the editor: it registers the provider for
- * `ssh_config` with the space as its only trigger character (F-4201 BR-12) and nothing else (F-4204).
+ * `ssh_config` with the space as its only trigger character and nothing else.
  */
 
 import type * as vscode from 'vscode';
@@ -35,7 +35,7 @@ function toItem(
 }
 
 /**
- * Registers the completion provider of F-4201, F-4202 and F-4203: the 96 items at a keyword position, nothing
+ * Registers the completion provider for SSH configuration files: the 96 items at a keyword position, nothing
  * elsewhere. Returns the registration to dispose.
  */
 export function registerSshConfigCompletion(
