@@ -12,6 +12,7 @@ and does not re-decide it.
 | [0004](0004-ssh-transport-native-openssh.md) | The SSH transport is the native OpenSSH client | accepted (D-51) |
 | [0005](0005-reuse-of-open-source-components.md) | Reuse existing open-source components (dev container CLI, the editor CLI) | accepted (R-76) |
 | [0006](0006-product-driven-artefact-resolution.md) | The running editor's product.json drives server and CLI resolution | accepted |
+| [0007](0007-editor-version-floor.md) | The editor version floor is 1.139, and proposed API is pinned to it | accepted |
 
 Planned, in this order (titles may change):
 

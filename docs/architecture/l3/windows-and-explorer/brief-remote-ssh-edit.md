@@ -1,7 +1,7 @@
 # Coding brief: remote-ssh-edit (first coding target)
 
-Status: draft by `remote-architect-worker-2` for the lead's review, 2026-10-06. After review the lead hands it to a
-coding worker. The design is `components.md` (remote-ssh-edit), the contracts are `contracts.md` §1, and the ADRs are
+Status: reviewed and issued by `remote-architect`, 2026-10-06, to `remote-coding-worker-1`. Drafted by
+`remote-architect-worker-2`. The design is `components.md` (remote-ssh-edit), the contracts are `contracts.md` §1, and the ADRs are
 0002, 0003, ADR-0007 (the `engines.vscode` floor, being written) and the draft "Identifier tables".
 
 ## What the package contains
@@ -57,7 +57,19 @@ The remote-ssh-edit suite (`tests/conformance/` in remote-oss/remote-ssh-edit) h
 - **Engine floor**: no case checks `engines.vscode`, so ADR-0007's floor applies. Tell the room that F-4003 BR-9
   quotes the reference's floor.
 
-## To settle before coding (through the lead)
+## Settled by the lead (2026-10-06)
+
+1. **R-54 for ssh-edit**: not extended. ssh-edit follows its accepted decision F-4901 §6 ("unsupported, no
+   handling"): no stand-down check, no warning, no `lib-standdown` import, no gating key. If the register later
+   extends R-54, F-4002 and F-4901 are revised first and the package follows.
+2. **The seven own-text keywords**: F-4902 §6's list of seven governs; §5's "two" is a wording defect reported to
+   the room.
+3. **Libraries**: `lib-identifiers` only (languages table and `checkStringTables`); no `lib-log`, no `lib-standdown`.
+   The container view's import graph is corrected accordingly.
+4. **The grammar and the language configuration are written from F-4101's scope list and F-4102's rules**, never
+   from any grammar file of another extension (`AGENTS.md`).
+
+## As drafted (kept for the record)
 
 1. **R-54 for ssh-edit** (constraint K2): F-4901 §6 says "unsupported, no handling", while F-9901 §5 step 3 counts
    ssh-edit among the members that stand down. It decides whether activation may show a warning (F-4002: activation
