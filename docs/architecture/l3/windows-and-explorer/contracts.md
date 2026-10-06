@@ -56,7 +56,7 @@ Effects, in this order:
 3. `serving`: set the key to false, clearing any value an earlier host run left in the window, and return. The caller
    goes on.
 
-No check runs mid-session (F-5901 step 5, F-8901). Containers' timing (b) is question 2 of `components.md`. Unit
+No check runs mid-session, family-wide (lead, 2026-10-06; F-1406 §6 revision requested). Unit
 tests cover present, absent, a stale key, and exactly one warning per standing activation.
 
 ## 3. lib-authority
@@ -120,8 +120,8 @@ stable `vscode.openFolder` (`forceNewWindow`, `forceReuseWindow`) and `vscode.ne
 | Operation | Input | Output | Failure |
 |---|---|---|---|
 | `probe` | the proposals this extension declares | per proposal `granted | missing | unprobeable`. Probes (F-1403): `resolvers` through a side-effect-free gated member, `tunnels` through `workspace.tunnels`, `contribViewsRemote` through the generated `<viewId>.focus` command in `getCommands(true)`. `contribRemoteHelp` is unprobeable | none |
-| `requestSetup` | the missing proposals, the calling extension id | at most one setup notification per window for the whole family. The primary action opens core's runtime-arguments editor (`workbench.action.configureRuntimeArguments`) and offers the `enable-proposed-api` entry with every installed family id that has a missing proposal. Then a restart offer | `Declined`: remembered per machine and product (`dataFolderName`), so the next prompt comes only when a gated member is about to be used again (F-1403) |
-| `cacheResult` | per extension and proposal | stored per machine and editor product in the editor's global state | none |
+| `requestSetup` | the missing proposals, the calling extension id | at most one setup notification per window for the whole family, unless the dismissal flag of F-1403 §6 is set. The primary action opens core's runtime-arguments editor (`workbench.action.configureRuntimeArguments`) and offers the `enable-proposed-api` entry with every installed family id that has a missing proposal. Then a restart offer | `Declined`: sets F-1403 §6's dismissal flag; when the prompt comes back follows F-1403 §6 |
+| (no success cache) | | Every activation probes again; nothing is cached on success (F-1403 §6, lead 2026-10-06) | |
 
 Family-wide coordination: each extension runs its own gate, but only one notification may show. The gate claims the
 window through a context key that an R-27 ledger entry names. The first extension to claim it shows the notification
@@ -190,10 +190,8 @@ C-14.
 
 - Label formatters (container view): `authority.codecs.label` gives the host part, and each package declares its
   `resourceLabelFormatters` in its manifest. The runtime suffix cache of F-0501 stays in remote-containers (area C).
-- The workspace-trust gate the container view lists under lib-authority has no area-B consumer (`components.md`
-  question 3), so it has no contract here.
-- Setup-flow caching follows F-3903 (success cached per machine and product, failure never cached), pending K3
-  (`components.md` question 6).
+- The workspace-trust gate moved to area C (F-0106).
+- Setup-flow caching follows F-1403 §6 (lead, 2026-10-06).
 
 - F-8201 BR-8 and §16 have the tunnels companion push `remote-internal.setActiveFolders`, while F-5902 §5 names only
   `remote-oss.remote-ssh` as its caller. The envelope accepts both. The interface document needs one answer (to the
