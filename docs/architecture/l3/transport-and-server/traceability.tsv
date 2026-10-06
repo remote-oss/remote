@@ -47,11 +47,11 @@ F-2703	remote-ssh#76	V2	V1	34	0
 F-2704	remote-ssh#77	V1	S2	32	0
 F-2008	remote-ssh#18	V3	B	16	0
 F-8101	remote-server#10	T6	T3;T4	26	0
-F-8102	remote-server#11	T3	T6	24	0
+F-8102	remote-server#11	T3	T6	26	0
 F-8103	remote-server#12	T5	T1;T2;B	30	0
-F-8104	remote-server#13	T5	T2	25	0
-F-8202	remote-server#15	W3	T5	17	0
-F-8203	remote-server#16	T4	T3	19	0
+F-8104	remote-server#13	T5	T2	31	0
+F-8202	remote-server#15	W3	T5	24	0
+F-8203	remote-server#16	T4	T3	26	0
 F-1102	remote-containers#58	W3	remote-containers	27	0
 F-0503	remote-containers#34	V3	V2;V4;V6;V7;remote-containers	51	0
 F-0419	remote-containers#92	V9	remote-containers	42	66

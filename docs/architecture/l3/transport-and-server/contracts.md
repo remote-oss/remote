@@ -117,8 +117,11 @@ It is the only place these strings may appear (ADR-0006 Check). P4 has no operat
 
 The argument rules:
 - `-F <file>` when `configFile` is set, with `~/` expanded against the editor's home (F-2201 BR-4).
-- `-T` unless `permitPtyAllocation` is truthy (F-2106).
-- `-o ConnectTimeout=<n>` only when the host sets none (F-2105).
+- `-T` on the connection `ssh` unless `permitPtyAllocation` is truthy (F-2106).
+- `-o ConnectTimeout=<n>` on every `ssh` of an attempt, the tunnel `ssh` included, only when the host sets none
+  (F-2105). Never a `ServerAlive*` option.
+- The bootstrap goes in on standard input with no remote command in shared mode; in terminal mode the remote program
+  is `sh` (F-2105, F-2704).
 - `-o RemoteCommand=none` when the effective options carry a `RemoteCommand` and `remoteCommandInEffect` is false
   (F-2107). S2 does not decide whether the feature is in effect; R1 does (F-2107 BR-1).
 - `-v` at the level S5 needs (F-2109 BR-3).
@@ -144,7 +147,9 @@ The rules are the specs' tables, by reference:
 - the changed-key refusal S111, in shared mode only (F-2305 BR-6): the mode is an input, never guessed;
 - the last "Permission denied (...)" line with its `user@host: ` prefix removed (F-2306 BR-13, F-2601 BR-3).
 
-An unrecognised failure yields `unknown` with an empty reason, which B shows as STR:S030.
+An unrecognised failure yields `unknown` with an empty reason, which B shows as STR:S030. "Could not resolve host"
+stays unrecognised, and a session that ends early without a recognised line is `unknown` (F-2105, F-2109). Of
+ssh's debug1 lines, only "Server host key" is kept for the log (F-2109).
 
 Never: log or return prompt answers.
 
@@ -200,8 +205,10 @@ Rules:
 Rules:
 - The editor's environment is passed unchanged (F-2101 BR-7). Standard input is a pipe; `SSH_ASKPASS_REQUIRE` is
   never set.
-- The connect wait is the timeout plus 2 seconds. It pauses while a prompt is open and stops at the first output or
-  the setup step (F-2105, F-2308 BR-5).
+- The connect wait is the timeout plus 2 seconds. It starts at the spawn in shared mode and at the platform choice in
+  terminal mode. It pauses while a prompt is open, restarts after each answer, counts time spent in an external
+  askpass, and stops at the first setup report (F-2105, F-2308 BR-5). The maximum for `ConnectTimeout 0` is an R-79
+  bound.
 
 ### S7 prompt-ui
 
@@ -214,6 +221,8 @@ F-2305, F-2306 and F-2307 Q1 (D-60).
 | `answer` | S6's surface, owner or mirror | the answer | `cancelled` |
 
 Rules:
+- The user's external askpass is kept only in shared mode, never in socket mode. An empty `SSH_ASKPASS` counts as
+  unset. No `DISPLAY` is injected (F-2309).
 - Picks close on focus loss; masked inputs do not (F-2305 BR-5, F-2306 BR-3).
 - In shared mode, a re-prompt carries ssh's "Permission denied, please try again." line (F-2306 BR-4).
 
@@ -324,8 +333,8 @@ Rules inside the scripts:
 Rules:
 - Reuse is checked before the source is resolved, so a host with a server needs no source (F-3902 rule 8, exception).
 - Where the download runs comes from the policy record's `downloadPlacement`. With `clientFirstThenHost`, a failed
-  client download falls back to the host in both install modes (F-6304 7.E2), pending the lead's answer to its Q2;
-  if the answer is no fallback, the record gains a stepwise-only value, not a flag in code.
+  client download falls back to the host in both install modes (F-6304 7.E2). Provisional until the WSL room answers
+  F-6304 Q2 (lead, 2026-10-06); no stepwise-only value unless the room says so.
 - `useExecServer` is never applied and is logged once per connect (F-2103 BR-13).
 
 ### V4 archive-transfer
@@ -355,7 +364,13 @@ Rules:
 | `withClientLock` | host identity | the lock held for the install phase | `lockTimeout` after 2 minutes, with S157 shown meanwhile (F-2408) |
 | `hostLockLoop` | a step that may return `LockBusy` | the step's result | `retriesExhausted` after 30 attempts, 1 second apart, each shown as "retry N" |
 
-Rule: a client lock whose owner process is gone counts as free (F-2408 Q1, recommended).
+Rules (F-2408 as revised):
+- A client lock whose owner died is not free. A waiter takes it over only when the file is at least 4 minutes old,
+  polling about every 0.5 s and giving up after 2 minutes. The holder never refreshes the file. It removes the file
+  on a clean end and relies on the age rule otherwise.
+- The lock id is any stable 8-hex value per host identity; interop with the reference is not a goal (BR-6).
+- Settings are read once per attempt sequence (AC-36).
+- The host lock wait is bounded at 30 attempts, so it needs no R-79 rule.
 
 ### V6 licence-gate
 
@@ -390,8 +405,17 @@ Start options:
 - `--file-watcher-polling <ms>` when the record allows `fileWatcherPolling` and the caller passes it (F-6601).
 
 The server is ready on its "Extension host agent listening on" line ([oss] `src/server-main.ts`). A bad bind host
-shows STR:S168 and falls back to 127.0.0.1 (F-2409). Remote environment: the agent socket link
-`/tmp/vscode-ssh-auth-sock-<n>` and `DISPLAY` (F-2311, F-2312).
+shows STR:S168 and falls back to 127.0.0.1 (F-2409).
+
+Grace time: read at each resolve that starts a server, and never passed to a Windows host (F-2413 7.E5).
+
+Remote environment (F-2311, F-2312):
+- The session's `SSH_AUTH_SOCK` and `DISPLAY` are learned from the session at server start, once per connection,
+  never built by us.
+- The agent link `/tmp/vscode-ssh-auth-sock-<n>` has a random name per window session, kept across reconnects, and
+  never overwrites an entry it did not create. Links are never removed.
+- The link step is gated by core's terminal trust (F-2311). It runs as a hidden terminal process through S8's
+  mechanism, not through H1. A failed link only logs a warning.
 
 ### V8 server-maintenance
 
@@ -404,7 +428,9 @@ shows STR:S168 and falls back to 127.0.0.1 (F-2409). Remote environment: the age
 Rules:
 - `kill` stops this data folder's server process tree and removes `bin/` (F-2411).
 - `uninstall` deletes exactly `<home>/<serverDataFolderName>` (F-2412).
-- `cleanup` follows the record's policy: `keepNewest(5)` for SSH on every resolve (F-2413 BR-9);
+- `cleanup` follows the record's policy: `keepNewest(5)` for SSH on every resolve (F-2413 BR-9 as revised). It
+  deletes an older install only when its F-2408 lock can be taken, always keeps the current one, follows
+  `serverInstallPath`, tolerates a missing `.log`, and never prunes the reused CLI layout's folders;
   `onlyCurrentRemoveLeftovers` removes every other 40-character commit folder and every `<commit>-<suffix>`
   leftover, keeping other names (F-6304 BR-8, AC-9); `onlyCurrentKeepLeftovers` keeps the leftovers (F-6304 BR-7).
 
@@ -486,8 +512,15 @@ Rules:
   (F-2304 BR-2), and a running host-side download is not stopped (F-2304 BR-8).
 - Connected carries `tunnelFeatures` from W3 next to the tunnel factory (F-8202).
 - Every attempt makes a fresh connection when S9 reports the transport lost (F-2505 BR-1).
-- Every recorded hang becomes a bound wait followed by F-2601's dialog (R-79). This covers F-2103 Q1, F-2104 Q1,
-  F-2304 Q2, F-2308 Q3 and Q4, F-2405 Q3 and F-2408 Q1.
+- Every recorded hang becomes a bound wait followed by F-2601's dialog (R-79). This covers:
+  - F-2103 Q1, F-2104 Q1, F-2304 Q2, F-2308 Q3 and Q4, F-2405 Q3;
+  - after the revisions of 2026-10-06: F-2105 (a `ProxyCommand` that never answers, `ConnectTimeout 0`), F-2108
+    7.E8, F-2311 7.E8 (through F-2104 and F-2304), the declined scp trust of F-2405, F-2406 7.E6 and F-2703 7.E5,
+    and F-2701 Q6.
+  F-2408 Q1 is closed by observation: its wait is bounded.
+- On reconnection the session's environment is learned again. The extension-host environment is refreshed, and the
+  terminal environment contribution is replaced without relaunching terminals (F-2312 6.9).
+- The pre-connection script runs on attempt 1 only, as a detached child that is never killed (F-2108).
 
 ### R2 ssh-diagnostics
 
@@ -545,6 +578,14 @@ What remains possible, for the user through the register:
 - (c) the native OpenSSH client through a small WebSocket bridge as `ProxyCommand`, speaking the relay's SSH
   directly. This keeps ADR-0004 whole but is unverified: whether OpenSSH can authenticate to the relay's host side
   must be shown before it counts as an option.
+
+Also fixed by the revisions of 2026-10-06, whatever relay is chosen:
+- The client contacts only the dev tunnels service domain, the cluster and relay addresses it returns, and the
+  editor's own authentication. It contacts no update or server-download service (F-8902 AC-4, AC-6).
+- Any telemetry flag in a start or reuse request to the host is forced off (F-8104 BR-15, R-83).
+- Open with the server room: F-8102 BR-5 against F-8103 BR-8 on when an account association is written, and
+  F-8104 Q6's wording against F-8902 rule 3. With remote-development: the dev tunnels terms of service (F-8902
+  Q1), which may hold the whole tunnel client.
 
 Fixed regardless of the choice:
 - **T1.** P1 gives `tunnelApplicationName`; a missing executable is F-8103 7.E10.
