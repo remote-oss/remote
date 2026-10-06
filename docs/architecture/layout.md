@@ -48,21 +48,9 @@ remote/
 6. **Every package has a `README.md`** that names its owner, the feature ids it implements (extensions) or the
    contract it offers (libraries), and its allowed imports.
 
-## Library candidates
+## Libraries
 
-From the brief, with working names. None is confirmed.
-
-| Working name | Purpose | Expected users |
-|---|---|---|
-| `lib-identifiers` | The D-14 identifiers from one table per extension; helpers to register settings and commands | all |
-| `lib-standdown` | The stand-down guard when the reference is enabled in the same window (R-54) | all |
-| `lib-authority` | Remote authority and window plumbing: resolvers, opening windows, reload | containers, ssh, wsl, server |
-| `lib-product` | The product profile read from the running editor's `product.json`: names, folders, URL templates, gallery, scheme (ADR-0006) | all resolvers, server |
-| `lib-server` | Server download, install and the licence gate (R-47, R-68) | containers, ssh, wsl, server |
-| `lib-ssh` | SSH transport and `ssh_config` parsing | ssh, ssh-edit, wsl over SSH, containers over SSH |
-| `lib-forwarding` | Port forwarding and terminals | containers, ssh, wsl, server |
-| `lib-companion` | The Remote Explorer companion interface (R-66) | explorer, ssh, wsl, server |
-| `lib-log` | Output channels and the error-reporting style | all |
-
-Open: whether there are server-side pieces of our own (code that runs on the remote host or in the container), and
-where they live. The container view answers it.
+Confirmed by the container view (`c4-l2-containers.md` §1, 2026-10-06): `lib-log`, `lib-identifiers`,
+`lib-standdown`, `lib-product`, `lib-authority`, `lib-companion`, `lib-host`, `lib-ssh`, `lib-server`,
+`lib-forwarding`. A library exists only with at least two consumers; the import graph in the container view is the
+one the lint enforces. Folders are created by the coding worker of the first package that needs them.

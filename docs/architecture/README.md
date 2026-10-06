@@ -9,17 +9,19 @@ Now:
 - [layout.md](layout.md): the repository layout proposal.
 - [reading-plan.md](reading-plan.md): how the specs are read once the design starts.
 - [spec-baseline/](spec-baseline/): the state of the spec issues the design has taken in (`tools/spec-watch`).
+- [catalogue.tsv](catalogue.tsv) and [catalogue/](catalogue/): one row per published spec issue (229), the
+  constraints list, the epic map, the adversaries' findings.
+- [c4-l1-context.md](c4-l1-context.md): the context view.
+- [c4-l2-containers.md](c4-l2-containers.md): packages, the library split, the import graph, areas and owners.
+- [l3/](l3/): per area, the dossier, the contracts, the component view and ADR drafts.
 
 ---
 
-Planned documents:
+Planned:
 
 | File | Content |
 |---|---|
-| `c4-l1-context.md` | The editor, the family's extensions, remote hosts, galleries and server downloads |
-| `c4-l2-containers.md` | One container per extension and per library; what each imports; server-side pieces |
-| `c4-l3-<area>.md` | Components per domain area, each with its interface contracts and its owner |
-| `catalogue.tsv` | Traceability: every feature id maps to exactly one component; a lint flags gaps and doubles |
+| `l3/<area>/components.md`, `traceability.tsv` | Components per area with contracts; feature id → owning component and contributors |
 | `build-order.md` | The build order and the first coding targets with the conformance cases that must pass |
 
 Decisions are in [`../adr/`](../adr/).
