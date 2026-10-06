@@ -109,13 +109,14 @@ It is the only place these strings may appear (ADR-0006 Check). P4 has no operat
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `validateTarget` | decoded target (alias, or host name with optional user and port) | ok | `invalidHost` or `invalidUser` with the reason STR:S119, S120, S121 or S122 and the character (F-2205 BR-2, BR-3) |
-| `buildInvocation` | target, purpose (`connection`, `tunnel`, `oneShot`, `copy`), the settings snapshot (`configFile`, `connectTimeout`, `permitPtyAllocation`, `enableRemoteCommand`), effective options from S4, forwards, remote program | program, argument list, environment additions | none (validation runs first) |
+| `buildInvocation` | target, purpose (`connection`, `tunnel`, `oneShot`, `copy`), the settings snapshot (`configFile`, `connectTimeout`, `permitPtyAllocation`), `remoteCommandInEffect` (decided by R1), effective options from S4, forwards, remote program | program, argument list, environment additions | none (validation runs first) |
 
 The argument rules:
 - `-F <file>` when `configFile` is set, with `~/` expanded against the editor's home (F-2201 BR-4).
 - `-T` unless `permitPtyAllocation` is truthy (F-2106).
 - `-o ConnectTimeout=<n>` only when the host sets none (F-2105).
-- `-o RemoteCommand=none` when the host has a `RemoteCommand` and `enableRemoteCommand` is not in effect (F-2107).
+- `-o RemoteCommand=none` when the effective options carry a `RemoteCommand` and `remoteCommandInEffect` is false
+  (F-2107). S2 does not decide whether the feature is in effect; R1 does (F-2107 BR-1).
 - `-v` at the level S5 needs (F-2109 BR-3).
 - `-D 127.0.0.1:<port>`, `-L <port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (F-2104 BR-1, F-2410).
 - The host and user go in as their own arguments.
@@ -127,13 +128,16 @@ Never: add `ControlMaster`, `ControlPath`, `ControlPersist`, host-key, identity 
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `classify` | ssh's error lines of one run, in order; the run's exit status; the purpose | a failure kind (`unreachable`, `timeout`, `authentication`, `hostKeyChanged`, `hostKeyRejected`, `forwardingDisabled`, `channelClosed`, `unknown`), the reason, and hints (message, status, mitigations, resources) | none |
+| `classify` | ssh's error lines of one run, in order; the run's exit status; the purpose; the connection mode (`shared` or `terminal`) | a failure kind (`unreachable`, `timeout`, `authentication`, `hostKeyChanged`, `hostKeyRejected`, `forwardingDisabled`, `channelClosed`, `brokenPipe`, `unknown`), the reason, and hints (message, status, mitigations, resources) | none |
 
 The rules are the specs' tables, by reference:
 - the network reasons, their substring and case rule, and their priority when several lines match (F-2603);
-- "administratively prohibited" and the MITM warning (F-2604);
+- "administratively prohibited" and the MITM warning (F-2604); S107 only in terminal mode (F-2604 BR-6);
+- "Connection closed." as `channelClosed` (F-2604 7.E1);
+- the broken pipe as `brokenPipe` (F-2603 7.E3): R1 asks B for the platform pick again and, if the next run fails
+  the same way, fails with an empty reason;
 - the timeout wordings S137 and S140 (F-2105);
-- the changed-key refusal S111, in shared mode only (F-2305 BR-6);
+- the changed-key refusal S111, in shared mode only (F-2305 BR-6): the mode is an input, never guessed;
 - the last "Permission denied (...)" line with its `user@host: ` prefix removed (F-2306 BR-13, F-2601 BR-3).
 
 An unrecognised failure yields `unknown` with an empty reason, which B shows as STR:S030.
@@ -423,6 +427,13 @@ The step order is in `components.md`. Phase events are `initializing`, `download
 `copyingWithScp`, `installing`, `settingUpTunnel`, `waitingForForwarding` and `serverDownloadPercent`.
 
 Rules:
+- `Failed.kind` is one of the closed list: `unreachable`, `timeout`, `authentication`, `hostKeyChanged`,
+  `hostKeyRejected`, `forwardingDisabled`, `channelClosed`, `brokenPipe`, `unsupportedPlatform`,
+  `prerequisiteMissing`, `noServerSource`, `invalidServerTemplate`, `licenceDeclined`, `serverDownload`,
+  `serverInstall`, `serverStart`, `invalidSetting`, `preconnectFailed`, `lockTimeout`, `retriesExhausted`,
+  `cancelled`, `unknown`. B's presenter maps every kind.
+- R1 decides `remoteCommandInEffect`: `remote.SSH.enableRemoteCommand` on, shared mode, and the host not excluded by
+  the platform match of F-2107 BR-1. S2 only applies it.
 - `connect` shows no dialog of its own for a failure. B's per-extension presenter renders `noServerSource` and
   `invalidServerTemplate` (F-3902 rule 8) and `licenceDeclined` (F-2601 with STR:S027). `userAlreadyNotified` is
   true only after the pre-connection script's own dialog (F-2108). The licence modal itself (V6) and the

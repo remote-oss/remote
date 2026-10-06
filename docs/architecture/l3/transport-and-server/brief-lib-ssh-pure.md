@@ -33,7 +33,8 @@ coding worker.
 
 - **S2.**
   - Every argument rule of contracts §3: `-F` with `~/` expanded, `-T` by truthiness, `ConnectTimeout` only when the
-    host sets none, `RemoteCommand=none` when needed, `-D`, `-L` port and `-L` socket.
+    host sets none, `RemoteCommand=none` when the effective options carry one and the caller's
+    `remoteCommandInEffect` is false, `-D`, `-L` port and `-L` socket.
   - The host and user as separate arguments.
   - `scp` with the same `-F`.
   - Rejection before any build: a leading `-`, and the characters of F-2205 BR-2 reported in BR-3's order, host part
@@ -55,9 +56,12 @@ coding worker.
 - **S5.**
   - The network reasons of F-2603, with its substring and case rule and its priority when several lines match, each
     reason ending in one full stop (F-2603 Q4 default (b)).
-  - The forwarding refusals of F-2604.
+  - The forwarding refusals of F-2604, S107 only in terminal mode (BR-6), and "Connection closed." as
+    `channelClosed` (7.E1).
+  - The broken pipe of F-2603 7.E3 as `brokenPipe`.
   - The timeout texts S137 and S140 of F-2105.
-  - The changed-key refusal S111 of F-2305 BR-6, in shared mode only.
+  - The changed-key refusal S111 of F-2305 BR-6, in shared mode only. `classify` takes the connection mode
+    (`shared` or `terminal`) as an input.
   - The last "Permission denied (...)" line with its `user@host: ` prefix removed (F-2306 BR-13).
   - An unknown failure gives an empty reason, which B shows as S030.
   - A test that no hint or reason contains a line the classifier received from a prompt.
