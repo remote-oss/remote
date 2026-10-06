@@ -76,7 +76,7 @@ Target shapes:
 
 | Family | Target | Spec |
 |---|---|---|
-| `ssh-remote` | `{alias}` or `{hostName, user?, port?}`, and `rawHostString`. Windows client user-name forms are provisional (lab) | F-2501, F-2301 BR-3/BR-4, F-2303 BR-2 |
+| `ssh-remote` | `{alias}` or `{hostName, user?, port?}`, and `rawHostString`. Decodes the three forms of F-2008 BR-5: `<alias>`, a bare host name (`[a-z0-9.:-]` only, no user, no port; resolved like a typed host), and the lower-case hex of a compact JSON object `{hostName, user?, port?}` with a numeric port. Windows client user-name forms are provisional (lab) | F-2501, F-2008 BR-5, F-2301 BR-3/BR-4, F-2303 BR-2 |
 | `dev-container`, `attached-container`, `k8s-container`, `apple-container` (F-0605), `exec` (F-0501; a formatter but no resolver) | the decoded payload of F-0501, plus an optional outer hop (`@ssh-remote+…`, `@wsl+…`, `@tunnel+…`) that is itself a `DecodedTarget` | F-0501, F-0502, F-1302 |
 | `tunnel` | `{tunnelName, distro?}` | F-8103, F-5902 §5 |
 | `wsl` | `{distro, outer?}`, the outer hop a `DecodedTarget` (`wsl+<d>@ssh-remote+<h>`). An empty distro means the default distro and is passed through, with no case folding: matching and the registered spelling are area D's | F-6201 BR-2, Q2 (a); F-6701 |
