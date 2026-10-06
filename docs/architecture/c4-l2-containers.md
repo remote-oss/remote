@@ -95,10 +95,19 @@ the browser bundle of each excludes `lib-ssh`, `lib-host`, `lib-server` and `lib
 5. A feature has one owning component and may list contributors; the matrix carries both columns.
 6. `engines.vscode` floor 1.139 (ADR-0007, to write).
 
-## 6. Open at this level
+## 6. Rulings applied after the first version (2026-10-06)
+
+R-77: R-54 extends to remote-explorer and remote-ssh-edit with the standing-down key (area B option A); ssh-edit
+gains `lib-standdown` once F-4002/F-4901 are revised (a follow-up brief, PR #21 stands). R-78: no mid-session
+re-check; the next activation decides. R-79: the hang rule is one family adaptation (bound wait, then F-2601's
+dialog). R-80: the source-based licence rule alone binds the shared gate (`lib-product`'s table, one active entry).
+R-81: the R-27 lint checks against published identifier inventories. R-82: provenance pointers move below the wall.
+R-83: every room's spec starts servers with telemetry off. D-55 (Tunnels) pending; the OpenSSH-over-WebSocket spike
+runs as investigation; Tunnels last in the build order. D-59/R-85: ADR-0008.
+
+## 7. Open at this level
 
 - F-1302 (containers over an SSH host): where the hop and the download run; decides whether `remote-containers`
   imports `lib-ssh`.
-- K5: one licence test for the shared gate (register).
 - The WSL package's split between B and D waits for the drafts.
 - Publication and packaging (Open VSX only per F-9901/F-3904; pre-release scheme) need their ADR.

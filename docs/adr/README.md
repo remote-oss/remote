@@ -13,6 +13,7 @@ and does not re-decide it.
 | [0005](0005-reuse-of-open-source-components.md) | Reuse existing open-source components (dev container CLI, the editor CLI) | accepted (R-76) |
 | [0006](0006-product-driven-artefact-resolution.md) | The running editor's product.json drives server and CLI resolution | accepted |
 | [0007](0007-editor-version-floor.md) | The editor version floor is 1.139, and proposed API is pinned to it | accepted |
+| [0008](0008-public-surface-and-voice.md) | The public surface speaks as a product and carries nothing of the process | accepted (D-59, R-85) |
 
 Planned, in this order (titles may change):
 
