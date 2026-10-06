@@ -105,6 +105,15 @@ Failure presenter (per extension, B): it renders by `Failed.kind`. The kinds `no
 `invalidServerTemplate` show remote-ssh F-3902 rule 8's dialog ("Open Setting" or "Cancel"), and remote-containers
 shows F-1402's no-default dialog in its place. `licenceDeclined` shows F-2601's dialog with STR:S027 (F-3902 rule 11).
 Every other kind shows F-2601's dialog (remote-ssh) or F-0502 7.E4's (remote-containers), with `reason` and `hints`.
+An empty `reason` (kinds `unknown` and `brokenPipe`) shows STR:S030. `channelClosed` arrives with the reason
+"Connection closed." (F-2604 7.E1). The closed list of kinds is area A's (`l3/transport-and-server/contracts.md`, R1
+rules), and the presenter has one branch per kind it treats specially, with a default for the rest. A kind added
+there needs no change here unless its spec names its own dialog.
+
+Platform pick (B provides to area A's R4, F-2206 and F-2603 7.E3): `pickRemotePlatform(hostLabel)` returns
+`linux`, `windows`, `macOS` or `cancelled`. It shows F-2206's picker only, writes nothing and decides nothing: when to
+ask and whether to store the answer are R4's. It lives in `ssh.connect-flows`. Windows-specific wording is provisional
+(lab) under D-60.
 `lib-product` returns values and never shows UI, so area A's `userAlreadyNotified` is true only after the
 pre-connection script's own dialog (F-2108). (Area A's review, accepted by the lead 2026-10-06.)
 

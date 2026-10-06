@@ -85,7 +85,7 @@ The workspace-trust gate moved to area C with F-0106 (lead, 2026-10-06).
 | Component | Responsibility | Owns | Uses |
 |---|---|---|---|
 | `ssh.package` | Activation contract, stand-down, help and report-issue commands, `remoteHelp`, command catalogue and palette gating, localization, pack membership, packaging; no chat surface | F-2001, F-2002, F-2004, F-2005, F-2006, F-2007, F-2606, F-3901, F-3904, F-3907 | `standdown.guard`, `identifiers.*`, `authority.proposed-api-gate` |
-| `ssh.connect-flows` | Host picker, `user@host` input, connect in current or new window, new window on the active host | F-2301, F-2302, F-2303 | `authority.codecs`, `authority.window-opener`, A's `listConfiguredHosts` |
+| `ssh.connect-flows` | Host picker, `user@host` input, connect in current or new window, new window on the active host; the remote-platform picker that area A's R4 asks for (F-2206, owned by A) | F-2301, F-2302, F-2303 | `authority.codecs`, `authority.window-opener`, A's `listConfiguredHosts` |
 | `ssh.resolver-front` | The `ssh-remote` resolver on the resolver host, with the extension's titles and texts; reconnection attempts, each a fresh `connect` | F-2501, F-2505 | `authority.resolver-host`, A's `connect` |
 | `ssh.window-surfaces` | Indicator entries, label formatter, opening folders, workspaces and links on a host; the hidden "Open Web UI" command | F-2502, F-2504, F-2509 | `authority.codecs`, `authority.window-opener` |
 | `ssh.failure-ui` | The failure presenter: F-2601's notification and the "More Actions..." picker from A's `Failed.reason` and `hints`; F-3902 rule 8's no-source dialog; STR:S027 for a declined licence; actions call A's operations | F-2601, F-2602 | `authority.resolver-host` |
