@@ -171,6 +171,21 @@ describe('grammar (F-4101)', () => {
     );
   });
 
+  for (const character of whitespace) {
+    const name = `U+${character.codePointAt(0)?.toString(16).toUpperCase().padStart(4, '0') ?? ''}`;
+
+    it(`keeps a leading ${name} in the first word (F-4101 AC-27)`, () => {
+      deepStrictEqual(tokens(`${character}Port 22`), [
+        [`${character}Port`, KEYWORD_SCOPE],
+        [' 22', VALUE_SCOPE],
+      ]);
+    });
+
+    it(`makes a line of ${name} alone one value token (F-4101 AC-35)`, () => {
+      deepStrictEqual(tokens(character), [[character, VALUE_SCOPE]]);
+    });
+  }
+
   it('keeps zero-width and control characters inside the word (BR-7)', () => {
     deepStrictEqual(
       [
