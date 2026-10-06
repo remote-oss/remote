@@ -29,12 +29,16 @@ lib-host, lib-product, and the pure parts of lib-ssh (S2, S5, S6, S4's parser an
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `runScript` | script text, interpreter (`posixShell`, `powershell`), environment additions, input text, cancellation | output lines as a stream, then the exit status | `channelClosed`, `spawnFailed`, `timeout`, `cancelled` |
+| `runScript` | script text, interpreter (`posixShell`, `powershell`), environment additions, input (text, or a local file streamed as bytes to standard input), cancellation | output lines as a stream, then the exit status | `channelClosed`, `spawnFailed`, `timeout`, `cancelled` |
 | `copyToHost` | local file, remote path, cancellation | done | `copyToolMissing`, `copyFailed` (with the tool's message), `channelClosed`, `cancelled` |
 | `identity` | none | the key that names the host in locks and records (SSH: the host string as written; containers: the container id; WSL: the distro name) | none |
 | `platformHint` | none | `linux`, `macOS`, `windows` or `unknown` | none |
+| `clientPathOnHost` (optional) | a local file | a host path where the host reads that file directly, or `none` | none: an error means `none`; an implementation that omits the operation means `none` |
 
 Rules:
+- A missing local file for a streamed input fails with `spawnFailed` before anything runs.
+- `clientPathOnHost` exists for WSL, which reads client files through the drive automount (remote-wsl F-6301 6.7).
+  SSH and `docker exec` return `none`, and callers then use `copyToHost`.
 - A channel never interprets script output.
 - A channel never retries by itself.
 - Failure kinds are closed: an implementation maps every error to one of the six kinds and keeps the original
@@ -259,11 +263,29 @@ H1 implemented over S9 or S3:
 
 ## 5. lib-server
 
+### 5.0 The server policy record
+
+Each extension passes lib-server one flat data record. lib-server never branches on which extension calls it. A
+policy that the record cannot express is a new component, never a flag (lead, 2026-10-06). Values that come from a
+setting at run time are filled in by the extension's adapter before the call.
+
+| Field | Values | remote-ssh | remote-containers | remote-wsl |
+|---|---|---|---|---|
+| `downloadPlacement` | `hostFirst` with `auto`, `always` or `off`; `clientFirstThenHost`; `clientOnly` | `hostFirst`, from `remote.SSH.localServerDownload` (F-2405) | `clientOnly`: the client machine downloads and copies into the container (F-1402) | `clientFirstThenHost`: a silent `wget` fallback in the distro (F-6301 BR-1, BR-7) |
+| `cache` | `none`; `kept` | `none` (F-3902 rule 6) | `kept` (F-0503 host cache) | `kept`, shared per user across windows and editor instances (F-6301 BR-4, BR-5, BR-14) |
+| `verification` | ordered list from `headerHash`, `lengthOnly`, `none` | `none` until the room names one | open (F-1402 Q4) | `headerHash`, then `lengthOnly` (F-6301 BR-6, Q3) |
+| `environmentSetup` | a host path to source before install and start, never on reuse; or none | none | none | the distro's server-env-setup (F-6303 BR-1 to BR-5) |
+| `requirementsCheck` | `none`; `serverBundled` (the server's own check after unpack) | `serverBundled` (F-2401) | `serverBundled` (F-0503) | `serverBundled` plus the Alpine libstdc++ probe (F-6302) |
+| `allowedExtraStartOptions` | a list from an allow-list | none | none | `fileWatcherPolling` for WSL 1 (F-6601) |
+| `cleanup` | `keepNewest(n)`; `onlyCurrentRemoveLeftovers`; `onlyCurrentKeepLeftovers` | `keepNewest(5)` (F-2413 BR-9) | to be set by area C | stepwise: `onlyCurrentRemoveLeftovers` (F-6304 BR-8, AC-9); single script: `onlyCurrentKeepLeftovers` (BR-7) |
+| `installMode` | `singleScript`; `stepwise` | `singleScript` | `singleScript` | from `remote.WSL.experimental.scriptLessStartup`, read by the WSL package and passed in (F-6304) |
+
+
 ### V1 bootstrap-scripts
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `scriptFor` | step (`probe`, `install`, `start`, `kill`, `uninstall`, `cleanup`), interpreter, parameters (data folder, launcher, commit, URL, proxy variables, lock method and place, downloader policy, start options) | script text under 8192 characters for PowerShell (F-2701) | none |
+| `scriptFor` | step (`probe`, `install`, `start`, `kill`, `uninstall`, `cleanup`), interpreter, install mode, parameters (data folder, launcher, commit, URL, proxy variables, lock method and place, downloader policy, environment setup, start options) | script text under 8192 characters for PowerShell (F-2701) | none |
 | `parseResult` | output lines | the result block between two markers: status, host facts, server facts, timings | `noResultBlock` (treated as `channelClosed`) |
 
 Statuses: `LockBusy`, `NoDownloaderAvailable`, `UnpackFailed`, `ServerDownloadFailed`, `CreateInstallDirFailed`,
@@ -280,13 +302,18 @@ Rules inside the scripts:
 - Windows uses no WMI process query, and a standard Windows user is not failed on purpose: no setting, and the
   reference's recorded failure is drift (R-86, F-3908). The PowerShell script's details are provisional (lab) until
   F-2701's capture runs (D-60).
+- In `stepwise` mode each action is its own `runScript` with one log line: remove per the cleanup policy, create
+  `bin/<commit>-<epoch ms>`, unpack from the streamed archive stripping the top folder, rename to `bin/<commit>`
+  atomically. The installed case is one inline script that sources the environment setup, reports process id,
+  kernel and node path, and starts the server (F-6304 6.1, 6.2, BR-8).
+- Unpack percentage lines become progress events for the caller to render.
 - The scripts are written from the specs only.
 
 ### V2 host-probe
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `probe` | H1, platform hint | host facts: OS, architecture token, libc family, release id, temp folder, login shell, tools, `SSH_AUTH_SOCK`, `DISPLAY` | `unsupportedPlatform`, `unsupportedArch`, `prerequisiteMissing` (F-2401, F-2402, F-2703), channel failures |
+| `probe` | H1, platform hint, requirements-check policy | host facts: OS, architecture token, libc family, release id, temp folder, login shell, tools, `SSH_AUTH_SOCK`, `DISPLAY` | `unsupportedPlatform`, `unsupportedArch`, `prerequisiteMissing` (F-2401, F-2402, F-2703), channel failures |
 
 ### V3 install-planner
 
@@ -296,6 +323,9 @@ Rules inside the scripts:
 
 Rules:
 - Reuse is checked before the source is resolved, so a host with a server needs no source (F-3902 rule 8, exception).
+- Where the download runs comes from the policy record's `downloadPlacement`. With `clientFirstThenHost`, a failed
+  client download falls back to the host in both install modes (F-6304 7.E2), pending the lead's answer to its Q2;
+  if the answer is no fallback, the record gains a stepwise-only value, not a flag in code.
 - `useExecServer` is never applied and is logged once per connect (F-2103 BR-13).
 
 ### V4 archive-transfer
@@ -305,8 +335,15 @@ Rules:
 | `transfer` | plan, H1, a download port (the editor's network stack), UI phase sink | the archive unpacked into `bin/<client commit>/`, with its commit checked and rewritten when needed | `serverDownload` (STR:S043), `localDownload` (STR:S071 with its detail), `unpack` (STR:S075), `copy` (from H1), `cancelled` |
 
 Rules:
-- The host downloads first. `auto` falls back to the client, `always` uses the client, `off` never does (F-2405).
-- The client copy is a temporary file, deleted afterwards (F-3902 rule 6).
+- Placement follows the record. For `hostFirst`: `auto` falls back to the client, `always` uses the client, `off`
+  never does (F-2405).
+- The archive reaches the host by `clientPathOnHost` when it returns a path, else by `copyToHost`, or as the streamed
+  input of the unpack step.
+- With `cache` `none` the client copy is a temporary file, deleted afterwards (F-3902 rule 6). With `kept` the
+  download goes to a temporary name, is verified, then renamed atomically into V9's folder. The rename is the only
+  step shared across windows and editor instances.
+- Verification follows the record: the download port reports the redirect chain's response facts (a hash header,
+  the content length), and V4 applies the first rule whose facts are present.
 - Manual bootstrap reads the fixed file and shows STR:S088 on every attempt (F-2406).
 - The commit is rewritten by editing the unpacked `product.json` only (F-3902 rule 9, pending the room's
   confirmation).
@@ -339,7 +376,7 @@ Never: accept for the user.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `startOrReuse` | H1, installed server, options (bind host, port range, socket mode, grace time, default extensions, licence accepted) | port or socket, connection token, process id, remote environment additions | `serverStart` (STR:S135 at the end of the start wait), `invalidPortRange` (before any ssh), `cancelled` |
+| `startOrReuse` | H1, installed server, options (bind host, port range, socket mode, grace time, default extensions, licence accepted, extra start options from the record's allow-list, environment setup) | port or socket, connection token, process id, remote environment additions | `serverStart` (STR:S135 at the end of the start wait), `invalidPortRange` (before any ssh), `cancelled` |
 | `installExtensions` | H1, server, ids filtered by F-2506 BR-2 | done; failures are logged per id (F-2506 Q1 (b)) | none raised |
 
 Start options:
@@ -349,7 +386,8 @@ Start options:
 - `--telemetry-level off` on every start (R-83);
 - `--reconnection-grace-time` when set and not 0;
 - `--enable-remote-auto-shutdown`;
-- `--install-extension` per default id.
+- `--install-extension` per default id;
+- `--file-watcher-polling <ms>` when the record allows `fileWatcherPolling` and the caller passes it (F-6601).
 
 The server is ready on its "Extension host agent listening on" line ([oss] `src/server-main.ts`). A bad bind host
 shows STR:S168 and falls back to 127.0.0.1 (F-2409). Remote environment: the agent socket link
@@ -366,13 +404,16 @@ shows STR:S168 and falls back to 127.0.0.1 (F-2409). Remote environment: the age
 Rules:
 - `kill` stops this data folder's server process tree and removes `bin/` (F-2411).
 - `uninstall` deletes exactly `<home>/<serverDataFolderName>` (F-2412).
-- `cleanup` runs on every resolve and keeps the five newest `bin/<commit>` folders (F-2413 BR-9).
+- `cleanup` follows the record's policy: `keepNewest(5)` for SSH on every resolve (F-2413 BR-9);
+  `onlyCurrentRemoveLeftovers` removes every other 40-character commit folder and every `<commit>-<suffix>`
+  leftover, keeping other names (F-6304 BR-8, AC-9); `onlyCurrentKeepLeftovers` keeps the leftovers (F-6304 BR-7).
 
 ### V9 server-cache
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `cacheFolders` | profile | the volume tree for servers, and the extension cache folder: `extensionsCache/` for `code` and `code-insiders`, `extensionsCache-<applicationName>/` for every other product | none |
+| `clientArchiveFolder` | profile, quality, commit, the extension's cache root | the kept client archive folder: the reference layout for `code` and `code-insiders`, with an `<applicationName>` level for every other product, so two products never share a name | none |
 
 Rule: an entry downloaded from another gallery is never reused (R-58, F-0419 BR-18). The container transport's
 contract (area C) defines the volume.

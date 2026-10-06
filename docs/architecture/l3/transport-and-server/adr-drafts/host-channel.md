@@ -36,7 +36,10 @@ times, against ADR-0003's rule on duplicated code.
    through a host-side download or `copyToHost`.
 3. Implementations live with their transports: `lib-ssh` over `ssh` and `scp`, `remote-containers` over the engine's
    exec and copy, and `remote-wsl` over `wsl.exe`.
-4. The channel stays narrow. Adding an operation requires a new revision of this ADR, naming the requirement that no
+4. Revised 2026-10-06 for WSL, accepted by the lead as narrow: `runScript`'s input is text or a local file streamed
+   as bytes (remote-wsl F-6304 6.1); one optional operation, `clientPathOnHost`, returns a host path where the host
+   reads a client file directly, or `none` (F-6301 6.7). SSH and `docker exec` return `none`.
+5. The channel stays narrow. Adding an operation requires a new revision of this ADR, naming the requirement that no
    script can meet.
 
 ## Options considered

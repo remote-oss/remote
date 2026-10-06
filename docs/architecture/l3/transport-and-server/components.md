@@ -134,5 +134,6 @@ B's resolver calls R1. R1 runs these steps:
   - F-2206 (D) → R4;
   - F-2701 (D) → V1;
   - F-0503, F-0419, F-0505 (C) → V3, V9, V7, with remote-containers' `docker exec` channel as contributor.
-- **Taken from the catalogue without reading the issue:** F-6301 and F-6303 (remote-wsl#28, #30) → V3 and V7, with
-  area D as contributor. They are to be checked when the WSL drafts arrive.
+- **Given to area D** (agreed with `remote-architect-worker-4`, 2026-10-06): F-6301, F-6302, F-6303, F-6304 and
+  F-6601 are owned by D's wsl-server-adapter. A's V1, V3, V4, V7, V8 and V9 are contributors through the policy
+  record (`contracts.md` §5.0). The WSL listener rendezvous is D's: only the owning window calls W2.
