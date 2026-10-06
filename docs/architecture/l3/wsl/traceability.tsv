@@ -1,0 +1,16 @@
+feature	issue	owner	contributors	acceptanceCriteria	conformanceCasesToday
+F-6101	remote-wsl#17	D2	D1; D1a	0	0
+F-6102	remote-wsl#18	D12	D2; wsl.targets-view	18	0
+F-6103	remote-wsl#19	D2	D6	9	0
+F-6203	remote-wsl#22	D12	D3; authority.window-opener	22	0
+F-6204	remote-wsl#23	D3	D12; authority.window-opener	32	0
+F-6206	remote-wsl#25	D10	D3; D12; wsl.package	25	0
+F-6207	remote-wsl#26	D12	D3	24	0
+F-6301	remote-wsl#28	D7	V3; V4; V9; D4; D7b	24	0
+F-6302	remote-wsl#29	D7	V1; V2	18	0
+F-6303	remote-wsl#30	D7	V1; D11; D8	28	0
+F-6304	remote-wsl#31	D7	V1; V7; V8; D5; D5r	18	0
+F-6401	remote-wsl#32	D8	D11; D7	36	0
+F-6402	remote-wsl#33	D6	wsl.resolver-front	28	0
+F-6601	remote-wsl#37	D7	V7	16	0
+F-6701	remote-wsl#39	D9	D1; D4; D5; authority.codecs	28	0
