@@ -93,7 +93,8 @@ A data module holding:
 - the two built-in table entries with their release repositories and asset shape (F-3902 rule 1(c), F-1402);
 - the licence hosts of F-3902 rule 11(i);
 - the VSCodium release prefixes of rule 11(ii);
-- the dev tunnels service domain.
+- the licence rules `clientLicence` and `sourceBased` and the active set, evaluated by `classifyLicence`;
+- the dev tunnels service domain, once the Tunnels ruling lands.
 
 It is the only place these strings may appear (ADR-0006 Check). P4 has no operations; P3 and V6 read it.
 
@@ -309,11 +310,12 @@ Rule: a client lock whose owner process is gone counts as free (F-2408 Q1, recom
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `classify` | P3's facts or a reuse, the profile | `microsoftLicensed` (with the terms URL) or `free` | none |
+| `classify` | delegated to lib-product's `classifyLicence` (facts, active rules); the rules are data in P4 | `microsoftLicensed` (with the terms URL) or `free` | none |
 | `ensureAccepted` | the classification, the profile's store, a UI port | `accepted` | `licenceDeclined` (reason STR:S027, "Connecting was canceled") |
 
 Rules:
-- Until K5 is ruled, `classify` returns `microsoftLicensed` when F-1402 rule 5's test or F-3902 rule 11's test holds.
+- The two candidate tests are the P4 rule entries `clientLicence` (F-1402 rule 5) and `sourceBased` (F-3902 rule
+  11); until K5 is ruled both are active with "any". K5 changes one table line.
 - An acceptance is stored per profile under a key derived from the terms URL, and is never synced.
 - The modal offers "Accept and Continue" and "Cancel" (R-68).
 
