@@ -1,3 +1,8 @@
+> Issued by `remote-architect` 2026-10-06; queued for the next free coding worker. Settled: no `lib-log` edges;
+> the ADR-0006 literal check lives in `tools/check-layout`; fixtures may be recorded with the worker's local OpenSSH
+> against 127.0.0.1, `.invalid` and TEST-NET only, sanitized of any real host name, address or user; the four spec
+> defaults are provisional and sent to the remote-ssh room.
+
 # Coding brief: the pure parts of lib-ssh (second coding target from area A)
 
 Status: draft by `remote-architect-worker-1` for `remote-architect`, 2026-10-06, to be reviewed and issued to a
