@@ -1,8 +1,8 @@
 # Binding rulings for the implementation (extract from the family register)
 
-Extracted by remote-development on 2026-10-05 from decisions.md (remote-oss/remote-development, private). Each entry is the
-register row: the decision or ruling text, then its trailing cells (who asked, options, recommendation or source) after an
-em dash. The full register carries the lab process, which the clean side never needs. Cite these ids; ask
+Extracted by remote-development on 2026-10-05 (23:20) from decisions.md (remote-oss/remote-development, private). Each entry is
+the register row: the decision or ruling text, then its trailing cells (who asked, options, recommendation or source) after
+an em dash. The full register carries the lab process, which the clean side never needs. Cite these ids; ask
 remote-development for anything not here.
 
 ## D-10
@@ -36,6 +36,24 @@ remote-development for anything not here.
 ## D-49
 
 **DECIDED 2026-10-05 16:15 (the user, picker): ADR-0002 (toolchain) approved with one change: pnpm workspaces instead of npm workspaces; the rest as proposed (TypeScript strict, esbuild bundling with tsc type checks, vsce packaging with the publishing location a later ADR, ESLint enforcing the layout's import rules and Prettier, tests on three levels with the conformance runner as the only definition of done, few MIT-compatible dependencies, no telemetry, no native modules without an ADR, manual CI).**
+
+— the user, 2026-10-05
+
+## D-50
+
+**DECIDED 2026-10-05 (the user, directly to remote-architect): strict coding standards during development. The user's dislikes, in substance: (1) verbose, apologetic AI comments ("comments are not going to be read by the user, so your conversations should not live in the code; the only defensible comments are those required by the Google style guide", https://google.github.io/styleguide/tsguide.html); (2) variable names of 3 letters or fewer; (3) duplicated code, or dead code nothing reaches; (4) no tests, or tests that do not cover all scenarios; (5) low coverage ("we must strive for the highest"). Recorded as ADR-0003 (docs/adr/0003-coding-standards.md, accepted) and in the monorepo's AGENTS.**
+
+— the user, 2026-10-05
+
+## D-51
+
+**DECIDED 2026-10-05 (the user, directly to remote-architect): the SSH transport is the native OpenSSH client, never the node ssh2 library (ADR-0004, accepted). The shared SSH library is a process manager around `ssh`, so the user's own config, agents, keys and jump hosts work because ssh handles them.**
+
+— the user, 2026-10-05
+
+## D-52
+
+**DECIDED 2026-10-05 (the user's wish to remote-architect, ruled by remote-development as R-76): the reimplementation reuses @devcontainers/cli (MIT, the open reference implementation of containers.dev) for configuration parsing, features, image build, container create/start and lifecycle hooks, and the editor's CLI binaries (the VS Code OSS cli/ crate, MIT, as built by VSCodium) to download and start the server and to connect to tunnels (ADR-0005).**
 
 — the user, 2026-10-05
 
@@ -134,3 +152,15 @@ remote-development for anything not here.
 **Conformance runner ownership.** The kit (remote-cleanroom-kit) is the runner's source while the dirty rooms run; the monorepo `remote-oss/remote` holds a synced copy under tests/conformance/runner, synced by the kit owner on each runner change; when the rooms close, the monorepo becomes the source and the kit copy is retired. Follows D-27.
 
 — remote-architect's question 4, 2026-10-05.
+
+## R-74
+
+**Enforcement of D-50 (the architect's choice; the user may change the numbers).** Google TS style enforced by an explicit typescript-eslint rule table with gts's Prettier settings copied (gts itself not installed: it pins ESLint 9 and enforces a thin set); JSDoc on exports and no other comment classes (jsdoc/require-jsdoc, no-warning-comments, no-inline-comments, plus three local rules: commented-out code, conversational phrases, TODO without an issue number); `_` is not an allowed identifier (the guide forbids it; unused trailing parameters are removed); id-length min 4 with a tiny fixed exception list plus an id-denylist of abbreviations (cfg, ctx, res, req, err, evt, fn, cb, tmp, val); jscpd failing on any clone of 5 lines AND 50 tokens in one run (revised 2026-10-05 from "10 lines / 75 tokens", not expressible in one run); knip plus noUnusedLocals/Parameters for dead code; c8 gates 90 % lines, 85 % branches, 90 % functions per package with a ratchet failing on a drop of more than 0.5 points; exclusions only by name with a reason, listed in the package README; six review questions R1–R6 answered in every coding PR; applies to tools/ as well as packages/.
+
+— remote-architect, ADR-0003, 2026-10-05.
+
+## R-76
+
+**Open-source components as allowed sources (clean side).** @devcontainers/cli and the VS Code OSS cli/ crate are allowed dependencies and allowed sources on the clean side, cited [devcontainers-cli] and [cli]: the cli/ crate is part of VS Code OSS (already [oss]); @devcontainers/cli follows that precedent as MIT open source distinct from the reference extensions. The wall stays around the ms-vscode-remote and ms-vscode extension packages (VSIX contents) and the dirty rooms. R-47 extended: the editor CLI archive is fetched like the server archive, from the product's own download location per product.json. The user may veto.
+
+— remote-architect's question, ADR-0005, 2026-10-05.
