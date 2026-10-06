@@ -85,7 +85,7 @@ The workspace-trust gate moved to area C with F-0106 (lead, 2026-10-06).
 | Component | Responsibility | Owns | Uses |
 |---|---|---|---|
 | `ssh.package` | Activation contract, stand-down, help and report-issue commands, `remoteHelp`, command catalogue and palette gating, localization, pack membership, packaging; no chat surface | F-2001, F-2002, F-2004, F-2005, F-2006, F-2007, F-2606, F-3901, F-3904, F-3907 | `standdown.guard`, `identifiers.*`, `authority.proposed-api-gate` |
-| `ssh.connect-flows` | Host picker, `user@host` input, connect in current or new window, new window on the active host | F-2301, F-2302, F-2303 | `authority.codecs`, `authority.window-opener`, A's `listConfiguredHosts` |
+| `ssh.connect-flows` | Host picker, `user@host` input, connect in current or new window, new window on the active host; the remote-platform picker that area A's R4 asks for (F-2206, owned by A) | F-2301, F-2302, F-2303 | `authority.codecs`, `authority.window-opener`, A's `listConfiguredHosts` |
 | `ssh.resolver-front` | The `ssh-remote` resolver on the resolver host, with the extension's titles and texts; reconnection attempts, each a fresh `connect` | F-2501, F-2505 | `authority.resolver-host`, A's `connect` |
 | `ssh.window-surfaces` | Indicator entries, label formatter, opening folders, workspaces and links on a host; the hidden "Open Web UI" command | F-2502, F-2504, F-2509 | `authority.codecs`, `authority.window-opener` |
 | `ssh.failure-ui` | The failure presenter: F-2601's notification and the "More Actions..." picker from A's `Failed.reason` and `hints`; F-3902 rule 8's no-source dialog; STR:S027 for a declined licence; actions call A's operations | F-2601, F-2602 | `authority.resolver-host` |
@@ -110,14 +110,17 @@ The workspace-trust gate moved to area C with F-0106 (lead, 2026-10-06).
 Everything else in remote-containers is area C, including its resolver (F-0502, which uses `authority.resolver-host`),
 reopen flows (F-0406), view registration (F-0906) and identity feature (F-0101). B appears there as a contributor.
 
-### remote-wsl (B part, provisional until the drafts land)
+### remote-wsl (B part; boundary agreed with area D, PR #25)
 
 | Component | Responsibility | Owns |
 |---|---|---|
-| `wsl.package` | Identity, help commands and `remoteHelp`, stand-down | F-6003, F-7901 |
-| `wsl.targets-view` | `targetsWsl` recent folders over core's recently-opened list, connect through the window opener | F-6503 |
-| `wsl.resolver-front` | The `wsl` resolver on the resolver host; the engine behind it is area D | F-6201 |
-| `wsl.failure-ui` | The failure dialog and recovery actions, rendered from the engine's failure | F-6208 |
+| `wsl.package` | Manifest, activation and platform gating, help commands and `remoteHelp`, walkthrough, identity and l10n, stand-down; renders the three F-6206 advisories from area D's flags; F-6602 as a documented no-op | F-6001, F-6003, F-6004, F-6005, F-6602, F-7901 |
+| `wsl.targets-view` | `targetsWsl` recent folders over core's recently-opened list, connect through the window opener; F-6501 and F-6502 when drafted | F-6503 |
+| `wsl.resolver-front` | The `wsl` resolver on the resolver host, registered on every platform; the connect behind it is area D's D6 | F-6201 |
+| `wsl.window-surfaces` | The per-distro label formatter registered at connect time, with area D's registered spelling and version | F-6205 |
+| `wsl.failure-ui` | The F-6208 dialog, keeping the resolve open until the user picks (presenter outcomes) | F-6208 |
+
+F-6402 (opening WSL windows from the Windows command line) is owned by area D's connect engine. `wsl.resolver-front` contributes.
 
 ## 3. Decisions taken on this view (lead, 2026-10-06)
 
