@@ -3,7 +3,9 @@ F-0103	remote-containers	74	containers.package	lib-identifiers/identifiers.strin
 F-0501	remote-containers	35	authority.codecs	containers.window-identity; authority.resolver-host	28	0	codec and label formatters; payload semantics by C
 F-0504	remote-containers	36	containers.window-identity	authority.codecs; identifiers.context-keys	32	0	
 F-0507	remote-containers	106	containers.package	authority.resolver-host	36	52	declares onDebugResolve:extensionHost only
+F-1401	remote-containers	38	identifiers.tables	authority.codecs	0	0	decision; identifier choices superseded by F-1406, authority names and formatters stand; owner per the lead (C/B boundary)
 F-1403	remote-containers	39	authority.proposed-api-gate	containers.package	0	0	moved A->B (lead, 2026-10-06): family-wide gate accepted by the lead 2026-10-06
+F-1404	remote-containers	55	containers.package	companion.detector	0	0	decision: partner ids and packs (R-21, R-22); owner per the lead (C/B boundary)
 F-1406	remote-containers	107	identifiers.tables	standdown.guard; containers.package	0	0	moved A->B (lead, 2026-10-06): identifier reuse and R-54 are lib-identifiers and lib-standdown
 F-2001	remote-ssh	11	ssh.package	standdown.guard; authority.proposed-api-gate	28	0	given by area A (A/B reconciliation)
 F-2002	remote-ssh	12	ssh.package	identifiers.string-tables	36	0	
