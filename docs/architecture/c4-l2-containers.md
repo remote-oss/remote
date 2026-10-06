@@ -29,8 +29,8 @@ A library exists only when at least two packages need the same behaviour; everyt
 |---|---|---|---|
 | `lib-identifiers` | Per-extension tables of the D-14 identifiers and the R-27 invented ones, generated from each manifest; command registration with the out-of-context guard (R-46); setting reads with legacy-key precedence; the string tables that conformance addresses | all seven (the pack: generation only) | none |
 | `lib-standdown` | The R-54 check at activation; the one warning; the "standing down" context key (polarity per ADR draft: entries visible by default) | all except the pack and ssh-edit | `lib-identifiers` |
-| `lib-log` | A logger passed in, never global; a channel created lazily only where a spec has one; `logOncePerSession`; a redaction rule libraries cannot bypass; levels per package setting; what may never be logged (prompt answers, tokens, event payloads; F-3905) | all except the pack and ssh-edit | none |
-| `lib-product` | The product profile read once from `product.json`; archive URL resolution (override, product template, built-in table, dialog); the only file where product names, hosts and prefixes appear | containers, ssh, wsl, server, explorer (`urlProtocol` only) | none (diagnostics are returned as values) |
+| `lib-log` | A logger passed in, never global; a channel created lazily only where a spec has one; `logOncePerSession`; a redaction rule libraries cannot bypass; levels per package setting; what may never be logged (prompt answers, tokens, event payloads; F-3905) | containers, ssh, wsl, server | none |
+| `lib-product` | The product profile read once from `product.json`; archive URL resolution (override, product template, built-in table, dialog); the only file where product names, hosts and prefixes appear | containers, ssh, wsl, server | none (diagnostics are returned as values) |
 | `lib-authority` | Resolver host over `registerRemoteAuthorityResolver`; one authority codec per family; window opener (current/new window, folder/workspace/empty, reload, close remote); the proposed-API gate and its one family-wide setup notification; label formatters (the workspace-trust gate moved to the containers engine, F-0106, its only consumer) | containers, ssh, wsl, server, explorer (opener and gate) | `lib-identifiers`, `lib-standdown`, `lib-log` |
 | `lib-companion` | The F-5902 §5 protocol: versioned plain-data payloads, 10 s caller timeout, foreign-payload rule, companion detection across hosts (`extensionsAny` with silent fallback); the one copy of the companion interface document; a recording fake as a test fixture | explorer, ssh, wsl, server | `lib-identifiers`, `lib-log` |
 | `lib-host` | The host channel: `runScript`, `copyToHost`, `identity`, `platformHint`, with the failure kinds `lib-server` maps; no implementation of its own | ssh (over `lib-ssh`), containers (over `docker exec`), wsl (over `wsl.exe`), `lib-server` | none |
@@ -48,7 +48,7 @@ and completion live in `remote-ssh-edit`. Dialog and progress helpers stay in th
 ```
 remote-extensionpack  ->  (nothing)
 remote-ssh-edit       ->  lib-identifiers   (no log by F-4002 AC-14; no stand-down by F-4901 §6)
-remote-explorer       ->  lib-identifiers, lib-standdown, lib-companion, lib-authority, lib-product, lib-log
+remote-explorer       ->  lib-identifiers, lib-standdown, lib-companion, lib-authority (gate only)   (no log by F-5901 §6; no product use)
 remote-server         ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-forwarding, lib-companion, lib-log
 remote-ssh            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-ssh, lib-server, lib-forwarding, lib-companion, lib-log
 remote-wsl            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-server, lib-forwarding, lib-companion, lib-log
