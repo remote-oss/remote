@@ -1,258 +1,473 @@
-# Area A interface contracts (draft)
+# Area A interface contracts
 
-- Status: draft, ahead of the container view, for lib-ssh and lib-server only (A2, A3, A4, A8, A9, A10). A1, A5,
-  A6, A7, A11, A12 and A13 follow in deliverable 2. A13 will carry two alternatives until F-8902 and the relay
-  question are ruled.
+- Status: complete for the lead's review (deliverable 2), replacing the draft merged in PR #8. The tunnel client
+  section (T) depends on the `[cli]` reading noted there.
 - Date: 2026-10-06
 - Author: `remote-architect-worker-1`; lead: `remote-architect`
-- Binds: ADR-0003, ADR-0004, ADR-0005 (no editor CLI for Remote-SSH, dossier §4), ADR-0006 as revised on
-  2026-10-06; R-28 and F-3905 (no telemetry, no payload lines in logs); R-47, R-58, R-68.
+- Binds:
+  - ADR-0003, ADR-0004, and ADR-0005 and ADR-0006 as revised on 2026-10-06 (no CLI download, CLI for Tunnels only,
+    no VS Code entry in the server table);
+  - R-28 and F-3905 (no telemetry, no payload lines in logs);
+  - R-47, R-58, R-68 (one licence test pending K5).
+- Component ids are those of `components.md`.
 
-A contract names the operations, their inputs and outputs, the failure states, what the component owns, and what it
-must never do. Shapes are named fields, not code. "Reason" always means the exact user-visible text that B shows in
-F-2601's dialog. Feature ids are remote-ssh unless marked.
+How to read a contract: each lists the operations with their inputs, outputs and failure states, the rules with
+their feature ids, and what the component must never do. Shapes are named fields, not code. "Reason" is the exact
+user-visible text B shows in F-2601's dialog; the specs' string ids (STR:Snnn) name it. Feature ids without a repo
+are remote-ssh's.
 
-## 0. The remote host channel (consumed by A8, A9, A10)
+Order: the pure components come first, because they are the candidates for the first coding briefs. Those are
+lib-host, lib-product, and the pure parts of lib-ssh (S2, S5, S6, S4's parser and writer, S1's decision).
 
-lib-server never knows how it reaches a host. It receives a host channel. A2 and A3 implement it for SSH, and later
-contracts implement it for `docker exec` (F-0503) and WSL. This is what lets the containers and WSL rooms reuse
-lib-server.
+---
 
-| Operation | Inputs | Output | Failures |
-|---|---|---|---|
-| `runScript` | script text, interpreter (`posixShell` or `powershell`), environment additions, input text | a stream of output lines, then the exit status | channel closed, timeout (the channel's own), cancelled |
-| `copyToHost` | local file, remote path | done | copy tool missing, copy failed with the tool's message, cancelled |
-| `identity` | none | the key that names this host in locks and records: the host string for SSH | none |
-| `platformHint` | none | linux, macOS, windows or unknown (F-2206: setting first, else unknown) | none |
+## 1. lib-host
 
-The channel never interprets what the script prints. Parsing belongs to A8.
-
-## A2 ssh-session (lib-ssh)
-
-Purpose: the only place that builds an `ssh` or `scp` invocation and spawns it (ADR-0004).
+### H1 host-channel
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `validateTarget` | decoded target | ok | host or user rejected: STR:S119, S120, S121 or S122 with the offending character (F-2205 BR-2, BR-3); nothing is spawned |
-| `invoke` | target, purpose (`connection`, `tunnel`, `oneShot`, `copy`), forwards (SOCKS port, local to remote port, local to remote socket), remote program (none, or `sh`), askpass environment from A4 | a session: output and error streams, input stream, exit status | client missing (from A1), spawn error |
-| `effectiveOptions` | target | the values OpenSSH computes for that host (`ssh -G`): `ConnectTimeout`, `RemoteCommand`, `HostName`, `User`, `Port` | the config cannot be read (reason from ssh) |
+| `runScript` | script text, interpreter (`posixShell`, `powershell`), environment additions, input text, cancellation | output lines as a stream, then the exit status | `channelClosed`, `spawnFailed`, `timeout`, `cancelled` |
+| `copyToHost` | local file, remote path, cancellation | done | `copyToolMissing`, `copyFailed` (with the tool's message), `channelClosed`, `cancelled` |
+| `identity` | none | the key that names the host in locks and records (SSH: the host string as written; containers: the container id; WSL: the distro name) | none |
+| `platformHint` | none | `linux`, `macOS`, `windows` or `unknown` | none |
 
-Argument rules:
-- **Host.** The host and user go in as separate arguments, never through a shell (F-2205 §16).
-- **Config file.** `-F <file>` when `remote.SSH.configFile` is set, with `~/` expanded. Otherwise no config option
-  (F-2201 BR-4).
-- **`-T`** unless `remote.SSH.permitPtyAllocation` is truthy (F-2106).
-- **Timeout.** `-o ConnectTimeout=<remote.SSH.connectTimeout>` only when the host sets none (F-2105).
-- **`RemoteCommand`.** An `-o RemoteCommand=none` override when the effective config has one and
-  `remote.SSH.enableRemoteCommand` is not in effect (F-2107).
-- **Verbosity.** Enough `-v` for the classifier's lines (F-2109 BR-3).
-- **Forwards.** `-D 127.0.0.1:<port>` for the SOCKS forward, `-L` for a second-ssh tunnel or a socket forward
-  (F-2104 BR-1).
+Rules:
+- A channel never interprets script output.
+- A channel never retries by itself.
+- Failure kinds are closed: an implementation maps every error to one of the six kinds and keeps the original
+  message as detail.
+- The library ships a recording fake that replays scripted outputs. lib-server's tests run on it alone.
 
-Everything else the user configures is passed through untouched. That covers the 43 keywords of F-2109 and
-`ProxyJump`, `ProxyCommand`, `ControlMaster`, `ControlPath`, `ControlPersist` and the host-key and key options
-(F-2102 BR-11, F-2305 BR-1, F-2307 BR-1, F-2310).
+Never: depend on any transport, the editor API, or lib-server.
 
-Process rules:
-- Use the client A1 accepted, with the editor's environment unchanged plus A4's askpass variables (F-2101 BR-7).
-- Standard input is a pipe and never a terminal. `SSH_ASKPASS_REQUIRE` is never set.
-- Own wait: `ConnectTimeout` plus 2 seconds. It pauses while a prompt is open and ends at the first output or the
-  setup step (F-2105, F-2308 BR-5).
-- Error-stream lines go to A12, which owns the classification, and to the log.
+---
 
-Never:
-- interpret an ssh option;
-- write `known_hosts`;
-- add keys to an agent;
-- start a shell on the client.
+## 2. lib-product
 
-## A3 connection-server (lib-ssh)
-
-Lifetime, ownership and how it dies are in [local-connection-server.md](local-connection-server.md).
+### P1 profile-reader
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `acquire` | host string, target, window identity, cancellation | a lease: SOCKS port, the shared record (remote port, OS, architecture, temp folder, connection token) when one exists, and the host channel over this connection | any A2 failure; `cancelled`; login failed (reason from A12) |
+| `readProfile` | the text of `<appRoot>/product.json` (the editor adapter reads the file once per session) | a profile with these fields: `applicationName`, `version`, `commit`, `quality`, `release` (empty when absent), `serverApplicationName`, `serverDataFolderName` (fallback `.vscode-server` only where a spec says so, F-0503), `dataFolderName`, `tunnelApplicationName`, `urlProtocol`, `serverDownloadUrlTemplate`, `serverLicense`, `serverLicenseUrl`, gallery | `unreadable` (the extension cannot run its resolvers; the log names the path) |
+
+Rules:
+- Commit and quality may also come from `env.appCommit` and `env.appQuality` under `resolvers`. The file is the
+  source of record (F-3903 rule 2).
+- Nothing outside lib-product reads `product.json` (ADR-0006).
+
+### P2 template-expander
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `expand` | template, values for `os`, `arch`, `commit`, `quality`, `version`, `release`, `applicationName`, allowed names | an absolute URL | `unknownPlaceholder` with its name; `notHttpUrl` |
+
+Rules:
+- `${release}` expands to the empty string when the product has none (F-3902 rule 3).
+- `${applicationName}` is allowed only where the extension's policy lists it (ADR-0006 decision 2).
+- A value with no placeholder is used as one URL for every host.
+
+### P3 archive-resolver
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `resolveServerArchive` | profile, host platform tokens (`os`, `arch`), the extension's override policy, the override value with the layer it came from | the URL, the step that produced it (`override`, `productTemplate`, `builtInTable`) and the facts V6 needs (URL host, `serverLicense` empty or not) | `noSource` (the `applicationName` and the setting key); `invalidOverride` (the setting key and the problem from P2) |
+
+Override policies (one table entry per extension, ADR-0006 decision 5):
+
+| Extension | Key | Layers | Forms |
+|---|---|---|---|
+| remote-ssh | `remote.SSH.serverDownloadUrlTemplate` | user layer of the default profile only (F-3902 rule 1) | template |
+| remote-containers | `remote.serverDownloadBaseUrl` | any layer (F-1402 rule 4) | template, or a base URL to which `/commit:{commit}/server-{platform}/{quality}` is appended |
+| remote-wsl | from the WSL drafts | to be added | to be added |
+
+Rules:
+- "Set" means the allowed layers hold a value, never "differs from the default" (F-3902 rule 1).
+- A bad product template is logged and skipped; resolution falls through (ADR-0006 as revised).
+- The built-in table matches `applicationName` exactly. It has two entries, `codium` and `codium-insiders`, and no
+  entry for VS Code (ADR-0006 decision 2).
+
+### P4 product-table
+
+A data module holding:
+- the two built-in table entries with their release repositories and asset shape (F-3902 rule 1(c), F-1402);
+- the licence hosts of F-3902 rule 11(i);
+- the VSCodium release prefixes of rule 11(ii);
+- the dev tunnels service domain.
+
+It is the only place these strings may appear (ADR-0006 Check). P4 has no operations; P3 and V6 read it.
+
+---
+
+## 3. lib-ssh, pure parts
+
+### S2 argument-builder
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `validateTarget` | decoded target (alias, or host name with optional user and port) | ok | `invalidHost` or `invalidUser` with the reason STR:S119, S120, S121 or S122 and the character (F-2205 BR-2, BR-3) |
+| `buildInvocation` | target, purpose (`connection`, `tunnel`, `oneShot`, `copy`), the settings snapshot (`configFile`, `connectTimeout`, `permitPtyAllocation`, `enableRemoteCommand`), effective options from S4, forwards, remote program | program, argument list, environment additions | none (validation runs first) |
+
+The argument rules:
+- `-F <file>` when `configFile` is set, with `~/` expanded against the editor's home (F-2201 BR-4).
+- `-T` unless `permitPtyAllocation` is truthy (F-2106).
+- `-o ConnectTimeout=<n>` only when the host sets none (F-2105).
+- `-o RemoteCommand=none` when the host has a `RemoteCommand` and `enableRemoteCommand` is not in effect (F-2107).
+- `-v` at the level S5 needs (F-2109 BR-3).
+- `-D 127.0.0.1:<port>`, `-L <port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (F-2104 BR-1, F-2410).
+- The host and user go in as their own arguments.
+- `scp` gets the same `-F` and the alias (F-2405 BR-6).
+
+Never: add `ControlMaster`, `ControlPath`, `ControlPersist`, host-key, identity or proxy options; quote for a shell.
+
+### S5 stderr-classifier
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `classify` | ssh's error lines of one run, in order; the run's exit status; the purpose | a failure kind (`unreachable`, `timeout`, `authentication`, `hostKeyChanged`, `hostKeyRejected`, `forwardingDisabled`, `channelClosed`, `unknown`), the reason, and hints (message, status, mitigations, resources) | none |
+
+The rules are the specs' tables, by reference:
+- the network reasons, their substring and case rule, and their priority when several lines match (F-2603);
+- "administratively prohibited" and the MITM warning (F-2604);
+- the timeout wordings S137 and S140 (F-2105);
+- the changed-key refusal S111, in shared mode only (F-2305 BR-6);
+- the last "Permission denied (...)" line with its `user@host: ` prefix removed (F-2306 BR-13, F-2601 BR-3).
+
+An unrecognised failure yields `unknown` with an empty reason, which B shows as STR:S030.
+
+Never: log or return prompt answers.
+
+### S6 prompt-classifier
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `classifyPrompt` | the prompt text ssh passes to askpass, the display host | a surface (`fingerprintPick`, `continuationPick`, `maskedInput`) with title or placeholder and the answer mapping | none |
+
+The rules, first match wins:
+1. The fingerprint pattern of F-2305 BR-2, with the placeholder rules of F-2305 BR-3.
+2. The Offending/Matching continuation lines of F-2305 BR-2.
+3. The passphrase question of F-2307 BR-3, shown as STR:S064 with {0} empty until F-2307 Q3 is decided.
+4. The password order of F-2306 BR-2.
+5. Otherwise the raw text in a masked input.
+
+### S4 config-model (parser and writer)
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `filesInEffect` | settings snapshot, home folder | the ordered files (user file, then the system file and its includes; or the one configured file) with their existence | none |
+| `listHosts` | the file texts through a file port | host entries in the order and with the inclusion rules of F-2202 BR-1 to BR-20 | `parseError` with file and reason (F-2201 BR-8) |
+| `effectiveOptions` | target | `ConnectTimeout`, `RemoteCommand`, `HostName`, `User`, `Port`, `LocalForward` as OpenSSH computes them (`ssh -G` through S3) | `parseError` |
+| `parseAddHostCommand` | the text the user typed | a Host block (keywords mapped by F-2204 BR-5) | one of the four errors of F-2204 |
+| `writeHostBlock` | file text, block | the new file text with the block placed by F-2204 BR-10 to BR-17 | none (B's command writes the file) |
+
+Rules:
+- `listHosts` reads fresh on every call and never caches (F-2202).
+- The match-back of F-2202 BR-21 uses `effectiveOptions` until the spec answers dossier question 5.
+
+### S1 client-locator (decision part)
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `candidates` | `remote.SSH.path` user value, PATH, platform | the ordered candidates (F-2101 BR-1) | none |
+| `judge` | a candidate's `-V` exit status and output | accepted or rejected (F-2101 BR-4, BR-5) | none |
+
+Rules:
+- Empty output with exit status 0 is rejected (F-2101 Q2, recommended (b)).
+- `scp` is looked for beside the accepted `ssh`, then on PATH (F-2405 BR-6).
+- Nothing is remembered between runs (F-2101 BR-10).
+
+---
+
+## 4. lib-ssh, process and UI parts
+
+### S3 session-spawner
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `spawn` | an S2 invocation, the askpass environment from S7 | a session: output and error streams, input stream, exit status | `spawnFailed`, `clientVanished` |
+
+Rules:
+- The editor's environment is passed unchanged (F-2101 BR-7). Standard input is a pipe; `SSH_ASKPASS_REQUIRE` is
+  never set.
+- The connect wait is the timeout plus 2 seconds. It pauses while a prompt is open and stops at the first output or
+  the setup step (F-2105, F-2308 BR-5).
+
+### S7 prompt-ui
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `askpassEnvironment` | lease or session, `remote.SSH.externalSSH_ASKPASS` | variables that make `ssh` call our askpass endpoint; none when the external askpass applies (F-2309) | none |
+| `answer` | S6's surface, owner or mirror | the answer | `cancelled` |
+
+Rules:
+- Picks close on focus loss; masked inputs do not (F-2305 BR-5, F-2306 BR-3).
+- In shared mode, a re-prompt carries ssh's "Permission denied, please try again." line (F-2306 BR-4).
+
+Never: store or log an answer or its length.
+
+### S8 login-terminal
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `runInTerminal` | invocation, name (`install`, `SSH Tunnel`, `Uninstall VS Code Server`), `remote.SSH.showLoginTerminal` | a session over the terminal: output events, input, end | trust refused (core) |
+
+Rules:
+- The terminal is hidden until revealed. With the setting on, it is revealed and every question stays in it. With
+  the setting off, F-2306's prompts become S7 inputs, read through `terminalDataWriteEvent` and answered by sending
+  the text (F-2308 BR-2, BR-4).
+- It is never created trust-exempt (F-3903 rule 1).
+
+### S9 connection-server
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `acquire` | host string, target, window identity, cancellation | a lease: SOCKS port, the shared record (remote port, OS, architecture, temp folder, connection token) when one exists, and S10 over this connection | S2 and S3 failures; `cancelled`; login failed (kind and reason from S5) |
 | `release` | lease | none | none |
 | `kill` | host string | done, silently, also when nothing runs (F-2102 BR-7) | none |
 | `events` | lease | `waitingForOtherWindow`, `ownerChanged`, `transportLost` | none |
 
 Rules:
-- One helper per host string, exactly as written, so an alias and a typed `user@host` are two keys (F-2102 BR-6).
+- One helper per host string, exactly as written (F-2102 BR-6).
 - The record is written only after the connection completes.
-- With `remote.SSH.useLocalServer` off, `acquire` is never called. The pipeline (A6) then uses A2 directly with A4's
-  login terminal (F-2102 BR-10). `remote.SSH.remoteServerListenOnSocket` forces that mode too (F-2410).
+- `acquire` is not used when `remote.SSH.useLocalServer` is off or socket mode is on (F-2102 BR-10, F-2410).
 
-## A4 ssh-prompts (lib-ssh, the one UI component of area A)
+Lifetime, ownership and how it dies are in [local-connection-server.md](local-connection-server.md) and the ADR
+draft `adr-drafts/local-connection-server.md`.
+
+### S10 ssh-host-channel
+
+H1 implemented over S9 or S3:
+- `runScript` runs `sh` or `powershell` per V1's interpreter (the login-shell mode is dossier question 10).
+- `copyToHost` uses `scp` through S2 and S3, run as a hidden task so that core's trust gate applies (F-2405).
+- `identity` is the host string.
+- `platformHint` comes from R4.
+
+---
+
+## 5. lib-server
+
+### V1 bootstrap-scripts
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `askpassEnvironment` | lease or window, external askpass setting | the variables `ssh` needs to call our askpass program | none |
-| `answer` | prompt text from `ssh`, display host ({0} as the user named it), owner or mirror | the answer text | cancelled (the askpass program exits non-zero) |
-| `loginTerminal` | invocation, name (`install`, `SSH Tunnel`, `Uninstall VS Code Server`), reveal flag | a terminal session with its output events | trust refused (core) |
+| `scriptFor` | step (`probe`, `install`, `start`, `kill`, `uninstall`, `cleanup`), interpreter, parameters (data folder, launcher, commit, URL, proxy variables, lock method and place, downloader policy, start options) | script text under 8192 characters for PowerShell (F-2701) | none |
+| `parseResult` | output lines | the result block between two markers: status, host facts, server facts, timings | `noResultBlock` (treated as `channelClosed`) |
 
-Classification of a prompt, first match wins:
-1. **Host-key fingerprint.** A line of the form "<TYPE> key fingerprint is <FP>." followed by the "Are you sure..."
-   line gives the quick pick STR:S001 with "Continue" and "Cancel" (F-2305 BR-2).
-2. **Continuation.** The "Offending key" and "Matching host key" lines give the quick pick with STR:S012.
-3. **Passphrase.** "Enter passphrase for key '<path>': " gives the masked input STR:S064 (F-2307 BR-3).
-4. **Password rules** of F-2306 BR-2: "'s password:", then "Password:", then "Verification code:", else the raw text.
+Statuses: `LockBusy`, `NoDownloaderAvailable`, `UnpackFailed`, `ServerDownloadFailed`, `CreateInstallDirFailed`,
+`UnsupportedArch`, `UnsupportedPlatform`, `LinuxPrereqs`, `NoBash` (only while a spec still requires bash),
+`ServerFailedToStart`.
+
+Rules inside the scripts:
+- `wget` is preferred, then `curl`, and their configuration files are skipped unless
+  `useCurlAndWgetConfigurationFiles` is on (F-2403 BR-12).
+- Lowercase `http_proxy` and `https_proxy` are exported in F-2404 BR-5's text, and the host's login environment
+  wins (F-2404 BR-10).
+- Locks use `flock` or atomic `ln` (F-2408, F-2702).
+- macOS sockets go in `TMPDIR` (F-2702).
+- Windows uses no WMI process query (F-3908).
+- The scripts are written from the specs only.
+
+### V2 host-probe
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `probe` | H1, platform hint | host facts: OS, architecture token, libc family, release id, temp folder, login shell, tools, `SSH_AUTH_SOCK`, `DISPLAY` | `unsupportedPlatform`, `unsupportedArch`, `prerequisiteMissing` (F-2401, F-2402, F-2703), channel failures |
+
+### V3 install-planner
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `plan` | host facts, profile, P3's result or failure, install path setting, download mode, existing layouts reported by the probe | a plan: reuse (`bin/<commit>` or the reused CLI layout of F-3902 rule 10), or download (where, URL), plus data folder, launcher, lock place | `noSource`, `invalidOverride`, `invalidInstallPath` (F-2407 BR-3, before any ssh) |
 
 Rules:
-- **Answers.** "Continue" sends `yes`. Escape and Cancel exit non-zero.
-- **Focus.** The quick picks close on focus loss; the masked inputs keep focus (F-2305 BR-5, F-2306 BR-3).
-- **Re-prompts.** In shared mode, a re-prompt shows ssh's "Permission denied, please try again." as its message
-  (F-2306 BR-4).
-- **External askpass.** With `remote.SSH.externalSSH_ASKPASS` on, shared mode, and a non-empty `SSH_ASKPASS` in the
-  editor's environment, the environment is left alone and no input appears (F-2309).
-- **Login terminal.** It is created hidden, with the home folder as working folder, and is never trust-exempt (F-3903
-  rule 1). With `remote.SSH.showLoginTerminal` on, it is revealed and focused and every question stays in the
-  terminal. Otherwise only F-2306's prompts become inputs, read through the proposed `terminalDataWriteEvent` and
-  answered with `sendText` (F-2308 BR-2, BR-4).
+- Reuse is checked before the source is resolved, so a host with a server needs no source (F-3902 rule 8, exception).
+- `useExecServer` is never applied and is logged once per connect (F-2103 BR-13).
 
-Never:
-- store an answer;
-- log an answer or its length (F-2306 BR-10, F-2307 BR-10);
-- add a limit or retry of its own (F-2306 BR-6).
-
-## A8 host-bootstrap (lib-server)
-
-Purpose: our own remote-side step, written from the specs, as one POSIX `sh` script and one PowerShell script shipped
-as text. Neither is ever derived from the reference's scripts.
+### V4 archive-transfer
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `probe` | host channel | host facts: OS (Linux, Darwin, Windows), architecture token (x64, arm64, armhf), libc family (glibc or musl from `/etc/os-release`), OS release id, temp folder, login shell name, available tools (curl, wget, tar, flock), `SSH_AUTH_SOCK`, `DISPLAY` | unsupportedPlatform (F-2401: kernel or architecture refused), prerequisiteMissing (glibc 2.28, libstdc++ 3.4.25; `bash` only where a spec still requires it, dossier question 10), channel failures |
-| `runStep` | host channel, step (`install`, `start`, `kill`, `uninstall`, `cleanup`), step parameters | one result block | a named status (below), with the host's message |
-
-The result block is a fixed set of `key=value` lines between two marker lines. A8 parses it; nothing else does.
-
-Statuses map one-to-one to the specs' categories and hint statuses:
-
-| Status | Source |
-|---|---|
-| `LockBusy` | F-2408 |
-| `NoDownloaderAvailable` | F-2402 |
-| `UnpackFailed` | F-2402, F-2403 |
-| `ServerDownloadFailed` | F-2403 |
-| `CreateInstallDirFailed` | F-2407 |
-| `UnsupportedArch` | F-2401 |
-| `UnsupportedPlatform` | F-2401 |
-| `LinuxPrereqs` | F-2401 |
-| `ServerFailedToStart` | F-2409 |
+| `transfer` | plan, H1, a download port (the editor's network stack), UI phase sink | the archive unpacked into `bin/<client commit>/`, with its commit checked and rewritten when needed | `serverDownload` (STR:S043), `localDownload` (STR:S071 with its detail), `unpack` (STR:S075), `copy` (from H1), `cancelled` |
 
 Rules:
-- **Downloader.** `wget` is preferred, then `curl`. Their configuration files are skipped unless
-  `remote.SSH.useCurlAndWgetConfigurationFiles` is on (F-2403 BR-12).
-- **Proxy.** Lowercase `http_proxy` and `https_proxy` are exported in the exact text of F-2404 BR-5. The host's own
-  login environment wins (F-2404 BR-10).
-- **Locks.** `flock` by default; atomic `ln` where `remote.SSH.useFlock` is off or `flock` is missing (macOS,
-  F-2702). The lock file is `vscode-remote-lock.<user>.<commit>` in the commit folder, or in `/tmp` with
-  `remote.SSH.lockfilesInTmp` (F-2408).
-- **macOS.** Server sockets go in `TMPDIR`, never `/tmp` (F-2702).
-- **Windows hosts.** The PowerShell script runs under `powershell` from the DefaultShell's answer or as the remote
-  program, and its command line stays under 8192 characters (F-2701). Whether the conformant build must reproduce
-  the standard-user failure of F-3908 rule 1 is open (question 1).
+- The host downloads first. `auto` falls back to the client, `always` uses the client, `off` never does (F-2405).
+- The client copy is a temporary file, deleted afterwards (F-3902 rule 6).
+- Manual bootstrap reads the fixed file and shows STR:S088 on every attempt (F-2406).
+- The commit is rewritten by editing the unpacked `product.json` only (F-3902 rule 9, pending the room's
+  confirmation).
 
-## A9 server-install (lib-server)
+### V5 install-locks
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `ensureServer` | host channel, host facts (A8), product profile (A7), extension policy (override key, download mode), licence UI port, phase sink, cancellation | an installed server: data folder, launcher path, commit, layout (`bin` or the reused CLI layout) | noServerSource, invalidServerTemplate (A7's dialog already shown), licenceDeclined, invalidSetting (install path), serverDownload, serverInstall, lockTimeout, retriesExhausted, cancelled |
+| `withClientLock` | host identity | the lock held for the install phase | `lockTimeout` after 2 minutes, with S157 shown meanwhile (F-2408) |
+| `hostLockLoop` | a step that may return `LockBusy` | the step's result | `retriesExhausted` after 30 attempts, 1 second apart, each shown as "retry N" |
 
-Order, matching F-3902 rules 10, 1, 11, 5 and 6:
-1. **Reuse.** Use an installed server for the client's commit when one exists:
-   - first `<root>/<serverDataFolderName>/bin/<commit>/`;
-   - else the CLI layout `cli/servers/Stable-<commit>/server/`, started directly.
+Rule: a client lock whose owner process is gone counts as free (F-2408 Q1, recommended).
 
-   Then go to step 4.
-2. **Resolve.** Ask A7 for the archive URL. A7 shows the no-default dialog itself when nothing resolves.
-3. **Download and unpack.**
-   - The host downloads first. Then `remote.SSH.localServerDownload` applies:
-     - `auto`: on failure, the client downloads through the editor's network stack and copies with `copyToHost`.
-     - `always`: always on the client.
-     - `off`: never on the client (F-2405).
-   - The client copy is a temporary file, deleted afterwards (F-3902 rule 6).
-   - The archive is unpacked into `bin/<client commit>/`.
-   - The server's `--version` is checked. A different commit is rewritten to the client's, with one log line naming
-     both (F-3902 rule 9).
-4. **Licence.** The gate below runs before any download (cases i, ii) and before any start (case iii).
+### V6 licence-gate
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `classify` | P3's facts or a reuse, the profile | `microsoftLicensed` (with the terms URL) or `free` | none |
+| `ensureAccepted` | the classification, the profile's store, a UI port | `accepted` | `licenceDeclined` (reason STR:S027, "Connecting was canceled") |
 
 Rules:
-- **Phases** go to the sink: `downloading`, `downloadingLocally`, `copyingWithScp`, `installing` (F-2304 BR-3).
-- **Client lock.** `vscode-remote-ssh-<8 hex>-install.lock` in the editor's temp folder, one per host identity,
-  waited on for at most 2 minutes with S157 shown. A lock whose owner process is gone counts as free (F-2408 Q1,
-  recommended).
-- **Host lock.** When it is busy, A9 ends the session, waits 1 second and retries, at most 30 times, each attempt with
-  the progress text "retry N" (F-2408).
-- **Install path.** `remote.SSH.serverInstallPath` is matched exactly on the host part. The value is validated on the
-  client before any `ssh` runs (F-2407 BR-3).
-- **Manual bootstrap.** `localServerDownload` set to `manual-bootstrap` takes the archive from
-  `~/vscode-remote-ssh-bootstrap/vscode-server.tar.gz` and shows STR:S088 on every attempt (F-2406).
-- **Exec-server mode.** `remote.SSH.useExecServer` is logged once per connect as not applied (F-2103 BR-13).
-- **Licence gate (R-68).** It is shared by every extension. Pending the register's ruling, the gate fires when
-  either the F-1402 test or the F-3902 rule 11 test holds. It shows a modal naming the terms, with a link and the
-  buttons "Accept and Continue" and "Cancel". An acceptance is stored in per-profile global state under a key derived
-  from the licence URL.
-- **Caches.** Remote-SSH keeps no client cache. The R-58 cache folders belong to the container transport (F-0419)
-  and arrive with deliverable 2.
+- Until K5 is ruled, `classify` returns `microsoftLicensed` when F-1402 rule 5's test or F-3902 rule 11's test holds.
+- An acceptance is stored per profile under a key derived from the terms URL, and is never synced.
+- The modal offers "Accept and Continue" and "Cancel" (R-68).
 
-Never:
-- download Microsoft's server unless the user set the URL (F-3902 rule 1);
-- accept licence terms for the user;
-- write outside `<root>/<serverDataFolderName>`, the configured lock place and temp folders.
+Never: accept for the user.
 
-## A10 server-runtime (lib-server)
+### V7 server-runtime
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `startOrReuse` | host channel, installed server, options (bind host, port range, socket mode, grace time, default extensions, licence accepted, proxy environment) | a running server: TCP port or socket path, connection token, process id, remote environment additions (agent socket link, `DISPLAY`) | serverStart (STR:S135, at the end of the start wait), invalidSetting (InvalidPortRange before any ssh; a bad bind host falls back to 127.0.0.1 after STR:S168), cancelled |
-| `installExtensions` | host channel, running server, ids | done; failures are logged per id | none raised (F-2506 Q1, recommended (b)) |
-| `kill` | host channel, data folder | done; the client side then drops the A3 record | ssh failure (STR:S076) |
-| `uninstall` | host channel, data folder | done, silently | ssh failure (core's "Failed to run command") |
-| `cleanup` | host channel, data folder | done | none raised |
+| `startOrReuse` | H1, installed server, options (bind host, port range, socket mode, grace time, default extensions, licence accepted) | port or socket, connection token, process id, remote environment additions | `serverStart` (STR:S135 at the end of the start wait), `invalidPortRange` (before any ssh), `cancelled` |
+| `installExtensions` | H1, server, ids filtered by F-2506 BR-2 | done; failures are logged per id (F-2506 Q1 (b)) | none raised |
 
 Start options:
-- `--start-server`, `--host <bindHost>` (127.0.0.1 by default) and `--port <0 or range>`, or `--socket-path` in
-  socket mode;
+- `--start-server`, `--host`, and `--port` or `--socket-path`;
 - `--connection-token-file`;
-- `--accept-server-license-terms` only after A9's gate accepted (R-68);
-- `--telemetry-level off` (R-28);
-- `--reconnection-grace-time` only when the setting is set and not 0 (F-2413);
+- `--accept-server-license-terms` only after `accepted`;
+- `--telemetry-level off`;
+- `--reconnection-grace-time` when set and not 0;
 - `--enable-remote-auto-shutdown`;
-- `--install-extension` for each id of `remote.SSH.defaultExtensions` that matches F-2506 BR-2.
+- `--install-extension` per default id.
 
-The server is ready when it prints "Extension host agent listening on <port or path>" ([oss]
-`src/server-main.ts`).
+The server is ready on its "Extension host agent listening on" line ([oss] `src/server-main.ts`). A bad bind host
+shows STR:S168 and falls back to 127.0.0.1 (F-2409). Remote environment: the agent socket link
+`/tmp/vscode-ssh-auth-sock-<n>` and `DISPLAY` (F-2311, F-2312).
 
-Reuse: a server already running for this commit and data folder is reused with its port and token (F-2409, F-2413
-BR-6). Otherwise a new one starts.
+### V8 server-maintenance
 
-Remote environment:
-- The forwarded agent socket gets a stable link `/tmp/vscode-ssh-auth-sock-<n>`, re-pointed on reconnection.
-- `DISPLAY` is the session's value.
-- Both reach the extension host through the resolver's environment and terminals through the environment variable
-  collection (F-2311, F-2312).
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `kill` | H1, data folder | done; the caller then drops S9's record | the channel failure (B shows STR:S076) |
+| `uninstall` | H1, data folder | done, silently | the channel failure |
+| `cleanup` | H1, data folder | done | none raised |
 
-Kill, uninstall and cleanup:
-- **Kill** stops this data folder's server process tree and removes `bin/`, so the next connect reinstalls
-  (F-2411; our layout is the reference's legacy one).
-- **Uninstall** stops the processes and deletes exactly `<home>/<serverDataFolderName>` (F-2412).
-- **Cleanup** runs on every resolve and keeps the five most recently modified `bin/<commit>` folders, deleting the
-  rest with their log and pid files (F-2413 BR-9).
+Rules:
+- `kill` stops this data folder's server process tree and removes `bin/` (F-2411).
+- `uninstall` deletes exactly `<home>/<serverDataFolderName>` (F-2412).
+- `cleanup` runs on every resolve and keeps the five newest `bin/<commit>` folders (F-2413 BR-9).
 
-Never:
-- stop processes of another data folder or product;
-- stop a launcher it did not start;
-- remove the user's ControlMaster or anything outside the data folder, apart from its own socket and agent link.
+### V9 server-cache
 
-## Open questions raised by these contracts
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `cacheFolders` | profile | the volume tree for servers, and the extension cache folder: `extensionsCache/` for `code` and `code-insiders`, `extensionsCache-<applicationName>/` for every other product | none |
 
-1. **F-3908 rule 1 (ssh#85).** The conformant default must fail for a standard Windows user. Our PowerShell step
-   uses no process query that needs WMI. Must the build fail on purpose, or may it connect?
-2. **Login environment vs explicit `sh` (dossier question 10).** If A8 runs under `sh` as the remote program, login
-   profiles do not run. F-2508 AC-2 still needs `~/.profile` variables in the server's environment. My proposal:
-   the probe reads `$SHELL`. A POSIX login shell gets the script on standard input, as the reference does. Anything
-   else gets `sh` after sourcing `~/.profile`. This goes to the remote-ssh room with question 10.
-3. **Commit rewrite (F-3902 rule 9).** "Make the server's commit equal to the client's" is only practical by editing
-   the unpacked `product.json`. Confirm the spec means that.
+Rule: an entry downloaded from another gallery is never reused (R-58, F-0419 BR-18). The container transport's
+contract (area C) defines the volume.
+
+---
+
+## 6. lib-forwarding
+
+### W1 port-search
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `parseRange` | `remote.SSH.preferredLocalPortRange` value | a range, or none with a log reason | none (an invalid value is ignored, F-2104 BR-6) |
+| `findFreePort` | range or none, a probe port | the first port whose connection attempt is refused; a random free port when there is no range | `noFreePort` (STR:S095 inside S067) after the whole range, or after about 3 seconds (F-2104 BR-7) |
+
+Never: probe by binding.
+
+### W2 window-tunnel
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `open` | a dialer, the remote target (server port on the host's IPv4 loopback, or a socket path), W1's port | the local address 127.0.0.1 and port | `tunnelNotReady` after the wait (about 10 s on the second-ssh path, F-2104 BR-10); dialer failures |
+
+Rule: the target is always the host's IPv4 loopback in TCP mode, whatever `bindHost` says (F-2104 BR-13).
+
+### W3 tunnel-factory
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `factoryFor` | a dialer, privacy options (Tunnels: `private`, `public`, F-8202) | the resolver's tunnel factory and tunnel features | none |
+| `environmentTunnels` | `LocalForward` entries from S4 | the resolver's environment tunnels (F-2507) | none |
+
+Rule: ports forwarded before a reconnection are revived over the new dialer (F-2104 Q4 and F-2507 Q1, recommended).
+
+### W4 default-forwards
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `applyDefaults` | `remote.SSH.defaultForwardedPorts` | one `openTunnel` per valid entry after resolve, never on reconnection | none raised (invalid entries are skipped and logged) |
+
+---
+
+## 7. remote-ssh, area A part
+
+### R1 connection-pipeline
+
+`connect` and `cancel` as agreed with area B. The inputs are the decoded target, the raw host string, the attempt,
+the reconnection flag and the window identity. The outputs are Connected or Failed with kind, reason, retryable,
+userAlreadyNotified, hints and diagnostics.
+
+The step order is in `components.md`. Phase events are `initializing`, `downloading`, `downloadingLocally`,
+`copyingWithScp`, `installing`, `settingUpTunnel`, `waitingForForwarding` and `serverDownloadPercent`.
+
+Rules:
+- Every attempt makes a fresh connection when S9 reports the transport lost (F-2505 BR-1).
+- A bound wait replaces each recorded hang, pending the family rule of dossier question 7.
+
+### R2 ssh-diagnostics
+
+Operations:
+- `recordResolve`: the log content of F-2003 BR-6, without secrets.
+- `storeHints`: the two newest records (F-2605).
+- `showTroubleshooting`: the session table terminal.
+
+### R3 preconnect-runner and R4 platform-decider
+
+R3:
+- Runs the configured script with no arguments and the editor's environment.
+- Shows the confirmation for an unconfirmed script and stores its hash (F-2108).
+- Failure kind `preconnectFailed` with F-2108's detail.
+
+R4:
+- Decides the platform in the order of F-2206 BR-1 to BR-4.
+- Writes the setting only under F-2206 BR-9.
+- Asks B for the picker when it is needed.
+
+---
+
+## 8. remote-server tunnel client: blocked
+
+The `[cli]` reading of 2026-10-06 (crate at commit 2c1d4c1a) shows that option (a), the shipped tunnel executable
+as the relay, cannot meet F-8103 and F-8902 as the specs stand. The contract for T2 to T5 is therefore not written.
+Only T1 and T3's token source are fixed.
+
+Facts:
+1. **No client relay mode.** The CLI's only path that connects to someone else's tunnel is
+   `DevTunnels::connect_to_tunnel_port` ([cli] `src/tunnels/dev_tunnels.rs`). Its only caller is
+   `code agent ps|stop|logs --tunnel <name>` ([cli] `src/commands/agent.rs`), which reaches the agent-host port 31546,
+   runs one command and exits. No subcommand connects to a tunnel's server and exposes a local socket or port for the
+   editor.
+2. **`command-shell` is the other side.** It serves the host side of the control protocol (`serve`, `forward`,
+   `fs_*`, `spawn`) on a local socket or port ([cli] `src/tunnels/control_server.rs`); it is not a tunnel client.
+3. **Every token is stored.** The device-code flow, `tunnel user login --access-token` and
+   `VSCODE_CLI_ACCESS_TOKEN` all write the credential to the OS keychain or to `<cli-data-dir>/token.json`
+   ([cli] `src/auth.rs`). No route keeps a token in memory only, which F-8902's sign-in rule needs.
+4. **GitHub tokens carry the CLI's client id.** The CLI sends them as `client_id=01ab8ac9400c4e429b23 <token>`.
+   Whether the service accepts a token minted for the editor's own GitHub session under that header cannot be seen
+   from the source.
+5. **Where the executable sits.** It ships as `bin/<tunnelApplicationName>` in the editor install (`build/`
+   packaging steps). The Rust code itself never reads `tunnelApplicationName`.
+
+What remains possible, for the user through the register:
+- (a) as decided, which needs a CLI client mode that does not exist in VS Code OSS today; we would depend on a
+  future upstream change;
+- (b) the dev tunnels client library in an A3-style helper, which needs an ADR-0004 exception for
+  `@microsoft/dev-tunnels-ssh` (`tunnel-client-alternatives.md`);
+- (c) the native OpenSSH client through a small WebSocket bridge as `ProxyCommand`, speaking the relay's SSH
+  directly. This keeps ADR-0004 whole but is unverified: whether OpenSSH can authenticate to the relay's host side
+  must be shown before it counts as an option.
+
+Fixed regardless of the choice:
+- **T1.** P1 gives `tunnelApplicationName`; a missing executable is F-8103 7.E10.
+- **T3.** Tokens come only from `vscode.authentication` with F-8102's provider ids and scopes.
+- **T2.** One relay per profile with F-8103 BR-6's lifetime.
