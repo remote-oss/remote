@@ -1,10 +1,10 @@
 # remote
 
-Clean-room reimplementation of the VS Code remote extensions, published as `remote-oss.remote-<x>` under the MIT
-licence. One repository, one package per extension and per shared library.
+Extensions that give Code - OSS and the editors built on it remote development: SSH hosts, containers, WSL and
+tunnels, with a Remote Explorer and `ssh_config` language support. Published as `remote-oss.remote-<x>` under the
+MIT licence. One repository, one package per extension and per shared library.
 
-Status: **architecture preparation.** There is no code yet. The design starts when the first-pass specifications of
-all seven extensions are published.
+Status: **in development**; the repository is private until the first release (`docs/adr/0008`).
 
 | Path | What it holds |
 |---|---|
@@ -15,6 +15,6 @@ all seven extensions are published.
 | `tests/conformance/` | The conformance runner and how the suites are run against our builds. |
 | `tools/` | Repository tools (`spec-watch`, `check-layout`). |
 
-The specifications and the conformance suites live in the seven repos `remote-oss/remote-<x>` until they move here.
-
-These extensions are not Microsoft's products and are not affiliated with Microsoft.
+The specifications and the conformance suites live in the seven repos `remote-oss/remote-<x>` until they move here;
+`docs/architecture` and `docs/adr` are private working documents (ADR-0008) and leave this repository before it
+is published.
