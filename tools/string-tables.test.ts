@@ -104,7 +104,7 @@ describe('string-tables', () => {
   it('reports a missing locale file of the declared locales', () => {
     workspace.write('packages/remote-x/identifiers.json', {
       source: 'x#1',
-      reference: 'ms.x',
+      standsDownFor: 'ms.x',
       locales: LOCALES,
     });
     remove('package.nls.cs.json');
@@ -116,7 +116,7 @@ describe('string-tables', () => {
   it('reports a table of a locale the package does not declare', () => {
     workspace.write('packages/remote-x/identifiers.json', {
       source: 'x#1',
-      reference: 'ms.x',
+      standsDownFor: 'ms.x',
       locales: LOCALES.filter(locale => locale !== 'hu'),
     });
     deepStrictEqual(problems(), [
@@ -128,7 +128,7 @@ describe('string-tables', () => {
   it('reports bundles that differ, a missing bundle and a stray file', () => {
     workspace.write('packages/remote-x/identifiers.json', {
       source: 'x#1',
-      reference: 'ms.x',
+      standsDownFor: 'ms.x',
       locales: LOCALES,
     });
     remove('l10n/bundle.l10n.ja.json');

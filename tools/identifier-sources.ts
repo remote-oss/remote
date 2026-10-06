@@ -97,8 +97,8 @@ export interface UngatedEntry {
 export interface DeclaredIdentifiers {
   /** The identity decision the file is reviewed against, as `owner/repo#issue (F-id)`. */
   source: string;
-  /** The reference's extension id. */
-  reference: string;
+  /** The id of the extension this package stands down for when both are enabled. */
+  standsDownFor: string;
   /**
    * Absent for a package that never stands down (F-4901 §6); empty while the room's identity decision has not
    * named the key.
@@ -376,7 +376,7 @@ function readNamespaces(
 
 const DECLARED_FIELDS = [
   'source',
-  'reference',
+  'standsDownFor',
   'standingDownKey',
   'namespaces',
   'contextKeys',
@@ -395,7 +395,7 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
   const locales = declared.field('locales');
   return {
     source: declared.field('source').nonEmptyString(),
-    reference: declared.field('reference').string(),
+    standsDownFor: declared.field('standsDownFor').string(),
     namespaces: readNamespaces(declared.field('namespaces')),
     contextKeys: declared
       .field('contextKeys')

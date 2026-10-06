@@ -180,9 +180,9 @@ describe('identifier-table', () => {
           {
             name: 'standDown',
             documentation:
-              'The reference extension and the standing-down key, empty while the room has not named it (R-54).',
+              'The extension this package stands down for, and the key set while it does; the key is empty until it is named.',
             entries: new Map([
-              ['reference', 'ms-vscode-remote.remote-x'],
+              ['standsDownFor', 'ms-vscode-remote.remote-x'],
               ['contextKey', ''],
             ]),
           },
@@ -194,10 +194,13 @@ describe('identifier-table', () => {
       deepStrictEqual(tableKinds(syntheticSources()), []);
     });
 
-    it('leaves out the stand-down kind without a reference', () => {
+    it('leaves out the stand-down kind without an extension to stand down for', () => {
       const kinds = tableKinds(
         syntheticSources({
-          declared: {reference: '', standingDownKey: 'remote-x.standingDown'},
+          declared: {
+            standsDownFor: '',
+            standingDownKey: 'remote-x.standingDown',
+          },
         }),
       );
       deepStrictEqual(

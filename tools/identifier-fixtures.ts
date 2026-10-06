@@ -34,7 +34,7 @@ export function syntheticSources(
     },
     declared: {
       source: 'remote-oss/remote-x#1 (F-0001)',
-      reference: 'ms-vscode-remote.remote-x',
+      standsDownFor: 'ms-vscode-remote.remote-x',
       namespaces: {},
       contextKeys: [],
       infoLineCommands: [],

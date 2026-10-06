@@ -13,6 +13,7 @@
         "tools/licences.ts",
         "tools/identifiers.ts",
         "tools/string-tables.ts",
+        "tools/package-extensions.ts",
         ".vscode-test.mjs",
       ],
       "project": ["tools/**/*.ts", "*.config.ts"],
@@ -25,12 +26,18 @@
   },
   // A system tool: preinstalled on the CI runner, installed with Homebrew or the package manager elsewhere.
   // @vscode/test-cli reads the default export of its configuration file.
-  "ignoreIssues": {".vscode-test.mjs": ["exports"]},
+  "ignoreIssues": {
+    ".vscode-test.mjs": ["exports"],
+    // The editor calls an extension's activate().
+    "packages/*/src/extension.ts": ["exports"],
+  },
   "ignoreBinaries": ["shellcheck"],
   "ignoreDependencies": [
     // @vscode/test-cli loads it to download and start the editor.
     "@vscode/test-electron",
     // tools/coverage.ts starts it through import.meta.resolve, which knip does not follow.
     "c8",
+    // tools/package-extensions.ts starts it the same way.
+    "@vscode/vsce",
   ],
 }

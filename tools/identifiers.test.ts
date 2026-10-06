@@ -9,7 +9,7 @@ const INVENTORY_NOTE =
 
 const DECLARED = {
   source: 'remote-oss/remote-x#1 (F-0001)',
-  reference: 'ms-vscode-remote.remote-x',
+  standsDownFor: 'ms-vscode-remote.remote-x',
 };
 
 describe('identifiers', () => {

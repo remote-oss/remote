@@ -24,13 +24,14 @@ jobs:
       - run: pnpm identifiers # the git-ignored tables every later step reads
       - run: pnpm check-layout
       - run: pnpm check-identifiers
-      - run: pnpm check-string-tables
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm lint:shell # shellcheck is preinstalled on the runner
       - run: pnpm check-licences
       - run: pnpm format:check
       - run: pnpm test:unit
+      - run: pnpm build
+      - run: pnpm package # vsce --no-dependencies; fails on node_modules in a VSIX (ADR-0002)
 
   # dupes: jscpd; dead: knip; coverage: c8 with the gates and the ratchet.
   quality:
@@ -52,6 +53,5 @@ jobs:
       - run: pnpm identifiers
       - run: pnpm ${{ matrix.check }}
 
-  # build:        bundle and package each extension, fail on node_modules in a VSIX, after the packaging ADR
   # integration:  pnpm test:integration under xvfb, after the testing ADR
   # conformance:  per package and profile, runner in tests/conformance/runner, after the testing ADR

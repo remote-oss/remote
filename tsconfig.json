@@ -45,6 +45,12 @@
     },
     {
       "path": "packages/remote-wsl/tsconfig.test.json"
+    },
+    {
+      "path": "packages/lib-identifiers"
+    },
+    {
+      "path": "packages/lib-identifiers/tsconfig.test.json"
     }
   ]
 }

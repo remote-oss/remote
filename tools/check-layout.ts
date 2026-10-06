@@ -6,6 +6,8 @@
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {checkWorkspace} from './check-workspace.ts';
+import {EDITOR_ENGINE} from './editor-floor.ts';
+import {checkStringTables} from './string-tables.ts';
 import {
   EXTENSION_FOLDERS,
   expectedPackageName,
@@ -26,6 +28,9 @@ const REQUIRED_FILES = [
 
 const PACKAGE_TSCONFIGS = ['tsconfig.json', 'tsconfig.test.json'];
 
+// ADR-0002, decision 5: the last @vscode/vsce without the proprietary @vscode/vsce-sign dependency.
+const VSCE_VERSION = '2.26.0';
+
 function rootReferences(root: string, problems: string[]): Set<string> {
   try {
     // The root tsconfig.json is a JSON object; a missing or malformed `references` list leaves the set empty.
@@ -41,14 +46,19 @@ function rootReferences(root: string, problems: string[]): Set<string> {
   }
 }
 
-function packageName(file: string): string {
+interface ManifestIdentity {
+  name?: string;
+  publisher?: string;
+  engines?: {vscode?: string};
+}
+
+function readManifest(file: string): ManifestIdentity {
   try {
-    // A package.json is a JSON object; a missing `name` reads as the empty string.
-    const manifest = JSON.parse(readFileSync(file, 'utf8')) as {name?: string};
-    return manifest.name ?? '';
+    // A package.json is a JSON object; each field read here is checked where it is used.
+    return JSON.parse(readFileSync(file, 'utf8')) as ManifestIdentity;
   } catch {
     // check-workspace reports a manifest that cannot be read.
-    return '';
+    return {};
   }
 }
 
@@ -71,11 +81,21 @@ function checkPackageFolder(
   }
   const manifest = path.join(directory, 'package.json');
   if (existsSync(manifest)) {
-    const found = packageName(manifest);
+    const fields = readManifest(manifest);
+    const found = fields.name ?? '';
     const expected = expectedPackageName(folder);
     if (found !== expected) {
       problems.push(
         `${where}/package.json has name '${found}', expected '${expected}'`,
+      );
+    }
+    // A manifest with a publisher is an extension manifest; the placeholders have none yet (ADR-0007).
+    if (
+      fields.publisher !== undefined &&
+      fields.engines?.vscode !== EDITOR_ENGINE
+    ) {
+      problems.push(
+        `${where}/package.json has engines.vscode '${fields.engines?.vscode ?? ''}', expected '${EDITOR_ENGINE}' (ADR-0007)`,
       );
     }
   } else {
@@ -92,6 +112,39 @@ function checkPackageFolder(
     if (!references.has(reference)) {
       problems.push(`tsconfig.json has no reference to ${reference}`);
     }
+  }
+}
+
+function checkPackagingTool(root: string, problems: string[]): void {
+  const declared = readManifest(path.join(root, 'package.json')) as {
+    devDependencies?: Record<string, string>;
+  };
+  const specifier = declared.devDependencies?.['@vscode/vsce'];
+  const lockfile = path.join(root, 'pnpm-lock.yaml');
+  const locked = existsSync(lockfile)
+    ? [
+        ...readFileSync(lockfile, 'utf8').matchAll(
+          /^ {2}'@vscode\/vsce@([^'(]+)[^']*':$/gm,
+        ),
+      ].map(match => match[1])
+    : [];
+  if (
+    specifier !== VSCE_VERSION ||
+    locked.some(version => version !== VSCE_VERSION)
+  ) {
+    problems.push(
+      `@vscode/vsce must stay exactly ${VSCE_VERSION} (ADR-0002, decision 5); package.json has '${specifier ?? ''}', the lockfile ${locked.join(', ') || 'none'}`,
+    );
+  }
+}
+
+function stringTableProblems(root: string, folder: string): string[] {
+  try {
+    return checkStringTables(root, folder).map(
+      problem => `string-tables: ${problem}`,
+    );
+  } catch (error) {
+    return [`string-tables: ${messageOf(error)}`];
   }
 }
 
@@ -128,8 +181,12 @@ export function checkLayout(root: string): string[] {
   const references = rootReferences(root, problems);
   for (const folder of packageFolders(root)) {
     checkPackageFolder(root, folder, references, problems);
+    if (existsSync(path.join(root, 'packages', folder, 'package.json'))) {
+      problems.push(...stringTableProblems(root, folder));
+    }
   }
   checkDecisionRecords(root, problems);
+  checkPackagingTool(root, problems);
   for (const file of REQUIRED_FILES) {
     if (!existsSync(path.join(root, file))) {
       problems.push(`${file} is missing`);

@@ -46,6 +46,8 @@ const IMPOSED_PROPERTY_KEYS = [
   'min',
   // Node.js child_process: the `cwd` of spawn options.
   'cwd',
+  // VS Code: the `t` of `l10n.t`.
+  't',
 ];
 
 // Phrases that address a reader of a conversation rather than of the code (ADR-0003, comments). An entry with an

@@ -43,6 +43,14 @@ describe('build', () => {
     ]);
   });
 
+  it('rejects a package whose string tables fail', async () => {
+    workspace.writeManifest('remote-b', {description: '%description%'});
+    await rejects(
+      buildPackages(workspace.root, ['remote-b']),
+      /^Error: remote-b: /,
+    );
+  });
+
   it('rejects a folder that does not exist', async () => {
     await rejects(buildPackages(workspace.root, ['remote-typo']), {
       message: 'no package folder packages/remote-typo',

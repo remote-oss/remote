@@ -24,14 +24,17 @@
     "check-licences": "node tools/licences.ts",
     "identifiers": "node tools/identifiers.ts",
     "check-identifiers": "node tools/identifiers.ts --check",
-    "check-string-tables": "node tools/string-tables.ts"
+    "check-string-tables": "node tools/string-tables.ts",
+    "package": "node tools/package-extensions.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.19.1",
+    "@types/vscode": "~1.138.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "2.26.0",
     "c8": "^12.0.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.12.0",

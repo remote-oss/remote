@@ -203,9 +203,9 @@ describe('identifier-sources', () => {
 
   describe('identifiers.json', () => {
     it('defaults every optional field', () => {
-      deepStrictEqual(declaredOf({source: 'x#1', reference: 'ms.x'}), {
+      deepStrictEqual(declaredOf({source: 'x#1', standsDownFor: 'ms.x'}), {
         source: 'x#1',
-        reference: 'ms.x',
+        standsDownFor: 'ms.x',
         namespaces: {},
         contextKeys: [],
         infoLineCommands: [],
@@ -219,7 +219,7 @@ describe('identifier-sources', () => {
     it('reads every field', () => {
       const content = {
         source: 'remote-oss/remote-x#1 (F-0001)',
-        reference: 'ms.x',
+        standsDownFor: 'ms.x',
         standingDownKey: 'remote-x.standingDown',
         namespaces: {commands: ['remote-x.'], contextKeys: ['remote-x.']},
         contextKeys: [{id: 'remote-x.connected', setter: 'extension'}],
@@ -243,7 +243,7 @@ describe('identifier-sources', () => {
     });
 
     it('fails on an unknown top-level field', () => {
-      throws(() => declaredOf({source: 'x', reference: 'r', extra: 1}), {
+      throws(() => declaredOf({source: 'x', standsDownFor: 'r', extra: 1}), {
         message: 'declared has unknown fields: extra',
       });
     });
@@ -253,7 +253,7 @@ describe('identifier-sources', () => {
         () =>
           declaredOf({
             source: 'x',
-            reference: 'r',
+            standsDownFor: 'r',
             contextKeys: [{id: 'k', setter: 'core', note: 'n'}],
           }),
         {message: 'declared.contextKeys[0] has unknown fields: note'},
@@ -263,7 +263,11 @@ describe('identifier-sources', () => {
     it('fails on an unknown namespace kind', () => {
       throws(
         () =>
-          declaredOf({source: 'x', reference: 'r', namespaces: {menus: []}}),
+          declaredOf({
+            source: 'x',
+            standsDownFor: 'r',
+            namespaces: {menus: []},
+          }),
         {message: 'declared.namespaces has unknown fields: menus'},
       );
     });
@@ -273,7 +277,7 @@ describe('identifier-sources', () => {
         () =>
           declaredOf({
             source: 'x',
-            reference: 'r',
+            standsDownFor: 'r',
             internal: [{id: 'i', role: 'owned', kind: 'query'}],
           }),
         {message: 'declared.internal[0].role must be one of served, called'},
@@ -281,7 +285,7 @@ describe('identifier-sources', () => {
     });
 
     it('fails on an empty source', () => {
-      throws(() => declaredOf({source: ' ', reference: 'r'}), {
+      throws(() => declaredOf({source: ' ', standsDownFor: 'r'}), {
         message: 'declared.source must be a non-empty string',
       });
     });
@@ -291,16 +295,16 @@ describe('identifier-sources', () => {
         () =>
           declaredOf({
             source: 'x',
-            reference: 'r',
+            standsDownFor: 'r',
             ungated: [{menu: 'commandPalette', item: 'remote-x.a', reason: ''}],
           }),
         {message: 'declared.ungated[0].reason must be a non-empty string'},
       );
     });
 
-    it('fails on a missing reference', () => {
+    it('fails on a missing standsDownFor', () => {
       throws(() => declaredOf({source: 'x'}), {
-        message: 'declared.reference must be a string',
+        message: 'declared.standsDownFor must be a string',
       });
     });
 
@@ -323,10 +327,10 @@ describe('identifier-sources', () => {
       workspace.writeManifest('remote-x');
       workspace.write('packages/remote-x/identifiers.json', {
         source: 'x#1',
-        reference: 'ms.x',
+        standsDownFor: 'ms.x',
       });
       deepStrictEqual(
-        readPackageSources(workspace.root, 'remote-x').declared?.reference,
+        readPackageSources(workspace.root, 'remote-x').declared?.standsDownFor,
         'ms.x',
       );
     });
@@ -336,7 +340,7 @@ describe('identifier-sources', () => {
       workspace.write('packages/remote-x/identifiers.json', {source: 'x'});
       throws(() => readPackageSources(workspace.root, 'remote-x'), {
         message:
-          'packages/remote-x/identifiers.json.reference must be a string',
+          'packages/remote-x/identifiers.json.standsDownFor must be a string',
       });
     });
 

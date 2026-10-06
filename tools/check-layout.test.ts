@@ -27,7 +27,11 @@ describe('check-layout', () => {
 
   beforeEach(() => {
     workspace = new TemporaryWorkspace('check-layout');
-    workspace.write('package.json', {name: 'root', private: true});
+    workspace.write('package.json', {
+      name: 'root',
+      private: true,
+      devDependencies: {'@vscode/vsce': '2.26.0'},
+    });
     workspace.write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
     for (const file of [
       'AGENTS.md',
@@ -83,6 +87,44 @@ describe('check-layout', () => {
     ]);
   });
 
+  it('reports an extension manifest whose engines.vscode is not the floor (ADR-0007)', () => {
+    workspace.writeManifest('remote-ssh', {
+      publisher: 'remote-oss',
+      engines: {vscode: '^1.74.0'},
+    });
+    workspace.writeManifest('remote-wsl', {publisher: 'remote-oss'});
+    workspace.writeManifest('remote-server', {
+      publisher: 'remote-oss',
+      engines: {vscode: '^1.139.0'},
+    });
+    deepStrictEqual(checkLayout(workspace.root), [
+      "packages/remote-ssh/package.json has engines.vscode '^1.74.0', expected '^1.139.0' (ADR-0007)",
+      "packages/remote-wsl/package.json has engines.vscode '', expected '^1.139.0' (ADR-0007)",
+    ]);
+  });
+
+  it('reports a repository without vsce or a lockfile', () => {
+    workspace.write('package.json', {name: 'root', private: true});
+    deepStrictEqual(checkLayout(workspace.root), [
+      "@vscode/vsce must stay exactly 2.26.0 (ADR-0002, decision 5); package.json has '', the lockfile none",
+    ]);
+  });
+
+  it('reports a packaging tool other than vsce 2.26.0 (ADR-0002, decision 5)', () => {
+    workspace.write('package.json', {
+      name: 'root',
+      private: true,
+      devDependencies: {'@vscode/vsce': '^4.0.0'},
+    });
+    workspace.write(
+      'pnpm-lock.yaml',
+      "packages:\n\n  '@vscode/vsce@4.0.0':\n  '@vscode/vsce@4.0.0(supports-color@8.1.1)':\n",
+    );
+    deepStrictEqual(checkLayout(workspace.root), [
+      "@vscode/vsce must stay exactly 2.26.0 (ADR-0002, decision 5); package.json has '^4.0.0', the lockfile 4.0.0, 4.0.0",
+    ]);
+  });
+
   it('reports a missing extension folder and missing repository files', () => {
     rmSync(path.join(workspace.root, 'packages/remote-wsl'), {recursive: true});
     writeSolution(EXTENSION_FOLDERS.filter(folder => folder !== 'remote-wsl'));
@@ -111,6 +153,14 @@ describe('check-layout', () => {
         problems[0]?.startsWith('tsconfig.json: cannot be read'),
       ],
       [1 + 2 * EXTENSION_FOLDERS.length, true],
+    );
+  });
+
+  it('adds the string-table problems of each package with their prefix', () => {
+    workspace.writeManifest('remote-ssh', {description: '%description%'});
+    deepStrictEqual(
+      checkLayout(workspace.root).map(problem => problem.split('/')[0]),
+      ['string-tables: packages'],
     );
   });
 
