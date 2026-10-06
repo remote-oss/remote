@@ -1,6 +1,9 @@
 # Coding brief: lib-identifiers and lib-standdown (second coding target from area B)
 
-Status: draft by `remote-architect-worker-2` for the lead's review, 2026-10-06. Design: `components.md` §1. Contracts:
+Status: reviewed and issued by `remote-architect`, 2026-10-06, to `remote-coding-worker-2`; drafted by
+`remote-architect-worker-2`. Settled: no `lib-log` edges (L2 corrected, e79f161); `standingDownKey` empty and
+reported as pending until the rooms' polarity revision; the generator is `tools/identifiers.ts` with the check as
+`pnpm check-identifiers`, and the generated table is git-ignored. Design: `components.md` §1. Contracts:
 `contracts.md` §1 and §2. ADRs: 0002, 0003, 0007 and the drafts "Identifier tables" and "Stand-down gating". Both
 libraries are built and unit-tested before any resolver, view or companion exists. They need no other library (see
 "Dependencies").
