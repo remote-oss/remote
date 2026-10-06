@@ -10,7 +10,7 @@ F-2108	remote-ssh#26	R3	R1	41	0
 F-2109	remote-ssh#27	S2	S5	19	0
 F-2201	remote-ssh#28	S4	B	44	0
 F-2202	remote-ssh#29	S4	B	34	0
-F-2204	remote-ssh#31	S4	B	40	0
+F-2204	remote-ssh#31	S4	B:ssh.config-flows	40	0
 F-2205	remote-ssh#32	S2	S5	36	0
 F-2206	remote-ssh#33	R4	B	38	0
 F-2003	remote-ssh#13	R2	lib-log	28	0
