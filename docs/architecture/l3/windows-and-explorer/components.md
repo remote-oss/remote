@@ -37,7 +37,7 @@ Rules for every component:
 | Component | Responsibility | Owns | Provides to |
 |---|---|---|---|
 | `authority.codecs` | One codec per authority family: decode, encode, label (the formatter's host part) | F-0501 | resolver fronts, connect flows, explorer |
-| `authority.resolver-host` | Registers a resolver over `resolvers`. Calls area A's `connect` once per core attempt. Maps `Failed` to resolver errors. Renders phases, progress and cancellation. Exposes the window's connection state and the "first resolve settled" event | F-2304 (proposed move) | ssh, containers, wsl, server |
+| `authority.resolver-host` | Registers a resolver over `resolvers`. Calls area A's `connect` once per core attempt. Maps `Failed` to resolver errors (no extension dialog during reconnection). Hands `tunnelFeatures` to core. Renders phases and progress, cancellable only where the spec allows. Follows A's transport events. Exposes the window's connection state and the "first resolve settled" event | F-2304 (proposed move) | ssh, containers, wsl, server |
 | `authority.window-opener` | Opens a target in the current or a new window, as folder, workspace or empty; reload; close remote | none (contributor) | every package that opens windows |
 | `authority.proposed-api-gate` | Probes, the one family-wide setup notification, the argv.json route, the per-product cache | F-1403, F-3903 (proposed moves) | containers, ssh, wsl, server, explorer |
 
@@ -88,7 +88,7 @@ The workspace-trust gate moved to area C with F-0106 (lead, 2026-10-06).
 | `ssh.connect-flows` | Host picker, `user@host` input, connect in current or new window, new window on the active host | F-2301, F-2302, F-2303 | `authority.codecs`, `authority.window-opener`, A's `listConfiguredHosts` |
 | `ssh.resolver-front` | The `ssh-remote` resolver on the resolver host, with the extension's titles and texts; reconnection attempts, each a fresh `connect` | F-2501, F-2505 | `authority.resolver-host`, A's `connect` |
 | `ssh.window-surfaces` | Indicator entries, label formatter, opening folders, workspaces and links on a host; the hidden "Open Web UI" command | F-2502, F-2504, F-2509 | `authority.codecs`, `authority.window-opener` |
-| `ssh.failure-ui` | The failure notification and the "More Actions..." picker, rendered from A's `Failed.reason` and `hints`; actions call A's operations | F-2601, F-2602 | `authority.resolver-host` |
+| `ssh.failure-ui` | The failure presenter: F-2601's notification and the "More Actions..." picker from A's `Failed.reason` and `hints`; F-3902 rule 8's no-source dialog; STR:S027 for a declined licence; actions call A's operations | F-2601, F-2602 | `authority.resolver-host` |
 | `ssh.companion-endpoints` | Serves the five `remote-internal.*` ids, keeps the folder history in global state, pushes `setActiveFolders`, signals `sshHostsChanged` | F-2503, F-3906 | `companion.protocol`, `authority.resolver-host` (state) |
 | `ssh.config-flows` | Picker for "Open SSH Configuration File...", the tab-scoped save watch, the change signal; the input box of "Add New SSH Host..." (F-2204 is owned by area A's S4, B contributes) | F-2203 | A's `configFilesInEffect`, `addHostFromCommandLine` |
 

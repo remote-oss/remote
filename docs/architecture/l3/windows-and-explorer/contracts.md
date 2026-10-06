@@ -87,14 +87,28 @@ spec fixes. A property test per family checks both directions.
 
 | Operation | Input | Output | Failure |
 |---|---|---|---|
-| `registerResolver` | `family`, `connector` (area A's `connect`, `cancel`, phase events), the family's codec, the extension's failure presenter | a disposable | `GuardStandingDown`: nothing is registered (`lib-standdown` ran first and said "standing"). `ProposalMissing`: `resolvers` is not granted. The gate (3.4) is told and nothing is registered |
-| on each core resolve (internal) | the authority and core's attempt number | core's resolved authority: `Connected.address`, `connectionToken`, `extensionHostEnv`, plus `environmentTunnels` and `tunnelFactory` handed to core unchanged | from `Failed`: `TemporarilyNotAvailable` when `retryable`; else `NotAvailable(handled)` when `userAlreadyNotified`; else the presenter shows the extension's failure dialog (F-2601, F-0502 7.E4) and the result is `NotAvailable(handled)` |
-| `currentConnection` | none | `none` or `{decodedTarget, state: resolving | connected | failed | transportLost}` for this window | none. This is what companion queries answer from, for example `getActiveSshRemote` and F-8201 BR-3 |
+| `registerResolver` | `family`, `connector` (area A's `connect`, `cancel`, `revealDetails`, phase events, `transportLost` and `transportClosed` events), the family's codec, the extension's failure presenter, `cancellable` (false for `ssh-remote`, F-2304 BR-2) | a disposable | `GuardStandingDown`: nothing is registered (`lib-standdown` ran first and said "standing"). `ProposalMissing`: `resolvers` is not granted. The gate (3.4) is told and nothing is registered |
+| on each core resolve (internal) | the authority and core's attempt number | core's resolved authority: `Connected.address`, `connectionToken`, `extensionHostEnv`, plus `environmentTunnels`, `tunnelFactory` and `tunnelFeatures` (F-8202) handed to core unchanged. The host never sets `isTrusted` (F-2001 BR-12) | from `Failed`, first match wins: (1) `retryable` (A decides from the kind and `isReconnection`; the host never interprets kinds): `TemporarilyNotAvailable`; (2) `isReconnection`: plain `NotAvailable`, no presenter, core shows its own "Cannot reconnect" (F-2601 BR-9, F-2603 AC-20, F-0502); (3) `userAlreadyNotified`: `NotAvailable(handled)`; (4) otherwise the presenter shows the extension's dialog for the kind and the result is `NotAvailable(handled)` |
+| `currentConnection` | none | `none` or `{decodedTarget, state: resolving | connected | failed | transportLost | transportClosed}` for this window, the transport states taken from A's events | none. This is what companion queries answer from, for example `getActiveSshRemote` and F-8201 BR-3 |
 | `onFirstResolveSettled` | listener | fires once per extension-host session when the first resolve attempt ends, success or failure | none. It feeds the `setActiveFolders` push (F-3906 rule 7) |
 
 Phases: the host subscribes to the connector's phase events and renders core progress with the extension's titles
-(F-2304). Cancel from the progress calls `connector.cancel`. "(details)" calls `connector.revealDetails`. Area A
-owns the phases and their names (agreed with worker-1).
+(F-2304). "(details)" calls `connector.revealDetails`. Area A owns the phases and their names (agreed with worker-1).
+
+Cancellation: core's resolve carries no cancellation. Progress offers Cancel only when the resolver registered as
+`cancellable` (never for `ssh-remote`, F-2304 BR-2). Otherwise the host calls `connector.cancel` only when the window
+tears down (the extension host deactivates, "Close Remote Connection", the window closes). Area A then ends prompts and
+processes, and a running host-side download is not stopped (F-2304 BR-8).
+
+Failure presenter (per extension, B): it renders by `Failed.kind`. The kinds `noServerSource` and
+`invalidServerTemplate` show remote-ssh F-3902 rule 8's dialog ("Open Setting" or "Cancel"), and remote-containers
+shows F-1402's no-default dialog in its place. `licenceDeclined` shows F-2601's dialog with STR:S027 (F-3902 rule 11).
+Every other kind shows F-2601's dialog (remote-ssh) or F-0502 7.E4's (remote-containers), with `reason` and `hints`.
+`lib-product` returns values and never shows UI, so area A's `userAlreadyNotified` is true only after the
+pre-connection script's own dialog (F-2108). (Area A's review, accepted by the lead 2026-10-06.)
+
+Not in this contract: `resolveExecServer` for nested authorities (F-1302). It waits for the containers room's answer
+(lead, 2026-10-06).
 
 Connect input passed to A: `{target, rawHostString, attempt, isReconnection, windowId}`. The `Connected` and `Failed`
 shapes are area A's contract and are cited here, not restated.
@@ -119,7 +133,7 @@ stable `vscode.openFolder` (`forceNewWindow`, `forceReuseWindow`) and `vscode.ne
 
 | Operation | Input | Output | Failure |
 |---|---|---|---|
-| `probe` | the proposals this extension declares | per proposal `granted | missing | unprobeable`. Probes (F-1403): `resolvers` through a side-effect-free gated member, `tunnels` through `workspace.tunnels`, `contribViewsRemote` through the generated `<viewId>.focus` command in `getCommands(true)`. `contribRemoteHelp` is unprobeable | none |
+| `probe` | the proposals this extension declares | per proposal `granted | missing | unprobeable`. Probes (F-1403): `resolvers` through a side-effect-free gated member, `tunnels` through `workspace.tunnels`, `contribViewsRemote` through the generated `<viewId>.focus` command in `getCommands(true)`, `terminalDataWriteEvent` through `window.onDidWriteTerminalData` (F-3903 rule 4; a partial grant registers what it allows). `contribRemoteHelp` is unprobeable | none |
 | `requestSetup` | the missing proposals, the calling extension id | at most one setup notification per window for the whole family, unless the dismissal flag of F-1403 §6 is set. The primary action opens core's runtime-arguments editor (`workbench.action.configureRuntimeArguments`) and offers the `enable-proposed-api` entry with every installed family id that has a missing proposal. Then a restart offer | `Declined`: sets F-1403 §6's dismissal flag; when the prompt comes back follows F-1403 §6 |
 | (no success cache) | | Every activation probes again; nothing is cached on success (F-1403 §6, lead 2026-10-06) | |
 
