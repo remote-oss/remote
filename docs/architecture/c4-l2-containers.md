@@ -27,8 +27,8 @@ A library exists only when at least two packages need the same behaviour; everyt
 
 | Library | Responsibility | Consumers | Depends on |
 |---|---|---|---|
-| `lib-identifiers` | Per-extension tables of the D-14 identifiers and the R-27 invented ones, generated from each manifest; command registration with the out-of-context guard (R-46); setting reads with legacy-key precedence; the string tables that conformance addresses | all seven (the pack: generation only) | `lib-log` |
-| `lib-standdown` | The R-54 check at activation; the one warning; the "standing down" context key (polarity per ADR draft: entries visible by default) | all except the pack and ssh-edit | `lib-identifiers`, `lib-log` |
+| `lib-identifiers` | Per-extension tables of the D-14 identifiers and the R-27 invented ones, generated from each manifest; command registration with the out-of-context guard (R-46); setting reads with legacy-key precedence; the string tables that conformance addresses | all seven (the pack: generation only) | none |
+| `lib-standdown` | The R-54 check at activation; the one warning; the "standing down" context key (polarity per ADR draft: entries visible by default) | all except the pack and ssh-edit | `lib-identifiers` |
 | `lib-log` | A logger passed in, never global; a channel created lazily only where a spec has one; `logOncePerSession`; a redaction rule libraries cannot bypass; levels per package setting; what may never be logged (prompt answers, tokens, event payloads; F-3905) | all except the pack and ssh-edit | none |
 | `lib-product` | The product profile read once from `product.json`; archive URL resolution (override, product template, built-in table, dialog); the only file where product names, hosts and prefixes appear | containers, ssh, wsl, server, explorer (`urlProtocol` only) | `lib-log` |
 | `lib-authority` | Resolver host over `registerRemoteAuthorityResolver`; one authority codec per family; window opener (current/new window, folder/workspace/empty, reload, close remote); the proposed-API gate and its one family-wide setup notification; label formatters (the workspace-trust gate moved to the containers engine, F-0106, its only consumer) | containers, ssh, wsl, server, explorer (opener and gate) | `lib-identifiers`, `lib-standdown`, `lib-log` |
@@ -56,11 +56,11 @@ remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-pro
 
 lib-ssh -> lib-host, lib-identifiers, lib-log        lib-server -> lib-host, lib-product, lib-log
 lib-authority -> lib-identifiers, lib-standdown, lib-log       lib-companion -> lib-identifiers, lib-log
-lib-standdown -> lib-identifiers, lib-log           lib-product -> lib-log       lib-forwarding -> lib-log
-lib-host -> lib-log       lib-identifiers -> lib-log       lib-log -> (nothing)
+lib-standdown -> lib-identifiers           lib-product -> lib-log       lib-forwarding -> lib-log
+lib-host -> lib-log       lib-identifiers -> (nothing)       lib-log -> (nothing)
 ```
 
-No cycles; `lib-log` is the root. The lint of ADR-0002 enforces the edges once the packages exist.
+No cycles; `lib-log` and `lib-identifiers` are the roots (neither identifiers nor stand-down logs anything under the specs: the warning and the R-46 line are UI, 2026-10-06). The lint of ADR-0002 enforces the edges once the packages exist.
 
 ## 2. Server-side pieces
 
