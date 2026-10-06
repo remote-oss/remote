@@ -20,7 +20,7 @@ Rules for every component:
 
 | Component | Responsibility | Owns | Provides to |
 |---|---|---|---|
-| `identifiers.tables` | The contract for the generated per-package tables: kinds, naming, the companion and internal id list, the invented-id ledger and the CI check `identifiers`. The generator itself is a tool under `tools/` | F-1406 (proposed move) | every package |
+| `identifiers.tables` | The contract for the generated per-package tables: kinds, naming, the companion and internal id list, the invented-id ledger and the CI check `identifiers`. The generator itself is a tool under `tools/` | F-1401, F-1406 | every package |
 | `identifiers.command-registry` | Registers a package's commands from its table. Every command gets a handler, and each handler runs behind the R-46 out-of-context guard its spec chooses (silent, or the R-46 info line) | none (contributor) | every package with commands |
 | `identifiers.settings-reader` | Reads settings through the table with declared legacy pairs and their precedence (F-0102 BR-4) | none (contributor; F-0102 is area C) | containers, ssh, wsl, server |
 | `identifiers.context-keys` | Sets only the context keys the table declares as extension-set | none (contributor) | containers, ssh, wsl, explorer, server |
@@ -105,7 +105,7 @@ The workspace-trust gate moved to area C with F-0106 (lead, 2026-10-06).
 | Component | Responsibility | Owns | Uses |
 |---|---|---|---|
 | `containers.window-identity` | The 17 indicator entries, the extension-set context keys, the identity text that feeds the label formatter | F-0504 | `authority.codecs`, `identifiers.context-keys` |
-| `containers.package` (B rows only) | Localization bundles; the debug activation event | F-0103, F-0507 | `identifiers.string-tables` |
+| `containers.package` (B rows only) | Localization bundles; the debug activation event; the dependencies and packs policy | F-0103, F-0507, F-1404 | `identifiers.string-tables` |
 
 Everything else in remote-containers is area C, including its resolver (F-0502, which uses `authority.resolver-host`),
 reopen flows (F-0406), view registration (F-0906) and identity feature (F-0101). B appears there as a contributor.
