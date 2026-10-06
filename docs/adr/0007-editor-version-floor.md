@@ -19,8 +19,11 @@ promise behaviour nobody has observed; a floor above it would exclude the editor
 ## Decision
 
 1. `engines.vscode` is `^1.139.0` in every extension package, set from one constant in the root configuration.
-2. `@types/vscode` is pinned to the same minor; the proposed-API declaration files are taken from the VS Code OSS
-   tag of that minor (`vscode-dts`) and committed per package next to the manifest that declares the proposal.
+2. `@types/vscode` is pinned to the newest published version at or below the floor (today `~1.138.0`; no 1.139.x
+   was published), so code can use nothing newer than the floor; if a stable API introduced in 1.139 itself is
+   needed, the floor's own `vscode.d.ts` from the VS Code OSS tag replaces the package, by a note to this ADR. The
+   proposed-API declaration files are taken from the VS Code OSS tag of the floor (`vscode-dts`) and committed per
+   package next to the manifest that declares the proposal. (Wording corrected 2026-10-06.)
 3. The floor is raised only by a new ADR, together with the suite's profiles, the pinned declarations and a run of
    every package's cases against the new version.
 4. A package that needs an API newer than the floor does not raise the floor on its own: it waits for the ADR or
@@ -36,8 +39,9 @@ promise behaviour nobody has observed; a floor above it would exclude the editor
 
 ## Consequences
 
-- The esbuild target of ADR-0002 (`NODE_TARGET`) is the Node.js version that VS Code 1.139 ships; the first coding
-  worker sets the constant from `[oss]` and records the source.
+- The esbuild target of ADR-0002 (`NODE_TARGET`) is the Node.js version that VS Code 1.139 ships: `node24`
+  (Electron 43.6.0 with Node.js 24.20.0, `[oss]` `.npmrc` and `remote/.npmrc` at tag 1.139.1), recorded in
+  `tools/editor-floor.ts`.
 - Explorer's and server's browser bundles target the same editor version's web runtime.
 - The pack's engine floor (F-9001) follows this ADR per release.
 
