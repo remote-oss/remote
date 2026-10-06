@@ -33,7 +33,11 @@ open, which is the user's decision through the register.
    (commands, pickers, views, the remote authority, the server install into the container, port forwarding, the
    recovery and error flows the specs name). The CLI is driven as a library or as a spawned program; the component
    view decides, and the conformance cases decide whether its observable behaviour matches the recorded one.
-2. **The editor's CLI serves Remote - Tunnels only.** Scoped 2026-10-06 after the specs were read: Remote-SSH
+2. **The editor's CLI: suspended for Tunnels, pending the user's decision (2026-10-06).** Reading the `cli/` crate
+   showed it has no client relay mode and persists every token it is given, so it cannot meet F-8902; the options
+   (an upstream client mode, the dev tunnels library in a detached helper under a scoped ADR-0004 exception, or
+   native OpenSSH over a WebSocket bridge) are with the register. The earlier text follows for the record.
+   **The editor's CLI serves Remote - Tunnels only.** Scoped 2026-10-06 after the specs were read: Remote-SSH
    installs every templated server source as one archive and never runs the CLI (F-3902 rule 5), and WSL and
    Dev Containers install the server themselves through the host channel; so the CLI is not a launcher for the
    resolvers. For Tunnels the local relay is the tunnel executable the running editor ships (`tunnelApplicationName`
