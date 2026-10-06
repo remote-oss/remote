@@ -48,6 +48,7 @@ Extension components (inside each package; B part only):
 | Containers resolver front | remote-containers | Container authorities on the resolver host, setup-failure dialogs | F-0502 (UI part) |
 | Containers window surfaces | remote-containers | Labels, title, 17 indicator entries, reopen elsewhere, help rows, view registration | F-0501, F-0504, F-0406, F-0105, F-0906 |
 | Dependencies policy | remote-containers | Partner ids, packs (R-21, R-22) | F-1404 |
+| Tunnels companion endpoints | remote-server | Serves the nine `remote-tunnels.*` ids through `lib-companion`, folder history store, connect through the window opener; tunnel data from area A's tunnel client | F-8201 |
 
 Not area B, from the issues read: F-0109, F-0402, F-0901 to F-0905 (view contents; F-0906 registers them) go to the
 containers engine. The A side gets the phase work of F-2304, the classification in F-2601, the server and transport
@@ -56,8 +57,9 @@ F-2205), E24, F-2506 to F-2509, F-2603 to F-2606, E27, F-3902, F-3905, F-3907 an
 title. F-2002 (localization) and F-2003 (log) go to the lead's `lib-log` and l10n decision. F-2008 is a boundary note.
 Its authority-form part joins F-2501 and its server part goes to A.
 
-Misplaced or unread, flagged: the WSL Targets view (`targetsWsl`), the WSL resolver and the tunnels companion
-(remote-server F-8201) are B-shaped but outside my reading list. I suggest B for their view and resolver fronts.
+Added after the lead's answer of 2026-10-06: the tunnels companion endpoints (remote-server F-8201) are B. The WSL
+Targets view (`targetsWsl`) and the WSL resolver front are B too, folded in when the WSL drafts land. The WSL engine
+side is a later area D.
 
 ## 2. Interfaces crossing the boundary
 
