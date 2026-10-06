@@ -5,3 +5,4 @@ dist/
 *.vsix
 .tsc/
 coverage/
+packages/*/src/identifiers.generated.ts
