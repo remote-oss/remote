@@ -37,6 +37,7 @@ A library exists only when at least two packages need the same behaviour; everyt
 | `lib-ssh` | `ssh`/`scp` discovery and checks; argument building and spawning; the local connection server (one `ssh` per host string across windows); prompt relay and the hidden login terminal; the `ssh_config` model (files in effect, host list, `ssh -G`, Host-block writer); stderr classification into failure kinds and hints; the host-channel implementation over `ssh` | ssh; containers for its over-SSH hop (F-1302, placement open); ssh-edit does not use it | `lib-host`, `lib-identifiers`, `lib-log` |
 | `lib-server` | Host bootstrap (POSIX `sh` and PowerShell scripts shipped as text); server download (host-first, client fallback), install, locks, commit rewrite, licence gate (R-68, one rule pending K5), caches (R-58); server start, reuse, socket mode, kill, uninstall, lifetime; default extensions handed to a starting server | ssh, wsl, containers (install into a container, F-0503/F-0419/F-0505) | `lib-host`, `lib-product`, `lib-log` |
 | `lib-wsl` | The `wsl.exe` runner, distro inventory, path mapper and the WSL host-channel implementation (added 2026-10-06, area D dossier) | wsl; containers for Docker-in-WSL (F-0204, F-0207, F-1301) | `lib-host`, `lib-log` |
+| `lib-helper` | The detached-helper pattern: a client, a runtime with end policies as data (grace, delayed check with an action, idle), a registry per profile or per user with atomic claim and nonce (added 2026-10-06, area A draft, area C reviews) | lib-ssh (the local connection server), containers (the F-0417 watchdog), server (if the relay stays) | `lib-log` |
 | `lib-forwarding` | The window tunnel to the server (local port range search, relay or socket); the resolver's tunnel factory; default and static forwards (`tunnels` proposal); port attributes | ssh, wsl, containers, server | `lib-log` |
 
 Not a library, by the two-consumer rule: the tunnel client (service calls through the shipped executable, sign-in
@@ -53,12 +54,12 @@ remote-explorer       ->  lib-identifiers, lib-standdown, lib-companion, lib-aut
 remote-server         ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-forwarding, lib-companion, lib-log
 remote-ssh            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-ssh, lib-server, lib-forwarding, lib-companion, lib-log
 remote-wsl            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-log
-remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-log  (+ lib-ssh if F-1302 lands the hop here)
+remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-log  (+ lib-ssh if F-1302 lands the hop here)
 
-lib-ssh -> lib-host, lib-identifiers, lib-log        lib-server -> lib-host, lib-product, lib-log
+lib-ssh -> lib-host, lib-helper, lib-identifiers, lib-log        lib-server -> lib-host, lib-product, lib-log
 lib-authority -> lib-identifiers, lib-standdown, lib-log       lib-companion -> lib-identifiers, lib-log
 lib-standdown -> lib-identifiers           lib-product -> (nothing)       lib-forwarding -> lib-log
-lib-host -> (nothing)       lib-identifiers -> (nothing)       lib-log -> (nothing)       lib-wsl -> lib-host, lib-log
+lib-host -> (nothing)       lib-identifiers -> (nothing)       lib-log -> (nothing)       lib-wsl -> lib-host, lib-log       lib-helper -> lib-log
 ```
 
 No cycles; `lib-log`, `lib-identifiers`, `lib-host` and `lib-product` are the roots (neither identifiers nor stand-down logs anything under the specs: the warning and the R-46 line are UI, 2026-10-06). The lint of ADR-0002 enforces the edges once the packages exist.
@@ -112,8 +113,6 @@ runs as investigation; Tunnels last in the build order. D-59/R-85: ADR-0008.
 
 ## 7. Open at this level
 
-- A shared detached-helper pattern (A3's local connection server and C's F-0417 watchdog): one library if the
-  contract is the same (`lib-helper`, two consumers); area A drafts it, area C reviews.
 
 - F-1302 (containers over an SSH host): where the hop and the download run; decides whether `remote-containers`
   imports `lib-ssh`.
