@@ -45,8 +45,9 @@ remote/
 5. **Each package keeps its own tests.** Unit tests live in the package. The package's conformance suite moves to
    `packages/<x>/tests/conformance/` when the specs and tests move here; until then CI fetches it from
    `remote-oss/remote-<x>`.
-6. **Every package has a `README.md`** that names its owner, the feature ids it implements (extensions) or the
-   contract it offers (libraries), and its allowed imports.
+6. **Every package has a `README.md`** that names its maintainers, its features in words (extensions; the feature
+   ids live in the traceability matrix, never in shipped prose, D-59) or the contract it offers (libraries), its
+   allowed imports and its coverage exclusions. A README ships in the VSIX and is written in the product's voice.
 
 ## Libraries
 
