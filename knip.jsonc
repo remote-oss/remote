@@ -11,6 +11,8 @@
         "tools/coverage.ts",
         "tools/integration-tests.ts",
         "tools/licences.ts",
+        "tools/identifiers.ts",
+        "tools/string-tables.ts",
         ".vscode-test.mjs",
       ],
       "project": ["tools/**/*.ts", "*.config.ts"],

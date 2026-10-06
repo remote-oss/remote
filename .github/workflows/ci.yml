@@ -21,7 +21,10 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm identifiers # the git-ignored tables every later step reads
       - run: pnpm check-layout
+      - run: pnpm check-identifiers
+      - run: pnpm check-string-tables
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm lint:shell # shellcheck is preinstalled on the runner
@@ -46,6 +49,7 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm identifiers
       - run: pnpm ${{ matrix.check }}
 
   # build:        bundle and package each extension, fail on node_modules in a VSIX, after the packaging ADR

@@ -21,7 +21,10 @@
     "coverage": "node tools/coverage.ts",
     "coverage:update": "node tools/coverage.ts --update",
     "lint:shell": "shellcheck tools/check-layout tools/spec-watch",
-    "check-licences": "node tools/licences.ts"
+    "check-licences": "node tools/licences.ts",
+    "identifiers": "node tools/identifiers.ts",
+    "check-identifiers": "node tools/identifiers.ts --check",
+    "check-string-tables": "node tools/string-tables.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
