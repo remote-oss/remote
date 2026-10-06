@@ -31,8 +31,11 @@ This ADR is written before the specifications are read. It fixes what does not d
    (Wording corrected 2026-10-05: the proposal said `tsc --noEmit`, which TypeScript rejects for a project that
    another project references, error TS6310. The decision is unchanged: `tsc` checks, esbuild writes all
    JavaScript.)
-5. **Packaging: `@vscode/vsce package --no-dependencies`** per extension. Where and how the VSIX files are published
-   is a later ADR and a decision for the user.
+5. **Packaging: `@vscode/vsce package --no-dependencies`** per extension, with `@vscode/vsce` pinned to exactly
+   2.26.0, the last release without the proprietary `@vscode/vsce-sign` dependency (its licence restricts use to
+   Microsoft products; added 2026-10-06, the user may veto). If a manifest field ever outgrows that release, the
+   replacement is a VSIX packer of our own under a new ADR. Where and how the VSIX files are published is a later
+   ADR and a decision for the user.
 6. **Lint and format: ESLint with typescript-eslint, and Prettier.** ESLint also enforces the import rules of
    `docs/architecture/layout.md` (no extension imports an extension; no library imports an extension; no cycles).
 7. **Tests, three levels:**
