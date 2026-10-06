@@ -1,7 +1,7 @@
 # ADR-0005: Reuse existing open-source components where they fit
 
-- Status: proposed (the user's wish, 2026-10-05; admissibility under the clean-room rules and the fit with the
-  specifications are to be confirmed before acceptance)
+- Status: accepted (the user's wish, 2026-10-05; admissibility ruled R-76 and R-47 extended for the CLI archive,
+  2026-10-05; the fit with the specifications is checked when they are read)
 - Date: 2026-10-05
 - Deciders: the user through the register for admissibility; the lead for the fit
 - Scope: Dev Containers; the server lifecycle and tunnels of every resolver
@@ -25,7 +25,7 @@ extensions' own code and files; they do not by themselves forbid an MIT library 
 use as well. Admitting one as a dependency and as reading material is still a change to what the clean side may
 open, which is the user's decision through the register.
 
-## Decision (proposed)
+## Decision
 
 1. **Dev Containers uses `@devcontainers/cli` as a dependency** for everything the specification delegates to the
    dev container specification: configuration parsing, features, image build, container create and start, lifecycle
@@ -38,9 +38,11 @@ open, which is the user's decision through the register.
    Per R-47 the binary follows the running editor's product: VSCodium's CLI with VSCodium, VS Code's with VS Code, from
    the product's own download location, with the R-68 licence gate for Microsoft-licensed artefacts. The design states,
    per resolver, which steps the CLI performs and which the extension performs itself.
-3. **Admissibility**: once the register admits them, the two components' source and documentation become allowed
-   reading, cited as `[cli] path` and `[devcontainers-cli] path`; `AGENTS.md` lists them. Until then nobody on the
-   clean side opens their source.
+3. **Admissibility (R-76)**: the clean side may depend on both and read their source and documentation, cited
+   `[devcontainers-cli] path` and `[cli] path`. The `cli/` crate is part of VS Code OSS, already allowed as `[oss]`;
+   `@devcontainers/cli` is MIT open source distinct from the reference extensions. The wall stays around the
+   `ms-vscode-remote.*` and `ms-vscode.*` extension packages and the dirty rooms. The editor CLI archive is fetched
+   like the server archive, from the product's own download location per `product.json` (R-47 extended).
 
 ## Options considered
 

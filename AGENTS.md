@@ -13,6 +13,9 @@ negotiable inside a session. A question about them goes to the architecture lead
 - The family conventions and the rulings of the decision register that the architecture documents cite.
 - The public VS Code extension API and the VS Code OSS source (MIT). Cite it as `[oss]` with a path.
 - Public standards and documentation of third-party tools (OpenSSH, Docker, WSL, the dev container specification).
+- The dev container CLI (`@devcontainers/cli`, MIT) and the editor's command-line interface (the `cli/` crate of
+  VS Code OSS, as built by VSCodium), source and documentation, cited `[devcontainers-cli]` and `[cli]` (R-76,
+  ADR-0005).
 
 ## What you never read, open or ask for
 

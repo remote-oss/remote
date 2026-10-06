@@ -1,6 +1,6 @@
 # ADR-0004: The SSH transport is the native OpenSSH client, never a JavaScript SSH library
 
-- Status: accepted (the user, 2026-10-05, stated directly to the lead; to be logged in the register)
+- Status: accepted (the user, 2026-10-05, D-51)
 - Date: 2026-10-05
 - Deciders: the user; design by `remote-architect`
 - Scope: every package that opens an SSH connection: Remote-SSH, WSL over SSH, Dev Containers on a remote host,

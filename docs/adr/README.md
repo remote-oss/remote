@@ -9,8 +9,8 @@ and does not re-decide it.
 |---|---|---|
 | [0002](0002-language-and-toolchain.md) | TypeScript, pnpm workspaces and esbuild for every package | accepted (D-49) |
 | [0003](0003-coding-standards.md) | Google TypeScript style, enforced by lint and coverage gates | accepted |
-| [0004](0004-ssh-transport-native-openssh.md) | The SSH transport is the native OpenSSH client | accepted |
-| [0005](0005-reuse-of-open-source-components.md) | Reuse existing open-source components (dev container CLI, the editor CLI) | proposed |
+| [0004](0004-ssh-transport-native-openssh.md) | The SSH transport is the native OpenSSH client | accepted (D-51) |
+| [0005](0005-reuse-of-open-source-components.md) | Reuse existing open-source components (dev container CLI, the editor CLI) | accepted (R-76) |
 
 Planned, in this order (titles may change):
 
