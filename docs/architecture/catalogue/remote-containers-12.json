@@ -1,0 +1,566 @@
+[
+ {
+  "id": "F-1001",
+  "issue": 54,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Git configuration copy",
+  "epic": "E10",
+  "acCount": 43,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.copyGitConfig",
+    "remote.containers.copyGitConfig (deprecated)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "silent step, no UI"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "git",
+    "docker exec"
+   ],
+   "network": [],
+   "remoteFiles": [
+    ".gitconfig",
+    "$XDG_CONFIG_HOME/git/config",
+    "allowed_signers"
+   ],
+   "localFiles": [
+    "~/.gitconfig",
+    "$XDG_CONFIG_HOME/git/config",
+    "gpg.ssh.allowedSignersFile target"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0408",
+   "remote-containers#F-1002",
+   "remote-containers#F-1007",
+   "remote-containers#F-0102",
+   "remote-containers#F-0601",
+   "remote-containers#F-0410",
+   "remote-containers#F-0402",
+   "remote-containers#F-0106"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.gitconfig-copier",
+  "candidateLibrary": "lib-identifiers",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Silent per-connect copy of host gitconfig with core.editor removed and helper rewritten; XDG file copied verbatim; allowed-signers rewrite. Never overwrites; runs after dotfiles. Many platform variants (WSL, SSH).",
+  "questions": [
+   "Is the line-level transform of the main file exactly specified as removing core.editor and replacing one helper value?",
+   "Which component owns the shared connect step ordering between F-1001, F-1002 and F-1007?",
+   "spec cites material not for the clean side (source paths or observation notes)"
+  ]
+ },
+ {
+  "id": "F-1002",
+  "issue": 77,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Git credential forwarding",
+  "epic": "E10",
+  "acCount": 37,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.gitCredentialHelperConfigLocation",
+    "remote.containers.gitCredentialHelperConfigLocation (deprecated)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "per-connection IPC env variable REMOTE_CONTAINERS_IPC",
+    "credential.helper written to system and global git config"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "git",
+    "git credential (host helper)",
+    "docker exec"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "/etc/gitconfig",
+    ".gitconfig",
+    "GIT_CONFIG_SYSTEM file",
+    "GIT_CONFIG_GLOBAL file",
+    "per-connection helper script",
+    "data/Machine/settings.json"
+   ],
+   "localFiles": [
+    "host git credential configuration"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0408",
+   "remote-containers#F-1001",
+   "remote-containers#F-0601",
+   "remote-containers#F-0604",
+   "remote-containers#F-0701",
+   "remote-containers#F-0410",
+   "remote-containers#F-1005"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.git-credential-relay",
+  "candidateLibrary": "lib-forwarding",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 4,
+  "notes": "Per-connection helper in container relays git credential fill/store/erase over IPC to host helper. Setting selects system, global or none. Container Machine settings override user value. Requires IPC env var.",
+  "questions": [
+   "How is the IPC channel between container helper and extension host defined, and is it shared with F-1003, F-1004, F-1005?",
+   "Is the accumulation of stale helpers (6.9) required behaviour or a defect to avoid?",
+   "spec cites material not for the clean side (source paths or observation notes)"
+  ]
+ },
+ {
+  "id": "F-1003",
+  "issue": 79,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "SSH agent forwarding",
+  "epic": "E10",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "no commands or settings",
+    "relay socket in container",
+    "known_hosts one-time copy"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "ssh-agent (host)",
+    "socket relay"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "relay socket",
+    "SSH_AUTH_SOCK",
+    "~/.ssh/known_hosts"
+   ],
+   "localFiles": [
+    "~/.ssh/known_hosts",
+    "host SSH_AUTH_SOCK socket"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0207",
+   "remote-containers#F-0416",
+   "remote-containers#F-0415",
+   "remote-containers#F-0601",
+   "remote-containers#F-0701",
+   "remote-containers#F-0704",
+   "remote-containers#F-0901",
+   "remote-containers#F-0205",
+   "remote-containers#F-1008"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.ssh-agent-relay",
+  "candidateLibrary": "lib-forwarding",
+  "area": "C",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 4,
+  "notes": "Unconditional socket relay to host agent started before server, SSH_AUTH_SOCK pointed at it for lifecycle commands and terminals, plus one-time known_hosts copy. remoteEnv override silently defeats it.",
+  "questions": [
+   "What is the relay mechanism the clean side must build: in-container helper process or engine-level mount?",
+   "Should known_hosts copy be decoupled from agent reachability as the spec observes?",
+   "spec cites material not for the clean side (source paths or observation notes)"
+  ]
+ },
+ {
+  "id": "F-1004",
+  "issue": 101,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "GPG agent forwarding",
+  "epic": "E10",
+  "acCount": 31,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "no commands or settings",
+    "S.gpg-agent relay socket",
+    "pubring.kbx and trustdb.gpg one-time copy",
+    "notification for unreachable agent"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showInformationMessage"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "gpg",
+    "gpgconf",
+    "gpg-agent"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "~/.gnupg",
+    "S.gpg-agent",
+    "pubring.kbx",
+    "trustdb.gpg",
+    "GNUPGHOME"
+   ],
+   "localFiles": [
+    "host agent-extra-socket",
+    "pubring.kbx",
+    "trustdb.gpg"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0106",
+   "remote-containers#F-0207",
+   "remote-containers#F-1002",
+   "remote-containers#F-1003",
+   "remote-containers#F-1005",
+   "remote-containers#F-1006"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.gpg-agent-relay",
+  "candidateLibrary": "lib-forwarding",
+  "area": "C",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "Relay of host gpg-agent extra socket into container GnuPG home plus one-time keybox and trustdb copy; gated on gpg present in container. Windows uses forwardWSLServices. Reference defect over SSH host to avoid.",
+  "questions": [
+   "Is the one notification text ('Could not connect to gpg-agent') mandatory for conformance?",
+   "How does the keybox copy behave under Remote-SSH when a file is missing: skip, per the not-reproduce note?",
+   "spec cites material not for the clean side (source paths or observation notes)"
+  ]
+ },
+ {
+  "id": "F-1007",
+  "issue": 102,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Dotfiles",
+  "epic": "E10",
+  "acCount": 39,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dotfiles.repository",
+    "dotfiles.installCommand",
+    "dotfiles.targetPath",
+    "remote.containers.dotfiles.* (deprecated)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "Configuring Dev Container status progress",
+    "marker file in container home"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "git clone",
+    "install script"
+   ],
+   "network": [
+    "dotfiles Git repository (git/https/ssh/GitHub owner/repo)"
+   ],
+   "remoteFiles": [
+    "~/dotfiles",
+    "install.sh and sibling candidates",
+    "dotfiles marker file in home"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0408",
+   "remote-containers#F-0405",
+   "remote-containers#F-0409",
+   "remote-containers#F-0415",
+   "remote-containers#F-0601",
+   "remote-containers#F-0102",
+   "remote-containers#F-1001",
+   "remote-containers#F-1002",
+   "remote-containers#F-1003",
+   "remote-containers#F-1008"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.dotfiles-installer",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 10,
+  "notes": "First-connection clone and install of dotfiles, marker prevents reruns; symlink fallback when no install script; never fails connection, log only. Not run on attach. Likely delegable to devcontainers CLI dotfiles options.",
+  "questions": [
+   "Does the reference CLI dotfiles behaviour match this spec closely enough to delegate entirely?",
+   "Where exactly is the marker file path and name fixed, if at all?",
+   "spec cites material not for the clean side (source paths or observation notes)"
+  ]
+ },
+ {
+  "id": "F-1008",
+  "issue": 105,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Display server forwarding (X11 and Wayland)",
+  "epic": "E10",
+  "acCount": 38,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.mountWaylandSocket"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "REMOTE_CONTAINERS_DISPLAY_SOCK",
+    "DISPLAY and WAYLAND_DISPLAY wiring",
+    "notification STR:S097",
+    "Wayland bind mount at container creation"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showInformationMessage"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "X11 relay",
+    "docker (bind mount of Wayland socket)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "/tmp/.X11-unix",
+    "relay X11 socket",
+    "Wayland mount",
+    "XDG_RUNTIME_DIR symlink"
+   ],
+   "localFiles": [
+    "host X11 DISPLAY socket",
+    "host Wayland compositor socket"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0601",
+   "remote-containers#F-0207",
+   "remote-containers#F-0402",
+   "remote-containers#F-0504",
+   "remote-containers#F-0810",
+   "remote-containers#F-1001",
+   "remote-containers#F-1002",
+   "remote-containers#F-1003",
+   "remote-containers#F-1004",
+   "remote-containers#F-1005",
+   "remote-containers#F-1006",
+   "remote-containers#F-1007"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.display-forwarder",
+  "candidateLibrary": "lib-forwarding",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Linux only. X11 relay per session to host DISPLAY; Wayland socket bind-mounted once at container creation, controlled by setting. containerEnv.DISPLAY disables X11. Spec still draft; Windows Wayland mount breaks creation.",
+  "questions": [
+   "Who owns STR:S200 given no flow shows it (Q-1 open)?",
+   "Is Windows Docker Desktop Wayland mount failure to be reproduced or avoided?",
+   "Spec is draft: which acceptance criteria are still unstable?",
+   "spec cites material not for the clean side (source paths or observation notes)"
+  ]
+ },
+ {
+  "id": "F-1005",
+  "issue": 109,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Docker credential helper in the container",
+  "epic": "E10",
+  "acCount": 46,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.dockerCredentialHelper"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "credsStore in container ~/.docker/config.json",
+    "generated helper program in /usr/local/bin"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "docker (container CLI)",
+    "host docker credential helper"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "~/.docker/config.json",
+    "/usr/local/bin helper",
+    "docker on PATH"
+   ],
+   "localFiles": [
+    "host ~/.docker/config.json",
+    "DOCKER_CONFIG (ignored)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0408",
+   "remote-containers#F-0601",
+   "remote-containers#F-0604",
+   "remote-containers#F-0701",
+   "remote-containers#F-0704",
+   "remote-containers#F-0410",
+   "remote-containers#F-1002"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.docker-credential-relay",
+  "candidateLibrary": "lib-forwarding",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 8,
+  "notes": "Writes credsStore into container Docker config and installs per-connection helper that relays to host credential sources; only when docker present and host has a usable source. Never overwrites foreign credsStore. Local user setting only.",
+  "questions": [
+   "Is the helper program name and interface a free choice under the identity decision?",
+   "Is the shared per-connection helper mechanism meant to be one library with F-1002?",
+   "spec cites material not for the clean side (source paths or observation notes)"
+  ]
+ },
+ {
+  "id": "F-1006",
+  "issue": 116,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "GitHub CLI authentication in the container",
+  "epic": "E10",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.githubCLILoginWithToken"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "customizations.vscode.settings override at creation",
+    "token fed on stdin"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "gh (host)",
+    "gh (container)",
+    "login shell on host"
+   ],
+   "network": [
+    "github.com (from container gh)"
+   ],
+   "remoteFiles": [
+    "gh on PATH",
+    "data/Machine/settings.json"
+   ],
+   "localFiles": [
+    "host gh config (GH_CONFIG_DIR)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0408",
+   "remote-containers#F-0701",
+   "remote-containers#F-0601",
+   "remote-containers#F-1001",
+   "remote-containers#F-1002",
+   "remote-containers#F-1003",
+   "remote-containers#F-1004",
+   "remote-containers#F-1005",
+   "remote-containers#F-1007",
+   "remote-containers#F-1008"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.gh-login",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 4,
+  "notes": "Opt-in step: if container gh unauthenticated, read token from host gh and pipe to container gh auth login. Not on attach. Container Machine setting overrides user value. Silent in all outcomes.",
+  "questions": [
+   "Is host token lookup via login shell environment required, or may implementations call gh directly?",
+   "Why is attach excluded here while sibling steps run on attach?",
+   "spec cites material not for the clean side (source paths or observation notes)"
+  ]
+ }
+]

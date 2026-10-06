@@ -1,0 +1,525 @@
+[
+ {
+  "id": "F-4001",
+  "issue": 8,
+  "repo": "remote-ssh-edit",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Language contribution and file associations",
+  "epic": "E40",
+  "acCount": 41,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "language id ssh_config",
+    "display name SSH Config",
+    "filename ssh.config",
+    "pattern **/.ssh/config",
+    "pattern /etc/ssh/ssh_config",
+    "language picker entry (core)"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "~/.ssh/config",
+    "/etc/ssh/ssh_config",
+    "ssh.config"
+   ]
+  },
+  "cites": [
+   "remote-ssh-edit#F-4002",
+   "remote-ssh-edit#F-4101",
+   "remote-ssh-edit#F-4102",
+   "remote-ssh-edit#F-4201",
+   "remote-ssh-edit#F-4901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh-edit.language-registration",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 6,
+  "notes": "Pure manifest contribution of one language with aliases and three associations; no runtime code, no commands or settings. Identifiers kept verbatim. Core does status bar, picker and files.associations.",
+  "questions": [
+   "Is a manifest-only package acceptable with no activation code for the whole ssh-edit extension?"
+  ]
+ },
+ {
+  "id": "F-4002",
+  "issue": 11,
+  "repo": "remote-ssh-edit",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Activation, extension kind, Restricted Mode and remote windows",
+  "epic": "E20",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openEmptyWindow",
+    "opensshremotes.openEmptyWindowInCurrentWindow",
+    "remote-internal.getSshFoldersHistory",
+    "remote-internal.deleteSshFolderFromHistory",
+    "remote-internal.getActiveSshRemote",
+    "remote-internal.getConfiguredHostnames",
+    "remote-internal.openRemoteSshTarget"
+   ],
+   "settings": [
+    "remote.extensionKind",
+    "extensions.supportUntrustedWorkspaces",
+    "security.workspace.trust.enabled",
+    "remote.SSH.experimental.chat"
+   ],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "extensionKind ui",
+    "untrustedWorkspaces supported",
+    "7 activation events"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [
+    "resolvers",
+    "tunnels",
+    "terminalDataWriteEvent",
+    "contribViewsRemote",
+    "telemetry",
+    "contribRemoteHelp"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3906"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.activation-manifest",
+  "candidateLibrary": "lib-product",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "BODY MISMATCH: text describes the Remote-SSH extension (F-2001), not the ssh-edit package; surfaces taken from that body. Kept as read; ssh-edit equivalent unspecified.",
+  "questions": [
+   "Issue titled F-4002 but body is Remote-SSH F-2001 at 0.128.0; is the ssh-edit activation spec missing or intentionally shared?",
+   "For a language-only package, what extensionKind and activation events apply, and which proposed APIs, if any?"
+  ]
+ },
+ {
+  "id": "F-4003",
+  "issue": 16,
+  "repo": "remote-ssh-edit",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Package identity, localization and documentation",
+  "epic": "E40",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.addNewSshHost",
+    "opensshremotes.clearAllSessionHints",
+    "opensshremotes.openEmptyWindowInCurrentWindow",
+    "opensshremotes.openEmptyWindow",
+    "opensshremotes.getStarted",
+    "opensshremotes.getHelp",
+    "opensshremotes.cleanCurrentRemoteServer",
+    "opensshremotes.cleanLocalServer",
+    "opensshremotes.cleanRemoteServer",
+    "opensshremotes.openEmptyWindowOnCurrentHost",
+    "opensshremotes.openWebUI",
+    "opensshremotes.openConfigFile",
+    "opensshremotes.provideFeedback",
+    "opensshremotes.reportIssue",
+    "opensshremotes.settings",
+    "opensshremotes.showLog",
+    "opensshremotes.cleanDevBox"
+   ],
+   "settings": [
+    "remote.SSH.useLocalServer",
+    "remote.SSH.enableWebAccess",
+    "remote.SSH.experimental.chat"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "remoteConnectionState",
+    "virtualWorkspace"
+   ],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "6 palette when-clauses MENU:commandPalette#0-5"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2204"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.command-surface",
+  "candidateLibrary": "lib-product",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "BODY MISMATCH: text is the Remote-SSH command catalogue (F-2006), not ssh-edit identity or localization. Nothing on l10n bundles or README read here; F-4202 relies on this feature for localization.",
+  "questions": [
+   "Issue titled F-4003 holds Remote-SSH F-2006 content; where is the ssh-edit identity, l10n bundle and README spec?",
+   "Gated palette entries before activation conflict with the coexistence context key; which option (a, b, c) is chosen?"
+  ]
+ },
+ {
+  "id": "F-4101",
+  "issue": 9,
+  "repo": "remote-ssh-edit",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Syntax highlighting: tokenization and scope names",
+  "epic": "E41",
+  "acCount": 35,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "TextMate grammar root source.config.ssh",
+    "4 scope names verbatim",
+    "no semantic tokens",
+    "token types Other/String/Comment"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh-edit#F-4001",
+   "remote-ssh-edit#F-4002",
+   "remote-ssh-edit#F-4102",
+   "remote-ssh-edit#F-4201",
+   "remote-ssh-edit#F-4901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh-edit.grammar",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 9,
+  "notes": "One coarse line-local grammar: comment line, first word, rest of line; no cross-line state. Scope names kept verbatim including azcli comment scope. Core handles theme, inspector, minimap MARK and Unicode highlighting from token types.",
+  "questions": [
+   "Grammar file path is free; may the clean team author it independently with no sample of the reference grammar?"
+  ]
+ },
+ {
+  "id": "F-4102",
+  "issue": 14,
+  "repo": "remote-ssh-edit",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Language configuration: comments, brackets, auto-closing, folding, indentation",
+  "epic": "E41",
+  "acCount": 49,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "LCONF comments, brackets, autoClosingPairs, indentationRules",
+    "Host column-1 indent rule",
+    "whitespace-only decrease rule"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh-edit#F-4001",
+   "remote-ssh-edit#F-4101",
+   "remote-ssh-edit#F-4002",
+   "remote-ssh-edit#F-4201",
+   "remote-ssh-edit#F-4901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh-edit.language-configuration",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 8,
+  "notes": "Declarative language configuration file only: hash comment, three bracket pairs plus two quote pairs, indentation increase after Host and decrease on whitespace-only lines. Folding, word pattern, onEnter left to core defaults.",
+  "questions": [
+   "Are indentation rule patterns to be written by us from described behavior only, verified against the scenarios?"
+  ]
+ },
+ {
+  "id": "F-4201",
+  "issue": 10,
+  "repo": "remote-ssh-edit",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Keyword completion and its documentation",
+  "epic": "E42",
+  "acCount": 45,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "completion provider for ssh_config",
+    "trigger character space",
+    "96 items incl. snippet",
+    "Property kind with plain-string docs",
+    "sortText lowercase label"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "languages.registerCompletionItemProvider",
+    "CompletionItem",
+    "CompletionItemKind.Property"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "ssh_config(5) manual 10.2p1 as content source"
+   ]
+  },
+  "cites": [
+   "remote-ssh-edit#F-4001",
+   "remote-ssh-edit#F-4002",
+   "remote-ssh-edit#F-4101",
+   "remote-ssh-edit#F-4202",
+   "remote-ssh-edit#F-4203",
+   "remote-ssh-edit#F-4204",
+   "remote-ssh-edit#F-4901",
+   "remote-ssh-edit#F-4902"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh-edit.keyword-completion",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Single provider returning a static keyword list with documentation at first-token positions only. 88 texts derived from OpenSSH 10.2p1 plus 7 own short texts. Order via lowercased sortText. List policy lives in F-4902.",
+  "questions": [
+   "Keyword table and documentation text: which published source may the clean side use for the 88 texts under R-48?",
+   "Obsolete and platform-specific keywords stay in the list per F-4902; is the 10.2p1 snapshot frozen or versioned?"
+  ]
+ },
+ {
+  "id": "F-4202",
+  "issue": 12,
+  "repo": "remote-ssh-edit",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Tunnel configuration snippet",
+  "epic": "E42",
+  "acCount": 35,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "completion item Configure tunnel kind Snippet",
+    "4-line Host template, 5 tab stops, mirrored port",
+    "strings STR:S001, STR:S002"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "languages.registerCompletionItemProvider",
+    "CompletionItemKind.Snippet",
+    "SnippetString",
+    "l10n.t"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh-edit#F-4001",
+   "remote-ssh-edit#F-4201",
+   "remote-ssh-edit#F-4101",
+   "remote-ssh-edit#F-4002",
+   "remote-ssh-edit#F-4102",
+   "remote-ssh-edit#F-4203",
+   "remote-ssh-edit#F-4003",
+   "remote-ssh-edit#F-4901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh-edit.tunnel-snippet",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "One extra item in the same provider as F-4201, snippet insert text with mirrored placeholders; not a contributed snippet. Two strings localized through l10n. Depends on core indentation adjustment.",
+  "questions": [
+   "Localization of the two strings needs bundle files; which locales and bundle names does F-4003 fix?"
+  ]
+ },
+ {
+  "id": "F-4203",
+  "issue": 13,
+  "repo": "remote-ssh-edit",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Completion in other contexts",
+  "epic": "E42",
+  "acCount": 24,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "keyword list only in first-token region",
+    "trigger on space only",
+    "no Match criteria, host patterns or value completion",
+    "12 Match criteria atoms recorded as absent"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "languages.registerCompletionItemProvider"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh-edit#F-4001",
+   "remote-ssh-edit#F-4201",
+   "remote-ssh-edit#F-4002",
+   "remote-ssh-edit#F-4101",
+   "remote-ssh-edit#F-4202",
+   "remote-ssh-edit#F-4204",
+   "remote-ssh-edit#F-4902"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh-edit.completion-positions",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Position rule inside the same provider: return the list in the first token region, empty elsewhere so core word suggestions appear. Reference deliberately offers no value or Match completion.",
+  "questions": [
+   "Rule for the first-token region uses only text before the cursor; does the empty-result fallback to core word items need a conformance test?"
+  ]
+ },
+ {
+  "id": "F-4204",
+  "issue": 15,
+  "repo": "remote-ssh-edit",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Authoring aids the reference does not provide",
+  "epic": "E42",
+  "acCount": 21,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "absence of hover, diagnostics, symbols, formatter, links, code actions, navigation",
+    "R-60 mirror reference",
+    "later adaptation behind off-by-default setting"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh-edit#F-4001",
+   "remote-ssh-edit#F-4002",
+   "remote-ssh-edit#F-4101",
+   "remote-ssh-edit#F-4201",
+   "remote-ssh-edit#F-4202",
+   "remote-ssh-edit#F-4203",
+   "remote-ssh-edit#F-4901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh-edit.no-aids-contract",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 6,
+  "notes": "Negative spec: register no provider of those kinds; core fallbacks appear. Later optional adaptations tagged and off by default. No code beyond not adding things.",
+  "questions": [
+   "Name of the future adaptation setting and its owner are undecided; reserve it now or leave for later?"
+  ]
+ }
+]

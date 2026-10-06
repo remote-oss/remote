@@ -1,0 +1,338 @@
+[
+ {
+  "id": "F-8301",
+  "issue": 17,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Continue Working in VS Code Desktop",
+  "epic": "E83",
+  "acCount": 14,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.openOnDesktop"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "isWeb",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "gated when clause with remote-tunnels.entriesEnabled",
+    "vscode-remote link on the editor's own URI scheme"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "workspace.workspaceFolders",
+    "workspace.workspaceFile",
+    "env.remoteName",
+    "env.uiKind",
+    "env.uriScheme",
+    "Uri.from",
+    "env.openExternal"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "desktop editor via OS protocol handler"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "tunnel host folder or .code-workspace path"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-server#F-8103",
+   "remote-server#F-8001",
+   "remote-server#F-8901",
+   "remote-server#F-8302",
+   "remote-server#F-8101",
+   "remote-server#F-8201",
+   "remote-server#F-8102",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": true,
+  "candidateComponent": "server.web-handoff",
+  "candidateLibrary": "lib-authority",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 6,
+  "notes": "Small web-only command that builds one desktop link from scheme, tunnel authority and folder, then opens it externally. Dialogs on both ends are core. Link shape and multi-folder rule are inferred, not observed.",
+  "questions": [
+   "Which exact link does the reference build (scheme, query, folder versus workspace file)? Q1 needs a web client and is unresolved.",
+   "Out-of-context invocation: keep silent no-op or show the R-46 info notification? Spec allows both.",
+   "Spec cites lab transcripts and VS Code core source file names; spec cites material not for the clean side. Who vets them?"
+  ]
+ },
+ {
+  "id": "F-8302",
+  "issue": 18,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Web entry: Explorer welcome and the vscode-remote web opener",
+  "epic": "E83",
+  "acCount": 12,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.connectCurrentWindowToTunnel"
+   ],
+   "settings": [],
+   "views": [
+    "explorer"
+   ],
+   "menus": [],
+   "contextKeys": [
+    "isWeb",
+    "remoteName"
+   ],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "viewsWelcome group 5_scm@2",
+    "webOpener scheme vscode-remote",
+    "browser entry point"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "contributes.viewsWelcome",
+    "contributes.commands"
+   ],
+   "proposedApi": [
+    "contribViewsWelcome"
+   ],
+   "processes": [],
+   "network": [
+    "vscode.dev tunnel URL shape (docs only)"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-server#F-8101",
+   "remote-server#F-8103",
+   "remote-server#F-8001",
+   "remote-server#F-8901",
+   "remote-server#F-8301",
+   "remote-server#F-8201",
+   "remote-explorer#F-5201",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": true,
+  "candidateComponent": "server.web-welcome",
+  "candidateLibrary": "lib-product",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Purely declarative: a welcome text with one command link, plus a webOpener declaration that only hosted vscode.dev reads. No runtime code needed for the welcome. Group placement needs a proposal the clean id will not be granted.",
+  "questions": [
+   "Keep webOpener (declare with own module) or omit it? Q3 is open and affects AC-8.",
+   "Welcome placement: keep group 5_scm@2 with proposal enablement, or omit group? Q4 decides AC-2.",
+   "Spec cites lab observation ids and VS Code core file names; spec cites material not for the clean side."
+  ]
+ },
+ {
+  "id": "F-8901",
+  "issue": 7,
+  "repo": "remote-server",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: identity, invented identifiers and telemetry",
+  "epic": "E89",
+  "acCount": 17,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.connectCurrentWindowToTunnel",
+    "remote-tunnels.getStarted",
+    "remote-tunnels.reportIssue",
+    "remote-tunnels.settings",
+    "remote-tunnels.openOnDesktop",
+    "remote-tunnels.showUsageLimits",
+    "remote-tunnels.signIntoTunnelWithDifferentAccount",
+    "remote-tunnels.isConnectedToRemote",
+    "remote-tunnels.connectNewWindowToTunnel",
+    "remote-tunnels.internal.isAuthenticated",
+    "remote-tunnels.internal.getTunnelsList",
+    "remote-tunnels.internal.getActiveRemote",
+    "remote-tunnels.internal.getFoldersHistory",
+    "remote-tunnels.internal.connectToRemote",
+    "remote-tunnels.internal.deleteFolderFromHistory",
+    "remote-tunnels.internal.unregisterTunnel"
+   ],
+   "settings": [
+    "remote.tunnels.defaultExtensions",
+    "remote.tunnels.alwaysUpdateCLI",
+    "remote.tunnels.tunnelCredentialCommand"
+   ],
+   "views": [
+    "explorer (welcome)"
+   ],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [
+    "remote-tunnels.entriesEnabled",
+    "remoteName",
+    "isWeb",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "extension id remote-oss.remote-server",
+    "activation events: ten plus onStartupFinished",
+    "R-54 coexistence stand-down with one warning",
+    "extensionPack remote-oss.remote-explorer",
+    "14 locales",
+    "webOpener vscode-remote",
+    "no telemetry"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "extensions.getExtension",
+    "env.uriScheme"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "tunnels",
+    "contribViewsWelcome"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.json",
+    "package.nls.json",
+    "l10n bundles",
+    "identity.yaml",
+    "product.json (editor, read only)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1405",
+   "remote-containers#F-1406",
+   "remote-explorer#F-5901",
+   "remote-explorer#F-5902",
+   "remote-server#F-8001",
+   "remote-server#F-8002",
+   "remote-server#F-8101",
+   "remote-server#F-8102",
+   "remote-server#F-8103",
+   "remote-server#F-8104",
+   "remote-server#F-8201",
+   "remote-server#F-8202",
+   "remote-server#F-8203",
+   "remote-server#F-8301",
+   "remote-server#F-8302",
+   "remote-server#F-8902"
+  ],
+  "coreUi": true,
+  "candidateComponent": "server.identity-and-standdown",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Identity card, verbatim identifier tables, telemetry ban and the R-54 stand-down protocol with positive gating key and a light startup activation. Anchor for lib-identifiers and lib-standdown shared across the family. Name and id tables belong in generated data.",
+  "questions": [
+   "Should lib-standdown be one shared library for all family extensions, given F-5901 omits startup activation while this adds it?",
+   "Who owns the 14-locale string reuse and the per-language identity substitution in conformance cases?",
+   "Is the unsatisfied-dependency notification of core acceptable as the only handling for third-party dependents?"
+  ]
+ },
+ {
+  "id": "F-8902",
+  "issue": 19,
+  "repo": "remote-server",
+  "kind": "decision",
+  "label": "spec:draft",
+  "title": "Decision: tunnel service, accounts and host side for Code-OSS builds",
+  "epic": "E89",
+  "acCount": 8,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "account-type pick GitHub or Microsoft Account",
+    "product configuration keys per build",
+    "Windows dev tunnels group policies (pending)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "authentication.getSession (github, microsoft)"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "editor CLI tunnel subcommand (host side, core)",
+    "host CLI asked for server of client commit"
+   ],
+   "network": [
+    "global.rel.tunnels.api.visualstudio.com",
+    "cluster and relay addresses returned by the service"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "product.json (editor, read only)",
+    "argv.json (never written)"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8901",
+   "remote-server#F-8102",
+   "remote-server#F-8101",
+   "remote-server#F-8103",
+   "remote-server#F-8104",
+   "remote-server#F-8201",
+   "remote-server#F-8202",
+   "remote-server#F-8203",
+   "remote-server#F-8001",
+   "remote-server#F-8002",
+   "remote-server#F-8301",
+   "remote-server#F-8302",
+   "remote-containers#F-1402",
+   "remote-containers#F-1403",
+   "remote-containers#F-1404"
+  ],
+  "coreUi": true,
+  "candidateComponent": "server.tunnel-service-client",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli",
+   "dev-tunnels-sdk"
+  ],
+  "errorPaths": 5,
+  "notes": "Recommends Option A: public dev tunnels service, editor-provided accounts, no host side of our own, no telemetry. Hinges on the service licence terms (Q1). Status is proposed, not accepted. Host CLI server fetch stays with the host.",
+  "questions": [
+   "Q1: do the dev tunnels licence terms permit a non-Microsoft client, and is shipping held until Microsoft answers?",
+   "Should Windows dev tunnels group policies be honoured (Q6), and which source supplies the registry value names?",
+   "Does the service accept VSCodium GitHub tokens and Microsoft tokens (Q7), and how does a Microsoft host CLI treat foreign commits (Q4)?"
+  ]
+ }
+]

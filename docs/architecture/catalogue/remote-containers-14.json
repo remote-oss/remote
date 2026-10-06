@@ -1,0 +1,405 @@
+[
+ {
+  "id": "F-1401",
+  "issue": 38,
+  "repo": "remote-containers",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: extension id and namespace compatibility",
+  "epic": "E14",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "exec",
+    "k8s-container",
+    "dev-container-family names kept"
+   ],
+   "other": [
+    "URI handler sub-path and query shape",
+    "label formatters per authority",
+    "identity card (D-41)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "registerCommand (duplicate-id throw)"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-1406",
+   "remote-containers#F-0101",
+   "remote-containers#F-0102",
+   "remote-containers#F-0105",
+   "remote-containers#F-0502",
+   "remote-containers#F-0706",
+   "remote-containers#F-0405",
+   "remote-containers#F-0403",
+   "remote-containers#F-0107",
+   "remote-containers#F-0501",
+   "remote-containers#F-0301"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.identity-and-authority-names",
+  "candidateLibrary": "lib-identifiers",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 1,
+  "notes": "Historical record. Authority family names and label formatters stay. Option C prefixes and extension id are superseded by F-1406. displayName fixed; no import of legacy settings. Settings collision finding closed.",
+  "questions": [
+   "Which authority names and label formatters does F-1401 still bind, given F-1406 supersedes only prefixes and id?",
+   "Does the URI handler path/query shape belong to lib-identifiers or lib-authority?"
+  ]
+ },
+ {
+  "id": "F-1403",
+  "issue": 39,
+  "repo": "remote-containers",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: proposed API enablement on Code-OSS builds",
+  "epic": "E14",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "one-time setup notification, probe and cache flow",
+    "argv.json route",
+    "product.json allow-list for packagers"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "registerRemoteAuthorityResolver (gated)",
+    "registerPortAttributesProvider"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "tunnels",
+    "contribViewsRemote",
+    "contribRemoteHelp",
+    "contribEditSessions",
+    "workspaceTrust",
+    "terminalDimensions",
+    "portsAttributes"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "argv.json",
+    "product.json (read)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0104",
+   "remote-containers#F-0105",
+   "remote-containers#F-0106",
+   "remote-containers#F-0502",
+   "remote-containers#F-0707",
+   "remote-containers#F-0906",
+   "remote-containers#F-1102",
+   "remote-containers#F-1406",
+   "remote-containers#F-1401"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.proposed-api-gate",
+  "candidateLibrary": "lib-product",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 3,
+  "notes": "Option D default: avoid proposals where stable equivalents exist. resolvers and tunnels need enablement via enable-proposed-api/argv.json; VSCodium allow-list pursued in parallel. Cites per-feature routes in seven specs.",
+  "questions": [
+   "Which of the seven owning features actually still need a proposal after Option D, and which route each uses?",
+   "Is the setup probe/cache shared code for lib-product or per feature?",
+   "Does the reimplementation edit argv.json itself or only instruct the user?"
+  ]
+ },
+ {
+  "id": "F-1402",
+  "issue": 41,
+  "repo": "remote-containers",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: server distribution for Code-OSS derivatives",
+  "epic": "E14",
+  "acCount": 5,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.serverDownloadBaseUrl"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "licence modal dialog (Accept and Continue / Cancel)",
+    "built-in table: codium, codium-insiders",
+    "product.json serverDownloadUrlTemplate"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "server launcher named by product.json serverApplicationName"
+   ],
+   "network": [
+    "VSCodium release archives",
+    "configured base URL"
+   ],
+   "remoteFiles": [
+    "server data folder (serverDataFolderName)",
+    "shared server volume"
+   ],
+   "localFiles": [
+    "product.json (read)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0503",
+   "remote-containers#F-0601",
+   "remote-containers#F-0604",
+   "remote-containers#F-0605",
+   "remote-containers#F-0505",
+   "remote-containers#F-1404",
+   "remote-containers#F-1406",
+   "remote-containers#F-1401",
+   "remote-containers#F-1301",
+   "remote-containers#F-1302",
+   "remote-containers#F-0410"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.server-source-resolver",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 4,
+  "notes": "Resolution order: setting, product template, built-in entry per applicationName, else no-default error. Placeholders written as dollar-brace names. Licence dialog on genuine VS Code; volume-shared server reasks per profile. R-47 family-wide.",
+  "questions": [
+   "Should licence acceptance state key live in lib-server shared with Remote-SSH and WSL?",
+   "Where is the placeholder expansion owned, lib-server or lib-product?",
+   "What exact placeholder names are fixed?"
+  ]
+ },
+ {
+  "id": "F-1404",
+  "issue": 55,
+  "repo": "remote-containers",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: dependencies on other extensions and marketplaces",
+  "epic": "E14",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.defaultExtensions",
+    "dev.containers.defaultExtensionsIfInstalledLocally"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "extensionDependencies on Microsoft ids",
+    "per-feature compatibility note"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "extensions gallery (Open VSX)"
+   ],
+   "network": [
+    "Open VSX"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0505",
+   "remote-containers#F-0707",
+   "remote-containers#F-0906",
+   "remote-containers#F-0603",
+   "remote-containers#F-0811",
+   "remote-containers#F-1301",
+   "remote-containers#F-1302",
+   "remote-containers#F-0703",
+   "remote-containers#F-0604",
+   "remote-containers#F-0506",
+   "remote-containers#F-0305",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.companion-extension-policy",
+  "candidateLibrary": "lib-companion",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 2,
+  "notes": "Option C: keep every integration point unconditional, add per-feature compatibility notes. Rulings R-21 and R-22 settle pack dependencies and companion sets family-wide. Names ms-azuretools containers and docker, remote-ssh, wsl, explorer, repositories.",
+  "questions": [
+   "Is a Microsoft id in extensionDependencies ever mapped to a remote-oss id (R-21)? State the mapping.",
+   "Which extensions form the companion set for lib-companion (R-22)?"
+  ]
+ },
+ {
+  "id": "F-1405",
+  "issue": 56,
+  "repo": "remote-containers",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: telemetry and experiments",
+  "epic": "E14",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "no telemetry backend",
+    "no experimentation"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "env.isTelemetryEnabled"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "telemetry.json (not shipped)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0402",
+   "remote-containers#F-0201",
+   "remote-containers#F-1201",
+   "remote-containers#F-0801",
+   "remote-containers#F-0502",
+   "remote-containers#F-0410",
+   "remote-containers#F-0408",
+   "remote-containers#F-0204",
+   "remote-containers#F-0104"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.no-telemetry",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 0,
+  "notes": "Ruling R-28: no telemetry, no aiKey, no experiment queries, nothing sent. All reference TEL atoms are reference data only. Settings respected trivially. No component needed beyond a negative requirement.",
+  "questions": [
+   "Does any feature need an in-product substitute for experiment-gated behaviour (query-expfeature) with a fixed default?",
+   "Do experimental dev.containers settings remain exposed without experiments?"
+  ]
+ },
+ {
+  "id": "F-1406",
+  "issue": 107,
+  "repo": "remote-containers",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: reuse the reference identifiers (supersedes F-1401 Option C prefixes)",
+  "epic": "E14",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [
+    "remote-containers.* (71 commands, e.g. remote-containers.reopenInContainer)"
+   ],
+   "settings": [
+    "dev.containers.* (24 keys)",
+    "remote.containers.* legacy twin"
+   ],
+   "views": [
+    "reference view ids verbatim"
+   ],
+   "menus": [
+    "reference menu and keybinding ids verbatim"
+   ],
+   "contextKeys": [
+    "reference context keys verbatim; own hide key for stand-down"
+   ],
+   "authorities": [],
+   "other": [
+    "extension id remote-oss.remote-containers",
+    "host CLI launcher devcontainer / devcontainer-insiders",
+    "category strings Dev Containers and Dev Containers Developer"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "devcontainer launcher (host CLI symlink)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "settings.json",
+    "keybindings.json",
+    "user PATH entry (Windows cli-bin)",
+    "host CLI symlink"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-1401",
+   "remote-containers#F-0101",
+   "remote-containers#F-0102",
+   "remote-containers#F-1402",
+   "remote-containers#F-1404",
+   "remote-containers#F-1201",
+   "remote-containers#F-1403",
+   "remote-containers#F-0906",
+   "remote-containers#F-0805",
+   "remote-containers#F-0706"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.identifiers-and-standdown",
+  "candidateLibrary": "lib-standdown",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 2,
+  "notes": "Option A: reuse reference ids verbatim, own extension id. R-54 stand-down: register nothing at run time, hide static menus behind own context key, one warning, inactive while reference enabled. Precedence of legacy settings reproduced.",
+  "questions": [
+   "Q-1: host CLI launcher naming and already-installed check across editors; A, B (owner-aware), or C? Windows PATH too?",
+   "Which context key name does the stand-down use, and does it belong in lib-standdown?",
+   "Is the stand-down check shared with other family extensions?"
+  ]
+ }
+]

@@ -4,14 +4,14 @@
 4	OPEN	2026-10-02T20:17:38Z	epic:E53,type:epic	E53 · Family combination
 5	OPEN	2026-10-02T20:17:39Z	epic:E59,type:epic	E59 · Decisions
 6	OPEN	2026-10-04T01:56:01Z	type:tracking	Feature inventory and coverage
-7	OPEN	2026-10-04T01:03:45Z	epic:E59,prio:P0,spec:reviewed,type:decision	F-5901 · Decision: identity of the reimplementation and invented identifiers
-8	OPEN	2026-10-04T01:35:45Z	epic:E51,prio:P1,spec:reviewed,type:feature-spec	F-5101 · Remotes (Tunnels/SSH) view: registration, groups, refresh and empty states
-9	OPEN	2026-10-04T01:45:14Z	epic:E51,prio:P1,spec:reviewed,type:feature-spec	F-5102 · SSH group: hosts from the SSH configuration, Open SSH Config File and New Remote
-10	OPEN	2026-10-04T01:55:59Z	epic:E51,prio:P1,spec:reviewed,type:feature-spec	F-5103 · Connect to a remote target in the current or a new window
-11	OPEN	2026-10-04T06:14:32Z	epic:E51,prio:P1,spec:reviewed,type:feature-spec	F-5104 · Recent folders under a target: list, sort, collapse, open, remove
-12	OPEN	2026-10-04T06:24:59Z	epic:E50,prio:P2,spec:reviewed,type:feature-spec	F-5002 · Command catalogue: palette-hidden commands and invocation out of context
-13	OPEN	2026-10-04T06:42:20Z	epic:E52,prio:P2,spec:reviewed,type:feature-spec	F-5201 · Tunnels group signed out: GitHub and Microsoft sign-in rows
-14	OPEN	2026-10-04T01:16:01Z	epic:E59,prio:P1,spec:reviewed,type:decision	F-5902 · Decision: interface between Remote Explorer and its family companions
-15	OPEN	2026-10-04T01:30:48Z	epic:E52,prio:P3,spec:reviewed,type:feature-spec	F-5202 · Tunnel machines: states, unregister and WSL distros on a tunnel machine
+7	OPEN	2026-10-06T08:39:31Z	epic:E59,prio:P0,spec:reviewed,type:decision	F-5901 · Decision: identity of the reimplementation and invented identifiers
+8	OPEN	2026-10-06T08:41:32Z	epic:E51,prio:P1,spec:reviewed,type:feature-spec	F-5101 · Remotes (Tunnels/SSH) view: registration, groups, refresh and empty states
+9	OPEN	2026-10-06T07:19:30Z	epic:E51,prio:P1,spec:reviewed,type:feature-spec	F-5102 · SSH group: hosts from the SSH configuration, Open SSH Config File and New Remote
+10	OPEN	2026-10-06T07:19:33Z	epic:E51,prio:P1,spec:reviewed,type:feature-spec	F-5103 · Connect to a remote target in the current or a new window
+11	OPEN	2026-10-06T07:20:12Z	epic:E51,prio:P1,spec:reviewed,type:feature-spec	F-5104 · Recent folders under a target: list, sort, collapse, open, remove
+12	OPEN	2026-10-06T08:54:02Z	epic:E50,prio:P2,spec:reviewed,type:feature-spec	F-5002 · Command catalogue: palette-hidden commands and invocation out of context
+13	OPEN	2026-10-06T08:42:26Z	epic:E52,prio:P2,spec:reviewed,type:feature-spec	F-5201 · Tunnels group signed out: GitHub and Microsoft sign-in rows
+14	OPEN	2026-10-06T08:54:05Z	epic:E59,prio:P1,spec:reviewed,type:decision	F-5902 · Decision: interface between Remote Explorer and its family companions
+15	OPEN	2026-10-06T07:26:10Z	epic:E52,prio:P3,spec:reviewed,type:feature-spec	F-5202 · Tunnel machines: states, unregister and WSL distros on a tunnel machine
 16	OPEN	2026-10-04T06:53:01Z	epic:E53,prio:P2,spec:reviewed,type:feature-spec	F-5301 · Remote Explorer with the family installed together
-17	OPEN	2026-10-04T06:35:55Z	epic:E50,prio:P2,spec:reviewed,type:feature-spec	F-5001 · Extension package: identity data, activation, extension kind, trust and localization
+17	OPEN	2026-10-06T08:53:59Z	epic:E50,prio:P2,spec:reviewed,type:feature-spec	F-5001 · Extension package: identity data, activation, extension kind, trust and localization

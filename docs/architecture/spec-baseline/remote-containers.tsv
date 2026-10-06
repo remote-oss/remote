@@ -12,7 +12,7 @@
 12	OPEN	2026-09-26T01:13:56Z	epic:E12,type:epic	E12 · Developer tooling
 13	OPEN	2026-09-26T01:13:57Z	epic:E13,type:epic	E13 · Interop with other remotes
 14	OPEN	2026-09-26T01:13:58Z	epic:E14,type:epic	E14 · OSS adaptation decisions
-15	OPEN	2026-10-04T06:40:26Z	type:tracking	Feature inventory and coverage
+15	OPEN	2026-10-05T21:40:58Z	type:tracking	Feature inventory and coverage
 17	OPEN	2026-10-02T09:25:57Z	epic:E04,prio:P1,spec:reviewed,type:feature-spec	F-0402 · Reopen-in-container notification on folder open
 18	OPEN	2026-10-03T20:09:46Z	epic:E02,prio:P0,spec:reviewed,type:feature-spec	F-0201 · Container CLI discovery, version and permission checks
 19	OPEN	2026-10-04T06:38:08Z	epic:E01,prio:P0,spec:reviewed,type:feature-spec	F-0101 · Extension manifest, activation and capability declarations
@@ -28,7 +28,7 @@
 30	OPEN	2026-10-04T06:40:24Z	epic:E12,prio:P2,spec:reviewed,type:feature-spec	F-1201 · Install devcontainer CLI
 31	OPEN	2026-10-02T09:25:21Z	epic:E02,prio:P3,spec:reviewed,type:feature-spec	F-0204 · Install Docker in WSL
 32	OPEN	2026-10-03T02:07:27Z	epic:E04,prio:P0,spec:reviewed,type:feature-spec	F-0415 · Lifecycle commands
-33	OPEN	2026-10-03T20:33:59Z	epic:E04,prio:P0,spec:draft,type:feature-spec	F-0411 · Workspace mount and workspace folder
+33	OPEN	2026-10-05T21:38:23Z	epic:E04,prio:P0,spec:reviewed,type:feature-spec	F-0411 · Workspace mount and workspace folder
 34	OPEN	2026-10-04T05:54:05Z	epic:E05,prio:P0,spec:reviewed,type:feature-spec	F-0503 · VS Code server installation in the container
 35	OPEN	2026-10-03T11:07:50Z	epic:E05,prio:P0,spec:reviewed,type:feature-spec	F-0501 · Remote authorities, URIs and resource labels
 36	OPEN	2026-10-03T14:07:27Z	epic:E05,prio:P0,spec:reviewed,type:feature-spec	F-0504 · Window title, remote indicator and labels
@@ -57,13 +57,13 @@
 59	OPEN	2026-10-03T11:08:08Z	epic:E04,prio:P1,spec:reviewed,type:feature-spec	F-0414 · Dev Container Features at build time
 60	OPEN	2026-10-03T14:07:35Z	epic:E05,prio:P1,spec:reviewed,type:feature-spec	F-0506 · Machine settings and MCP servers in the container
 61	OPEN	2026-10-02T12:01:15Z	epic:E04,prio:P1,spec:reviewed,type:feature-spec	F-0418 · Container creation options
-62	OPEN	2026-10-03T20:41:36Z	epic:E04,prio:P1,spec:draft,type:feature-spec	F-0417 · Shutdown behavior when windows close
+62	OPEN	2026-10-05T21:38:34Z	epic:E04,prio:P1,spec:reviewed,type:feature-spec	F-0417 · Shutdown behavior when windows close
 63	OPEN	2026-10-02T09:26:51Z	epic:E04,prio:P1,spec:reviewed,type:feature-spec	F-0416 · Users, UID/GID synchronization and environment variables
 64	OPEN	2026-10-04T01:17:15Z	epic:E06,prio:P1,spec:draft,type:feature-spec	F-0601 · Attach to Running Container
 65	OPEN	2026-10-04T01:39:48Z	epic:E07,prio:P1,spec:reviewed,type:feature-spec	F-0701 · Clone Repository in Container Volume
 66	OPEN	2026-10-03T19:37:27Z	epic:E08,prio:P1,spec:reviewed,type:feature-spec	F-0803 · Template and feature option prompts
 67	OPEN	2026-10-03T09:08:21Z	epic:E08,prio:P1,spec:reviewed,type:feature-spec	F-0806 · New Dev Container
-68	OPEN	2026-10-04T00:55:37Z	epic:E04,prio:P1,spec:draft,type:feature-spec	F-0406 · Reopen folder locally, in WSL, over SSH or in a tunnel
+68	OPEN	2026-10-05T21:38:44Z	epic:E04,prio:P1,spec:reviewed,type:feature-spec	F-0406 · Reopen folder locally, in WSL, over SSH or in a tunnel
 69	OPEN	2026-10-04T06:39:11Z	epic:E08,prio:P1,spec:reviewed,type:feature-spec	F-0804 · Feature picker
 70	OPEN	2026-10-02T16:47:38Z	epic:E07,prio:P1,spec:reviewed,type:feature-spec	F-0704 · Bootstrap container
 71	OPEN	2026-10-03T11:08:18Z	epic:E08,prio:P1,spec:reviewed,type:feature-spec	F-0812 · Open Container Configuration File
@@ -108,7 +108,7 @@
 110	OPEN	2026-10-03T14:07:50Z	epic:E06,prio:P3,spec:reviewed,type:feature-spec	F-0604 · Attach to Kubernetes containers
 111	OPEN	2026-10-02T09:27:48Z	epic:E06,prio:P3,spec:reviewed,type:feature-spec	F-0605 · Attach to Apple containers (experimental)
 112	OPEN	2026-10-02T09:28:17Z	epic:E07,prio:P3,spec:reviewed,type:feature-spec	F-0707 · Continue Working in Container Volume
-113	OPEN	2026-10-04T06:45:01Z	epic:E11,prio:P2,spec:draft,type:feature-spec	F-1103 · Label port and update devcontainer.json
+113	OPEN	2026-10-05T21:40:55Z	epic:E11,prio:P2,spec:reviewed,type:feature-spec	F-1103 · Label port and update devcontainer.json
 114	OPEN	2026-10-04T01:56:14Z	epic:E12,prio:P3,spec:draft,type:feature-spec	F-1202 · Developer command Test Connection
 115	OPEN	2026-10-02T09:29:40Z	epic:E13,prio:P3,spec:reviewed,type:feature-spec	F-1301 · Dev containers with WSL
 116	OPEN	2026-10-02T08:02:05Z	epic:E10,prio:P3,spec:reviewed,type:feature-spec	F-1006 · GitHub CLI authentication in the container

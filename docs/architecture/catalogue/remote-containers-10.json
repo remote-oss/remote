@@ -1,0 +1,356 @@
+[
+ {
+  "id": "F-0810",
+  "issue": 95,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "devcontainer.json authoring aids",
+  "epic": "E08",
+  "acCount": 48,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "dev-container",
+    "ssh-remote",
+    "wsl"
+   ],
+   "other": [
+    "jsonc filename associations",
+    "JSON schema association for devcontainer-feature.json",
+    "feature-version CodeLens",
+    "feature hover",
+    "devcontainers-contrib diagnostic",
+    "features completion provider"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "languages.registerCodeLensProvider",
+    "languages.registerHoverProvider",
+    "languages.createDiagnosticCollection",
+    "languages.registerCompletionItemProvider",
+    "workspace.onDidChangeTextDocument",
+    "window.showWarningMessage modal",
+    "workspace edit"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "devcontainer CLI outdated (suggested)",
+    "docker credential helper"
+   ],
+   "network": [
+    "OCI registries (ghcr.io etc.)",
+    "containers.dev feature index",
+    "raw.githubusercontent.com devContainerFeature schema",
+    "http_proxy/https_proxy"
+   ],
+   "remoteFiles": [
+    "devcontainer.json",
+    "devcontainer-lock.json"
+   ],
+   "localFiles": [
+    "Docker config / DOCKER_CONFIG",
+    "devcontainer-lock.json",
+    "temp config copy in WSL window"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0414",
+   "remote-containers#F-0108",
+   "remote-containers#F-0305",
+   "remote-containers#F-0801",
+   "remote-containers#F-0803",
+   "remote-containers#F-0804",
+   "remote-containers#F-0809",
+   "remote-containers#F-0701",
+   "remote-containers#F-1008"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.authoring-aids",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "jsonc-parser"
+  ],
+  "errorPaths": 5,
+  "notes": "No container engine needed. Editor-only providers over open buffers; version lookup debounced and delegated to the outdated lookup; hover and completion use the live containers.dev index. Reference defects flagged (localhost registry, completion ranges).",
+  "questions": [
+   "Is delegating version lookup to the devcontainer CLI outdated command acceptable, given the debounce and per-lookup log contract?",
+   "Should the containers.dev feature index be cached, or fetched per use as in the reference?",
+   "Does lib-product or any shared library own the registry-credential resolution reused from F-0414?"
+  ]
+ },
+ {
+  "id": "F-0807",
+  "issue": 96,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Configure Container Features",
+  "epic": "E08",
+  "acCount": 68,
+  "surfaces": {
+   "commands": [
+    "remote-containers.configureContainerFeatures"
+   ],
+   "settings": [
+    "dev.containers.repositoryConfigurationPaths (read)",
+    "dev.containers.defaultFeatures (not read)"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "virtualWorkspace"
+   ],
+   "authorities": [
+    "dev-container",
+    "wsl",
+    "ssh-remote",
+    "tunnel"
+   ],
+   "other": [
+    "Select Features multi-select picker with Finish title button",
+    "modal no-config dialog with Add Files",
+    "rebuild notification hand-off"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.createQuickPick",
+    "window.showInformationMessage modal",
+    "workspace edit / jsonc-parser edits",
+    "notification API"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "devcontainer CLI outdated (suggested)"
+   ],
+   "network": [
+    "feature catalogue (via F-0804)",
+    "http.proxy"
+   ],
+   "remoteFiles": [
+    "devcontainer.json",
+    "root .devcontainer.json"
+   ],
+   "localFiles": [
+    "user-data configs/<folder>/.devcontainer/devcontainer.json in global storage",
+    "mirrored configuration from repositoryConfigurationPaths"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0804",
+   "remote-containers#F-0301",
+   "remote-containers#F-0303",
+   "remote-containers#F-0803",
+   "remote-containers#F-0801",
+   "remote-containers#F-0302",
+   "remote-containers#F-0802",
+   "remote-containers#F-0410",
+   "remote-containers#F-0810",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406",
+   "remote-containers#F-1403",
+   "remote-containers#F-1103"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.feature-config-command",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "jsonc-parser"
+  ],
+  "errorPaths": 8,
+  "notes": "Edits the features key of the active configuration in place with a format-preserving JSONC editor. Depends on shared catalogue picker, option wizard, config selector. Several reference defects to avoid: silent mixed-workspace run, no-folder no-op.",
+  "questions": [
+   "Which component owns resolving the active configuration file per connection, including Recovery Container and user-data locations?",
+   "Is the multi-select picker shared code with F-0804 or a separate component?",
+   "Should post-write version check via CLI outdated be part of this command or only F-0810?"
+  ]
+ },
+ {
+  "id": "F-0808",
+  "issue": 97,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Try a Dev Container Sample",
+  "epic": "E08",
+  "acCount": 23,
+  "surfaces": {
+   "commands": [
+    "remote-containers.trySample"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "commandPalette",
+    "New Dev Container hub quick pick item"
+   ],
+   "contextKeys": [
+    "hideConnectCommands",
+    "remoteName",
+    "virtualWorkspace"
+   ],
+   "authorities": [
+    "dev-container",
+    "wsl",
+    "ssh-remote",
+    "tunnel"
+   ],
+   "other": [
+    "eight-sample quick pick",
+    "Restricted Mode confirmation (reimplementation decision)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.showWarningMessage modal",
+    "workspace.isTrusted"
+   ],
+   "proposedApi": [
+    "whatever F-0701/F-0408 need (unnamed)"
+   ],
+   "processes": [
+    "docker CLI",
+    "git clone inside bootstrap container",
+    "docker desktop auto-launch (via F-0202)"
+   ],
+   "network": [
+    "https://github.com/Microsoft/vscode-remote-try-<lang> (8 repos)"
+   ],
+   "remoteFiles": [
+    "sample devcontainer.json (in volume)"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0701",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0504",
+   "remote-containers#F-0106",
+   "remote-containers#F-0806",
+   "remote-containers#F-0901",
+   "remote-containers#F-0417",
+   "remote-containers#F-0601",
+   "remote-containers#F-0410",
+   "remote-containers#F-0204",
+   "remote-containers#F-0207",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.try-sample",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "docker"
+  ],
+  "errorPaths": 4,
+  "notes": "Thin command: fixed list of eight sample URLs handed to the clone-in-volume flow; reuse and no-op semantics come from volume and container lookup. Own logic is picker, trust confirmation, availability gating.",
+  "questions": [
+   "Spec cites material not for the clean side (lab review notes and viewaction runs); is the cited behavior fully restated in the spec?",
+   "Should the sample list be bundled data or fetched, and who owns updates to it?",
+   "Which library owns the container-tracking registry behind the same-window and other-window no-op checks?"
+  ]
+ },
+ {
+  "id": "F-0811",
+  "issue": 118,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "GitHub Copilot-assisted configuration",
+  "epic": "E08",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [
+    "remote-containers.createDevContainerFileWithCopilot"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "commandPalette (constant-false when, never shown)"
+   ],
+   "contextKeys": [
+    "github.copilot.activated",
+    "remoteName",
+    "virtualWorkspace"
+   ],
+   "authorities": [
+    "dev-container",
+    "wsl",
+    "ssh-remote",
+    "tunnel"
+   ],
+   "other": [
+    "location quick pick shared with F-0801",
+    "modal fallback dialog",
+    "Suggested by GitHub Copilot label with sparkle (unobservable)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.executeCommand",
+    "window.showQuickPick",
+    "window.showInformationMessage modal"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [
+    "devcontainer.json (written by fallback flow)"
+   ],
+   "localFiles": [
+    "user-data configuration storage in global storage"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0801",
+   "remote-containers#F-0802",
+   "remote-containers#F-0803",
+   "remote-containers#F-0804",
+   "remote-containers#F-0805",
+   "remote-containers#F-1401",
+   "remote-containers#F-1404",
+   "remote-containers#F-0302",
+   "remote-containers#F-0402",
+   "remote-containers#F-0404",
+   "remote-containers#F-0207",
+   "remote-containers#F-0812",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.copilot-config-command",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "github.copilot-chat command github.copilot.devcontainer.generateDevContainerConfig"
+  ],
+  "errorPaths": 4,
+  "notes": "Hidden command delegating to a third-party Copilot command; in practice always falls to the F-0801 wizard after a modal error. Partner extensions are absent from Open VSX. Low priority P3; candidate to implement as registered-but-hidden stub.",
+  "questions": [
+   "Given Copilot extensions are absent on Open VSX, should this command ship at all or be a documented stub?",
+   "Is the Copilot-active success path normative, since it is inferred and unobservable?",
+   "Does the constant-false palette visibility need reproducing exactly in the reimplementation?"
+  ]
+ }
+]

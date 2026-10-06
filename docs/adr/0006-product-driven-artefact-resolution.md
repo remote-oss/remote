@@ -47,7 +47,10 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
    `serverDownloadUrlTemplate`; (c) the built-in table for products that declare none, keyed by `applicationName`
    (VS Code and VS Code Insiders through the explicit Microsoft URL behind the R-68 gate; `codium`,
    `codium-insiders`); (d) the no-default dialog. Placeholders in every template: `${os}`, `${arch}`, `${commit}`,
-   `${quality}`, `${version}`, `${applicationName}`; unknown placeholders are an error, not an empty string.
+   `${quality}`, `${version}`, `${release}` (the specs' name for the product's release tag, F-3902 rule 3 and
+   F-1402) and `${applicationName}`. An unknown placeholder or an unexpandable template is never an empty string:
+   in the product's template it is logged and resolution falls through to the next source (F-3902 rule 3); in the
+   user's override setting it is the dialog. (Revised 2026-10-06 from the area A dossier.)
 3. **CLI archive URL**, same shape: (a) a user-set override setting; (b) the product's `cliDownloadUrlTemplate`, a
    field we define and document so that any product can declare it next to `serverDownloadUrlTemplate` (proposed
    to VSCodium as a one-line addition to its patch); (c) the built-in table, which for a product that only
@@ -58,8 +61,11 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
    keyed by `commit`; the CLI runs as `tunnelApplicationName`; caches are per product (R-58); the editor's URI scheme
    is `urlProtocol` (R-32); the gallery is the product's own (R-47 rule 3). Two products never share state on a
    remote.
-5. **Settings for the overrides** follow D-14 where the reference has them and R-27 where they are invented; their
-   names are fixed in each extension's identity decision after the specs are read, from one table in `lib-product`.
+5. **Settings for the overrides** follow D-14 where the reference has them and R-27 where they are invented. The
+   specs give each extension its own override policy (Dev Containers: `remote.serverDownloadBaseUrl`, any settings
+   layer, a base URL or a template, F-1402; Remote-SSH: `remote.SSH.serverDownloadUrlTemplate`, user layer only,
+   F-3902), so `lib-product` takes a per-extension override policy (key, allowed layers, accepted forms) from one
+   table and applies the same resolution order to all. (Revised 2026-10-06.)
 6. **Conformance**: the suite's profiles include at least two real products (genuine VS Code with the explicit
    server URL; VSCodium) and one synthetic `product.json` with made-up names and both templates, so a build that
    hard-codes any product fails a case.

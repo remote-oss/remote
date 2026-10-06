@@ -1,0 +1,792 @@
+[
+ {
+  "id": "F-2601",
+  "issue": 68,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Connection failure notification and its buttons",
+  "epic": "E26",
+  "acCount": 37,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.useLocalServer",
+    "remote.SSH.experimental.chat",
+    "remote.SSH.experimental.enhancedSessionLogs",
+    "remote.SSH.showLoginTerminal",
+    "remote.SSH.connectTimeout"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "modal failure dialog with Retry, More Actions, Close Remote",
+    "Open Logs button label",
+    "strings S030 S031 S117 S092 S022 S101 S077 S015"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage (modal)"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "ssh"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "known_hosts"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2603",
+   "remote-ssh#F-2604",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2505"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.failure-dialog",
+  "candidateLibrary": "lib-authority",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 9,
+  "notes": "Single modal dialog ending every failed resolve; reason text supplied by classifiers elsewhere. Buttons map to reload, picker, close-remote. Window order is core-dependent. Help string never shown.",
+  "questions": [
+   "Is Help (S077) kept as an unplaced string or dropped (Q3)?",
+   "Native macOS dialog button order and focus: any requirement or leave to core?",
+   "Does Retry loop count or limit matter beyond exact reload per press?"
+  ]
+ },
+ {
+  "id": "F-2602",
+  "issue": 69,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Mitigation picker: More Actions..., settings fixes and resources",
+  "epic": "E26",
+  "acCount": 24,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openConfigFile",
+    "opensshremotes.settings"
+   ],
+   "settings": [
+    "remote.SSH.experimental.chat",
+    "remote.SSH.experimental.enhancedSessionLogs",
+    "remote.SSH.localServerDownload",
+    "remote.SSH.serverInstallPath",
+    "remote.SSH.preconnect"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "static five-item quick pick",
+    "table column headers Mitigations and Resources",
+    "Skip button of pre-connection dialog"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "env.openExternal",
+    "commands.executeCommand"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "ssh",
+    "scp",
+    "sshd"
+   ],
+   "network": [
+    "documentation URL opened in external browser"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "user settings file",
+    "ssh config file"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2203",
+   "remote-ssh#F-2108",
+   "remote-ssh#F-2201"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.mitigation-picker",
+  "candidateLibrary": "lib-authority",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Fixed five-item picker; no generated fixes. Setting-fix texts are only advice rows in the troubleshooting table. Items delegate to core commands.",
+  "questions": [
+   "Static picker as observed (a) or add sectioned click-driven picker (b)?",
+   "Should picker close on focus loss?",
+   "Which documentation URL should the reimplementation open, given the reference uses a Microsoft short link?"
+  ]
+ },
+ {
+  "id": "F-2603",
+  "issue": 70,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Network-level connection errors",
+  "epic": "E26",
+  "acCount": 27,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.useLocalServer",
+    "remote.SSH.experimental.enhancedSessionLogs",
+    "remote.SSH.experimental.chat",
+    "remote.SSH.configFile"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "five fixed offline reasons",
+    "macOS local network hint",
+    "OfflineError hint kind",
+    "ssh keywords AddressFamily BindAddress BindInterface"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "ssh"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "ssh config file",
+    "global state session hints"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2411"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.error-classifier.network",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 9,
+  "notes": "Pattern match on ssh stderr with fixed priority across six texts including timeout. Produces reason plus OfflineError hint. macOS local-network hint unobserved.",
+  "questions": [
+   "What triggers the macOS local-network hint S096 and what fills {0} of S051?",
+   "Does real Windows OpenSSH emit the nonexistent-pipe text?",
+   "Is the double full stop in translated locales to be reproduced?"
+  ]
+ },
+ {
+  "id": "F-2604",
+  "issue": 71,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "TCP forwarding disabled on the server",
+  "epic": "E26",
+  "acCount": 22,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.showLog"
+   ],
+   "settings": [
+    "remote.SSH.useLocalServer",
+    "remote.SSH.useExecServer",
+    "remote.SSH.remoteServerListenOnSocket",
+    "remote.SSH.enableDynamicForwarding",
+    "remote.SSH.experimental.enhancedSessionLogs"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "AllowTcpForwardingDisabled hint with two mitigations",
+    "log line naming AllowTcpForwarding yes",
+    "endless wait at port-forwarding-ready"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "ssh",
+    "sshd",
+    "powershell"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "sshd_config",
+    "authorized_keys restrictions"
+   ],
+   "localFiles": [
+    "known_hosts",
+    "ssh config file"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.error-classifier.forwarding",
+  "candidateLibrary": "lib-forwarding",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 6,
+  "notes": "Detects refused channel from ssh output, logs a fixed line, stores hint. Default flow waits forever with nothing shown; reference quirk is a design choice. Client-side disabled-forwarding case only in terminal mode.",
+  "questions": [
+   "Keep the endless wait or fail on recognition and show the hint (Q3)?",
+   "Sshd config path text for Windows and macOS servers (S005 {1})?",
+   "Should client-side forwarding-disabled warning be recognised in default mode too?"
+  ]
+ },
+ {
+  "id": "F-2605",
+  "issue": 72,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Enhanced session logs and session hints",
+  "epic": "E26",
+  "acCount": 27,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.clearAllSessionHints"
+   ],
+   "settings": [
+    "remote.SSH.experimental.enhancedSessionLogs",
+    "remote.SSH.experimental.chat",
+    "remote.SSH.useExecServer",
+    "remote.SSH.useLocalServer",
+    "remote.SSH.connectTimeout"
+   ],
+   "views": [
+    "terminal: Remote - SSH: Session Troubleshooting"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "session record in global state",
+    "box-drawn table Status Message Mitigations Resources",
+    "Remote - SSH output summary lines"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTerminal (pseudoterminal)",
+    "ExtensionContext.globalState",
+    "commands.registerCommand"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "ssh",
+    "sshd"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "sshd_config"
+   ],
+   "localFiles": [
+    "global state session records"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2603",
+   "remote-ssh#F-2604",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2006"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.session-hints",
+  "candidateLibrary": "lib-log",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Per-attempt record of settings, versions, platform, errors and log text in global state; read-only panel terminal shown on recognised failure; one silent clear command. Consumed by chat participant.",
+  "questions": [
+   "What do Status links and Output Log do without a chat participant (Q2)?",
+   "Where is Analyzing previous session logs text (S011) shown?",
+   "Exact platform hint format and modifier text on macOS and Windows clients?"
+  ]
+ },
+ {
+  "id": "F-2606",
+  "issue": 73,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "The @remote-ssh chat participant",
+  "epic": "E26",
+  "acCount": 24,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.experimental.chat",
+    "remote.SSH.experimental.enhancedSessionLogs",
+    "remote.SSH.connectTimeout"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "sticky chat participant @remote-ssh",
+    "Diagnose with Copilot dialog button",
+    "Cmd+click line in troubleshooting terminal"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "chat.createChatParticipant",
+    "chat.disableAIFeatures setting read"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "Copilot Chat service"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "global state session records"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3905",
+   "remote-ssh#F-3907"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.chat-participant",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Optional AI-assist surface gated by one setting; response behavior unobserved (no sign-in permitted). Decision F-3907 recommends no participant. Spec gives criteria for both outcomes.",
+  "questions": [
+   "Is the participant dropped per F-3907, and do dependent buttons and lines vanish?",
+   "Which surface shows S006 and S037, and what happens signed out?",
+   "Reproduce BR-4 quirk or show the button whenever setting is true?"
+  ]
+ },
+ {
+  "id": "F-2701",
+  "issue": 74,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Windows SSH hosts",
+  "epic": "E27",
+  "acCount": 18,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.showDetails"
+   ],
+   "settings": [
+    "remote.SSH.remotePlatform",
+    "remote.SSH.windowsRemotes",
+    "remote.SSH.useLocalServer",
+    "remote.SSH.localServerDownload",
+    "remote.SSH.useExecServer",
+    "remote.SSH.remoteServerListenOnSocket",
+    "remote.SSH.reconnectionGraceTime",
+    "remote.SSH.serverInstallPath",
+    "remote.SSH.suppressWindowsSshWarning"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "platform detection or asking",
+    "PowerShell-driven host",
+    "legacy string S160 Insiders-only"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "ssh",
+    "powershell",
+    "sh",
+    "bash",
+    "busybox"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "%USERPROFILE%\\.vscode-server"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2401",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2406",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-2703",
+   "remote-ssh#F-2704"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.host-profile.windows",
+  "candidateLibrary": "lib-server",
+  "area": "D",
+  "reuse": [
+   "openssh",
+   "editor-cli"
+  ],
+  "errorPaths": 8,
+  "notes": "Windows host differences: PowerShell bootstrap, several Linux-only options ignored. Reference never connected as non-admin, so the connected-window behavior is docs-only. Status needs-revision.",
+  "questions": [
+   "Keep legacy S160 as unused text or enforce Insiders gate (Q1)?",
+   "Post-connect layout, paths and shell on Windows hosts: which source is authoritative given no observation?",
+   "Is non-admin CIM access denied a Windows default?"
+  ]
+ },
+ {
+  "id": "F-2702",
+  "issue": 75,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "macOS SSH hosts",
+  "epic": "E27",
+  "acCount": 39,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.showDetails",
+    "opensshremotes.cleanDevBox"
+   ],
+   "settings": [
+    "remote.SSH.remotePlatform",
+    "remote.SSH.serverInstallPath",
+    "remote.SSH.useLocalServer",
+    "remote.SSH.reconnectionGraceTime",
+    "remote.SSH.localServerDownload",
+    "remote.SSH.remoteServerListenOnSocket",
+    "remote.SSH.lockfilesInTmp",
+    "remote.SSH.useFlock",
+    "remote.SSH.connectTimeout"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "darwin-arm64 and darwin-x64 server builds",
+    "zip archive",
+    "sockets under per-user TMPDIR"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "ssh",
+    "zsh",
+    "tar",
+    "curl",
+    "wget",
+    "scp",
+    "sh",
+    "bash"
+   ],
+   "network": [],
+   "remoteFiles": [
+    ".vscode-server",
+    "TMPDIR sockets"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2401",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2402",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2408",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2413",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2703",
+   "remote-ssh#F-2704"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.host-profile.macos",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh",
+   "editor-cli"
+  ],
+  "errorPaths": 6,
+  "notes": "Mostly parity with Linux: platform detection, mac build selection, zsh default, TMPDIR sockets. Wrong remotePlatform value fails. Long, fully reviewed spec with no open questions.",
+  "questions": [
+   "Does any macOS-specific behavior live outside platform and build selection, or can host-profile be a data table?",
+   "Is the reconnectionGraceTime docs mismatch (Linux only) to be documented or corrected?"
+  ]
+ },
+ {
+  "id": "F-2703",
+  "issue": 76,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Minimal and non-glibc hosts: Alpine, BusyBox, no bash",
+  "epic": "E27",
+  "acCount": 34,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.useExecServer",
+    "remote.SSH.useLocalServer",
+    "remote.SSH.localServerDownload"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "bash not found reason S163",
+    "Alpine server build",
+    "BusyBox wget and tar handling"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "ssh",
+    "bash",
+    "busybox",
+    "wget",
+    "sh",
+    "tar",
+    "scp",
+    "curl"
+   ],
+   "network": [
+    "server download host"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server/cli/servers/",
+    "~/.vscode-server/bin/"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2401",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-2704",
+   "remote-ssh#F-3902"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.host-profile.minimal",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh",
+   "editor-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Exec-server bootstrap needs no bash so musl hosts connect; legacy bootstrap fails fast when bash missing. Derivative clients always use direct install, raising a bash requirement question.",
+  "questions": [
+   "Must derivative-client direct install require bash like the legacy bootstrap (Q2)?",
+   "Do x86_64 musl and BusyBox hosts match aarch64 results, or hold open (Q1)?",
+   "Is exec-server the only supported bootstrap for new work?"
+  ]
+ },
+ {
+  "id": "F-2704",
+  "issue": 77,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Login shells and profile scripts on the host",
+  "epic": "E27",
+  "acCount": 32,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.cleanRemoteServer"
+   ],
+   "settings": [
+    "remote.SSH.enableRemoteCommand",
+    "remote.SSH.useLocalServer",
+    "remote.SSH.useExecServer",
+    "remote.SSH.permitPtyAllocation",
+    "remote.SSH.connectTimeout",
+    "remote.SSH.remotePlatform",
+    "remote.SSH.showLoginTerminal"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "profile output tolerated and logged",
+    "fish login shell timeout",
+    "RemoteCommand ending session",
+    "environment propagation to server, tasks, terminals"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "ssh",
+    "zsh",
+    "bash",
+    "fish",
+    "sh",
+    "powershell"
+   ],
+   "network": [],
+   "remoteFiles": [
+    ".profile",
+    ".bashrc",
+    ".bash_profile",
+    ".zshrc",
+    ".zprofile",
+    "~/.vscode-server/data/logs/"
+   ],
+   "localFiles": [
+    "ssh config file"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2106",
+   "remote-ssh#F-2107",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-2703"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.login-shell-compat",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 6,
+  "notes": "Defines which login shells and profile behaviors let setup commands run. Failures end in timeout or immediate failure dialog. Environment probe belongs to core. Fish in default mode times out.",
+  "questions": [
+   "Reproduce fish timeout (A) or start setup through sh so fish hosts connect (B)?",
+   "Is a hang-detection hint wanted beyond the timeout dialog?",
+   "Which env variables from profile scripts must the bridge guarantee reach the server?"
+  ]
+ }
+]

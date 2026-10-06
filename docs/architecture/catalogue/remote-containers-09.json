@@ -1,0 +1,678 @@
+[
+ {
+  "id": "F-0802",
+  "issue": 40,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Template catalogue and selection",
+  "epic": "E08",
+  "acCount": 37,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "template quick pick flat vs curated",
+    "reuse-existing-file chooser",
+    "custom template id mode (2+ slashes)",
+    "Learn More item",
+    "Show All Templates item",
+    "apply-failure modal"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "window.showErrorMessage",
+    "window.withProgress",
+    "workspace.fs"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "devcontainers CLI template apply (assumed)"
+   ],
+   "network": [
+    "containers.dev catalogue",
+    "OCI registry for custom template id",
+    "aka.ms/vscode-dev-containers"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "Dockerfile*",
+    "*compose*.yml/yaml in target root",
+    ".devcontainer/devcontainer.json (output)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0801",
+   "remote-containers#F-0803",
+   "remote-containers#F-0804",
+   "remote-containers#F-0805",
+   "remote-containers#F-0806",
+   "remote-containers#F-0701",
+   "remote-containers#F-0403",
+   "remote-containers#F-0413",
+   "remote-containers#F-0807",
+   "remote-containers#F-0105",
+   "remote-containers#F-0811"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.template-catalogue-picker",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Quick pick that lists templates downloaded each run; curation by folder contents; custom id; reuse-existing Dockerfile/compose chooser. Owns no command or setting. Catalogue fetched before first screen.",
+  "questions": [
+   "Is the curated recommendation data (non-neutral file to template map) in scope for a clean reimplementation, or only the tested file types?",
+   "Should the catalogue fetch use the proxy settings, given template download did not in the reference?",
+   "Does apply use the devcontainers CLI or an in-house OCI template fetcher?"
+  ]
+ },
+ {
+  "id": "F-0801",
+  "issue": 53,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Add Dev Container Configuration Files",
+  "epic": "E08",
+  "acCount": 43,
+  "surfaces": {
+   "commands": [
+    "remote-containers.createDevContainerFile",
+    "remote-containers.reopenInContainer",
+    "remote-containers.openDevContainerFile"
+   ],
+   "settings": [
+    "dev.containers.executeInWSL",
+    "http.proxy",
+    "http.proxySupport"
+   ],
+   "views": [],
+   "menus": [
+    "remote_30_dev-container_2_actions@4"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "ssh-remote",
+    "wsl",
+    "tunnel"
+   ],
+   "other": [
+    "location pick",
+    "stage pick",
+    "progress notification",
+    "overwrite prompt per file",
+    "telemetry event createConfiguration (suppressed per F-1405)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "window.showErrorMessage",
+    "window.withProgress",
+    "workspace.fs"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "devcontainers CLI template apply (assumed)",
+    "docker (existence not required)"
+   ],
+   "network": [
+    "containers.dev catalogue",
+    "template download from registry",
+    "aka.ms/devcontainer.json"
+   ],
+   "remoteFiles": [
+    ".devcontainer/devcontainer.json (ssh windows)",
+    ".github/dependabot.yml (optional file example)"
+   ],
+   "localFiles": [
+    ".devcontainer/devcontainer.json",
+    ".devcontainer.json",
+    "user-data configs/<folder>/ under global storage",
+    "*.code-workspace"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0802",
+   "remote-containers#F-0803",
+   "remote-containers#F-0804",
+   "remote-containers#F-0805",
+   "remote-containers#F-0402",
+   "remote-containers#F-0404",
+   "remote-containers#F-0302",
+   "remote-containers#F-0108",
+   "remote-containers#F-0410",
+   "remote-containers#F-0701",
+   "remote-containers#F-0812",
+   "remote-containers#F-0807",
+   "remote-containers#F-0810",
+   "remote-containers#F-0811",
+   "remote-containers#F-1401",
+   "remote-containers#F-1405",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.config-wizard",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "editor-cli"
+  ],
+  "errorPaths": 16,
+  "notes": "Wizard host: location pick, stage pick, template chain, write phase with per-file overwrite prompts. Variants by window kind (ssh, multi-root, WSL, Recovery Container, clone volume). Writes nested devcontainer.json; two files for compose.",
+  "questions": [
+   "Is the user-data configuration path prefix kept under the reference extension id or renamed per F-1401?",
+   "Which of the never-observed folder-select strings are required behaviours?",
+   "Why did the write-phase template download ignore http.proxy?"
+  ]
+ },
+ {
+  "id": "F-0803",
+  "issue": 66,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Template and feature option prompts",
+  "epic": "E08",
+  "acCount": 32,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "per-option quick picks (enum/string)",
+    "combined boolean checkbox screen",
+    "Additional Options gate item",
+    "Keep Defaults or Configure Options detour",
+    "default marker"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "window.showErrorMessage",
+    "window.withProgress",
+    "workspace.fs"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "template/feature option metadata (from registry)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0802",
+   "remote-containers#F-0804",
+   "remote-containers#F-0801",
+   "remote-containers#F-0806",
+   "remote-containers#F-0807",
+   "remote-containers#F-0805"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.options-prompts",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 2,
+  "notes": "Quick-pick screens driven by option schemas of templates and features. Owns no command or setting. Boolean options merged into one checkbox screen; schema defaults marked; existing devcontainer.json not read back.",
+  "questions": [
+   "Which schema shapes beyond enum, string and boolean must be handled?",
+   "Is the fallback placeholder for description-less options inferred only, and is that acceptable?",
+   "Where do the chosen option values get resolved: this wizard or the CLI?"
+  ]
+ },
+ {
+  "id": "F-0806",
+  "issue": 67,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "New Dev Container",
+  "epic": "E08",
+  "acCount": 38,
+  "surfaces": {
+   "commands": [
+    "remote-containers.createDevContainer",
+    "remote-containers.newContainer"
+   ],
+   "settings": [
+    "dev.containers.executeInWSL",
+    "http.proxy",
+    "http.proxySupport"
+   ],
+   "views": [
+    "targetsContainers"
+   ],
+   "menus": [
+    "remote_30_dev-container_2_actions@1",
+    "view/title (Dev Containers view plus icon)"
+   ],
+   "contextKeys": [
+    "hideConnectCommands",
+    "remoteName"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "ssh-remote",
+    "wsl",
+    "tunnel",
+    "exec",
+    "k8s-container",
+    "apple-container"
+   ],
+   "other": [
+    "Dev container name combo quick pick",
+    "Create Dev Container item",
+    "Additional Options item",
+    "plus hub menu"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "window.showErrorMessage",
+    "window.withProgress",
+    "workspace.fs"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker (named volume creation)",
+    "devcontainers CLI build/up (assumed)"
+   ],
+   "network": [
+    "containers.dev catalogue"
+   ],
+   "remoteFiles": [
+    "volume workspace in container"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0802",
+   "remote-containers#F-0803",
+   "remote-containers#F-0804",
+   "remote-containers#F-0805",
+   "remote-containers#F-0504",
+   "remote-containers#F-0702",
+   "remote-containers#F-0107",
+   "remote-containers#F-0901",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0701",
+   "remote-containers#F-0703",
+   "remote-containers#F-0808",
+   "remote-containers#F-0603",
+   "remote-containers#F-0201"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.new-container-flow",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "docker"
+  ],
+  "errorPaths": 5,
+  "notes": "Creates a container with a fresh Docker volume as workspace, no local folder. Name box defaults to lowercased template id; skips feature and optional-file steps unless Additional Options is chosen. Volume name validation owned by F-0702.",
+  "questions": [
+   "Does Create Dev Container with no options really skip feature and optional-file screens entirely?",
+   "Which authorities should the command palette when-clause admit in the clean build?",
+   "Who owns the volume creation and build hand-off after naming: F-0806 or F-0702/F-0504?"
+  ]
+ },
+ {
+  "id": "F-0804",
+  "issue": 69,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Feature picker",
+  "epic": "E08",
+  "acCount": 29,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.defaultFeatures",
+    "http.proxy",
+    "http.proxySupport",
+    "security.workspace.trust.enabled"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "Select Features multi-select quick pick",
+    "Finish and OK buttons",
+    "owner-trust gate (Trust owner, F-0806 only)",
+    "filtering rule",
+    "pre-check of existing features (F-0807 only)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "window.showErrorMessage",
+    "window.withProgress",
+    "workspace.fs"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "containers.dev feature catalogue",
+    "ghcr.io/devcontainers/features/*"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json features property"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0803",
+   "remote-containers#F-0105",
+   "remote-containers#F-0108",
+   "remote-containers#F-0106",
+   "remote-containers#F-0701",
+   "remote-containers#F-0801",
+   "remote-containers#F-0806",
+   "remote-containers#F-0807",
+   "remote-containers#F-0802",
+   "remote-containers#F-0414",
+   "remote-containers#F-1401"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.feature-picker",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 2,
+  "notes": "Shared multi-select feature catalogue reused by three callers. defaultFeatures setting has no visible effect here. Finish writes features keyed by OCI reference; OK detours to option prompts. Item locking from image metadata not observed.",
+  "questions": [
+   "Is the owner-trust gate in scope given it only applies to F-0806 callers?",
+   "Should defaultFeatures ever pre-check items, given the reference does not?",
+   "How are features written when OCI reference tag and id differ, per BR-8?"
+  ]
+ },
+ {
+  "id": "F-0812",
+  "issue": 71,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Open Container Configuration File",
+  "epic": "E08",
+  "acCount": 43,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openDevContainerFile"
+   ],
+   "settings": [
+    "dev.containers.repositoryConfigurationPaths",
+    "dev.containers.logLevel",
+    "dev.containers.experimentalAppleContainerSupport"
+   ],
+   "views": [
+    "detailsContainers"
+   ],
+   "menus": [
+    "remote indicator Dev Containers group (first item)",
+    "view/title gear (detailsContainers)",
+    "view/item/context (Configuration)"
+   ],
+   "contextKeys": [
+    "workspaceFolderCount",
+    "remoteName"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "ssh-remote",
+    "wsl",
+    "tunnel",
+    "k8s-container",
+    "apple-container"
+   ],
+   "other": [
+    "multi-configuration picker (F-0301)",
+    "fallthrough to F-0801 wizard",
+    "per-image attach config (F-0602)",
+    "mirrored repository configuration lookup"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "window.showErrorMessage",
+    "window.withProgress",
+    "workspace.fs"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "git (origin remote lookup)",
+    "docker (container reachability, attached case)"
+   ],
+   "network": [
+    "git remote host URL shapes https:// and user@host:path"
+   ],
+   "remoteFiles": [
+    ".devcontainer/devcontainer.json in container",
+    "per-image attach configuration file"
+   ],
+   "localFiles": [
+    ".devcontainer/devcontainer.json",
+    ".devcontainer.json",
+    ".devcontainer/<sub>/devcontainer.json",
+    "mirrored repo config folder"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0801",
+   "remote-containers#F-0602",
+   "remote-containers#F-0302",
+   "remote-containers#F-0903",
+   "remote-containers#F-0402",
+   "remote-containers#F-0104",
+   "remote-containers#F-0401",
+   "remote-containers#F-0410",
+   "remote-containers#F-0106",
+   "remote-containers#F-0404",
+   "remote-containers#F-0802"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.config-file-opener",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "editor-cli",
+   "openssh",
+   "docker"
+  ],
+  "errorPaths": 8,
+  "notes": "Opens, picks or creates the container configuration file depending on discovery. Handles untitled and virtual-folder workspaces, Recovery Container, attached containers, and mirrored repository configuration. Reference defect in 7.E8 settled as not reproduced.",
+  "questions": [
+   "Which of the virtual-folder and saved-workspace silent-no-op cases must the clean build reproduce versus fix?",
+   "Does mirrored lookup need a git binary or can origin be read from config directly?",
+   "Where is the per-image attach file stored, and who owns its path?"
+  ]
+ },
+ {
+  "id": "F-0805",
+  "issue": 89,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Optional template files",
+  "epic": "E08",
+  "acCount": 21,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "security.workspace.trust.enabled"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "Optional Files/Directories quick pick",
+    "OK and Back buttons",
+    "user-data branch notification",
+    "workspace branch Reopen in Container notification"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "window.showErrorMessage",
+    "window.withProgress",
+    "workspace.fs"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "template package from registry"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "template optionalPaths entries (e.g. .github/dependabot.yml)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0801",
+   "remote-containers#F-0802",
+   "remote-containers#F-0803",
+   "remote-containers#F-0804",
+   "remote-containers#F-0806",
+   "remote-containers#F-0108",
+   "remote-containers#F-0402",
+   "remote-containers#F-0302",
+   "remote-containers#F-0812",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.optional-files-step",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 4,
+  "notes": "Final wizard step listing the template optionalPaths; always shown for reuse-existing Dockerfile or compose templates. Items and order come from template metadata. Applies for both workspace and user-data branches.",
+  "questions": [
+   "What happens when optionalPaths entries collide with existing files: does the overwrite prompt still apply?",
+   "Is the step shown in the F-0806 volume branch with no folder to write into?",
+   "Are all optionalPaths checked by default?"
+  ]
+ },
+ {
+  "id": "F-0809",
+  "issue": 91,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Add extension to devcontainer.json",
+  "epic": "E08",
+  "acCount": 51,
+  "surfaces": {
+   "commands": [
+    "remote-containers.addExtensionToConfig",
+    "remote-containers.openDevContainerFile",
+    "remote-containers.createDevContainerFile"
+   ],
+   "settings": [
+    "dev.containers.repositoryConfigurationPaths"
+   ],
+   "views": [],
+   "menus": [
+    "extension/context#0 (group 2_configure)"
+   ],
+   "contextKeys": [
+    "isBuiltinExtension",
+    "isWorkspaceScopedExtension",
+    "remoteName"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container"
+   ],
+   "other": [
+    "info notification with Dev Container configuration link",
+    "multi-file quick pick",
+    "direct write to user-data configuration with no editor"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showInformationMessage",
+    "workspace.openTextDocument",
+    "workspace.applyEdit"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "git (mirrored config lookup)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "attached-container per-image configuration"
+   ],
+   "localFiles": [
+    "devcontainer.json extensions or customizations.vscode.extensions",
+    "user-data configuration",
+    "mirrored repo configuration"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0801",
+   "remote-containers#F-0812",
+   "remote-containers#F-0602",
+   "remote-containers#F-0302",
+   "remote-containers#F-0810",
+   "remote-containers#F-0303",
+   "remote-containers#F-0807",
+   "remote-containers#F-0410",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.add-extension-to-config",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 6,
+  "notes": "Extensions-view context action inserting an extension id into the discovered devcontainer.json, legacy or customizations array. Duplicate check ignores opt-out entries. Recovery Container writes redirect to bootstrap file.",
+  "questions": [
+   "Should the duplicate check recognise the dash-prefixed opt-out form, which the reference does not?",
+   "In Recovery Container, is writing to the bootstrap file intended behaviour or a defect to fix?",
+   "Is the Extensions view menu entry (VS Code core) available to third-party extensions unchanged?"
+  ]
+ }
+]

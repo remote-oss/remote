@@ -1,0 +1,463 @@
+[
+ {
+  "id": "F-0301",
+  "issue": 20,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "devcontainer.json discovery and configuration selection",
+  "epic": "E03",
+  "acCount": 76,
+  "surfaces": {
+   "commands": [
+    "remote-containers.reopenInContainer",
+    "remote-containers.openFolder",
+    "remote-containers.openWorkspace",
+    "remote-containers.openDevContainerFile",
+    "remote-containers.rebuildAndReopenInContainer",
+    "remote-containers.rebuildNoCacheAndReopenInContainer",
+    "remote-containers.reopenLocally",
+    "remote-containers.showReopenInContainerNotificationReset"
+   ],
+   "settings": [
+    "dev.containers.repositoryConfigurationPaths",
+    "dev.containers.dockerComposePath"
+   ],
+   "views": [
+    "detailsContainers",
+    "targetsContainers"
+   ],
+   "menus": [
+    "remote indicator group remote_30_dev-container_2_actions"
+   ],
+   "contextKeys": [
+    "hideConnectCommands",
+    "hideRebuildCommands",
+    "canReopenLocally"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "exec",
+    "k8s-container",
+    "apple-container",
+    "wsl",
+    "ssh-remote"
+   ],
+   "other": [
+    "discovery notification",
+    "configuration quick pick with Open File button",
+    "modal trust dialog",
+    "remote indicator label",
+    "state-db flag for notification suppression"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showInformationMessage",
+    "window.showQuickPick",
+    "window.showErrorMessage",
+    "window.showWarningMessage",
+    "window.showOpenDialog",
+    "commands.executeCommand",
+    "workspace fs reads"
+   ],
+   "proposedApi": [
+    "workspaceTrust (requestWorkspaceTrust)"
+   ],
+   "processes": [
+    "docker-compose (validation of compose-backed configs)"
+   ],
+   "network": [
+    "aka.ms/vscode-remote/docker (link only)"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    ".devcontainer/devcontainer.json",
+    ".devcontainer.json",
+    ".devcontainer/<sub>/devcontainer.json",
+    ".code-workspace",
+    "compose files referenced by config"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0106",
+   "remote-containers#F-0109",
+   "remote-containers#F-0401",
+   "remote-containers#F-0403",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0812",
+   "remote-containers#F-0302",
+   "remote-containers#F-0303",
+   "remote-containers#F-0304",
+   "remote-containers#F-0305",
+   "remote-containers#F-0306",
+   "remote-containers#F-0402",
+   "remote-containers#F-0701",
+   "remote-containers#F-0801",
+   "remote-containers#F-0201",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.config-discovery",
+  "candidateLibrary": "lib-identifiers",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 12,
+  "notes": "Pure host-side discovery of candidate config files, picker ordering and labels, multi-root workspace rules, notification, validation errors. Uses proposed workspaceTrust API; ids reused verbatim per decision D-14.",
+  "questions": [
+   "Is the proposed workspaceTrust request mandatory, or may the clean side use a stable trust API?",
+   "Which window kinds are the eight remote names behind the connect-command condition, exactly?",
+   "Does candidate ordering in the picker have a defined sort across platforms and symlinks?"
+  ]
+ },
+ {
+  "id": "F-0306",
+  "issue": 44,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Image metadata and configuration merging",
+  "epic": "E03",
+  "acCount": 49,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "devcontainer.metadata image/container label",
+    "merge table of properties",
+    "no commands, settings or views"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "docker (image inspect, container create, container inspect)",
+    "docker compose"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "devcontainer.metadata label on image and container",
+    "devcontainer.config_file label",
+    "devcontainer.local_folder label"
+   ],
+   "localFiles": [
+    "devcontainer.json",
+    "Dockerfile",
+    "compose file"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0402",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0414",
+   "remote-containers#F-0106",
+   "remote-containers#F-0601",
+   "remote-containers#F-0206",
+   "remote-containers#F-0302",
+   "remote-containers#F-0303",
+   "remote-containers#F-0304",
+   "remote-containers#F-0305",
+   "remote-containers#F-0410",
+   "remote-containers#F-0415",
+   "remote-containers#F-0416",
+   "remote-containers#F-0504",
+   "remote-containers#F-0506"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.metadata-merge",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Ordered layer list: image label layers, then feature layers, then devcontainer.json last. Per-property merge rules (union, last wins, boolean/optional gpu, memory units). Label persisted on containers and built images; attach reads container label.",
+  "questions": [
+   "Should merging be delegated wholesale to the devcontainers CLI or reimplemented to match the merge table?",
+   "Is the order among several Features in layers owned by F-0414 fully specified?",
+   "Which exact property set forms the merge table versus ignored label properties?"
+  ]
+ },
+ {
+  "id": "F-0305",
+  "issue": 45,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "devcontainer.json property support matrix",
+  "epic": "E03",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "customizations.vscode namespace",
+    "legacy top-level properties normalized",
+    "secrets property inert",
+    "JSON schema supplied by VS Code core configuration-editing"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace trust state"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "raw.githubusercontent.com devcontainers spec schema (editor-side download)"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json",
+    "state.vscdb workspace key (inspected only)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0302",
+   "remote-containers#F-0303",
+   "remote-containers#F-0304",
+   "remote-containers#F-0306",
+   "remote-containers#F-0502",
+   "remote-containers#F-0505",
+   "remote-containers#F-0506",
+   "remote-containers#F-0602",
+   "remote-containers#F-0810"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.property-normalizer",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Defines which properties are honored, legacy-to-customizations normalization and conflict precedence, unknown-property handling. Schema and diagnostics are editor core, not extension. Mostly a mapping table.",
+  "questions": [
+   "Does the clean extension ship any schema association, or rely entirely on core configuration-editing?",
+   "Which legacy property wins when both legacy and customizations.vscode forms are present?",
+   "Is the secrets property required to stay fully inert?"
+  ]
+ },
+ {
+  "id": "F-0303",
+  "issue": 47,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Configuration change detection and rebuild prompt",
+  "epic": "E03",
+  "acCount": 31,
+  "surfaces": {
+   "commands": [
+    "remote-containers.rebuildContainer (owned by F-0405, invoked by prompt)"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "single informational notification with Rebuild and Ignore buttons",
+    "acknowledgment stored per workspace in state store"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.createFileSystemWatcher",
+    "window.showInformationMessage",
+    "ExtensionContext.workspaceState"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json",
+    "Dockerfile",
+    "docker-compose.yml",
+    "state.vscdb (workspace storage)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0502",
+   "remote-containers#F-0301",
+   "remote-containers#F-0302",
+   "remote-containers#F-0304",
+   "remote-containers#F-0306",
+   "remote-containers#F-0401",
+   "remote-containers#F-0405"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.change-detector",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Watches config, Dockerfile and compose files while connected; live for devcontainer.json, delayed for others at activation. Batches diverged files, Ignore persists per-file acknowledgment, Rebuild resyncs all. Recovery container variant.",
+  "questions": [
+   "Exact hash or comparison basis for diverged-file detection, and is a content hash acceptable?",
+   "When exactly are non-live files checked: activation only, or also reconnect?",
+   "Where must the acknowledgment be stored to match observable behavior?"
+  ]
+ },
+ {
+  "id": "F-0304",
+  "issue": 48,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Variable substitution in configuration",
+  "epic": "E03",
+  "acCount": 67,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "variable catalogue: localEnv, env, containerEnv, localWorkspaceFolder, localWorkspaceFolderBasename, containerWorkspaceFolder, containerWorkspaceFolderBasename, devcontainerId",
+    "log lines for no-name references"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker (container config env lookup)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json",
+    "attached container configuration file"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0408",
+   "remote-containers#F-0302",
+   "remote-containers#F-0303",
+   "remote-containers#F-0305",
+   "remote-containers#F-0306",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0414",
+   "remote-containers#F-0401",
+   "remote-containers#F-0405",
+   "remote-containers#F-0601",
+   "remote-containers#F-0602",
+   "remote-containers#F-0812",
+   "remote-containers#F-0504"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.variable-substitution",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Resolution moment decides scope: host variables at read, containerEnv after creation. devcontainerId from two labels via public computation. No-name reference errors surface via other features' dialogs. Windows/WSL path forms differ.",
+  "questions": [
+   "Is devcontainerId required to be bit-identical to the reference computation?",
+   "Which resolution moments exist, and which properties resolve at each?",
+   "How are Windows and WSL path forms of localWorkspaceFolder to be normalized?"
+  ]
+ },
+ {
+  "id": "F-0302",
+  "issue": 78,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Repository configuration folders and user-data configurations",
+  "epic": "E03",
+  "acCount": 46,
+  "surfaces": {
+   "commands": [
+    "remote-containers.createDevContainerFile (owned F-0801)",
+    "remote-containers.reopenInContainer",
+    "remote-containers.openDevContainerFile",
+    "remote-containers.openRepositoryInUniqueVolume"
+   ],
+   "settings": [
+    "dev.containers.repositoryConfigurationPaths",
+    "remote.containers.repositoryConfigurationPaths (deprecated alias)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "extra row in add-configuration stage pick with Open File button",
+    "modal delete dialog",
+    "notification text substitution",
+    "user-data config slot under globalStorage configs folder"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.showInformationMessage"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "git (remote URL lookup, likely)",
+    "docker"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "<globalStorage>/ms-vscode-remote.remote-containers/configs/<name>/.devcontainer/devcontainer.json",
+    "mirrored config folders named by repositoryConfigurationPaths",
+    "git remote URL forms git://, ssh://, https"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0402",
+   "remote-containers#F-0801",
+   "remote-containers#F-0301",
+   "remote-containers#F-0304",
+   "remote-containers#F-0305",
+   "remote-containers#F-0306",
+   "remote-containers#F-0812",
+   "remote-containers#F-0108",
+   "remote-containers#F-0101",
+   "remote-containers#F-0701",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.external-config-store",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 6,
+  "notes": "Two external config sources beside local files: repository mirror folders matched by remote URL, and per-workspace user-data slots keyed by folder basename. Collision and WSL translation failure cases. Clone-in-volume uses only the first source.",
+  "questions": [
+   "How is a remote URL normalized into the mirror folder match key across git://, ssh:// and https forms?",
+   "How are user-data slots disambiguated when two folders share a basename?",
+   "What is the exact external-config translation failure under WSL?"
+  ]
+ }
+]

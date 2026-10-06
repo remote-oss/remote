@@ -1,0 +1,657 @@
+[
+ {
+  "id": "F-2401",
+  "issue": 46,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Host prerequisites: glibc, libstdc++, architecture and legacy servers",
+  "epic": "E24",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "Prerequisite check outcome shown in failure dialog",
+    "Custom sysroot env variable workaround"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "uname",
+    "ldd",
+    "getconf"
+   ],
+   "network": [
+    "aka.ms/vscode-remote/linux-prerequisites",
+    "aka.ms/vscode-remote/faq/old-linux"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server/bin/<commit>/",
+    "~/.vscode-server/code-<commit>",
+    "~/.vscode-server/cli/servers"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2402",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2703",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-2304"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.host-prereq-check",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 12,
+  "notes": "Owns no command or setting. Check runs inside connect; reports glibc/libstdc++ minimum, arch, 32-bit ARM, musl, custom sysroot cases. Several strings (S145, S147, S148) have no observed placement.",
+  "questions": [
+   "Should STR:S147 and STR:S148 be kept, and for which conditions, given no stable input produced them?",
+   "What are the real glibc and libstdc++ minimum versions and exact check commands to implement?",
+   "How do macOS and Windows hosts behave for prerequisite checks?"
+  ]
+ },
+ {
+  "id": "F-2402",
+  "issue": 47,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Required commands on the host (curl/wget, tar and others)",
+  "epic": "E24",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "Failure reason plus stored session hint",
+    "Session Troubleshooting terminal row"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTerminal"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "curl",
+    "wget",
+    "tar",
+    "gzip",
+    "sh",
+    "bash",
+    "ln",
+    "flock",
+    "getconf",
+    "ldd",
+    "uname"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "~/.vscode-server",
+    "~/.profile"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2401",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-2703",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-3907"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.host-tool-probe",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "Guards the install: no downloader means failure, or client-side fallback in auto mode. Texts S004, S020, S062, S083 are unplaced in the reference. Login PATH decides what counts as present.",
+  "questions": [
+   "When does STR:S020 appear, or should it stay unused or be reserved for a new status check?",
+   "Which situation shows STR:S004 for a program other than curl or wget?",
+   "Which hosts need bash, and what happens when bash is removed?"
+  ]
+ },
+ {
+  "id": "F-2403",
+  "issue": 48,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Server download and install on the host",
+  "epic": "E24",
+  "acCount": 27,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.useCurlAndWgetConfigurationFiles"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "Stage texts Downloading/Installing VS Code Server",
+    "Exec-server versus legacy mode split"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "curl",
+    "wget",
+    "tar",
+    "code"
+   ],
+   "network": [
+    "VS Code update service (host side)"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server",
+    "~/.curlrc",
+    "~/.wgetrc",
+    "/tmp"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2402",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2408",
+   "remote-ssh#F-2401",
+   "remote-ssh#F-2404",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2406",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2413",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-2703",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-3907"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.server-installer",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh",
+   "editor-cli"
+  ],
+  "errorPaths": 9,
+  "notes": "Core install pipeline: exec-server mode via the editor CLI versus legacy tarball via curl/wget plus unpack. Stage texts feed F-2304 progress. curlrc/wgetrc skipped unless setting on.",
+  "questions": [
+   "Where are mitigation texts S040, S054, S055, S061, S080, S124, S154 shown without chat, and for which failure?",
+   "When does STR:S071 appear and what fills its placeholder?",
+   "Should a progress gap during the CLI server download be filled with an indeterminate stage?"
+  ]
+ },
+ {
+  "id": "F-2404",
+  "issue": 49,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "HTTP(S) proxy for the server install and launch",
+  "epic": "E24",
+  "acCount": 40,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.httpProxy",
+    "remote.SSH.httpsProxy",
+    "http.proxy"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "Per-host object with star key",
+    "Changes need server kill to apply"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "curl",
+    "wget"
+   ],
+   "network": [
+    "user-configured proxy URL"
+   ],
+   "remoteFiles": [
+    "~/.curlrc",
+    "~/.bashrc",
+    "~/.profile"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2310",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-3907",
+   "remote-ssh#F-2006"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.proxy-env",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "Sets http_proxy and https_proxy for install and launch. String or per-host object with a star fallback. URI validation, schemeless values, credentials in URL, client-side proxy boundary with F-2405.",
+  "questions": [
+   "Which object key applies when the host is user@alias, user@hostname or an encoded JSON host name?",
+   "Where do STR:S110, S128 and S018 appear and what fills S128's placeholder?",
+   "Should invalid values be rejected by the extension or left to the download tool?"
+  ]
+ },
+ {
+  "id": "F-2405",
+  "issue": 50,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Client-side download and transfer with scp",
+  "epic": "E24",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.localServerDownload",
+    "remote.SSH.allowLocalServerDownload",
+    "remote.SSH.path",
+    "remote.SSH.useLocalServer",
+    "http.proxy"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "Trust-gated hidden terminal task for scp (VS Code core)",
+    "Marker file plus archive copy"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.fs"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "scp",
+    "ssh"
+   ],
+   "network": [
+    "update.code.visualstudio.com"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server/",
+    "~/.vscode-server/bin/<commit>/"
+   ],
+   "localFiles": [
+    "vscode_server_<epoch-ms> temp folder"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2402",
+   "remote-ssh#F-2404",
+   "remote-ssh#F-2406",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2408",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2506",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-3905"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.local-download-transfer",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 12,
+  "notes": "Modes auto, always, off; deprecated boolean setting. Client downloads archive into temp folder, copies with scp found beside ssh, under trust gate. Failed copy or stalled download hangs the window in the reference.",
+  "questions": [
+   "Should a failed copy or stalled download end with the failure dialog and a timeout, as recommended?",
+   "On Windows clients, where is scp.exe looked up and which temp folder holds the download?",
+   "Where do STR:S021 and S072 appear?"
+  ]
+ },
+ {
+  "id": "F-2406",
+  "issue": 51,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Manual local bootstrap of the server",
+  "epic": "E24",
+  "acCount": 30,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.localServerDownload",
+    "remote.SSH.useExecServer",
+    "remote.SSH.useLocalServer"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "Undeclared setting value, core warning in settings.json"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showWarningMessage",
+    "window.withProgress",
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "scp"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "~/.vscode-server/bin/<commit>/",
+    "~/.vscode-server/cli/"
+   ],
+   "localFiles": [
+    "$HOME/vscode-remote-ssh-bootstrap/vscode-server.tar.gz"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2408",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-0109",
+   "remote-ssh#F-2603",
+   "remote-ssh#F-3903"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.manual-bootstrap",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 7,
+  "notes": "Undeclared enum value manual-bootstrap forces legacy mode and copies a user-placed archive for offline hosts. Windows hosts unsupported. Reuses the F-2405 scp step and trust gate.",
+  "questions": [
+   "Declare manual-bootstrap in the enum or keep it undeclared with the core warning?",
+   "Which home folder variable does the bootstrap path use on Windows and macOS clients?",
+   "What surface shows the Windows-remote unsupported text?"
+  ]
+ },
+ {
+  "id": "F-2407",
+  "issue": 52,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Server install location: remote.SSH.serverInstallPath",
+  "epic": "E24",
+  "acCount": 22,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.serverInstallPath"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "Plain-description map setting, Settings editor table (VS Code core)"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "ssh"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "<path>/.vscode-server",
+    "~/.vscode-server"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2408",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2413",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2108",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2003"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.install-path-resolver",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Per-host map of alias to absolute path; server goes in <path>/.vscode-server. Verbatim path shapes, plain-absolute check, host cannot create folder. Space in value passes check but breaks install.",
+  "questions": [
+   "Should a space in the path be rejected, reproduced as failure, or accepted and installed correctly?",
+   "Which default folder and which value forms apply on macOS and Windows hosts?",
+   "What fills STR:S139's placeholder?"
+  ]
+ },
+ {
+  "id": "F-2408",
+  "issue": 53,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Install lock files and concurrent connects",
+  "epic": "E24",
+  "acCount": 40,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.lockfilesInTmp",
+    "remote.SSH.useFlock",
+    "remote.SSH.useExecServer",
+    "remote.SSH.configFile"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "Wait text Waiting for other windows to connect"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "flock",
+    "ln",
+    "ssh"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "/tmp/vscode-remote-lock.<user>.<commit>",
+    "~/.vscode-server/bin/<commit>/vscode-remote-lock.<user>.<commit>",
+    "~/.vscode-server/cli/servers/.locks/<Quality>-<commit>"
+   ],
+   "localFiles": [
+    "vscode-remote-ssh-<id>-install.lock in client temp folder"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2413",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-1403",
+   "remote-ssh#F-1406",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2301"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.install-lock",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 9,
+  "notes": "Two-level locking: client lock per alias (2 minute wait) and host lock (30 attempts) via flock or ln, in legacy mode only. Stale ln locks, crashed flock holders, NFS homes covered.",
+  "questions": [
+   "Should a stale ln lock be cleaned up automatically in the reimplementation?",
+   "Do macOS and Windows hosts create any lock files, and which method applies?",
+   "Which temp folder holds the client lock on Windows and macOS clients?"
+  ]
+ }
+]

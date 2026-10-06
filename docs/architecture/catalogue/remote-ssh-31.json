@@ -1,0 +1,637 @@
+[
+ {
+  "id": "F-3901",
+  "issue": 78,
+  "repo": "remote-ssh",
+  "kind": "decision",
+  "label": "spec:draft",
+  "title": "Decision: identity card and reference identifiers",
+  "epic": "E39",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.* (17 ids)",
+    "remote-internal.* (5 ids)"
+   ],
+   "settings": [
+    "remote.SSH.* (35 keys verbatim)",
+    "remote.SSH.serverDownloadUrlTemplate"
+   ],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator (2 items)",
+    "commandPalette (6 items)"
+   ],
+   "contextKeys": [
+    "opensshremotes.active (proposed, R-54 stand-down)"
+   ],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "extension id remote-oss.remote-ssh",
+    "display name Remote - SSH",
+    "URI handler scheme://remote-oss.remote-ssh/path",
+    "chat participant id remote-ssh",
+    "label formatter ssh-remote+* suffix SSH",
+    "remoteHelp four roles"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "extensions.getExtension",
+    "window.showWarningMessage",
+    "env.uriScheme",
+    "ExtensionContext.globalState",
+    "ExtensionContext.globalStorageUri"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.json",
+    "LICENSE",
+    "README",
+    "package.nls.json",
+    "l10n bundle"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-1406",
+   "remote-containers#F-1401",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-3907",
+   "remote-ssh#F-3904",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-3906",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2004",
+   "remote-ssh#F-2005",
+   "remote-ssh#F-2007",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2504",
+   "remote-ssh#F-2606"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.identity-and-standdown",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 3,
+  "notes": "Fixes verbatim identifiers with own id; defines stand-down when the reference extension is enabled; ledger of invented identifiers. Coexistence with community resolvers unsupported.",
+  "questions": [
+   "Is ruling R-54 (stand-down) confirmed for the ssh room, and what is the context key name?",
+   "What are the stand-down warning text and button label, and is there a re-check when the reference is enabled mid-session?",
+   "Should the stand-down also cover community ssh-remote resolvers, or is a README note enough?",
+   "Is a one-time import of the reference's stored choices wanted?",
+   "Spec cites material not for the clean side (manifest paths of the reference) in provenance."
+  ]
+ },
+ {
+  "id": "F-3902",
+  "issue": 79,
+  "repo": "remote-ssh",
+  "kind": "decision",
+  "label": "spec:draft",
+  "title": "Decision: where the server comes from for SSH hosts",
+  "epic": "E39",
+  "acCount": 18,
+  "surfaces": {
+   "commands": [
+    "workbench.action.openSettings (core, with query)"
+   ],
+   "settings": [
+    "remote.SSH.serverDownloadUrlTemplate",
+    "remote.SSH.useExecServer",
+    "remote.SSH.localServerDownload",
+    "remote.SSH.serverInstallPath",
+    "remote.SSH.useCurlAndWgetConfigurationFiles",
+    "remote.SSH.remoteServerListenOnSocket",
+    "remote.SSH.defaultExtensions"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "modal no-source dialog (Open Setting, Cancel)",
+    "licence dialog (Accept and Continue, Cancel)",
+    "placeholders os arch version commit quality release",
+    "global-state key derived from licence URL"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage (modal)",
+    "commands.executeCommand",
+    "ExtensionContext.globalState"
+   ],
+   "proposedApi": [
+    "resolvers (for commit/quality)"
+   ],
+   "processes": [
+    "ssh",
+    "scp",
+    "tar",
+    "curl",
+    "wget",
+    "server launcher bin/<serverApplicationName> --version",
+    "--accept-server-license-terms"
+   ],
+   "network": [
+    "github.com/VSCodium/vscodium releases",
+    "github.com/VSCodium/vscodium-insiders releases",
+    "update.code.visualstudio.com",
+    "vscode.download.prss.microsoft.com",
+    "client updateUrl host",
+    "aka.ms/vscode-server-license"
+   ],
+   "remoteFiles": [
+    "<data folder>/bin/<commit>/",
+    "<data folder>/cli/servers/Stable-<commit>/server/",
+    "serverDataFolderName (.vscodium-server, .vscode-server)"
+   ],
+   "localFiles": [
+    "client product.json (serverDownloadUrlTemplate, serverDataFolderName, serverApplicationName, serverLicense, serverLicenseUrl, updateUrl, applicationName)",
+    "temporary archive file in client temp folder"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-1402",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2401",
+   "remote-ssh#F-2703",
+   "remote-ssh#F-2404",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2506",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.server-source-resolver",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "Defines source resolution order, templated archive direct install, commit forcing, reuse of installed layouts, and licence acceptance gating. Shared with Dev Containers via lib-server; setting is user-layer only.",
+  "questions": [
+   "Should the Dev Containers key remote.serverDownloadBaseUrl also be honoured so one value serves both rooms?",
+   "Do stock Windows tar builds unpack both tar.gz and zip server archives? Needs a windows-target check.",
+   "Is the commit-forcing approach (make server commit equal client commit) acceptable to the family, and is it shared via lib-server?",
+   "Spec cites material not for the clean side (lab observation ids cli1-cli3, lab paths)."
+  ]
+ },
+ {
+  "id": "F-3903",
+  "issue": 80,
+  "repo": "remote-ssh",
+  "kind": "decision",
+  "label": "spec:draft",
+  "title": "Decision: proposed APIs",
+  "epic": "E39",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [
+    "workbench.action.configureRuntimeArguments (core, setup notification button)"
+   ],
+   "settings": [
+    "remote.SSH.defaultForwardedPorts",
+    "remote.SSH.useLocalServer"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "setup notification (non-modal)",
+    "argv.json enable-proposed-api route",
+    "contributes.remoteHelp"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "env.appRoot",
+    "commands.registerCommand"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "tunnels",
+    "terminalDataWriteEvent",
+    "contribRemoteHelp",
+    "contribViewsRemote (not declared)",
+    "terminalRemoteResolver (not declared)",
+    "telemetry (not declared)"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "argv.json",
+    "product.json (extension allow-lists)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-1403",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2004",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2507",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-3904",
+   "remote-ssh#F-3905"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.proposed-api-gate",
+  "candidateLibrary": "lib-product",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Declares four proposals, probes three gated members at activation, shows one shared setup notification, never caches failure. Enablement through argv.json; petition to editors. Shared probe with Dev Containers room suggests lib-product.",
+  "questions": [
+   "Can a pseudoterminal replace terminalDataWriteEvent for the login terminal without visible difference?",
+   "Should terminalRemoteResolver be ruled as a post-conformance improvement?",
+   "Is one setup-notification wording shared across all remote-oss rooms, and does it mention core's Install and Reload prompt?",
+   "Spec cites material not for the clean side (editor product.json files, lab runs)."
+  ]
+ },
+ {
+  "id": "F-3904",
+  "issue": 81,
+  "repo": "remote-ssh",
+  "kind": "decision",
+  "label": "spec:draft",
+  "title": "Decision: companions, marketplaces and pre-release channel",
+  "epic": "E39",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "extensionPack: remote-oss.remote-ssh-edit then remote-oss.remote-explorer",
+    "no extensionDependencies",
+    "publication on Open VSX only plus VSIX on release page",
+    "pre-release channel same id, odd minor",
+    "README statements"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "open-vsx.org/api/remote-oss/*"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.json extensionPack",
+    "README",
+    "VSIX files"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-1404",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-3906",
+   "remote-ssh#F-3907",
+   "remote-ssh#F-3905",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2007",
+   "remote-ssh-edit#F-4901",
+   "remote-explorer#F-5901",
+   "remote-extensionpack#F-9901"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.packaging-and-release",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 1,
+  "notes": "Pack lists the two family companions, no runtime probing; Open VSX only; releases and pre-releases share one id with even/odd minors and a fresh pre-release after every release. Build and release concern, not runtime code.",
+  "questions": [
+   "Should the release page also publish platform-neutral VSIX files of the companions for non-Open VSX editors?",
+   "Does the release process own the fresh-pre-release-after-release step, and in which repo's tooling?",
+   "Spec cites material not for the clean side (release-note atom RN:v1_64)."
+  ]
+ },
+ {
+  "id": "F-3905",
+  "issue": 82,
+  "repo": "remote-ssh",
+  "kind": "decision",
+  "label": "spec:draft",
+  "title": "Decision: telemetry",
+  "epic": "E39",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.logLevel",
+    "telemetry.telemetryLevel (core, read by checks only)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "no aiKey",
+    "no telemetry.json",
+    "README no-telemetry line",
+    "server started with telemetry disabled"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [
+    "telemetry (not declared)"
+   ],
+   "processes": [
+    "VS Code Server launcher (telemetry-disable switch)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "server remoteagent.log"
+   ],
+   "localFiles": [
+    "package.json",
+    "extHostTelemetry.log (check only)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-1405",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-3907",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-3904"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.no-telemetry-policy",
+  "candidateLibrary": "lib-log",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 0,
+  "notes": "No telemetry sent or logged by the extension; server always started with telemetry off. Constraint on lib-log (no event-payload lines) and the server launcher flags rather than a component.",
+  "questions": [
+   "Which documented server switch disables server telemetry, and is it passed by lib-server for all rooms?",
+   "Spec cites material not for the clean side (reference telemetry.json, readme, lab runs r1-1..r1-4)."
+  ]
+ },
+ {
+  "id": "F-3906",
+  "issue": 83,
+  "repo": "remote-ssh",
+  "kind": "decision",
+  "label": "spec:draft",
+  "title": "Decision: interface with the Remotes view",
+  "epic": "E39",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [
+    "remote-internal.getConfiguredHostnames",
+    "remote-internal.getSshFoldersHistory",
+    "remote-internal.getActiveSshRemote",
+    "remote-internal.deleteSshFolderFromHistory",
+    "remote-internal.openRemoteSshTarget",
+    "remote-internal.setActiveFolders (called)",
+    "remote-internal.sshHostsChanged (called)",
+    "opensshremotes.openConfigFile",
+    "opensshremotes.addNewSshHost"
+   ],
+   "settings": [
+    "remote.SSH.configFile"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "onCommand activation events for five ids",
+    "interface version in payloads",
+    "docs/companion-interface.md in both repos"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "commands.executeCommand",
+    "workspace.onDidSaveTextDocument",
+    "workspace.workspaceFolders",
+    "ExtensionContext.globalState"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "user ssh config file",
+    "remote.SSH.configFile file",
+    "system-wide ssh config file",
+    "docs/companion-interface.md"
+   ]
+  },
+  "cites": [
+   "remote-explorer#F-5902",
+   "remote-explorer#F-5901",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2203",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2503",
+   "remote-ssh#F-3901"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.companion-bridge",
+  "candidateLibrary": "lib-companion",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "SSH side of the command contract with Remote Explorer: five served ids, two fire-and-forget calls, silent on foreign or contextless calls, 10 second answer limit, version-mismatch log line once. Payloads provisional pending F-5902.",
+  "questions": [
+   "Does F-5902 accept the setActiveFolders push from local windows with a folder open?",
+   "Does F-5902 state the host key is the authority host part so typed user@host keys separately?",
+   "Is docs/companion-interface.md the agreed file, with remote-explorer authoritative?",
+   "Spec cites material not for the clean side (review notes and lab run ids)."
+  ]
+ },
+ {
+  "id": "F-3907",
+  "issue": 84,
+  "repo": "remote-ssh",
+  "kind": "decision",
+  "label": "spec:draft",
+  "title": "Decision: the Copilot chat participant and AI-assisted diagnosis",
+  "epic": "E39",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.clearAllSessionHints (no enablement)"
+   ],
+   "settings": [
+    "remote.SSH.experimental.chat (not declared)",
+    "remote.SSH.experimental.enhancedSessionLogs",
+    "chat.disableAIFeatures (core)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "no contributes.chatParticipants",
+    "no Diagnose with Copilot button",
+    "failure dialog three buttons Retry, More Actions..., Close Remote",
+    "session table without Cmd+click line"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "chat.createChatParticipant (not used)",
+    "lm.selectChatModels (not used)"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2205",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2603",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-3904",
+   "remote-ssh#F-3905"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.no-chat-surface",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 0,
+  "notes": "Recommends omitting the chat participant and setting; keeps the clear-session-hints command always listed; no AI entry points and no egress. Setting count becomes 34. Removes a component rather than adding one.",
+  "questions": [
+   "Should a later decision take the provider-neutral participant as a post-conformance improvement?",
+   "Does F-3901 get its verbatim-identifier counts (35 settings) revised to 34?",
+   "Spec cites material not for the clean side (reference string ids and telemetry event names)."
+  ]
+ },
+ {
+  "id": "F-3908",
+  "issue": 85,
+  "repo": "remote-ssh",
+  "kind": "decision",
+  "label": "spec:draft",
+  "title": "Decision: connecting to a Windows host without a WMI process query",
+  "epic": "E39",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.killServer (Kill VS Code Server on Host)",
+    "Uninstall VS Code Server from Host"
+   ],
+   "settings": [
+    "remote.SSH.experimental.windowsStandardUser (post-conformance)",
+    "remote.SSH.useLocalServer"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "failure dialog Could not establish connection",
+    "progress Setting up SSH Host / Initializing VS Code Server"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "ssh",
+    "powershell 5.1",
+    "powershell 7",
+    "cmd",
+    "WMI/CIM process query"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "server folder in account home on Windows"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2413",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-3901"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.windows-host-step",
+  "candidateLibrary": "lib-server",
+  "area": "D",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 3,
+  "notes": "Conformant default keeps WMI dependency and its failure; post-conformance experimental setting avoids WMI for standard users. Windows-specific install, start, kill and uninstall step design is left to the clean team.",
+  "questions": [
+   "Should the family promote the no-setting, no-WMI option once post-conformance starts?",
+   "Can session process ancestry be read without the CIM class under PowerShell 5.1 and cmd?",
+   "Does Remote-SSH connect to the Windows host as an administrator account in both local-server modes?",
+   "Spec cites material not for the clean side (lab target accounts and probes)."
+  ]
+ }
+]

@@ -1,0 +1,731 @@
+[
+ {
+  "id": "F-0415",
+  "issue": 32,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Lifecycle commands",
+  "epic": "E04",
+  "acCount": 41,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "Configuring... terminal",
+    "props initializeCommand onCreateCommand updateContentCommand postCreateCommand postStartCommand postAttachCommand waitFor"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTerminal"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker exec",
+    "/bin/sh",
+    "docker ps"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "once-only run markers inside container",
+    "containerWorkspaceFolder as cwd"
+   ],
+   "localFiles": [
+    "localWorkspaceFolder as cwd for initializeCommand",
+    "Dev Containers log"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0104",
+   "remote-containers#F-0108",
+   "remote-containers#F-0201",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0301",
+   "remote-containers#F-0306",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0407",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0411",
+   "remote-containers#F-0412",
+   "remote-containers#F-0416",
+   "remote-containers#F-0417",
+   "remote-containers#F-0504",
+   "remote-containers#F-0601",
+   "remote-containers#F-0602",
+   "remote-containers#F-0701",
+   "remote-containers#F-0902",
+   "remote-containers#F-1004",
+   "remote-containers#F-1007",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.lifecycle-runner",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Seven devcontainer.json properties run in fixed order with once-per-container, per-start, per-attach markers; waitFor gates window connect; Configuring terminal shows output. Failure skips queued commands.",
+  "questions": [
+   "Where exactly do the once-only markers live and how are they keyed when metadata label merges?",
+   "Is waitFor handling split between CLI and extension side, or wholly ours?",
+   "Spec cites lab observations; any normative timing beyond order for object-form parallel entries?"
+  ]
+ },
+ {
+  "id": "F-0411",
+  "issue": 33,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Workspace mount and workspace folder",
+  "epic": "E04",
+  "acCount": 42,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.workspaceMountConsistency",
+    "dev.containers.experimentalMountGitWorktreeCommonDir",
+    "dev.containers.executeInWSL",
+    "dev.containers.logLevel"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "props workspaceMount workspaceFolder"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.requestWorkspaceTrust"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "devcontainer up",
+    "devcontainer build",
+    "devcontainer read-configuration",
+    "docker inspect",
+    "docker volume ls",
+    "docker volume inspect",
+    "docker ps -a",
+    "git"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "/workspaces/<basename>"
+   ],
+   "localFiles": [
+    "git repository root",
+    "git worktree common dir"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0102",
+   "remote-containers#F-0106",
+   "remote-containers#F-0201",
+   "remote-containers#F-0204",
+   "remote-containers#F-0205",
+   "remote-containers#F-0301",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0407",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0414",
+   "remote-containers#F-0415",
+   "remote-containers#F-0416",
+   "remote-containers#F-0417",
+   "remote-containers#F-0418",
+   "remote-containers#F-0419",
+   "remote-containers#F-0504",
+   "remote-containers#F-0603",
+   "remote-containers#F-0604",
+   "remote-containers#F-1008",
+   "remote-containers#F-1301",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.workspace-mount",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Default bind mount of git root at /workspaces/basename, overrides via workspaceMount and workspaceFolder, worktree second mount, consistency hint. Compose adds no mount.",
+  "questions": [
+   "Spec cites material not for the clean side (transcripts, notes.md); which ACs depend on it?",
+   "Is Docker Desktop file-sharing check (S356) required given it was never observed?",
+   "Who resolves git root: our code or devcontainer CLI?"
+  ]
+ },
+ {
+  "id": "F-0414",
+  "issue": 59,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Dev Container Features at build time",
+  "epic": "E04",
+  "acCount": 52,
+  "surfaces": {
+   "commands": [
+    "remote-containers.configureContainerFeatures"
+   ],
+   "settings": [
+    "dev.containers.defaultFeatures",
+    "dev.containers.lockfile"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "Problems panel diagnostics for malformed feature ids",
+    "devcontainer-lock.json",
+    "props features overrideFeatureInstallOrder"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "vscode.languages.createDiagnosticCollection",
+    "window.showErrorMessage",
+    "window.showWarningMessage"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "devcontainer up",
+    "devcontainer read-configuration",
+    "docker exec",
+    "docker inspect",
+    "docker images",
+    "docker run --rm"
+   ],
+   "network": [
+    "ghcr.io OCI registries",
+    "containers.dev/static/devcontainer-control-manifest.json",
+    "HTTPS feature tarballs"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer-lock.json next to config",
+    "local ./ feature folders"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0201",
+   "remote-containers#F-0204",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0405",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0415",
+   "remote-containers#F-0416",
+   "remote-containers#F-0418",
+   "remote-containers#F-0419",
+   "remote-containers#F-0807",
+   "remote-containers#F-1008",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.features-resolver",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 16,
+  "notes": "Resolves OCI, tarball and local features, install order with dependsOn, lockfile pinning, control-manifest refusal, and id-shape diagnostics in Problems. Mostly delegable to the CLI except diagnostics.",
+  "questions": [
+   "Is the Problems-panel id validation ours while build-time resolution is delegated to the CLI?",
+   "Control manifest fetch failure: block builds or only log?",
+   "Which Advisories or lockfile behaviors are CLI-version dependent?"
+  ]
+ },
+ {
+  "id": "F-0418",
+  "issue": 61,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Container creation options",
+  "epic": "E04",
+  "acCount": 41,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.executeInWSL"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "props runArgs init privileged capAdd securityOpt mounts overrideCommand"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "docker create",
+    "docker compose",
+    "docker inspect",
+    "docker info",
+    "docker logs",
+    "docker stop",
+    "docker top",
+    "docker volume ls",
+    "docker ps"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "HostConfig of created container"
+   ],
+   "localFiles": [
+    ".env"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0203",
+   "remote-containers#F-0301",
+   "remote-containers#F-0306",
+   "remote-containers#F-0401",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0407",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0411",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0414",
+   "remote-containers#F-0415",
+   "remote-containers#F-0416",
+   "remote-containers#F-0419",
+   "remote-containers#F-1008"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.creation-options",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 6,
+  "notes": "Seven properties mapped to Docker container config at creation; six merge from image metadata and Features. runArgs image/Dockerfile only. overrideCommand default differs for Compose.",
+  "questions": [
+   "Is runArgs passed through verbatim with no validation of unknown flags?",
+   "Merge precedence among config, image label and Features for mounts and capAdd?",
+   "Which Docker Desktop file-sharing behaviors are normative for mounts?"
+  ]
+ },
+ {
+  "id": "F-0417",
+  "issue": 62,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Shutdown behavior when windows close",
+  "epic": "E04",
+  "acCount": 67,
+  "surfaces": {
+   "commands": [
+    "Dev Containers: Reopen Folder Locally"
+   ],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.executeInWSL",
+    "remote.SSH.configFile"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "prop shutdownAction none stopContainer stopCompose",
+    "cross-window connection check after about 10 s"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "vscode.lock"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker stop",
+    "docker kill",
+    "docker rm -f",
+    "docker ps",
+    "docker events",
+    "docker inspect",
+    "docker exec",
+    "docker diff",
+    "docker start",
+    "docker compose up"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "local profile log"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0106",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0301",
+   "remote-containers#F-0303",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0407",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0415",
+   "remote-containers#F-0416",
+   "remote-containers#F-0601",
+   "remote-containers#F-0902",
+   "remote-containers#F-1008",
+   "remote-containers#F-1401"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.shutdown-manager",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 6,
+  "notes": "Each window connection carries a shutdown obligation; after about ten seconds one check stops the container or compose services if no other window uses it. Spec deliberately deviates from reference defects.",
+  "questions": [
+   "How do windows of the same VS Code instance detect each other (lock, shared state)?",
+   "Spec departs from reference for Compose siblings; which behavior do conformance tests assert?",
+   "Remote-SSH window on another machine: whose engine is stopped?"
+  ]
+ },
+ {
+  "id": "F-0416",
+  "issue": 63,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Users, UID/GID synchronization and environment variables",
+  "epic": "E04",
+  "acCount": 52,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.mountWaylandSocket"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "props containerUser remoteUser updateRemoteUserUID containerEnv remoteEnv userEnvProbe",
+    "derived UID-sync image",
+    "login-shell environment probe"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "docker exec",
+    "docker compose",
+    "docker images",
+    "docker inspect",
+    "docker ps",
+    "usermod",
+    "groupmod",
+    "id",
+    "/bin/sh",
+    "bash"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "/etc/passwd",
+    "/etc/profile",
+    "/etc/bash.bashrc",
+    "login start-up files"
+   ],
+   "localFiles": [
+    "host UID/GID"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0108",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0301",
+   "remote-containers#F-0303",
+   "remote-containers#F-0401",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0407",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0411",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0414",
+   "remote-containers#F-0415",
+   "remote-containers#F-0418",
+   "remote-containers#F-0601",
+   "remote-containers#F-0602",
+   "remote-containers#F-0604",
+   "remote-containers#F-0701",
+   "remote-containers#F-1008"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.user-env",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 8,
+  "notes": "Resolves container and remote user, builds derived image for UID/GID sync on Linux for named non-root users, merges containerEnv and remoteEnv, and probes login-shell env. Probe failures are tolerated.",
+  "questions": [
+   "Which probe modes (login, interactive) and timeouts are normative?",
+   "Derived-image UID sync: exact conditions to skip, and image naming or cleanup expectations?",
+   "remoteUser change on reload: required behavior when account lacks home?"
+  ]
+ },
+ {
+  "id": "F-0406",
+  "issue": 68,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Reopen folder locally, in WSL, over SSH or in a tunnel",
+  "epic": "E04",
+  "acCount": 37,
+  "surfaces": {
+   "commands": [
+    "remote-containers.reopenLocally",
+    "remote-containers.reopenInSSH",
+    "remote-containers.reopenInWSL",
+    "remote-containers.reopenInTunnel",
+    "Dev Containers: Reopen Folder",
+    "Dev Containers: Reset Don't Show Reopen Notification"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "Command Palette",
+    "Remote indicator menu"
+   ],
+   "contextKeys": [
+    "canReopenLocally",
+    "canReopenInSSH",
+    "canReopenInWSL",
+    "canReopenInTunnel",
+    "canReopen"
+   ],
+   "authorities": [],
+   "other": [
+    "information message not possible in current context",
+    "Close Remote button after failed build"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "vscode.openFolder",
+    "window.showInformationMessage"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker exec",
+    "docker ps",
+    "wsl"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "origin folder record for reopen"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0104",
+   "remote-containers#F-0107",
+   "remote-containers#F-0109",
+   "remote-containers#F-0303",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0407",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0411",
+   "remote-containers#F-0417",
+   "remote-containers#F-0419",
+   "remote-containers#F-0902",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.reopen-origin",
+  "candidateLibrary": "lib-authority",
+  "area": "C",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 9,
+  "notes": "Four commands return the same window to its origin host (local, SSH, WSL, tunnel) via folder open; availability by context keys; container stops afterwards per F-0417. Tunnel variant specified by decision only.",
+  "questions": [
+   "How is the origin host recorded in a dev-container window so reopen can recover it?",
+   "Tunnel reopen was never observed; which behavior is normative?",
+   "Which parts are VS Code core and which our extension contributes (37 core mentions)?"
+  ]
+ },
+ {
+  "id": "F-0413",
+  "issue": 73,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Docker Compose configurations",
+  "epic": "E04",
+  "acCount": 71,
+  "surfaces": {
+   "commands": [
+    "Dev Containers: Add Dev Container Configuration Files..."
+   ],
+   "settings": [
+    "dev.containers.dockerComposePath",
+    "dev.containers.dockerPath"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "props dockerComposeFile service runServices",
+    "compose project name resolution",
+    "compose profiles",
+    "quick pick service chooser"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker compose",
+    "docker-compose",
+    "docker compose -p other up -d",
+    "docker exec",
+    "docker inspect",
+    "docker network ls",
+    "docker ps",
+    "docker rm",
+    "docker images",
+    "docker top",
+    "devcontainer"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "compose files under workspace"
+   ],
+   "localFiles": [
+    "docker-compose.yml",
+    "docker-compose.override.yml",
+    ".env",
+    "/tmp/devcontainercli-<user>/docker-compose/"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0201",
+   "remote-containers#F-0301",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0407",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0411",
+   "remote-containers#F-0412",
+   "remote-containers#F-0414",
+   "remote-containers#F-0416",
+   "remote-containers#F-0417",
+   "remote-containers#F-0418",
+   "remote-containers#F-0419",
+   "remote-containers#F-0701",
+   "remote-containers#F-0801",
+   "remote-containers#F-0804",
+   "remote-containers#F-0805",
+   "remote-containers#F-0903",
+   "remote-containers#F-1008",
+   "remote-containers#F-1101",
+   "remote-containers#F-1401"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.compose-orchestrator",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 14,
+  "notes": "Compose-backed configs: file merge order, service selection, runServices subset, project naming, reuse of running or stopped containers, override files. Compose-specific failures observed only as generic dialog.",
+  "questions": [
+   "Spec cites material not for the clean side (observations notes); which compose behaviors lack public basis?",
+   "Three own error strings never observed; implement or omit?",
+   "Compose v2 plugin vs dockerComposePath fallback: exact detection rule?"
+  ]
+ }
+]

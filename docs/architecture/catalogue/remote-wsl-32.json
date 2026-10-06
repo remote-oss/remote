@@ -1,0 +1,800 @@
+[
+ {
+  "id": "F-6001",
+  "issue": 12,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Activation, platforms, the web and workspace trust",
+  "epic": "E60",
+  "acCount": 29,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.showLog (availability only)",
+    "remote-wsl.connect",
+    "remote-wsl.reopenInWSL",
+    "remote-wsl.openFolder"
+   ],
+   "settings": [],
+   "views": [
+    "targetsWsl"
+   ],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [
+    "wslFeatureInstalled",
+    "wsl.noWSLPath",
+    "wsl.openInNewWindow",
+    "wsl.noWSLDistrosInstalled",
+    "isWindows",
+    "isWeb",
+    "virtualWorkspace",
+    "remoteName",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "wsl"
+   ],
+   "other": [
+    "manifest: extensionKind ui",
+    "activation onStartupFinished",
+    "capabilities untrusted/virtual",
+    "node and browser entries"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "commands.executeCommand setContext"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "contribRemoteHelp",
+    "contribViewsRemote",
+    "telemetry"
+   ],
+   "processes": [
+    "wsl.exe (presence check, owned elsewhere)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "argv.json (proposed-API enablement)"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6003",
+   "remote-wsl#F-6004",
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6204",
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6401",
+   "remote-wsl#F-6501",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-6203",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6207",
+   "remote-wsl#F-6005",
+   "remote-wsl#F-1403",
+   "containers#F-0109"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.activation-gate",
+  "candidateLibrary": "lib-standdown",
+  "area": "D",
+  "reuse": [],
+  "errorPaths": 7,
+  "notes": "Pure manifest and context-key feature: where the extension runs, when it activates, what is hidden off Windows, in virtual workspaces and on web. Commands must stay registered everywhere but inert. Candidate shared pattern for platform stand-down across rooms.",
+  "questions": [
+   "Does the reimplementation ship the browser build at all (decision pending for S061)?",
+   "Should the S041 dev-build guard be implemented or omitted?",
+   "Is the inert-outside-Windows contract (R-46) one shared helper for all remote families?"
+  ]
+ },
+ {
+  "id": "F-6002",
+  "issue": 13,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "The WSL log and debug logging",
+  "epic": "E60",
+  "acCount": 25,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.showLog"
+   ],
+   "settings": [
+    "remote.WSL.debug"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette#8",
+    "statusBar/remoteIndicator#5"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "wsl"
+   ],
+   "other": [
+    "extension-owned pseudo terminal named WSL",
+    "buffer replay until first terminal",
+    "daemon log file wsl-daemon-<timestamp>.log in debug",
+    "auto reveal on failed start or debug window start"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTerminal",
+    "Pseudoterminal",
+    "Terminal.show",
+    "window.onDidCloseTerminal",
+    "workspace.getConfiguration",
+    "ExtensionContext.logUri",
+    "l10n.t"
+   ],
+   "proposedApi": [
+    "resolvers (progress link caller)"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "wsl-daemon-<yyyymmddThhmmss>.log in extension-host log folder"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6303",
+   "remote-wsl#F-6304",
+   "remote-wsl#F-6401",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-6003",
+   "remote-wsl#F-7901"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.log-terminal",
+  "candidateLibrary": "lib-log",
+  "area": "D",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Log terminal with replay buffer, reveal rules and debug daemon file. Reference leaks connection token and environment into the log; spec recommends masking. Strong candidate for a family-wide log library.",
+  "questions": [
+   "Mask token and environment values in the log (option b)? Confirm as family rule for lib-log.",
+   "Does the terminal name follow display language (pseudo-locale check pending)?",
+   "Can the log terminal and replay buffer be shared by all rooms through lib-log?"
+  ]
+ },
+ {
+  "id": "F-6003",
+  "issue": 14,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Help, feedback and issue reporting",
+  "epic": "E60",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.getHelp",
+    "remote-wsl.provideFeedback",
+    "remote-wsl.reportIssue"
+   ],
+   "settings": [],
+   "views": [
+    "~remote.helpPanel (core)"
+   ],
+   "menus": [
+    "commandPalette#9",
+    "commandPalette#11",
+    "commandPalette#12"
+   ],
+   "contextKeys": [
+    "wslFeatureInstalled",
+    "isWindows",
+    "isWeb"
+   ],
+   "authorities": [],
+   "other": [
+    "contributes.remoteHelp with getStarted, documentation, issues, remoteName",
+    "walkthrough id wslWalkthrough"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "env.openExternal",
+    "commands.executeCommand workbench.action.openIssueReporter"
+   ],
+   "proposedApi": [
+    "contribRemoteHelp"
+   ],
+   "processes": [],
+   "network": [
+    "documentation URL",
+    "feedback URL",
+    "issue list URL",
+    "bugs URL (all ours per R-31)"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6004",
+   "remote-wsl#F-6005",
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6501",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-1403",
+   "containers#F-0109"
+  ],
+  "coreUi": true,
+  "candidateComponent": "wsl.help-contrib",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Three URL-opening commands plus a manifest-only remoteHelp block. Help rows need a proposed API with no stable substitute. Family-wide pattern: same help block per room with our own URLs.",
+  "questions": [
+   "Which hosts will our help, feedback and issue URLs use given the link-protection dialog (Q3)?",
+   "Is contribRemoteHelp enabled via argv.json route, and do the commands work without it?",
+   "Is one shared help-contribution template wanted across all rooms?"
+  ]
+ },
+ {
+  "id": "F-6201",
+  "issue": 20,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "The wsl authority, resolver and connection lifecycle",
+  "epic": "E62",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "wsl+<distro>",
+    "wsl+ (default distro)",
+    "nested wsl+x@outer"
+   ],
+   "other": [
+    "activation onResolveRemoteAuthority:wsl",
+    "static label formatter wsl+*",
+    "Windows-side local proxy per distro on 127.0.0.1",
+    "progress notification Starting VS Code in WSL",
+    "global state keys wsl.downloadInProgress, extensionUsed, wsl.lastUpdateCheck, wsl.usageTime.<platform>"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "ProgressLocation.Notification",
+    "RemoteAuthorityResolverError (resolvers)"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "wsl.exe --list --verbose",
+    "wsl.exe -d <distro> (probe, start, relay per connection)",
+    "VS Code Server in distro"
+   ],
+   "network": [
+    "127.0.0.1:<random proxy port>",
+    "127.0.0.1:<random server port> in distro",
+    "/version endpoint on proxy"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server/bin/<commit>",
+    "~/.vscode-server/server-env-setup",
+    "/etc/wsl.conf"
+   ],
+   "localFiles": [
+    "%USERPROFILE%\\vscode-remote-wsl\\<quality>\\<commit> cache"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-7901",
+   "remote-wsl#F-1403",
+   "remote-wsl#F-6203",
+   "remote-wsl#F-6204",
+   "remote-wsl#F-6002"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.resolver",
+  "candidateLibrary": "lib-authority",
+  "area": "A",
+  "reuse": [
+   "wsl.exe",
+   "openssh (nested route only)"
+  ],
+  "errorPaths": 9,
+  "notes": "P0 core: resolver, per-distro proxy reusing one wsl.exe relay per connection, stage progress, reload and reconnect re-resolve. Server install and start delegated to F-6301/F-6304. Ties to lib-server for lifecycle and lib-authority for parsing.",
+  "questions": [
+   "Should wsl+ with empty name keep meaning default distro (Q2)?",
+   "On re-resolve after distro termination, restart the server (option b) or reproduce reference?",
+   "What are non-distro WSL targets and the minimum WSL version for S051?"
+  ]
+ },
+ {
+  "id": "F-6203",
+  "issue": 22,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Open Folder in WSL",
+  "epic": "E62",
+  "acCount": 22,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.openFolder"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "commandPalette#5"
+   ],
+   "contextKeys": [
+    "isWindows",
+    "isWeb"
+   ],
+   "authorities": [
+    "wsl+<distro>"
+   ],
+   "other": [
+    "folder dialog starting at default distro share",
+    "walkthrough step link"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showOpenDialog",
+    "commands.executeCommand vscode.openFolder",
+    "commands.executeCommand workbench.action.files.openFolder"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "wsl.exe --list --verbose"
+   ],
+   "network": [
+    "\\\\wsl.localhost\\<distro>\\ share",
+    "\\\\wsl$\\<distro>\\ share"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "UNC share of default distro (read via dialog)"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6102",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6204",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6004",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6701"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.open-folder",
+  "candidateLibrary": "none",
+  "area": "D",
+  "reuse": [
+   "editor-cli (core openFolder)"
+  ],
+  "errorPaths": 7,
+  "notes": "Thin command: dialog on default distro share, map UNC path to wsl+ URI, hand to core. Silent no-ops on cancel or non-distro path. Depends on core UNC allow-list setting.",
+  "questions": [
+   "Should the clean side reuse the Windows folder dialog or a distro-aware picker?",
+   "Behaviour when a Remote-SSH window on a Windows client runs this command (Q4)?",
+   "S046 trigger on very old WSL is unobserved; implement or omit?"
+  ]
+ },
+ {
+  "id": "F-6204",
+  "issue": 23,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Reopen Folder in WSL and Reopen Folder in Windows",
+  "epic": "E62",
+  "acCount": 32,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.reopenInWSL",
+    "remote-wsl.reopenInWindows"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "commandPalette#6",
+    "commandPalette#7",
+    "statusBar/remoteIndicator#4"
+   ],
+   "contextKeys": [
+    "wsl.noWSLPath",
+    "workspaceFolderCount",
+    "virtualWorkspace",
+    "remoteName"
+   ],
+   "authorities": [
+    "wsl+<distro>"
+   ],
+   "other": [
+    "menu group remote_10_wsl_1_open@3",
+    "distro picker reused from F-6202",
+    "info notifications S003, S047, S048"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.showInformationMessage",
+    "workspace.workspaceFile",
+    "workspace.workspaceFolders",
+    "env.remoteName",
+    "commands.executeCommand vscode.openFolder"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "wsl.exe -d <distro>",
+    "wslpath"
+   ],
+   "network": [
+    "\\\\wsl.localhost\\<distro>\\ share"
+   ],
+   "remoteFiles": [
+    "/etc/wsl.conf [automount] root"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6102",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6203",
+   "remote-wsl#F-7901",
+   "containers#F-0406",
+   "containers#F-0109"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.reopen-translate",
+  "candidateLibrary": "none",
+  "area": "D",
+  "reuse": [
+   "wslpath"
+  ],
+  "errorPaths": 10,
+  "notes": "Path translation both ways through wslpath in the distro, reload current window. Untitled workspace leaves a blank window in reference. Overlaps conceptually with containers reopen commands.",
+  "questions": [
+   "Untitled workspace: reopen saved file, refuse, or first folder only (Q3)?",
+   "What does UNC allow-list refusal do after Reopen in Windows?",
+   "Shared reopen-in-X helper across WSL, SSH and containers rooms?"
+  ]
+ },
+ {
+  "id": "F-6205",
+  "issue": 24,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Window title, remote indicator and resource labels",
+  "epic": "E62",
+  "acCount": 20,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "wsl+*",
+    "wsl+<distro>"
+   ],
+   "other": [
+    "static resourceLabelFormatter wsl+*",
+    "runtime formatter per installed distro with priority",
+    "workspaceSuffix 'WSL: {0}'",
+    "workspaceTooltip 'Running in {0} (WSL {1})'"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "l10n.t"
+   ],
+   "proposedApi": [
+    "resolvers (registerResourceLabelFormatter)",
+    "contribLabelFormatterWorkspaceTooltip (not needed)"
+   ],
+   "processes": [
+    "wsl.exe --list --verbose"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6204",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-7901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "wsl.label-formatters",
+  "candidateLibrary": "lib-authority",
+  "area": "D",
+  "reuse": [],
+  "errorPaths": 3,
+  "notes": "Label formatter data keyed by authority; every distro gets one at connect time. Indicator, title and Explorer text are core. Pattern repeats in every family room (authority to label), so a shared helper is plausible.",
+  "questions": [
+   "What does the tooltip show when WSL reports no distro version (Q2)?",
+   "Should label formatters be a generic lib-authority facility with per-room strings?",
+   "Is the hover text on screen verified (Q1)?"
+  ]
+ },
+ {
+  "id": "F-6208",
+  "issue": 27,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Connection failures and recovery",
+  "epic": "E62",
+  "acCount": 30,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "modal failure dialog with Retry, Close WSL Window, Ignore",
+    "reveals WSL log terminal on failure",
+    "log lines S026 and S050",
+    "90 s silence watchdog",
+    "Ignore leaves window disconnected (NotAvailable handled)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage modal with isCloseAffordance",
+    "env.openExternal",
+    "commands workbench.action.reloadWindow",
+    "commands workbench.action.remote.close"
+   ],
+   "proposedApi": [
+    "resolvers (RemoteAuthorityResolverError.NotAvailable)"
+   ],
+   "processes": [
+    "wsl.exe start step in distro"
+   ],
+   "network": [
+    "127.0.0.1 proxy /version URL (log line)"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server/server-env-setup"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6302",
+   "remote-wsl#F-6303",
+   "remote-wsl#F-6304",
+   "remote-wsl#F-6003",
+   "remote-wsl#F-7901",
+   "containers#F-0109"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.failure-dialog",
+  "candidateLibrary": "lib-standdown",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 9,
+  "notes": "One dialog per failed start, message names the kind not the cause, cause only in log. Retry equals window reload. Failure-dialog and silence-watchdog behaviour looks reusable across families; cites raw lab notes (not for clean side).",
+  "questions": [
+   "Spec cites observations/F-6208/notes.md raw transcript; spec cites material not for the clean side. Please strip the reference.",
+   "Is the 90 s silence watchdog a family constant for lib-server?",
+   "Keep S036 'Ok' unused, or use it for a non-modal failure message?"
+  ]
+ },
+ {
+  "id": "F-6301",
+  "issue": 28,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Server download and install",
+  "epic": "E63",
+  "acCount": 24,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.WSL.downloadInBackground"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "wsl"
+   ],
+   "other": [
+    "progress stages Downloading server..., Unpacking server...",
+    "cache of server archives per commit on Windows",
+    "background download every ~30 s per window",
+    "global state keys wsl.lastUpdateCheck, wsl.downloadInProgress, wsl.usageTime.<platform>"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "env.appName",
+    "version",
+    "http.proxy support via Node https"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "wsl.exe -d <distro>",
+    "wget (in distro, fallback)",
+    "tar (in distro)",
+    "wslpath"
+   ],
+   "network": [
+    "update service (updateUrl from product.json)",
+    "serverDownloadUrlTemplate host",
+    "update.code.visualstudio.com:443",
+    "vscode.download.prss.microsoft.com:443"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server/bin/<commit>",
+    "~/.wgetrc",
+    "<server data folder from product.json>"
+   ],
+   "localFiles": [
+    "%USERPROFILE%\\vscode-remote-wsl\\<quality>\\<commit>\\vscode-server-<quality>-<platform>.tar.gz",
+    "client product.json fields (commit, quality, updateUrl, serverDownloadUrlTemplate, serverApplicationName, serverDataFolderName)"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6302",
+   "remote-wsl#F-6303",
+   "remote-wsl#F-6304",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6401",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-7901",
+   "remote-ssh#server-install (remote-ssh room)"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.server-installer",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "wsl.exe",
+   "wget",
+   "tar"
+  ],
+  "errorPaths": 9,
+  "notes": "P0: source order installed, cached, Windows download, in-distro wget fallback; checksum then length; atomic cache rename. Derives build from client product.json (R-47). Strong lib-server and lib-product candidate shared with SSH and tunnels.",
+  "questions": [
+   "Report specific reasons S019, S020, S023 in the log before fallback (Q1)?",
+   "Quality checks S007/S056 for Code-OSS derivatives: only when URL comes from updateUrl (Q3)?",
+   "Is the server cache layout shared with other rooms through lib-server?"
+  ]
+ },
+ {
+  "id": "F-6303",
+  "issue": 30,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Server environment",
+  "epic": "E63",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.WSL.useShellEnvironment"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "server-env-setup file read by sh",
+    "environment layering: server process, shell probe, handed-over launching shell",
+    "per-window environment handed from code launcher"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "sh (reads server-env-setup)",
+    "wsl.exe -d <distro>",
+    "interactive login shell probe (core)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "~/.vscode-server/server-env-setup",
+    "~/.vscode-server-insiders/server-env-setup",
+    "<server data folder>/server-env-setup",
+    "user default shell from user database"
+   ],
+   "localFiles": [
+    "VS Code user settings (reads useShellEnvironment)"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6304",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6401",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6302",
+   "remote-wsl#F-6602",
+   "remote-wsl#F-6701",
+   "remote-wsl#F-7901"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.server-env",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "openssh (SSH room has equivalent script)"
+  ],
+  "errorPaths": 7,
+  "notes": "Extension only reads the user's setup file and passes the launching shell environment per window; layering mostly VS Code core. Setup-script semantics (sh, exit failure) likely shared with other server-based rooms.",
+  "questions": [
+   "Which launching-shell variables (PWD, SHLVL, WSL_INTEROP) are excluded from the handed-over environment (Q1)?",
+   "Must the reimplementation provide Windows certificates to remote extensions (Q3)?",
+   "Is server-env-setup behaviour common to all rooms and owned by lib-server?"
+  ]
+ }
+]

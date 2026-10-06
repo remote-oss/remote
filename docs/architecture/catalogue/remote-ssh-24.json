@@ -1,0 +1,478 @@
+[
+ {
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "epic": "E22",
+  "id": "F-2201",
+  "issue": 28,
+  "title": "Which SSH configuration files are read; remote.SSH.configFile; parse errors",
+  "acCount": 44,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openConfigFile (shared picker)"
+   ],
+   "settings": [
+    "remote.SSH.configFile"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "config-file quick pick rows Settings and Help",
+    "keyword IgnoreUnknown mitigation",
+    "strings S010 S047 S099 S114 S162 S166"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration",
+    "window.showQuickPick",
+    "window.showInformationMessage",
+    "workspace.onDidChangeConfiguration"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh (-F option)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "~/.ssh/config",
+    "/etc/ssh/ssh_config",
+    "custom file named by setting"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2203",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3907"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.config-source",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 10,
+  "notes": "Decides which config files feed the host list and ssh. Empty setting means ssh gets no -F; non-empty means one file everywhere, with ~ expansion. Parse-failure surface depends on invocation route.",
+  "questions": [
+   "S010/S099/S114 were never reproduced; which route shows them, option (a) route-dependent or (b) uniform notification?",
+   "Does an unparsable system file fail like a user file, or is it skipped?",
+   "Does the Help row open our own documentation page, or do nothing?"
+  ]
+ },
+ {
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "epic": "E22",
+  "id": "F-2202",
+  "issue": 29,
+  "title": "Host list from the configuration: Host patterns, Include and Match",
+  "acCount": 34,
+  "surfaces": {
+   "commands": [
+    "remote-internal.getConfiguredHostnames"
+   ],
+   "settings": [
+    "remote.SSH.configFile"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "activation event onCommand:remote-internal.getConfiguredHostnames",
+    "keywords Host Match Include Tag",
+    "list shown in Connect pickers and Remotes SSH group"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "workspace.fs",
+    "workspace.onDidChangeConfiguration",
+    "workspace.onDidSaveTextDocument",
+    "window.tabGroups.onDidChangeTabs",
+    "workspace.onDidCloseTextDocument"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "~/.ssh/config",
+    "/etc/ssh/ssh_config",
+    "Included files and globs"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2203",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2503",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3906",
+   "remote-explorer#F-5102",
+   "remote-explorer#F-5902"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.host-list",
+  "candidateLibrary": "lib-ssh",
+  "area": "B",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 6,
+  "notes": "Pure parser and lister of aliases with reference-specific Include/glob order and match-back lookup. Internal command is the contract with explorer. Save-refresh duty lies on the SSH side, delivery via F-3906.",
+  "questions": [
+   "Which host options besides ConnectTimeout go through the match-back lookup (option A all, B only ConnectTimeout)?",
+   "How is the host-list-changed notification delivered to remote-explorer (F-3906 payload versus F-5902)?",
+   "On Windows, which system file feeds the list and how do Include paths resolve?"
+  ]
+ },
+ {
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "epic": "E22",
+  "id": "F-2203",
+  "issue": 30,
+  "title": "Open SSH Configuration File...",
+  "acCount": 31,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openConfigFile",
+    "workbench.action.openSettings"
+   ],
+   "settings": [
+    "remote.SSH.configFile"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "quick pick of config files plus Settings and Help rows",
+    "snippet template for new file",
+    "Configure SSH Hosts... row",
+    "Open SSH Configuration File row of failure picker",
+    "Remote Explorer row action"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "workspace.openTextDocument",
+    "window.showTextDocument",
+    "TextEditor.insertSnippet",
+    "env.openExternal",
+    "workspace.onDidSaveTextDocument",
+    "workspace.onDidCloseTextDocument"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "~/.ssh (mode 0700)",
+    "~/.ssh/config (mode 0600)",
+    "/etc/ssh/ssh_config",
+    "custom file"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.config-opener",
+  "candidateLibrary": "lib-ssh",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 6,
+  "notes": "Picker plus create-if-missing plus template snippet, always on client files. Shares picker with Add New SSH Host, suggesting one shared picker module. Companion actions call this exact command id.",
+  "questions": [
+   "Relative setting values: reject, resolve against home, or reproduce the reference mismatch?",
+   "Missing system file in a writable folder: create like a custom file or open an unsaved empty editor?",
+   "Windows file row labels and created access rights?"
+  ]
+ },
+ {
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "epic": "E22",
+  "id": "F-2204",
+  "issue": 31,
+  "title": "Add New SSH Host...",
+  "acCount": 40,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.addNewSshHost",
+    "vscode.newWindow"
+   ],
+   "settings": [
+    "remote.SSH.configFile"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "input box Enter SSH Connection Command",
+    "Host added! notification with Open Config and Connect",
+    "Add New SSH Host row in Connect pickers",
+    "Remote Explorer New Remote action",
+    "keywords Hostname Port User"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showInputBox",
+    "window.showQuickPick",
+    "window.showInformationMessage",
+    "window.showErrorMessage",
+    "workspace.openTextDocument",
+    "window.showTextDocument",
+    "commands vscode.newWindow"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "~/.ssh",
+    "~/.ssh/config",
+    "/etc/ssh/ssh_config",
+    "custom file"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2203",
+   "remote-ssh#F-2205",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3903"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.add-host-wizard",
+  "candidateLibrary": "lib-ssh",
+  "area": "B",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 9,
+  "notes": "Parses a typed ssh command line into a Host entry and appends it to a chosen file. Needs its own getopt-style parser with four mandatory error texts. Many reference quirks pending decisions.",
+  "questions": [
+   "Apply F-2205 host and user checks to the typed input (CVE class) or reproduce no checks?",
+   "Reproduce reference parsing quirks (IPv6, -W, -P, -c, -I, option-like words) or use the recommended fixes?",
+   "Writing under a dirty editor: write on disk, apply through the open document, or warn first?"
+  ]
+ },
+ {
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "epic": "E22",
+  "id": "F-2205",
+  "issue": 32,
+  "title": "Host and user name validation",
+  "acCount": 36,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openEmptyWindow",
+    "opensshremotes.openEmptyWindowInCurrentWindow",
+    "opensshremotes.cleanDevBox",
+    "opensshremotes.cleanRemoteServer"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "failure dialog reasons S119 S120 S121 S122 S079",
+    "no check in cleanLocalServer"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.registerRemoteAuthorityResolver"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh (separate arguments, no shell)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2504",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2603",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-1403",
+   "remote-ssh#F-3901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.name-validator",
+  "candidateLibrary": "lib-identifiers",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 12,
+  "notes": "Small pure validator for host and user names (leading dash, six forbidden characters), called at resolver start and in kill/uninstall commands. Also maps ssh's own host rejection to a separate reason. Security-relevant.",
+  "questions": [
+   "Should HostName and User values from config and Add Host input also be checked, or reproduce no checks?",
+   "Does OpenSSH on Windows and macOS reject the same characters and keep the S079 mapping?",
+   "Which exact six forbidden characters apply to host names, and do they differ for user names?"
+  ]
+ },
+ {
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "epic": "E22",
+  "id": "F-2206",
+  "issue": 33,
+  "title": "Remote platform per host: detection, the platform picker and remotePlatform",
+  "acCount": 38,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openEmptyWindow",
+    "opensshremotes.cleanRemoteServer",
+    "opensshremotes.cleanDevBox"
+   ],
+   "settings": [
+    "remote.SSH.remotePlatform",
+    "remote.SSH.windowsRemotes",
+    "remote.SSH.useLocalServer",
+    "remote.SSH.enableRemoteCommand"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "platform quick pick Linux Windows macOS",
+    "Don't Show Again notification via globalState",
+    "strings S034 S057",
+    "deprecated windowsRemotes rendering"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.showInformationMessage",
+    "workspace.getConfiguration (inspect globalValue, update Global)",
+    "ExtensionContext.globalState",
+    "workspace.registerRemoteAuthorityResolver"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "hidden terminal in non-local mode"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "remote OS probe output"
+   ],
+   "localFiles": [
+    "user settings.json"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-2703",
+   "remote-ssh#F-2704",
+   "remote-ssh#F-2107",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2101"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.platform-resolver",
+  "candidateLibrary": "lib-ssh",
+  "area": "D",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 10,
+  "notes": "Decides remote OS: probe in default mode, picker plus stored setting in non-local mode, forced windows via setting. Touches resolver, kill and uninstall flows. Wildcard host keys. Several reference quirks to keep or fix.",
+  "questions": [
+   "Where and when do S034 and S057 actually surface, and what fills their placeholder?",
+   "Keep the reference quirks (misspelled deprecation text, You selected shown when nothing selected) or fix them?",
+   "How are macOS and Windows hosts behaving in non-local mode with no entry?"
+  ]
+ }
+]

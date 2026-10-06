@@ -1,0 +1,373 @@
+[
+ {
+  "id": "F-9001",
+  "issue": 5,
+  "repo": "remote-extensionpack",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Package data: display name, description, categories, keywords, localization, engine and links",
+  "epic": "E90",
+  "acCount": 22,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "manifest fields displayName, description, categories, keywords, engines.vscode, repository, bugs",
+    "14 package.nls bundles plus default",
+    "no commands, settings or views"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "gallery (Open VSX)",
+    "github.com/remote-oss/remote-extensionpack"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.json",
+    "package.nls.json",
+    "package.nls.<lang>.json x14"
+   ]
+  },
+  "cites": [
+   "remote-extensionpack#F-9901",
+   "remote-extensionpack#F-9002",
+   "remote-extensionpack#F-9101",
+   "remote-extensionpack#F-9102",
+   "remote-extensionpack#F-9103",
+   "remote-extensionpack#F-5901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "pack.manifest-data",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [
+   "editor-core-extensions-view"
+  ],
+  "errorPaths": 5,
+  "notes": "Declarative only; no code. Engine floor must be computed as highest floor among members (^1.133.0 at pin). Needs a build-time check of manifest and bundles.",
+  "questions": [
+   "Is the engine-floor rule BR-7 meant to be a release-time script that reads member manifests?",
+   "Language pack path for META:l10n unobserved; will reimplementation test cover bundle resolution?"
+  ]
+ },
+ {
+  "id": "F-9002",
+  "issue": 6,
+  "repo": "remote-extensionpack",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Gallery listing and readme: overview, member summary, requirements and links",
+  "epic": "E90",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "README.md at package root",
+    "gallery listing properties: Links.*, GitHubFlavoredMarkdown, Pricing=Free",
+    "no markdown or pricing manifest field"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "Open VSX listing",
+    "github.com/remote-oss/remote-extensionpack"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "README.md"
+   ]
+  },
+  "cites": [
+   "remote-extensionpack#F-9901",
+   "remote-extensionpack#F-9001",
+   "remote-extensionpack#F-9101",
+   "remote-extensionpack#F-9102",
+   "remote-extensionpack#F-9103"
+  ],
+  "coreUi": true,
+  "candidateComponent": "pack.readme-listing",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [
+   "editor-core-extensions-view"
+  ],
+  "errorPaths": 6,
+  "notes": "Content spec for README and listing links; verifiable by file checks. Label says needs-revision though open questions list none.",
+  "questions": [
+   "Label is needs-revision but section 17 says none; what revision is outstanding?",
+   "Which README parts are conformance-checked: headings, links, or member summary text?"
+  ]
+ },
+ {
+  "id": "F-9101",
+  "issue": 7,
+  "repo": "remote-extensionpack",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Members and installing the pack",
+  "epic": "E91",
+  "acCount": 33,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "manifest extensionPack list of 4 member ids in fixed order",
+    "categories include Extension Packs",
+    "install paths: Extensions view, CLI, Quick Open ext install, VSIX"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "code --install-extension (editor CLI)"
+   ],
+   "network": [
+    "gallery (Open VSX)"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.json"
+   ]
+  },
+  "cites": [
+   "remote-extensionpack#F-9901",
+   "remote-extensionpack#F-9001",
+   "remote-extensionpack#F-9102",
+   "remote-extensionpack#F-9103",
+   "remote-extensionpack#F-9002",
+   "remote-wsl#F-7901",
+   "remote-containers#F-1406",
+   "remote-ssh#F-3901",
+   "remote-server#F-8901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "pack.member-list",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [
+   "editor-cli",
+   "editor-core-extension-management"
+  ],
+  "errorPaths": 13,
+  "notes": "Only functional content is the four-id extensionPack list; install behaviour belongs to the editor. Primary risk is members missing from the gallery.",
+  "questions": [
+   "Decision pending: what to do when gallery lacks members or has no gallery at all (recommendation a)?",
+   "Will release tooling verify all four member ids on Open VSX before publishing the pack?"
+  ]
+ },
+ {
+  "id": "F-9102",
+  "issue": 8,
+  "repo": "remote-extensionpack",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Managing an installed pack: uninstall, disable, enable, update, and members on their own",
+  "epic": "E91",
+  "acCount": 52,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "extensions.autoUpdate",
+    "extensions.autoCheckUpdates",
+    "extensions.autoUpdateDelay",
+    "extensions.autoRestart"
+   ],
+   "views": [],
+   "menus": [
+    "Manage menu of pack row (editor core)",
+    "details page header (editor core)",
+    "restart banner (editor core)"
+   ],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "pack contributes nothing of its own"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "code --uninstall-extension (editor CLI)"
+   ],
+   "network": [
+    "gallery (Open VSX)"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-extensionpack#F-9101",
+   "remote-extensionpack#F-9901",
+   "remote-extensionpack#F-9103",
+   "remote-extensionpack#F-9001",
+   "remote-extensionpack#F-9002"
+  ],
+  "coreUi": true,
+  "candidateComponent": "pack.lifecycle-conformance",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [
+   "editor-cli",
+   "editor-core-extension-management"
+  ],
+  "errorPaths": 9,
+  "notes": "No owned atoms; pure editor behaviour recorded as conformance data. Largest AC count of the set, so mostly verification scenarios not code.",
+  "questions": [
+   "Q3 decision: should README mention that uninstalling the pack removes members the user installed alone?",
+   "Windows, macOS and WSL passes are outstanding; who runs them and when?"
+  ]
+ },
+ {
+  "id": "F-9103",
+  "issue": 9,
+  "repo": "remote-extensionpack",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "The pack in remote windows, in the browser and on each platform",
+  "epic": "E91",
+  "acCount": 23,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.extensionKind",
+    "remote.SSH.defaultExtensions"
+   ],
+   "views": [],
+   "menus": [
+    "Install Local Extensions in '<authority>'... (editor core)"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote",
+    "wsl",
+    "dev-container",
+    "tunnel"
+   ],
+   "other": [
+    "manifest extensionKind [ui]",
+    "listing property Microsoft.VisualStudio.Code.ExtensionKind"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "gallery (Open VSX)"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-extensionpack#F-9101",
+   "remote-extensionpack#F-9901",
+   "remote-extensionpack#F-9102",
+   "remote-extensionpack#F-9001",
+   "remote-extensionpack#F-9002"
+  ],
+  "coreUi": true,
+  "candidateComponent": "pack.extension-kind",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [
+   "editor-core-extension-management"
+  ],
+  "errorPaths": 6,
+  "notes": "Pack stays UI-kind so it installs locally with members; browser editor and Windows/macOS not observed. Placement logic is the editor's.",
+  "questions": [
+   "Does the gallery offer the pack in browser editors, and what dialog text appears (Q3)?",
+   "Needs-revision label: which sections are to be revised before architecture relies on it?"
+  ]
+ },
+ {
+  "id": "F-9901",
+  "issue": 10,
+  "repo": "remote-extensionpack",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: identity of the reimplemented pack and the member ids it lists",
+  "epic": "E99",
+  "acCount": 18,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "id remote-oss.vscode-remote-extensionpack",
+    "publisher remote-oss",
+    "MIT licence",
+    "no telemetry",
+    "icon PNG at least 128px",
+    "member ids remote-oss.remote-wsl, remote-containers, remote-ssh, remote-server in order"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "open-vsx.org namespace remote-oss",
+    "github.com/remote-oss/remote-extensionpack"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.json",
+    "LICENSE",
+    "README.md",
+    "icon PNG"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-7901",
+   "remote-containers#F-1406",
+   "remote-containers#F-1401",
+   "remote-containers#F-1404",
+   "remote-ssh#F-3901",
+   "remote-server#F-8901",
+   "remote-explorer#F-5901",
+   "remote-extensionpack#F-9001",
+   "remote-extensionpack#F-9002",
+   "remote-extensionpack#F-9101",
+   "remote-extensionpack#F-9102",
+   "remote-extensionpack#F-9103"
+  ],
+  "coreUi": true,
+  "candidateComponent": "pack.identity",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [
+   "openvsx"
+  ],
+  "errorPaths": 2,
+  "notes": "Fixes the pack identity and member list; ids feed the shared identifier table. Published on Open VSX only. remote-ssh pack contents still pending its own decision.",
+  "questions": [
+   "Remote-ssh F-3901 was still proposed; has it ruled on its extensionPack contents (ssh-edit and explorer)?",
+   "Which component owns the family-wide member id table that this list and other packs share?"
+  ]
+ }
+]

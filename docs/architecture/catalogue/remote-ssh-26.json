@@ -1,0 +1,337 @@
+[
+ {
+  "id": "F-2309",
+  "issue": 42,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "External SSH_ASKPASS",
+  "epic": "E23",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.externalSSH_ASKPASS"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "application-scoped boolean setting",
+    "Settings editor row (core)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "user askpass program"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "known_hosts",
+    "user settings.json",
+    "global state entry auth-prompt-<alias>"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2001"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.askpass-policy",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "Pure env decision at local-server start: keep user SSH_ASKPASS only when setting true, local-server mode and value non-empty (blank counts). Never touch SSH_ASKPASS_REQUIRE or add DISPLAY. No fallback prompt on failure.",
+  "questions": [
+   "Windows OpenSSH: does ssh call SSH_ASKPASS without DISPLAY, and which variables does the extension add there?",
+   "macOS Dock-launched window: is DISPLAY present, so is the user program used without SSH_ASKPASS_REQUIRE?",
+   "Spec cites lab evidence ids and observation notes; are those material not for the clean side? Spec cites material not for the clean side."
+  ]
+ },
+ {
+  "id": "F-2310",
+  "issue": 43,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Jump hosts and proxy commands",
+  "epic": "E23",
+  "acCount": 36,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "ssh config keywords ProxyJump, ProxyCommand, ProxyUseFdpass",
+    "per-hop prompt relay via host-key and password inputs"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createInputBox",
+    "window.showQuickPick"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "scp",
+    "nc",
+    "ssh -W"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "~/.vscode-server (absent on jump host)"
+   ],
+   "localFiles": [
+    "ssh config file",
+    "known_hosts"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2311",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2603",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-1403",
+   "remote-ssh#F-3903"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.hop-prompt-relay",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 9,
+  "notes": "No jump logic in extension: run ssh with the alias and relay every question. Key design points are the connect-timeout budget over jump prompts, reconnection stale-input behaviour, and prompt ordering across hops.",
+  "questions": [
+   "Decision Q3: reproduce exactly, name the hop in prompts, or enlarge timeout and close stale prompts? Which option binds the architecture?",
+   "Windows client: ProxyCommand without POSIX shell and ProxyUseFdpass; which dialog appears?",
+   "macOS system ssh: which wording and input surface does each hop question use?"
+  ]
+ },
+ {
+  "id": "F-2311",
+  "issue": 44,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "SSH agent forwarding into the remote environment",
+  "epic": "E23",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.enableAgentForwarding",
+    "terminal.integrated.allowInUntrustedWorkspace (core, read)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "terminal env variable collection entry SSH_AUTH_SOCK",
+    "remote symlink /tmp/vscode-ssh-auth-sock-<n>",
+    "remote extension host env SSH_AUTH_SOCK"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "ExtensionContext.environmentVariableCollection",
+    "workspace.getConfiguration",
+    "window.createTerminal"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "sshd",
+    "ssh-add",
+    "remote hidden terminal process creating symlink"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "/tmp/vscode-ssh-auth-sock-<n>",
+    "~/.ssh/agent/",
+    "/tmp/ssh-<random>/agent.<pid>"
+   ],
+   "localFiles": [
+    "per-host connection data of local server (forwarded socket path)"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2312",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-1403",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-1406",
+   "remote-ssh#F-2104"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.agent-env-fixer",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "Per-window symlink in /tmp to the session's forwarded socket, never removed; env set in extension host and terminals. Link step is gated by workspace trust via terminal API. Decision stored in local-server connection data and reused on reload.",
+  "questions": [
+   "Windows host: what replaces the /tmp symlink and what is SSH_AUTH_SOCK there?",
+   "macOS host: is the link in /tmp or TMPDIR?",
+   "Must the link step really go through the terminal API for trust gating, or may a hidden exec be used? Is cleanup of stale links allowed?"
+  ]
+ },
+ {
+  "id": "F-2312",
+  "issue": 45,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "X11 forwarding into the remote environment",
+  "epic": "E23",
+  "acCount": 33,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.enableX11Forwarding"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "terminal env variable collection entry DISPLAY",
+    "remote extension host env DISPLAY",
+    "ssh keywords ForwardX11, ForwardX11Trusted, ForwardX11Timeout, XAuthLocation"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "ExtensionContext.environmentVariableCollection",
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "sshd",
+    "xauth",
+    "xdpyinfo"
+   ],
+   "network": [
+    "localhost:6000+n on host (sshd listener)"
+   ],
+   "remoteFiles": [
+    "~/.Xauthority"
+   ],
+   "localFiles": [
+    "per-host connection data of local server (display)"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2311",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-1403",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.display-env-fixer",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 6,
+  "notes": "Takes the DISPLAY the host session reports and sets it in extension host and terminals; no parsing of ssh config. Silent failures. Sibling of agent forwarding, so one shared env-fix component with a pluggable variable is likely.",
+  "questions": [
+   "Windows host: is any DISPLAY reported or contributed, and does ssh X11 refusal appear?",
+   "macOS host: is DISPLAY contributed as in the main flow?",
+   "Debuggee after repeated reconnects keeps an older display; must the clean build reproduce that or fix it?"
+  ]
+ }
+]

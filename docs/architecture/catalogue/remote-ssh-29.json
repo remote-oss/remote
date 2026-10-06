@@ -1,0 +1,629 @@
+[
+ {
+  "id": "F-2501",
+  "issue": 59,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Resolving the ssh-remote authority",
+  "epic": "E25",
+  "acCount": 35,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "remoteName"
+   ],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "activation event onResolveRemoteAuthority:ssh-remote",
+    "remoteHelp contribution",
+    "extensionKind ui"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "local connection helper"
+   ],
+   "network": [
+    "local forwarded port"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2505"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.authority-resolver",
+  "candidateLibrary": "lib-authority",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 10,
+  "notes": "Decodes plain or hex-JSON authority into host/user/port, runs connection inside resolve, returns managed authority with tunnel factory; reuses live connection per host/user/port; failures marked handled.",
+  "questions": [
+   "Authority forms outside entry points (empty, uppercase hex, IPv6 literals): require the failure-dialog behaviour or exact parsing rules?",
+   "Does spec cite scenario ids (S2, R-63) only as lab references, with no transcripts for the clean side?",
+   "Is managed-authority socket factory contract defined in F-3903 or here?"
+  ]
+ },
+ {
+  "id": "F-2502",
+  "issue": 60,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Remote indicator and resource labels in an SSH window",
+  "epic": "E25",
+  "acCount": 35,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openEmptyWindow",
+    "opensshremotes.openEmptyWindowInCurrentWindow"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote+*"
+   ],
+   "other": [
+    "resourceLabelFormatters manifest entry",
+    "runtime label formatter",
+    "status.host item (core)",
+    "window.title variables"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [
+    "resolvers (registerResourceLabelFormatter)"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2503",
+   "remote-ssh#F-2504",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2506",
+   "remote-ssh#F-2508",
+   "remote-ssh#F-3901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.label-formatter",
+  "candidateLibrary": "lib-authority",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Static manifest formatter plus per-window runtime formatter whose suffix is the host label; label rules (port only after IP literal, 40-char truncation) drive core indicator text.",
+  "questions": [
+   "Host label rule for non-alias host names with ports and IPv6: adopt BR-3 as written or show port always?",
+   "Windows and macOS path display (tilde, drive letter) pending: which target decides?",
+   "Is label derivation shared with F-2501 decoding in one library?"
+  ]
+ },
+ {
+  "id": "F-2503",
+  "issue": 61,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Internal commands for the Remotes view",
+  "epic": "E25",
+  "acCount": 33,
+  "surfaces": {
+   "commands": [
+    "remote-internal.getSshFoldersHistory",
+    "remote-internal.deleteSshFolderFromHistory",
+    "remote-internal.getActiveSshRemote",
+    "remote-internal.openRemoteSshTarget"
+   ],
+   "settings": [],
+   "views": [
+    "Remotes view (Remote Explorer)"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "onCommand activation events x4",
+    "untrustedWorkspaces supported"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "global-state folder history store"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-3906",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2504",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-3901",
+   "remote-explorer#F-5102",
+   "remote-explorer#F-5103",
+   "remote-explorer#F-5104",
+   "remote-explorer#F-5902"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.history-service",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [
+   "remote-explorer"
+  ],
+  "errorPaths": 5,
+  "notes": "Four command ids answer Remote Explorer: folder history per host, delete entry, active remote, open target. Payloads unobservable and delegated to F-5902 contract.",
+  "questions": [
+   "Payload shapes of the four remote-internal commands: who fixes them, F-3906 or remote-explorer F-5902?",
+   "Does the view call openRemoteSshTarget or open the vscode-remote URI directly?",
+   "Are history change notifications and setActiveFolders part of the contract?"
+  ]
+ },
+ {
+  "id": "F-2504",
+  "issue": 62,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Opening folders, workspaces and links on an SSH host",
+  "epic": "E25",
+  "acCount": 32,
+  "surfaces": {
+   "commands": [
+    "workbench.action.files.openFolder",
+    "workbench.action.files.openFile",
+    "workbench.action.files.openFileFolder",
+    "workbench.action.openWorkspace",
+    "workbench.action.openRecent",
+    "workbench.extensions.action.manageAuthorizedExtensionURIs"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "activation event onUri",
+    "URI scheme <scheme>://<extension-id>/path",
+    "code --remote CLI"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "vscode.env.uriScheme"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "code CLI"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2503",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-1406",
+   "remote-ssh#F-2701"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.open-targets",
+  "candidateLibrary": "lib-authority",
+  "area": "B",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 10,
+  "notes": "Mostly VS Code core entry points that must work in SSH windows; only owned item is the onUri activation event with no observable handler behaviour.",
+  "questions": [
+   "Should the reimplementation register a URI handler, ignore all URIs, or define own shapes (Q1)?",
+   "Windows host path forms (/c:/...) need which check and by whom?",
+   "Is URI handling identity (extension id) fixed by F-3901?"
+  ]
+ },
+ {
+  "id": "F-2505",
+  "issue": 63,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Disconnect, reconnection and reconnection attempts",
+  "epic": "E25",
+  "acCount": 33,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.maxReconnectionAttempts",
+    "remote.SSH.reconnectionGraceTime"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "remoteConnectionState"
+   ],
+   "authorities": [],
+   "other": [
+    "Reconnect Now, Reload Window, Dismiss buttons (core)"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "ssh (new process per attempt)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2401",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2413",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2004",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2411"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.reconnect-controller",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "Core calls resolver again per attempt; extension must report temporary errors, rebuild tunnel and re-prompt. Reference counts reconnections per window and ignores limit when null.",
+  "questions": [
+   "null max attempts: match reference (no limit, cumulative) or follow description (8 per outage)?",
+   "Forwarded ports after reconnection: revive tunnels or reproduce hang until reload?",
+   "Windows and macOS repeat of countdown and password re-prompt scenarios: who verifies?"
+  ]
+ },
+ {
+  "id": "F-2506",
+  "issue": 64,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Extensions on the SSH host and default extensions",
+  "epic": "E25",
+  "acCount": 25,
+  "surfaces": {
+   "commands": [
+    "workbench.extensions.installLocalExtensions",
+    "workbench.action.reloadWindow"
+   ],
+   "settings": [
+    "remote.SSH.defaultExtensions",
+    "remote.SSH.defaultExtensionsIfInstalledLocally",
+    "remote.defaultExtensionsIfInstalledLocally"
+   ],
+   "views": [
+    "Extensions view remote section (core)"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": []
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "VS Code Server install"
+   ],
+   "network": [
+    "extension gallery from host"
+   ],
+   "remoteFiles": [
+    ".vscode-server extensions folder"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2508",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2601"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.default-extensions",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Resolver hands the default-extension list to the host on connect and to a running server; migrates the older if-installed-locally key; install failures on running server close the connection in reference.",
+  "questions": [
+   "Install failure on running server: fail resolve (reference) or ignore and log (recommended)?",
+   "Which gallery do derivatives use for host installs (F-3902)?",
+   "Windows host extensions folder and error UI: which target pass records this?"
+  ]
+ },
+ {
+  "id": "F-2507",
+  "issue": 65,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Port forwarding over the SSH connection",
+  "epic": "E25",
+  "acCount": 42,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.defaultForwardedPorts",
+    "remote.autoForwardPortsSource"
+   ],
+   "views": [
+    "Ports view (core)"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "ssh keywords LocalForward, RemoteForward, DynamicForward, GatewayPorts, PermitRemoteOpen",
+    "tunnel factory",
+    "port source output"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [
+    "resolvers (tunnelFactory, port source)"
+   ],
+   "processes": [
+    "ssh SOCKS forward"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "ssh config file (remote.SSH.configFile)"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2508",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3903"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.tunnel-factory",
+  "candidateLibrary": "lib-forwarding",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 10,
+  "notes": "Provides tunnel support riding the connection SOCKS forward, default forwards from setting, static rows from LocalForward only. No visibility or privileged-port elevation.",
+  "questions": [
+   "Reference rough edges (no validation, Unix socket NaN rows, hang after reconnect): reproduce or skip invalid and revive tunnels?",
+   "Is default-forward re-application after reconnect excluded in both options?",
+   "Does the Ports origin text 'Remote - SSH' stay fixed by F-3901?"
+  ]
+ },
+ {
+  "id": "F-2508",
+  "issue": 66,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "VS Code core features in an SSH window",
+  "epic": "E25",
+  "acCount": 37,
+  "surfaces": {
+   "commands": [
+    "workbench.action.terminal.new",
+    "workbench.action.terminal.selectDefaultShell",
+    "workbench.action.openRemoteSettingsFile",
+    "workbench.action.openRemoteSettings",
+    "workbench.action.debug.start",
+    "workbench.action.debug.selectandstart",
+    "workbench.action.tasks.runTask",
+    "workbench.view.extensions",
+    "workbench.action.reloadWindow"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "remote code CLI in terminal",
+    "Remote settings tab"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "host shell",
+    "code CLI",
+    "node (debug)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "/tmp/code-stdin-*"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2704",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2504",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2506",
+   "remote-ssh#F-2507",
+   "remote-ssh#F-2311",
+   "remote-ssh#F-2312",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3903"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.core-passthrough",
+  "candidateLibrary": "none",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 4,
+  "notes": "Owns no atoms; documents terminals, CLI, settings, debug and tasks that work because the server environment is correct. Mainly conformance, with server environment from F-2704 and F-2403.",
+  "questions": [
+   "Which server environment layers must the clean side set for the code CLI to work in terminals?",
+   "Windows and macOS shell profile sets for terminal default profile: who observes?",
+   "Is this spec only a conformance suite with no component?"
+  ]
+ },
+ {
+  "id": "F-2509",
+  "issue": 67,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Open Web UI",
+  "epic": "E25",
+  "acCount": 21,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openWebUI"
+   ],
+   "settings": [
+    "remote.SSH.enableWebAccess"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "config.remote.SSH.enableWebAccess",
+    "remoteConnectionState"
+   ],
+   "authorities": [],
+   "other": [
+    "implicit onCommand activation"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "env.openExternal"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "http://localhost:<server port>/"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2002",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2507",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3905"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.open-web-ui",
+  "candidateLibrary": "none",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Hidden command, gated by an undeclared setting key; reference opens a local URL of the server port without forwarding it, so it reaches nothing. Low priority P3.",
+  "questions": [
+   "Reimplement exactly, no-op, omit, or build a working web UI (Q1)?",
+   "Is the stable API call env.openExternal, or another opener, in the reference?",
+   "Which family rule keeps experiments off and so hides the behaviour?"
+  ]
+ }
+]

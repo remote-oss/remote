@@ -1,0 +1,728 @@
+[
+ {
+  "id": "F-2101",
+  "issue": 19,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Finding and running the local ssh client",
+  "epic": "E21",
+  "acCount": 30,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.path",
+    "remote.SSH.suppressWindowsSshWarning"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "warning with Don't Show Again button (Windows)",
+    "version-check run"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration",
+    "window.showWarningMessage",
+    "child_process"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "ssh -V",
+    "Git for Windows ssh.exe"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "user settings",
+    "extension global state"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2309",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2006"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.client-locator",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 5,
+  "notes": "Candidate search: setting, then PATH, then Git location on Windows; banner check via -V; user-scope only; env inherited. Missing-client surface unobserved (provisional AC-21).",
+  "questions": [
+   "What surface and buttons does the no-client error (S009) use, and are non-PATH locations probed on Linux?",
+   "Should a version check that exits 0 with no output hang (reference) or count as rejected?",
+   "Where is the Windows warning's Don't Show Again choice stored, and in which order are Git locations searched?",
+   "Spec cites material not for the clean side (lab scenario ids, lab host limits); how should the architecture treat those references?"
+  ]
+ },
+ {
+  "id": "F-2102",
+  "issue": 20,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Connection sharing: local connection server and Kill Local Connection Server",
+  "epic": "E21",
+  "acCount": 40,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.cleanLocalServer"
+   ],
+   "settings": [
+    "remote.SSH.useLocalServer"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette (when config.remote.SSH.useLocalServer)"
+   ],
+   "contextKeys": [
+    "config.remote.SSH.useLocalServer"
+   ],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "progress phase text S157",
+    "mirrored prompts across windows",
+    "per-host server record"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "window.showInputBox",
+    "ExtensionContext.globalStorageUri",
+    "ExtensionContext.globalState",
+    "workspace.onDidChangeConfiguration",
+    "child_process"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "detached local helper process",
+    "SSH_ASKPASS helper"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "per-host record in global storage",
+    "askpass sockets or named pipes",
+    "ssh control socket (ControlPath)"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2107",
+   "remote-ssh#F-2108",
+   "remote-ssh#F-2109",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2309",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-3901",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-2408"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.local-connection-server",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 10,
+  "notes": "Detached helper owning one ssh per host, shared by windows, with prompt mirroring and a stale-record check. Kill command visible only when setting is on. Large design surface; core of area A.",
+  "questions": [
+   "Windows waiting through S157 end up on two server instances after a Kill: reproduce or avoid? Spec recommends avoid.",
+   "What replaces askpass sockets on Windows, and how does ControlMaster behave there?",
+   "Is the helper-to-window protocol (prompt hand-over) free design, given record layout is declared free?",
+   "Spec cites material not for the clean side (lab scenario ids, lab host limits); how should the architecture treat those references?"
+  ]
+ },
+ {
+  "id": "F-2103",
+  "issue": 21,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Exec server bootstrap mode",
+  "epic": "E21",
+  "acCount": 34,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.useExecServer"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "progress texts S041/S045/S084",
+    "two bootstrap modes (exec, legacy)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration",
+    "window.withProgress"
+   ],
+   "proposedApi": [
+    "resolvers (resolveExecServer, workspace.getRemoteExecServer)"
+   ],
+   "processes": [
+    "VS Code CLI on host",
+    "bash",
+    "curl",
+    "wget",
+    "scp",
+    "ssh"
+   ],
+   "network": [
+    "server download endpoint"
+   ],
+   "remoteFiles": [
+    "server folder per client product",
+    "cli/ folder"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2406",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2703",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2701",
+   "remote-ssh#F-2702",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-3902",
+   "remote-ssh#F-2305"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.exec-bootstrap",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli",
+   "openssh"
+  ],
+  "errorPaths": 6,
+  "notes": "Setting picks exec mode (CLI-managed server) or legacy shell bootstrap per resolve; truthiness quirks for non-boolean values; manual-bootstrap forces legacy; derivative server source never uses exec.",
+  "questions": [
+   "Exec mode hangs on a host lacking runtime libraries: reproduce or fail with the server-start dialog?",
+   "Should the architecture implement legacy mode at all, or only exec mode plus the manual path?",
+   "Does exec mode work on hosts without bash, per the release note, and how is that verified?",
+   "Spec cites material not for the clean side (lab scenario ids, lab host limits); how should the architecture treat those references?"
+  ]
+ },
+ {
+  "id": "F-2104",
+  "issue": 22,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "SSH tunnel to the server, dynamic forwarding and local port range",
+  "epic": "E21",
+  "acCount": 48,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.enableDynamicForwarding",
+    "remote.SSH.preferredLocalPortRange"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "progress texts S130/S158",
+    "tunnel error S067/S073/S095",
+    "show-log error notification",
+    "second-ssh tunnel path"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "window.showErrorMessage",
+    "net (TCP listener)"
+   ],
+   "proposedApi": [
+    "resolvers (ResolvedAuthority, tunnel factory)"
+   ],
+   "processes": [
+    "ssh (SOCKS dynamic forward)",
+    "second ssh with local forward"
+   ],
+   "network": [
+    "127.0.0.1 window port",
+    "SOCKS5 over loopback",
+    "host IPv4 loopback server port"
+   ],
+   "remoteFiles": [
+    "server unix socket (socket mode)"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2409",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3903",
+   "remote-ssh#F-2109",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2507"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.tunnel-manager",
+  "candidateLibrary": "lib-forwarding",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 13,
+  "notes": "Local listener relays through ssh SOCKS forward to the server port; free-port search with optional range; alternative second-ssh path when local server is off or socket mode. Many hang cases in the reference.",
+  "questions": [
+   "Several failures hang silently in the reference: reproduce, add a time limit, or fail at once?",
+   "After the shared ssh is replaced, earlier forwarded ports go dead: reproduce, re-route, or remove them?",
+   "Which loopback address family does the port check use on macOS and Windows?",
+   "Spec cites material not for the clean side (lab scenario ids, lab host limits); how should the architecture treat those references?"
+  ]
+ },
+ {
+  "id": "F-2105",
+  "issue": 23,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Connection timeouts",
+  "epic": "E21",
+  "acCount": 32,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.connectTimeout"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "reason texts S137/S140/S089 and an unowned text",
+    "ssh_config keywords ConnectTimeout, ConnectionAttempts, ServerAliveInterval, ServerAliveCountMax"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration",
+    "setTimeout"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "ssh config file (remote.SSH.configFile)"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2106",
+   "remote-ssh#F-2107",
+   "remote-ssh#F-2108",
+   "remote-ssh#F-2109",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2003"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.timeout-policy",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "Setting feeds ssh ConnectTimeout unless host entry sets one; extension also runs its own wait, paused during prompts; reasons mapped from ssh stderr text. Odd values mishandled in reference.",
+  "questions": [
+   "Unusual setting values (zero, negative, fraction, string) misbehave in the reference: reproduce, normalise, or warn?",
+   "Per-host ConnectTimeout 0 gives an unbounded extension wait: no wait, a stated maximum, or platform maximum?",
+   "How does the extension read per-host ConnectTimeout: via ssh -G or its own parser?"
+  ]
+ },
+ {
+  "id": "F-2106",
+  "issue": 24,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "PTY allocation",
+  "epic": "E21",
+  "acCount": 17,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.permitPtyAllocation"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "ssh_config keyword RequestTTY"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "ssh (-T flag)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "ssh config file"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2109",
+   "remote-ssh#F-2107",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2405",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.pty-flag",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 4,
+  "notes": "Single boolean: when off, the ssh command carries -T; when on it is omitted. Applies only to a new ssh connection, so local-server mode needs a Kill. Forced pty makes bootstrap fail intermittently.",
+  "questions": [
+   "Forced pty (RequestTTY force with the setting on) fails in the reference: pass flag faithfully, fix bootstrap, or message? Spec recommends faithful.",
+   "Spec cites material not for the clean side (lab scenario ids, lab host limits); how should the architecture treat those references?"
+  ]
+ },
+ {
+  "id": "F-2107",
+  "issue": 25,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "RemoteCommand support",
+  "epic": "E21",
+  "acCount": 27,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.enableRemoteCommand"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "ssh_config keywords RemoteCommand, SessionType, StdinNull, ForkAfterAuthentication",
+    "log hints (not contract)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "ssh -G"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "ssh config file"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2109",
+   "remote-ssh#F-2106",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2003"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.remote-command-gate",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 11,
+  "notes": "Setting off suppresses a configured RemoteCommand per invocation; on only works with local server on and host absent from remotePlatform. Bootstrap is fed to the login shell on stdin, so StdinNull and fork options break it.",
+  "questions": [
+   "Is overriding RemoteCommand off via a -o option on the ssh command line acceptable, or must config evaluation be done by the extension?",
+   "How are hosts resolved for RemoteCommand detection given Match blocks: always via ssh -G?",
+   "Does bootstrap work inside non-bash login shells (PowerShell, zsh) on Windows and macOS hosts?"
+  ]
+ },
+ {
+  "id": "F-2108",
+  "issue": 26,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Pre-connection script",
+  "epic": "E21",
+  "acCount": 41,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.preconnect"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "modal confirmation dialog (Allow, Allow and Don't Ask Again, Skip)",
+    "progress step S118",
+    "PreconnectScriptFailure row in session troubleshooting terminal",
+    "per-script confirmation hash in global state"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showWarningMessage (modal)",
+    "window.withProgress",
+    "ExtensionContext.globalState",
+    "LogOutputChannel",
+    "crypto SHA-256",
+    "child_process",
+    "os.homedir"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "user-configured script (.sh/executable; .ps1 on Windows)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "script file",
+    "extension global state"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2407",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-3901"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.preconnect-runner",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 9,
+  "notes": "Runs a local script before connecting, per host or global, guarded by a modal confirmation tied to a content hash. Setting honoured from workspace and folder settings even when untrusted; script outlives the extension host.",
+  "questions": [
+   "Setting is honoured from workspace and Restricted Mode folder settings: reproduce, restrict scope, or ignore when untrusted? Spec recommends reproduce.",
+   "Where does the Windows .ps1 requirement text appear and how is the script started?",
+   "Should preconnect live in the ssh library or a separate pre-connect hook component shared by other families?"
+  ]
+ },
+ {
+  "id": "F-2109",
+  "issue": 27,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "ssh_config keywords passed through to ssh",
+  "epic": "E21",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "43 owned ssh_config keywords passed unchanged",
+    "LogLevel overridden by verbosity option",
+    "ssh stderr written to log channel"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createOutputChannel (log)"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "ssh config file (remote.SSH.configFile)"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2106",
+   "remote-ssh#F-2107",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2310",
+   "remote-ssh#F-2311",
+   "remote-ssh#F-2312",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2507",
+   "remote-ssh#F-2603",
+   "remote-ssh#F-2306"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.config-passthrough",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 6,
+  "notes": "Contract is mostly negative: hand alias and config file to ssh and do not parse or emulate the 43 keywords. Exceptions: LogLevel overridden, host-key-change reason mapped, unknown keyword gives reasonless dialog.",
+  "questions": [
+   "Is a test-only catalogue of the 43 keywords enough, or does any keyword need active handling beyond passing the config file?",
+   "Which owned keywords does the Windows OpenSSH client lack, and how should the failure dialog read?"
+  ]
+ }
+]

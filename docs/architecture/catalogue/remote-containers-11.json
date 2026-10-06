@@ -1,0 +1,610 @@
+[
+ {
+  "id": "F-0906",
+  "issue": 72,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Remote Explorer integration",
+  "epic": "E09",
+  "acCount": 23,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "workbench.remoteIndicator.showExtensionRecommendations (core)",
+    "remote.explorerType (core storage key)"
+   ],
+   "views": [
+    "targetsContainers",
+    "detailsContainers",
+    "devVolumes",
+    "workbench.view.remote",
+    "~remote.helpPanel"
+   ],
+   "menus": [
+    "statusBar/remoteIndicator (17 entries, 13 unique commands)"
+   ],
+   "contextKeys": [
+    "hideConnectCommands",
+    "remote-containers:showDetails",
+    "hideRebuildCommands",
+    "canReopenLocally",
+    "canReopenInWSL",
+    "canReopenInSSH",
+    "canReopenInTunnel"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "exec",
+    "k8s-container",
+    "apple-container"
+   ],
+   "other": [
+    "views.remote registration",
+    "Switch Remote dropdown (core)",
+    "remoteHelp contribution",
+    "enabledApiProposals manifest entry",
+    "extensionKind ui"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.getCommands"
+   ],
+   "proposedApi": [
+    "contribViewsRemote",
+    "contribRemoteHelp"
+   ],
+   "processes": [
+    "docker (inspect/start via sibling flows)"
+   ],
+   "network": [
+    "aka.ms help links"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "editor product.json remoteExtensionTips (read by core)",
+    "argv.json (proposal enablement)"
+   ]
+  },
+  "cites": [
+   "remote-containers#906",
+   "remote-containers#901",
+   "remote-containers#903",
+   "remote-containers#904",
+   "remote-containers#102",
+   "remote-containers#402",
+   "remote-containers#405",
+   "remote-containers#406",
+   "remote-containers#601",
+   "remote-containers#604",
+   "remote-containers#605",
+   "remote-containers#1403",
+   "remote-containers#1404",
+   "remote-containers#1406",
+   "remote-containers#1401",
+   "remote-containers#101",
+   "remote-containers#105",
+   "remote-containers#106",
+   "remote-containers#107",
+   "remote-containers#108"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.remote-explorer-registration",
+  "candidateLibrary": "lib-product",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Mostly manifest registration plus proposal gating; core owns viewlet, dropdown and indicator quick input. Extension side is manifest entries and one proposal-enablement probe. Spec text cites lab notes.",
+  "questions": [
+   "Does the proposal-enablement probe (F-0101) live in lib-product or in this component?",
+   "Which view and menu entries must stay verbatim versus allowed to differ under the new extension id?",
+   "Spec cites material not for the clean side (lab notes, product.json path); is any of it normative?"
+  ]
+ },
+ {
+  "id": "F-0901",
+  "issue": 76,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Dev Containers view",
+  "epic": "E09",
+  "acCount": 58,
+  "surfaces": {
+   "commands": [
+    "remote-containers.explorerTargetsRefresh"
+   ],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.dockerComposePath",
+    "dev.containers.executeInWSL"
+   ],
+   "views": [
+    "targetsContainers"
+   ],
+   "menus": [
+    "view/title#0-2",
+    "view/item/context#4-26",
+    "viewsWelcome targetsContainers#0-3"
+   ],
+   "contextKeys": [
+    "remote-containers:needsDockerStartOrInstall",
+    "remote-containers:needsSSHCredentials",
+    "remote-containers:noContainersWithFolder",
+    "remote-containers:noContainersWithoutFolder",
+    "canReopenLocally",
+    "canReopenInWSL",
+    "canReopenInSSH",
+    "canReopenInTunnel",
+    "hideRebuildCommands"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "exec",
+    "k8s-container",
+    "apple-container"
+   ],
+   "other": [
+    "tree with Dev Containers and Other Containers groups",
+    "row icons per state",
+    "relative-time tooltips",
+    "de-densified multi-folder parent rows"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTreeView",
+    "window.registerTreeDataProvider",
+    "TreeItem",
+    "ThemeIcon",
+    "setContext command"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker (ps, inspect)",
+    "docker-compose (state grouping)"
+   ],
+   "network": [
+    "Docker engine endpoint"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json (config existence check on host)",
+    "vm-active.svg",
+    "folder-active.svg",
+    "folder.svg",
+    "refresh.svg"
+   ]
+  },
+  "cites": [
+   "remote-containers#901",
+   "remote-containers#902",
+   "remote-containers#903",
+   "remote-containers#904",
+   "remote-containers#905",
+   "remote-containers#906",
+   "remote-containers#102",
+   "remote-containers#105",
+   "remote-containers#107",
+   "remote-containers#201",
+   "remote-containers#203",
+   "remote-containers#204",
+   "remote-containers#205",
+   "remote-containers#401",
+   "remote-containers#403",
+   "remote-containers#405",
+   "remote-containers#406",
+   "remote-containers#410",
+   "remote-containers#501",
+   "remote-containers#601",
+   "remote-containers#605",
+   "remote-containers#806",
+   "remote-containers#1003",
+   "remote-containers#1401",
+   "remote-containers#1403",
+   "remote-containers#1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.explorer-targets-view",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "docker-cli",
+   "editor-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Largest spec: tree provider over Docker list and inspect with label-based grouping, state icons, tooltips, welcome states. Several behaviours inferred or closed by decision. Spec cites lab notes many times.",
+  "questions": [
+   "Is the Docker listing shared with F-0903 and F-0904 as one container-state service?",
+   "Which row behaviours are decided versus observed, esp. needsSSHCredentials and Tunnel analogy?",
+   "Spec cites material not for the clean side (lab notes, review notes); which statements stand alone?"
+  ]
+ },
+ {
+  "id": "F-0902",
+  "issue": 80,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Container and folder actions",
+  "epic": "E09",
+  "acCount": 55,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openFolderInContainerInCurrentWindow",
+    "remote-containers.openFolderInContainerInNewWindow",
+    "remote-containers.attachToContainerInCurrentWindow",
+    "remote-containers.attachToContainerInNewWindow",
+    "remote-containers.stopContainer",
+    "remote-containers.startContainer",
+    "remote-containers.removeContainer",
+    "remote-containers.removeRecentFolder",
+    "remote-containers.showDetails",
+    "remote-containers.inspectDockerResource",
+    "remote-containers.showContainerLog"
+   ],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.executeInWSL"
+   ],
+   "views": [],
+   "menus": [
+    "view/item/context groups 1_folder, 1_container, 2_container, 2_folder",
+    "view/title navigation (Details attach)"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "dev-container",
+    "attached-container"
+   ],
+   "other": [
+    "modal confirmations for Stop and Remove",
+    "attach trust acknowledgement in global state",
+    "none in Command Palette"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "vscode.openFolder",
+    "window.showWarningMessage",
+    "window.showErrorMessage",
+    "window.createTerminal (Pseudoterminal)",
+    "workspace.openTextDocument",
+    "window.showTextDocument",
+    "ExtensionContext.globalState",
+    "setKeysForSync"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker (ps, stop, start, rm, inspect, logs, volume rm)"
+   ],
+   "network": [
+    "vscode-remote:// URI handoff",
+    "aka.ms trust link"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "vm-start.svg",
+    "remove.svg"
+   ]
+  },
+  "cites": [
+   "remote-containers#902",
+   "remote-containers#901",
+   "remote-containers#906",
+   "remote-containers#106",
+   "remote-containers#108",
+   "remote-containers#903",
+   "remote-containers#904",
+   "remote-containers#905",
+   "remote-containers#406",
+   "remote-containers#405",
+   "remote-containers#413",
+   "remote-containers#417",
+   "remote-containers#602",
+   "remote-containers#504",
+   "remote-containers#401",
+   "remote-containers#402",
+   "remote-containers#403",
+   "remote-containers#404",
+   "remote-containers#408",
+   "remote-containers#409",
+   "remote-containers#410",
+   "remote-containers#705"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.row-actions",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "docker-cli"
+  ],
+  "errorPaths": 9,
+  "notes": "Eleven palette-hidden commands on tree rows; thin Docker CLI wrappers plus modal confirmations, an attach trust flag and handoff to connection features. Spec still draft. No devcontainer CLI needed.",
+  "questions": [
+   "Spec is draft; which sections are still open before architecture can rely on it?",
+   "Who owns the vscode.openFolder handoff and exited-target start: this feature or F-0601/F-0602?",
+   "Should Stop, Start and Remove share one Docker command runner with F-0905?"
+  ]
+ },
+ {
+  "id": "F-0903",
+  "issue": 94,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Details (Containers) view",
+  "epic": "E09",
+  "acCount": 36,
+  "surfaces": {
+   "commands": [
+    "remote-containers.explorerDetailsRefresh"
+   ],
+   "settings": [
+    "dev.containers.executeInWSL",
+    "dev.containers.mountWaylandSocket (cited)"
+   ],
+   "views": [
+    "detailsContainers"
+   ],
+   "menus": [
+    "view/title#4-7",
+    "view/item/context#27-29"
+   ],
+   "contextKeys": [
+    "remote-containers:showDetails",
+    "hideConnectCommands",
+    "hideRebuildCommands",
+    "remoteName"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container"
+   ],
+   "other": [
+    "dynamic view title",
+    "Attributes and Mounts sections",
+    "mount performance hint row",
+    "X11 display row",
+    "Configuration row"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTreeView",
+    "TreeItem",
+    "ThemeIcon",
+    "setContext command",
+    "commands.executeCommand"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker (inspect, ps)",
+    "wsl.exe (Windows path)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json (config file shown in Configuration row)",
+    "gear.svg",
+    "tools.svg",
+    "refresh.svg"
+   ]
+  },
+  "cites": [
+   "remote-containers#903",
+   "remote-containers#906",
+   "remote-containers#902",
+   "remote-containers#801",
+   "remote-containers#701",
+   "remote-containers#405",
+   "remote-containers#812",
+   "remote-containers#708",
+   "remote-containers#1008",
+   "remote-containers#901",
+   "remote-containers#904",
+   "remote-containers#109",
+   "remote-containers#402",
+   "remote-containers#410",
+   "remote-containers#601",
+   "remote-containers#604",
+   "remote-containers#1401",
+   "remote-containers#1403",
+   "remote-containers#1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.details-view",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "docker-cli"
+  ],
+  "errorPaths": 9,
+  "notes": "Tree provider over single-container inspect data, titled dynamically and following the window's own container. Toolbar icons depend on viewing window remote kind. Several nine edge cases, mostly rows that are absent.",
+  "questions": [
+   "Is the origin (SSH, WSL) read from container labels only, or also from window state?",
+   "Who sets the showDetails context key, F-0906 or F-0902?",
+   "Spec cites material not for the clean side (lab notes, audit files); does anything normative depend on them?"
+  ]
+ },
+ {
+  "id": "F-0904",
+  "issue": 99,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Dev Volumes view",
+  "epic": "E09",
+  "acCount": 42,
+  "surfaces": {
+   "commands": [
+    "remote-containers.explorerVolumesRefresh",
+    "remote-containers.cloneInVolume",
+    "remote-containers.removeVolume"
+   ],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.executeInWSL"
+   ],
+   "views": [
+    "devVolumes"
+   ],
+   "menus": [
+    "view/title#8-10",
+    "view/item/context#30-33",
+    "viewsWelcome devVolumes#4"
+   ],
+   "contextKeys": [
+    "remote-containers:noDevVolumes",
+    "hideConnectCommands"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container"
+   ],
+   "other": [
+    "row kinds devVolume and uniqueDevVolume",
+    "GitHub URL friendly labels",
+    "pull-request volume rows"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTreeView",
+    "window.registerTreeDataProvider",
+    "window.showInputBox",
+    "window.showErrorMessage",
+    "window.showInformationMessage",
+    "window.confirmSaveUntitledWorkspace",
+    "MarkdownString tooltips"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker (volume ls, volume rm, inspect, ps)",
+    "git (clone inside helper container)"
+   ],
+   "network": [
+    "github.com repository URLs"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#904",
+   "remote-containers#906",
+   "remote-containers#701",
+   "remote-containers#703",
+   "remote-containers#705",
+   "remote-containers#902",
+   "remote-containers#905",
+   "remote-containers#702",
+   "remote-containers#901",
+   "remote-containers#903",
+   "remote-containers#106",
+   "remote-containers#107",
+   "remote-containers#201",
+   "remote-containers#410",
+   "remote-containers#801",
+   "remote-containers#1401",
+   "remote-containers#1403",
+   "remote-containers#1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.volumes-view",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "docker-cli",
+   "devcontainers-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Volume list with label-derived rows, in-use check at removal time, and a Clone Repository in Volume action that reuses F-0701/F-0702 prompts. Hides the vscode cache volume and 64-hex names.",
+  "questions": [
+   "Which volume labels (vsch.local.repository.*) are the contract shared with F-0701 and F-0905?",
+   "Does cloneInVolume call the same engine path as F-0701, or a separate one?",
+   "Why does Remove skip a menu guard and check in-use only at pick time?"
+  ]
+ },
+ {
+  "id": "F-0905",
+  "issue": 100,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Clean Up Dev Containers and Dev Volumes",
+  "epic": "E09",
+  "acCount": 33,
+  "surfaces": {
+   "commands": [
+    "remote-containers.cleanUpDevContainers",
+    "remote-containers.pruneVolumes"
+   ],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.executeInWSL"
+   ],
+   "views": [],
+   "menus": [
+    "view/title navigation@2 on targetsContainers (F-0901)",
+    "view/title navigation@2 on devVolumes (F-0904)"
+   ],
+   "contextKeys": [
+    "remote-containers:needsDockerStartOrInstall",
+    "remote-containers:noContainersWithFolder",
+    "remote-containers:noContainersWithoutFolder"
+   ],
+   "authorities": [],
+   "other": [
+    "multi-select quick picks",
+    "chained containers then volumes pickers",
+    "completion and nothing-to-delete dialogs"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick (canPickMany)",
+    "window.showInformationMessage"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker (ps, rm, volume ls, volume rm, inspect)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json (association check)"
+   ]
+  },
+  "cites": [
+   "remote-containers#905",
+   "remote-containers#901",
+   "remote-containers#904",
+   "remote-containers#906",
+   "remote-containers#902",
+   "remote-containers#417",
+   "remote-containers#203",
+   "remote-containers#505",
+   "remote-containers#801",
+   "remote-containers#1401",
+   "remote-containers#1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.cleanup-commands",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "docker-cli"
+  ],
+  "errorPaths": 3,
+  "notes": "Two palette commands: scan stopped dev containers and unused volumes, multi-select pick, remove. Sorted with locale collation. Containers command propagates Docker errors, volumes command swallows them.",
+  "questions": [
+   "Should candidate detection reuse F-0901 and F-0904 row classification code?",
+   "Why does the volumes command swallow Docker-unreachable while the containers command surfaces it?",
+   "Is the compose sibling left orphaned by design, per F-0417?"
+  ]
+ }
+]

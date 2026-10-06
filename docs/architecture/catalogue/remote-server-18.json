@@ -1,0 +1,698 @@
+[
+ {
+  "id": "F-8001",
+  "issue": 8,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Package, activation, extension kind and web entry",
+  "epic": "E80",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.connectCurrentWindowToTunnel",
+    "remote-tunnels.getStarted",
+    "remote-tunnels.reportIssue",
+    "remote-tunnels.settings",
+    "remote-tunnels.showUsageLimits",
+    "remote-tunnels.signIntoTunnelWithDifferentAccount",
+    "remote-tunnels.openOnDesktop"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator",
+    "commandPalette"
+   ],
+   "contextKeys": [
+    "remote-tunnels.entriesEnabled",
+    "remoteName",
+    "isWeb",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "extensionKind ui",
+    "main and browser entries",
+    "extensionPack to remote-explorer",
+    "14 language l10n sets",
+    "untrustedWorkspaces supported",
+    "R-54 coexistence warning",
+    "Output channel Remote - Tunnels"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "extensions.getExtension",
+    "commands.executeCommand",
+    "window.createOutputChannel",
+    "window.showWarningMessage",
+    "ExtensionContext.globalState"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "argv.json enable-proposed-api",
+    "package.nls.<lang>.json",
+    "l10n bundles",
+    "Remote - Tunnels.log"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8901",
+   "remote-server#F-8902",
+   "remote-containers#F-1403",
+   "remote-containers#F-1404",
+   "remote-explorer#F-5001",
+   "remote-server#F-8002",
+   "remote-server#F-8101",
+   "remote-server#F-8102",
+   "remote-server#F-8103",
+   "remote-server#F-8201",
+   "remote-server#F-8301",
+   "remote-server#F-8302",
+   "remote-containers#F-1406",
+   "remote-containers#F-0101"
+  ],
+  "coreUi": true,
+  "candidateComponent": "tunnels.extension-shell",
+  "candidateLibrary": "lib-product",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Manifest-level shell: ten activation events plus startup activation, coexistence check against the reference, gating context key, ordered activation so a missing resolvers grant cannot abort it.",
+  "questions": [
+   "Which package owns the 14 language bundles and the coexistence check: lib-product or the extension shell?",
+   "Is argv.json enable-proposed-api the only supported proposal route for derivatives besides product config?",
+   "Spec cites lab observation ids and a reference manifest path; not for the clean side."
+  ]
+ },
+ {
+  "id": "F-8002",
+  "issue": 9,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Help, settings and issue-reporting commands",
+  "epic": "E80",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.getStarted",
+    "remote-tunnels.settings",
+    "remote-tunnels.reportIssue"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "README help section with project URLs"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "env.openExternal"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "external browser"
+   ],
+   "network": [
+    "project documentation URL (https)"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.json bugs and repository fields"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8001",
+   "remote-server#F-8901",
+   "remote-server#F-8104",
+   "remote-server#F-8102",
+   "remote-server#F-8101",
+   "remote-server#F-8103"
+  ],
+  "coreUi": true,
+  "candidateComponent": "tunnels.help-commands",
+  "candidateLibrary": "lib-product",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 3,
+  "notes": "Three stateless hand-offs: browser, filtered Settings editor, core Issue Reporter. Writes nothing. Needs only project identity values; trivial component.",
+  "questions": [
+   "Is the project documentation URL a build-time constant from the identity card or a runtime config value?",
+   "Settings and reporter behavior in a signed-in tunnel window is unobserved; is that a blocker?"
+  ]
+ },
+ {
+  "id": "F-8101",
+  "issue": 10,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Connect to Tunnel: command, entry points and the tunnel picker",
+  "epic": "E81",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.connectCurrentWindowToTunnel"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator group remote_10_tunnel_0_local@1",
+    "commandPalette"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "tunnel quick pick with Online and Offline groups",
+    "Learn More row",
+    "Switch Account row"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "QuickPickItemKind.Separator",
+    "authentication.getSession",
+    "env.openExternal",
+    "ExtensionContext.globalState",
+    "commands.executeCommand vscode.openFolder",
+    "vscode.l10n.t"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "dev-tunnels client (VS Code CLI based)"
+   ],
+   "network": [
+    "dev-tunnels service",
+    "devtunnels.ms"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-server#F-8102",
+   "remote-server#F-8103",
+   "remote-server#F-8104",
+   "remote-server#F-8201",
+   "remote-server#F-8203",
+   "remote-server#F-8302",
+   "remote-server#F-8901",
+   "remote-server#F-8902",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-explorer#F-5902"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.connect-picker",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Account step, then tunnel list from the tunnel service, then reload window into tunnel+name authority. Remembers last-used account in global state. Offline and empty states are inferred, not observed.",
+  "questions": [
+   "How does the clean team list tunnels: which client and service does F-8902 choose for Code-OSS builds?",
+   "What does picking an Offline tunnel do, and is Create a Tunnel real?",
+   "Is Last used also shown on tunnel rows?"
+  ]
+ },
+ {
+  "id": "F-8102",
+  "issue": 11,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Tunnel sign-in: GitHub or Microsoft account and switching accounts",
+  "epic": "E81",
+  "acCount": 24,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.signIntoTunnelWithDifferentAccount"
+   ],
+   "settings": [
+    "remote.tunnels.tunnelCredentialCommand"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "account-type quick pick",
+    "modal not-found dialog with Pick a different account"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "authentication.getSession",
+    "window.showInformationMessage",
+    "window.showErrorMessage",
+    "ExtensionContext.globalState",
+    "vscode.l10n.t"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "GitHub auth provider",
+    "Microsoft auth provider",
+    "dev-tunnels service"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "globalState tunnelClearSessionOnNextProvider"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8101",
+   "remote-server#F-8103",
+   "remote-server#F-8201",
+   "remote-server#F-8901",
+   "remote-server#F-8902",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5902"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.account-session",
+  "candidateLibrary": "lib-authority",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Obtains github or microsoft sessions through core auth, persists last choice, reports consent refusal and tunnel-not-found. Credential-command setting is declared but has no desktop effect. Different-account command is inferred.",
+  "questions": [
+   "What value shape does remote.tunnels.tunnelCredentialCommand expect for delegated web authentication?",
+   "What exactly does the different-account command do, given it was never run?",
+   "Which scopes are required for the Microsoft provider session?"
+  ]
+ },
+ {
+  "id": "F-8103",
+  "issue": 12,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "The tunnel remote authority, the connected window and connection errors",
+  "epic": "E81",
+  "acCount": 30,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "remoteName == tunnel"
+   ],
+   "authorities": [
+    "tunnel",
+    "tunnel+<name>"
+   ],
+   "other": [
+    "onResolveRemoteAuthority:tunnel",
+    "progress notification Connecting to name",
+    "label formatter for vscode-remote",
+    "local relay on 127.0.0.1"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "window.showErrorMessage",
+    "window.showQuickPick",
+    "ExtensionContext.globalState",
+    "window.createOutputChannel",
+    "workspace.registerResourceLabelFormatter"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "local relay helper (tunnel client)",
+    "VS Code CLI on host"
+   ],
+   "network": [
+    "dev-tunnels relay",
+    "global.rel.tunnels.api.visualstudio.com",
+    "127.0.0.1 websocket"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "vscode-tunneling-* socket",
+    "Remote - Tunnels log"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8102",
+   "remote-server#F-8101",
+   "remote-server#F-8104",
+   "remote-server#F-8201",
+   "remote-server#F-8302",
+   "remote-server#F-8901",
+   "remote-server#F-8902",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.resolver-relay",
+  "candidateLibrary": "lib-forwarding",
+  "area": "A",
+  "reuse": [
+   "editor-cli",
+   "openssh"
+  ],
+  "errorPaths": 10,
+  "notes": "Resolver for tunnel authority: find tunnel, start or reuse local relay, return loopback address. Owns ten error states. Relay may outlive editor; socket naming is reference data. Draft status.",
+  "questions": [
+   "Should Close Connection run core close-remote (option b) or match the reference no-op?",
+   "What triggers the outdated-connection error and what does Upgrade do?",
+   "Where do relay sockets live on Windows and macOS, and does the relay outlive the editor there?"
+  ]
+ },
+ {
+  "id": "F-8104",
+  "issue": 13,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "VS Code Server and CLI on the tunnel host: download, CLI updates, default extensions",
+  "epic": "E81",
+  "acCount": 25,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.tunnels.defaultExtensions",
+    "remote.tunnels.alwaysUpdateCLI"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "CLI update prompt Update, Always update, Not Now",
+    "server download and extract progress"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration inspect",
+    "ConfigurationTarget.Global",
+    "window.showInformationMessage",
+    "window.withProgress"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "VS Code CLI on host (code tunnel)",
+    "VS Code Server"
+   ],
+   "network": [
+    "update service of host CLI",
+    "server distribution"
+   ],
+   "remoteFiles": [
+    "cached server for client commit",
+    "host CLI binary"
+   ],
+   "localFiles": [
+    "user settings.json"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8103",
+   "remote-server#F-8102",
+   "remote-server#F-8101",
+   "remote-server#F-8201",
+   "remote-server#F-8901",
+   "remote-server#F-8902",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.host-software",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Mostly delegates to the host CLI: server download, install of default extensions per relay connection, CLI update prompt. Download, extract and update screens are inferred from strings. Spec mentions lab files forbidden to clean side.",
+  "questions": [
+   "Do download and extract messages appear inside the Connecting notification or in a separate one?",
+   "If one default-extension id fails on a running server, are the others installed first?",
+   "What does Always update store, and how do true, false and unset differ?"
+  ]
+ },
+ {
+  "id": "F-8201",
+  "issue": 14,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Tunnel data and actions behind the Remotes view",
+  "epic": "E82",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.internal.isAuthenticated",
+    "remote-tunnels.internal.getTunnelsList",
+    "remote-tunnels.internal.getActiveRemote",
+    "remote-tunnels.internal.getFoldersHistory",
+    "remote-tunnels.internal.connectToRemote",
+    "remote-tunnels.internal.deleteFolderFromHistory",
+    "remote-tunnels.internal.unregisterTunnel",
+    "remote-tunnels.isConnectedToRemote",
+    "remote-tunnels.connectNewWindowToTunnel",
+    "remote-internal.setActiveFolders"
+   ],
+   "settings": [],
+   "views": [
+    "remoteTargets"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "folder history in global state key remote-tunnels.folder-history",
+    "nine onCommand activation events"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "authentication.getSession silent",
+    "ExtensionContext.globalState",
+    "workspace.workspaceFolders",
+    "workspace.workspaceFile",
+    "window.showWarningMessage modal",
+    "commands.executeCommand vscode.openFolder"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "dev-tunnels client"
+   ],
+   "network": [
+    "dev-tunnels service"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "globalState remote-tunnels.folder-history"
+   ]
+  },
+  "cites": [
+   "remote-explorer#F-5902",
+   "remote-explorer#F-5201",
+   "remote-explorer#F-5202",
+   "remote-explorer#F-5104",
+   "remote-server#F-8102",
+   "remote-server#F-8103",
+   "remote-server#F-8101",
+   "remote-server#F-8202",
+   "remote-server#F-8203",
+   "remote-server#F-8901"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.explorer-data-api",
+  "candidateLibrary": "lib-companion",
+  "area": "B",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Command-based data and action interface for Remote Explorer Tunnels group plus folder history store. Spec chooses to fix three reference quirks; owner of two hover texts undecided.",
+  "questions": [
+   "Confirm fixing the three reference quirks: connected state, folder-active flag, per-window history copies?",
+   "Who owns the hover texts: Remote Explorer or this extension?",
+   "What are the purpose and argument of isConnectedToRemote, which nothing calls?"
+  ]
+ },
+ {
+  "id": "F-8202",
+  "issue": 15,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Port forwarding over a tunnel: Private and Public ports",
+  "epic": "E82",
+  "acCount": 17,
+  "surfaces": {
+   "commands": [
+    "remote.tunnel.privacyprivate",
+    "remote.tunnel.privacypublic",
+    "remote.tunnel.forwardCommandPalette",
+    "remote.tunnel.forwardInline"
+   ],
+   "settings": [],
+   "views": [
+    "Ports view (core)"
+   ],
+   "menus": [
+    "Port Visibility submenu"
+   ],
+   "contextKeys": [
+    "remoteName == tunnel"
+   ],
+   "authorities": [
+    "tunnel"
+   ],
+   "other": [
+    "privacy options private and public",
+    "tunnelFeatures elevation false protocol false"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "l10n.t"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "dev-tunnels client"
+   ],
+   "network": [
+    "https devtunnels.ms forwarded addresses",
+    "dev-tunnels service"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-server#F-8103",
+   "remote-server#F-8102",
+   "remote-server#F-8201",
+   "remote-server#F-8203",
+   "remote-server#F-8001",
+   "remote-server#F-8901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "tunnels.port-forwarder",
+  "candidateLibrary": "lib-forwarding",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Tunnel provider features via resolvers: two privacy options, factory adds ports to the tunnel with access control. Public was never run on the reference. Core draws the Ports view.",
+  "questions": [
+   "What does Public do in practice, and should the clean side offer it with a warning or at all?",
+   "What does the user see when the service refuses a forward or visibility change?",
+   "Which icon does Public use?"
+  ]
+ },
+ {
+  "id": "F-8203",
+  "issue": 16,
+  "repo": "remote-server",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Tunnel usage limits",
+  "epic": "E82",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [
+    "remote-tunnels.showUsageLimits"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "output channel Remote - Tunnels",
+    "Checking usage limits progress notification"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "window.withProgress",
+    "window.showQuickPick",
+    "authentication.getSession",
+    "window.createOutputChannel",
+    "l10n.t"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "dev-tunnels client"
+   ],
+   "network": [
+    "dev-tunnels service limits request",
+    "aka.ms learn-more link"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "Remote - Tunnels log"
+   ]
+  },
+  "cites": [
+   "remote-server#F-8102",
+   "remote-server#F-8001",
+   "remote-server#F-8101",
+   "remote-server#F-8103",
+   "remote-server#F-8202",
+   "remote-server#F-8901"
+  ],
+  "coreUi": false,
+  "candidateComponent": "tunnels.usage-limits",
+  "candidateLibrary": "lib-server",
+  "area": "A",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Single command: account question, session, limits request, three log lines in the output channel. Limit-reached strings exist but were never produced.",
+  "questions": [
+   "What replaces No limits are currently in place when a tunnel or bandwidth limit is reached?",
+   "What does Show Limits run, and what carries it?",
+   "Is the Learn more link a project URL or the service documentation link?"
+  ]
+ }
+]

@@ -1,0 +1,285 @@
+[
+ {
+  "id": "F-0404",
+  "issue": 81,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Open Workspace in Container and multi-root workspaces",
+  "epic": "E04",
+  "acCount": 34,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openWorkspace"
+   ],
+   "settings": [
+    "window.confirmSaveUntitledWorkspace",
+    "files.simpleDialog.enable",
+    "window.dialogStyle",
+    "dev.containers.executeInWSL",
+    "dev.containers.dockerPath"
+   ],
+   "views": [
+    "Remote Explorer Dev Containers view (New Dev Container hub)"
+   ],
+   "menus": [
+    "commandPalette"
+   ],
+   "contextKeys": [
+    "hideConnectCommands",
+    "remoteName"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "exec",
+    "k8s-container",
+    "apple-container",
+    "wsl",
+    "ssh-remote",
+    "tunnel"
+   ],
+   "other": [
+    "file-open dialog filtered to .code-workspace",
+    "modal Cancel/Continue validation dialog",
+    "hub quick pick row",
+    "strings S078 S185 S262 S279 S363 S406-S409 S415"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showOpenDialog",
+    "window.showInformationMessage",
+    "commands.executeCommand vscode.openFolder",
+    "workspace.requestWorkspaceTrust",
+    "window.createQuickPick"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker"
+   ],
+   "network": [],
+   "remoteFiles": [
+    ".code-workspace file",
+    "shared root folder",
+    "SSH host file system"
+   ],
+   "localFiles": [
+    ".code-workspace file",
+    ".devcontainer/devcontainer.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0106",
+   "remote-containers#F-0107",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0301",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0411",
+   "remote-containers#F-0801",
+   "remote-containers#F-0806",
+   "remote-containers#F-0807",
+   "remote-containers#F-0812",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0902",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.workspace-opener",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 10,
+  "notes": "Pick a code-workspace file, validate every folder against the shared root, report only the first failure in a Cancel/Continue dialog, then open it into one container. Shared-root validation is also reached by Reopen in Container.",
+  "questions": [
+   "Which component owns shared-root validation, given Reopen in Container and three other commands reuse it?",
+   "Does Remote-SSH reach Docker through the SSH host, and which library carries that path?",
+   "Spec cites material not for the clean side (reference manifest and string table in provenance); is the string atom list authoritative?"
+  ]
+ },
+ {
+  "id": "F-0407",
+  "issue": 82,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Switch Container",
+  "epic": "E04",
+  "acCount": 29,
+  "surfaces": {
+   "commands": [
+    "remote-containers.switchContainer"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "commandPalette"
+   ],
+   "contextKeys": [
+    "remoteName"
+   ],
+   "authorities": [
+    "dev-container"
+   ],
+   "other": [
+    "configuration picker quick pick with Current marker",
+    "single-configuration modal dialog with Open Folder in Container button",
+    "strings S001 S240 S299"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "window.showInformationMessage",
+    "workspace.requestWorkspaceTrust",
+    "window.showOpenDialog"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker",
+    "devcontainer read-configuration",
+    "devcontainer up"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    ".devcontainer.json",
+    ".devcontainer/devcontainer.json",
+    ".devcontainer/<folder>/devcontainer.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0401",
+   "remote-containers#F-0406",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0417",
+   "remote-containers#F-0109",
+   "remote-containers#F-0106",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0413",
+   "remote-containers#F-0701",
+   "remote-containers#F-0704",
+   "remote-containers#F-0108",
+   "remote-containers#F-0505",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.switch-container",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Lists configurations of the connected folder, marks the current one, and hands the chosen one to the normal connect flow in the same window. Applies the left configuration's shutdown action. Also works in recovery, disconnected and no-folder windows.",
+  "questions": [
+   "Is the connect entry point shared with Reopen in Container a single component the switch command calls?",
+   "How is the left container's shutdown action applied when the switch comes from a window a switch itself loaded?",
+   "Spec cites material not for the clean side (reference manifest and string table paths in provenance); confirm only the quoted atoms matter."
+  ]
+ },
+ {
+  "id": "F-0419",
+  "issue": 92,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Server and extension cache volume",
+  "epic": "E04",
+  "acCount": 42,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.cacheVolume",
+    "remote.containers.cacheVolume"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "Docker named volume vscode mounted at /vscode",
+    "no UI of its own"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker volume",
+    "docker inspect",
+    "docker run",
+    "docker compose"
+   ],
+   "network": [
+    "extension gallery download host"
+   ],
+   "remoteFiles": [
+    "/vscode/vscode-server/bin/<platform>/<commit>",
+    "/vscode/vscode-server/extensionsCache",
+    "~/.vscode-server/bin/<commit> symlink",
+    "~/.vscode-server/extensionsCache"
+   ],
+   "localFiles": [
+    "host temp extensionsCache folder when setting is false"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0102",
+   "remote-containers#F-0106",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0407",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0411",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0417",
+   "remote-containers#F-0418",
+   "remote-containers#F-0503",
+   "remote-containers#F-0505",
+   "remote-containers#F-0601",
+   "remote-containers#F-0701",
+   "remote-containers#F-0905",
+   "remote-containers#F-1401",
+   "remote-containers#F-1402",
+   "remote-containers#F-1404",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.cache-volume",
+  "candidateLibrary": "lib-server",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Setting-driven mount of the shared vscode volume on every container creation path. Server install layout and extension cache sharing via symlinks, with a per-product cache folder key. Mount collisions and unusable volumes surface as generic failures.",
+  "questions": [
+   "Is the shared-volume server install a lib-server responsibility or purely a container-creation detail of this extension?",
+   "Which layer decides mount collisions on /vscode for Compose versus image configurations?",
+   "Does the per-product extensionsCache folder name rule apply identically to every client product, and who fixes the platform names?"
+  ]
+ }
+]

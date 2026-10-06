@@ -1,0 +1,619 @@
+[
+ {
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "epic": "E05",
+  "id": "F-0503",
+  "issue": 34,
+  "title": "VS Code server installation in the container",
+  "acCount": 51,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.serverDownloadBaseUrl",
+    "remote.serverDownloadFolder"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "progress phase text Installing server / Starting server",
+    "modal requirements-failure dialog",
+    "licence acceptance dialog (BR-16)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "window.showErrorMessage",
+    "window.showInformationMessage",
+    "ExtensionContext.globalState"
+   ],
+   "proposedApi": [
+    "resolvers (env.appCommit, env.appQuality)"
+   ],
+   "processes": [
+    "docker",
+    "docker exec",
+    "docker inspect",
+    "docker run",
+    "tar",
+    "node (in container)",
+    "devcontainers-cli"
+   ],
+   "network": [
+    "update.code.visualstudio.com",
+    "remote.serverDownloadBaseUrl host"
+   ],
+   "remoteFiles": [
+    "/vscode volume",
+    "/vscode/vscode-server/bin/{platform}/{commit}",
+    "~/.vscode-server",
+    "~/.vscode-server-insiders",
+    "product.json"
+   ],
+   "localFiles": [
+    "{serverDownloadFolder}/{commit}/vscode-server-{platform}[-quality].tar.gz",
+    "client product.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0408",
+   "remote-containers#F-0502",
+   "remote-containers#F-0410",
+   "remote-containers#F-0601",
+   "remote-containers#F-0505",
+   "remote-containers#F-0506",
+   "remote-containers#F-1402",
+   "remote-containers#F-1403",
+   "remote-containers#F-1008"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.server-installer",
+  "candidateLibrary": "lib-server",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Per {platform,commit} server cache in one shared Docker volume; archive downloaded locally, cached, copied in. Requirements check, Alpine and arch variants, licence step for reimplementation. No open-source reference for download/copy/start.",
+  "questions": [
+   "Which distribution host and default base URL does the reimplementation use (BR-14 and F-1402), given no Microsoft server download?",
+   "Exact requirements-check minimums and expected check output format for the failure dialog detail?",
+   "Is abandoned partial-directory cleanup in scope, and where may it run without delaying connect?"
+  ]
+ },
+ {
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "epic": "E05",
+  "id": "F-0501",
+  "issue": 35,
+  "title": "Remote authorities, URIs and resource labels",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [
+    "remote-containers.reopenInContainer",
+    "remote-containers.attachToRunningContainer",
+    "remote-containers.openRepositoryInUniqueVolume",
+    "remote-containers.openRepositoryInVolume",
+    "remote-containers.attachToK8sContainer",
+    "remote-containers.attachToK8sContainerFromViewlet",
+    "remote-containers.attachToAppleContainer"
+   ],
+   "settings": [
+    "dev.containers.experimentalAppleContainerSupport"
+   ],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator group remote_30_dev-container_2_actions"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "hideConnectCommands"
+   ],
+   "authorities": [
+    "dev-container+",
+    "attached-container+",
+    "exec+",
+    "k8s-container+",
+    "apple-container+"
+   ],
+   "other": [
+    "five resourceLabelFormatters on vscode-remote scheme",
+    "activation events onResolveRemoteAuthority for four families (not exec)",
+    "hex-encoded JSON authority payloads",
+    "per-profile label cache memento",
+    "Open Recent labels"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration",
+    "ExtensionContext.globalState"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "devcontainers-cli up / set-up",
+    "docker",
+    "kubectl exec",
+    "container (Apple CLI)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "/workspaces/<basename>"
+   ],
+   "localFiles": [
+    "workspace.json",
+    "backupWorkspaces emptyWindows entries",
+    "recent-workspaces store",
+    "~/.docker/config.json currentContext",
+    "kubeconfig"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0502",
+   "remote-containers#F-0503",
+   "remote-containers#F-0504",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0410",
+   "remote-containers#F-0601",
+   "remote-containers#F-0602",
+   "remote-containers#F-0604",
+   "remote-containers#F-0701",
+   "remote-containers#F-0705",
+   "remote-containers#F-0205",
+   "remote-containers#F-0106",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.authority-codec",
+  "candidateLibrary": "lib-authority",
+  "area": "B",
+  "reuse": [
+   "devcontainers-cli",
+   "kubectl"
+  ],
+  "errorPaths": 7,
+  "notes": "Owns authority families and payload encoding for folder, attach, volume, recovery and inspect windows, plus label formatters and recents labels. Persistence layout mirrors reference. exec+ has formatter but no resolver by decision.",
+  "questions": [
+   "Does the reimplementation reuse the dev-container+ prefix and mirror localDocker:false, or define its own authority prefix?",
+   "Is authority payload hex-JSON layout a contract across the family or private to containers?",
+   "Should reserved characters in host folder names be encoded correctly (7.E7) despite reference defect?"
+  ]
+ },
+ {
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "epic": "E05",
+  "id": "F-0504",
+  "issue": 36,
+  "title": "Window title, remote indicator and labels",
+  "acCount": 32,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openDevContainerFile",
+    "remote-containers.createDevContainer",
+    "remote-containers.attachToRunningContainer",
+    "remote-containers.configureContainerFeatures",
+    "remote-containers.createDevContainerFile",
+    "remote-containers.openRepositoryInUniqueVolume",
+    "remote-containers.rebuildContainer",
+    "remote-containers.reopenLocally",
+    "remote-containers.reopenInWSL",
+    "remote-containers.reopenInSSH",
+    "remote-containers.reopenInTunnel",
+    "remote-containers.reopenInContainer",
+    "remote-containers.openFolder",
+    "workbench.action.remote.showMenu"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator#0-#16 group remote_30_dev-container_2_actions"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "workspaceFolderCount",
+    "virtualWorkspace",
+    "gitOpenRepositoryCount",
+    "hideConnectCommands",
+    "hideRebuildCommands",
+    "canReopenLocally",
+    "canReopenInWSL",
+    "canReopenInSSH",
+    "canReopenInTunnel"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "k8s-container"
+   ],
+   "other": [
+    "STR S114/S118 live window suffix",
+    "STR S428/S432/S398/S433 recents labels",
+    "name property",
+    "truncation of indicator text with uncapped tooltip"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.executeCommand setContext",
+    "recently-opened label API",
+    "workspace trust request"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json name property",
+    "~/.docker/config.json currentContext"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0501",
+   "remote-containers#F-0502",
+   "remote-containers#F-0106",
+   "remote-containers#F-0401",
+   "remote-containers#F-0403",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0408",
+   "remote-containers#F-0410",
+   "remote-containers#F-0601",
+   "remote-containers#F-0604",
+   "remote-containers#F-0701",
+   "remote-containers#F-0705",
+   "remote-containers#F-0205",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.window-identity",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Seventeen menu placements with when clauses; six context keys the extension must set itself. Identity text from name, Docker context and origin remote (SSH alias tail). Two reserved strings with no trigger kept by decision. Origin-remote logic is family-shared.",
+  "questions": [
+   "Which of the six custom context keys must be shared across remote-ssh, wsl and containers via lib-identifiers?",
+   "Where do S008 and S433 appear, given decision to keep them with inferred placement?",
+   "Spec cites vscode-oss source paths; are those acceptable clean-side material? Spec cites material not for the clean side."
+  ]
+ },
+ {
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "epic": "E05",
+  "id": "F-0505",
+  "issue": 37,
+  "title": "Extensions in the container",
+  "acCount": 38,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.defaultExtensions",
+    "remote.containers.defaultExtensions",
+    "remote.defaultExtensionsIfInstalledLocally",
+    "dev.containers.defaultExtensionsIfInstalledLocally",
+    "http.systemCertificates"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "devcontainer.json properties customizations.vscode.extensions and top-level extensions",
+    "item syntax -id, @version, @prerelease",
+    "schema jsonValidation with anchored pattern"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration().update (global target)",
+    "contributes.configuration",
+    "jsonValidation"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "devcontainers-cli read-configuration",
+    "VS Code server extension install"
+   ],
+   "network": [
+    "extension marketplace (via server)"
+   ],
+   "remoteFiles": [
+    "/vscode/vscode-server/extensionsCache"
+   ],
+   "localFiles": [
+    "user settings.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0502",
+   "remote-containers#F-0503",
+   "remote-containers#F-0102",
+   "remote-containers#F-0405",
+   "remote-containers#F-0504",
+   "remote-containers#F-0506",
+   "remote-containers#F-0601",
+   "remote-containers#F-0602",
+   "remote-containers#F-0603",
+   "remote-containers#F-0809",
+   "remote-containers#F-1404",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.extension-list-builder",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Builds ordered extension id list from image and feature metadata, devcontainer.json, deprecated key and user setting; precedence and opt-out rules; handed to the server only on first server start. Also moves one undeclared setting key into core's key.",
+  "questions": [
+   "Does the server accept the id list through an existing install interface, or must the reimplementation drive installs itself?",
+   "Is the key move of defaultExtensionsIfInstalledLocally required given an undeclared key?",
+   "Which registry hosts do in-container installs use for the reimplementation (F-1404 relation)?"
+  ]
+ },
+ {
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "epic": "E05",
+  "id": "F-0502",
+  "issue": 57,
+  "title": "Remote authority resolver and connection lifecycle",
+  "acCount": 41,
+  "surfaces": {
+   "commands": [
+    "remote-containers.reopenInContainer",
+    "remote-containers.rebuildAndReopenInContainer",
+    "remote-containers.rebuildNoCacheAndReopenInContainer",
+    "remote-containers.reopenLocally",
+    "remote-containers.attachToRunningContainer",
+    "remote-containers.attachToK8sContainer",
+    "remote-containers.revealLogTerminal",
+    "remote-containers.showReopenInContainerNotificationReset",
+    "workbench.action.remote.close",
+    "workbench.action.reloadWindow"
+   ],
+   "settings": [
+    "telemetry.telemetryLevel"
+   ],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator group remote_30_dev-container_2_actions@0-@8"
+   ],
+   "contextKeys": [
+    "isRecoveryContainer",
+    "hideConnectCommands",
+    "hideRebuildCommands",
+    "canReopenLocally",
+    "canReopenInWSL",
+    "canReopenInSSH",
+    "canReopenInTunnel",
+    "remoteName",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "k8s-container",
+    "apple-container"
+   ],
+   "other": [
+    "devPort and customizations.vscode.devPort properties",
+    "telemetry events resolver and serviceConnectionFailure (not emitted by decision)",
+    "strings S055 S058 S270 S286 S296 S375",
+    "indicator states resolving/reconnecting/disconnected"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "window.showErrorMessage"
+   ],
+   "proposedApi": [
+    "resolvers (registerRemoteAuthorityResolver, RemoteAuthorityResolverError)"
+   ],
+   "processes": [
+    "devcontainers-cli up and run-user-commands",
+    "docker",
+    "kubectl"
+   ],
+   "network": [
+    "loopback forward to in-container server"
+   ],
+   "remoteFiles": [
+    "VS Code server process and token"
+   ],
+   "localFiles": [
+    "devcontainer.json",
+    "global storage folder"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0408",
+   "remote-containers#F-0501",
+   "remote-containers#F-0503",
+   "remote-containers#F-0504",
+   "remote-containers#F-0505",
+   "remote-containers#F-0506",
+   "remote-containers#F-0507",
+   "remote-containers#F-0601",
+   "remote-containers#F-0604",
+   "remote-containers#F-0701",
+   "remote-containers#F-0202",
+   "remote-containers#F-0201",
+   "remote-containers#F-0410",
+   "remote-containers#F-1403",
+   "remote-containers#F-1405",
+   "remote-containers#F-1008"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.resolver",
+  "candidateLibrary": "lib-authority",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "openssh-none"
+  ],
+  "errorPaths": 17,
+  "notes": "Resolver for container authorities: fresh connect, reload re-resolution, server death, container stop, removal, pause, restart, engine unreachable, token mismatch, pod deletion. Error-class mapping to core retry behaviour is central. Owns resolvers proposal.",
+  "questions": [
+   "Should the resolver error-class mapping (temporarily-not-available vs handled not-available) become a family-wide lib-authority contract?",
+   "Do the four untriggered strings S055, S058, S270, S375 keep placement or get dropped?",
+   "Is the 3-hour reconnection grace time configurable or fixed, and who sets it?"
+  ]
+ },
+ {
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "epic": "E05",
+  "id": "F-0506",
+  "issue": 60,
+  "title": "Machine settings and MCP servers in the container",
+  "acCount": 15,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.portsAttributes",
+    "remote.otherPortsAttributes",
+    "github.copilot.chat.codeGeneration.instructions"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "devcontainer.json properties customizations.vscode.settings, settings, customizations.vscode.mcp",
+    "schemas vscode://schemas/settings/machine and vscode://schemas/mcp",
+    "one-time marker-gated file write"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "devcontainers-cli read-configuration",
+    "docker exec (file write)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "~/.vscode-server/data/Machine/settings.json",
+    "~/.vscode-server/data/Machine/.writeMachineSettingsMarker",
+    "~/.vscode-server/data/User/mcp.json"
+   ],
+   "localFiles": [
+    "devcontainer.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0502",
+   "remote-containers#F-0503",
+   "remote-containers#F-0402",
+   "remote-containers#F-0405",
+   "remote-containers#F-0408",
+   "remote-containers#F-0504",
+   "remote-containers#F-0505",
+   "remote-containers#F-0601",
+   "remote-containers#F-0602",
+   "remote-containers#F-1101",
+   "remote-containers#F-0106"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.machine-settings-writer",
+  "candidateLibrary": "lib-server",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 4,
+  "notes": "Silent one-time merge of feature and config settings into the server machine settings file, plus MCP file, gated by marker in the server data folder rather than container id. Mechanism for generated Copilot instructions reproduced in own wording.",
+  "questions": [
+   "Is the marker file name and location a contract, or may the reimplementation choose its own?",
+   "Should the server-data folder layout be shared with remote-ssh and wsl via lib-server?",
+   "Which live probes feed the generated instructions entry, and what is its exact setting shape?"
+  ]
+ },
+ {
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "epic": "E05",
+  "id": "F-0507",
+  "issue": 106,
+  "title": "Extension host debugging in containers",
+  "acCount": 36,
+  "surfaces": {
+   "commands": [
+    "workbench.action.debug.start"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "activation event onDebugResolve:extensionHost",
+    "launch.json type extensionHost",
+    "no debuggers contributed"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "activationEvents onDebugResolve"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "automatic port forwarding of core"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    ".vscode/launch.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0501",
+   "remote-containers#F-0502",
+   "remote-containers#F-0503",
+   "remote-containers#F-0504",
+   "remote-containers#F-0401",
+   "remote-containers#F-0410",
+   "remote-containers#F-0201",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.debug-activation",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 6,
+  "notes": "Only contribution is declaring the onDebugResolve:extensionHost activation event; no provider registered by decision. Behaviour comes from core re-resolving the same authority in a second window. Mostly verification scenarios across authority kinds and Windows engines.",
+  "questions": [
+   "Since no outward effect was observed, may the manifest event be omitted if tests pass without it?",
+   "Do the second-window reuse scenarios require resolver support for concurrent windows on one container?",
+   "Are Windows and WSL Docker-backend scenarios in VS-9 to VS-12 required for first release?"
+  ]
+ }
+]

@@ -1,0 +1,284 @@
+[
+ {
+  "id": "F-6401",
+  "issue": 32,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "The code command in a WSL shell",
+  "epic": "E64",
+  "acCount": 35,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.WSL.useShellEnvironment",
+    "window.openFoldersInNewWindow",
+    "window.openFilesInNewWindow"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "wsl+<distro>"
+   ],
+   "other": [
+    "code CLI in distro shell",
+    "env VSCODE_WSL_DEBUG_INFO",
+    "env WSL_DISTRO_NAME",
+    "env VSCODE_CLIENT_COMMAND / VSCODE_CLIENT_COMMAND_CWD / VSCODE_CLI_AUTHORITY",
+    "activation event onResolveRemoteAuthority:wsl",
+    "shell progress lines on first install"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "code launcher (Windows)",
+    "code server CLI in distro",
+    "wget",
+    "check-requirements.sh",
+    "wsl.exe"
+   ],
+   "network": [
+    "VS Code server download host (inside distro, via wget)"
+   ],
+   "remoteFiles": [
+    "~/.vscode-server/bin/<commit>",
+    "/tmp/remote-wsl-loc.txt",
+    "/tmp/vscode-distro-env.<random>",
+    "/tmp/code-stdin-<xyz>",
+    "/etc/wsl.conf"
+   ],
+   "localFiles": [
+    "profile logs/cli.log",
+    "VS Code extensions folder (launcher lookup)"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6302",
+   "remote-wsl#F-6303",
+   "remote-wsl#F-6402",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6503",
+   "remote-wsl#F-7901",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "wsl.shell-handoff",
+  "candidateLibrary": "lib-server",
+  "area": "D",
+  "reuse": [
+   "editor-cli",
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "Distro-side hand-off: ensures server (wget download, progress lines), records shell env, sets authority inputs, runs server CLI. Stock launcher finds extension by reference id, so the reimplementation may be unreachable (Q1). AC-22 removed, so 35 active ACs.",
+  "questions": [
+   "Q1: how does a stock launcher reach remote-oss.remote-wsl: derivative launchers only, own distro-side code entry, or both?",
+   "Is the hand-off contract (env inputs, temp file names) stable enough to specify for Code-OSS derivative launchers?",
+   "Should server download logic be shared with the UI connect install (F-6301) or stay a separate wget-only shell route?",
+   "Spec cites material not for the clean side: server CLI source path and lab observation notes; confirm only identifiers are needed."
+  ]
+ },
+ {
+  "id": "F-6503",
+  "issue": 36,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:needs-revision",
+  "title": "Recent folders in the WSL Targets view",
+  "epic": "E65",
+  "acCount": 22,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.explorer.connectInCurrentWindow",
+    "remote-wsl.explorer.connectInNewWindow",
+    "remote-wsl.explorer.removeFolder"
+   ],
+   "settings": [
+    "window.openFoldersInNewWindow",
+    "workbench.view.alwaysShowHeaderActions"
+   ],
+   "views": [
+    "targetsWsl"
+   ],
+   "menus": [
+    "commandPalette#13",
+    "commandPalette#14",
+    "commandPalette#15",
+    "view/item/context#0",
+    "view/item/context#1",
+    "view/item/context#2",
+    "view/item/context#3",
+    "view/item/context#4",
+    "view/item/context#5"
+   ],
+   "contextKeys": [
+    "viewItem == folder"
+   ],
+   "authorities": [
+    "wsl+<distro>"
+   ],
+   "other": [
+    "tree item contextValue folder",
+    "codicons folder, folder-active, arrow-right, empty-window, close",
+    "hover STR:S004",
+    "view Refresh title action reuse"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTreeView",
+    "TreeDataProvider",
+    "TreeItem",
+    "ThemeIcon",
+    "workspace.workspaceFolders",
+    "env.remoteName",
+    "commands.executeCommand"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "VS Code shared storage history.recentlyOpenedPathsList (via core commands)"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6501",
+   "remote-wsl#F-6502",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6208",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6301",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": true,
+  "candidateComponent": "wsl.explorer-recent-folders",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 4,
+  "notes": "Filtered view over core recently-opened list; uses internal _workbench.getRecentlyOpened, vscode.removeFromRecentlyOpened and vscode.openFolder. No own storage. Active row marking per window, case-insensitive distro match, stale until Refresh.",
+  "questions": [
+   "Is relying on the internal command _workbench.getRecentlyOpened acceptable, or is a fallback needed if it disappears?",
+   "Should out-of-context invocation stay silent or show the R-46 information notification?",
+   "Do recent folders under SSH-nested WSL targets belong to this feature or to F-6501?"
+  ]
+ },
+ {
+  "id": "F-7901",
+  "issue": 11,
+  "repo": "remote-wsl",
+  "kind": "decision",
+  "label": "spec:needs-revision",
+  "title": "Decision: extension identity and reference identifiers",
+  "epic": "E79",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [
+    "23 remote-wsl.* ids (verbatim, category WSL)"
+   ],
+   "settings": [
+    "remote.WSL.fileWatcher.polling",
+    "remote.WSL.fileWatcher.pollingInterval",
+    "remote.WSL.debug",
+    "remote.WSL.useShellEnvironment",
+    "remote.WSL.downloadInBackground",
+    "remote.WSL.experimental.scriptLessStartup",
+    "remote.WSL1.connectionMethod",
+    "remote.WSL2.connectionMethod"
+   ],
+   "views": [
+    "targetsWsl"
+   ],
+   "menus": [
+    "remote_10_wsl_0_local",
+    "remote_10_wsl_1_open"
+   ],
+   "contextKeys": [
+    "wslFeatureInstalled",
+    "wsl.openInNewWindow",
+    "wsl.noWSLPath",
+    "wsl.noWSLDistrosInstalled"
+   ],
+   "authorities": [
+    "wsl"
+   ],
+   "other": [
+    "keybinding Shift+Alt+R reveal in explorer",
+    "walkthrough wslWalkthrough",
+    "resource label formatter suffix WSL",
+    "publisher remote-oss, id remote-oss.remote-wsl",
+    "display name WSL",
+    "MIT licence"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "Open VSX namespace remote-oss"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "settings.json",
+    "keybindings.json",
+    "recent folders list"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6003",
+   "remote-wsl#F-6004",
+   "remote-wsl#F-6005",
+   "remote-wsl#F-6102",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6203",
+   "remote-wsl#F-6204",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6207",
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6303",
+   "remote-wsl#F-6304",
+   "remote-wsl#F-6501",
+   "remote-wsl#F-6502",
+   "remote-wsl#F-6503",
+   "remote-wsl#F-6601",
+   "remote-containers#F-1401",
+   "remote-containers#F-1405",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.identity-manifest",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 0,
+  "notes": "Accepted: keep reference identifiers verbatim under own publisher and id (D-14, D-10, D-41). Display name WSL kept. No telemetry. Invented identifiers table currently empty; Q1 of F-6401 may add one. Side-by-side with reference unsupported.",
+  "questions": [
+   "Will F-6401 Q1 add an [adaptation] distro-side code entry to this decision's invented-identifier table?",
+   "Which derived names (global storage, log folder, URI handler host) follow remote-oss.remote-wsl, and where are they recorded?",
+   "The issue says no open questions but affects F-6401 whose launcher lookup depends on identity; is that consistent?"
+  ]
+ }
+]

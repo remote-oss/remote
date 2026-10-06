@@ -1,0 +1,783 @@
+[
+ {
+  "id": "F-0701",
+  "issue": 65,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Clone Repository in Container Volume",
+  "epic": "E07",
+  "acCount": 75,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openRepositoryInUniqueVolume"
+   ],
+   "settings": [],
+   "views": [
+    "devVolumes (title action, owned by F-0904)"
+   ],
+   "menus": [
+    "commandPalette",
+    "remote indicator quick pick group remote_30_dev-container_2_actions@5",
+    "view/title devVolumes navigation@1"
+   ],
+   "contextKeys": [
+    "hideConnectCommands",
+    "remoteName",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "exec",
+    "k8s-container",
+    "apple-container",
+    "wsl",
+    "ssh-remote",
+    "tunnel"
+   ],
+   "other": [
+    "trust confirmation dialog",
+    "repository-source quick pick",
+    "free-text URL input",
+    "template picker fallback",
+    "window reload then clone"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.showInputBox",
+    "window.withProgress",
+    "window.showWarningMessage",
+    "window.showInformationMessage",
+    "workspace.registerRemoteAuthorityResolver",
+    "workspace.registerResourceLabelFormatter",
+    "authentication.getSession"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker",
+    "git",
+    "git ls-remote",
+    "wsl (Windows case)",
+    "devcontainer build/up"
+   ],
+   "network": [
+    "github.com",
+    "mcr.microsoft.com"
+   ],
+   "remoteFiles": [
+    "/workspaces/<repo-name>",
+    ".devcontainer/devcontainer.json",
+    ".devcontainer.json",
+    "docker-compose.yml",
+    "Dockerfile"
+   ],
+   "localFiles": [
+    "Dev Containers log"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0104",
+   "remote-containers#F-0106",
+   "remote-containers#F-0107",
+   "remote-containers#F-0108",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0207",
+   "remote-containers#F-0301",
+   "remote-containers#F-0302",
+   "remote-containers#F-0303",
+   "remote-containers#F-0304",
+   "remote-containers#F-0401",
+   "remote-containers#F-0405",
+   "remote-containers#F-0410",
+   "remote-containers#F-0503",
+   "remote-containers#F-0504",
+   "remote-containers#F-0702",
+   "remote-containers#F-0703",
+   "remote-containers#F-0704",
+   "remote-containers#F-0705",
+   "remote-containers#F-0706",
+   "remote-containers#F-0707",
+   "remote-containers#F-0801",
+   "remote-containers#F-0802",
+   "remote-containers#F-0807",
+   "remote-containers#F-0903",
+   "remote-containers#F-0904",
+   "remote-containers#F-1005",
+   "remote-containers#F-1008",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.clone-volume-flow",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "git",
+   "docker"
+  ],
+  "errorPaths": 12,
+  "notes": "Largest spec of the batch. Orchestrates repo pre-check, reload, bootstrap clone into labeled volume, then build. Volume labels vsch.local.repository.* carry state across the reload. Ignores workspaceMount/workspaceFolder from repo config.",
+  "questions": [
+   "Is the reload-then-resume handoff state fully carried by volume labels, or also by a stored pending-operation record?",
+   "Should the authenticated GitHub picker (inferred strings only) be built, given no observation exists?",
+   "Cap on shorthand and URL forms accepted for the pre-check: is git ls-remote the normative reachability test?",
+   "spec cites material not for the clean side (lab observation notes, decision tool)"
+  ]
+ },
+ {
+  "id": "F-0704",
+  "issue": 70,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Bootstrap container",
+  "epic": "E07",
+  "acCount": 35,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.bootstrapImage",
+    "dev.containers.bootstrapImagePull",
+    "dev.containers.dockerSocketPath"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "no commands, no UI of its own",
+    "image tag vsc-volume-bootstrap"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage",
+    "window.createTerminal"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker",
+    "docker images",
+    "docker events",
+    "docker inspect",
+    "docker ps",
+    "git",
+    "node",
+    "devcontainer up"
+   ],
+   "network": [
+    "VS Code Server download (only when image lacks Node.js)"
+   ],
+   "remoteFiles": [
+    "/var/run/docker.sock (inside bootstrap container)",
+    "/workspaces/<repo-name>"
+   ],
+   "localFiles": [
+    "host Docker socket path"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0105",
+   "remote-containers#F-0108",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0204",
+   "remote-containers#F-0401",
+   "remote-containers#F-0403",
+   "remote-containers#F-0408",
+   "remote-containers#F-0410",
+   "remote-containers#F-0503",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0703",
+   "remote-containers#F-0705",
+   "remote-containers#F-0706",
+   "remote-containers#F-0904",
+   "remote-containers#F-1001",
+   "remote-containers#F-1002",
+   "remote-containers#F-1003",
+   "remote-containers#F-1004",
+   "remote-containers#F-1008",
+   "remote-containers#F-1401",
+   "remote-containers#F-1402",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.bootstrap-container",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "docker",
+   "git"
+  ],
+  "errorPaths": 6,
+  "notes": "Helper that mounts the volume plus the host docker socket, checks Docker and Git CLIs, adds Node when missing, clones. Image built on every run unless a custom image is set. Inspect and recovery containers ignore these settings.",
+  "questions": [
+   "Which exact server download source supplies Node.js for custom images, and is it the product-defined server component?",
+   "Is the built-in bootstrap Dockerfile content left to the implementer, and what minimum tool set is normative?",
+   "Is the rebuild-every-run behavior required or may a cache be used?",
+   "spec cites material not for the clean side (lab observation notes, decision tool)"
+  ]
+ },
+ {
+  "id": "F-0702",
+  "issue": 86,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Clone Repository in Named Container Volume",
+  "epic": "E07",
+  "acCount": 37,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openRepositoryInVolume"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "commandPalette"
+   ],
+   "contextKeys": [
+    "hideConnectCommands"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "exec",
+    "k8s-container",
+    "apple-container",
+    "wsl",
+    "ssh-remote",
+    "tunnel"
+   ],
+   "other": [
+    "volume picker with create-new item",
+    "volume name input with live validation",
+    "folder name input"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.showInputBox",
+    "window.showErrorMessage"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker info",
+    "docker inspect",
+    "git clone (via bootstrap)",
+    "wsl (Windows case)"
+   ],
+   "network": [
+    "github.com"
+   ],
+   "remoteFiles": [
+    "/workspaces/<folder-name>",
+    ".devcontainer/devcontainer.json"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0102",
+   "remote-containers#F-0106",
+   "remote-containers#F-0107",
+   "remote-containers#F-0201",
+   "remote-containers#F-0204",
+   "remote-containers#F-0410",
+   "remote-containers#F-0503",
+   "remote-containers#F-0701",
+   "remote-containers#F-0703",
+   "remote-containers#F-0704",
+   "remote-containers#F-0705",
+   "remote-containers#F-0706",
+   "remote-containers#F-0707",
+   "remote-containers#F-0708",
+   "remote-containers#F-0801",
+   "remote-containers#F-0802",
+   "remote-containers#F-0901",
+   "remote-containers#F-0904",
+   "remote-containers#F-1008",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.clone-named-volume",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "docker"
+  ],
+  "errorPaths": 7,
+  "notes": "Variant of F-0701 where the user picks or creates a named volume and a target folder name. Shares the clone mechanics. Volume name rule: alphanumeric start, then [a-zA-Z0-9_.-]. Distinct from cloneInVolume owned by F-0904.",
+  "questions": [
+   "Several owned strings (S017, S214, S249) were never observed; should they be implemented or dropped?",
+   "When volume exists with other content, is the clone refused or merged into the folder?",
+   "Is folder name validated at all, given the unvalidated box?",
+   "spec cites material not for the clean side (lab observation notes, decision tool)"
+  ]
+ },
+ {
+  "id": "F-0703",
+  "issue": 87,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Clone GitHub Pull Request in Container Volume",
+  "epic": "E07",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openPullRequestInVolume",
+    "remote-containers.checkoutPRInVolume"
+   ],
+   "settings": [],
+   "views": [
+    "pr: (contributed by GitHub Pull Requests extension)"
+   ],
+   "menus": [
+    "commandPalette",
+    "view/item/context#2 group 1_pullrequest@3 on pr: view"
+   ],
+   "contextKeys": [
+    "hideConnectCommands",
+    "view",
+    "viewItem"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "exec",
+    "k8s-container",
+    "apple-container",
+    "wsl",
+    "ssh-remote",
+    "tunnel"
+   ],
+   "other": [
+    "PR URL input box",
+    "head-branch checkout",
+    "forced install of GitHub Pull Requests extension in container"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showInputBox",
+    "window.withProgress",
+    "window.showInformationMessage",
+    "authentication.getSession"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker",
+    "docker info",
+    "docker context",
+    "git remote",
+    "git (via bootstrap)",
+    "gh",
+    "docker login"
+   ],
+   "network": [
+    "github.com",
+    "GitHub REST API for PR lookup"
+   ],
+   "remoteFiles": [
+    "/workspaces/<repo-name>",
+    ".devcontainer/devcontainer.json"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0102",
+   "remote-containers#F-0106",
+   "remote-containers#F-0107",
+   "remote-containers#F-0201",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0401",
+   "remote-containers#F-0408",
+   "remote-containers#F-0410",
+   "remote-containers#F-0503",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0704",
+   "remote-containers#F-0705",
+   "remote-containers#F-0706",
+   "remote-containers#F-0707",
+   "remote-containers#F-0708",
+   "remote-containers#F-0801",
+   "remote-containers#F-0802",
+   "remote-containers#F-0904",
+   "remote-containers#F-1008",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1404",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.clone-pr-volume",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "git",
+   "docker"
+  ],
+  "errorPaths": 6,
+  "notes": "Resolves a PR URL via GitHub, clones head repo and branch into a unique volume, installs the PR extension in the container. Second command is only a row action from the third-party pr: view; not in palette.",
+  "questions": [
+   "Is the GitHub lookup authenticated through the editor session or an extension-owned flow, and which API calls are normative?",
+   "How is the PR extension identified for forced install, and what if the marketplace lacks it?",
+   "Row action path was decided, not observed: confirm it matches the clone flow from the lookup step on.",
+   "spec cites material not for the clean side (lab observation notes, decision tool)"
+  ]
+ },
+ {
+  "id": "F-0706",
+  "issue": 93,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "\"Open in Dev Containers\" URI handler",
+  "epic": "E07",
+  "acCount": 23,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "URI handler for <scheme>://<extension-id>/cloneInVolume?url=",
+    "only action path cloneInVolume, only param url",
+    "core confirm dialog before handler"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.registerUriHandler",
+    "env.uriScheme",
+    "window.confirmSaveUntitledWorkspace"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "git ls-remote (via F-0701 pre-check)"
+   ],
+   "network": [
+    "github.com"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0106",
+   "remote-containers#F-0108",
+   "remote-containers#F-0109",
+   "remote-containers#F-0201",
+   "remote-containers#F-0408",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0703",
+   "remote-containers#F-0704",
+   "remote-containers#F-0705",
+   "remote-containers#F-0707",
+   "remote-containers#F-0708",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.uri-handler",
+  "candidateLibrary": "lib-identifiers",
+  "area": "C",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 3,
+  "notes": "Thin entry point handing url to F-0701 pre-check. Authority segment depends on reimplementation extension id (decision F-1401) and scheme on host editor. Reference fails on owner/repo shorthand and PR paths; spec recommends a fix. Spec mentions contribEditSessions only as context.",
+  "questions": [
+   "Should the reimplementation expand owner/repo shorthand and PR/tree paths, as section 16 recommends, or mirror the reference defect?",
+   "Strings S096, S180, S210 sit behind a stricter URL check never observed; what exact parse rules apply?",
+   "Do badges authored for the reference id need an alias authority?",
+   "spec cites material not for the clean side (lab observation notes, decision tool)"
+  ]
+ },
+ {
+  "id": "F-0705",
+  "issue": 98,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Explore a Volume in a Dev Container",
+  "epic": "E07",
+  "acCount": 37,
+  "surfaces": {
+   "commands": [
+    "remote-containers.inspectVolume",
+    "remote-containers.inspectInBasicDevContainer",
+    "remote-containers.inspectVolumeFromViewlet",
+    "remote-containers.inspectDockerResource"
+   ],
+   "settings": [],
+   "views": [
+    "devVolumes"
+   ],
+   "menus": [
+    "commandPalette (inspectInBasicDevContainer when:false)",
+    "view/item/context group 2_volumes@1"
+   ],
+   "contextKeys": [
+    "view",
+    "viewItem (devVolume|uniqueDevVolume)"
+   ],
+   "authorities": [
+    "dev-container (resulting connection)"
+   ],
+   "other": [
+    "volume quick pick with created-at description",
+    "Restricted Mode start",
+    "fixed mount path /volume"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "workspace.isTrusted",
+    "workspace.registerRemoteAuthorityResolver",
+    "workspace.registerResourceLabelFormatter"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker",
+    "docker images",
+    "docker ps",
+    "docker info",
+    "devcontainer up"
+   ],
+   "network": [
+    "mcr.microsoft.com",
+    "ghcr.io"
+   ],
+   "remoteFiles": [
+    "/volume",
+    "/vscode"
+   ],
+   "localFiles": [
+    "generated .devcontainer.json under a per-user temp inspect-volume folder",
+    "/tmp/vscode-wayland-<uuid>.sock"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0107",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0410",
+   "remote-containers#F-0501",
+   "remote-containers#F-0502",
+   "remote-containers#F-0503",
+   "remote-containers#F-0504",
+   "remote-containers#F-0603",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0703",
+   "remote-containers#F-0704",
+   "remote-containers#F-0807",
+   "remote-containers#F-0812",
+   "remote-containers#F-0901",
+   "remote-containers#F-0902",
+   "remote-containers#F-0904",
+   "remote-containers#F-1008",
+   "remote-containers#F-1103",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.volume-explorer",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "docker"
+  ],
+  "errorPaths": 10,
+  "notes": "Mounts any named volume at /volume in a generated basic dev container and connects in Restricted Mode. Container is stopped, not removed, on leaving; reuse on re-explore. Does not use bootstrap settings. Spec lists four commands, two only referenced.",
+  "questions": [
+   "Do inspectVolumeFromViewlet and inspectDockerResource belong to this feature or to F-0904?",
+   "Which base image and features does the generated basic container use, and is defaultFeatures honored?",
+   "Date rendering is English-only by decision; confirm for localized builds.",
+   "spec cites material not for the clean side (lab observation notes, decision tool)"
+  ]
+ },
+ {
+  "id": "F-0707",
+  "issue": 112,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Continue Working in Container Volume",
+  "epic": "E07",
+  "acCount": 8,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openRepositoryFromRemoteHubWithEditSession",
+    "remote-containers.openRepositoryFromGitWithEditSession"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "commandPalette (when false)",
+    "continueEditSession x2 group 0_local@2",
+    "remote indicator group remote_30_dev-container_2_actions@8"
+   ],
+   "contextKeys": [
+    "remoteHub:hasVirtualFolders",
+    "git.state",
+    "gitOpenRepositoryCount",
+    "remoteName",
+    "isWeb"
+   ],
+   "authorities": [],
+   "other": [
+    "dormant in reference: both entries unreachable"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [
+    "contribEditSessions"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0402",
+   "remote-containers#F-0603",
+   "remote-containers#F-0604",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0703",
+   "remote-containers#F-0704",
+   "remote-containers#F-0705",
+   "remote-containers#F-0706",
+   "remote-containers#F-0708",
+   "remote-containers#F-0801",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1404",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.continue-edit-session",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 3,
+  "notes": "Dormant contribution: two continueEditSession entries, one needing a context key only Remote Repositories sets, the other disabled by a literal false. Reproduce surfaces for parity; hand-off to F-0701 is decided, not observed.",
+  "questions": [
+   "Can the product use a proposed API like contribEditSessions at all in the target editor, and what if it cannot?",
+   "Should the dormant entries ship disabled exactly as the reference, including the always-false clause?",
+   "Intended hand-off to F-0701 is by decision only: which repository URL derivation is normative?",
+   "spec cites material not for the clean side (lab observation notes, decision tool)"
+  ]
+ },
+ {
+  "id": "F-0708",
+  "issue": 117,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Mount performance guidance",
+  "epic": "E07",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openInformationAboutMountPerformance"
+   ],
+   "settings": [],
+   "views": [
+    "detailsContainers"
+   ],
+   "menus": [
+    "view/item/context#29 inline@1",
+    "commandPalette (when false)"
+   ],
+   "contextKeys": [
+    "viewItem == mountPerformanceInfo",
+    "view == detailsContainers"
+   ],
+   "authorities": [],
+   "other": [
+    "hint row I/O performance under Bind mount rows",
+    "guidance text on Reopen in Container notification (inferred placement)",
+    "Windows host with Windows-side Docker CLI only"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "env.openExternal"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker"
+   ],
+   "network": [
+    "own guidance docs page (ruling R-31; reference opens an aka.ms link)"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0107",
+   "remote-containers#F-0402",
+   "remote-containers#F-0410",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0704",
+   "remote-containers#F-0901",
+   "remote-containers#F-0902",
+   "remote-containers#F-0903",
+   "remote-containers#F-0904",
+   "remote-containers#F-0906",
+   "remote-containers#F-1008",
+   "remote-containers#F-1301",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.mount-perf-hint",
+  "candidateLibrary": "none",
+  "area": "D",
+  "reuse": [
+   "docker"
+  ],
+  "errorPaths": 4,
+  "notes": "Hint row shown only for bind mounts when Docker runs from the Windows side; never on Linux, never via WSL execution. Command opens a docs page externally. Command registered only after details view data loads once.",
+  "questions": [
+   "What exact test decides the 'bridging OSes' condition: client OS, daemon type, or docker context?",
+   "Which guidance URL does the reimplementation publish, and who owns the page?",
+   "Is the Reopen notification guidance in scope given placement is inferred?",
+   "spec cites material not for the clean side (lab observation notes, decision tool)"
+  ]
+ }
+]

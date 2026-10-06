@@ -10,7 +10,7 @@
 10	OPEN	2026-10-04T06:22:59Z	epic:E42,prio:P0,spec:reviewed,type:feature-spec	F-4201 · Keyword completion and its documentation
 11	OPEN	2026-10-04T02:07:13Z	epic:E40,prio:P1,spec:reviewed,type:feature-spec	F-4002 · Activation, extension kind, Restricted Mode and remote windows
 12	OPEN	2026-10-03T11:24:50Z	epic:E42,prio:P1,spec:reviewed,type:feature-spec	F-4202 · Tunnel configuration snippet
-13	OPEN	2026-10-03T11:03:32Z	epic:E42,prio:P2,spec:reviewed,type:feature-spec	F-4203 · Completion in other contexts
-14	OPEN	2026-10-04T06:35:45Z	epic:E41,prio:P1,spec:reviewed,type:feature-spec	F-4102 · Language configuration: comments, brackets, auto-closing, folding, indentation
+13	OPEN	2026-10-06T06:03:41Z	epic:E42,prio:P2,spec:reviewed,type:feature-spec	F-4203 · Completion in other contexts
+14	OPEN	2026-10-06T00:05:20Z	epic:E41,prio:P1,spec:reviewed,type:feature-spec	F-4102 · Language configuration: comments, brackets, auto-closing, folding, indentation
 15	OPEN	2026-10-03T13:18:01Z	epic:E42,prio:P2,spec:reviewed,type:feature-spec	F-4204 · Authoring aids the reference does not provide
 16	OPEN	2026-10-03T19:57:41Z	epic:E40,prio:P3,spec:reviewed,type:feature-spec	F-4003 · Package identity, localization and documentation

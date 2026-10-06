@@ -1,0 +1,604 @@
+[
+ {
+  "id": "F-0201",
+  "issue": 18,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Container CLI discovery, version and permission checks",
+  "epic": "E02",
+  "acCount": 56,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.dockerComposePath"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote",
+    "wsl"
+   ],
+   "other": [
+    "pre-flight check wired into every container command",
+    "modal dialogs: missing CLI, permission, compose, version gate",
+    "dockerVersion telemetry (reference only, not sent)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage",
+    "window.showInformationMessage",
+    "env.openExternal",
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker",
+    "docker-compose",
+    "docker version/info query"
+   ],
+   "network": [
+    "aka.ms/download-docker-linux-vscode",
+    "aka.ms/docker-subscription-service-agreement"
+   ],
+   "remoteFiles": [
+    "docker CLI on remote host (SSH/WSL windows)"
+   ],
+   "localFiles": [
+    "/var/run/docker.sock",
+    "devcontainer.json",
+    "remoteContainers-<timestamp>.log"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0104",
+   "remote-containers#F-0106",
+   "remote-containers#F-0202",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0205",
+   "remote-containers#F-0301",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0413",
+   "remote-containers#F-0601",
+   "remote-containers#F-0604",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0705",
+   "remote-containers#F-0806",
+   "remote-containers#F-0901",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.cli-preflight",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "openssh"
+  ],
+  "errorPaths": 17,
+  "notes": "Gate run before nearly all container commands; verdict follows exit status; engine API below 1.35 rejected. Reference waits unbounded; clean side adds 30-60s timeout. Cross-cutting, wired per entry point.",
+  "questions": [
+   "Which commands must share one preflight function versus calling it individually, given the long per-command table?",
+   "Is the 30-60 s check timeout configurable or fixed?",
+   "Should Remote-SSH and Remote-WSL windows resolve the CLI on the remote side via a library hook?"
+  ]
+ },
+ {
+  "id": "F-0203",
+  "issue": 26,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Install Docker",
+  "epic": "E02",
+  "acCount": 40,
+  "surfaces": {
+   "commands": [
+    "remote-containers.installDocker"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "remote-containers:needsDockerStartOrInstall"
+   ],
+   "authorities": [],
+   "other": [
+    "progress notification while downloading installer",
+    "Windows already-installed Reinstall prompt",
+    "view welcome link entry point"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "window.showInformationMessage",
+    "window.showErrorMessage",
+    "env.openExternal"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "Docker Desktop installer (Windows run and wait; macOS open)"
+   ],
+   "network": [
+    "aka.ms/download-docker-linux-vscode",
+    "aka.ms/download-docker-windows-vscode",
+    "aka.ms/AA37qtj",
+    "docker.com Docker Desktop download",
+    "aka.ms/docker-subscription-service-agreement"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "temporary installer file"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0104",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0204",
+   "remote-containers#F-0205",
+   "remote-containers#F-0206",
+   "remote-containers#F-0901"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.docker-installer",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 3,
+  "notes": "Linux just opens a URL; Windows and macOS download then launch Docker Desktop installer. Installer wait unbounded on Windows. Stale PATH lookup after install is a known reference quirk.",
+  "questions": [
+   "Which official download location and architecture mapping is the clean side expected to use for installer fetching?",
+   "Should PATH be re-read after install so no VS Code restart is needed?"
+  ]
+ },
+ {
+  "id": "F-0204",
+  "issue": 31,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Install Docker in WSL",
+  "epic": "E02",
+  "acCount": 24,
+  "surfaces": {
+   "commands": [
+    "remote-containers.installDockerInWSL"
+   ],
+   "settings": [
+    "dev.containers.executeInWSL"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "isWindows",
+    "remoteName",
+    "virtualWorkspace",
+    "hideConnectCommands"
+   ],
+   "authorities": [],
+   "other": [
+    "progress notification Installing Docker in WSL",
+    "reboot-request modal",
+    "telemetry installDockerInWSL (reference only)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "window.showInformationMessage",
+    "workspace.getConfiguration",
+    "workspace.isTrusted"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "wsl.exe",
+    "elevated hidden helper script",
+    "apt package manager inside distro",
+    "docker group add",
+    "systemctl (optional)"
+   ],
+   "network": [
+    "Docker apt repository and signing key"
+   ],
+   "remoteFiles": [
+    "/etc/wsl.conf"
+   ],
+   "localFiles": [
+    "temporary elevation batch script",
+    "user settings.json (executeInWSL)"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0104",
+   "remote-containers#F-0106",
+   "remote-containers#F-0107",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0203",
+   "remote-containers#F-0205",
+   "remote-containers#F-0206",
+   "remote-containers#F-0207"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.wsl-docker-installer",
+  "candidateLibrary": "none",
+  "area": "D",
+  "reuse": [],
+  "errorPaths": 7,
+  "notes": "Windows-only bootstrap of WSL platform plus Docker inside default distro; ends by setting executeInWSL true. Needs elevation and possible reboot. Daemon startup in WSL needs systemd or alternative.",
+  "questions": [
+   "Is enabling systemd in the distro required, or may another daemon-start remedy be chosen?",
+   "Does the flow resume automatically after the reboot request?",
+   "Which distro validation failures are recoverable versus terminal?"
+  ]
+ },
+ {
+  "id": "F-0202",
+  "issue": 49,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Docker daemon availability and automatic start",
+  "epic": "E02",
+  "acCount": 63,
+  "surfaces": {
+   "commands": [
+    "remote-containers.revealLogTerminal"
+   ],
+   "settings": [
+    "dev.containers.optimisticallyLaunchDocker"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "two modal dialogs: fresh-open and resolve-time",
+    "More Actions quick pick",
+    "progress notification Starting Docker (show log)",
+    "setting does not suppress auto start (observed)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage",
+    "window.showQuickPick",
+    "window.withProgress",
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker",
+    "Docker Desktop (Docker.app on macOS, installed app on Windows)",
+    "process-existence check for Docker Desktop"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "remoteContainers-<timestamp>.log",
+    "/Applications/Docker.app"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0104",
+   "remote-containers#F-0106",
+   "remote-containers#F-0201",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0205",
+   "remote-containers#F-0206",
+   "remote-containers#F-0207",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0408",
+   "remote-containers#F-0410",
+   "remote-containers#F-0601",
+   "remote-containers#F-0604",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0703",
+   "remote-containers#F-0705",
+   "remote-containers#F-0806",
+   "remote-containers#F-0808",
+   "remote-containers#F-0901",
+   "remote-containers#F-0905",
+   "remote-containers#F-1302"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.daemon-guard",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Reachability check with Docker Desktop auto start on macOS and Windows; Windows wait capped at 5 minutes by decision. Two check phases: fresh open and after reload. optimisticallyLaunchDocker is inert by observation.",
+  "questions": [
+   "Is a still-inert optimisticallyLaunchDocker setting acceptable or should it gate the start?",
+   "In WSL windows does Edit devcontainer.json also open the failed log in a second group (Q4)?",
+   "What exactly counts as Docker Desktop already running on each OS?"
+  ]
+ },
+ {
+  "id": "F-0206",
+  "issue": 75,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Host requirements and GPU availability",
+  "epic": "E02",
+  "acCount": 51,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.gpuAvailability"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "hostRequirements property cpus/memory/storage/gpu",
+    "modal info dialog with two actions",
+    "devcontainer.metadata label read"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showInformationMessage",
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker info (NCPU, MemTotal, NVIDIA runtime)",
+    "devcontainer read-configuration",
+    "devcontainer up (GPU availability option)"
+   ],
+   "network": [
+    "image registry (metadata of non-local images)"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json",
+    "devcontainer.metadata label of existing container"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0106",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0204",
+   "remote-containers#F-0205",
+   "remote-containers#F-0207",
+   "remote-containers#F-0301",
+   "remote-containers#F-0303",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0408",
+   "remote-containers#F-0410",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0601",
+   "remote-containers#F-0701"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.host-requirements",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Compares declared cpus and memory with daemon totals before create; storage never compared, gpu cores and memory ignored. Not run for attach, clone, remote-window rebuild or Open Recent.",
+  "questions": [
+   "Is the check expected before or after the configuration picker when several configurations exist?",
+   "Should an out-of-enum gpuAvailability value fail setup exactly as the reference does?"
+  ]
+ },
+ {
+  "id": "F-0205",
+  "issue": 84,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Remote Docker hosts and Docker contexts",
+  "epic": "E02",
+  "acCount": 65,
+  "surfaces": {
+   "commands": [
+    "remote-containers.explorerTargetsRefresh"
+   ],
+   "settings": [
+    "containers.environment",
+    "docker.environment",
+    "docker.host",
+    "docker.certPath",
+    "docker.tlsVerify"
+   ],
+   "views": [
+    "Remote Explorer Dev Containers view (welcome content owned by F-0901)"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "SSH question relay via input box",
+    "ssh:// and tcp:// docker endpoints",
+    "endpoint pinned for life of a container window"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage",
+    "window.showInputBox",
+    "workspace.getConfiguration",
+    "workspace.onDidChangeConfiguration"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker (contexts, DOCKER_HOST)",
+    "ssh via SSH_ASKPASS helper"
+   ],
+   "network": [
+    "remote Docker hosts over ssh:// or tcp://"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "~/.ssh/known_hosts",
+    "~/.docker/config.json",
+    ".vscode/settings.json",
+    ".code-workspace"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0104",
+   "remote-containers#F-0106",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0204",
+   "remote-containers#F-0206",
+   "remote-containers#F-0207",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0408",
+   "remote-containers#F-0601",
+   "remote-containers#F-0701",
+   "remote-containers#F-0901"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.remote-engine-endpoint",
+  "candidateLibrary": "lib-forwarding",
+  "area": "C",
+  "reuse": [
+   "openssh",
+   "devcontainers-cli"
+  ],
+  "errorPaths": 9,
+  "notes": "Reads other extensions' settings to build DOCKER_ environment (four names only). SSH prompts relayed via askpass. Draft spec status. Windows behavior to follow docs rather than reference.",
+  "questions": [
+   "Spec is draft: which sections are still unsettled before architecture can rely on them?",
+   "Is the askpass helper part of this component or a shared SSH library?",
+   "Should settings from other extensions be read at all in untrusted folders?"
+  ]
+ },
+ {
+  "id": "F-0207",
+  "issue": 108,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Running container commands through WSL on Windows",
+  "epic": "E02",
+  "acCount": 53,
+  "surfaces": {
+   "commands": [
+    "remote-containers.reopenInWSL (owned F-0406)"
+   ],
+   "settings": [
+    "dev.containers.executeInWSL",
+    "dev.containers.executeInWSLDistro",
+    "dev.containers.forwardWSLServices",
+    "remote.containers.executeInWSL (deprecated)",
+    "remote.containers.executeInWSLDistro (deprecated)"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "canReopenInWSL",
+    "isWindows",
+    "remoteName",
+    "hideConnectCommands",
+    "virtualWorkspace"
+   ],
+   "authorities": [
+    "wsl"
+   ],
+   "other": [
+    "trust dialog before WSL routing",
+    "remote-indicator WSL install row is VS Code core"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.getConfiguration",
+    "window.showErrorMessage",
+    "window.showInformationMessage"
+   ],
+   "proposedApi": [
+    "workspace trust request (proposal-gated)"
+   ],
+   "processes": [
+    "wsl.exe (list distros, run commands in distro)",
+    "docker inside distro"
+   ],
+   "network": [
+    "aka.ms/vscode-wsl"
+   ],
+   "remoteFiles": [
+    "docker CLI inside WSL distro"
+   ],
+   "localFiles": [
+    ".devcontainer/devcontainer.json",
+    ".devcontainer.json",
+    "Windows workspace path mapped to distro path"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0102",
+   "remote-containers#F-0106",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0301",
+   "remote-containers#F-0302",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0406",
+   "remote-containers#F-0408",
+   "remote-containers#F-0410",
+   "remote-containers#F-0601",
+   "remote-containers#F-0801",
+   "remote-containers#F-0802",
+   "remote-containers#F-0901",
+   "remote-containers#F-1003",
+   "remote-containers#F-1004",
+   "remote-containers#F-1008"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.wsl-bridge",
+  "candidateLibrary": "lib-forwarding",
+  "area": "D",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 12,
+  "notes": "Routes all Docker and CLI calls into a WSL distro by folder location or settings; legacy keys migrate. Forwards SSH and GPG agents, X and Wayland. Windows-only; failure with nonexistent distro rejects to VS Code core.",
+  "questions": [
+   "Which trust-request API is available at the pinned VS Code commit given it is proposal-gated?",
+   "Where does WSL service forwarding live relative to the forwarding library?",
+   "How are Windows workspace paths mapped to distro paths for UNC shares?"
+  ]
+ }
+]

@@ -1,0 +1,607 @@
+[
+ {
+  "id": "F-2001",
+  "issue": 11,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Activation, extension kind and workspace trust",
+  "epic": "E20",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [
+    "remote-internal.getSshFoldersHistory",
+    "remote-internal.deleteSshFolderFromHistory",
+    "remote-internal.getActiveSshRemote",
+    "remote-internal.getConfiguredHostnames",
+    "remote-internal.openRemoteSshTarget"
+   ],
+   "settings": [
+    "remote.extensionKind",
+    "extensions.supportUntrustedWorkspaces",
+    "security.workspace.trust.enabled",
+    "remote.SSH.experimental.chat"
+   ],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "manifest extensionKind ui",
+    "untrustedWorkspaces supported",
+    "7 activation events",
+    "enabledApiProposals x6",
+    "engines.vscode"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.executeCommand",
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "tunnels",
+    "terminalDataWriteEvent",
+    "contribViewsRemote",
+    "telemetry",
+    "contribRemoteHelp"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-development#F-3903",
+   "remote-development#F-3901",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2007",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2502",
+   "remote-explorer#F-2503",
+   "remote-ssh#F-2504",
+   "remote-ssh#F-2606",
+   "remote-development#F-3904",
+   "remote-development#F-3906",
+   "remote-ssh#F-2002"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.activation-manifest",
+  "candidateLibrary": "lib-standdown",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Mostly manifest declarations and observable activation behaviour. Little runtime code; the real design weight is coexistence with the reference (stand-down key) and proposed-API enablement.",
+  "questions": [
+   "Which family library owns the stand-down context key, and is it set before or after activation?",
+   "Does the activation-event set change if the stand-down key moves to an early activation event?",
+   "Q3 core missing-resolver behaviour: which of options a, b, c is settled with F-3901/3903/3904?"
+  ]
+ },
+ {
+  "id": "F-2002",
+  "issue": 12,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Localization of commands, settings and runtime strings",
+  "epic": "E20",
+  "acCount": 36,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "package.nls.<lang>.json x14 (60 keys)",
+    "l10n bundle x14 (168 keys)",
+    "pseudo-locale qps-ploc",
+    "display language follows VS Code"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "l10n.t",
+    "env.language"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.nls.json",
+    "package.nls.<language>.json",
+    "l10n/bundle.l10n.<language>.json"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2006",
+   "remote-development#F-3901",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2403"
+  ],
+  "coreUi": false,
+  "candidateComponent": "ssh.l10n-bundles",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [
+   "vscode-l10n"
+  ],
+  "errorPaths": 7,
+  "notes": "Build-time resource set: 14 languages, same key sets, English-as-key runtime bundle. Needs a rule on translation provenance and a parity check tool across languages.",
+  "questions": [
+   "Q5: may translated values be reused verbatim from the reference, or must the family write its own?",
+   "Should l10n tables be shared by the companions through a common library or kept per extension?",
+   "Is a Marketplace language pack comparison (Q4) required before the key sets are frozen?"
+  ]
+ },
+ {
+  "id": "F-2003",
+  "issue": 13,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "The Remote - SSH log: output channel, Show Log and log level",
+  "epic": "E20",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.showLog"
+   ],
+   "settings": [
+    "remote.SSH.logLevel"
+   ],
+   "views": [
+    "Output channel Remote - SSH"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "terminal link Output Log...",
+    "Show log link in error notification",
+    "no secrets in log (AC-21)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createOutputChannel",
+    "OutputChannel.show",
+    "workspace.getConfiguration",
+    "workspace.onDidChangeConfiguration",
+    "window.registerTerminalLinkProvider"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "ssh (verbose flags)",
+    "VS Code Server (log-level start option)"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "remoteagent.log"
+   ],
+   "localFiles": [
+    "output_logging_<ts>/1-Remote - SSH.log"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2002",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2606",
+   "remote-development#F-3901",
+   "remote-development#F-3905",
+   "remote-development#F-3906",
+   "remote-development#F-3907",
+   "remote-ssh#F-2005"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.log-channel",
+  "candidateLibrary": "lib-log",
+  "area": "A",
+  "reuse": [
+   "vscode-output-channel"
+  ],
+  "errorPaths": 6,
+  "notes": "One plain channel per window with secret redaction as a hard requirement the reference fails. Log level is read live and passed to the server at start. Obvious shared lib-log candidate for the family.",
+  "questions": [
+   "Q1: should Output Log... link reveal the channel now, before the reference behaviour is observed?",
+   "Is lib-log a family-wide channel/redaction library, and who owns the redaction rules?",
+   "Should the reimplementation mirror trace-level server logging or define its own level mapping?"
+  ]
+ },
+ {
+  "id": "F-4102",
+  "issue": 14,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Language configuration: comments, brackets, auto-closing, folding, indentation",
+  "epic": "E41",
+  "acCount": 49,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "language configuration for ssh_config",
+    "line comment #",
+    "3 bracket pairs",
+    "5 auto-closing pairs",
+    "indentation rules for Host",
+    "core indentation folding"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "contributes.languages configuration"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh-edit#F-4001",
+   "remote-ssh-edit#F-4101",
+   "remote-ssh-edit#F-4002",
+   "remote-ssh-edit#F-4201",
+   "remote-development#F-4901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh-edit.language-configuration",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [
+   "vscode-language-configuration"
+  ],
+  "errorPaths": 8,
+  "notes": "Declarative JSON only, no code. Note the issue is F-4102 (ssh-edit syntax epic E41), not F-2004 as the task stated. Belongs to the ssh-edit companion, not to the SSH extension.",
+  "questions": [
+   "Issue 14 in remote-ssh is F-4102, not F-2004; is it misfiled or is F-2004 elsewhere?",
+   "Should F-4102 move to the remote-ssh-edit repo?",
+   "Where does F-2004 (Help and feedback view) live, since F-2005 and F-2006 cite it?"
+  ]
+ },
+ {
+  "id": "F-2005",
+  "issue": 15,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Report Issue...",
+  "epic": "E20",
+  "acCount": 12,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.reportIssue"
+   ],
+   "settings": [
+    "issueReporter.wizard.enabled"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "manifest bugs.url and repository.url",
+    "core Issue Reporter window"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "tracker URL from F-3901"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2001",
+   "remote-development#F-3901",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2004",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2007"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.report-issue",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [
+   "vscode-issue-reporter"
+  ],
+  "errorPaths": 2,
+  "notes": "Command only opens core reporter with the extension preselected; target comes from manifest URLs. Small once the tracker choice is fixed by the identity decision.",
+  "questions": [
+   "Q1: is the tracker a GitHub issues URL, or a non-GitHub tracker where core opens a browser instead of previewing?",
+   "Which command does the core reporter invoke for the extension, and does the manifest need an extra key?",
+   "Should log content ever be attached, given the no-secrets rule in F-2003?"
+  ]
+ },
+ {
+  "id": "F-2006",
+  "issue": 16,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Command catalogue: palette visibility and out-of-context invocation",
+  "epic": "E20",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.addNewSshHost",
+    "opensshremotes.clearAllSessionHints",
+    "opensshremotes.openEmptyWindowInCurrentWindow",
+    "opensshremotes.openEmptyWindow",
+    "opensshremotes.getStarted",
+    "opensshremotes.getHelp",
+    "opensshremotes.cleanCurrentRemoteServer",
+    "opensshremotes.cleanLocalServer",
+    "opensshremotes.cleanRemoteServer",
+    "opensshremotes.openEmptyWindowOnCurrentHost",
+    "opensshremotes.openWebUI",
+    "opensshremotes.openConfigFile",
+    "opensshremotes.provideFeedback",
+    "opensshremotes.reportIssue",
+    "opensshremotes.settings",
+    "opensshremotes.showLog",
+    "opensshremotes.cleanDevBox"
+   ],
+   "settings": [
+    "remote.SSH.useLocalServer",
+    "remote.SSH.enableWebAccess",
+    "remote.SSH.experimental.chat"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette#0",
+    "commandPalette#1",
+    "commandPalette#2",
+    "commandPalette#3",
+    "commandPalette#4",
+    "commandPalette#5",
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "remoteConnectionState",
+    "virtualWorkspace",
+    "config.remote.SSH.useLocalServer",
+    "config.remote.SSH.enableWebAccess"
+   ],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "out-of-context contract R-46",
+    "17 commands, none keybound"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.registerCommand",
+    "window.showInformationMessage"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2002",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2004",
+   "remote-ssh#F-2005",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2203",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2509",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2605",
+   "remote-development#F-3901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.command-catalogue",
+  "candidateLibrary": "lib-standdown",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Manifest-level catalogue plus a safety contract for commands run where the palette hides them. A stand-down context key must be added to six when-clauses, which collides with pre-activation listing.",
+  "questions": [
+   "Q1: accept after-activation palette listing, use a negative stand-down key, or add an early activation event?",
+   "Is the optional R-46 not-possible-in-context notification required or only allowed?",
+   "Do the commands out of the 17 have shared ids with the explorer companion that need coordinating?"
+  ]
+ },
+ {
+  "id": "F-2007",
+  "issue": 17,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Companions installed with the extension (extension pack)",
+  "epic": "E20",
+  "acCount": 15,
+  "surfaces": {
+   "commands": [
+    "remote-internal.*"
+   ],
+   "settings": [
+    "remote.SSH.configFile"
+   ],
+   "views": [
+    "remoteTargets"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "extensionPack list of two companions",
+    "EXTENSION PACK tab (core)",
+    "no extensionDependencies"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-development#F-3904",
+   "remote-development#F-3901",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-explorer#F-2503",
+   "remote-development#F-3906",
+   "remote-ssh#F-2004",
+   "remote-development#F-4901",
+   "remote-development#F-5901"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.extension-pack-manifest",
+  "candidateLibrary": "lib-companion",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 3,
+  "notes": "A single manifest field naming the family companions; extension never depends on them at runtime. Real work is in the companions' repos. Coexistence with the reference's companions is open.",
+  "questions": [
+   "Q2: accept two language contributions and two Remotes views when both pairs are installed, or extend stand-down to the companions?",
+   "Which family ids name the pack, and does F-3904 fix them finally?",
+   "Does the pack order matter for activation or only display?"
+  ]
+ },
+ {
+  "id": "F-2008",
+  "issue": 18,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Boundary with VS Code core's own SSH features",
+  "epic": "E20",
+  "acCount": 16,
+  "surfaces": {
+   "commands": [
+    "workbench.action.sessions.connectViaSSH",
+    "workbench.action.sessions.addNewSSHHost",
+    "workbench.action.sessions.configureSSHHosts",
+    "workbench.action.chat.forgetSSHHostKey",
+    "sessions.remoteAgentHost.add",
+    "workbench.action.openAgentsWindow"
+   ],
+   "settings": [
+    "chat.remoteAgentHostsEnabled",
+    "chat.remoteAgentHostsAutoConnect",
+    "chat.remoteAgentHosts",
+    "chat.sshRemoteAgentHostCommand",
+    "chat.agentHost.forwardSSHAgent"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote+<alias>",
+    "ssh-remote+<host name>",
+    "ssh-remote+<hex JSON>"
+   ],
+   "other": [
+    "Agents window (core)",
+    "shared server data folder on target",
+    "launcher re-install after core deletes it"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "VS Code CLI / server install script",
+    "agent-host supervisor"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "server data folder",
+    "commit-keyed launchers"
+   ],
+   "localFiles": [
+    "~/.ssh/config"
+   ]
+  },
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2203",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2508",
+   "remote-ssh#F-2606",
+   "remote-development#F-3902",
+   "remote-development#F-3907"
+  ],
+  "coreUi": true,
+  "candidateComponent": "ssh.core-boundary",
+  "candidateLibrary": "lib-authority",
+  "area": "A",
+  "reuse": [
+   "editor-cli",
+   "openssh"
+  ],
+  "errorPaths": 7,
+  "notes": "No UI. Defines what the reimplementation must not duplicate and the authority forms it must resolve, including hex JSON. Shared server folder means launcher re-install must tolerate core deleting launchers.",
+  "questions": [
+   "Q1: let the agent-host supervisor start on the exec-server path, avoid it, or reproduce the reference?",
+   "Must the resolver accept all three authority forms, including hex JSON, from the first release?",
+   "Spec cites material not for the clean side? no, but Q2 needs signed-in observation; who closes it?"
+  ]
+ }
+]

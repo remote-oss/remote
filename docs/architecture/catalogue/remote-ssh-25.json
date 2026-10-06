@@ -1,0 +1,679 @@
+[
+ {
+  "id": "F-2301",
+  "issue": 34,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Connect to Host... (new window): the host picker and user@host input",
+  "epic": "E23",
+  "acCount": 34,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openEmptyWindow"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator (remote_20_ssh-remote_1general@1)"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "host quick pick with typed-text row",
+    "authority hex-JSON encoding",
+    "Host added! Connect button"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "commands.executeCommand vscode.newWindow",
+    "window.showInformationMessage"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "~/.ssh/config",
+    "/etc/ssh/ssh_config",
+    "remote.SSH.configFile target"
+   ]
+  },
+  "candidateComponent": "ssh.host-picker",
+  "candidateLibrary": "lib-authority",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 11,
+  "notes": "Picker validates nothing; builds ssh-remote authority (plain or lowercase hex JSON of host,user,port) and opens an empty new window. All errors surface in the new window. Typed-input parsing edge cases are many.",
+  "questions": [
+   "Must the authority bytes match the reference exactly (option A) or may any form that F-2501 decodes be used (option B)?",
+   "Which system SSH config files and order feed the picker on macOS and Windows clients?",
+   "Is the typed-input split rule (last @, port digits, bracketed IPv6) a shared lib-authority function also used by F-2302 and F-2303?"
+  ],
+  "cites": [
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2202",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2203",
+   "remote-ssh#F-2204",
+   "remote-ssh#F-2205",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006"
+  ],
+  "coreUi": true
+ },
+ {
+  "id": "F-2302",
+  "issue": 35,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Connect Current Window to Host...",
+  "epic": "E23",
+  "acCount": 34,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openEmptyWindowInCurrentWindow"
+   ],
+   "settings": [
+    "remote.SSH.useLocalServer (reads)",
+    "files.hotExit (core)"
+   ],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator (remote_20_ssh-remote_1general@2)"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "optional host argument skips picker"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createQuickPick",
+    "commands.executeCommand vscode.newWindow reuseWindow=true"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "SSH config files via F-2301 picker"
+   ]
+  },
+  "candidateComponent": "ssh.host-picker (reuse-window variant)",
+  "candidateLibrary": "lib-authority",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Same picker as F-2301 but reuses the window. Old folder is not carried over. Save prompt and hot exit are core. Should share one picker implementation with F-2301.",
+  "questions": [
+   "Does a host argument not matching a configured alias get encoded like picker input or passed through unchanged?",
+   "Is window-reuse a parameter of one shared picker component or two commands over one library?",
+   "What are the save-prompt button order and default on macOS and Windows?"
+  ],
+  "cites": [
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006"
+  ],
+  "coreUi": true
+ },
+ {
+  "id": "F-2303",
+  "issue": 36,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "New Window on Active Host",
+  "epic": "E23",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.openEmptyWindowOnCurrentHost"
+   ],
+   "settings": [
+    "remote.SSH.useLocalServer (reads)",
+    "remote.SSH.remoteServerListenOnSocket (reads)",
+    "remote.SSH.enableDynamicForwarding (reads)",
+    "remote.SSH.remotePlatform (reads)"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette (when clause)"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "remoteConnectionState"
+   ],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": []
+  },
+  "external": {
+   "stableApi": [
+    "env.remoteName",
+    "env.remoteAuthority",
+    "commands.executeCommand vscode.newWindow"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "candidateComponent": "ssh.new-window-on-host",
+  "candidateLibrary": "lib-authority",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 3,
+  "notes": "No picker; rebuilds the current authority and opens an empty window. Connection reuse happens in the resolver and local server (F-2102), not in this command. Palette-only, SSH windows only.",
+  "questions": [
+   "Which source rebuilds the authority: env.remoteAuthority, remoteName, or workspace URIs, and how are port and user preserved?",
+   "Is shared-connection reuse guaranteed by the resolver contract, or must this command signal it?",
+   "Do macOS and Windows SSH hosts behave the same for reuse with default settings?"
+  ],
+  "cites": [
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2606",
+   "remote-ssh#F-2006"
+  ],
+  "coreUi": true
+ },
+ {
+  "id": "F-2304",
+  "issue": 37,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Connection progress, phases and cancel",
+  "epic": "E23",
+  "acCount": 34,
+  "surfaces": {
+   "commands": [
+    "opensshremotes.showDetails (runtime only, not contributed)"
+   ],
+   "settings": [
+    "remote.SSH.useLocalServer",
+    "remote.SSH.remoteServerListenOnSocket",
+    "remote.SSH.useExecServer",
+    "remote.SSH.enableDynamicForwarding",
+    "remote.SSH.connectTimeout",
+    "remote.SSH.showLoginTerminal",
+    "remote.SSH.remotePlatform",
+    "remote.SSH.maxReconnectionAttempts"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "non-cancellable progress notification",
+    "details link",
+    "phase messages",
+    "Connecting was canceled reason"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress",
+    "commands.registerCommand",
+    "OutputChannel.show",
+    "Terminal.show"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "terminalDataWriteEvent"
+   ],
+   "processes": [
+    "ssh"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "candidateComponent": "ssh.connect-progress",
+  "candidateLibrary": "lib-log",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 11,
+  "notes": "One notification per resolve with phase messages from other features. Cancel only by dismissing a prompt. Retry title never observed. Tunnel-never-ready hangs over three minutes. Needs a phase-reporting interface other components call.",
+  "questions": [
+   "Should a stuck Waiting for port forwarding phase get a timeout and the failure dialog, or reproduce the hang?",
+   "When does the retry-title string appear and what fills its placeholder?",
+   "Which component owns the phase-reporting interface that F-2403, F-2104 and F-2405 call into?"
+  ],
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2403",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2103",
+   "remote-ssh#F-2410",
+   "remote-ssh#F-2006"
+  ],
+  "coreUi": true
+ },
+ {
+  "id": "F-2305",
+  "issue": 38,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Host-key verification",
+  "epic": "E23",
+  "acCount": 45,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.useLocalServer",
+    "remote.SSH.path",
+    "remote.SSH.configFile",
+    "remote.SSH.showLoginTerminal",
+    "remote.SSH.enableDynamicForwarding"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "fingerprint quick pick (Continue/Cancel)",
+    "masked raw-question input",
+    "continuation quick pick",
+    "changed-key failure reason",
+    "ssh_config keywords StrictHostKeyChecking, UserKnownHostsFile, GlobalKnownHostsFile, HostKeyAlias, CheckHostIP, FingerprintHash, VisualHostKey, UpdateHostKeys, NoHostAuthenticationForLocalhost"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createInputBox",
+    "window.showInputBox",
+    "window.createQuickPick"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "ssh",
+    "SSH_ASKPASS relay"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "~/.ssh/known_hosts",
+    "~/.ssh/known_hosts2",
+    "UserKnownHostsFile target",
+    "GlobalKnownHostsFile target",
+    "SSH config file"
+   ]
+  },
+  "candidateComponent": "ssh.prompt-relay (host-key classifier)",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 9,
+  "notes": "Question text is classified by pattern into fingerprint pick, raw masked input or continuation pick. Policy stays with OpenSSH; extension never edits known-hosts. Wording differs across OpenSSH versions.",
+  "questions": [
+   "Should OpenSSH 10.x colon-form fingerprint wording get the fingerprint pick or the raw masked input?",
+   "Keep reference behaviour of cancelling picks on focus loss, or keep them open?",
+   "Changed key with StrictHostKeyChecking no hangs in local-server mode; reproduce or fail with the changed-key reason?"
+  ],
+  "cites": [
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2310",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2604",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2412",
+   "remote-ssh#F-2206",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2003",
+   "unknown#F-3901",
+   "unknown#F-3903",
+   "remote-ssh#F-2006"
+  ],
+  "coreUi": true
+ },
+ {
+  "id": "F-2306",
+  "issue": 39,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Password and keyboard-interactive (two-factor) prompts",
+  "epic": "E23",
+  "acCount": 36,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.useLocalServer",
+    "remote.SSH.enableDynamicForwarding",
+    "remote.SSH.showLoginTerminal",
+    "remote.SSH.externalSSH_ASKPASS",
+    "remote.SSH.connectTimeout",
+    "remote.SSH.configFile",
+    "ssh_config BatchMode, PasswordAuthentication, KbdInteractiveAuthentication, KbdInteractiveDevices, NumberOfPasswordPrompts, PreferredAuthentications"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "masked input with per-challenge placeholder",
+    "re-prompt message line",
+    "Enter verification code literal"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createInputBox",
+    "window.showInputBox"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "terminalDataWriteEvent"
+   ],
+   "processes": [
+    "ssh",
+    "SSH_ASKPASS relay"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "SSH config file"
+   ]
+  },
+  "candidateComponent": "ssh.prompt-relay (secret input)",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 7,
+  "notes": "Askpass relay shows each challenge as masked input; placeholder chosen by challenge text. Once per connection in shared mode, per window load in terminal mode. Answers kept only in memory.",
+  "questions": [
+   "Keep Enter verification code as an unlocalized English literal or localize it?",
+   "Do Windows and macOS ssh clients show the same placeholders and per-mode prompt counts?",
+   "Is the askpass relay one component shared by F-2305, F-2306, F-2307 and F-2309?"
+  ],
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2309",
+   "remote-ssh#F-2310",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2201",
+   "unknown#F-3901"
+  ],
+  "coreUi": true
+ },
+ {
+  "id": "F-2307",
+  "issue": 40,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Keys, passphrases, certificates and the local SSH agent",
+  "epic": "E23",
+  "acCount": 32,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.useLocalServer",
+    "remote.SSH.configFile",
+    "remote.SSH.path",
+    "remote.SSH.showLoginTerminal",
+    "remote.SSH.externalSSH_ASKPASS",
+    "remote.SSH.connectTimeout",
+    "remote.SSH.maxReconnectionAttempts",
+    "remote.SSH.enableDynamicForwarding",
+    "remote.SSH.preconnect",
+    "ssh_config IdentityFile, CertificateFile, IdentitiesOnly, IdentityAgent, AddKeysToAgent, PubkeyAuthentication"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "masked passphrase input",
+    "AddKeysToAgent ask second input"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createInputBox",
+    "window.showInputBox"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "terminalDataWriteEvent"
+   ],
+   "processes": [
+    "ssh",
+    "ssh-agent (via SSH_AUTH_SOCK)",
+    "SSH_ASKPASS relay"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "private key files",
+    "certificate files",
+    "SSH config file",
+    "agent socket"
+   ]
+  },
+  "candidateComponent": "ssh.prompt-relay (passphrase)",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "OpenSSH does all key work; extension only shows the passphrase question. Must pass VS Code environment (SSH_AUTH_SOCK) through and never add keys to the agent. Key problems appear only in the log.",
+  "questions": [
+   "Fill the key path into the passphrase placeholder, or reproduce the reference's empty placeholder?",
+   "Does macOS UseKeychain supply the passphrase without an input?",
+   "Which ssh does a Windows client prefer, the OpenSSH built-in or the one bundled with Git?"
+  ],
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2601",
+   "remote-ssh#F-2201",
+   "remote-ssh#F-2301",
+   "remote-ssh#F-2302",
+   "remote-ssh#F-2303",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2308",
+   "remote-ssh#F-2309",
+   "remote-ssh#F-2310",
+   "remote-ssh#F-2311",
+   "remote-ssh#F-2602",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2502",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2105",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2108",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2101",
+   "remote-ssh#F-2206",
+   "unknown#F-0109",
+   "unknown#F-3901",
+   "unknown#F-3903",
+   "unknown#F-3905"
+  ],
+  "coreUi": true
+ },
+ {
+  "id": "F-2308",
+  "issue": 41,
+  "repo": "remote-ssh",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "The login terminal and unrecognized prompts",
+  "epic": "E23",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.SSH.showLoginTerminal",
+    "remote.SSH.useLocalServer",
+    "remote.SSH.enableDynamicForwarding",
+    "remote.SSH.connectTimeout",
+    "remote.SSH.configFile",
+    "remote.SSH.remotePlatform"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote"
+   ],
+   "other": [
+    "login terminals named install, SSH Tunnel, Uninstall VS Code Server",
+    "hidden terminal until revealed",
+    "unrecognized prompt waits silently"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTerminal",
+    "Terminal.show",
+    "Terminal.sendText",
+    "workspace.getConfiguration"
+   ],
+   "proposedApi": [
+    "terminalDataWriteEvent",
+    "resolvers"
+   ],
+   "processes": [
+    "ssh"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "local home folder as terminal cwd"
+   ]
+  },
+  "candidateComponent": "ssh.login-terminal",
+  "candidateLibrary": "lib-ssh",
+  "area": "A",
+  "reuse": [
+   "openssh"
+  ],
+  "errorPaths": 8,
+  "notes": "Terminal mode only: ssh runs in hidden integrated terminals; prompts read from terminal output. Unrecognized questions produce no UI. Stale input and tunnel-terminal dead ends exist. Terminal creation waits on workspace trust.",
+  "questions": [
+   "Should an ended tunnel-terminal ssh show the failure dialog instead of hanging at Opening Remote?",
+   "Should the quick input close when the user answers in the terminal and ssh moves on?",
+   "May a pseudoterminal replace terminalDataWriteEvent, and what lab comparison would justify it?"
+  ],
+  "cites": [
+   "remote-ssh#F-2501",
+   "remote-ssh#F-2102",
+   "remote-ssh#F-2304",
+   "remote-ssh#F-2306",
+   "remote-ssh#F-2601",
+   "unknown#F-3903",
+   "remote-ssh#F-2104",
+   "remote-ssh#F-2305",
+   "remote-ssh#F-2307",
+   "remote-ssh#F-2309",
+   "remote-ssh#F-2310",
+   "remote-ssh#F-2411",
+   "remote-ssh#F-2505",
+   "remote-ssh#F-2605",
+   "remote-ssh#F-2003",
+   "remote-ssh#F-2006",
+   "remote-ssh#F-2001",
+   "remote-ssh#F-2704"
+  ],
+  "coreUi": true
+ }
+]

@@ -6,14 +6,14 @@
 6	OPEN	2026-10-04T01:02:28Z	type:tracking	Feature inventory and coverage
 7	OPEN	2026-10-04T01:02:26Z	epic:E89,prio:P0,spec:reviewed,type:decision	F-8901 · Decision: identity, invented identifiers and telemetry
 8	OPEN	2026-10-04T07:00:06Z	epic:E80,prio:P1,spec:needs-revision,type:feature-spec	F-8001 · Package, activation, extension kind and web entry
-9	OPEN	2026-10-03T19:44:38Z	epic:E80,prio:P2,spec:pending,type:feature-spec	F-8002 · Help, settings and issue-reporting commands
+9	OPEN	2026-10-06T07:34:03Z	epic:E80,prio:P2,spec:needs-revision,type:feature-spec	F-8002 · Help, settings and issue-reporting commands
 10	OPEN	2026-10-04T06:59:33Z	epic:E81,prio:P0,spec:needs-revision,type:feature-spec	F-8101 · Connect to Tunnel: command, entry points and the tunnel picker
-11	OPEN	2026-10-03T19:44:41Z	epic:E81,prio:P1,spec:pending,type:feature-spec	F-8102 · Tunnel sign-in: GitHub or Microsoft account and switching accounts
-12	OPEN	2026-10-03T19:44:43Z	epic:E81,prio:P0,spec:pending,type:feature-spec	F-8103 · The tunnel remote authority, the connected window and connection errors
-13	OPEN	2026-10-03T19:44:44Z	epic:E81,prio:P1,spec:pending,type:feature-spec	F-8104 · VS Code Server and CLI on the tunnel host: download, CLI updates, default extensions
-14	OPEN	2026-10-03T19:44:46Z	epic:E82,prio:P1,spec:pending,type:feature-spec	F-8201 · Tunnel data and actions behind the Remotes view
-15	OPEN	2026-10-03T19:44:47Z	epic:E82,prio:P1,spec:pending,type:feature-spec	F-8202 · Port forwarding over a tunnel: Private and Public ports
-16	OPEN	2026-10-03T19:44:49Z	epic:E82,prio:P2,spec:pending,type:feature-spec	F-8203 · Tunnel usage limits
-17	OPEN	2026-10-03T19:44:51Z	epic:E83,prio:P2,spec:pending,type:feature-spec	F-8301 · Continue Working in VS Code Desktop
-18	OPEN	2026-10-03T19:44:53Z	epic:E83,prio:P2,spec:pending,type:feature-spec	F-8302 · Web entry: Explorer welcome and the vscode-remote web opener
-19	OPEN	2026-10-03T19:44:55Z	epic:E89,prio:P0,spec:pending,type:decision	F-8902 · Decision: tunnel service, accounts and host side for Code-OSS builds
+11	OPEN	2026-10-06T07:12:15Z	epic:E81,prio:P1,spec:needs-revision,type:feature-spec	F-8102 · Tunnel sign-in: GitHub or Microsoft account and switching accounts
+12	OPEN	2026-10-06T08:50:26Z	epic:E81,prio:P0,spec:draft,type:feature-spec	F-8103 · The tunnel remote authority, the connected window and connection errors
+13	OPEN	2026-10-06T07:17:50Z	epic:E81,prio:P1,spec:needs-revision,type:feature-spec	F-8104 · VS Code Server and CLI on the tunnel host: download, CLI updates, default extensions
+14	OPEN	2026-10-06T07:27:56Z	epic:E82,prio:P1,spec:needs-revision,type:feature-spec	F-8201 · Tunnel data and actions behind the Remotes view
+15	OPEN	2026-10-06T07:28:59Z	epic:E82,prio:P1,spec:needs-revision,type:feature-spec	F-8202 · Port forwarding over a tunnel: Private and Public ports
+16	OPEN	2026-10-06T07:35:37Z	epic:E82,prio:P2,spec:needs-revision,type:feature-spec	F-8203 · Tunnel usage limits
+17	OPEN	2026-10-06T07:43:41Z	epic:E83,prio:P2,spec:needs-revision,type:feature-spec	F-8301 · Continue Working in VS Code Desktop
+18	OPEN	2026-10-06T07:44:13Z	epic:E83,prio:P2,spec:needs-revision,type:feature-spec	F-8302 · Web entry: Explorer welcome and the vscode-remote web opener
+19	OPEN	2026-10-06T08:34:49Z	epic:E89,prio:P0,spec:needs-revision,type:decision	F-8902 · Decision: tunnel service, accounts and host side for Code-OSS builds

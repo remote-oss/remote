@@ -1,0 +1,828 @@
+[
+ {
+  "id": "F-0101",
+  "issue": 19,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Extension manifest, activation and capability declarations",
+  "epic": "E01",
+  "acCount": 24,
+  "surfaces": {
+   "commands": [
+    "remote-containers.revealLogTerminal",
+    "remote-containers.attachToAppleContainer"
+   ],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.experimentalAppleContainerSupport"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "k8s-container",
+    "apple-container"
+   ],
+   "other": [
+    "activation events: onStartupFinished, workspaceContains devcontainer files, onResolveRemoteAuthority x4",
+    "extensionKind ui",
+    "virtualWorkspaces capability",
+    "untrustedWorkspaces limited",
+    "reopen-in-container notification",
+    "coexistence warning notification",
+    "one-time proposed-API setup notification and probe",
+    "remote indicator items"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "extensions.getExtension",
+    "commands.getCommands",
+    "window.showInformationMessage",
+    "ExtensionContext.globalState",
+    "l10n"
+   ],
+   "proposedApi": [
+    "resolvers",
+    "tunnels",
+    "workspaceTrust",
+    "terminalDimensions",
+    "contribEditSessions",
+    "contribViewsRemote",
+    "contribRemoteHelp"
+   ],
+   "processes": [
+    "docker CLI (one call during activation)",
+    "kubectl",
+    "apple container CLI"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "devcontainer.json locations on remote side not read at activation"
+   ],
+   "localFiles": [
+    ".devcontainer/devcontainer.json",
+    ".devcontainer.json",
+    ".devcontainer/<sub>/devcontainer.json",
+    "extension log file"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0402",
+   "remote-containers#F-0102",
+   "remote-containers#F-0106",
+   "remote-containers#F-0104",
+   "remote-containers#F-0107",
+   "remote-containers#F-0501",
+   "remote-containers#F-0502",
+   "remote-containers#F-0105",
+   "remote-containers#F-0707",
+   "remote-containers#F-0906",
+   "remote-containers#F-1102",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406",
+   "remote-containers#F-0604",
+   "remote-containers#F-0605"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.activation-and-identity",
+  "candidateLibrary": "lib-product",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Manifest, activation triggers, authority registration, coexistence stand-down check, and shared proposed-API enablement probe used by six other features. Owns no commands. Docker CLI call at activation delays the reopen offer.",
+  "questions": [
+   "Which library owns the shared proposed-API probe and notification: lib-product, lib-standdown, or a family-wide one used by ssh and wsl too?",
+   "Spec cites material not for the clean side (sources/ paths in provenance); is the architecture to treat F-1403 option B as final?",
+   "Is the coexistence check (inactive beside the reference extension) the same contract as the other repos' stand-down?"
+  ]
+ },
+ {
+  "id": "F-0104",
+  "issue": 43,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Logging, the log terminal and log files",
+  "epic": "E01",
+  "acCount": 34,
+  "surfaces": {
+   "commands": [
+    "remote-containers.revealLogTerminal",
+    "remote-containers.openLogFile",
+    "remote-containers.openLastLogFile",
+    "remote-containers.showContainerLog"
+   ],
+   "settings": [
+    "dev.containers.logLevel",
+    "remote.containers.logLevel"
+   ],
+   "views": [
+    "targetsContainers"
+   ],
+   "menus": [
+    "view/item/context"
+   ],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "Dev Containers pseudo-terminal",
+    "Show All Logs quick pick",
+    "per-activation log file",
+    "log link in progress messages"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.createTerminal",
+    "ExtensionTerminalOptions",
+    "Terminal.show",
+    "Terminal.dimensions",
+    "window.showQuickPick",
+    "window.showInformationMessage modal",
+    "ExtensionContext.logUri"
+   ],
+   "proposedApi": [
+    "terminalDimensions"
+   ],
+   "processes": [
+    "devcontainers CLI (log level option)"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "per-window extension log folder",
+    "one log file per activation named by start time"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0102",
+   "remote-containers#F-0106",
+   "remote-containers#F-0406",
+   "remote-containers#F-0408",
+   "remote-containers#F-0901",
+   "remote-containers#F-0902",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.log-service",
+  "candidateLibrary": "lib-log",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 3,
+  "notes": "Pseudo-terminal log sink plus file log per activation; previous-log selection excludes current file and only counts this extension's logs. Log level setting passed through to the CLI, applied live.",
+  "questions": [
+   "Should lib-log serve the other repos' log terminals and file naming, or is this containers-only?",
+   "Is the Terminal.dimensions plus no-event fallback acceptable so terminalDimensions need not be enabled?",
+   "Show All Logs walks sibling session folders of the profile log folder; is that host-layout dependence allowed in lib-log?"
+  ]
+ },
+ {
+  "id": "F-0106",
+  "issue": 46,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Workspace trust integration",
+  "epic": "E01",
+  "acCount": 47,
+  "surfaces": {
+   "commands": [
+    "remote-containers.reopenInContainer",
+    "remote-containers.openFolder",
+    "remote-containers.rebuildAndReopenInContainer",
+    "remote-containers.rebuildNoCacheAndReopenInContainer",
+    "remote-containers.attachToRunningContainer",
+    "remote-containers.attachToK8sContainer",
+    "remote-containers.attachToAppleContainer",
+    "remote-containers.openRepositoryInUniqueVolume",
+    "remote-containers.openRepositoryInVolume",
+    "remote-containers.openPullRequestInVolume",
+    "remote-containers.inspectVolume",
+    "remote-containers.trySample"
+   ],
+   "settings": [
+    "security.workspace.trust.enabled",
+    "dev.containers.experimentalAppleContainerSupport"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "core workspace trust modal with custom message",
+    "attach and clone one-time warning modals",
+    "decline-trust info modal",
+    "per-window-kind resolved trust",
+    "two global-state confirmation flags"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showWarningMessage modal",
+    "workspace.isTrusted",
+    "ExtensionContext.globalState",
+    "capabilities.untrustedWorkspaces"
+   ],
+   "proposedApi": [
+    "workspaceTrust",
+    "resolvers (isTrusted on resolved authority)"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0107",
+   "remote-containers#F-0108",
+   "remote-containers#F-0401",
+   "remote-containers#F-0403",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0601",
+   "remote-containers#F-0604",
+   "remote-containers#F-0605",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0703",
+   "remote-containers#F-0705",
+   "remote-containers#F-0808",
+   "remote-containers#F-0502",
+   "remote-containers#F-1403"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.trust-gate",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 6,
+  "notes": "Trust gate in front of twelve commands: core dialog for folder commands, own one-time warnings for attach and clone families. Resolver returns trust per window kind. Several strings are never shown yet must be kept.",
+  "questions": [
+   "Does a family trust-gate library exist, given ssh, wsl and tunnels also need trust answers from the resolver?",
+   "Dead strings S124-S131 and S378 must be reproduced at inferred placements; who decides those placements?",
+   "Spec cites material not for the clean side (sources/ paths); no action beyond note. Is requestWorkspaceTrust fallback via argv.json final?"
+  ]
+ },
+ {
+  "id": "F-0108",
+  "issue": 50,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Shared UI conventions and vocabulary",
+  "epic": "E01",
+  "acCount": 26,
+  "surfaces": {
+   "commands": [
+    "remote-containers.attachToAppleContainer"
+   ],
+   "settings": [
+    "dev.containers.executeInWSL",
+    "dev.containers.experimentalAppleContainerSupport"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "notification source label from displayName",
+    "notification button order primary first",
+    "modal button order primary last",
+    "dialog icon by severity",
+    "quick-pick Back and Finish buttons",
+    "multi-select OK button",
+    "shared button vocabulary",
+    "eight untriggered labels kept by decision"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showInformationMessage",
+    "window.showWarningMessage",
+    "window.showErrorMessage",
+    "window.showQuickPick",
+    "QuickInputButtons.Back",
+    "ExtensionContext.globalState",
+    "ThemeIcon"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0106",
+   "remote-containers#F-0202",
+   "remote-containers#F-0303",
+   "remote-containers#F-0402",
+   "remote-containers#F-0406",
+   "remote-containers#F-0410",
+   "remote-containers#F-0801",
+   "remote-containers#F-0902",
+   "remote-containers#F-0905",
+   "remote-containers#F-0802",
+   "remote-containers#F-1401"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.ui-vocabulary",
+  "candidateLibrary": "undecided",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Conventions rather than behavior: button order, icons, wizard buttons, string vocabulary and don't-show-again state. Candidate for a small shared helper module; no runtime calls into other features.",
+  "questions": [
+   "Should the shared dialog and don't-show-again helpers live in a family library or stay in containers?",
+   "Eight unseen labels are kept by decision; are they required as constants or may unused ones be dropped?",
+   "Install flows are specified only up to the last screen; what exactly must the reimplementation start after that?"
+  ]
+ },
+ {
+  "id": "F-0107",
+  "issue": 51,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Command availability matrix and context keys",
+  "epic": "E01",
+  "acCount": 20,
+  "surfaces": {
+   "commands": [
+    "remote-containers.reopenInContainer",
+    "remote-containers.rebuildAndReopenInContainer",
+    "remote-containers.rebuildNoCacheAndReopenInContainer",
+    "remote-containers.openFolder",
+    "remote-containers.openWorkspace",
+    "remote-containers.attachToRunningContainer",
+    "remote-containers.attachToK8sContainer",
+    "remote-containers.attachToAppleContainer",
+    "remote-containers.openRepositoryInVolume",
+    "remote-containers.openRepositoryInUniqueVolume",
+    "remote-containers.openPullRequestInVolume",
+    "remote-containers.reopenLocally",
+    "remote-containers.reopenInWSL",
+    "remote-containers.reopenInSSH",
+    "remote-containers.reopenInTunnel",
+    "remote-containers.rebuildContainer",
+    "remote-containers.rebuildContainerNoCache",
+    "remote-containers.switchContainer",
+    "remote-containers.getStarted",
+    "remote-containers.trySample",
+    "remote-containers.installDockerInWSL",
+    "remote-containers.settings",
+    "remote-containers.showDetails",
+    "remote-containers.getHelp",
+    "remote-containers.reportIssue",
+    "remote-containers.provideFeedback",
+    "remote-containers.openLogFile",
+    "remote-containers.openLastLogFile",
+    "remote-containers.revealLogTerminal",
+    "remote-containers.showContainerLog",
+    "remote-containers.installUserCLI",
+    "remote-containers.installDocker",
+    "remote-containers.newContainer",
+    "remote-containers.configureContainerFeatures",
+    "remote-containers.cleanUpDevContainers",
+    "remote-containers.pruneVolumes",
+    "remote-containers.cloneInVolume",
+    "remote-containers.inspectVolume"
+   ],
+   "settings": [
+    "dev.containers.experimentalAppleContainerSupport",
+    "dev.containers.dockerPath",
+    "dev.containers.dockerSocketPath"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette",
+    "view/item/context",
+    "view/title"
+   ],
+   "contextKeys": [
+    "canReopenLocally",
+    "canReopenInWSL",
+    "canReopenInSSH",
+    "canReopenInTunnel",
+    "hideConnectCommands",
+    "hideRebuildCommands",
+    "isRecoveryContainer",
+    "remote-containers:showDetails",
+    "remote-containers:needsDockerStartOrInstall",
+    "remote-containers:needsSSHCredentials",
+    "remote-containers:noContainersWithFolder",
+    "remote-containers:noContainersWithoutFolder",
+    "remote-containers:noDevVolumes",
+    "remoteName",
+    "virtualWorkspace",
+    "workspaceFolderCount",
+    "isWindows"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "k8s-container",
+    "apple-container",
+    "exec"
+   ],
+   "other": [
+    "when-clause matrix over window kinds",
+    "about 70 palette entries incl. hidden ones"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "commands.executeCommand setContext",
+    "contributes.menus.commandPalette"
+   ],
+   "proposedApi": [
+    "resolvers"
+   ],
+   "processes": [
+    "devcontainer read-configuration",
+    "devcontainer up"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "persisted folder-identity string for origin detection"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0102",
+   "remote-containers#F-0104",
+   "remote-containers#F-0105",
+   "remote-containers#F-0106",
+   "remote-containers#F-0108",
+   "remote-containers#F-0109",
+   "remote-containers#F-0204",
+   "remote-containers#F-0501",
+   "remote-containers#F-0504",
+   "remote-containers#F-0605",
+   "remote-containers#F-0901",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.command-gating",
+  "candidateLibrary": "lib-identifiers",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Mostly manifest data: per-command when-clauses and custom context keys set by the extension. Ids reused verbatim by decision. Origin keys (WSL, SSH, tunnel, local) need connection-origin tracking. Two hide keys stay false.",
+  "questions": [
+   "Which component sets canReopenIn* keys and how is connection origin persisted across window reloads?",
+   "Does lib-identifiers hold command, context key and view ids for all repos, or per repo?",
+   "WSL-origin sets both reopenLocally and reopenInWSL keys; is that coupling a rule for the WSL area too?"
+  ]
+ },
+ {
+  "id": "F-0103",
+  "issue": 74,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Localization",
+  "epic": "E01",
+  "acCount": 10,
+  "surfaces": {
+   "commands": [],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "manifest l10n field",
+    "package.nls base plus 14 locale files",
+    "runtime bundle per locale keyed by English text",
+    "qps-ploc pseudo-locale pair"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "vscode.l10n",
+    "env.language"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "package.nls.json",
+    "package.nls.<locale>.json",
+    "l10n/bundle.l10n.<locale>.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0102",
+   "remote-containers#F-0104",
+   "remote-containers#F-0105",
+   "remote-containers#F-0106"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.l10n-bundles",
+  "candidateLibrary": "none",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 3,
+  "notes": "Pure data and build step: 159 manifest keys and 437 runtime keys per locale across 14 locales. No code beyond using l10n calls. Key-set parity check is testable in CI.",
+  "questions": [
+   "Are translations produced by the clean side or is only the file layout and key parity required?",
+   "Is a shared l10n build tool wanted across repos, with key-set parity checking?",
+   "Is the pseudo-locale pair required output or optional QA?"
+  ]
+ },
+ {
+  "id": "F-0102",
+  "issue": 88,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Settings catalogue and legacy setting migration",
+  "epic": "E01",
+  "acCount": 31,
+  "surfaces": {
+   "commands": [
+    "remote-containers.settings"
+   ],
+   "settings": [
+    "dev.containers.bootstrapImage",
+    "dev.containers.bootstrapImagePull",
+    "dev.containers.cacheVolume",
+    "dev.containers.copyGitConfig",
+    "dev.containers.defaultExtensions",
+    "dev.containers.defaultFeatures",
+    "dev.containers.dockerComposePath",
+    "dev.containers.dockerCredentialHelper",
+    "dev.containers.dockerPath",
+    "dev.containers.dockerSocketPath",
+    "dev.containers.executeInWSL",
+    "dev.containers.executeInWSLDistro",
+    "dev.containers.forwardWSLServices",
+    "dev.containers.gitCredentialHelperConfigLocation",
+    "dev.containers.githubCLILoginWithToken",
+    "dev.containers.gpuAvailability",
+    "dev.containers.lockfile",
+    "dev.containers.logLevel",
+    "dev.containers.mountWaylandSocket",
+    "dev.containers.optimisticallyLaunchDocker",
+    "dev.containers.repositoryConfigurationPaths",
+    "dev.containers.workspaceMountConsistency",
+    "dev.containers.experimentalAppleContainerSupport",
+    "dev.containers.experimentalMountGitWorktreeCommonDir",
+    "dotfiles.installCommand",
+    "dotfiles.repository",
+    "dotfiles.targetPath",
+    "remote.serverDownloadBaseUrl",
+    "remote.serverDownloadFolder",
+    "14 legacy remote.containers.* keys"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "43-key configuration section titled Dev Containers",
+    "deprecation rendering for legacy keys",
+    "legacy-versus-new precedence rules"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workbench.action.openSettings (@ext:<id>)",
+    "workspace.getConfiguration",
+    "workspace.requestWorkspaceTrust"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "wsl.exe (executeInWSL)",
+    "docker",
+    "docker-compose"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "settings.json user scope"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0104",
+   "remote-containers#F-0201",
+   "remote-containers#F-0207",
+   "remote-containers#F-0302",
+   "remote-containers#F-0414",
+   "remote-containers#F-0419",
+   "remote-containers#F-0704",
+   "remote-containers#F-1001",
+   "remote-containers#F-1005",
+   "remote-containers#F-1006",
+   "remote-containers#F-1007",
+   "remote-containers#F-0503",
+   "remote-containers#F-1402",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.settings-catalogue",
+  "candidateLibrary": "lib-identifiers",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 5,
+  "notes": "Manifest catalogue of 43 keys plus a small read-time migration layer: legacy and new keys with per-key precedence, dotfiles trio reversed, empty legacy value ignored. Read at each connect or rebuild.",
+  "questions": [
+   "Should a single settings-read helper with legacy fallback live in lib-identifiers or in containers only?",
+   "Do remote.serverDownload* keys belong to lib-server shared with other repos given they sit here?",
+   "Spec cites material not for the clean side (sources/ and observations paths); is a key-by-key manifest table available as published conformance data?"
+  ]
+ },
+ {
+  "id": "F-0109",
+  "issue": 90,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Programmatic command interface",
+  "epic": "E01",
+  "acCount": 39,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openFolder",
+    "remote-containers.cloneInVolume",
+    "remote-containers.cloneInVolumeFromViewlet",
+    "remote-containers.labelPortAndUpdateConfig",
+    "remote-containers.addExtensionToConfig",
+    "remote-containers.testConnection",
+    "remote-containers.switchContainer",
+    "remote-containers.openDevContainerFile",
+    "remote-containers.revealLogTerminal"
+   ],
+   "settings": [
+    "dev.containers.executeInWSL"
+   ],
+   "views": [
+    "Dev Containers",
+    "Dev Volumes",
+    "Ports",
+    "Extensions"
+   ],
+   "menus": [
+    "view/item/context",
+    "view/title",
+    "continueEditSession"
+   ],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "vscode:// URI handler action cloneInVolume with url query",
+    "openFolder argument object forceNewWindow forceReuseWindow noRecentEntry",
+    "row-argument contract for tree items",
+    "inline label editor in Ports view"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.registerUriHandler",
+    "commands.registerCommand",
+    "commands.executeCommand",
+    "contributes.menus"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "devcontainers CLI (clone then up)",
+    "git",
+    "docker"
+   ],
+   "network": [
+    "repository URL passed in URI"
+   ],
+   "remoteFiles": [
+    "devcontainer.json portsAttributes label",
+    "customizations.vscode.extensions"
+   ],
+   "localFiles": [
+    "devcontainer.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0106",
+   "remote-containers#F-0107",
+   "remote-containers#F-0108",
+   "remote-containers#F-0706",
+   "remote-containers#F-0904",
+   "remote-containers#F-0809",
+   "remote-containers#F-1103",
+   "remote-containers#F-0603",
+   "remote-containers#F-0604",
+   "remote-containers#F-0703",
+   "remote-containers#F-0806",
+   "remote-containers#F-0701",
+   "remote-containers#F-0403",
+   "remote-containers#F-0406",
+   "remote-containers#F-1401"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.command-arguments",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Cross-cutting argument contract: URI deep link, openFolder options, row arguments from own and foreign views, and invocation outside palette context. Reuses existing volume and container on repeat clone URIs.",
+  "questions": [
+   "Should the URI handler and argument validation be one component shared by all repos' deep links?",
+   "Does a repeat cloneInVolume URI reuse by label lookup, and which component owns that lookup?",
+   "Foreign-view contributions (Kubernetes, GitHub PR) depend on other extensions; are they required in v1?"
+  ]
+ },
+ {
+  "id": "F-0105",
+  "issue": 104,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Help, feedback and getting started",
+  "epic": "E01",
+  "acCount": 22,
+  "surfaces": {
+   "commands": [
+    "remote-containers.getHelp",
+    "remote-containers.getStarted",
+    "remote-containers.reportIssue",
+    "remote-containers.provideFeedback"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "remoteName",
+    "virtualWorkspace"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container",
+    "exec",
+    "k8s-container",
+    "apple-container"
+   ],
+   "other": [
+    "contributes.remoteHelp (getStarted, documentation, issues)",
+    "Remote Explorer Help and feedback panel (core)",
+    "Open Documentation item in failure quick pick",
+    "issue reporter prefill text"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "env.openExternal",
+    "commands.executeCommand workbench.action.openIssueReporter"
+   ],
+   "proposedApi": [
+    "contribRemoteHelp"
+   ],
+   "processes": [],
+   "network": [
+    "documentation, getting-started, feedback and issue URLs (replaced by own per F-1401)"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0101",
+   "remote-containers#F-0104",
+   "remote-containers#F-0109",
+   "remote-containers#F-0202",
+   "remote-containers#F-0410",
+   "remote-containers#F-1401",
+   "remote-containers#F-1403",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.help-commands",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Four URL-opening or reporter commands, no CLI involvement. Proposed API not needed under option D. Destination URLs are identity data and are replaced with own project URLs. Spec status is draft.",
+  "questions": [
+   "Which URLs should the reimplementation use for documentation, getting started and feedback?",
+   "Spec is still draft; which acceptance criteria are expected to change before architecture freezes?",
+   "Is the Remote Explorer help panel entry dropped when contribRemoteHelp is not requested, and is that accepted?"
+  ]
+ }
+]

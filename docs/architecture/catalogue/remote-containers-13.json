@@ -1,0 +1,572 @@
+[
+ {
+  "id": "F-1101",
+  "issue": 42,
+  "label": "spec:draft",
+  "title": "Declared port forwarding",
+  "epic": "E11",
+  "acCount": 39,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.portsAttributes",
+    "remote.otherPortsAttributes",
+    "remote.autoForwardPorts",
+    "remote.restoreForwardedPorts"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "devcontainer.json props forwardPorts, portsAttributes, otherPortsAttributes, appPort",
+    "STR:S278 dash-port notification",
+    "Ports view origins Dev Containers and Statically Forwarded (core)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.openTunnel",
+    "workspace.registerPortAttributesProvider"
+   ],
+   "proposedApi": [
+    "resolvers (environmentTunnels)",
+    "tunnels"
+   ],
+   "processes": [
+    "docker (port publish via devcontainer up)",
+    "devcontainer CLI read-configuration"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "container devcontainer.metadata label",
+    "remote machine settings"
+   ],
+   "localFiles": [
+    "devcontainer.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0411",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0416",
+   "remote-containers#F-1102",
+   "remote-containers#F-1103",
+   "remote-containers#F-0303",
+   "remote-containers#F-0410",
+   "remote-containers#F-0205",
+   "remote-containers#F-0506",
+   "remote-containers#F-1401"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.port-declarations",
+  "candidateLibrary": "lib-forwarding",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 6,
+  "notes": "Applies build-time recorded forwardPorts and attributes at connect via core tunnel API and machine settings; appPort is plain Docker publish shown only when Docker is local. Strict host:port shape filter drops entries silently.",
+  "questions": [
+   "Which merged config source is authoritative at reconnect: container metadata label or edited file, and who reads it?",
+   "Is machine-settings write of port attributes owned here or by F-0506?",
+   "Is the dash-port notification placement a final decision despite no observed trigger?"
+  ],
+  "repo": "remote-containers",
+  "kind": "feature"
+ },
+ {
+  "id": "F-1102",
+  "issue": 58,
+  "label": "spec:reviewed",
+  "title": "Port forwarding mechanism and automatic forwarding",
+  "epic": "E11",
+  "acCount": 27,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "remote.autoForwardPorts",
+    "remote.autoForwardPortsSource",
+    "remote.autoForwardPortsFallback",
+    "remote.restoreForwardedPorts",
+    "remote.forwardOnOpen",
+    "remote.localPortHost"
+   ],
+   "views": [
+    "Ports (core)"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "tunnels proposed API declaration",
+    "Ports status bar item (core)",
+    "auto-forward notification (core)"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [
+    "tunnels",
+    "resolvers"
+   ],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0502",
+   "remote-containers#F-0401",
+   "remote-containers#F-1101",
+   "remote-containers#F-1103",
+   "remote-containers#F-0413",
+   "remote-containers#F-1403",
+   "remote-containers#F-1401"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.tunnels-declaration",
+  "candidateLibrary": "lib-forwarding",
+  "area": "A",
+  "reuse": [],
+  "errorPaths": 3,
+  "notes": "Almost entirely core: declare tunnels proposal beside resolvers and keep authority stable across rebuilds so restore works. Detection scoping to attached container in Compose is core-side. Needs enable-proposed-api per F-1403.",
+  "questions": [
+   "Must the authority string be derived only from folder/config, never container id, to keep restored ports across rebuild?",
+   "Does Compose detection scoping need extension help or is it fully core?",
+   "Any elevation offer for privileged ports expected from the resolver?"
+  ],
+  "repo": "remote-containers",
+  "kind": "feature"
+ },
+ {
+  "id": "F-1103",
+  "issue": 113,
+  "label": "spec:reviewed",
+  "title": "Label port and update devcontainer.json",
+  "epic": "E11",
+  "acCount": 25,
+  "surfaces": {
+   "commands": [
+    "remote-containers.labelPortAndUpdateConfig"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "ports/item/port/inline#0_manage@4",
+    "commandPalette#63"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "tunnelType"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container"
+   ],
+   "other": [
+    "STR:S276",
+    "STR:S277",
+    "tag codicon inline action"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "workspace.applyEdit",
+    "TextDocument.save",
+    "workspace.textDocuments"
+   ],
+   "proposedApi": [],
+   "processes": [],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json",
+    "global storage imageConfigs/<image-ref>.json (attach per-image config)",
+    "Recovery Container synthetic config"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0601",
+   "remote-containers#F-1101",
+   "remote-containers#F-1102",
+   "remote-containers#F-0602",
+   "remote-containers#F-0301",
+   "remote-containers#F-0303",
+   "remote-containers#F-0812",
+   "remote-containers#F-0107",
+   "remote-containers#F-0903",
+   "remote-containers#F-0410",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.port-label-writer",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 6,
+  "notes": "Stable-API-only menu command writing portsAttributes label into devcontainer.json or the per-image attach file. Needs key-order rule, dirty-document handling, and recovery-container target. Unchanged resubmit is a silent no-op.",
+  "questions": [
+   "Which module owns the shared JSON-with-comments rewrite helper used by F-0301, F-0602 and this feature?",
+   "Is the port-number-first key ordering normative?",
+   "Is S276 reachable only from a non-UI entry point, and which?"
+  ],
+  "repo": "remote-containers",
+  "kind": "feature"
+ },
+ {
+  "id": "F-1201",
+  "issue": 30,
+  "label": "spec:reviewed",
+  "title": "Install devcontainer CLI",
+  "epic": "E12",
+  "acCount": 60,
+  "surfaces": {
+   "commands": [
+    "remote-containers.installUserCLI"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "devcontainer launcher with open and legacy build",
+    "cli-bin folder in global storage",
+    "TEL:userCLI (no telemetry per F-1405)",
+    "macOS osascript elevation dialog",
+    "Windows user PATH edit"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showInformationMessage (modal)",
+    "env.clipboard",
+    "ExtensionContext.globalStorageUri",
+    "env.appRoot",
+    "env.machineId"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "devcontainer CLI (@devcontainers/cli)",
+    "osascript",
+    "code --folder-uri"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "cli-bin launcher and .cmd sibling",
+    "symlink devcontainer in PATH directory",
+    "user PATH environment variable (Windows)",
+    "devcontainer.json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-1202",
+   "remote-containers#F-0401",
+   "remote-containers#F-0502",
+   "remote-containers#F-0410",
+   "remote-containers#F-1405",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406",
+   "remote-containers#F-0108",
+   "remote-containers#F-0806"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.cli-launcher",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "editor-cli"
+  ],
+  "errorPaths": 10,
+  "notes": "Largest spec: PATH symlink or Windows PATH installer plus a launcher adding open and legacy build to the open-source CLI. open builds a dev-container authority URI and launches the default profile. macOS launches nothing in reference.",
+  "questions": [
+   "How is the dev-container authority URI built from path and workspaceFolder, and must symlink-vs-absolute path differences be reproduced?",
+   "Should open honour --config rather than ignore it as the reference does?",
+   "Is the launcher name for Insiders-type builds in scope?"
+  ],
+  "repo": "remote-containers",
+  "kind": "feature"
+ },
+ {
+  "id": "F-1202",
+  "issue": 114,
+  "label": "spec:draft",
+  "title": "Developer command Test Connection",
+  "epic": "E12",
+  "acCount": 19,
+  "surfaces": {
+   "commands": [
+    "remote-containers.testConnection"
+   ],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.logLevel",
+    "dev.containers.executeInWSL"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "remoteName"
+   ],
+   "authorities": [
+    "dev-container",
+    "attached-container"
+   ],
+   "other": [
+    "Dev Containers log block of timed round trips"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "docker exec shell in container",
+    "host-side shell"
+   ],
+   "network": [],
+   "remoteFiles": [],
+   "localFiles": [
+    "Dev Containers log"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0601",
+   "remote-containers#F-0502",
+   "remote-containers#F-0501",
+   "remote-containers#F-1201",
+   "remote-containers#F-0109",
+   "remote-containers#F-0107",
+   "remote-containers#F-0604",
+   "remote-containers#F-0605",
+   "remote-containers#F-0405",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.connection-probe",
+  "candidateLibrary": "lib-log",
+  "area": "C",
+  "reuse": [],
+  "errorPaths": 3,
+  "notes": "Palette-only diagnostic timing three round trips each to container shell and host shell, writing log lines only. No timeout. Host phase location varies for SSH-nested and WSL. Windows without WSL fails in reference; better behavior preferred.",
+  "questions": [
+   "Where does the host-phase shell run in SSH-nested and WSL cases?",
+   "Should Windows without WSL succeed rather than mirror the reference failure?",
+   "Is the exact log wording normative for parity?"
+  ],
+  "repo": "remote-containers",
+  "kind": "feature"
+ },
+ {
+  "id": "F-1302",
+  "issue": 103,
+  "label": "spec:reviewed",
+  "title": "Dev containers on SSH hosts and tunnels",
+  "epic": "E13",
+  "acCount": 25,
+  "surfaces": {
+   "commands": [
+    "remote-containers.reopenInContainer",
+    "remote-containers.rebuildAndReopenInContainer",
+    "remote-containers.rebuildNoCacheAndReopenInContainer",
+    "remote-containers.rebuildContainer",
+    "remote-containers.rebuildContainerNoCache",
+    "remote-containers.createDevContainerFile",
+    "remote-containers.openDevContainerFile",
+    "remote-containers.trySample",
+    "remote-containers.configureContainerFeatures",
+    "remote-containers.openFolder",
+    "remote-containers.openWorkspace",
+    "remote-containers.openRepositoryInUniqueVolume",
+    "remote-containers.openRepositoryInVolume",
+    "remote-containers.openPullRequestInVolume"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "statusBar/remoteIndicator"
+   ],
+   "contextKeys": [
+    "remoteName",
+    "workspaceFolderCount",
+    "hideConnectCommands",
+    "hideRebuildCommands",
+    "gitOpenRepositoryCount",
+    "canReopenInSSH",
+    "canReopenInTunnel",
+    "canReopenLocally"
+   ],
+   "authorities": [
+    "ssh-remote",
+    "tunnel",
+    "dev-container"
+   ],
+   "other": [
+    "STR:S192 progress title",
+    "window title Dev Container: name @ host"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [
+    "devcontainer CLI spawned on remote host extension host",
+    "docker on remote host"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "remote host Docker daemon",
+    "VS Code Server"
+   ],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0701",
+   "remote-containers#F-0702",
+   "remote-containers#F-0703",
+   "remote-containers#F-0402",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0504",
+   "remote-containers#F-0106",
+   "remote-containers#F-0107",
+   "remote-containers#F-0503",
+   "remote-containers#F-1301",
+   "remote-containers#F-0801",
+   "remote-containers#F-0812",
+   "remote-containers#F-0808",
+   "remote-containers#F-0807",
+   "remote-containers#F-0412"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.remote-host-gating",
+  "candidateLibrary": "lib-authority",
+  "area": "undecided",
+  "reuse": [
+   "devcontainers-cli",
+   "openssh"
+  ],
+  "errorPaths": 4,
+  "notes": "No own commands: when-clause gating on ssh-remote and tunnel authorities plus running the CLI on the remote host's workspace extension host. localEnv and localWorkspaceFolder resolve on the host. Depends on sibling remote-ssh and tunnels authority names.",
+  "questions": [
+   "Which authority names do the reimplemented ssh and tunnel remotes expose, and who guarantees them?",
+   "Where must the CLI process run: remote workspace extension host only?",
+   "Spec cites lab observation files and reference package.json; is that material not for the clean side?"
+  ],
+  "repo": "remote-containers",
+  "kind": "feature"
+ },
+ {
+  "id": "F-1301",
+  "issue": 115,
+  "label": "spec:reviewed",
+  "title": "Dev containers with WSL",
+  "epic": "E13",
+  "acCount": 20,
+  "surfaces": {
+   "commands": [
+    "remote-containers.reopenInContainer",
+    "remote-containers.rebuildAndReopenInContainer",
+    "remote-containers.rebuildNoCacheAndReopenInContainer",
+    "remote-containers.openFolder",
+    "remote-containers.openWorkspace",
+    "remote-containers.reopenInWSL",
+    "remote-containers.createDevContainerFile",
+    "remote-containers.openDevContainerFile",
+    "remote-containers.trySample",
+    "remote-containers.configureContainerFeatures",
+    "remote-containers.installDockerInWSL"
+   ],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.executeInWSL",
+    "dev.containers.executeInWSLDistro"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [
+    "remoteName",
+    "canReopenInWSL",
+    "hideConnectCommands",
+    "hideRebuildCommands",
+    "workspaceFolderCount"
+   ],
+   "authorities": [
+    "wsl",
+    "dev-container"
+   ],
+   "other": [
+    "STR:S003 mnt performance hint",
+    "STR:S136 Docker Desktop WSL 2 backend required (modal, Learn More)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage (modal)"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker in WSL distro",
+    "Docker Desktop",
+    "devcontainer CLI"
+   ],
+   "network": [],
+   "remoteFiles": [
+    "WSL distro filesystem",
+    "/mnt/<drive>/ mount"
+   ],
+   "localFiles": [
+    "\\\\wsl$ and \\\\wsl.localhost share paths"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0405",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0406",
+   "remote-containers#F-0106",
+   "remote-containers#F-0402",
+   "remote-containers#F-1302",
+   "remote-containers#F-0204",
+   "remote-containers#F-0207",
+   "remote-containers#F-0202",
+   "remote-containers#F-0201",
+   "remote-containers#F-1008",
+   "remote-containers#F-0503",
+   "remote-containers#F-1402",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.wsl-docker-selection",
+  "candidateLibrary": "lib-authority",
+  "area": "D",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Gating by wsl authority plus Docker-side selection: check Docker in-distro, hand off /mnt folders to the Windows flow, show WSL 2 backend dialog. Never tested from a genuine wsl window in lab. Cites lab tooling and l10n bundle.",
+  "questions": [
+   "Which authority name does the reimplemented WSL remote use, and does it expose canReopenInWSL?",
+   "How is the /mnt path mapped back to a Windows drive path for hand-off?",
+   "Spec cites lab tooling and bundle files; is that material not for the clean side?"
+  ],
+  "repo": "remote-containers",
+  "kind": "feature"
+ }
+]

@@ -1,0 +1,772 @@
+[
+ {
+  "id": "F-0402",
+  "issue": 17,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Reopen-in-container notification on folder open",
+  "epic": "E04",
+  "acCount": 16,
+  "surfaces": {
+   "commands": [
+    "remote-containers.showReopenInContainerNotificationReset"
+   ],
+   "settings": [
+    "dev.containers.repositoryConfigurationPaths",
+    "remote.containers.repositoryConfigurationPaths (deprecated)",
+    "dev.containers.executeInWSL"
+   ],
+   "views": [
+    "Dev Containers view welcome content"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "ssh-remote",
+    "dev-container",
+    "attached-container"
+   ],
+   "other": [
+    "notification with two buttons",
+    "follow-up suppress notification",
+    "markdown command link to openDevContainerFile",
+    "workspace-scoped and global suppression timestamp"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showInformationMessage",
+    "window.withProgress",
+    "commands.executeCommand",
+    "ExtensionContext.workspaceState",
+    "ExtensionContext.globalState"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "git (remote lookup)"
+   ],
+   "network": [
+    "aka.ms learn-more links only"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "devcontainer.json",
+    "repository configuration folders",
+    "workspace state db",
+    "global state db"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0407",
+   "remote-containers#F-0408",
+   "remote-containers#F-0410",
+   "remote-containers#F-0812",
+   "remote-containers#F-1405",
+   "remote-containers#F-0301",
+   "remote-containers#F-0302",
+   "remote-containers#F-0106",
+   "remote-containers#F-1301"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.reopen-notifier",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "editor-cli"
+  ],
+  "errorPaths": 4,
+  "notes": "Pure UI trigger over config discovery; persists suppression timestamps in extension state. Works in plain SSH windows too. No telemetry per F-1405.",
+  "questions": [
+   "Is the global reset timestamp key shared with the recovery notification reset in F-0410, or separate?",
+   "Spec cites reference package paths in provenance; confirm those are not for the clean side (spec cites material not for the clean side)."
+  ]
+ },
+ {
+  "id": "F-0401",
+  "issue": 21,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Reopen in Container",
+  "epic": "E04",
+  "acCount": 23,
+  "surfaces": {
+   "commands": [
+    "remote-containers.reopenInContainer"
+   ],
+   "settings": [],
+   "views": [],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator (group remote_30_dev-container_2_actions@8)"
+   ],
+   "contextKeys": [
+    "remoteName"
+   ],
+   "authorities": [
+    "dev-container",
+    "ssh-remote",
+    "wsl",
+    "tunnel"
+   ],
+   "other": [
+    "configuration selection quick pick",
+    "progress notification with show log link",
+    "window title suffix and indicator text",
+    "trust confirmation before reload"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showQuickPick",
+    "window.withProgress",
+    "window.showErrorMessage",
+    "commands.executeCommand",
+    "workspace.workspaceFile"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker (via F-0408/F-0409)"
+   ],
+   "network": [
+    "mcr.microsoft.com (images, indirect)"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    ".devcontainer/devcontainer.json",
+    ".devcontainer.json",
+    "remoteContainers log file"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0106",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0801",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0407",
+   "remote-containers#F-0411",
+   "remote-containers#F-0412",
+   "remote-containers#F-0414",
+   "remote-containers#F-0415",
+   "remote-containers#F-0416",
+   "remote-containers#F-0417",
+   "remote-containers#F-0419",
+   "remote-containers#F-1401",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.connect-command",
+  "candidateLibrary": "lib-authority",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "editor-cli"
+  ],
+  "errorPaths": 5,
+  "notes": "Thin command shell owning availability rules per window kind and the reload hand-off; real work sits in startup orchestration. Tunnel case is by analogy, not observed.",
+  "questions": [
+   "Command hidden-vs-invokable: is running outside its context (R-46) to be reproduced for every window kind?",
+   "Is tunnel behaviour required, given it was specified by analogy and not observed?"
+  ]
+ },
+ {
+  "id": "F-0403",
+  "issue": 22,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Open Folder in Container",
+  "epic": "E04",
+  "acCount": 28,
+  "surfaces": {
+   "commands": [
+    "remote-containers.openFolder",
+    "remote-containers.removeRecentFolder",
+    "workbench.action.openRecent (core)"
+   ],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.executeInWSL",
+    "files.simpleDialog.enable (core)",
+    "window.dialogStyle (core)"
+   ],
+   "views": [],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator (empty window)"
+   ],
+   "contextKeys": [],
+   "authorities": [
+    "dev-container",
+    "ssh-remote",
+    "wsl",
+    "attached-container"
+   ],
+   "other": [
+    "folder picker",
+    "action pick after failure",
+    "clone-in-volume pickers",
+    "configs folder in global storage",
+    "managed CLI folder"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showOpenDialog",
+    "window.createQuickPick",
+    "window.showErrorMessage",
+    "window.showInformationMessage",
+    "window.withProgress",
+    "commands.executeCommand"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker",
+    "docker compose",
+    "docker volume",
+    "docker ps",
+    "docker inspect",
+    "devcontainer up",
+    "git",
+    "wsl.exe"
+   ],
+   "network": [
+    "ghcr.io",
+    "containers.dev features index",
+    "mcr.microsoft.com"
+   ],
+   "remoteFiles": [
+    ".devcontainer/devcontainer.json",
+    ".devcontainer-internal.json",
+    "Dockerfile",
+    "docker-compose.yml"
+   ],
+   "localFiles": [
+    "cli-bin folder (devcontainer, devcontainer.cmd, path/version files)",
+    "extension logs remoteContainers and shutdownMonitor",
+    "workspace and global state db",
+    "storage.json",
+    "argv.json",
+    "repository configs folder"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0411",
+   "remote-containers#F-0414",
+   "remote-containers#F-0416",
+   "remote-containers#F-0419",
+   "remote-containers#F-0106",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0407",
+   "remote-containers#F-0410",
+   "remote-containers#F-0417"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.open-folder-flow",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "editor-cli"
+  ],
+  "errorPaths": 7,
+  "notes": "Open a local, WSL or SSH folder in a container via a picker; heavy cross-cutting spec touching CLI, mounts, features, UID sync. Several strings listed but never observed.",
+  "questions": [
+   "Which parts of the managed cli-bin folder layout are contractual versus incidental to the reference?",
+   "Several owned strings (S254, S258) are never observed; must the clean side still define them?",
+   "Does the open-folder flow create the same container as Reopen in Container for identical folders?"
+  ]
+ },
+ {
+  "id": "F-0409",
+  "issue": 23,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:draft",
+  "title": "Existing container discovery, reuse and state handling",
+  "epic": "E04",
+  "acCount": 47,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.executeInWSL"
+   ],
+   "views": [
+    "Dev Containers view rows (F-0906)"
+   ],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "dev-container"
+   ],
+   "other": [
+    "container labels devcontainer.local_folder and devcontainer.config_file",
+    "stopped, paused and removed state handling",
+    "three runtime strings S088-S090"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker ps",
+    "docker inspect",
+    "docker start",
+    "docker stop",
+    "docker rm",
+    "docker create",
+    "docker run",
+    "docker compose",
+    "devcontainer up"
+   ],
+   "network": [
+    "mcr.microsoft.com (indirect)"
+   ],
+   "remoteFiles": [
+    "devcontainer.json path as label value"
+   ],
+   "localFiles": [
+    "workspace state db"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0303",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0407",
+   "remote-containers#F-0408",
+   "remote-containers#F-0410",
+   "remote-containers#F-0411",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0416",
+   "remote-containers#F-0417",
+   "remote-containers#F-0419",
+   "remote-containers#F-0601",
+   "remote-containers#F-0902",
+   "remote-containers#F-0905",
+   "remote-containers#F-0906"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.container-matcher",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "docker"
+  ],
+  "errorPaths": 6,
+  "notes": "Matching rule is folder label plus config-file label; decides reuse, restart or create. Spec is still draft with an open Windows case question. Mostly Docker queries.",
+  "questions": [
+   "Is path matching case-sensitive on Windows (Q-1 open, needs windows lab)? Decides duplicate versus reused container.",
+   "Spec is draft: which acceptance criteria are still expected to change?",
+   "Is the label pair the only match key, or also compose project or image?"
+  ]
+ },
+ {
+  "id": "F-0405",
+  "issue": 24,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Rebuild commands",
+  "epic": "E04",
+  "acCount": 36,
+  "surfaces": {
+   "commands": [
+    "remote-containers.rebuildContainer",
+    "remote-containers.rebuildContainerNoCache",
+    "remote-containers.rebuildAndReopenInContainer",
+    "remote-containers.rebuildNoCacheAndReopenInContainer",
+    "remote-containers.revealLogTerminal"
+   ],
+   "settings": [
+    "dev.containers.dockerPath",
+    "dev.containers.executeInWSL",
+    "dev.containers.features",
+    "dev.containers.mountWaylandSocket"
+   ],
+   "views": [
+    "targetsContainers",
+    "detailsContainers"
+   ],
+   "menus": [
+    "commandPalette",
+    "statusBar/remoteIndicator",
+    "view/item/context",
+    "view/title"
+   ],
+   "contextKeys": [
+    "hideRebuildCommands",
+    "remoteName"
+   ],
+   "authorities": [
+    "dev-container"
+   ],
+   "other": [
+    "rebuild-and-reopen vs in-container pair",
+    "no-cache variants",
+    "workspace trust request before and-reopen"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage",
+    "window.withProgress",
+    "commands.executeCommand",
+    "workspace.workspaceFile"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker ps",
+    "docker inspect",
+    "docker stop",
+    "docker exec",
+    "docker run",
+    "docker compose",
+    "docker volume",
+    "git"
+   ],
+   "network": [
+    "mcr.microsoft.com (indirect)"
+   ],
+   "remoteFiles": [
+    "/mnt/wsl docker-desktop bind mounts path"
+   ],
+   "localFiles": [
+    ".devcontainer/devcontainer.json",
+    "remoteContainers log file"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0401",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0415",
+   "remote-containers#F-0416",
+   "remote-containers#F-0106",
+   "remote-containers#F-0201",
+   "remote-containers#F-0202",
+   "remote-containers#F-0303",
+   "remote-containers#F-0402",
+   "remote-containers#F-0404",
+   "remote-containers#F-0109"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.rebuild-commands",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 9,
+  "notes": "Four commands with window-kind gating; replaces container then reconnects. Context key hideRebuildCommands never set by policy. Commands still run when hidden if invoked directly.",
+  "questions": [
+   "Should hideRebuildCommands be defined at all if nothing sets it?",
+   "What data survives a rebuild: volumes, caches, named mounts?",
+   "Behaviour when rebuild is invoked from a window kind where it is hidden (R-46) for each command?"
+  ]
+ },
+ {
+  "id": "F-0408",
+  "issue": 27,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Container startup orchestration and progress reporting",
+  "epic": "E04",
+  "acCount": 27,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.executeInWSL"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "progress notification Reading configuration (cancellable)",
+    "progress notification Connecting to Dev Container",
+    "status-bar progress Configuring",
+    "named log steps",
+    "performance telemetry entry (not sent)"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.withProgress (notification and window locations)",
+    "commands.executeCommand"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker ps",
+    "docker inspect",
+    "docker stop",
+    "docker compose",
+    "buildx",
+    "git"
+   ],
+   "network": [
+    "registry pulls"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "remoteContainers log file"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0409",
+   "remote-containers#F-0410",
+   "remote-containers#F-0412",
+   "remote-containers#F-0415",
+   "remote-containers#F-0416",
+   "remote-containers#F-0419",
+   "remote-containers#F-0104",
+   "remote-containers#F-0201",
+   "remote-containers#F-0203",
+   "remote-containers#F-0204",
+   "remote-containers#F-0207",
+   "remote-containers#F-0503",
+   "remote-containers#F-0504",
+   "remote-containers#F-0701",
+   "remote-containers#F-0405",
+   "remote-containers#F-1405"
+  ],
+  "coreUi": true,
+  "candidateComponent": "containers.startup-orchestrator",
+  "candidateLibrary": "lib-log",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 4,
+  "notes": "Defines phase order and which progress surfaces show when. Several strings are never visible. Phase selection depends on discovery result and config type.",
+  "questions": [
+   "Which phases are contractually observable, given step names are log-only?",
+   "Is performanceEntry telemetry fully dropped, or kept as local log lines?"
+  ]
+ },
+ {
+  "id": "F-0410",
+  "issue": 28,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Failure handling and the recovery container",
+  "epic": "E04",
+  "acCount": 39,
+  "surfaces": {
+   "commands": [
+    "remote-containers.showRecoveryContainerNotificationReset",
+    "remote-containers.rebuildContainer",
+    "remote-containers.reopenInTunnel",
+    "workbench.action.reloadWindow (core)"
+   ],
+   "settings": [
+    "dev.containers.bootstrapImage",
+    "dev.containers.bootstrapImagePull"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [
+    "dev-container",
+    "ssh-remote",
+    "wsl",
+    "tunnel"
+   ],
+   "other": [
+    "modal failure dialog with up to four buttons",
+    "More Actions quick pick",
+    "recovery container window and notification",
+    "disconnected dev-container state"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage (modal)",
+    "window.showQuickPick",
+    "window.showInformationMessage",
+    "commands.executeCommand"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker ps",
+    "docker inspect",
+    "docker volume",
+    "docker compose",
+    "docker stop",
+    "docker image",
+    "wsl.exe",
+    "git"
+   ],
+   "network": [
+    "mcr.microsoft.com (bootstrap image)"
+   ],
+   "remoteFiles": [
+    ".devcontainer/Dockerfile",
+    "docker-compose.yml",
+    "devcontainer-lock.json"
+   ],
+   "localFiles": [
+    "devcontainer.json",
+    "remoteContainers log file",
+    "state db for notification suppression"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0406",
+   "remote-containers#F-0411",
+   "remote-containers#F-0412",
+   "remote-containers#F-0413",
+   "remote-containers#F-0415",
+   "remote-containers#F-0416",
+   "remote-containers#F-0418",
+   "remote-containers#F-0419",
+   "remote-containers#F-0704",
+   "remote-containers#F-0202",
+   "remote-containers#F-0108"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.recovery-handler",
+  "candidateLibrary": "lib-standdown",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli"
+  ],
+  "errorPaths": 8,
+  "notes": "Maps failures to three recognised texts (mount, port, generic) and offers edit, rebuild, retry. Recovery container uses a bootstrap image. Tunnel variant specified by analogy.",
+  "questions": [
+   "Which failure classes beyond mount, port and generic must the clean side recognise?",
+   "Is the recovery container a plain container or built via the same CLI path?",
+   "Edit-in-Tunnel wording was not observed; is analogy acceptable?",
+   "Spec cites reference package and telemetry paths in provenance: spec cites material not for the clean side."
+  ]
+ },
+ {
+  "id": "F-0412",
+  "issue": 29,
+  "repo": "remote-containers",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Image and Dockerfile configurations",
+  "epic": "E04",
+  "acCount": 44,
+  "surfaces": {
+   "commands": [],
+   "settings": [
+    "dev.containers.executeInWSL",
+    "dev.containers.mountWaylandSocket"
+   ],
+   "views": [],
+   "menus": [],
+   "contextKeys": [],
+   "authorities": [],
+   "other": [
+    "devcontainer.json properties image, build, build.dockerfile, build.context, build.args, build.target, build.cacheFrom, build.options, dockerFile, context",
+    "schema contribution for devcontainer.json",
+    "obsolete Debian base image error dialog"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "window.showErrorMessage",
+    "window.showQuickPick"
+   ],
+   "proposedApi": [],
+   "processes": [
+    "docker build",
+    "docker buildx",
+    "docker image",
+    "docker inspect",
+    "docker ps",
+    "docker compose"
+   ],
+   "network": [
+    "docker.io and registry pulls",
+    "deb.debian.org (obsolete repo detection text)"
+   ],
+   "remoteFiles": [
+    ".devcontainer/Dockerfile"
+   ],
+   "localFiles": [
+    "devcontainer.json",
+    "devContainer base schema json"
+   ]
+  },
+  "cites": [
+   "remote-containers#F-0301",
+   "remote-containers#F-0408",
+   "remote-containers#F-0409",
+   "remote-containers#F-0401",
+   "remote-containers#F-0402",
+   "remote-containers#F-0403",
+   "remote-containers#F-0404",
+   "remote-containers#F-0405",
+   "remote-containers#F-0407",
+   "remote-containers#F-0410",
+   "remote-containers#F-0413",
+   "remote-containers#F-0414",
+   "remote-containers#F-0416",
+   "remote-containers#F-0418",
+   "remote-containers#F-0419",
+   "remote-containers#F-0503",
+   "remote-containers#F-0202",
+   "remote-containers#F-0504",
+   "remote-containers#F-0106"
+  ],
+  "coreUi": false,
+  "candidateComponent": "containers.image-build",
+  "candidateLibrary": "none",
+  "area": "C",
+  "reuse": [
+   "devcontainers-cli",
+   "docker"
+  ],
+  "errorPaths": 8,
+  "notes": "Property semantics for image and Dockerfile builds, derived image naming and cache/target options. Most behaviour is delegable to the devcontainers CLI. Both image and build set is settled by F-0412 Q-1.",
+  "questions": [
+   "What is the derived image tag when both image and build are set (Q-1 settled): exact naming rule?",
+   "Should the clean side detect the obsolete Debian repository case itself or delegate to build output?",
+   "Which build properties must pass through unchanged to buildx?"
+  ]
+ }
+]
