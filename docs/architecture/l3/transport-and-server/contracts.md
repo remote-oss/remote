@@ -413,6 +413,16 @@ The step order is in `components.md`. Phase events are `initializing`, `download
 `copyingWithScp`, `installing`, `settingUpTunnel`, `waitingForForwarding` and `serverDownloadPercent`.
 
 Rules:
+- `connect` shows no dialog of its own for a failure. B's per-extension presenter renders `noServerSource` and
+  `invalidServerTemplate` (F-3902 rule 8) and `licenceDeclined` (F-2601 with STR:S027). `userAlreadyNotified` is
+  true only after the pre-connection script's own dialog (F-2108). The licence modal itself (V6) and the
+  authentication prompts (S7, S8) are interactions inside the connect, not failure dialogs (review of lib-authority,
+  points 1 and 2, accepted 2026-10-06).
+- `retryable` is set by A from the kind and `isReconnection`. B never interprets kinds, and shows no failure dialog
+  during reconnection.
+- `cancel` is called by B on window teardown or "Close Remote Connection". The SSH progress offers no Cancel
+  (F-2304 BR-2), and a running host-side download is not stopped (F-2304 BR-8).
+- Connected carries `tunnelFeatures` from W3 next to the tunnel factory (F-8202).
 - Every attempt makes a fresh connection when S9 reports the transport lost (F-2505 BR-1).
 - A bound wait replaces each recorded hang, pending the family rule of dossier question 7.
 
