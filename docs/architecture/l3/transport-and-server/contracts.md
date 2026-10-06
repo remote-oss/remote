@@ -29,11 +29,11 @@ lib-host, lib-product, and the pure parts of lib-ssh (S2, S5, S6, S4's parser an
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `runScript` | script text, interpreter (`posixShell`, `powershell`), environment additions, input (text, or a local file streamed as bytes to standard input), cancellation | output lines as a stream, then the exit status | `channelClosed`, `spawnFailed`, `timeout`, `cancelled` |
+| `runScript` | script text, interpreter (`posixShell`, `powershell`), environment additions, input (`ScriptInput`: `text` with its text sent as UTF-8, or `file` with a local file streamed byte for byte to standard input), cancellation | output lines as a stream, then the exit status | `channelClosed`, `spawnFailed`, `timeout`, `cancelled` |
 | `copyToHost` | local file, remote path, cancellation | done | `copyToolMissing`, `copyFailed` (with the tool's message), `channelClosed`, `cancelled` |
 | `identity` | none | the key that names the host in locks and records (SSH: the host string as written; containers: the container id; WSL: the distro name) | none |
 | `platformHint` | none | `linux`, `macOS`, `windows` or `unknown` | none |
-| `clientPathOnHost` (optional) | a local file | a host path where the host reads that file directly, or `none` | none: an error means `none`; an implementation that omits the operation means `none` |
+| `clientPathOnHost` (optional) | a local file | a host path where the host reads that file directly, or `none` | none. Callers never call it directly: they use `hostPathOf(channel, file)`, which maps a missing operation and any rejection to `none` in one place |
 
 Rules:
 - A missing local file for a streamed input fails with `spawnFailed` before anything runs.
@@ -43,7 +43,10 @@ Rules:
 - A channel never retries by itself.
 - Failure kinds are closed: an implementation maps every error to one of the six kinds and keeps the original
   message as detail.
-- The library ships a recording fake that replays scripted outputs. lib-server's tests run on it alone.
+- The library ships a recording fake that replays scripted outputs, takes maps of local files and host paths, and
+  records each whole request. lib-server's tests run on it alone.
+- The shared channel suite runs the `clientPathOnHost` mapping case only for implementations whose harness declares
+  `reachesClientFiles` (WSL). The "none" case runs for all.
 
 Never: depend on any transport, the editor API, or lib-server.
 
