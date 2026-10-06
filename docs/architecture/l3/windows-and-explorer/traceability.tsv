@@ -34,7 +34,7 @@ F-4001	remote-ssh-edit	8	sshedit.language	identifiers.tables	41	64
 F-4002	remote-ssh-edit	11	sshedit.package		28	72	
 F-4003	remote-ssh-edit	16	sshedit.package	identifiers.string-tables	26	29	
 F-4101	remote-ssh-edit	9	sshedit.language		35	99	
-F-4102	remote-ssh-edit	14	sshedit.language		49	164	F-4204 and F-4001 name a different owner; matrix follows F-4102 (question)
+F-4102	remote-ssh-edit	14	sshedit.language		49	164	owns indent and folding (room disposition 2026-10-06)
 F-4201	remote-ssh-edit	10	sshedit.completion		45	115	
 F-4202	remote-ssh-edit	12	sshedit.completion		35	104	
 F-4203	remote-ssh-edit	13	sshedit.completion		24	97	
@@ -59,7 +59,7 @@ F-6503	remote-wsl	36	wsl.targets-view	authority.window-opener	22	0	WSL B part; d
 F-7901	remote-wsl	11	wsl.package	identifiers.tables; standdown.guard	0	0	WSL B part; drafts pending
 F-8001	remote-server	8	server.package	standdown.guard; authority.proposed-api-gate	26	0	given by area A; spec keeps startup activation for the check
 F-8002	remote-server	9	server.package	identifiers.command-registry	19	0	given by area A
-F-8201	remote-server	14	tunnels.explorer-endpoints	companion.protocol; authority.window-opener; tunnel client (A)	26	0	explorer side data-only; tunnel client design frozen pending the user (area A)
+F-8201	remote-server	14	tunnels.explorer-endpoints	companion.protocol; authority.window-opener; tunnel client (A)	26	0	explorer side data-only; Q1 decided: three quirks fixed; tunnel client frozen pending the user (area A)
 F-8301	remote-server	17	tunnels.web-surfaces	authority.codecs	14	0	given by area A; web-only link
 F-8302	remote-server	18	tunnels.web-surfaces		12	0	given by area A; declarative welcome and webOpener
 F-8901	remote-server	7	server.package	identifiers.tables; standdown.guard	17	0	spec keeps a startup activation for the check (constraint 26)

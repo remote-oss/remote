@@ -70,7 +70,7 @@ The workspace-trust gate moved to area C with F-0106 (lead, 2026-10-06).
 
 | Component | Responsibility | Owns | Uses |
 |---|---|---|---|
-| `sshedit.package` | Manifest identity, `extensionKind` `["ui"]`, untrusted workspaces supported, empty activation events, 14 locales, README and licence | F-4002, F-4003, F-4901 | `identifiers.tables`, `identifiers.string-tables` (no `lib-standdown`, no `lib-log`: R-54 not extended, F-4901 §6) |
+| `sshedit.package` | Manifest identity, `extensionKind` `["ui"]`, untrusted workspaces supported, empty activation events, 14 locales, README and licence | F-4002, F-4003, F-4901 | `identifiers.tables`, `identifiers.string-tables` `standdown.guard` with the standing-down key (R-77, once F-4002 and F-4901 are revised); no `lib-log` |
 | `sshedit.language` | Declarative: language `ssh_config` with aliases and associations, the TextMate grammar, the language configuration file | F-4001, F-4101, F-4102 | none at run time |
 | `sshedit.completion` | One completion provider for `ssh_config`: the keyword data list (R-53) with documentation, the tunnel snippet, the position gate, the space trigger. Nothing else is registered (R-60) | F-4201, F-4202, F-4203, F-4204, F-4902 | completion adapter |
 
@@ -78,7 +78,7 @@ The workspace-trust gate moved to area C with F-0106 (lead, 2026-10-06).
 
 | Component | Responsibility | Owns |
 |---|---|---|
-| `pack.manifest` | Code-less manifest: member ids in order, `extensionKind`, 14 locales, README and listing (R-62) | F-9001, F-9002, F-9101, F-9102, F-9103, F-9901 |
+| `pack.manifest` | Code-less manifest: member ids in order, `extensionKind`, the ADR-0007 engine floor, 14 locales, README and listing (R-62); no `browser` entry of its own (R-87 names explorer, server and wsl) | F-9001, F-9002, F-9101, F-9102, F-9103, F-9901 |
 
 ### remote-ssh (B part)
 
@@ -121,12 +121,21 @@ reopen flows (F-0406), view registration (F-0906) and identity feature (F-0101).
 
 ## 3. Decisions taken on this view (lead, 2026-10-06)
 
-1. R-54 is not extended to ssh-edit (F-4901 §6 governs): no `lib-standdown`, no `lib-log`.
-2. The guard acts at activation only, family-wide; no mid-session re-check, no containers-only hook (F-1406 §6
-   revision requested).
+1. R-54 now extends to Remote Explorer and ssh-edit with the standing-down key (R-77, option A of the gating ADR
+   draft). It supersedes the earlier "not extended" answer for ssh-edit, and it also revises F-8901 §5 and F-8001.
+   ssh-edit takes `lib-standdown` once F-4002 and F-4901 are revised; the follow-up brief waits for that text.
+2. The guard acts at activation only, family-wide; no mid-session re-check (R-78).
 3. The workspace-trust gate is area C (F-0106).
 4. Catalogue defects fixed on main (b340cb3). Where the catalogue still disagrees, this matrix governs.
 5. Moves into B accepted: F-2303, F-2304, F-2501, F-1403, F-3903, F-1406. F-2202 to A. The A/B reconciliation adds
    F-2001, F-2505, F-2509, F-8001, F-8002, F-8301, F-8302, F-6201 and F-6208 to B. It gives F-2204 to A, with
    `ssh.config-flows` as contributor.
-6. The proposed-API gate follows F-1403 §6: no success caching, a dismissal flag (F-3903 aligns).
+6. The proposed-API gate follows F-1403 §6: no success caching, a dismissal flag (F-3903 aligns). F-1403 allows the
+   one family-wide setup flow.
+7. Room dispositions for ssh-edit: F-4102 owns indent and folding; F-4202's `quickSuggestions` statements stand;
+   `activationEvents` is an empty list; U+FEFF and U+0085 behave as the specs write them.
+8. Pack: the engine floor is the ADR-0007 constant. Browser entries exist exactly where the reference manifest has
+   one: explorer, server and wsl (R-87).
+9. The R-27 lint checks against the published identifier inventories (R-81).
+10. Clauses that need a lab run (the Windows client, other platform checks) are held under D-60. They keep their
+    provisional defaults and are marked "provisional (lab)" in `contracts.md`.

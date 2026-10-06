@@ -59,7 +59,9 @@ The remote-ssh-edit suite (`tests/conformance/` in remote-oss/remote-ssh-edit) h
 
 ## Settled by the lead (2026-10-06)
 
-1. **R-54 for ssh-edit**: not extended. ssh-edit follows its accepted decision F-4901 §6 ("unsupported, no
+1. **R-54 for ssh-edit**: superseded by R-77 (2026-10-06), which extends R-54 to ssh-edit with the standing-down
+   key. Until F-4002 and F-4901 are revised, this brief stands as written; a follow-up brief adds the guard. The
+   earlier answer was: not extended. ssh-edit follows its accepted decision F-4901 §6 ("unsupported, no
    handling"): no stand-down check, no warning, no `lib-standdown` import, no gating key. If the register later
    extends R-54, F-4002 and F-4901 are revised first and the package follows.
 2. **The seven own-text keywords**: F-4902 §6's list of seven governs; §5's "two" is a wording defect reported to
@@ -83,10 +85,9 @@ Not blocking, with the answer to use:
 
 - Activation events: an empty list (F-4002 3.3).
 - Display name: D-41 verbatim.
-- Language-configuration ownership: follow F-4102 (F-4204 and F-4001 name another owner; traceability follows
-  F-4102).
-- Core's `quickSuggestions` default: core's own behaviour. The extension never sets it, and the cases were recorded
-  on 1.139.1.
+- Language-configuration ownership: F-4102 owns indent and folding (room disposition, 2026-10-06).
+- Core's `quickSuggestions` default: F-4202's statements stand (room disposition). The extension never sets it.
+- U+FEFF and U+0085: as the specs write them (room disposition).
 
 Done means the 706 cases pass in the runner against the packaged VSIX, the ADR-0003 gates are green, and the PR answers
 R1–R6.
