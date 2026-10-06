@@ -1,6 +1,7 @@
 # C4 level 3: area B components (resolvers, windows, Remote Explorer and companions)
 
-Status: first version by `remote-architect-worker-2`, 2026-10-06, against `c4-l2-containers.md` (b007348). Every
+Status: version 2 by `remote-architect-worker-2`, 2026-10-06, against `c4-l2-containers.md` (b007348). It includes the lead's
+answers of 2026-10-06 and the A/B reconciliation with `l3/transport-and-server/traceability.tsv`. Every
 feature id maps to exactly one owning component in `traceability.tsv`. Contracts of the shared libraries are in
 `contracts.md`. The two ADR drafts are in `adr-drafts/`. Component names are `<package short name>.<component>` and
 are the names the matrix and the coding briefs use.
@@ -40,9 +41,7 @@ Rules for every component:
 | `authority.window-opener` | Opens a target in the current or a new window, as folder, workspace or empty; reload; close remote | none (contributor) | every package that opens windows |
 | `authority.proposed-api-gate` | Probes, the one family-wide setup notification, the argv.json route, the per-product cache | F-1403, F-3903 (proposed moves) | containers, ssh, wsl, server, explorer |
 
-The container view also places "the workspace-trust gate" here. No area-B spec needs one: F-2001 BR-6, F-5001,
-F-8201 BR-13 and F-4002 all state that trust changes nothing for them. F-0106 (containers) is area C. Question 3 asks
-the lead to move it to area C or name its consumers.
+The workspace-trust gate moved to area C with F-0106 (lead, 2026-10-06).
 
 ### lib-companion
 
@@ -71,7 +70,7 @@ the lead to move it to area C or name its consumers.
 
 | Component | Responsibility | Owns | Uses |
 |---|---|---|---|
-| `sshedit.package` | Manifest identity, `extensionKind` `["ui"]`, untrusted workspaces supported, empty activation events, 14 locales, README and licence | F-4002, F-4003, F-4901 | `identifiers.tables`, `identifiers.string-tables`; `standdown.guard` only if R-54 is extended to it (question 1) |
+| `sshedit.package` | Manifest identity, `extensionKind` `["ui"]`, untrusted workspaces supported, empty activation events, 14 locales, README and licence | F-4002, F-4003, F-4901 | `identifiers.tables`, `identifiers.string-tables` (no `lib-standdown`, no `lib-log`: R-54 not extended, F-4901 §6) |
 | `sshedit.language` | Declarative: language `ssh_config` with aliases and associations, the TextMate grammar, the language configuration file | F-4001, F-4101, F-4102 | none at run time |
 | `sshedit.completion` | One completion provider for `ssh_config`: the keyword data list (R-53) with documentation, the tunnel snippet, the position gate, the space trigger. Nothing else is registered (R-60) | F-4201, F-4202, F-4203, F-4204, F-4902 | completion adapter |
 
@@ -85,20 +84,21 @@ the lead to move it to area C or name its consumers.
 
 | Component | Responsibility | Owns | Uses |
 |---|---|---|---|
-| `ssh.package` | Activation contract, stand-down, help and report-issue commands, `remoteHelp`, command catalogue and palette gating, localization, pack membership, packaging; no chat surface | F-2002, F-2004, F-2005, F-2006, F-2007, F-2606, F-3901, F-3904, F-3907 | `standdown.guard`, `identifiers.*`, `authority.proposed-api-gate` |
+| `ssh.package` | Activation contract, stand-down, help and report-issue commands, `remoteHelp`, command catalogue and palette gating, localization, pack membership, packaging; no chat surface | F-2001, F-2002, F-2004, F-2005, F-2006, F-2007, F-2606, F-3901, F-3904, F-3907 | `standdown.guard`, `identifiers.*`, `authority.proposed-api-gate` |
 | `ssh.connect-flows` | Host picker, `user@host` input, connect in current or new window, new window on the active host | F-2301, F-2302, F-2303 | `authority.codecs`, `authority.window-opener`, A's `listConfiguredHosts` |
-| `ssh.resolver-front` | The `ssh-remote` resolver on the resolver host, with the extension's titles and texts | F-2501 | `authority.resolver-host`, A's `connect` |
-| `ssh.window-surfaces` | Indicator entries, label formatter, opening folders, workspaces and links on a host | F-2502, F-2504 | `authority.codecs`, `authority.window-opener` |
+| `ssh.resolver-front` | The `ssh-remote` resolver on the resolver host, with the extension's titles and texts; reconnection attempts, each a fresh `connect` | F-2501, F-2505 | `authority.resolver-host`, A's `connect` |
+| `ssh.window-surfaces` | Indicator entries, label formatter, opening folders, workspaces and links on a host; the hidden "Open Web UI" command | F-2502, F-2504, F-2509 | `authority.codecs`, `authority.window-opener` |
 | `ssh.failure-ui` | The failure notification and the "More Actions..." picker, rendered from A's `Failed.reason` and `hints`; actions call A's operations | F-2601, F-2602 | `authority.resolver-host` |
 | `ssh.companion-endpoints` | Serves the five `remote-internal.*` ids, keeps the folder history in global state, pushes `setActiveFolders`, signals `sshHostsChanged` | F-2503, F-3906 | `companion.protocol`, `authority.resolver-host` (state) |
-| `ssh.config-flows` | Pickers and input for "Open SSH Configuration File..." and "Add New SSH Host...", the tab-scoped save watch, the change signal | F-2203, F-2204 | A's `configFilesInEffect`, `addHostFromCommandLine` |
+| `ssh.config-flows` | Picker for "Open SSH Configuration File...", the tab-scoped save watch, the change signal; the input box of "Add New SSH Host..." (F-2204 is owned by area A's S4, B contributes) | F-2203 | A's `configFilesInEffect`, `addHostFromCommandLine` |
 
 ### remote-server (B part)
 
 | Component | Responsibility | Owns | Uses |
 |---|---|---|---|
-| `server.package` | Identity, stand-down (with the startup activation its spec keeps, constraint 26), identifier tables | F-8901 | `standdown.guard`, `identifiers.*` |
-| `tunnels.explorer-endpoints` | Serves the nine `remote-tunnels.*` ids, the tunnel folder history in global state, connect through the window opener; tunnel data from area A's tunnel client | F-8201 | `companion.protocol`, `authority.window-opener` |
+| `server.package` | Manifest, activation (with the startup activation its spec keeps for the check, constraint 26), stand-down, identifier tables, help, settings and issue commands | F-8001, F-8002, F-8901 | `standdown.guard`, `identifiers.*` |
+| `tunnels.explorer-endpoints` | Serves the nine `remote-tunnels.*` ids, the tunnel folder history in global state, connect through the window opener. Data-only for now: the tunnel client behind it is frozen pending the user (area A, ADR-0005) | F-8201 | `companion.protocol`, `authority.window-opener` |
+| `tunnels.web-surfaces` | Web only: the Explorer welcome, the `vscode-remote` web opener declaration, "Continue Working in VS Code Desktop" | F-8301, F-8302 | `authority.codecs`, `lib-product` (`urlProtocol`) |
 
 ### remote-containers (B part)
 
@@ -116,18 +116,17 @@ reopen flows (F-0406), view registration (F-0906) and identity feature (F-0101).
 |---|---|---|
 | `wsl.package` | Identity, help commands and `remoteHelp`, stand-down | F-6003, F-7901 |
 | `wsl.targets-view` | `targetsWsl` recent folders over core's recently-opened list, connect through the window opener | F-6503 |
+| `wsl.resolver-front` | The `wsl` resolver on the resolver host; the engine behind it is area D | F-6201 |
+| `wsl.failure-ui` | The failure dialog and recovery actions, rendered from the engine's failure | F-6208 |
 
-## 3. Questions for the lead (batched)
+## 3. Decisions taken on this view (lead, 2026-10-06)
 
-1. **R-54 for ssh-edit and wsl** (constraints K2) decides whether `sshedit.package` imports `lib-standdown` and shows
-   a warning. F-4002 also says activation shows nothing. This blocks the ssh-edit brief's last line.
-2. **K1, mid-session arrival of the reference.** `standdown.guard` follows F-5901 step 5 and F-8901: it acts only at
-   activation. F-1406 §6 asks containers to notice an arrival mid-session. One family rule is needed, or an optional
-   per-package hook that only containers turns on.
-3. **The workspace-trust gate in `lib-authority`**: no area-B consumer (see 1). Move it to area C or name its users.
-4. **Catalogue fixes**: remote-ssh#14 is F-2004 (help commands), filed as a duplicate F-4102. The ssh-edit rows F-4002
-   and F-4003 carry remote-ssh component names (`ssh.activation-manifest`, `ssh.command-surface`).
-5. **Proposed moves** (matrix notes): F-2303, F-2304, F-2501, F-1403, F-1406 and F-3903 from A to B, and F-2202 from B
-   to A. Reasons are in each row.
-6. **K3, setup-flow caching** (F-1403 against F-3903): the family gate needs one rule. I propose F-3903's (cache
-   success per machine and product, never cache failure), because the gate re-probes at every activation anyway.
+1. R-54 is not extended to ssh-edit (F-4901 §6 governs): no `lib-standdown`, no `lib-log`.
+2. The guard acts at activation only, family-wide; no mid-session re-check, no containers-only hook (F-1406 §6
+   revision requested).
+3. The workspace-trust gate is area C (F-0106).
+4. Catalogue defects fixed on main (b340cb3). Where the catalogue still disagrees, this matrix governs.
+5. Moves into B accepted: F-2303, F-2304, F-2501, F-1403, F-3903, F-1406. F-2202 to A. The A/B reconciliation adds
+   F-2001, F-2505, F-2509, F-8001, F-8002, F-8301, F-8302, F-6201 and F-6208 to B. It gives F-2204 to A, with
+   `ssh.config-flows` as contributor.
+6. The proposed-API gate follows F-1403 §6: no success caching, a dismissal flag (F-3903 aligns).

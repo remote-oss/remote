@@ -3,29 +3,30 @@ F-0103	remote-containers	74	containers.package	lib-identifiers/identifiers.strin
 F-0501	remote-containers	35	authority.codecs	containers.window-identity; authority.resolver-host	28	0	codec and label formatters; payload semantics by C
 F-0504	remote-containers	36	containers.window-identity	authority.codecs; identifiers.context-keys	32	0	
 F-0507	remote-containers	106	containers.package	authority.resolver-host	36	52	declares onDebugResolve:extensionHost only
-F-1403	remote-containers	39	authority.proposed-api-gate	containers.package	0	0	PROPOSED MOVE A->B: family-wide gate accepted by the lead 2026-10-06
-F-1406	remote-containers	107	identifiers.tables	standdown.guard; containers.package	0	0	PROPOSED MOVE A->B: identifier reuse and R-54 are lib-identifiers and lib-standdown
+F-1403	remote-containers	39	authority.proposed-api-gate	containers.package	0	0	moved A->B (lead, 2026-10-06): family-wide gate accepted by the lead 2026-10-06
+F-1406	remote-containers	107	identifiers.tables	standdown.guard; containers.package	0	0	moved A->B (lead, 2026-10-06): identifier reuse and R-54 are lib-identifiers and lib-standdown
+F-2001	remote-ssh	11	ssh.package	standdown.guard; authority.proposed-api-gate	28	0	given by area A (A/B reconciliation)
 F-2002	remote-ssh	12	ssh.package	identifiers.string-tables	36	0	
-F-2004	remote-ssh	14	ssh.package	identifiers.command-registry		0	CATALOGUE DEFECT: row filed as F-4102 under remote-ssh#14
+F-2004	remote-ssh	14	ssh.package	identifiers.command-registry		0	catalogue fixed on main (b340cb3)
 F-2005	remote-ssh	15	ssh.package	identifiers.command-registry	12	0	
 F-2006	remote-ssh	16	ssh.package	identifiers.command-registry; standdown.guard	26	0	gating polarity per ADR draft stand-down-gating
 F-2007	remote-ssh	17	ssh.package		15	0	manifest extensionPack only
-F-2202	remote-ssh	29	lib-ssh (area A)	ssh.companion-endpoints; ssh.connect-flows	34	0	PROPOSED MOVE B->A: listConfiguredHosts is an A operation (agreed with worker-1)
 F-2203	remote-ssh	30	ssh.config-flows	lib-ssh configFilesInEffect (A)	31	0	B owns picker, tab-scoped save watch, sshHostsChanged
-F-2204	remote-ssh	31	ssh.config-flows	lib-ssh addHostFromCommandLine (A)	40	0	B owns input box and signal; A owns parser and Host-block writer
 F-2301	remote-ssh	34	ssh.connect-flows	authority.codecs; authority.window-opener; lib-ssh listConfiguredHosts (A)	34	0	
 F-2302	remote-ssh	35	ssh.connect-flows	authority.window-opener	34	0	
-F-2303	remote-ssh	36	ssh.connect-flows	authority.codecs; authority.window-opener	26	0	PROPOSED MOVE A->B: authority rebuild plus window opener; connection reuse is consumed, not owned
-F-2304	remote-ssh	37	authority.resolver-host	ssh.resolver-front; lib-ssh phase events (A)	34	0	PROPOSED MOVE A->B: lead ruling 2026-10-06, B renders progress, titles and cancel
-F-2501	remote-ssh	59	ssh.resolver-front	authority.codecs; authority.resolver-host; lib-ssh connect (A)	35	0	PROPOSED MOVE A->B: lead ruling 2026-10-06, codec and resolver front are B
+F-2303	remote-ssh	36	ssh.connect-flows	authority.codecs; authority.window-opener	26	0	moved A->B (lead, 2026-10-06): authority rebuild plus window opener; connection reuse is consumed, not owned
+F-2304	remote-ssh	37	authority.resolver-host	ssh.resolver-front; lib-ssh phase events (A)	34	0	moved A->B (lead, 2026-10-06): lead ruling 2026-10-06, B renders progress, titles and cancel
+F-2501	remote-ssh	59	ssh.resolver-front	authority.codecs; authority.resolver-host; lib-ssh connect (A)	35	0	moved A->B (lead, 2026-10-06): lead ruling 2026-10-06, codec and resolver front are B
 F-2502	remote-ssh	60	ssh.window-surfaces	authority.codecs	35	0	
 F-2503	remote-ssh	61	ssh.companion-endpoints	companion.endpoints	33	0	
 F-2504	remote-ssh	62	ssh.window-surfaces	authority.window-opener	32	0	
+F-2505	remote-ssh	63	ssh.resolver-front	authority.resolver-host; lib-ssh fresh connection per attempt (A)	33	0	given by area A
+F-2509	remote-ssh	67	ssh.window-surfaces	identifiers.command-registry	21	0	given by area A; hidden command, P3
 F-2601	remote-ssh	68	ssh.failure-ui	authority.resolver-host; lib-ssh failure classification (A)	37	0	
 F-2602	remote-ssh	69	ssh.failure-ui	lib-ssh hints and mitigations (A)	24	0	
 F-2606	remote-ssh	73	ssh.package		24	0	not built (F-3907): contract of absence
 F-3901	remote-ssh	78	ssh.package	identifiers.tables; standdown.guard	0	0	
-F-3903	remote-ssh	80	authority.proposed-api-gate	ssh.package	0	0	PROPOSED MOVE A->B: same as F-1403
+F-3903	remote-ssh	80	authority.proposed-api-gate	ssh.package	0	0	moved A->B (lead, 2026-10-06): same as F-1403
 F-3904	remote-ssh	81	ssh.package		0	0	packaging and release; pack membership
 F-3906	remote-ssh	83	ssh.companion-endpoints	companion.protocol	0	0	
 F-3907	remote-ssh	84	ssh.package		0	0	decision: no chat surface
@@ -52,9 +53,15 @@ F-5301	remote-explorer	16	explorer.targets-view	companion.detector	28	0	family c
 F-5901	remote-explorer	7	explorer.package	identifiers.tables; standdown.guard	19	0	
 F-5902	remote-explorer	14	companion.protocol	explorer.inbox; ssh.companion-endpoints; tunnels.explorer-endpoints	36	0	
 F-6003	remote-wsl	14	wsl.package	identifiers.command-registry	19	0	WSL B part; drafts pending
+F-6201	remote-wsl	20	wsl.resolver-front	authority.resolver-host; authority.codecs; WSL engine (area D)	26	0	given by area A; provisional until the WSL drafts
+F-6208	remote-wsl	27	wsl.failure-ui	authority.resolver-host; WSL engine (area D)	30	0	given by area A; provisional until the WSL drafts
 F-6503	remote-wsl	36	wsl.targets-view	authority.window-opener	22	0	WSL B part; drafts pending
 F-7901	remote-wsl	11	wsl.package	identifiers.tables; standdown.guard	0	0	WSL B part; drafts pending
-F-8201	remote-server	14	tunnels.explorer-endpoints	companion.protocol; authority.window-opener; tunnel client (A)	26	0	
+F-8001	remote-server	8	server.package	standdown.guard; authority.proposed-api-gate	26	0	given by area A; spec keeps startup activation for the check
+F-8002	remote-server	9	server.package	identifiers.command-registry	19	0	given by area A
+F-8201	remote-server	14	tunnels.explorer-endpoints	companion.protocol; authority.window-opener; tunnel client (A)	26	0	explorer side data-only; tunnel client design frozen pending the user (area A)
+F-8301	remote-server	17	tunnels.web-surfaces	authority.codecs	14	0	given by area A; web-only link
+F-8302	remote-server	18	tunnels.web-surfaces		12	0	given by area A; declarative welcome and webOpener
 F-8901	remote-server	7	server.package	identifiers.tables; standdown.guard	17	0	spec keeps a startup activation for the check (constraint 26)
 F-9001	remote-extensionpack	5	pack.manifest		22	0	
 F-9002	remote-extensionpack	6	pack.manifest		19	0	
