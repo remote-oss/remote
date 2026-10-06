@@ -1,6 +1,6 @@
 # Binding rulings for the implementation (extract from the family register)
 
-Extracted by remote-development on 2026-10-05 (23:20) from decisions.md (remote-oss/remote-development, private). Each entry is
+Extracted by remote-development on 2026-10-05 (23:40) from decisions.md (remote-oss/remote-development, private). Each entry is
 the register row: the decision or ruling text, then its trailing cells (who asked, options, recommendation or source) after
 an em dash. The full register carries the lab process, which the clean side never needs. Cite these ids; ask
 remote-development for anything not here.
@@ -54,6 +54,12 @@ remote-development for anything not here.
 ## D-52
 
 **DECIDED 2026-10-05 (the user's wish to remote-architect, ruled by remote-development as R-76): the reimplementation reuses @devcontainers/cli (MIT, the open reference implementation of containers.dev) for configuration parsing, features, image build, container create/start and lifecycle hooks, and the editor's CLI binaries (the VS Code OSS cli/ crate, MIT, as built by VSCodium) to download and start the server and to connect to tunnels (ADR-0005).**
+
+— the user, 2026-10-05
+
+## D-53
+
+**DECIDED 2026-10-05 (the user, directly to remote-architect): "VSCodium won't be our only editor, so we have to expect that the editor configures the URL patterns for the REH and CLI binaries" (ADR-0006, accepted). One product profile read from the running editor's product.json (lib-product, the only place a product name may appear in code) supplies names, data folders, templates, gallery and URI scheme to every resolver and to Tunnels; nothing is hard-coded per product. Server URL order stays R-47 rule 4; for the CLI a product field `cliDownloadUrlTemplate` with the same order (override setting, product field, built-in table with the OSS shape `{updateUrl}/commit:{commit}/cli-{os}-{arch}/{quality}` for VS Code behind the R-68 gate and VSCodium's release assets, dialog); conformance profiles carry a synthetic product.json so a build that hard-codes a product fails a case. R-47 amended accordingly (its CLI extension takes ADR-0006 decision 3 as its rule 4). Deferred public action: proposing to VSCodium a patch declaring `cliDownloadUrlTemplate` next to `serverDownloadUrlTemplate`, the user's call when the design is stable (D-15 forbids nothing here: that was about another project).**
 
 — the user, 2026-10-05
 
@@ -155,7 +161,7 @@ remote-development for anything not here.
 
 ## R-74
 
-**Enforcement of D-50 (the architect's choice; the user may change the numbers).** Google TS style enforced by an explicit typescript-eslint rule table with gts's Prettier settings copied (gts itself not installed: it pins ESLint 9 and enforces a thin set); JSDoc on exports and no other comment classes (jsdoc/require-jsdoc, no-warning-comments, no-inline-comments, plus three local rules: commented-out code, conversational phrases, TODO without an issue number); `_` is not an allowed identifier (the guide forbids it; unused trailing parameters are removed); id-length min 4 with a tiny fixed exception list plus an id-denylist of abbreviations (cfg, ctx, res, req, err, evt, fn, cb, tmp, val); jscpd failing on any clone of 5 lines AND 50 tokens in one run (revised 2026-10-05 from "10 lines / 75 tokens", not expressible in one run); knip plus noUnusedLocals/Parameters for dead code; c8 gates 90 % lines, 85 % branches, 90 % functions per package with a ratchet failing on a drop of more than 0.5 points; exclusions only by name with a reason, listed in the package README; six review questions R1–R6 answered in every coding PR; applies to tools/ as well as packages/.
+**Enforcement of D-50 (the architect's choice; the user may change the numbers).** Google TS style enforced by an explicit typescript-eslint rule table with gts's Prettier settings copied (gts itself not installed: it pins ESLint 9 and enforces a thin set); JSDoc on exports and no other comment classes (jsdoc rules plus three local rules no-commented-out-code, no-conversation and todo-issue in the TODO(#123) form, and multiline-comment-style; /* name= */ parameter comments allowed per the guide); ADR-0003 on main is the authoritative text; `_` is not an allowed identifier (the guide forbids it; unused trailing parameters are removed); id-length min 4 with a tiny fixed exception list plus an id-denylist of abbreviations (cfg, ctx, res, req, err, evt, fn, cb, tmp, val); jscpd failing on any clone of 5 lines AND 50 tokens in one run (revised 2026-10-05 from "10 lines / 75 tokens", not expressible in one run); knip plus noUnusedLocals/Parameters for dead code; c8 gates 90 % lines, 85 % branches, 90 % functions per package with a ratchet failing on a drop of more than 0.5 points; exclusions only by name with a reason, listed in the package README; six review questions R1–R6 answered in every coding PR; applies to tools/ as well as packages/.
 
 — remote-architect, ADR-0003, 2026-10-05.
 
