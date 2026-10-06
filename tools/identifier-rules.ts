@@ -6,6 +6,7 @@
 
 import {
   DECLARED_FILE,
+  type DeclaredIdentifiers,
   type LedgerKind,
   type MenuEntry,
   type PackageSources,
@@ -18,6 +19,12 @@ export interface RuleOutcome {
   notes: string[];
 }
 
+/** The standing-down key as a one-element list once the room has named it, else an empty list. */
+function namedStandingDownKey(declared: DeclaredIdentifiers): string[] {
+  const standingDownKey = declared.standingDownKey ?? '';
+  return standingDownKey === '' ? [] : [standingDownKey];
+}
+
 function knownIds(sources: PackageSources): Record<LedgerKind, Set<string>> {
   const {manifest, declared} = sources;
   return {
@@ -25,7 +32,7 @@ function knownIds(sources: PackageSources): Record<LedgerKind, Set<string>> {
     settings: new Set(manifest.settings.map(setting => setting.id)),
     contextKeys: new Set([
       ...declared.contextKeys.map(contextKey => contextKey.id),
-      ...(declared.standingDownKey === '' ? [] : [declared.standingDownKey]),
+      ...namedStandingDownKey(declared),
     ]),
     views: new Set(manifest.views),
     internalCommands: new Set(declared.internal.map(command => command.id)),
@@ -49,9 +56,9 @@ function ledgerProblems(sources: PackageSources): string[] {
       );
     }
   }
-  const standingDownKey = declared.standingDownKey;
+  const [standingDownKey] = namedStandingDownKey(declared);
   if (
-    standingDownKey !== '' &&
+    standingDownKey !== undefined &&
     !declared.invented.some(
       invented =>
         invented.kind === 'contextKeys' && invented.id === standingDownKey,
@@ -119,43 +126,44 @@ function occurrences(text: string, searched: string): number {
   return text.split(searched).length - 1;
 }
 
-function isUngated(
-  ungated: readonly UngatedEntry[],
-  entry: MenuEntry,
-): boolean {
-  return ungated.some(
-    exemption => exemption.menu === entry.menu && exemption.item === entry.item,
+function exempts(exemption: UngatedEntry, entry: MenuEntry): boolean {
+  return exemption.menu === entry.menu && exemption.item === entry.item;
+}
+
+/** Whether a when clause gates its entry: the reference's clause followed by the negated key, or that alone. */
+function isGated(when: string, standingDownKey: string): boolean {
+  return (
+    when === `!${standingDownKey}` ||
+    (when.endsWith(` && !${standingDownKey}`) &&
+      occurrences(when, standingDownKey) === 1)
   );
 }
 
-function gatingProblems(sources: PackageSources): string[] {
+function gatingProblems(
+  sources: PackageSources,
+  standingDownKey: string,
+): string[] {
   const {manifest, declared} = sources;
-  const standingDownKey = declared.standingDownKey;
-  const clause = ` && !${standingDownKey}`;
   const problems: string[] = [];
-  for (const entry of manifest.menuEntries) {
+  // An entry hidden with `when: "false"` shows nothing, so it cannot duplicate the reference's.
+  for (const entry of manifest.menuEntries.filter(
+    candidate => candidate.when !== 'false',
+  )) {
     const when = entry.when ?? '';
-    if (isUngated(declared.ungated, entry)) {
+    if (declared.ungated.some(exemption => exempts(exemption, entry))) {
       if (occurrences(when, standingDownKey) > 0) {
         problems.push(
           `${describeEntry(entry)} is ungated but its when clause carries '${standingDownKey}'`,
         );
       }
-    } else if (
-      !when.endsWith(clause) ||
-      occurrences(when, standingDownKey) !== 1
-    ) {
+    } else if (!isGated(when, standingDownKey)) {
       problems.push(
-        `${describeEntry(entry)} must end its when clause in '${clause}' and name the key once (stand-down gating)`,
+        `${describeEntry(entry)} must end its when clause in ' && !${standingDownKey}', or be '!${standingDownKey}', naming the key once (stand-down gating)`,
       );
     }
   }
   for (const ungated of declared.ungated) {
-    if (
-      !manifest.menuEntries.some(
-        entry => entry.menu === ungated.menu && entry.item === ungated.item,
-      )
-    ) {
+    if (!manifest.menuEntries.some(entry => exempts(ungated, entry))) {
       problems.push(
         `ungated names ${ungated.menu} entry '${ungated.item}', which the manifest does not contribute`,
       );
@@ -166,13 +174,16 @@ function gatingProblems(sources: PackageSources): string[] {
 
 /** Applies every rule to one package that has identifiers.json. */
 export function checkPackageRules(sources: PackageSources): RuleOutcome {
+  const [standingDownKey] = namedStandingDownKey(sources.declared);
   const gatingPending = sources.declared.standingDownKey === '';
   return {
     problems: [
       ...ledgerProblems(sources),
       ...internalProblems(sources),
       ...referenceProblems(sources),
-      ...(gatingPending ? [] : gatingProblems(sources)),
+      ...(standingDownKey === undefined
+        ? []
+        : gatingProblems(sources, standingDownKey)),
     ],
     notes: gatingPending
       ? ['stand-down gating pending: standingDownKey is empty']

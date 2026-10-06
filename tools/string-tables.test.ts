@@ -9,6 +9,7 @@ const LOCALES = [
   'de',
   'es',
   'fr',
+  'hu',
   'it',
   'ja',
   'ko',
@@ -18,7 +19,6 @@ const LOCALES = [
   'tr',
   'zh-cn',
   'zh-tw',
-  'hu',
 ];
 
 describe('string-tables', () => {
@@ -133,11 +133,40 @@ describe('string-tables', () => {
     });
     remove('l10n/bundle.l10n.ja.json');
     write('l10n/bundle.l10n.ko.json', {Label: 'x'});
-    write('l10n/bundle.l10n.json', {Label: 'Label'});
+    write('l10n/notes.json', {});
     deepStrictEqual(problems(), [
       'packages/remote-x/l10n/bundle.l10n.ja.json: missing',
-      "packages/remote-x/l10n/bundle.l10n.json: not a bundle of the package's locales",
       "packages/remote-x/l10n/bundle.l10n.ko.json: missing key 'Text'",
+      "packages/remote-x/l10n/notes.json: not a bundle of the package's locales",
+    ]);
+  });
+
+  it('checks every bundle against the default bundle when the package ships one', () => {
+    write('l10n/bundle.l10n.json', {
+      Label: 'Label',
+      Text: 'Text',
+      More: 'More',
+    });
+    deepStrictEqual(
+      problems(),
+      LOCALES.map(
+        locale =>
+          `packages/remote-x/l10n/bundle.l10n.${locale}.json: missing key 'More'`,
+      ),
+    );
+  });
+
+  it('reports an empty text in the default bundle', () => {
+    write('l10n/bundle.l10n.json', {Label: '', Text: 'Text'});
+    deepStrictEqual(problems(), [
+      "packages/remote-x/l10n/bundle.l10n.json: key 'Label' has no text",
+    ]);
+  });
+
+  it('reports a default bundle that is not JSON and checks no bundle against it', () => {
+    write('l10n/bundle.l10n.json', '{');
+    deepStrictEqual(unreadableFiles(), [
+      'packages/remote-x/l10n/bundle.l10n.json',
     ]);
   });
 

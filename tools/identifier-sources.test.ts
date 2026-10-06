@@ -206,7 +206,6 @@ describe('identifier-sources', () => {
       deepStrictEqual(declaredOf({source: 'x#1', reference: 'ms.x'}), {
         source: 'x#1',
         reference: 'ms.x',
-        standingDownKey: '',
         namespaces: {},
         contextKeys: [],
         infoLineCommands: [],
@@ -283,9 +282,20 @@ describe('identifier-sources', () => {
 
     it('fails on an empty source', () => {
       throws(() => declaredOf({source: ' ', reference: 'r'}), {
-        message:
-          'declared.source must be the identity decision it is reviewed against',
+        message: 'declared.source must be a non-empty string',
       });
+    });
+
+    it('fails on an exemption without a reason (stand-down gating, ungated)', () => {
+      throws(
+        () =>
+          declaredOf({
+            source: 'x',
+            reference: 'r',
+            ungated: [{menu: 'commandPalette', item: 'remote-x.a', reason: ''}],
+          }),
+        {message: 'declared.ungated[0].reason must be a non-empty string'},
+      );
     });
 
     it('fails on a missing reference', () => {

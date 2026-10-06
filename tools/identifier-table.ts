@@ -122,9 +122,10 @@ export function tableKinds(sources: PackageSources): TableKind[] {
       {id: contextKey.id, setter: contextKey.setter},
     ]),
   );
-  if (declared.standingDownKey !== '') {
-    contextKeys.set(declared.standingDownKey, {
-      id: declared.standingDownKey,
+  const standingDownKey = declared.standingDownKey;
+  if (standingDownKey !== undefined && standingDownKey !== '') {
+    contextKeys.set(standingDownKey, {
+      id: standingDownKey,
       setter: 'extension',
     });
   }
@@ -196,14 +197,14 @@ export function tableKinds(sources: PackageSources): TableKind[] {
       ),
     ),
   ];
-  if (declared.reference !== '' && declared.standingDownKey !== '') {
+  if (standingDownKey !== undefined && declared.reference !== '') {
     kinds.push({
       name: 'standDown',
       documentation:
-        'The reference extension and the standing-down key (R-54).',
+        'The reference extension and the standing-down key, empty while the room has not named it (R-54).',
       entries: new Map<string, TableValue>([
         ['reference', declared.reference],
-        ['contextKey', declared.standingDownKey],
+        ['contextKey', standingDownKey],
       ]),
     });
   }

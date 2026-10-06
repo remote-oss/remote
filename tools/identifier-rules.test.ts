@@ -12,11 +12,34 @@ const STANDING_DOWN_LEDGER = {
 } as const;
 
 describe('identifier-rules', () => {
-  it('passes a package without identifiers and notes the pending gating', () => {
-    deepStrictEqual(checkPackageRules(syntheticSources()), {
-      problems: [],
-      notes: ['stand-down gating pending: standingDownKey is empty'],
-    });
+  it('passes a package that never stands down, with no gating and no note (F-4901 §6)', () => {
+    deepStrictEqual(
+      checkPackageRules(
+        syntheticSources({
+          manifest: {
+            menuEntries: [{menu: 'commandPalette', item: 'remote-x.open'}],
+          },
+        }),
+      ),
+      {problems: [], notes: []},
+    );
+  });
+
+  it('notes the gating as pending while the standing-down key is empty', () => {
+    deepStrictEqual(
+      checkPackageRules(
+        syntheticSources({
+          manifest: {
+            menuEntries: [{menu: 'commandPalette', item: 'remote-x.open'}],
+          },
+          declared: {standingDownKey: ''},
+        }),
+      ),
+      {
+        problems: [],
+        notes: ['stand-down gating pending: standingDownKey is empty'],
+      },
+    );
   });
 
   describe('ledger (R-27)', () => {
@@ -264,11 +287,33 @@ describe('identifier-rules', () => {
       );
     });
 
+    it('passes a bare negated key for an entry the reference shows unconditionally (stand-down gating, decision 1)', () => {
+      deepStrictEqual(
+        gated([
+          {
+            menu: 'commandPalette',
+            item: 'remote-x.open',
+            when: `!${STANDING_DOWN_KEY}`,
+          },
+        ]),
+        [],
+      );
+    });
+
+    it('exempts an entry hidden with when false, which cannot duplicate', () => {
+      deepStrictEqual(
+        gated([
+          {menu: 'commandPalette', item: 'remote-x.hidden', when: 'false'},
+        ]),
+        [],
+      );
+    });
+
     it('reports an entry without a when clause', () => {
       deepStrictEqual(
         gated([{menu: 'viewsWelcome', item: 'remote-x.targets'}]),
         [
-          "viewsWelcome entry 'remote-x.targets' must end its when clause in ' && !remote-x.standingDown' and name the key once (stand-down gating)",
+          "viewsWelcome entry 'remote-x.targets' must end its when clause in ' && !remote-x.standingDown', or be '!remote-x.standingDown', naming the key once (stand-down gating)",
         ],
       );
     });
@@ -283,7 +328,7 @@ describe('identifier-rules', () => {
           },
         ]),
         [
-          "view/title entry 'remote-x.refresh' must end its when clause in ' && !remote-x.standingDown' and name the key once (stand-down gating)",
+          "view/title entry 'remote-x.refresh' must end its when clause in ' && !remote-x.standingDown', or be '!remote-x.standingDown', naming the key once (stand-down gating)",
         ],
       );
     });
@@ -298,7 +343,7 @@ describe('identifier-rules', () => {
           },
         ]),
         [
-          "continueEditSession entry 'remote-x.continue' must end its when clause in ' && !remote-x.standingDown' and name the key once (stand-down gating)",
+          "continueEditSession entry 'remote-x.continue' must end its when clause in ' && !remote-x.standingDown', or be '!remote-x.standingDown', naming the key once (stand-down gating)",
         ],
       );
     });
@@ -306,8 +351,8 @@ describe('identifier-rules', () => {
     it('passes an ungated entry without the key', () => {
       deepStrictEqual(
         gated(
-          [{menu: 'commandPalette', item: 'remote-x.hidden', when: 'false'}],
-          [{menu: 'commandPalette', item: 'remote-x.hidden', reason: 'hidden'}],
+          [{menu: 'view/title', item: 'remote-x.refresh', when: 'isWeb'}],
+          [{menu: 'view/title', item: 'remote-x.refresh', reason: 'web only'}],
         ),
         [],
       );
@@ -320,7 +365,7 @@ describe('identifier-rules', () => {
             {
               menu: 'commandPalette',
               item: 'remote-x.hidden',
-              when: `false && !${STANDING_DOWN_KEY}`,
+              when: `isWeb && !${STANDING_DOWN_KEY}`,
             },
           ],
           [{menu: 'commandPalette', item: 'remote-x.hidden', reason: 'hidden'}],

@@ -6,8 +6,9 @@
  *     node tools/string-tables.ts remote-ssh ...   the named package folders
  *
  * Every `%key%` of package.json has a text in package.nls.json. Each locale has package.nls.<locale>.json with
- * exactly the keys of package.nls.json. When l10n/ exists, each locale has l10n/bundle.l10n.<locale>.json, all
- * bundles hold the same keys, and the folder holds nothing else. Every text is a non-empty string. The locales are
+ * exactly the keys of package.nls.json. When l10n/ exists, each locale has l10n/bundle.l10n.<locale>.json with
+ * exactly the keys of the default bundle l10n/bundle.l10n.json, or, in a package that ships no default bundle
+ * (F-4003 AC-8), the same keys as every other locale's bundle; the folder holds nothing else. Every text is a non-empty string. The locales are
  * identifiers.json's `locales`, or the locales of the tables present when it names none.
  */
 
@@ -33,6 +34,7 @@ const NLS_SOURCE = 'package.nls.json';
 const NLS_PATTERN = /^package\.nls\.(.+)\.json$/;
 const BUNDLE_FOLDER = 'l10n';
 const BUNDLE_PATTERN = /^bundle\.l10n\.(.+)\.json$/;
+const BUNDLE_SOURCE = `${BUNDLE_FOLDER}/bundle.l10n.json`;
 
 function nlsFile(locale: string): string {
   return `package.nls.${locale}.json`;
@@ -169,18 +171,29 @@ function bundleProblems(
   if (!existsSync(folder)) {
     return;
   }
-  const expectedFiles = new Set(locales.map(bundleFile));
+  const translatedFiles = locales.map(bundleFile);
+  const knownFiles = new Set([BUNDLE_SOURCE, ...translatedFiles]);
   for (const name of readdirSync(folder)) {
     const file = `${BUNDLE_FOLDER}/${name}`;
-    if (!expectedFiles.has(file)) {
+    if (!knownFiles.has(file)) {
       problems.push({file, text: "not a bundle of the package's locales"});
     }
   }
-  const bundles = readTables(directory, [...expectedFiles], problems);
+  let sourceKeys: Set<string> | undefined;
+  if (existsSync(path.join(directory, BUNDLE_SOURCE))) {
+    const source = readTable(directory, BUNDLE_SOURCE, problems);
+    if (source === undefined) {
+      return;
+    }
+    problems.push(...emptyTextProblems(BUNDLE_SOURCE, source));
+    sourceKeys = new Set(source.keys());
+  }
+  const bundles = readTables(directory, translatedFiles, problems);
   problems.push(
     ...translationProblems(
       bundles,
-      new Set([...bundles.values()].flatMap(table => [...table.keys()])),
+      sourceKeys ??
+        new Set([...bundles.values()].flatMap(table => [...table.keys()])),
     ),
   );
 }
@@ -204,10 +217,12 @@ export function checkStringTables(root: string, folder: string): string[] {
     ]),
   ];
   if (declared !== undefined) {
-    for (const file of readdirSync(directory)) {
-      const locale = NLS_PATTERN.exec(file)?.[1];
-      if (locale !== undefined && !declared.includes(locale)) {
-        problems.push({file, text: "not a table of the package's locales"});
+    for (const locale of localesOf(readdirSync(directory), NLS_PATTERN)) {
+      if (!declared.includes(locale)) {
+        problems.push({
+          file: nlsFile(locale),
+          text: "not a table of the package's locales",
+        });
       }
     }
   }

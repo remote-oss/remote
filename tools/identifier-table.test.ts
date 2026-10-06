@@ -161,7 +161,7 @@ describe('identifier-table', () => {
       );
     });
 
-    it('adds the stand-down kind only when the reference and the key are both set', () => {
+    it('adds the stand-down kind with the named key', () => {
       const kinds = tableKinds(
         syntheticSources({
           declared: {standingDownKey: 'remote-x.standingDown'},
@@ -171,6 +171,27 @@ describe('identifier-table', () => {
         kinds.map(kind => kind.name),
         ['contextKeys', 'standDown'],
       );
+    });
+
+    it('adds the stand-down kind with an empty key while the key is pending', () => {
+      deepStrictEqual(
+        tableKinds(syntheticSources({declared: {standingDownKey: ''}})),
+        [
+          {
+            name: 'standDown',
+            documentation:
+              'The reference extension and the standing-down key, empty while the room has not named it (R-54).',
+            entries: new Map([
+              ['reference', 'ms-vscode-remote.remote-x'],
+              ['contextKey', ''],
+            ]),
+          },
+        ],
+      );
+    });
+
+    it('leaves out the stand-down kind for a package that never stands down', () => {
+      deepStrictEqual(tableKinds(syntheticSources()), []);
     });
 
     it('leaves out the stand-down kind without a reference', () => {

@@ -99,8 +99,11 @@ export interface DeclaredIdentifiers {
   source: string;
   /** The reference's extension id. */
   reference: string;
-  /** Empty until the room's identity decision names the key. */
-  standingDownKey: string;
+  /**
+   * Absent for a package that never stands down (F-4901 §6); empty while the room's identity decision has not
+   * named the key.
+   */
+  standingDownKey?: string;
   namespaces: Partial<Record<LedgerKind, string[]>>;
   contextKeys: DeclaredContextKey[];
   infoLineCommands: string[];
@@ -158,6 +161,11 @@ class JsonCursor {
 
   object(): JsonObject {
     return isObject(this.value) ? this.value : this.fail('an object');
+  }
+
+  nonEmptyString(): string {
+    const text = this.string();
+    return text.trim() === '' ? this.fail('a non-empty string') : text;
   }
 
   string(): string {
@@ -218,11 +226,14 @@ function readCommands(
   return contributes
     .field('commands')
     .optionalItems()
-    .map(command => ({
-      id: command.field('command').string(),
-      title: command.field('title').string(),
-      palette: !hidden.has(command.field('command').string()),
-    }));
+    .map(command => {
+      const commandId = command.field('command').string();
+      return {
+        id: commandId,
+        title: command.field('title').string(),
+        palette: !hidden.has(commandId),
+      };
+    });
 }
 
 function readSettings(contributes: JsonCursor): ContributedSetting[] {
@@ -380,18 +391,11 @@ const DECLARED_FIELDS = [
 /** Reads a package's `identifiers.json`; throws on an unknown field or a value of the wrong shape. */
 export function readDeclared(file: string, where: string): DeclaredIdentifiers {
   const declared = readJson(file, where).onlyFields(DECLARED_FIELDS);
-  const source = declared.field('source').string();
-  if (source.trim() === '') {
-    declared
-      .field('source')
-      .fail('the identity decision it is reviewed against');
-  }
   const standingDownKey = declared.field('standingDownKey');
   const locales = declared.field('locales');
   return {
-    source,
+    source: declared.field('source').nonEmptyString(),
     reference: declared.field('reference').string(),
-    standingDownKey: standingDownKey.isAbsent() ? '' : standingDownKey.string(),
     namespaces: readNamespaces(declared.field('namespaces')),
     contextKeys: declared
       .field('contextKeys')
@@ -444,8 +448,11 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
           .field('menu')
           .string(),
         item: entry.field('item').string(),
-        reason: entry.field('reason').string(),
+        reason: entry.field('reason').nonEmptyString(),
       })),
+    ...(standingDownKey.isAbsent()
+      ? {}
+      : {standingDownKey: standingDownKey.string()}),
     ...(locales.isAbsent()
       ? {}
       : {locales: locales.items().map(locale => locale.string())}),

@@ -107,6 +107,7 @@ describe('identifiers', () => {
       workspace.writeManifest('remote-x');
       workspace.write('packages/remote-x/identifiers.json', {
         ...DECLARED,
+        standingDownKey: '',
         infoLineCommands: ['remote-x.gone'],
       });
       deepStrictEqual(checkIdentifiers(workspace.root), {
