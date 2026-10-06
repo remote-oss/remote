@@ -57,6 +57,7 @@ From the brief, with working names. None is confirmed.
 | `lib-identifiers` | The D-14 identifiers from one table per extension; helpers to register settings and commands | all |
 | `lib-standdown` | The stand-down guard when the reference is enabled in the same window (R-54) | all |
 | `lib-authority` | Remote authority and window plumbing: resolvers, opening windows, reload | containers, ssh, wsl, server |
+| `lib-product` | The product profile read from the running editor's `product.json`: names, folders, URL templates, gallery, scheme (ADR-0006) | all resolvers, server |
 | `lib-server` | Server download, install and the licence gate (R-47, R-68) | containers, ssh, wsl, server |
 | `lib-ssh` | SSH transport and `ssh_config` parsing | ssh, ssh-edit, wsl over SSH, containers over SSH |
 | `lib-forwarding` | Port forwarding and terminals | containers, ssh, wsl, server |
