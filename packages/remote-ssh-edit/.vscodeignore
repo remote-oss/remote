@@ -1,0 +1,9 @@
+**
+!package.json
+!package.nls*.json
+!l10n/**
+!language-configuration.json
+!syntaxes/**
+!dist/extension.js
+!LICENSE
+!ThirdPartyNotices.txt

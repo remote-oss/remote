@@ -10,18 +10,13 @@
 import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {build} from 'esbuild';
+import {NODE_TARGET} from './editor-floor.ts';
 import {
   isMainModule,
   messageOf,
   packageFolders,
   REPOSITORY_ROOT,
 } from './repository.ts';
-
-/**
- * The Node.js version of the oldest editor version we support. That editor version is open until the
- * specifications are read (ADR-0002); the design sets this constant.
- */
-const NODE_TARGET = 'node22';
 
 /** Where a package keeps its entry point; the manifest's `main` points at BUNDLE_PATH once the design adds it. */
 const ENTRY_PATH = 'src/extension.ts';

@@ -1,5 +1,70 @@
 {
   "name": "remote-ssh-edit",
+  "displayName": "Remote - SSH: Editing Configuration Files",
+  "description": "%description%",
   "version": "0.0.0",
-  "private": true
+  "publisher": "remote-oss",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/remote-oss/remote.git",
+    "directory": "packages/remote-ssh-edit"
+  },
+  "bugs": {
+    "url": "https://github.com/remote-oss/remote-ssh-edit/issues"
+  },
+  "engines": {
+    "vscode": "^1.139.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "remote development",
+    "remote",
+    "ssh"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "l10n": "./l10n",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ssh_config",
+        "aliases": [
+          "SSH Config",
+          "ssh_config"
+        ],
+        "filenames": [
+          "ssh.config"
+        ],
+        "filenamePatterns": [
+          "**/.ssh/config",
+          "/etc/ssh/ssh_config"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ssh_config",
+        "scopeName": "source.config.ssh",
+        "path": "./syntaxes/ssh_config.tmLanguage.json"
+      }
+    ]
+  },
+  "devDependencies": {
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  }
 }

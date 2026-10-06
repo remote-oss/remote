@@ -1,0 +1,28 @@
+{
+  "name": "SSH Config",
+  "scopeName": "source.config.ssh",
+  "patterns": [
+    {
+      "comment": "A line whose first non-whitespace character is # (F-4101 BR-4).",
+      "match": "^[\\t\\x{0B}\\x{0C} \\x{85}\\x{A0}\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}]*#.*",
+      "name": "comment.line.hash.azcli"
+    },
+    {
+      "comment": "A whitespace-only line (F-4101 BR-5).",
+      "match": "^[\\t\\x{0B}\\x{0C} \\x{85}\\x{A0}\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}]+$",
+      "name": "string.quoted.double.ssh_config"
+    },
+    {
+      "comment": "Any other line: the first word with its indentation, then the rest of the line (F-4101 BR-6).",
+      "match": "^([\\t\\x{0B}\\x{0C} \\x{85}\\x{A0}\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}]*[^\\t\\x{0B}\\x{0C} \\x{85}\\x{A0}\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}\\n\\r]+)([\\t\\x{0B}\\x{0C} \\x{85}\\x{A0}\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}].*)?",
+      "captures": {
+        "1": {
+          "name": "support.type.property-name.ssh_config"
+        },
+        "2": {
+          "name": "string.quoted.double.ssh_config"
+        }
+      }
+    }
+  ]
+}

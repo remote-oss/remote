@@ -1,0 +1,10 @@
+{
+  "exclude": {
+    "src/extension.ts": "loads the vscode module, which exists only in the extension host; the conformance cases cover it"
+  },
+  "ratchet": {
+    "lines": 100,
+    "branches": 100,
+    "functions": 100
+  }
+}
