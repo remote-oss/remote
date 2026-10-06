@@ -79,7 +79,7 @@ Target shapes:
 | `ssh-remote` | `{alias}` or `{hostName, user?, port?}`, and `rawHostString`. Windows client user-name forms are provisional (lab) | F-2501, F-2301 BR-3/BR-4, F-2303 BR-2 |
 | `dev-container`, `attached-container`, `k8s-container` | the decoded payload of F-0501, plus an optional outer hop (`@ssh-remote+…`, `@wsl+…`, `@tunnel+…`) that is itself a `DecodedTarget` | F-0501, F-0502, F-1302 |
 | `tunnel` | `{tunnelName, distro?}` | F-8103, F-5902 §5 |
-| `wsl` | `{distro}` | remote-wsl drafts (pending) |
+| `wsl` | `{distro, outer?}`, the outer hop a `DecodedTarget` (`wsl+<d>@ssh-remote+<h>`). An empty distro means the default distro and is passed through, with no case folding: matching and the registered spelling are area D's | F-6201 BR-2, Q2 (a); F-6701 |
 
 Rule: `decode(encode(target))` returns `target`, and `encode(decode(authority))` returns `authority` for every form a
 spec fixes. A property test per family checks both directions.
@@ -89,7 +89,7 @@ spec fixes. A property test per family checks both directions.
 | Operation | Input | Output | Failure |
 |---|---|---|---|
 | `registerResolver` | `family`, `connector` (area A's `connect`, `cancel`, `revealDetails`, phase events, `transportLost` and `transportClosed` events), the family's codec, the extension's failure presenter, `cancellable` (false for `ssh-remote`, F-2304 BR-2) | a disposable | `GuardStandingDown`: nothing is registered (`lib-standdown` ran first and said "standing"). `ProposalMissing`: `resolvers` is not granted. The gate (3.4) is told and nothing is registered |
-| on each core resolve (internal) | the authority and core's attempt number | core's resolved authority: `Connected.address`, `connectionToken`, `extensionHostEnv`, plus `environmentTunnels`, `tunnelFactory` and `tunnelFeatures` (F-8202) handed to core unchanged. The host never sets `isTrusted` (F-2001 BR-12) | from `Failed`, first match wins: (1) `retryable` (A decides from the kind and `isReconnection`; the host never interprets kinds): `TemporarilyNotAvailable`; (2) `isReconnection`: plain `NotAvailable`, no presenter, core shows its own "Cannot reconnect" (F-2601 BR-9, F-2603 AC-20, F-0502); (3) `userAlreadyNotified`: `NotAvailable(handled)`; (4) otherwise the presenter shows the extension's dialog for the kind and the result is `NotAvailable(handled)` |
+| on each core resolve (internal) | the authority and core's attempt number | core's resolved authority: `Connected.address`, `connectionToken`, `extensionHostEnv`, plus `environmentTunnels`, `tunnelFactory` and `tunnelFeatures` (F-8202) handed to core unchanged. The host never sets `isTrusted` (F-2001 BR-12) | from `Failed`, first match wins: (1) `retryable` (A decides from the kind and `isReconnection`; the host never interprets kinds): `TemporarilyNotAvailable`; (2) `isReconnection`: plain `NotAvailable`, no presenter, core shows its own "Cannot reconnect" (F-2601 BR-9, F-2603 AC-20, F-0502); (3) `userAlreadyNotified`: `NotAvailable(handled)`; (4) otherwise the host awaits the presenter's outcome before it answers core: `handled` gives `NotAvailable(handled)`, `reload` reloads the window, `closeRemote` leaves the remote |
 | `currentConnection` | none | `none` or `{decodedTarget, state: resolving | connected | failed | transportLost | transportClosed}` for this window, the transport states taken from A's events | none. This is what companion queries answer from, for example `getActiveSshRemote` and F-8201 BR-3 |
 | `onFirstResolveSettled` | listener | fires once per extension-host session when the first resolve attempt ends, success or failure | none. It feeds the `setActiveFolders` push (F-3906 rule 7) |
 
@@ -101,7 +101,11 @@ Cancellation: core's resolve carries no cancellation. Progress offers Cancel onl
 tears down (the extension host deactivates, "Close Remote Connection", the window closes). Area A then ends prompts and
 processes, and a running host-side download is not stopped (F-2304 BR-8).
 
-Failure presenter (per extension, B): it renders by `Failed.kind`. The kinds `noServerSource` and
+Failure presenter (per extension, B): it renders by `Failed.kind` and returns an outcome (`handled`, `reload`,
+`closeRemote`). Remote-SSH's and remote-containers' presenters show their dialog without waiting and return `handled`
+at once, because their buttons act later (F-2601). The WSL presenter keeps the resolve open until the user picks
+(F-6208 BR-4): Retry gives `reload`, Close WSL Window gives `closeRemote`, Ignore gives `handled`. WSL kinds
+`distroUnknown` and `proxyFailed` show STR:S053 and STR:S022 from `reason` (area D's contract). The kinds `noServerSource` and
 `invalidServerTemplate` show remote-ssh F-3902 rule 8's dialog ("Open Setting" or "Cancel"), and remote-containers
 shows F-1402's no-default dialog in its place. `licenceDeclined` shows F-2601's dialog with STR:S027 (F-3902 rule 11).
 Every other kind shows F-2601's dialog (remote-ssh) or F-0502 7.E4's (remote-containers), with `reason` and `hints`.
@@ -120,7 +124,9 @@ pre-connection script's own dialog (F-2108). (Area A's review, accepted by the l
 Not in this contract: `resolveExecServer` for nested authorities (F-1302). It waits for the containers room's answer
 (lead, 2026-10-06).
 
-Connect input passed to A: `{target, rawHostString, attempt, isReconnection, windowId}`. The `Connected` and `Failed`
+Connect input passed to A (and to area D's WSL connect): `{target, rawHostString, attempt, isReconnection, windowId,
+windowWorkspace}`. `windowWorkspace` is the window's folder or workspace URI, or none, read in the local extension host
+at resolve time. Area D uses it for the `code .` environment rendezvous (F-6303 6.1). The `Connected` and `Failed`
 shapes are area A's contract and are cited here, not restated.
 
 Requirements: `extensionKind` `["ui"]` for every resolver extension, because core looks resolvers up among local
