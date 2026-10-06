@@ -59,6 +59,12 @@ The remote-ssh-edit suite (`tests/conformance/` in remote-oss/remote-ssh-edit) h
 
 ## Settled by the lead (2026-10-06)
 
+0. **Conformance target corrected (2026-10-06, suite at e8a14f3):** 811 recorded cases; the target is the **772**
+   companion-free cases in 12 profiles (F-4204 now has 67 cases; profiles `bad-homeconfig` and `bad-largefile` were
+   added); 39 companion cases (`clean-companions`, the two `sshwindow` profiles, `clean-sshrestricted`) are not run
+   until our Remote-SSH and Remote Explorer exist. The kit runs the 772 against the VSIX built from d88c960 and
+   returns a results PR.
+
 1. **R-54 for ssh-edit**: superseded by R-77 (2026-10-06), which extends R-54 to ssh-edit with the standing-down
    key. Until F-4002 and F-4901 are revised, this brief stands as written; a follow-up brief adds the guard. The
    earlier answer was: not extended. ssh-edit follows its accepted decision F-4901 §6 ("unsupported, no
