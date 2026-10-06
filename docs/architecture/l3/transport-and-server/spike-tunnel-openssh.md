@@ -1,6 +1,8 @@
 # Spike: native OpenSSH to a tunnel host through a WebSocket bridge
 
-- Status: protocol reading complete; **live test not run** (it needs the user's account decision, below)
+- Status: final. The result rests on the protocol reading; **no live test by decision**: the Tunnels room reads
+  the dev tunnels terms (§1(a), §5(a)) as allowing use only with Microsoft products, so a live test with the user's
+  account would itself be a non-Microsoft client on the service (`remote-development`, 2026-10-06)
 - Date: 2026-10-06
 - Author: `remote-coding-worker-1`; assigned by `remote-architect`, authorized by `remote-development` as an
   investigation (D-55 pending)
@@ -13,8 +15,8 @@ bytes, used as `ProxyCommand`?
 
 ## The answer
 
-**Yes at the protocol level, for the protocol the editor's tunnel host speaks (relay protocol V1). Not yet shown
-live.** With a bridge that opens the relay WebSocket and pumps bytes, `ssh -N -L <local>:127.0.0.1:31545 -o
+**Yes at the protocol level, for the protocol the editor's tunnel host speaks (relay protocol V1). Not shown live,
+by decision (Status).** With a bridge that opens the relay WebSocket and pumps bytes, `ssh -N -L <local>:127.0.0.1:31545 -o
 ProxyCommand=<bridge>` meets every requirement the host's SSH server imposes:
 
 - The client's SSH session runs end to end to the tunnel host. The relay only proxies its bytes.
@@ -107,29 +109,26 @@ compiled in ([cli] `Cargo.lock`; [russh-fork] `russh/src/negotiation.rs:55-124`)
 | 31546 | The agent host, HTTP and WebSocket | [cli] `src/constants.rs:15`, `src/tunnels/agent_host.rs:1503-1533` |
 | others | Only what the RPC `forward` method adds | [cli] `src/tunnels/port_forwarder.rs:84-102` |
 
-### 4. What the bridge did
+### 4. What a live test would have had to show
 
-**Nothing has been run.** A live test needs a tunnel host. That means `code tunnel` on this Mac, signed in through a
-device-code flow with the user's GitHub account, and a tunnel registered under it. It also means a non-Microsoft
-client talking to Microsoft's dev tunnels service, which is F-8902 Q1. `remote-development` put that decision to the
-user. Until it is made, the answer rests on the reading above.
+No bridge was built or run, and no account or tunnel was used (Status). A live test would have had to show, in
+order:
 
-The live test, if the user agrees, is planned like this. The host runs on this Mac only, never on a lab machine, and
-the tunnel is deleted afterwards.
+1. **The relay passes V1 through unchanged:** the client WebSocket with `tunnel-relay-client` and a `connect` token
+   is accepted, and the host's SSH server answers on it. The reading supports this, since the Go and Rust clients
+   use V1 with a generic SSH client, but only the service can confirm it.
+2. **OpenSSH completes the handshake:** `ssh -v` negotiates group14, rsa-sha2-512, aes-ctr and hmac-sha2-etm, and
+   accepts the host key from a known_hosts line written from the endpoint's `hostPublicKeys`.
+3. **`none` authentication is accepted,** with no other method tried.
+4. **A `direct-tcpip` channel to 127.0.0.1:31545 opens** under `-N -L`, and a client on the local port receives the
+   control RPC's `version` message.
+5. **Optionally,** `serve` and one `servermsg` round trip, which shows that the application protocol works over the
+   OpenSSH transport.
+6. **The behaviour around the edges:** keepalive replies, rekey after 1 GiB or an hour, channel close, and what
+   happens when the WebSocket drops.
 
-1. `code tunnel` with a tunnel name of our own, signed in by the user.
-2. A throwaway bridge, about 40 lines, outside the repository and never committed:
-   1. it reads the tunnel record with the user's token to get `clientRelayUri`, a `connect`-scope token and
-      `hostPublicKeys`;
-   2. it writes a known_hosts line `<alias> ssh-rsa <hostPublicKeys[0]>`;
-   3. it opens the WebSocket with `tunnel-relay-client` and the token header;
-   4. it pumps stdin/stdout to and from binary frames.
-3. `ssh -v -N -o User=tunnel -o HostKeyAlias=<alias> -o UserKnownHostsFile=<file> -o ProxyCommand=<bridge> -L
-   9000:127.0.0.1:31545 tunnel`.
-4. A short client on `localhost:9000` reads the msgpack `version` message. Seeing it proves handshake, auth and
-   channel end to end.
-5. Optionally, `serve` and one `servermsg` round trip.
-6. Logs sanitized of tokens, tunnel ids and account names.
+Step 1 is the only step the reading cannot settle on its own. Steps 2 to 5 follow from code that the host and
+OpenSSH both publish.
 
 ## What a product bridge would need
 
@@ -189,6 +188,6 @@ the tunnel is deleted afterwards.
 
 ## Open
 
-- The live test (above), if the user agrees to the account use. Its result replaces "not yet shown live" with
-  evidence or with the step that failed.
+- The user's decision on Tunnels as a whole (F-8902 Q1). This spike adds option C to it and changes no other
+  option's facts.
 - The exact source link of the licence terms PDF, for the register.
