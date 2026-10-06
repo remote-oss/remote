@@ -435,12 +435,39 @@ R4:
 
 ---
 
-## 8. remote-server tunnel client (option (a): the editor's shipped tunnel executable)
+## 8. remote-server tunnel client: blocked
 
-To be completed from the `[cli]` reading of the client mode and its sign-in. Fixed already:
-- **T1.** The executable is `<appRoot>/bin/<tunnelApplicationName>` from P1. When it is missing, the failure is the
-  relay start failure of F-8103 7.E10.
-- **T3.** The token comes from `vscode.authentication` with F-8102's provider ids and scopes. It is handed to the
-  relay without the relay storing it (F-8902).
-- **T2.** One relay per profile, reused while it answers, ending 20 to 30 seconds after its last window
-  (F-8103 BR-6).
+The `[cli]` reading of 2026-10-06 (crate at commit 2c1d4c1a) shows that option (a), the shipped tunnel executable
+as the relay, cannot meet F-8103 and F-8902 as the specs stand. The contract for T2 to T5 is therefore not written.
+Only T1 and T3's token source are fixed.
+
+Facts:
+1. **No client relay mode.** The CLI's only path that connects to someone else's tunnel is
+   `DevTunnels::connect_to_tunnel_port` ([cli] `src/tunnels/dev_tunnels.rs`). Its only caller is
+   `code agent ps|stop|logs --tunnel <name>` ([cli] `src/commands/agent.rs`), which reaches the agent-host port 31546,
+   runs one command and exits. No subcommand connects to a tunnel's server and exposes a local socket or port for the
+   editor.
+2. **`command-shell` is the other side.** It serves the host side of the control protocol (`serve`, `forward`,
+   `fs_*`, `spawn`) on a local socket or port ([cli] `src/tunnels/control_server.rs`); it is not a tunnel client.
+3. **Every token is stored.** The device-code flow, `tunnel user login --access-token` and
+   `VSCODE_CLI_ACCESS_TOKEN` all write the credential to the OS keychain or to `<cli-data-dir>/token.json`
+   ([cli] `src/auth.rs`). No route keeps a token in memory only, which F-8902's sign-in rule needs.
+4. **GitHub tokens carry the CLI's client id.** The CLI sends them as `client_id=01ab8ac9400c4e429b23 <token>`.
+   Whether the service accepts a token minted for the editor's own GitHub session under that header cannot be seen
+   from the source.
+5. **Where the executable sits.** It ships as `bin/<tunnelApplicationName>` in the editor install (`build/`
+   packaging steps). The Rust code itself never reads `tunnelApplicationName`.
+
+What remains possible, for the user through the register:
+- (a) as decided, which needs a CLI client mode that does not exist in VS Code OSS today; we would depend on a
+  future upstream change;
+- (b) the dev tunnels client library in an A3-style helper, which needs an ADR-0004 exception for
+  `@microsoft/dev-tunnels-ssh` (`tunnel-client-alternatives.md`);
+- (c) the native OpenSSH client through a small WebSocket bridge as `ProxyCommand`, speaking the relay's SSH
+  directly. This keeps ADR-0004 whole but is unverified: whether OpenSSH can authenticate to the relay's host side
+  must be shown before it counts as an option.
+
+Fixed regardless of the choice:
+- **T1.** P1 gives `tunnelApplicationName`; a missing executable is F-8103 7.E10.
+- **T3.** Tokens come only from `vscode.authentication` with F-8102's provider ids and scopes.
+- **T2.** One relay per profile with F-8103 BR-6's lifetime.

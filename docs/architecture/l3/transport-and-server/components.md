@@ -88,8 +88,8 @@ Mocha unit tests (ADR-0002 rule 7). Those components are the first coding candid
 
 ## remote-server, tunnel client
 
-The tunnel client uses option (a): the tunnel executable the editor ships. Details follow the `[cli]` reading in
-`contracts.md`.
+Blocked: option (a), the shipped tunnel executable, has no client relay mode and stores every token
+(`contracts.md` §8). The rows below hold whatever relay the user's ruling picks; T2's mechanism is open.
 
 | Id | Component | Responsibility | Kind |
 |---|---|---|---|
