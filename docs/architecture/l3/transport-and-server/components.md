@@ -67,6 +67,7 @@ Mocha unit tests (ADR-0002 rule 7). Those components are the first coding candid
 | V7 | server-runtime | Start or reuse, socket mode, readiness line, start options, remote environment fix-ups, default extensions | over H1 |
 | V8 | server-maintenance | Kill, uninstall, old-version clean-up | over H1 |
 | V9 | server-cache | The R-58 cache keys and folders for the container transport (F-0419) | pure keys; over H1 |
+| V10 | server-prefetch | Background download of the next server into the kept cache when the record says `onProductUpdate` (F-6301 6.6) | over the download port |
 
 ## lib-helper (lead's ruling 2026-10-06; draft for area C's review)
 
