@@ -81,7 +81,7 @@ export function expand(
   if (unknown !== undefined) {
     return {kind: 'unknownPlaceholder', name: unknown};
   }
-  const address = template.replace(PLACEHOLDER, (_whole, name: string) => {
+  const address = template.replace(PLACEHOLDER, (matchedText, name: string) => {
     // Every name left here is one of allowedNames, so VALUE_OF knows it.
     const field = VALUE_OF.get(name as PlaceholderName) ?? 'version';
     return values[field];
