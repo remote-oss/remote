@@ -5,7 +5,7 @@ import {checkIdentifiers, generateTables} from './identifiers.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
 const INVENTORY_NOTE =
-  'reference inventory comparison skipped: the rooms have not published their inventories';
+  'reference inventory comparison skipped: no spec repository publishes tests/conformance/identity-inventory.json yet';
 
 const DECLARED = {
   source: 'remote-oss/remote-x#1 (F-0001)',
