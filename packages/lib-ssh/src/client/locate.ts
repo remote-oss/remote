@@ -4,7 +4,6 @@
  * is remembered between lookups.
  */
 
-import path from 'node:path';
 import type {ClientPlatform} from '../config/files.ts';
 import {pathsFor} from '../config/files.ts';
 
@@ -17,31 +16,34 @@ export interface ClientCandidate {
 /** The word a banner must contain, in any letter case. */
 const CLIENT_NAME = 'openssh';
 
-/** Git for Windows' default place for its `ssh`, under the Program Files folder. */
-const GIT_FOR_WINDOWS_SSH = ['Git', 'usr', 'bin', 'ssh.exe'];
+/** Git for Windows' default place for its `ssh`. */
+const GIT_FOR_WINDOWS_SSH = 'C:\\Program Files\\Git\\usr\\bin\\ssh.exe';
 
 /** The only argument a candidate is checked with. */
 export const VERSION_ARGUMENTS: readonly string[] = ['-V'];
 
 /**
  * The candidates in the order they are tried: the setting's value exactly as written when it is not empty, the
- * bare name `ssh` that the platform looks up on PATH, and on Windows Git for Windows' default place.
+ * bare program name that the platform looks up on PATH when PATH is not empty, and on Windows Git for Windows'
+ * default place.
  */
 export function candidates(
   settingValue: string,
+  pathValue: string,
   platform: ClientPlatform,
-  programFilesFolder: string,
 ): ClientCandidate[] {
   const list: ClientCandidate[] = [];
   if (settingValue !== '') {
     list.push({program: settingValue, origin: 'setting'});
   }
-  list.push({program: 'ssh', origin: 'path'});
-  if (platform === 'windows') {
+  if (pathValue !== '') {
     list.push({
-      program: path.win32.join(programFilesFolder, ...GIT_FOR_WINDOWS_SSH),
-      origin: 'gitForWindows',
+      program: platform === 'windows' ? 'ssh.exe' : 'ssh',
+      origin: 'path',
     });
+  }
+  if (platform === 'windows') {
+    list.push({program: GIT_FOR_WINDOWS_SSH, origin: 'gitForWindows'});
   }
   return list;
 }

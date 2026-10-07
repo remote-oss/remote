@@ -50,7 +50,7 @@ interface RequestBase {
 export interface SshRequest extends RequestBase {
   purpose: SshPurpose;
   forwards?: Forward[];
-  /** The command line run on the host by a `oneShot` run. */
+  /** The command run on the host: the command of a `oneShot` run, or `sh` for a connection in terminal mode. */
   remoteProgram?: string;
 }
 
@@ -78,7 +78,10 @@ const LOOPBACK = '127.0.0.1';
  * arguments; `-F` carries the expanded configuration file when one is set.
  */
 export function buildInvocation(request: InvocationRequest): Invocation {
-  const common = configFileArguments(request);
+  const common = configFileArguments(
+    request.settings.configFile,
+    request.homeFolder,
+  );
   if (request.purpose === 'copy') {
     return copyInvocation(request, common);
   }
@@ -108,11 +111,8 @@ export function buildInvocation(request: InvocationRequest): Invocation {
   if (request.target.user !== undefined && request.target.user !== '') {
     argumentList.push('-l', request.target.user);
   }
-  if (request.target.port !== undefined) {
-    argumentList.push('-p', String(request.target.port));
-  }
   argumentList.push(request.target.host);
-  if (request.purpose === 'oneShot' && request.remoteProgram !== undefined) {
+  if (request.purpose !== 'tunnel' && request.remoteProgram !== undefined) {
     argumentList.push(request.remoteProgram);
   }
   return {
@@ -122,13 +122,36 @@ export function buildInvocation(request: InvocationRequest): Invocation {
   };
 }
 
+/** What a query for the options OpenSSH computes for a target needs. */
+export interface OptionsQueryRequest {
+  target: SshTarget;
+  /** The configuration file setting as written; empty when unset. */
+  configFile: string;
+  /** The `ssh` program the client check accepted. */
+  sshProgram: string;
+  /** The editor's home folder, against which a leading `~/` of the configuration file expands. */
+  homeFolder: string;
+}
+
+/** The `ssh -G` run that prints the options OpenSSH computes for the target, read by `parseEffectiveOptions`. */
+export function buildOptionsQuery(request: OptionsQueryRequest): Invocation {
+  return {
+    program: request.sshProgram,
+    arguments: [
+      ...configFileArguments(request.configFile, request.homeFolder),
+      '-G',
+      request.target.host,
+    ],
+    environment: {},
+  };
+}
+
 /** `-F <file>` with a leading `~/` expanded against the home folder, or nothing when no file is configured. */
-function configFileArguments(request: InvocationRequest): string[] {
-  const file = request.settings.configFile;
+function configFileArguments(file: string, homeFolder: string): string[] {
   if (file === '') {
     return [];
   }
-  return ['-F', expandHome(file, request.homeFolder)];
+  return ['-F', expandHome(file, homeFolder)];
 }
 
 /** A path with a leading `~/`, or a lone `~`, replaced by the home folder; any other path unchanged. */
@@ -154,23 +177,19 @@ function forwardArguments(forward: Forward): string[] {
   return ['-L', `${localPort}:${forward.socketPath}`];
 }
 
-/** The `scp` run: the same configuration file, then the source and the destination on the target. */
+/**
+ * The `scp` run: the same configuration file, then the source and the destination on the target, which reaches the
+ * host through its configuration entry. An IPv6 address is bracketed so that its colons are not read as the path's.
+ */
 function copyInvocation(request: CopyRunRequest, common: string[]): Invocation {
-  const argumentList = [...common];
-  if (request.target.port !== undefined) {
-    argumentList.push('-P', String(request.target.port));
-  }
   const host = request.target.host.includes(':')
     ? `[${request.target.host}]`
     : request.target.host;
-  const user =
-    request.target.user === undefined || request.target.user === ''
-      ? ''
-      : `${request.target.user}@`;
-  argumentList.push(
+  const argumentList = [
+    ...common,
     request.copy.localFile,
-    `${user}${host}:${request.copy.remotePath}`,
-  );
+    `${host}:${request.copy.remotePath}`,
+  ];
   return {
     program: request.programs.scp,
     arguments: argumentList,
