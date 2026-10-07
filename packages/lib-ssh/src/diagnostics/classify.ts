@@ -6,7 +6,6 @@
 import type {DiagnosticStringId, FailureKind} from './rules.ts';
 import {
   FAILING_CONNECTIONS_TOPIC,
-  CHANNEL_CLOSED_REASON,
   DEBUG1_PREFIX,
   FAILURE_TEXTS,
   FORWARDING_SETTING,
@@ -66,7 +65,11 @@ export function classify(
   function contains(text: string): boolean {
     return errorLines.some(line => line.includes(text));
   }
-  if (mode === 'shared' && contains(FAILURE_TEXTS.hostKeyChanged)) {
+  if (
+    mode === 'shared' &&
+    contains(FAILURE_TEXTS.hostKeyChanged) &&
+    !contains(FAILURE_TEXTS.forwardingDisabledByClient)
+  ) {
     return plain('hostKeyChanged', {id: 'S111'});
   }
   if (contains(FAILURE_TEXTS.hostKeyRejected)) {
@@ -74,59 +77,22 @@ export function classify(
   }
   const denied = lastPermissionDenied(errorLines);
   if (denied !== undefined) {
-    return {
-      kind: 'authentication',
-      reason: {text: denied},
-      hints: [
-        {
-          status: 'PermissionDenied',
-          message: 'Error: PermissionDenied',
-          details: {text: denied},
-          mitigations: [],
-          resources: [],
-        },
-      ],
-      logLines: [],
-    };
+    return withHint('authentication', 'PermissionDenied', {text: denied});
   }
   if (purpose === 'connection' && contains(FAILURE_TEXTS.invalidHostName)) {
-    return plain('unreachable', {id: 'S079'});
+    return withHint('unreachable', 'InvalidHostName', {id: 'S079'});
   }
   const network = NETWORK_RULES.find(rule => contains(rule.text));
   if (network !== undefined) {
-    return {
-      kind: network.kind,
-      reason: {id: network.reason},
-      hints: [
-        {
-          status: 'OfflineError',
-          message: 'Error: OfflineError',
-          details: {id: network.reason},
-          mitigations: [],
-          resources: [],
-        },
-      ],
-      logLines: [],
-    };
+    return withHint(network.kind, 'OfflineError', {id: network.reason});
   }
   if (
     mode === 'terminal' &&
     contains(FAILURE_TEXTS.forwardingDisabledByClient)
   ) {
-    return {
-      kind: 'forwardingDisabled',
-      reason: {id: 'S107'},
-      hints: [
-        {
-          status: 'MitmPortForwardingDisabled',
-          message: 'Error: MitmPortForwardingDisabled',
-          details: {id: 'S107'},
-          mitigations: [],
-          resources: [],
-        },
-      ],
-      logLines: [],
-    };
+    return withHint('forwardingDisabled', 'MitmPortForwardingDisabled', {
+      id: 'S107',
+    });
   }
   if (contains(FAILURE_TEXTS.forwardingProhibited)) {
     return {
@@ -162,8 +128,8 @@ export function classify(
       logLines: [],
     };
   }
-  if (contains(FAILURE_TEXTS.channelConnectFailed)) {
-    return plain('channelClosed', {text: CHANNEL_CLOSED_REASON});
+  if (contains(FAILURE_TEXTS.connectionClosed)) {
+    return plain('channelClosed', {text: FAILURE_TEXTS.connectionClosed});
   }
   return plain('unknown');
 }
@@ -177,6 +143,28 @@ export function logLinesOf(errorLines: readonly string[]): string[] {
     line =>
       !line.startsWith(DEBUG1_PREFIX) || line.includes(SERVER_HOST_KEY_TEXT),
   );
+}
+
+/** A classification whose reason is also the details of its one hint, named by its type. */
+function withHint(
+  kind: FailureKind,
+  status: string,
+  reason: FailureReason,
+): Classification {
+  return {
+    kind,
+    reason,
+    hints: [
+      {
+        status,
+        message: `Error: ${status}`,
+        details: reason,
+        mitigations: [],
+        resources: [],
+      },
+    ],
+    logLines: [],
+  };
 }
 
 /** A classification without hints or log lines. */

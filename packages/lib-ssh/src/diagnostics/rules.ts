@@ -64,11 +64,8 @@ export const FAILURE_TEXTS = {
   forwardingDisabledByClient:
     'Port forwarding is disabled to avoid man-in-the-middle attacks',
   brokenPipe: 'send disconnect: Broken pipe',
-  channelConnectFailed: 'connect failed',
+  connectionClosed: 'Connection closed.',
 } as const;
-
-/** The reason shown when a forwarded channel fails to open on the host. */
-export const CHANNEL_CLOSED_REASON = 'Connection closed.';
 
 /** The prefix of ssh's first-level debug lines. */
 export const DEBUG1_PREFIX = 'debug1: ';
