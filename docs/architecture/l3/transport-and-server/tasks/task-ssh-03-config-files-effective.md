@@ -1,6 +1,6 @@
 # Task ssh-03: files in effect and the `ssh -G` reader (S4)
 
-Base: branch `feature/lib-ssh-pure` (3c0463a). The modules exist; this card writes their tests and fixes what fails. This card also owns the shared test helper that task ssh-02 uses.
+Base: branch `feature/lib-ssh-pure` (ff563f1), brought to the contract. The modules exist; this card writes their tests and fixes what fails. This card also owns the shared test helper that task ssh-02 uses.
 
 ## 1. Package and file boundary
 
@@ -32,7 +32,7 @@ Command `ssh -G -F rec.cfg <alias>` for `recorded` and `bare`. Keep only the lin
 
 ## 2. Contract
 
-`contracts.md` section 3, heading "### S4 config-model (parser and writer)", operations `filesInEffect` and `effectiveOptions` ("`ConnectTimeout`, `RemoteCommand`, `HostName`, `User`, `Port`, `LocalForward` as OpenSSH computes them (`ssh -G` through S3); failure `parseError`"). The contract governs. The pure half of `effectiveOptions` is the reader of the printed text; running `ssh -G` belongs to S3 and is not in this card. Branch signatures:
+`contracts.md` section 3, heading "### S4 config-model (parser and writer)", operations `filesInEffect` and `effectiveOptions` ("`ConnectTimeout`, `RemoteCommand`, `HostName`, `User`, `Port`, `LocalForward` as OpenSSH computes them (`ssh -G` through S3); failure `parseError`"). The contract governs. The pure half of `effectiveOptions` is the reader of the printed text; running `ssh -G` belongs to S3, and its argument list (`buildOptionsQuery`) is task ssh-01's; neither is in this card. Branch signatures:
 
 - `filesInEffect(configFile: string, locations: ClientLocations, reader: ConfigFileReader): FileInEffect[]`
 - `pathsFor(platform: ClientPlatform): path.PlatformPath`
@@ -48,6 +48,7 @@ Default for `filesInEffect` rows: `locations {homeFolder:'/home/dev', platform:'
 |---|---|---|
 | F-2201.BR-1 / AC-1 | `configFile ''`, port holds U and Y | `[{file:U, role:'user', includeBase:'/home/dev/.ssh', exists:true}, {file:Y, role:'system', includeBase:'/etc/ssh', exists:true}]` |
 | F-2201.AC-3 | `configFile ''`, port holds Y only | the same two entries, U with `exists:false`, Y `exists:true` |
+| F-2201.AC-3 | `configFile ''`, port holds U as `''` and Y | U `exists:true`; Y `exists:true` |
 | F-2201.BR-2 | `configFile '/srv/ssh/custom'`, file present | exactly `[{file:'/srv/ssh/custom', role:'configured', includeBase:'/srv/ssh', exists:true}]` |
 | F-2201.BR-2 | `configFile '/srv/ssh/custom'`, file missing | one entry, `exists:false`; no U, no Y |
 | F-2201.BR-3 | `configFile '~/alt'` | `file '/home/dev/alt'`, `includeBase '/home/dev'`, role `configured` |
@@ -87,12 +88,12 @@ Reviewer: remote-coding-worker-1. PR title: `lib-ssh: tests and fixes for files 
 
 ## 6. Open rows (stop and report)
 
-| # | Case | Question |
+Sent to the lead with a proposed answer; until the answer is written into section 3, the worker stops here.
+
+| # | Case | Question and proposed answer |
 |---|---|---|
-| 1 | Who builds the argument list of the `ssh -G <alias>` call (with `-F` when a file is configured)? `buildInvocation` has no purpose for it (task ssh-01) | A fifth purpose, or S3's own list? |
-| 2 | `exists` for a file that is present but empty | True or false? |
-| 3 | Windows client with no `programDataFolder` (`files.ts:75` joins an empty folder and yields a relative path) | Refuse, or default to `C:\ProgramData`? |
-| 4 | macOS file locations (the branch treats `macOS` as Linux) | Confirmed? |
-| 5 | `~\x` and `C:/x` forms of the setting on Windows; `expandHome` joins with `/` | What is the expansion? |
-| 6 | A line with a keyword and no value (`remotecommand` alone): the branch returns an empty `remoteCommand` | Absent or empty? |
-| 7 | Upper-case keywords in the text | Ignored, or folded? |
+| 3 | A Windows client with no `programDataFolder` | Proposed: default to `C:\ProgramData` (a branch change in `files.ts`) |
+| 4 | macOS file locations; F-2201 Q3 and F-2202 Q1 are open | Proposed: the Linux layout, as the branch does |
+| 5 | `~\x` and `C:/x` forms of the setting on Windows; F-2201 Q4 is open | Proposed: `~\` and `~/` expand with the Windows separator; `C:/x` as written. Shared with task ssh-01 row 4 |
+| 6 | `remotecommand` printed with no value | Proposed: absent, like `none` (a branch change in `effective.ts`) |
+| 7 | Upper-case keywords in the `ssh -G` text | Proposed: fold keywords to lower case (a branch change in `effective.ts`) |

@@ -1,6 +1,6 @@
 # Task ssh-05: the stderr classifier (S5)
 
-Base: branch `feature/lib-ssh-pure` (HEAD_SHA), brought to the contract. The modules exist; this card writes their tests and fixes what fails.
+Base: branch `feature/lib-ssh-pure` (ff563f1), brought to the contract. The modules exist; this card writes their tests and fixes what fails.
 
 ## 1. Package and file boundary
 

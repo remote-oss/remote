@@ -1,6 +1,6 @@
 # Task ssh-04: the Add New SSH Host parser and the host-block writer (S4)
 
-Base: branch `feature/lib-ssh-pure` (3c0463a). The modules exist; this card writes their tests and fixes what fails. At least one row (option parsing after the destination) is expected to fail on the branch.
+Base: branch `feature/lib-ssh-pure` (ff563f1), brought to the contract. The modules exist; this card writes their tests and fixes what fails.
 
 ## 1. Package and file boundary
 
@@ -10,11 +10,11 @@ Base: branch `feature/lib-ssh-pure` (3c0463a). The modules exist; this card writ
 | `packages/lib-ssh/src/config/writer.ts` | `writeHostBlock` |
 | `packages/lib-ssh/test/unit/add-host.test.ts`, `packages/lib-ssh/test/unit/writer.test.ts` | new |
 
-Nothing else may change (`choices.ts` included). No fixtures: every input is an inline literal of the table. Flag meanings follow the public ssh(1) and ssh_config(5) manual pages.
+Nothing else may change. No fixtures: every input is an inline literal of the table. Flag meanings follow the public ssh(1) and ssh_config(5) manual pages.
 
 ## 2. Contract
 
-`contracts.md` section 3, heading "### S4 config-model (parser and writer)", operations `parseAddHostCommand` ("the text the user typed" to "a Host block; one of the four errors of F-2204") and `writeHostBlock` ("file text, block" to "the new file text"). The contract governs. Branch signatures, both with a defaulted last parameter `choices` that the tests do not pass (section 6 row 1):
+`contracts.md` section 3, heading "### S4 config-model (parser and writer)", operations `parseAddHostCommand` ("the text the user typed" to "a Host block; one of the four errors of F-2204") and `writeHostBlock` ("file text, block" to "the new file text"). The contract governs. Branch signatures:
 
 - `parseAddHostCommand(command: string): {block: {alias, lines: {keyword, value}[]}} | {problem}`; `problem` is `{kind:'missingHost'|'unknownFlag'|'missingFlagArgument'|'optionWithoutValue', message}` or `{kind:'shellCharacter', character}`.
 - `writeHostBlock(fileText: string, block: HostBlock): string`.
@@ -87,6 +87,10 @@ Writer. B is the block alias `host4`, lines `HostName host4`, `Port 2222`; "W(..
 | F-2204.BR-13 | `Host a\nHostName x\n` | `Host` unindented, options 2 spaces |
 | F-2204.BR-14 | `Host host4\n  HostName host4\n` | B, blank line, then the existing block (both present) |
 | F-2204.BR-12 (adapted) | `  Host a\n    X 1\n` (first line indented) | B inserted at the start of that line; the line stays untouched |
+| F-2204.BR-10 | `user@host:2222` | alias host; `User user`, `Port 2222` |
+| F-2204.7.E5 | `a;b\|c` | problem `{kind:'shellCharacter', character:';'}` (the first) |
+| F-2204.BR-8 | `-L 8080 h` | alias h; `LocalForward 8080` |
+| F-2204.BR-13 | writer: `Host a\n X 1\n` (one space) | `Host host4\n HostName host4\n Port 2222\n\nHost a\n X 1\n` |
 
 ## 4. Rule for the worker
 
@@ -102,12 +106,11 @@ Reviewer: remote-coding-worker-1. PR title: `lib-ssh: tests and fixes for the ho
 
 ## 6. Open rows (stop and report)
 
-| # | Case | Question |
+Sent to the lead with a proposed answer; until the answer is written into section 3, the worker stops here.
+
+| # | Case | Question and proposed answer |
 |---|---|---|
-| 1 | The `choices` parameter and `choices.ts`: the nine switches are all fixed to the confirmed values, so their other branches are unreachable from the table and count as dead code under the coding standard | Remove the parameter and the switches (a signature change), or keep them? |
-| 2 | Order of `User` and `Port` when one destination gives both (`user@host:2222`): the branch writes `User` first | Is that the order? |
-| 3 | Bracketed IPv6: the branch drops the brackets (`user@[::1]` gives alias `::1`; `[::1]:2222` gives alias `::1`, `Port 2222`) | Brackets kept or dropped in the alias? Is the port after a bracket accepted? |
-| 4 | Malformed destinations: `host:` (empty port, the branch writes an empty `Port`), `[::1` (no closing bracket), `host:1:2` | Error, or written as typed? |
-| 5 | Several unquoted shell characters (`a;b\|c`): the branch names the first | First, or all? |
-| 6 | `-L` with fewer than three parts (`-L 8080`): the branch writes the value as typed | Error, or as typed? |
-| 7 | A file indented by one space only; a file with mixed line endings; a file holding only blanks | Indentation, line end and placement? |
+| 3 | Bracketed IPv6 (F-2204.7.E9 keeps the address whole, says nothing of the brackets) | Proposed: brackets dropped, a port after them accepted (`user@[::1]` gives alias `::1`; `[::1]:2222` gives alias `::1`, `Port 2222`), as the branch does |
+| 4 | Malformed destinations `[::1`, `host:1:2`, `host:` | Proposed: the first two written as typed (F-2204.BR-8); `host:` writes no `Port` line, since an empty one makes ssh reject the file (a branch change in `add-host.ts`) |
+| 7 | Writer: a file with mixed line endings; a file of blanks only | Proposed: CRLF when any line ends in CRLF (branch); a file of blanks only keeps its blanks and gets the block after them with no extra blank line (a branch change in `writer.ts`: test `fileText === ''`, not `trim()`) |
+| 11 | F-2204.AC-12 (second half, `ssh user@host7 -p 2200 -i k7`) and AC-23 / 7.E3 (`ssh host48 -p`) describe flags read after the destination, against BR-3's decision that parsing ends there | Proposed: BR-3 governs (row `F-2204.BR-3 (adapted)`); the spec's AC-12 second half and AC-23 are amended |

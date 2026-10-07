@@ -1,6 +1,6 @@
 # Task ssh-02: the configuration lexer and the host list (S4)
 
-Base: branch `feature/lib-ssh-pure` (3c0463a). The modules exist; this card writes their tests and fixes what fails. It needs the `memory-reader.fixture.ts` helper of task ssh-03 (the in-memory file port); until that is merged keep a local copy and do not commit it.
+Base: branch `feature/lib-ssh-pure` (ff563f1), brought to the contract. The modules exist; this card writes their tests and fixes what fails. It needs the `memory-reader.fixture.ts` helper of task ssh-03 (the in-memory file port); until that is merged keep a local copy and do not commit it.
 
 ## 1. Package and file boundary
 
@@ -82,6 +82,9 @@ Default for every host row: `configFile ''`, `locations {homeFolder:'/home/dev',
 | F-2201.AC-8 | `configFile '/srv/c'` = `Host custom`; U = `Host userhost` | custom |
 | F-2201.AC-12 | `configFile '~/alt'`; `/home/dev/alt` = `Host viaalt` | viaalt, file `/home/dev/alt` |
 | F-2201.AC-13 | (each) `configFile` `rel/config`, `~`, `$HOME/x`, `${env:HOME}/x`, `   `; U and Y define hosts | empty list (no fallback to U or Y) |
+| F-2201.BR-8 | U: `Host own`; Y: `Host "abc` | `{parseError:{file:'/etc/ssh/ssh_config', reason}}` with a non-empty reason; no hosts |
+| F-2201.BR-8 | U: `Host own`; Y: `Include ssh_config.d/*.conf`, `Host sys`; `/etc/ssh/ssh_config.d/x.conf`: `Host "abc` | own, sys; no error |
+| F-2201.AC-38 | U: the bytes `\u0000\u0001\u0002`, line end, `Host bin`; Y absent | empty list; no `parseError` |
 
 ## 4. Rule for the worker
 
@@ -97,12 +100,12 @@ Reviewer: remote-coding-worker-1. PR title: `lib-ssh: tests and fixes for the co
 
 ## 6. Open rows (stop and report)
 
-| # | Case | Question |
+Sent to the lead with a proposed answer; until the answer is written into section 3, the worker stops here.
+
+| # | Case | Question and proposed answer |
 |---|---|---|
-| 1 | An unparsable system file or system include: `hosts.ts:47-49` aborts the whole list with `parseError` for any file in effect | Same as the user file, or skip the system file and keep the user file's hosts? |
-| 2 | Wording of `parseError.reason` (the branch writes `unterminated quote after <keyword>`) | Is the text shown to the user, and in what words? |
-| 3 | `#` inside a quoted pattern (`Host "a#b"`) and in the middle of an unquoted word (`Host a#b`) | Comment or part of the name? |
-| 4 | A file that starts with binary bytes, then host lines | Which hosts are listed? |
-| 5 | A glob that meets a name starting with a dot; bracket classes such as `[a-c]` in an `Include` | Matched or not? |
-| 6 | Relative `Include`, `~/` and backslash paths on a Windows client | Which folder, which separator? |
-| 7 | Include nesting depth or file count limit | Is there one? |
+| 2 | The words of `parseError.reason`; F-2201 Q1 is open | Proposed: the branch's text, not a contract; tests assert only that it is not empty |
+| 3 | `#` inside a word: `Host "a#b"` and `Host a#b` | Proposed: `a#b` and `a`, as the branch does (F-2202.BR-1) |
+| 5 | `*` and `?` against names starting with a dot; bracket classes in `Include` | Proposed: no match on a leading dot unless the pattern starts with `.`; `[a-c]` and `[!a]` are classes, as the branch does |
+| 6 | Relative, `~/` and backslash `Include` paths on Windows; F-2202 Q2 is open | Proposed: relative against the include base with Windows joins; `~/` and `~\` against the home folder; both separators accepted |
+| 7 | A limit on `Include` nesting or file count | Proposed: none; the seen-file set already stops loops (F-2202.BR-14, F-2201.7.E5) |
