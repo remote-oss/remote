@@ -276,6 +276,17 @@ H1 implemented over S9 or S3:
 
 ## 5. lib-server
 
+### Network rule for every client-side HTTP request (2026-10-07, the user's evaluation)
+
+Every HTTP request an extension makes on the client (server archive download, prefetch, gallery, licence texts)
+goes through the editor's proxy-aware path: the extension host's patched `http`/`fetch` under
+`http.proxySupport`, so the editor's system-proxy and PAC resolution applies and the family carries no proxy
+resolution of its own. Spawned programs (`ssh`, the dev container CLI) inherit the environment. The native
+`@vscode/os-proxy-resolver` was evaluated and is not adopted; it stays a fallback candidate that needs a ruling if a
+recorded case ever shows the editor path insufficient. lib-server's V4 (archive transfer) and V10 (prefetch) and
+lib-product's licence-text fetch take an injected HTTP port that the extension wires to the editor's path; a test
+proves no module creates its own agent or reads proxy settings.
+
 ### 5.0 The server policy record
 
 Each extension passes lib-server one flat data record. lib-server never branches on which extension calls it. A
