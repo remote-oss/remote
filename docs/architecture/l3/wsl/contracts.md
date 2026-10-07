@@ -207,16 +207,28 @@ Rules:
 - A failed client download is logged with its specific reason (F-6301 Q1 (b), provisional) and never shown.
 - In `stepwise` mode a failed client download also falls back to `wget` in the distro (F-6304 Q2 (b), provisional).
 
-### D7b background-download (**provisional**)
+### D7b background-download
+
+The mechanism is area A's V10 server-prefetch and the `prefetch` field of the policy record
+(`../transport-and-server/contracts.md`, PR #35), agreed with `remote-architect-worker-1` on 2026-10-06. D7b supplies
+the remote-wsl row: `prefetch: onProductUpdate`, setting `remote.WSL.downloadInBackground`.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `tick` | every 30 s while `remote.WSL.downloadInBackground` is true | for each platform in `usageTime` younger than 14 days, the archive of the pending commit in the kept cache | none raised; logged |
-| `recordUse` | platform | updates `usageTime.<platform>` | none |
+| `wire` | the policy row, the settings snapshot, the window's lifetime | V10 started or stopped as the setting changes (F-6301 6.6 steps 3, 4) | none raised |
+| `recordUse` | platform | updates `usageTime.<platform>` after a connect, for V10's 14-day window | none |
 
-State (global state, our id): `lastUpdateCheck`, `downloadInProgress`, `usageTime.<platform>` (F-6301 BR-13). The
-source of "the pending commit" is open (dossier question 10). Until it is answered, `tick` only logs that the setting
-is on or off (F-6301 6.6 steps 1, 3, 4).
+Behaviour as V10 defines it:
+- the setting and core's `update.mode` gate it;
+- a 30 s tick and an hourly feed check;
+- a source must resolve through P3 before any feed request;
+- `skipUnaccepted` for the licence;
+- a per-user lock file next to the kept cache;
+- silent, log lines only (F-6301 BR-13).
+
+State in global state (our id): `lastUpdateCheck` and `usageTime.<platform>`. The reference's `downloadInProgress`
+flag is replaced by V10's lock file, because global state is per profile, not per user. F-6301 BR-13 calls those keys
+internal, not a contract.
 
 ### D8 shell-handoff (`scripts/wslCode.sh`, shipped text)
 
@@ -313,4 +325,4 @@ Rules:
 | A (`lib-forwarding`) | W2 opened by D5 with a dialer; W2 itself holds no rendezvous | agreed |
 | B | the `wsl` codec `{distro, outer?}`; presenter outcomes; `windowWorkspace`; resolver registered on every platform; window opener; the exec facility of an outer resolver for D9 | PR #26; exec facility open (question 3) |
 | lead (`lib-log`) | a terminal sink named "WSL" with a per-extension-host buffer; token masking (F-6002 Q1 (b)) | open |
-| register | WSL server source (question 2), nested route (question 3), background-download trigger (question 10) | routed by the lead |
+| register | WSL server source (question 2), nested route (question 3) | routed by the lead |
