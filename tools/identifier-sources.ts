@@ -460,10 +460,10 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
 }
 
 /**
- * Whether a package folder is an extension with code, and therefore needs `identifiers.json` and a generated table.
- * A library contributes nothing to a manifest, so it has neither.
+ * Whether a package folder needs `identifiers.json` and a generated table: an extension with code. A library
+ * contributes no identifiers and stands down for nothing.
  */
-export function hasSources(packageDirectory: string): boolean {
+export function needsIdentifiers(packageDirectory: string): boolean {
   return (
     !isLibraryFolder(path.basename(packageDirectory)) &&
     existsSync(path.join(packageDirectory, 'src'))

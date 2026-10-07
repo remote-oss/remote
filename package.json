@@ -8,24 +8,24 @@
     "node": ">=24.2"
   },
   "scripts": {
-    "typecheck": "tsc --build",
-    "lint": "eslint .",
+    "typecheck": "node tools/identifiers.ts && tsc --build",
+    "lint": "node tools/identifiers.ts && eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "build": "node tools/build.ts",
-    "test:unit": "mocha",
+    "build": "node tools/identifiers.ts && node tools/build.ts",
+    "test:unit": "node tools/identifiers.ts && mocha",
     "test:integration": "node tools/integration-tests.ts",
     "check-layout": "tools/check-layout",
     "dupes": "jscpd -c .jscpd.json packages tools",
-    "dead": "knip --no-progress --no-config-hints",
-    "coverage": "node tools/coverage.ts",
-    "coverage:update": "node tools/coverage.ts --update",
+    "dead": "node tools/identifiers.ts && knip --no-progress --no-config-hints",
+    "coverage": "node tools/identifiers.ts && node tools/coverage.ts",
+    "coverage:update": "node tools/identifiers.ts && node tools/coverage.ts --update",
     "lint:shell": "shellcheck tools/check-layout tools/spec-watch",
     "check-licences": "node tools/licences.ts",
     "identifiers": "node tools/identifiers.ts",
     "check-identifiers": "node tools/identifiers.ts --check",
     "check-string-tables": "node tools/string-tables.ts",
-    "package": "node tools/package-extensions.ts"
+    "package": "pnpm build && node tools/package-extensions.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

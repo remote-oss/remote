@@ -5,9 +5,10 @@
  *     node tools/identifiers.ts           write packages/<x>/src/identifiers.generated.ts
  *     node tools/identifiers.ts --check   check the sources of every package
  *
- * A package with a src/ folder must have identifiers.json and gets a table; one whose kinds are all empty gets
- * none. The check applies the rules of tools/identifier-rules.ts to every package with identifiers.json. The
- * comparison with the rooms' reference inventories is reported as skipped until the rooms publish them.
+ * An extension package with a src/ folder must have identifiers.json and gets a table; one whose kinds are all
+ * empty gets none. Libraries have neither. The check applies the rules of tools/identifier-rules.ts to every package
+ * with identifiers.json. The comparison with the rooms' reference inventories is reported as skipped until the rooms
+ * publish them.
  */
 
 import {rmSync, writeFileSync} from 'node:fs';
@@ -16,7 +17,7 @@ import {format, resolveConfig} from 'prettier';
 import {checkPackageRules} from './identifier-rules.ts';
 import {
   DECLARED_FILE,
-  hasSources,
+  needsIdentifiers,
   readPackageSources,
   type PackageSources,
 } from './identifier-sources.ts';
@@ -37,7 +38,7 @@ export interface IdentifierReport {
 const INVENTORY_NOTE =
   'reference inventory comparison skipped: no spec repository publishes tests/conformance/identity-inventory.json yet';
 
-const MISSING_DECLARED = `${DECLARED_FILE} is missing; a package with src/ needs one`;
+const MISSING_DECLARED = `${DECLARED_FILE} is missing; an extension with src/ needs one`;
 
 /** The sources of a package with code; throws when its identifiers.json is missing. */
 function sourcesWithDeclared(root: string, folder: string): PackageSources {
@@ -56,14 +57,14 @@ async function formattedTable(file: string, source: string): Promise<string> {
 }
 
 /**
- * Writes the table of every package with src/ under `<root>/packages`, removes a table whose kinds are now all
- * empty, and returns one line per package with src/. Throws on the first package whose sources cannot be read.
+ * Writes the table of every extension package with src/ under `<root>/packages`, removes a table whose kinds are now all
+ * empty, and returns one line per such package. Throws on the first package whose sources cannot be read.
  */
 export async function generateTables(root: string): Promise<string[]> {
   const outcomes: string[] = [];
   for (const folder of packageFolders(root)) {
     const directory = path.join(root, 'packages', folder);
-    if (!hasSources(directory)) {
+    if (!needsIdentifiers(directory)) {
       continue;
     }
     let source: string | undefined;
@@ -94,7 +95,7 @@ export function checkIdentifiers(root: string): IdentifierReport {
     try {
       const {manifest, declared} = readPackageSources(root, folder);
       if (declared === undefined) {
-        if (hasSources(path.join(root, 'packages', folder))) {
+        if (needsIdentifiers(path.join(root, 'packages', folder))) {
           problems.push(`packages/${folder}: ${MISSING_DECLARED}`);
         }
         continue;

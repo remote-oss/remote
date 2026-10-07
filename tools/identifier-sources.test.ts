@@ -1,7 +1,7 @@
 import {deepStrictEqual, throws} from 'node:assert';
 import path from 'node:path';
 import {
-  hasSources,
+  needsIdentifiers,
   readDeclared,
   readManifest,
   readPackageSources,
@@ -344,15 +344,15 @@ describe('identifier-sources', () => {
       });
     });
 
-    it('tells an extension with src/ from one without, and from a library', () => {
+    it('asks identifiers of an extension with src/, not of one without or of a library', () => {
       workspace.write('packages/with/src/extension.ts', '');
       workspace.writeManifest('without');
-      workspace.write('packages/lib-x/src/index.ts', '');
+      workspace.write('packages/lib-x/src/channel.ts', '');
       deepStrictEqual(
         [
-          hasSources(path.join(workspace.root, 'packages/with')),
-          hasSources(path.join(workspace.root, 'packages/without')),
-          hasSources(path.join(workspace.root, 'packages/lib-x')),
+          needsIdentifiers(path.join(workspace.root, 'packages/with')),
+          needsIdentifiers(path.join(workspace.root, 'packages/without')),
+          needsIdentifiers(path.join(workspace.root, 'packages/lib-x')),
         ],
         [true, false, false],
       );

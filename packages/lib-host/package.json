@@ -1,0 +1,10 @@
+{
+  "name": "lib-host",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing/recording-channel": "./src/testing/recording-channel.ts",
+    "./testing/channel-contract": "./src/testing/channel-contract.ts"
+  }
+}

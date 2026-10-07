@@ -59,10 +59,12 @@ describe('identifiers', () => {
       );
     });
 
-    it('reports each package with src/ and skips the others', async () => {
+    it('reports each extension with src/ and skips the others, libraries included', async () => {
       writeCodePackage('remote-x', {languages: [{id: 'ssh_config'}]});
       writeCodePackage('remote-y', {});
       workspace.writeManifest('remote-z');
+      workspace.writeManifest('lib-x');
+      workspace.write('packages/lib-x/src/channel.ts', '');
       deepStrictEqual(await generateTables(workspace.root), [
         'remote-x: src/identifiers.generated.ts',
         'remote-y: no identifiers, no table',
@@ -81,7 +83,7 @@ describe('identifiers', () => {
       workspace.write('packages/remote-x/src/extension.ts', '');
       await rejects(generateTables(workspace.root), {
         message:
-          'packages/remote-x: identifiers.json is missing; a package with src/ needs one',
+          'packages/remote-x: identifiers.json is missing; an extension with src/ needs one',
       });
     });
   });
@@ -95,11 +97,17 @@ describe('identifiers', () => {
       });
     });
 
+    it('passes a library with src/ and no identifiers.json', () => {
+      workspace.writeManifest('lib-x');
+      workspace.write('packages/lib-x/src/channel.ts', '');
+      deepStrictEqual(checkIdentifiers(workspace.root).problems, []);
+    });
+
     it('reports a package with src/ and no identifiers.json', () => {
       workspace.writeManifest('remote-x');
       workspace.write('packages/remote-x/src/extension.ts', '');
       deepStrictEqual(checkIdentifiers(workspace.root).problems, [
-        'packages/remote-x: identifiers.json is missing; a package with src/ needs one',
+        'packages/remote-x: identifiers.json is missing; an extension with src/ needs one',
       ]);
     });
 
