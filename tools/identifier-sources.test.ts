@@ -344,15 +344,17 @@ describe('identifier-sources', () => {
       });
     });
 
-    it('tells a package with src/ from one without', () => {
+    it('tells an extension with src/ from one without, and from a library', () => {
       workspace.write('packages/with/src/extension.ts', '');
       workspace.writeManifest('without');
+      workspace.write('packages/lib-x/src/index.ts', '');
       deepStrictEqual(
         [
           hasSources(path.join(workspace.root, 'packages/with')),
           hasSources(path.join(workspace.root, 'packages/without')),
+          hasSources(path.join(workspace.root, 'packages/lib-x')),
         ],
-        [true, false],
+        [true, false, false],
       );
     });
   });

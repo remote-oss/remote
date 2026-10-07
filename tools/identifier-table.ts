@@ -115,6 +115,9 @@ export function tableKinds(sources: PackageSources): TableKind[] {
   const legacyOf = new Map(
     declared.settingPairs.map(pair => [pair.current, pair]),
   );
+  const scopeOf = new Map(
+    manifest.settings.map(setting => [setting.id, setting.scope]),
+  );
   const legacyKeys = new Set(declared.settingPairs.map(pair => pair.legacy));
   const contextKeys = new Map<string, TableValue>(
     declared.contextKeys.map(contextKey => [
@@ -132,7 +135,7 @@ export function tableKinds(sources: PackageSources): TableKind[] {
   const kinds = [
     tableKind(
       'commands',
-      'The commands of `contributes.commands`: title as written, palette visibility, R-46 policy.',
+      'The commands of `contributes.commands`: title as written, palette visibility, out-of-context policy.',
       new Map(
         manifest.commands.map(command => [
           command.id,
@@ -160,7 +163,11 @@ export function tableKinds(sources: PackageSources): TableKind[] {
                 scope: setting.scope,
                 ...(pair === undefined
                   ? {}
-                  : {legacyId: pair.legacy, winner: pair.winner}),
+                  : {
+                      legacyId: pair.legacy,
+                      legacyScope: scopeOf.get(pair.legacy) ?? 'window',
+                      winner: pair.winner,
+                    }),
               },
             ];
           }),
@@ -188,7 +195,7 @@ export function tableKinds(sources: PackageSources): TableKind[] {
     ),
     tableKind(
       'internalCommands',
-      'The internal command ids of identifiers.json (F-5902 §5).',
+      'The internal command ids of identifiers.json, served or called.',
       new Map(
         declared.internal.map(command => [
           command.id,

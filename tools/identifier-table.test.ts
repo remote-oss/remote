@@ -111,7 +111,7 @@ describe('identifier-table', () => {
           manifest: {
             settings: [
               {id: 'dev.containers.dockerPath', scope: 'machine'},
-              {id: 'remote.containers.dockerPath', scope: 'machine'},
+              {id: 'remote.containers.dockerPath', scope: 'application'},
               {id: 'dev.containers.logLevel', scope: 'window'},
             ],
           },
@@ -135,10 +135,43 @@ describe('identifier-table', () => {
               id: 'dev.containers.dockerPath',
               scope: 'machine',
               legacyId: 'remote.containers.dockerPath',
+              legacyScope: 'application',
               winner: 'current',
             },
           ],
           ['logLevel', {id: 'dev.containers.logLevel', scope: 'window'}],
+        ]),
+      );
+    });
+
+    it('gives a legacy twin the default window scope when the manifest does not contribute it', () => {
+      const [settings] = tableKinds(
+        syntheticSources({
+          manifest: {settings: [{id: 'dotfiles.repository', scope: 'machine'}]},
+          declared: {
+            settingPairs: [
+              {
+                current: 'dotfiles.repository',
+                legacy: 'remote.containers.dotfiles.repository',
+                winner: 'legacy',
+              },
+            ],
+          },
+        }),
+      );
+      deepStrictEqual(
+        settings?.entries,
+        new Map([
+          [
+            'repository',
+            {
+              id: 'dotfiles.repository',
+              scope: 'machine',
+              legacyId: 'remote.containers.dotfiles.repository',
+              legacyScope: 'window',
+              winner: 'legacy',
+            },
+          ],
         ]),
       );
     });
@@ -255,7 +288,7 @@ describe('identifier-table', () => {
           '  sshConfig: "ssh_config",',
           '} as const;',
           '',
-          '/** The internal command ids of identifiers.json (F-5902 §5). */',
+          '/** The internal command ids of identifiers.json, served or called. */',
           'export const internalCommands = {',
           '  remoteInternalGet: {id: "remote-internal.get", role: "called", kind: "query"},',
           '} as const;',

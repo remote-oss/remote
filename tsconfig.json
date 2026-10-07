@@ -5,6 +5,18 @@
       "path": "tools"
     },
     {
+      "path": "packages/lib-identifiers"
+    },
+    {
+      "path": "packages/lib-identifiers/tsconfig.test.json"
+    },
+    {
+      "path": "packages/lib-standdown"
+    },
+    {
+      "path": "packages/lib-standdown/tsconfig.test.json"
+    },
+    {
       "path": "packages/remote-containers"
     },
     {
@@ -32,25 +44,19 @@
       "path": "packages/remote-ssh"
     },
     {
-      "path": "packages/remote-ssh/tsconfig.test.json"
-    },
-    {
       "path": "packages/remote-ssh-edit"
     },
     {
       "path": "packages/remote-ssh-edit/tsconfig.test.json"
     },
     {
+      "path": "packages/remote-ssh/tsconfig.test.json"
+    },
+    {
       "path": "packages/remote-wsl"
     },
     {
       "path": "packages/remote-wsl/tsconfig.test.json"
-    },
-    {
-      "path": "packages/lib-identifiers"
-    },
-    {
-      "path": "packages/lib-identifiers/tsconfig.test.json"
     }
   ]
 }

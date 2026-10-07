@@ -18,6 +18,13 @@
       ],
       "project": ["tools/**/*.ts", "*.config.ts"],
     },
+    // A library's entry is its index: its exports are the contract the extensions import, so they are not reported
+    // as unused; everything behind the index is.
+    "packages/lib-*": {
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+      "includeEntryExports": false,
+    },
     // Each package's entry point is the one tools/build.ts bundles; its tests are entries of their own.
     "packages/*": {
       "entry": ["src/extension.ts", "test/**/*.test.ts"],

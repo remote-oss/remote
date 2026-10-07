@@ -35,7 +35,7 @@ export interface IdentifierReport {
 }
 
 const INVENTORY_NOTE =
-  'reference inventory comparison skipped: the rooms have not published their inventories';
+  'reference inventory comparison skipped: no spec repository publishes tests/conformance/identity-inventory.json yet';
 
 const MISSING_DECLARED = `${DECLARED_FILE} is missing; a package with src/ needs one`;
 
