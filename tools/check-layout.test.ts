@@ -135,6 +135,38 @@ describe('check-layout', () => {
     ]);
   });
 
+  it('reports the VSCodium name in package code (ADR-0006)', () => {
+    workspace.write(
+      'packages/remote-ssh/src/server.ts',
+      "const text = 'vscodium';\n",
+    );
+    deepStrictEqual(checkLayout(workspace.root).length, 1);
+  });
+
+  it("reports the editor's site in package code (ADR-0006)", () => {
+    workspace.write(
+      'packages/remote-ssh/src/server.ts',
+      "const text = 'https://code.visualstudio.com/docs';\n",
+    );
+    deepStrictEqual(checkLayout(workspace.root).length, 1);
+  });
+
+  it('reports the server data folder in package code (ADR-0006)', () => {
+    workspace.write(
+      'packages/remote-ssh/src/server.ts',
+      "const text = '~/.vscode-server';\n",
+    );
+    deepStrictEqual(checkLayout(workspace.root).length, 1);
+  });
+
+  it('reports the second licence host in package code (ADR-0006)', () => {
+    workspace.write(
+      'packages/remote-ssh/src/server.ts',
+      "const text = 'https://vscode.download.prss.microsoft.com/x';\n",
+    );
+    deepStrictEqual(checkLayout(workspace.root).length, 1);
+  });
+
   it('allows product names and download hosts in the product table', () => {
     writePackage('lib-product');
     writeSolution([...EXTENSION_FOLDERS, 'lib-product']);

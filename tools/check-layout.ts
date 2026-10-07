@@ -148,9 +148,11 @@ function stringTableProblems(root: string, folder: string): string[] {
   }
 }
 
-// ADR-0006: product names and download hosts appear in package code only in lib-product's product table.
+// ADR-0006: product names, server folders, download hosts and release prefixes appear in package code only in
+// lib-product's product table. `codium` also covers `vscodium` and the VSCodium release prefixes;
+// `code.visualstudio.com` covers its update host; `vscode-server` covers `.vscode-server`.
 const PRODUCT_LITERAL =
-  /vscodium|update\.code\.visualstudio\.com|vscode\.download\.prss\.microsoft\.com|['"`]codium(-insiders)?['"`]/i;
+  /codium|code\.visualstudio\.com|vscode-server|vscode\.download\.prss\.microsoft\.com/i;
 const PRODUCT_TABLE = path.join(
   'packages',
   'lib-product',
