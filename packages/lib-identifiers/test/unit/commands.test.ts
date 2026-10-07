@@ -164,4 +164,14 @@ describe('registerCommands', () => {
       {message: "MissingHandler: command 'kill' has no handler"},
     );
   });
+
+  it('registers no command when one has no handler', () => {
+    throws(() =>
+      // @ts-expect-error: the table names a command the handlers leave out.
+      registerCommands(host, 'serving', COMMANDS, {
+        open: {execute: () => undefined},
+      }),
+    );
+    deepStrictEqual([...host.callbacks.keys()], []);
+  });
 });

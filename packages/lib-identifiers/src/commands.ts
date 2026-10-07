@@ -60,7 +60,7 @@ function guarded(
 /**
  * Registers every command of `commands` with its handler from `handlers`, each behind the out-of-context guard,
  * and returns one registration that undoes them all. Throws when the activation stands down, since nothing may be
- * registered then, and when a command has no handler; both are programming errors.
+ * registered then, and when a command has no handler, before registering any; both are programming errors.
  */
 export function registerCommands<
   Commands extends Readonly<Record<string, CommandEntry>>,
@@ -78,13 +78,16 @@ export function registerCommands<
   const handlerByName = new Map<string, CommandHandler>(
     Object.entries(handlers),
   );
-  const registrations = Object.entries(commands).map(([name, entry]) => {
+  const guardedCommands = Object.entries(commands).map(([name, entry]) => {
     const handler = handlerByName.get(name);
     if (handler === undefined) {
       throw new Error(`MissingHandler: command '${name}' has no handler`);
     }
-    return host.registerCommand(entry.id, guarded(host, entry, handler));
+    return {entry, handler};
   });
+  const registrations = guardedCommands.map(({entry, handler}) =>
+    host.registerCommand(entry.id, guarded(host, entry, handler)),
+  );
   return {
     dispose: () => {
       for (const registration of registrations) {
