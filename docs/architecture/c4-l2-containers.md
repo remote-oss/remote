@@ -114,7 +114,9 @@ runs as investigation; Tunnels last in the build order. D-59/R-85: ADR-0008.
 ## 7. Open at this level
 
 
-- F-1302 (containers over an SSH host): where the hop and the download run; decides whether `remote-containers`
-  imports `lib-ssh`.
+- F-1302 decided by the containers room (2026-10-07): nested authorities over the outer authority's exec server
+  (`resolveExecServer` / `getRemoteExecServer`); so the Remote-SSH (and later Tunnels) resolver provides
+  `resolveExecServer` in `lib-authority` and `lib-host` gains an exec-server channel; `remote-containers` does not
+  import `lib-ssh`. Scheduled in slice 3 (#42).
 - The WSL package's split between B and D waits for the drafts.
 - Publication and packaging (Open VSX only per F-9901/F-3904; pre-release scheme) need their ADR.
