@@ -90,7 +90,10 @@ const QUOTED_KEYWORDS = new Set(['IdentityFile', 'User']);
 /** The `-o` keyword that never becomes a line, because the destination gives it. */
 const DESTINATION_KEYWORD = 'HostName';
 
-/** Reads a typed connection command. */
+/**
+ * Reads a typed connection command. Option parsing ends at the destination; the words after it are the remote
+ * command, which is not written.
+ */
 export function parseAddHostCommand(command: string): AddHostResult {
   const split = splitWords(command);
   if ('problem' in split) {
@@ -110,13 +113,12 @@ export function parseAddHostCommand(command: string): AddHostResult {
       if (problem !== undefined) {
         return {problem};
       }
-    } else if (destination === undefined) {
+    } else {
       destination = word;
       const problem = readDestination(word, collector);
       if (problem !== undefined) {
         return {problem};
       }
-    } else {
       break;
     }
   }

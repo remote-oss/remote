@@ -1,12 +1,12 @@
 # Task ssh-05: the stderr classifier (S5)
 
-Base: branch `feature/lib-ssh-pure` (3c0463a). The modules exist; this card writes their tests and fixes what fails.
+Base: branch `feature/lib-ssh-pure` (HEAD_SHA), brought to the contract. The modules exist; this card writes their tests and fixes what fails.
 
 ## 1. Package and file boundary
 
 | File | Role |
 |---|---|
-| `packages/lib-ssh/src/diagnostics/classify.ts` | `classify`, `endWithFullStop` |
+| `packages/lib-ssh/src/diagnostics/classify.ts` | `classify`, `logLinesOf`, `endWithFullStop` |
 | `packages/lib-ssh/src/diagnostics/rules.ts` | the texts and the priority table (data; tested through `classify`, no test file of its own) |
 | `packages/lib-ssh/test/unit/diagnostics-classify.test.ts` | new |
 | `packages/lib-ssh/test/fixtures/stderr/recorded.json` | new, a list of `{source, errorLines, exitStatus}` |
@@ -17,9 +17,9 @@ Nothing else may change. Fixture origin: recorded with the worker's own OpenSSH 
 
 `contracts.md` section 3, heading "### S5 stderr-classifier", operation `classify` ("ssh's error lines of one run, in order; the run's exit status; the purpose; the connection mode (`shared` or `terminal`)" to a kind, a reason and hints). The contract governs. Branch signature:
 
-`classify(errorLines: readonly string[], exitStatus: number | undefined, purpose: 'connection'|'tunnel'|'oneShot'|'copy', mode: 'shared'|'terminal'): Classification` with `Classification = {kind, reason?: {id}|{text}, hints: FailureHint[], logLines: string[]}`; `FailureHint = {status, message: string|{id,values}, details?: id, mitigations: {id,values}[], resources: string[]}`. Reasons are string ids (`S094`...); a test pins ids, not texts.
+`classify(errorLines: readonly string[], exitStatus: number | undefined, purpose: 'connection'|'tunnel'|'oneShot'|'copy', mode: 'shared'|'terminal'): Classification` with `Classification = {kind, reason?: {id}|{text}, hints: FailureHint[], logLines: string[]}`; `FailureHint = {status, message: string|{id,values}, details?: {id}|{text}, mitigations: {id,values}[], resources: string[]}`. `logLinesOf(errorLines: readonly string[]): string[]`; `endWithFullStop(text: string): string`. Reasons are string ids (`S094`...); a test pins ids, not texts.
 
-Defaults: exit status 255, purpose `connection`, mode `shared`. `OFF(Sxxx)` stands for the hint list `[{status:'OfflineError', message:'Error: OfflineError', details:'Sxxx', mitigations:[], resources:[]}]`. A row asserts the fields it names; "plain" means `hints []` and `logLines []`. (each) means one `it` per listed input.
+Defaults: exit status 255, purpose `connection`, mode `shared`. `OFF(Sxxx)` stands for the hint list `[{status:'OfflineError', message:'Error: OfflineError', details:{id:'Sxxx'}, mitigations:[], resources:[]}]`. A row asserts the fields it names; "plain" means `hints []` and `logLines []`. (each) means one `it` per listed input.
 
 ## 3. Test table
 
@@ -38,7 +38,7 @@ Defaults: exit status 255, purpose `connection`, mode `shared`. `OFF(Sxxx)` stan
 | F-2603.7.E2 | all seven texts, one per line, in table order and in reverse | S094 both times |
 | F-2603.7.E1 | (each) `network is unreachable`; `no route to host`; `Cannot assign requested address`; `Connection refused`; `Host is down` | kind unknown, plain |
 | F-2603.BR-1 | `ssh: Could not resolve host x` (no `name`) | unknown, plain |
-| F-2205.BR-6 | purpose connection, `ssh: hostname contains invalid characters` | kind unreachable, reason S079 |
+| F-2205.BR-6 / F-2205.9 | purpose connection, `ssh: hostname contains invalid characters` | kind unreachable, reason S079, hints `[{status:'InvalidHostName', message:'Error: InvalidHostName', details:{id:'S079'}, mitigations:[], resources:[]}]` |
 | F-2205.BR-6 | (each) purpose oneShot, tunnel, copy, the same line | kind unknown, plain |
 | F-2306.BR-13 | `debug1: x`, `lab@127.0.0.1: Permission denied (publickey,password).` | kind authentication, reason `{text:'Permission denied (publickey,password).'}` |
 | F-2306.BR-13 | `Permission denied, please try again.`, `x@h: Permission denied (password).  ` (trailing blanks) | authentication, `{text:'Permission denied (password).'}` |
@@ -53,7 +53,7 @@ Defaults: exit status 255, purpose `connection`, mode `shared`. `OFF(Sxxx)` stan
 | F-2604.BR-1 | mode shared: `channel 2: open failed: administratively prohibited: open failed` | kind forwardingDisabled, no `reason`; one hint with status `AllowTcpForwardingDisabled`, message `{id:'S150', values:[]}`, mitigations `[{id:'S005', values:['AllowTcpForwarding yes','/etc/ssh/sshd_config']}, {id:'S116', values:[]}]`, exactly one entry in `resources`; `logLines ['S046']` |
 | F-2604.AC-11 | the same line in mode terminal | the same result as in mode shared |
 | F-2604.BR-2 | the same line three times, with different channel numbers | one hint, `logLines ['S046']` once |
-| F-2604.BR-6 | mode terminal: `Warning: Port forwarding is disabled to avoid man-in-the-middle attacks.` | forwardingDisabled, reason S107, hints `[{status:'MitmPortForwardingDisabled', message:'Error: MitmPortForwardingDisabled', details:'S107', mitigations:[], resources:[]}]`, `logLines []` |
+| F-2604.BR-6 | mode terminal: `Warning: Port forwarding is disabled to avoid man-in-the-middle attacks.` | forwardingDisabled, reason S107, hints `[{status:'MitmPortForwardingDisabled', message:'Error: MitmPortForwardingDisabled', details:{id:'S107'}, mitigations:[], resources:[]}]`, `logLines []` |
 | F-2604.BR-6 | mode shared, the same line | unknown, plain |
 | F-2305.AC-19 | mode terminal: the changed-key warning line, then the port forwarding line above | forwardingDisabled, S107 |
 | F-2603.7.E3 | `packet_write_wait: Connection to x port 22: send disconnect: Broken pipe` | kind brokenPipe, no `reason`; one hint `{status:'SendDisconnectBrokenPipe', message:'Error: SendDisconnectBrokenPipe', mitigations:[], resources:[]}`, no `details` |
@@ -65,6 +65,14 @@ Defaults: exit status 255, purpose `connection`, mode `shared`. `OFF(Sxxx)` stan
 | F-2603.BR-10 | `endWithFullStop('The connection timed out')`; `('Permission denied (password)')` | the text plus `.`; the text plus `.` |
 | F-2603.BR-10 | (each) `endWithFullStop` of `Der Hostname konnte nicht aufgelöst werden.`, `Really?`, `Wow!`, `日本語。`, `x．`, `x！`, `x？` | unchanged |
 | F-2603.BR-1 | recorded fixture lines | each classified as the matching row above |
+| F-2604.7.E1 | `Connection closed.` | kind channelClosed, reason `{text:'Connection closed.'}`, plain |
+| F-2604.BR-1 | `channel 3: open failed: connect failed: open failed` | kind unknown, no `reason`, plain |
+| F-2604.7.E1 | `Connection closed by 192.0.2.1 port 22` | kind unknown, no `reason`, plain |
+| F-2605.6.2 | `x@h.invalid: Permission denied (password).` | kind authentication, hints `[{status:'PermissionDenied', message:'Error: PermissionDenied', details:{text:'Permission denied (password).'}, mitigations:[], resources:[]}]` |
+| F-2601.5.0 | `Host key verification failed.` | kind hostKeyRejected, plain |
+| F-2305.BR-6 | mode shared: `@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@`, then `Warning: Port forwarding is disabled to avoid man-in-the-middle attacks.` | kind unknown, no `reason`, plain |
+| F-2109.BR-4 | `logLinesOf` of `debug1: Server host key: ssh-ed25519 SHA256:abc`, `debug1: Authenticating to h.invalid:22`, `debug2: x`, `Warning: y` | `['debug1: Server host key: ssh-ed25519 SHA256:abc', 'debug2: x', 'Warning: y']` |
+| F-2109.BR-4 | `logLinesOf([])` | `[]` |
 
 ## 4. Rule for the worker
 
@@ -80,14 +88,11 @@ Reviewer: remote-coding-worker-1. PR title: `lib-ssh: tests and fixes for the st
 
 ## 6. Open rows (stop and report)
 
-| # | Case | Question |
+Sent to the lead with a proposed answer; until the answer is written into section 3, the worker stops here.
+
+| # | Case | Question and proposed answer |
 |---|---|---|
-| 1 | `channelClosed`: the contract says "Connection closed." is `channelClosed`; the branch recognises the text `connect failed` (`rules.ts:67`, `classify.ts:151`) and gives no reason, while the dialog of that case shows "Connection closed." | Which line is recognised, and which reason (id, ssh text, none)? |
-| 2 | Contract line "Could not resolve host stays unrecognised" against the recognised "Could not resolve hostname" of the network rules | Does the contract line mean only the form without `name`? |
-| 3 | Priority between classes when lines of several classes occur (a changed-key warning with a network text; a permission-denied line with a network text): the branch order is changed key, rejected key, denied, invalid name, network, forwarding, broken pipe, channel | Is that the order? |
-| 4 | `authentication` and `hostKey*` carry no hint on the branch (`classify.ts:74-77`), while the session hint list expects a `PermissionDenied` entry whose details are the denied line; `FailureHint.details` only holds a string id | Which hints, and what type for free text details? |
-| 5 | Hints of the S079 reason and of `channelClosed` (the branch returns none) | None, or an entry? |
-| 6 | The identifier of the documentation resource of the forwarding hint (the branch uses `hangingOrFailingConnections`) | Which identifier? |
-| 7 | The "Server host key" debug line kept for the log (contract): no function exists | Which operation returns it, and what does it return? |
-| 8 | Exit status never changes the result; the changed key in shared mode with the forwarding warning (branch: S111) | Does a status of 0 with a recognised line classify? Changed-key plus forwarding warning in shared mode: S111 or none? |
-| 9 | `endWithFullStop` and its `choices` parameter are not in the contract; the other branch of the choice is unreachable | Keep, move to the caller, or drop the parameter? |
+| 3 | Priority between classes beyond the decided pairs (changed key over rejected key in shared mode, F-2305.AC-16; the forwarding warning in terminal mode, F-2305.AC-19): a denied line with a network text, a changed key with a network text | Proposed: keep the branch order (changed key, rejected key, denied, invalid name, network, forwarding, broken pipe, closed connection); a denied line with `No route to host` is `authentication` |
+| 6 | The identifier of the forwarding hint's documentation resource (F-2604.AC-3 asks for the project's own URL, still open) | Proposed: keep the topic key `hangingOrFailingConnections`; the extension maps it to the URL |
+| 8 | The exit status: does a status of 0 or `undefined` with a recognised line classify? | Proposed: yes, the status never changes the result (F-2604.BR-3 records the hint while the window still waits) |
+| 10 | `hostKeyChanged` hints: no spec lists one | Proposed: none |
