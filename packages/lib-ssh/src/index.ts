@@ -56,7 +56,7 @@ export type {
   PromptText,
 } from './prompts/classify.ts';
 export {classifyPrompt} from './prompts/classify.ts';
-export type {ClientCandidate} from './client/locate.ts';
+export type {ClientCandidate, ClientEnvironment} from './client/locate.ts';
 export {
   candidates,
   judge,

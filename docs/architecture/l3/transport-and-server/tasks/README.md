@@ -1,8 +1,7 @@
-> Status (2026-10-07, `remote-coding-worker-1`): `feature/lib-ssh-pure` is at the contract (contracts.md section 3)
-> and follows the library convention (`src/index.ts` is the contract surface; README; no behaviour switches). Of the
-> 43 open rows, 19 are now table rows decided by the contract or the specs; 24 remain, together with 3 that the
-> contract changes raised, each with a proposed answer for the lead in its card's section 6. A worker writes every
-> section 3 row and stops at section 6.
+> Status (2026-10-07, `remote-coding-worker-1`): `feature/lib-ssh-pure` is at the contract (contracts.md section 3,
+> amended with the lead's rulings of 2026-10-07) and follows the library convention. Every open row is decided: no
+> card has a section 6 row left. Rows marked (provisional) rest on a spec reading rather than a confirmed answer; the
+> lead receives their list after the cards have run.
 
 # Local-worker task cards: lib-ssh pure parts
 
@@ -30,7 +29,7 @@ Every card has exactly six sections:
 
 ## Order
 
-The sources of all six cards already exist on `feature/lib-ssh-pure` (ff563f1), so cards 01 to 06 may run in parallel. The import edges decide the order of merging:
+The sources of all six cards already exist on `feature/lib-ssh-pure` (its head), so cards 01 to 06 may run in parallel. The import edges decide the order of merging:
 
 - 03 first among the config cards: `hosts.ts` (02) and `locate.ts` (06) import `config/files.ts`, and 03 owns the shared test helper `memory-reader.fixture.ts` that 02 uses.
 - `config/files.ts` imports `expandHome` from `arguments/invocation.ts`, and `invocation.ts` imports the type `EffectiveOptions` from `config/effective.ts`: merge 01 and 03 in the same window, 01 first.
@@ -40,6 +39,8 @@ Merge order: 01, 03, 02, 04, 05, 06.
 
 ## Shared notes
 
-- `packages/lib-ssh/NOTES.md` applies. Its packaging convention (items 1 to 7: `exports`, root `tsconfig.json` pair, `coverage.json` ratchet, README, the identifiers check) is not part of any card: it is done once by the integrator before the branch merges, and no card touches `package.json`, `tsconfig*`, `coverage.json` or `knip.jsonc`. Its gate traps (property names of four characters, no `const` arrow helpers, JSDoc on public class members, five-line clones inside one file) apply to every card. Its fixture recording notes apply to cards 03, 05 and 06; the NOTES file is deleted before the merge.
+- The packaging is done on the branch (`src/index.ts`, `exports`, README, root `tsconfig.json` pair); no card touches `package.json`, `tsconfig*`, `coverage.json` or `knip.jsonc`. The integrator records the coverage ratchet (`pnpm coverage:update`) once the cards have merged; until then `pnpm coverage` fails for lib-ssh only.
+- Gate traps: property names of four characters or more; no `const` arrow helpers (`func-style`); JSDoc on public class members; jscpd also flags five-line clones inside one file. Tests import through `../../src/index.ts` where the export exists.
+- Fixture recording (cards 03, 05, 06): local `ssh -G` prints `connecttimeout none` when unset and `localforward 8080 [127.0.0.1]:80`. A `ProxyCommand` script that writes chosen lines to stderr and exits 255 reproduces exact texts (an inline command breaks, because ssh expands `%`). An `SSH_ASKPASS` script with `SSH_ASKPASS_REQUIRE=force` records the real question texts against a local sshd; OpenSSH 10.3 prints the colon fingerprint form. Remove the local host-key fingerprint, user name and home paths from every recording before commit; record only against 127.0.0.1, `.invalid` names and TEST-NET addresses.
 - Test style: Mocha with `node:assert`, files named `*.test.ts` under `packages/lib-ssh/test/unit/`, helper files named `*.fixture.ts`.
 - The voice rule of the public-surface ADR applies to code comments and JSDoc: no feature, rule or decision ids and no origin framing. Test names keep the ids.

@@ -1,6 +1,6 @@
 # Task ssh-05: the stderr classifier (S5)
 
-Base: branch `feature/lib-ssh-pure` (ff563f1), brought to the contract. The modules exist; this card writes their tests and fixes what fails.
+Base: branch `feature/lib-ssh-pure` (its head), brought to the contract. The modules exist; this card writes their tests and fixes what fails.
 
 ## 1. Package and file boundary
 
@@ -22,6 +22,8 @@ Nothing else may change. Fixture origin: recorded with the worker's own OpenSSH 
 Defaults: exit status 255, purpose `connection`, mode `shared`. `OFF(Sxxx)` stands for the hint list `[{status:'OfflineError', message:'Error: OfflineError', details:{id:'Sxxx'}, mitigations:[], resources:[]}]`. A row asserts the fields it names; "plain" means `hints []` and `logLines []`. (each) means one `it` per listed input.
 
 ## 3. Test table
+
+Rows marked (provisional) rest on a spec reading, not a confirmed answer; they are tested like any other row.
 
 | Cite | Given (error lines) | Expected |
 |---|---|---|
@@ -73,6 +75,10 @@ Defaults: exit status 255, purpose `connection`, mode `shared`. `OFF(Sxxx)` stan
 | F-2305.BR-6 | mode shared: `@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@`, then `Warning: Port forwarding is disabled to avoid man-in-the-middle attacks.` | kind unknown, no `reason`, plain |
 | F-2109.BR-4 | `logLinesOf` of `debug1: Server host key: ssh-ed25519 SHA256:abc`, `debug1: Authenticating to h.invalid:22`, `debug2: x`, `Warning: y` | `['debug1: Server host key: ssh-ed25519 SHA256:abc', 'debug2: x', 'Warning: y']` |
 | F-2109.BR-4 | `logLinesOf([])` | `[]` |
+| F-2603.BR-3 (provisional) | `x@h.invalid: Permission denied (publickey).`, `No route to host` | kind authentication |
+| F-2604.AC-3 (provisional) | the forwarding row's hint | resources `['hangingOrFailingConnections']` |
+| F-2604.BR-3 (provisional) | (each) exit status `0`; `undefined`; with `Host key verification failed.` | kind hostKeyRejected |
+| F-2305.BR-6 (provisional) | mode shared, the changed-key line alone | hints `[]` |
 
 ## 4. Rule for the worker
 
@@ -88,11 +94,4 @@ Reviewer: remote-coding-worker-1. PR title: `lib-ssh: tests and fixes for the st
 
 ## 6. Open rows (stop and report)
 
-Sent to the lead with a proposed answer; until the answer is written into section 3, the worker stops here.
-
-| # | Case | Question and proposed answer |
-|---|---|---|
-| 3 | Priority between classes beyond the decided pairs (changed key over rejected key in shared mode, F-2305.AC-16; the forwarding warning in terminal mode, F-2305.AC-19): a denied line with a network text, a changed key with a network text | Proposed: keep the branch order (changed key, rejected key, denied, invalid name, network, forwarding, broken pipe, closed connection); a denied line with `No route to host` is `authentication` |
-| 6 | The identifier of the forwarding hint's documentation resource (F-2604.AC-3 asks for the project's own URL, still open) | Proposed: keep the topic key `hangingOrFailingConnections`; the extension maps it to the URL |
-| 8 | The exit status: does a status of 0 or `undefined` with a recognised line classify? | Proposed: yes, the status never changes the result (F-2604.BR-3 records the hint while the window still waits) |
-| 10 | `hostKeyChanged` hints: no spec lists one | Proposed: none |
+None: every row is decided in section 3.

@@ -5,6 +5,7 @@
  */
 
 import type {EffectiveOptions} from '../config/effective.ts';
+import type {ClientPlatform} from '../config/files.ts';
 import type {SshTarget} from './target.ts';
 
 /** What an `ssh` run is for; a `copy` run uses `scp`. */
@@ -44,6 +45,8 @@ interface RequestBase {
   programs: {ssh: string; scp: string};
   /** The editor's home folder, against which a leading `~/` of the configuration file expands. */
   homeFolder: string;
+  /** The client platform, which decides the separator of an expanded path. */
+  platform: ClientPlatform;
 }
 
 /** An `ssh` run. */
@@ -78,10 +81,11 @@ const LOOPBACK = '127.0.0.1';
  * arguments; `-F` carries the expanded configuration file when one is set.
  */
 export function buildInvocation(request: InvocationRequest): Invocation {
-  const common = configFileArguments(
-    request.settings.configFile,
-    request.homeFolder,
-  );
+  const common = configFileArguments({
+    configFile: request.settings.configFile,
+    homeFolder: request.homeFolder,
+    platform: request.platform,
+  });
   if (request.purpose === 'copy') {
     return copyInvocation(request, common);
   }
@@ -111,6 +115,9 @@ export function buildInvocation(request: InvocationRequest): Invocation {
   if (request.target.user !== undefined && request.target.user !== '') {
     argumentList.push('-l', request.target.user);
   }
+  if (request.target.port !== undefined) {
+    argumentList.push('-p', String(request.target.port));
+  }
   argumentList.push(request.target.host);
   if (request.purpose !== 'tunnel' && request.remoteProgram !== undefined) {
     argumentList.push(request.remoteProgram);
@@ -131,36 +138,47 @@ export interface OptionsQueryRequest {
   sshProgram: string;
   /** The editor's home folder, against which a leading `~/` of the configuration file expands. */
   homeFolder: string;
+  /** The client platform, which decides the separator of an expanded path. */
+  platform: ClientPlatform;
 }
 
 /** The `ssh -G` run that prints the options OpenSSH computes for the target, read by `parseEffectiveOptions`. */
 export function buildOptionsQuery(request: OptionsQueryRequest): Invocation {
   return {
     program: request.sshProgram,
-    arguments: [
-      ...configFileArguments(request.configFile, request.homeFolder),
-      '-G',
-      request.target.host,
-    ],
+    arguments: [...configFileArguments(request), '-G', request.target.host],
     environment: {},
   };
 }
 
 /** `-F <file>` with a leading `~/` expanded against the home folder, or nothing when no file is configured. */
-function configFileArguments(file: string, homeFolder: string): string[] {
-  if (file === '') {
+function configFileArguments(
+  setting: Pick<OptionsQueryRequest, 'configFile' | 'homeFolder' | 'platform'>,
+): string[] {
+  if (setting.configFile === '') {
     return [];
   }
-  return ['-F', expandHome(file, homeFolder)];
+  return [
+    '-F',
+    expandHome(setting.configFile, setting.homeFolder, setting.platform),
+  ];
 }
 
-/** A path with a leading `~/`, or a lone `~`, replaced by the home folder; any other path unchanged. */
-export function expandHome(file: string, homeFolder: string): string {
+/**
+ * A path with a leading `~/` (or `~\` on Windows), or a lone `~`, with the home folder in place of the `~`, joined
+ * with the platform's separator; any other path unchanged.
+ */
+export function expandHome(
+  file: string,
+  homeFolder: string,
+  platform: ClientPlatform,
+): string {
   if (file === '~') {
     return homeFolder;
   }
-  if (file.startsWith('~/')) {
-    return `${homeFolder}/${file.slice(2)}`;
+  const windows = platform === 'windows';
+  if (file.startsWith('~/') || (windows && file.startsWith('~\\'))) {
+    return `${homeFolder}${windows ? '\\' : '/'}${file.slice(2)}`;
   }
   return file;
 }

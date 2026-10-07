@@ -91,8 +91,8 @@ const QUOTED_KEYWORDS = new Set(['IdentityFile', 'User']);
 const DESTINATION_KEYWORD = 'HostName';
 
 /**
- * Reads a typed connection command. Option parsing ends at the destination; the words after it are the remote
- * command, which is not written.
+ * Reads a typed connection command as ssh does: options before and after the destination are read, and the first
+ * other word after the destination starts the remote command, which is not written.
  */
 export function parseAddHostCommand(command: string): AddHostResult {
   const split = splitWords(command);
@@ -113,12 +113,13 @@ export function parseAddHostCommand(command: string): AddHostResult {
       if (problem !== undefined) {
         return {problem};
       }
-    } else {
+    } else if (destination === undefined) {
       destination = word;
       const problem = readDestination(word, collector);
       if (problem !== undefined) {
         return {problem};
       }
+    } else {
       break;
     }
   }

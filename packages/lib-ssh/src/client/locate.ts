@@ -4,6 +4,7 @@
  * is remembered between lookups.
  */
 
+import path from 'node:path';
 import type {ClientPlatform} from '../config/files.ts';
 import {pathsFor} from '../config/files.ts';
 
@@ -16,34 +17,48 @@ export interface ClientCandidate {
 /** The word a banner must contain, in any letter case. */
 const CLIENT_NAME = 'openssh';
 
-/** Git for Windows' default place for its `ssh`. */
-const GIT_FOR_WINDOWS_SSH = 'C:\\Program Files\\Git\\usr\\bin\\ssh.exe';
+/** The environment values the lookup depends on, each empty when unset. */
+export interface ClientEnvironment {
+  /** The program search path. */
+  searchPath: string;
+  /** The Windows `ProgramFiles` folder; unused on other platforms. */
+  programFilesFolder: string;
+}
+
+/** Git for Windows' default place for its `ssh`, under the Program Files folder. */
+const GIT_FOR_WINDOWS_SSH = ['Git', 'usr', 'bin', 'ssh.exe'];
 
 /** The only argument a candidate is checked with. */
 export const VERSION_ARGUMENTS: readonly string[] = ['-V'];
 
 /**
  * The candidates in the order they are tried: the setting's value exactly as written when it is not empty, the
- * bare program name that the platform looks up on PATH when PATH is not empty, and on Windows Git for Windows'
- * default place.
+ * bare program name that the platform looks up on the search path when that is not empty, and on Windows Git for
+ * Windows' default place when the Program Files folder is known.
  */
 export function candidates(
   settingValue: string,
-  pathValue: string,
+  environment: ClientEnvironment,
   platform: ClientPlatform,
 ): ClientCandidate[] {
   const list: ClientCandidate[] = [];
   if (settingValue !== '') {
     list.push({program: settingValue, origin: 'setting'});
   }
-  if (pathValue !== '') {
+  if (environment.searchPath !== '') {
     list.push({
       program: platform === 'windows' ? 'ssh.exe' : 'ssh',
       origin: 'path',
     });
   }
-  if (platform === 'windows') {
-    list.push({program: GIT_FOR_WINDOWS_SSH, origin: 'gitForWindows'});
+  if (platform === 'windows' && environment.programFilesFolder !== '') {
+    list.push({
+      program: path.win32.join(
+        environment.programFilesFolder,
+        ...GIT_FOR_WINDOWS_SSH,
+      ),
+      origin: 'gitForWindows',
+    });
   }
   return list;
 }

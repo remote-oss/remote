@@ -57,7 +57,11 @@ export function filesInEffect(
     return reader.readText(file) !== undefined;
   }
   if (configFile !== '') {
-    const file = expandHome(configFile, locations.homeFolder);
+    const file = expandHome(
+      configFile,
+      locations.homeFolder,
+      locations.platform,
+    );
     return [
       {
         file,

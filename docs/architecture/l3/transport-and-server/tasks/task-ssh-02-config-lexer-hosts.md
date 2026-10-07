@@ -1,6 +1,6 @@
 # Task ssh-02: the configuration lexer and the host list (S4)
 
-Base: branch `feature/lib-ssh-pure` (ff563f1), brought to the contract. The modules exist; this card writes their tests and fixes what fails. It needs the `memory-reader.fixture.ts` helper of task ssh-03 (the in-memory file port); until that is merged keep a local copy and do not commit it.
+Base: branch `feature/lib-ssh-pure` (its head), brought to the contract. The modules exist; this card writes their tests and fixes what fails. It needs the `memory-reader.fixture.ts` helper of task ssh-03 (the in-memory file port); until that is merged keep a local copy and do not commit it.
 
 ## 1. Package and file boundary
 
@@ -19,6 +19,8 @@ Nothing else may change. No recorded fixtures: every file tree is an inline lite
 Default for every host row: `configFile ''`, `locations {homeFolder:'/home/dev', platform:'linux'}`, files given as a path-to-text map. U is `/home/dev/.ssh/config`, Y is `/etc/ssh/ssh_config`. Expected is the list of `name`s in order unless a file is named. (each) means one `it` per listed input.
 
 ## 3. Test table
+
+Rows marked (provisional) rest on a spec reading, not a confirmed answer; they are tested like any other row.
 
 | Cite | Given (`lexConfiguration`) | Expected |
 |---|---|---|
@@ -85,6 +87,12 @@ Default for every host row: `configFile ''`, `locations {homeFolder:'/home/dev',
 | F-2201.BR-8 | U: `Host own`; Y: `Host "abc` | `{parseError:{file:'/etc/ssh/ssh_config', reason}}` with a non-empty reason; no hosts |
 | F-2201.BR-8 | U: `Host own`; Y: `Include ssh_config.d/*.conf`, `Host sys`; `/etc/ssh/ssh_config.d/x.conf`: `Host "abc` | own, sys; no error |
 | F-2201.AC-38 | U: the bytes `\u0000\u0001\u0002`, line end, `Host bin`; Y absent | empty list; no `parseError` |
+| F-2201.Q1 (provisional) | U: `Host "abc` | the `parseError` reason is a non-empty string (its words are not asserted) |
+| F-2202.BR-1 (provisional) | U: `Host "a#b"`, `Host c#d` | a#b, c |
+| F-2202.BR-12 (provisional) | U: `Include conf.d/*`; folder `/home/dev/.ssh/conf.d` holds `.hidden`, `shown`, each containing `Host <its file name>` | shown; .hidden absent |
+| F-2202.BR-12 (provisional) | U: `Include conf.d/[a-b]*`; folder holds `a1`, `b1`, `c1`, each containing `Host <its file name>` | a1, b1 |
+| F-2202.Q2 (lead 2026-10-07) | locations `{homeFolder:'C:\Users\dev', platform:'windows', programDataFolder:'C:\ProgramData'}`; U (`C:\Users\dev\.ssh\config`): `Include inc.conf`, `Include ~\other.conf`, `Include ~/third.conf`; `C:\Users\dev\.ssh\inc.conf` = `Host inc`, `C:\Users\dev\other.conf` = `Host other`, `C:\Users\dev\third.conf` = `Host third` | inc, other, third |
+| F-2202.BR-14 (provisional) | U: `Include a.conf`; `a.conf` = `Include b.conf`, `Host a`; `b.conf` = `Include c.conf`, `Host b`; `c.conf` = `Include d.conf`, `Host c`; `d.conf` = `Host d` (all under `/home/dev/.ssh`) | d, c, b, a (no depth limit) |
 
 ## 4. Rule for the worker
 
@@ -100,12 +108,4 @@ Reviewer: remote-coding-worker-1. PR title: `lib-ssh: tests and fixes for the co
 
 ## 6. Open rows (stop and report)
 
-Sent to the lead with a proposed answer; until the answer is written into section 3, the worker stops here.
-
-| # | Case | Question and proposed answer |
-|---|---|---|
-| 2 | The words of `parseError.reason`; F-2201 Q1 is open | Proposed: the branch's text, not a contract; tests assert only that it is not empty |
-| 3 | `#` inside a word: `Host "a#b"` and `Host a#b` | Proposed: `a#b` and `a`, as the branch does (F-2202.BR-1) |
-| 5 | `*` and `?` against names starting with a dot; bracket classes in `Include` | Proposed: no match on a leading dot unless the pattern starts with `.`; `[a-c]` and `[!a]` are classes, as the branch does |
-| 6 | Relative, `~/` and backslash `Include` paths on Windows; F-2202 Q2 is open | Proposed: relative against the include base with Windows joins; `~/` and `~\` against the home folder; both separators accepted |
-| 7 | A limit on `Include` nesting or file count | Proposed: none; the seen-file set already stops loops (F-2202.BR-14, F-2201.7.E5) |
+None: every row is decided in section 3.
