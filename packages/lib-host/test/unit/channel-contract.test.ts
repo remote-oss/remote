@@ -1,6 +1,6 @@
 import {deepStrictEqual, rejects} from 'node:assert';
 import {createHash} from 'node:crypto';
-import type {ChannelFailureKind, ScriptInput} from '../../src/host-channel.ts';
+import type {ChannelFailureKind, ScriptInput} from '../../src/index.ts';
 import {
   channelContractCases,
   type ChannelHarness,

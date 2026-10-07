@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/host-channel.ts",
+    ".": "./src/index.ts",
     "./testing/recording-channel": "./src/testing/recording-channel.ts",
     "./testing/channel-contract": "./src/testing/channel-contract.ts"
   }

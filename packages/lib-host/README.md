@@ -28,6 +28,6 @@ For tests, under `src/testing/` (never imported by a bundle):
 | | |
 |---|---|
 | Maintainers | remote-oss |
-| Entry points | `lib-host` (`src/host-channel.ts`), `lib-host/testing/recording-channel`, `lib-host/testing/channel-contract` |
+| Entry points | `lib-host` (`src/index.ts`), `lib-host/testing/recording-channel`, `lib-host/testing/channel-contract` |
 | Allowed imports | `node:assert` in `src/testing/` only; no library, no extension, no `vscode` |
 | Coverage exclusions | none |

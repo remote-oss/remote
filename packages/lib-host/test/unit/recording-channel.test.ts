@@ -1,5 +1,5 @@
 import {deepStrictEqual, rejects} from 'node:assert';
-import type {CopyRequest, ScriptRequest} from '../../src/host-channel.ts';
+import type {CopyRequest, ScriptRequest} from '../../src/index.ts';
 import {
   RecordingChannel,
   type ScriptAnswer,

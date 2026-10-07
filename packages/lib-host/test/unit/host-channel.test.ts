@@ -1,9 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {
-  failFrom,
-  hostPathOf,
-  type HostChannel,
-} from '../../src/host-channel.ts';
+import {failFrom, hostPathOf, type HostChannel} from '../../src/index.ts';
 import {RecordingChannel} from '../../src/testing/recording-channel.ts';
 
 describe('failFrom (host channel contract: original message as detail)', () => {
