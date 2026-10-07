@@ -1,0 +1,4 @@
+{
+  "source": "OpenSSH_10.3p1, LibreSSL 3.3.6\nssh -G -F rec.cfg recorded",
+  "text": "user dev\nhostname 127.0.0.1\nport 2222\nremotecommand echo \"hi there\"\nlocalforward 8080 [127.0.0.1]:80\nlocalforward 8081 [127.0.0.1]:81\nconnecttimeout 21\n"
+}
