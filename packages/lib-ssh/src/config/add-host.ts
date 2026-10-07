@@ -3,9 +3,6 @@
  * the Host block that is written to a configuration file.
  */
 
-import type {BehaviourChoices} from '../choices.ts';
-import {BEHAVIOUR_CHOICES} from '../choices.ts';
-
 /** One option line of a Host block. */
 export interface BlockLine {
   keyword: string;
@@ -54,7 +51,7 @@ const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*/;
 const SILENT_FLAGS = new Set('tTNfnsqGVya');
 
 /** Flags whose argument is consumed and not written. */
-const SILENT_ARGUMENT_FLAGS = new Set('FEeBOQ');
+const SILENT_ARGUMENT_FLAGS = new Set('FEeBOQPW');
 
 /** Flags that take no argument and write a fixed line. */
 const FIXED_FLAGS: ReadonlyMap<string, BlockLine> = new Map([
@@ -94,10 +91,7 @@ const QUOTED_KEYWORDS = new Set(['IdentityFile', 'User']);
 const DESTINATION_KEYWORD = 'HostName';
 
 /** Reads a typed connection command. */
-export function parseAddHostCommand(
-  command: string,
-  choices: BehaviourChoices = BEHAVIOUR_CHOICES,
-): AddHostResult {
+export function parseAddHostCommand(command: string): AddHostResult {
   const split = splitWords(command);
   if ('problem' in split) {
     return split;
@@ -112,17 +106,17 @@ export function parseAddHostCommand(
     if (!optionsEnded && word === '--') {
       optionsEnded = true;
     } else if (!optionsEnded && word.startsWith('-') && word.length > 1) {
-      const problem = readFlags(word, () => words[index++], collector, choices);
+      const problem = readFlags(word, () => words[index++], collector);
       if (problem !== undefined) {
         return {problem};
       }
     } else if (destination === undefined) {
       destination = word;
-      const problem = readDestination(word, collector, choices);
+      const problem = readDestination(word, collector);
       if (problem !== undefined) {
         return {problem};
       }
-    } else if (choices.commandStopsOptionsAtDestination) {
+    } else {
       break;
     }
   }
@@ -193,7 +187,6 @@ function readFlags(
   word: string,
   nextWord: () => string | undefined,
   collector: LineCollector,
-  choices: BehaviourChoices,
 ): AddHostProblem | undefined {
   for (let position = 1; position < word.length; position++) {
     const letter = word.charAt(position);
@@ -202,13 +195,10 @@ function readFlags(
       collector.record(fixed.keyword, fixed.value);
       continue;
     }
-    if (
-      SILENT_FLAGS.has(letter) ||
-      (letter === 'P' && !choices.commandReadsJumpAndTagFlagsAsSsh)
-    ) {
+    if (SILENT_FLAGS.has(letter)) {
       continue;
     }
-    const keyword = argumentKeyword(letter, choices);
+    const keyword = argumentKeyword(letter);
     if (keyword === undefined) {
       return {kind: 'unknownFlag', message: `Unknown flag ${letter}`};
     }
@@ -226,26 +216,15 @@ function readFlags(
 }
 
 /** The keyword an argument flag writes, the empty string for one that writes nothing, undefined for an unknown flag. */
-function argumentKeyword(
-  letter: string,
-  choices: BehaviourChoices,
-): string | undefined {
-  if (
-    SILENT_ARGUMENT_FLAGS.has(letter) ||
-    (letter === 'P' && choices.commandReadsJumpAndTagFlagsAsSsh)
-  ) {
+function argumentKeyword(letter: string): string | undefined {
+  if (SILENT_ARGUMENT_FLAGS.has(letter)) {
     return '';
   }
-  if (letter === 'W') {
-    return choices.commandReadsJumpAndTagFlagsAsSsh ? '' : 'RemoteForward';
-  }
   if (letter === 'c') {
-    return choices.commandWritesCurrentKeywords ? 'Ciphers' : 'Cipher';
+    return 'Ciphers';
   }
   if (letter === 'I') {
-    return choices.commandWritesCurrentKeywords
-      ? 'PKCS11Provider'
-      : 'SmartcardDevice';
+    return 'PKCS11Provider';
   }
   if (letter === 'o') {
     return 'o';
@@ -296,7 +275,6 @@ function localForwardValue(argument: string): string {
 function readDestination(
   word: string,
   collector: LineCollector,
-  choices: BehaviourChoices,
 ): AddHostProblem | undefined {
   const withoutScheme = word.startsWith('ssh://')
     ? word.slice('ssh://'.length)
@@ -304,7 +282,7 @@ function readDestination(
   const userEnd = withoutScheme.lastIndexOf('@');
   const user = userEnd < 0 ? '' : withoutScheme.slice(0, userEnd);
   const hostAndPort = withoutScheme.slice(userEnd + 1);
-  const {host, port} = splitHostAndPort(hostAndPort, choices);
+  const {host, port} = splitHostAndPort(hostAndPort);
   if (host === '') {
     return missingHost();
   }
@@ -318,20 +296,15 @@ function readDestination(
   return undefined;
 }
 
-/** The host and the optional port of a destination; an IPv6 address stays whole when the choice says so. */
-function splitHostAndPort(
-  text: string,
-  choices: BehaviourChoices,
-): {host: string; port?: string} {
-  if (choices.commandKeepsIpv6Host) {
-    const bracketed = /^\[([^\]]*)\](?::(.*))?$/.exec(text);
-    if (bracketed !== null) {
-      const host = bracketed[1] ?? '';
-      return bracketed[2] === undefined ? {host} : {host, port: bracketed[2]};
-    }
-    if (text.indexOf(':') !== text.lastIndexOf(':')) {
-      return {host: text};
-    }
+/** The host and the optional port of a destination; an IPv6 address, bracketed or bare, stays whole. */
+function splitHostAndPort(text: string): {host: string; port?: string} {
+  const bracketed = /^\[([^\]]*)\](?::(.*))?$/.exec(text);
+  if (bracketed !== null) {
+    const host = bracketed[1] ?? '';
+    return bracketed[2] === undefined ? {host} : {host, port: bracketed[2]};
+  }
+  if (text.indexOf(':') !== text.lastIndexOf(':')) {
+    return {host: text};
   }
   const colon = text.indexOf(':');
   return colon < 0

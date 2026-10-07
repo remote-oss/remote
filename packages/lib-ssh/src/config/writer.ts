@@ -3,8 +3,6 @@
  * line so that it takes precedence, or after the file's global lines when it has no block yet.
  */
 
-import type {BehaviourChoices} from '../choices.ts';
-import {BEHAVIOUR_CHOICES} from '../choices.ts';
 import type {HostBlock} from './add-host.ts';
 
 /** A line that opens a block. */
@@ -17,33 +15,25 @@ const INDENTED_LINE = /^[ \t]+\S/;
 const DEFAULT_OPTION_INDENT = '  ';
 
 /** The file text with the block added. Duplicates of an existing host are written as they are. */
-export function writeHostBlock(
-  fileText: string,
-  block: HostBlock,
-  choices: BehaviourChoices = BEHAVIOUR_CHOICES,
-): string {
-  const lineEnd =
-    choices.writerKeepsSurroundingText && fileText.includes('\r\n')
-      ? '\r\n'
-      : '\n';
+export function writeHostBlock(fileText: string, block: HostBlock): string {
+  const lineEnd = fileText.includes('\r\n') ? '\r\n' : '\n';
   if (fileText.trim() === '') {
     return renderBlock(block, '', DEFAULT_OPTION_INDENT, lineEnd);
   }
-  const text = choices.writerKeepsSurroundingText ? fileText : fileText.trim();
-  const lines = text.split('\n');
+  const lines = fileText.split('\n');
   const firstBlock = lines.findIndex(line => BLOCK_START.test(line));
   if (firstBlock < 0) {
-    const separated = text.endsWith('\n') ? text : `${text}${lineEnd}`;
+    const separated = fileText.endsWith('\n')
+      ? fileText
+      : `${fileText}${lineEnd}`;
     const blankBefore = /(^|\n)[ \t\r]*\n$/.test(separated) ? '' : lineEnd;
     return `${separated}${blankBefore}${renderBlock(block, '', DEFAULT_OPTION_INDENT, lineEnd)}`;
   }
   const optionIndent = copiedIndent(lines.slice(firstBlock + 1));
-  const hostIndent = choices.writerIndentsHostLine
-    ? hostIndentFor(optionIndent)
-    : '';
+  const hostIndent = hostIndentFor(optionIndent);
   const offset =
     lines.slice(0, firstBlock).join('\n').length + (firstBlock > 0 ? 1 : 0);
-  return `${text.slice(0, offset)}${renderBlock(block, hostIndent, optionIndent, lineEnd)}${lineEnd}${text.slice(offset)}`;
+  return `${fileText.slice(0, offset)}${renderBlock(block, hostIndent, optionIndent, lineEnd)}${lineEnd}${fileText.slice(offset)}`;
 }
 
 /** The block's text, each line ended. */

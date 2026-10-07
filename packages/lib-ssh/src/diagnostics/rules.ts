@@ -67,6 +67,15 @@ export const FAILURE_TEXTS = {
   channelConnectFailed: 'connect failed',
 } as const;
 
+/** The reason shown when a forwarded channel fails to open on the host. */
+export const CHANNEL_CLOSED_REASON = 'Connection closed.';
+
+/** The prefix of ssh's first-level debug lines. */
+export const DEBUG1_PREFIX = 'debug1: ';
+
+/** The one first-level debug line kept for the log. */
+export const SERVER_HOST_KEY_TEXT = 'Server host key';
+
 /** The sshd setting and file named by the forwarding hint's first mitigation. */
 export const FORWARDING_SETTING = {
   setting: 'AllowTcpForwarding yes',

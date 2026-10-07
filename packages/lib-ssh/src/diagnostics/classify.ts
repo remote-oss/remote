@@ -3,15 +3,16 @@
  * hints kept for the session. Prompts and their answers never pass through here.
  */
 
-import type {BehaviourChoices} from '../choices.ts';
-import {BEHAVIOUR_CHOICES} from '../choices.ts';
 import type {DiagnosticStringId, FailureKind} from './rules.ts';
 import {
   FAILING_CONNECTIONS_TOPIC,
+  CHANNEL_CLOSED_REASON,
+  DEBUG1_PREFIX,
   FAILURE_TEXTS,
   FORWARDING_SETTING,
   NETWORK_RULES,
   SENTENCE_ENDINGS,
+  SERVER_HOST_KEY_TEXT,
 } from './rules.ts';
 
 /** What the `ssh` run was for. */
@@ -36,7 +37,7 @@ export interface FailureHint {
   /** The message: a fixed text naming the type, or a string of the table. */
   message: string | FilledString;
   /** The reason the hint carries; absent when it has none. */
-  details?: DiagnosticStringId;
+  details?: FailureReason;
   mitigations: FilledString[];
   /** Documentation topics. */
   resources: string[];
@@ -73,7 +74,20 @@ export function classify(
   }
   const denied = lastPermissionDenied(errorLines);
   if (denied !== undefined) {
-    return plain('authentication', {text: denied});
+    return {
+      kind: 'authentication',
+      reason: {text: denied},
+      hints: [
+        {
+          status: 'PermissionDenied',
+          message: 'Error: PermissionDenied',
+          details: {text: denied},
+          mitigations: [],
+          resources: [],
+        },
+      ],
+      logLines: [],
+    };
   }
   if (purpose === 'connection' && contains(FAILURE_TEXTS.invalidHostName)) {
     return plain('unreachable', {id: 'S079'});
@@ -87,7 +101,7 @@ export function classify(
         {
           status: 'OfflineError',
           message: 'Error: OfflineError',
-          details: network.reason,
+          details: {id: network.reason},
           mitigations: [],
           resources: [],
         },
@@ -106,7 +120,7 @@ export function classify(
         {
           status: 'MitmPortForwardingDisabled',
           message: 'Error: MitmPortForwardingDisabled',
-          details: 'S107',
+          details: {id: 'S107'},
           mitigations: [],
           resources: [],
         },
@@ -149,9 +163,20 @@ export function classify(
     };
   }
   if (contains(FAILURE_TEXTS.channelConnectFailed)) {
-    return plain('channelClosed');
+    return plain('channelClosed', {text: CHANNEL_CLOSED_REASON});
   }
   return plain('unknown');
+}
+
+/**
+ * The lines of one run that go to the extension's log: every line except ssh's `debug1` lines, of which only the
+ * server host key line is kept.
+ */
+export function logLinesOf(errorLines: readonly string[]): string[] {
+  return errorLines.filter(
+    line =>
+      !line.startsWith(DEBUG1_PREFIX) || line.includes(SERVER_HOST_KEY_TEXT),
+  );
 }
 
 /** A classification without hints or log lines. */
@@ -177,13 +202,10 @@ function lastPermissionDenied(
 
 /**
  * A reason as the failure dialog shows it: with one closing full stop, which is not added after text that already
- * ends a sentence when the choice says so.
+ * ends a sentence.
  */
-export function endWithFullStop(
-  text: string,
-  choices: BehaviourChoices = BEHAVIOUR_CHOICES,
-): string {
-  if (choices.fullStopOnlyWhenMissing && SENTENCE_ENDINGS.test(text)) {
+export function endWithFullStop(text: string): string {
+  if (SENTENCE_ENDINGS.test(text)) {
     return text;
   }
   return `${text}.`;

@@ -3,9 +3,6 @@
  * a pick for the host-key questions it knows, a masked input for everything else. The first rule that matches wins.
  */
 
-import type {BehaviourChoices} from '../choices.ts';
-import {BEHAVIOUR_CHOICES} from '../choices.ts';
-
 /** The string ids a prompt surface uses. */
 export type PromptStringId =
   'S001' | 'S012' | 'S013' | 'S015' | 'S028' | 'S064' | 'S065' | 'S066';
@@ -43,9 +40,6 @@ const CONTINUE_QUESTION =
 /** The classic fingerprint line: type, the words, one space, the fingerprint and a final full stop. */
 const CLASSIC_FINGERPRINT = /^\S+ key fingerprint is (\S+)\.$/;
 
-/** The newer fingerprint line, with a colon and without the final full stop. */
-const COLON_FINGERPRINT = /^\S+ key fingerprint is: (\S+?)\.?$/;
-
 /** The two lines of an address key that differs from the host key. */
 const OFFENDING_LINE = /^Offending key for IP in .+:\d+$/;
 const MATCHING_LINE = /^Matching host key in .+:\d+$/;
@@ -66,13 +60,12 @@ const PICK_ITEMS: readonly PickItem[] = [
 export function classifyPrompt(
   text: string,
   displayHost: string,
-  choices: BehaviourChoices = BEHAVIOUR_CHOICES,
 ): PromptSurface {
   const lines = text.split('\n').map(line => line.trimEnd());
   const questionLine = lines.findIndex(line => CONTINUE_QUESTION.test(line));
   if (questionLine >= 0) {
     const before = lines.slice(0, questionLine);
-    const fingerprint = fingerprintOf(before, choices);
+    const fingerprint = fingerprintOf(before);
     if (fingerprint !== undefined) {
       return {
         surface: 'fingerprintPick',
@@ -95,39 +88,25 @@ export function classifyPrompt(
   }
   return {
     surface: 'maskedInput',
-    placeholder: maskedPlaceholder(text, choices),
+    placeholder: maskedPlaceholder(text),
   };
 }
 
-/** The fingerprint of the host-key line before the question, in the forms the choices accept. */
-function fingerprintOf(
-  linesBeforeQuestion: string[],
-  choices: BehaviourChoices,
-): string | undefined {
+/** The fingerprint of the host-key line before the question. */
+function fingerprintOf(linesBeforeQuestion: string[]): string | undefined {
   for (const line of linesBeforeQuestion) {
     const classic = CLASSIC_FINGERPRINT.exec(line);
     if (classic !== null) {
       return classic[1];
-    }
-    const colon = choices.fingerprintPickForColonForm
-      ? COLON_FINGERPRINT.exec(line)
-      : null;
-    if (colon !== null) {
-      return colon[1];
     }
   }
   return undefined;
 }
 
 /** The placeholder of a masked input: passphrase, password, code, or the question itself. */
-function maskedPlaceholder(
-  text: string,
-  choices: BehaviourChoices,
-): PromptText {
-  const passphrase = PASSPHRASE_QUESTION.exec(text);
-  if (passphrase !== null) {
-    const keyFile = choices.passphraseNamesKeyFile ? (passphrase[1] ?? '') : '';
-    return {id: 'S064', values: [keyFile]};
+function maskedPlaceholder(text: string): PromptText {
+  if (PASSPHRASE_QUESTION.test(text)) {
+    return {id: 'S064', values: ['']};
   }
   const passwordAt = text.indexOf(PASSWORD_FOR);
   if (passwordAt >= 0) {
