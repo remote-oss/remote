@@ -24,15 +24,15 @@ export type PlaceholderName =
   | 'release'
   | 'applicationName';
 
-const VALUE_OF = new Map<PlaceholderName, keyof PlaceholderValues>([
-  ['os', 'operatingSystem'],
-  ['arch', 'architecture'],
-  ['commit', 'commit'],
-  ['quality', 'quality'],
-  ['version', 'version'],
-  ['release', 'release'],
-  ['applicationName', 'applicationName'],
-]);
+function fieldOf(name: PlaceholderName): keyof PlaceholderValues {
+  if (name === 'os') {
+    return 'operatingSystem';
+  }
+  if (name === 'arch') {
+    return 'architecture';
+  }
+  return name;
+}
 
 /** The names every template may use; `applicationName` only where a policy allows it. */
 export const BASE_PLACEHOLDERS: readonly PlaceholderName[] = [
@@ -62,6 +62,13 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
+function isAllowed(
+  name: string,
+  allowedNames: readonly PlaceholderName[],
+): name is PlaceholderName {
+  return (allowedNames as readonly string[]).includes(name);
+}
+
 /**
  * Replaces every `${name}` of `template` with its value. A name outside `allowedNames` gives
  * `unknownPlaceholder`; a result that is not an absolute http or https URL gives `notHttpUrl`. A template without
@@ -72,20 +79,17 @@ export function expand(
   values: PlaceholderValues,
   allowedNames: readonly PlaceholderName[],
 ): Expansion {
-  const names = [...template.matchAll(PLACEHOLDER)].map(
-    match => match[1] ?? '',
-  );
-  const unknown = names.find(
-    name => !(allowedNames as readonly string[]).includes(name),
-  );
+  let unknown: string | undefined;
+  const address = template.replace(PLACEHOLDER, (matchedText, name: string) => {
+    if (isAllowed(name, allowedNames)) {
+      return values[fieldOf(name)];
+    }
+    unknown ??= name;
+    return matchedText;
+  });
   if (unknown !== undefined) {
     return {kind: 'unknownPlaceholder', name: unknown};
   }
-  const address = template.replace(PLACEHOLDER, (matchedText, name: string) => {
-    // Every name left here is one of allowedNames, so VALUE_OF knows it.
-    const field = VALUE_OF.get(name as PlaceholderName) ?? 'version';
-    return values[field];
-  });
   return isHttpUrl(address)
     ? {kind: 'url', address}
     : {kind: 'notHttpUrl', value: address};
