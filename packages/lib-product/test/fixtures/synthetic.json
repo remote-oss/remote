@@ -1,0 +1,15 @@
+{
+  "//": "Synthetic product.json with invented names in every field (ADR-0006 decision 6).",
+  "applicationName": "fixture-editor",
+  "serverApplicationName": "fixture-server",
+  "serverDataFolderName": ".fixture-server",
+  "dataFolderName": ".fixture-editor",
+  "tunnelApplicationName": "fixture-tunnel",
+  "urlProtocol": "fixture",
+  "release": "-r7",
+  "serverDownloadUrlTemplate": "https://archives.example.invalid/${quality}/${commit}/${version}${release}/server-${os}-${arch}.tar.gz",
+  "serverLicense": [],
+  "version": "9.8.7",
+  "commit": "f1f2f3f4",
+  "quality": "fixture-quality"
+}

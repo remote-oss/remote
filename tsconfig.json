@@ -63,6 +63,12 @@
     },
     {
       "path": "packages/lib-host/tsconfig.test.json"
+    },
+    {
+      "path": "packages/lib-product"
+    },
+    {
+      "path": "packages/lib-product/tsconfig.test.json"
     }
   ]
 }

@@ -125,6 +125,26 @@ describe('check-layout', () => {
     ]);
   });
 
+  it('reports a product name in package code outside the product table (ADR-0006)', () => {
+    workspace.write(
+      'packages/remote-ssh/src/server.ts',
+      "const name = 'codium';\n",
+    );
+    deepStrictEqual(checkLayout(workspace.root), [
+      `${path.join('packages', 'remote-ssh', 'src', 'server.ts')} names a product or a download host; only ${path.join('packages', 'lib-product', 'src', 'product-table.ts')} may (ADR-0006)`,
+    ]);
+  });
+
+  it('allows product names and download hosts in the product table', () => {
+    writePackage('lib-product');
+    writeSolution([...EXTENSION_FOLDERS, 'lib-product']);
+    workspace.write(
+      'packages/lib-product/src/product-table.ts',
+      "const host = 'update.code.visualstudio.com';\n",
+    );
+    deepStrictEqual(checkLayout(workspace.root), []);
+  });
+
   it('reports a missing extension folder and missing repository files', () => {
     rmSync(path.join(workspace.root, 'packages/remote-wsl'), {recursive: true});
     writeSolution(EXTENSION_FOLDERS.filter(folder => folder !== 'remote-wsl'));
