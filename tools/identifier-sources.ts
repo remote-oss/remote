@@ -7,7 +7,7 @@
 
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {messageOf} from './repository.ts';
+import {isLibraryFolder, messageOf} from './repository.ts';
 
 /** The kinds an invented identifier or a namespace belongs to. */
 const LEDGER_KINDS = [
@@ -459,9 +459,15 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
   };
 }
 
-/** Whether a package folder has code, and therefore needs `identifiers.json` and a generated table. */
+/**
+ * Whether a package folder is an extension with code, and therefore needs `identifiers.json` and a generated table.
+ * A library contributes nothing to a manifest, so it has neither.
+ */
 export function hasSources(packageDirectory: string): boolean {
-  return existsSync(path.join(packageDirectory, 'src'));
+  return (
+    !isLibraryFolder(path.basename(packageDirectory)) &&
+    existsSync(path.join(packageDirectory, 'src'))
+  );
 }
 
 /** Reads both sources of `packages/<folder>`; whether the package needs identifiers.json is the check's rule. */
