@@ -1,0 +1,13 @@
+{
+  "//": "Reduced product.json of VSCodium 1.135.06055: only the fields F-3902 section 3 states.",
+  "applicationName": "codium",
+  "serverApplicationName": "codium-server",
+  "serverDataFolderName": ".vscodium-server",
+  "tunnelApplicationName": "codium-tunnel",
+  "serverLicense": [],
+  "serverDownloadUrlTemplate": "https://github.com/VSCodium/vscodium/releases/download/1.135.06055/vscodium-reh-${os}-${arch}-1.135.06055.tar.gz",
+  "extensionsGallery": {"serviceUrl": "https://open-vsx.org/vscode/gallery"},
+  "version": "1.135.06055",
+  "commit": "1a46a584",
+  "quality": "stable"
+}

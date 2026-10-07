@@ -148,6 +148,49 @@ function stringTableProblems(root: string, folder: string): string[] {
   }
 }
 
+// ADR-0006: product names, server folders, download hosts and release prefixes appear in package code only in
+// lib-product's product table. `codium` also covers `vscodium` and the VSCodium release prefixes;
+// `code.visualstudio.com` covers its update host; `vscode-server` covers `.vscode-server`.
+const PRODUCT_LITERAL =
+  /codium|code\.visualstudio\.com|vscode-server|vscode\.download\.prss\.microsoft\.com/i;
+const PRODUCT_TABLE = path.join(
+  'packages',
+  'lib-product',
+  'src',
+  'product-table.ts',
+);
+
+function sourceFiles(directory: string): string[] {
+  if (!existsSync(directory)) {
+    return [];
+  }
+  return sortedEntries(directory).flatMap(entry => {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return sourceFiles(fullPath);
+    }
+    return entry.name.endsWith('.ts') ? [fullPath] : [];
+  });
+}
+
+function checkProductLiterals(root: string, problems: string[]): void {
+  for (const folder of packageFolders(root)) {
+    for (const file of sourceFiles(
+      path.join(root, 'packages', folder, 'src'),
+    )) {
+      const relative = path.relative(root, file);
+      if (
+        relative !== PRODUCT_TABLE &&
+        PRODUCT_LITERAL.test(readFileSync(file, 'utf8'))
+      ) {
+        problems.push(
+          `${relative} names a product or a download host; only ${PRODUCT_TABLE} may (ADR-0006)`,
+        );
+      }
+    }
+  }
+}
+
 function checkDecisionRecords(root: string, problems: string[]): void {
   const records = sortedEntries(path.join(root, 'docs', 'adr'))
     .map(entry => entry.name)
@@ -187,6 +230,7 @@ export function checkLayout(root: string): string[] {
   }
   checkDecisionRecords(root, problems);
   checkPackagingTool(root, problems);
+  checkProductLiterals(root, problems);
   for (const file of REQUIRED_FILES) {
     if (!existsSync(path.join(root, file))) {
       problems.push(`${file} is missing`);
