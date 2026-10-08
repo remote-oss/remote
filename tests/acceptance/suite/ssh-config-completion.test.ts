@@ -20,10 +20,10 @@ describe('SSH config completion in the editor under test', function () {
     );
   });
 
-  it('F-4202: typed Conf, a 2.5 s wait and Enter insert the first match', async () => {
+  it('F-4202: typed Conf, a 2.5 s wait and Enter insert the Configure tunnel template', async () => {
     deepStrictEqual(
       await trials(TRIALS, {typed: 'Conf'}, 2500),
-      Array.from({length: TRIALS}, () => 'CanonicalDomains'),
+      Array.from({length: TRIALS}, () => 'Host alias'),
     );
   });
 });
