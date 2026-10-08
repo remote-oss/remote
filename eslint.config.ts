@@ -35,8 +35,20 @@ const ABBREVIATIONS = [
   'args',
 ];
 
-// Short names ADR-0003 allows; names/scoped-exceptions restricts i, j, k, id and the type letters to their scopes.
-const SHORT_NAME_EXCEPTIONS = ['i', 'j', 'k', 'x', 'y', 'id', 'T', 'K', 'V'];
+// Short names ADR-0003 allows; names/scoped-exceptions restricts i, j, k, id and the type letters to their scopes. `now` is
+// the clock's own word and is allowed anywhere.
+const SHORT_NAME_EXCEPTIONS = [
+  'i',
+  'j',
+  'k',
+  'x',
+  'y',
+  'id',
+  'now',
+  'T',
+  'K',
+  'V',
+];
 
 // Property keys shorter than four characters that a third-party API imposes, each with the API.
 const IMPOSED_PROPERTY_KEYS = [
