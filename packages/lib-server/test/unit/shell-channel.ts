@@ -14,10 +14,17 @@ import type {
 } from 'lib-host';
 import type {FakeHost} from './fake-host.ts';
 
-/** A channel whose scripts run under `/bin/sh` with the fake host's environment; nothing can be copied. */
+/** How a channel hands the script to the shell: as the argument of `sh -c`, or on the standard input of `sh -s`. */
+export type Delivery = 'argument' | 'stdin';
+
+/**
+ * A channel whose scripts run under `/bin/sh` with the fake host's environment; nothing can be copied. With the
+ * `stdin` delivery the script is the standard input of the shell, as the SSH channel sends a script that reads no input.
+ */
 export function shellChannel(
   host: FakeHost,
   hint: PlatformHint = 'linux',
+  delivery: Delivery = 'argument',
 ): HostChannel {
   return {
     runScript(
@@ -25,13 +32,17 @@ export function shellChannel(
       onLine: (line: string) => void,
     ): Promise<ScriptOutcome> {
       return new Promise<ScriptOutcome>(resolve => {
-        const child = spawn('/bin/sh', ['-c', request.script], {
-          env: {...host.environment, ...request.environment},
-        });
+        const child = spawn(
+          '/bin/sh',
+          delivery === 'stdin' ? ['-s'] : ['-c', request.script],
+          {env: {...host.environment, ...request.environment}},
+        );
         const bytes =
-          request.input.kind === 'file'
-            ? readFileSync(request.input.localFile)
-            : Buffer.from(request.input.text);
+          delivery === 'stdin'
+            ? Buffer.from(request.script)
+            : request.input.kind === 'file'
+              ? readFileSync(request.input.localFile)
+              : Buffer.from(request.input.text);
         let pending = '';
         child.stdout.setEncoding('utf8');
         child.stdout.on('data', (chunk: string) => {

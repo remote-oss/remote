@@ -327,6 +327,50 @@ describe('probe (V2)', () => {
     );
   });
 
+  it('F-2401.BR-2: an operating system this library cannot run is unreadable, not Linux', async () => {
+    const outcome = await probe(
+      recording(block('Ok', 'host.os=plan9', 'host.arch=x64')),
+      parametersFor(),
+      NEVER_CANCELLED,
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'unreadableFacts', field: 'os'},
+    );
+  });
+
+  it('F-2401.BR-2: an architecture this library cannot run is unreadable, not x64', async () => {
+    const outcome = await probe(
+      recording(block('Ok', 'host.os=linux', 'host.arch=mips')),
+      parametersFor(),
+      NEVER_CANCELLED,
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'unreadableFacts', field: 'arch'},
+    );
+  });
+
+  it('F-2703: a host that has gzip reports it among its tools', async () => {
+    const outcome = await probe(
+      recording(
+        block(
+          'Ok',
+          'host.os=linux',
+          'host.arch=x64',
+          'host.tool.tar=yes',
+          'host.tool.gzip=yes',
+        ),
+      ),
+      parametersFor(),
+      NEVER_CANCELLED,
+    );
+    deepStrictEqual(
+      outcome.kind === 'probed' ? outcome.host.tools : outcome.kind,
+      ['tar', 'gzip'],
+    );
+  });
+
   it('F-2401.BR-1: a host without tar lacks a prerequisite', async () => {
     const outcome = await probe(
       recording(
@@ -407,6 +451,20 @@ describe('the lifecycle over a real shell', () => {
         ? [outcome.host.operatingSystem, outcome.host.installed]
         : failureOf(outcome),
       ['linux', false],
+    );
+  });
+
+  it('F-2703.BR-9: a probe whose script arrives on standard input finds the host', async () => {
+    const outcome = await probe(
+      shellChannel(host, 'linux', 'stdin'),
+      parametersFor(),
+      NEVER_CANCELLED,
+    );
+    deepStrictEqual(
+      outcome.kind === 'probed'
+        ? outcome.host.operatingSystem
+        : failureOf(outcome),
+      'linux',
     );
   });
 

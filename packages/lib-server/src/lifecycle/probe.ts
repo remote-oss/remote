@@ -17,7 +17,7 @@ export interface ProbedHost {
   home: string;
   temporaryFolder: string;
   loginShell: string;
-  /** The tools the host has, from `wget`, `curl`, `tar`, `unzip` and `flock`, in that order. */
+  /** The tools the host has, from `wget`, `curl`, `tar`, `unzip`, `flock` and `gzip`, in that order. */
   tools: readonly string[];
   /** Whether the `wget` it has is BusyBox's. */
   busyboxWget: boolean;
@@ -35,6 +35,7 @@ export type ProbeFailure =
   | {kind: 'unsupportedArch'; reported: string}
   | {kind: 'prerequisiteMissing'; missing: readonly string[]}
   | {kind: 'probeFailed'; status: string}
+  | {kind: 'unreadableFacts'; field: 'os' | 'arch'}
   | {kind: 'noResultBlock'}
   | {kind: 'channelFailed'; failure: ChannelFailure};
 
@@ -45,27 +46,45 @@ export type ProbeOutcome =
 /** The tools a host must have for any server install: the archive is a tar file. */
 const REQUIRED_TOOLS = ['tar'];
 
-const TOOL_NAMES = ['wget', 'curl', 'tar', 'unzip', 'flock'];
+const TOOL_NAMES = ['wget', 'curl', 'tar', 'unzip', 'flock', 'gzip'];
 
-function hostOf(block: ResultBlock): ProbedHost {
+const OPERATING_SYSTEMS = ['linux', 'darwin'] as const;
+
+const ARCHITECTURES = ['x64', 'arm64', 'armhf'] as const;
+
+/** The host a block describes, or the field that no host of this library can have. */
+function hostOf(
+  block: ResultBlock,
+): {host: ProbedHost} | {unreadable: 'os' | 'arch'} {
   const facts = block.hostFacts;
+  const operatingSystem = OPERATING_SYSTEMS.find(name => name === facts.os);
+  if (operatingSystem === undefined) {
+    return {unreadable: 'os'};
+  }
+  const architecture = ARCHITECTURES.find(name => name === facts.arch);
+  if (architecture === undefined) {
+    return {unreadable: 'arch'};
+  }
   const tools = TOOL_NAMES.filter(name => facts[`tool.${name}`] === 'yes');
   return {
-    operatingSystem: facts.os === 'darwin' ? 'darwin' : 'linux',
-    architecture:
-      facts.arch === 'arm64' || facts.arch === 'armhf' ? facts.arch : 'x64',
-    libc:
-      facts.libc === 'glibc' || facts.libc === 'musl' ? facts.libc : 'unknown',
-    release: facts.release ?? '',
-    home: facts.home ?? '',
-    temporaryFolder: facts.tmp ?? '',
-    loginShell: facts.shell ?? '',
-    tools,
-    busyboxWget: facts.wgetBusybox === 'yes',
-    sshAuthSock: facts.sshAuthSock ?? '',
-    display: facts.display ?? '',
-    installed: block.serverFacts.installed === 'yes',
-    installFolder: block.serverFacts.installDir ?? '',
+    host: {
+      operatingSystem,
+      architecture,
+      libc:
+        facts.libc === 'glibc' || facts.libc === 'musl'
+          ? facts.libc
+          : 'unknown',
+      release: facts.release ?? '',
+      home: facts.home ?? '',
+      temporaryFolder: facts.tmp ?? '',
+      loginShell: facts.shell ?? '',
+      tools,
+      busyboxWget: facts.wgetBusybox === 'yes',
+      sshAuthSock: facts.sshAuthSock ?? '',
+      display: facts.display ?? '',
+      installed: block.serverFacts.installed === 'yes',
+      installFolder: block.serverFacts.installDir ?? '',
+    },
   };
 }
 
@@ -109,7 +128,14 @@ export async function probe(
       failure: {kind: 'probeFailed', status: block.status},
     };
   }
-  const host = hostOf(block);
+  const read = hostOf(block);
+  if ('unreadable' in read) {
+    return {
+      kind: 'failed',
+      failure: {kind: 'unreadableFacts', field: read.unreadable},
+    };
+  }
+  const {host} = read;
   const missing = REQUIRED_TOOLS.filter(name => !host.tools.includes(name));
   return missing.length > 0
     ? {kind: 'failed', failure: {kind: 'prerequisiteMissing', missing}}

@@ -213,7 +213,7 @@ const PROBE_BODY: readonly string[] = [
   'fact host.kernel "$(uname -r 2>/dev/null)"',
   'RELEASE_ID=$(. /etc/os-release >/dev/null 2>&1 </dev/null; echo "${ID:-}")',
   'fact host.release "${RELEASE_ID:-$OS_NAME}"',
-  'for TOOL in wget curl tar unzip flock; do',
+  'for TOOL in wget curl tar unzip flock gzip; do',
   '  if have "$TOOL"; then',
   '    fact "host.tool.$TOOL" yes',
   '  else',
