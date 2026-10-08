@@ -44,8 +44,11 @@ const IMPOSED_PROPERTY_KEYS = [
   'loc',
   'end',
   'min',
-  // Node.js child_process: the `cwd` of spawn options.
+  // Node.js child_process: the `cwd` and `env` of spawn options; @vscode/test-cli: the `env` of a configuration.
   'cwd',
+  'env',
+  // Mocha: the `ui` option.
+  'ui',
   // VS Code: the `t` of `l10n.t`.
   't',
 ];
@@ -71,6 +74,7 @@ const TYPESCRIPT_PROJECTS = [
   './tools/tsconfig.json',
   './packages/*/tsconfig.json',
   './packages/*/tsconfig.test.json',
+  './tests/acceptance/tsconfig.json',
 ];
 
 const DEFAULT_EXPORT_BAN = {
@@ -83,6 +87,7 @@ const DEFAULT_EXPORT_FILES = [
   'eslint.config.ts',
   'prettier.config.ts',
   '.vscode-test.mjs',
+  'tests/acceptance/vscode-test.mjs',
 ];
 
 // ADR-0002, decision 9: Node's type stripping resolves a relative import only by its full file name.

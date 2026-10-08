@@ -1,0 +1,9 @@
+// The acceptance suite runs in the editor's extension host: Node.js, Mocha's globals and the editor API.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "mocha", "vscode"],
+    "tsBuildInfoFile": "${configDir}/.tsc/suite.tsbuildinfo"
+  },
+  "include": ["${configDir}/suite"]
+}

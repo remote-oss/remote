@@ -1,0 +1,8 @@
+#!/bin/sh
+# Installs the run's public key, given in AUTHORIZED_KEY, for the user harness, then runs sshd in the foreground.
+set -eu
+install -d -m 700 -o harness -g harness /home/harness/.ssh
+printf '%s\n' "$AUTHORIZED_KEY" > /home/harness/.ssh/authorized_keys
+chown harness:harness /home/harness/.ssh/authorized_keys
+chmod 600 /home/harness/.ssh/authorized_keys
+exec /usr/sbin/sshd -D -e
