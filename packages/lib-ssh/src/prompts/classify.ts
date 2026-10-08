@@ -110,8 +110,8 @@ function maskedPlaceholder(text: string): PromptText {
   }
   const passwordAt = text.indexOf(PASSWORD_FOR);
   if (passwordAt >= 0) {
-    const words = text.slice(0, passwordAt).split(/\s+/);
-    return {id: 'S066', values: [words[words.length - 1] ?? '']};
+    const lastWord = text.slice(0, passwordAt).replace(/^.*\s/su, '');
+    return {id: 'S066', values: [lastWord]};
   }
   if (text.includes('Password:')) {
     return {id: 'S065', values: []};

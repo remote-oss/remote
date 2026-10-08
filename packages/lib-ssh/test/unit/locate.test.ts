@@ -75,11 +75,14 @@ describe('candidates (the programs to try, in order)', () => {
       makeEnv('C:\\Windows\\System32', 'C:\\Program Files'),
       'windows',
     );
-    deepStrictEqual(
-      list.map(candidate => candidate.origin),
-      ['setting', 'path', 'gitForWindows'],
-    );
-    deepStrictEqual(list[0], {program: 'C:\\x\\ssh.exe', origin: 'setting'});
+    deepStrictEqual(list, [
+      {program: 'C:\\x\\ssh.exe', origin: 'setting'},
+      {program: 'ssh.exe', origin: 'path'},
+      {
+        program: 'C:\\Program Files\\Git\\usr\\bin\\ssh.exe',
+        origin: 'gitForWindows',
+      },
+    ]);
   });
 
   const SETTINGS = [
