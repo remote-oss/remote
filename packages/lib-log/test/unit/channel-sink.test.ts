@@ -19,9 +19,13 @@ describe('channel sink (card log-02 table)', () => {
     const port = new FakeEditorPort();
     const sink = createChannelSink(port, 'Remote - SSH');
     sink.write(LINE);
-    strictEqual(port.channels.length, 1);
-    deepStrictEqual(port.channels.at(0)?.name, 'Remote - SSH');
-    deepStrictEqual(port.channels.at(0)?.appendedLines, [defaultFormat(LINE)]);
+    deepStrictEqual(
+      port.channels.map(channel => ({
+        name: channel.name,
+        lines: channel.appendedLines,
+      })),
+      [{name: 'Remote - SSH', lines: [defaultFormat(LINE)]}],
+    );
   });
 
   it('three writes -> one channel, three appendLine calls in order', () => {
@@ -32,12 +36,22 @@ describe('channel sink (card log-02 table)', () => {
     sink.write(LINE);
     sink.write(second);
     sink.write(third);
-    strictEqual(port.channels.length, 1);
-    deepStrictEqual(port.channels.at(0)?.appendedLines, [
-      defaultFormat(LINE),
-      defaultFormat(second),
-      defaultFormat(third),
-    ]);
+    deepStrictEqual(
+      port.channels.map(channel => ({
+        name: channel.name,
+        lines: channel.appendedLines,
+      })),
+      [
+        {
+          name: 'Remote - SSH',
+          lines: [
+            defaultFormat(LINE),
+            defaultFormat(second),
+            defaultFormat(third),
+          ],
+        },
+      ],
+    );
   });
 
   it("custom format returning 'X' -> appendLine('X')", () => {
@@ -52,9 +66,18 @@ describe('channel sink (card log-02 table)', () => {
     const sink = createChannelSink(port, 'Remote - SSH');
     sink.write(LINE);
     sink.dispose();
-    strictEqual(port.channels.at(0)?.disposeCalls, 1);
     sink.write(LINE);
-    strictEqual(port.channels.length, 2);
+    deepStrictEqual(
+      port.channels.map(channel => ({
+        name: channel.name,
+        lines: channel.appendedLines,
+        disposed: channel.disposeCalls,
+      })),
+      [
+        {name: 'Remote - SSH', lines: [defaultFormat(LINE)], disposed: 1},
+        {name: 'Remote - SSH', lines: [defaultFormat(LINE)], disposed: 0},
+      ],
+    );
   });
 
   it('dispose() before any write -> no port call at all', () => {

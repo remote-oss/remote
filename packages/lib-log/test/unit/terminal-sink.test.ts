@@ -25,12 +25,18 @@ describe('terminal sink (card log-02 table)', () => {
     sink.write(FIRST);
     sink.write(SECOND);
     sink.show();
-    strictEqual(port.terminals.length, 1);
-    strictEqual(port.terminals.at(0)?.name, 'WSL');
-    deepStrictEqual(port.terminals.at(0)?.writtenText, [
-      `${defaultFormat(FIRST)}\r\n`,
-      `${defaultFormat(SECOND)}\r\n`,
-    ]);
+    deepStrictEqual(
+      port.terminals.map(terminal => ({
+        name: terminal.name,
+        text: terminal.writtenText,
+      })),
+      [
+        {
+          name: 'WSL',
+          text: [`${defaultFormat(FIRST)}\r\n`, `${defaultFormat(SECOND)}\r\n`],
+        },
+      ],
+    );
   });
 
   it('terminal sink: a write after show() -> streamed at once: one more write call', () => {
@@ -56,12 +62,24 @@ describe('terminal sink (card log-02 table)', () => {
     port.closeLatestTerminal();
     sink.write(THIRD);
     sink.show();
-    strictEqual(port.terminals.length, 2);
-    deepStrictEqual(port.terminals.at(1)?.writtenText, [
+    const replay = [
       `${defaultFormat(FIRST)}\r\n`,
       `${defaultFormat(SECOND)}\r\n`,
       `${defaultFormat(THIRD)}\r\n`,
-    ]);
+    ];
+    deepStrictEqual(
+      port.terminals.map(terminal => ({
+        name: terminal.name,
+        text: terminal.writtenText,
+      })),
+      [
+        {
+          name: 'WSL',
+          text: [`${defaultFormat(FIRST)}\r\n`, `${defaultFormat(SECOND)}\r\n`],
+        },
+        {name: 'WSL', text: replay},
+      ],
+    );
   });
 
   it('terminal sink: show() twice while open -> one terminal only', () => {
@@ -79,12 +97,21 @@ describe('terminal sink (card log-02 table)', () => {
     sink.write(SECOND);
     sink.show();
     sink.dispose();
-    strictEqual(port.terminals.at(0)?.disposeCalls, 1);
-    sink.show();
-    strictEqual(port.terminals.length, 2);
-    deepStrictEqual(port.terminals.at(1)?.writtenText, [
+    const buffered = [
       `${defaultFormat(FIRST)}\r\n`,
       `${defaultFormat(SECOND)}\r\n`,
-    ]);
+    ];
+    sink.show();
+    deepStrictEqual(
+      port.terminals.map(terminal => ({
+        name: terminal.name,
+        text: terminal.writtenText,
+        disposed: terminal.disposeCalls,
+      })),
+      [
+        {name: 'WSL', text: buffered, disposed: 1},
+        {name: 'WSL', text: buffered, disposed: 0},
+      ],
+    );
   });
 });
