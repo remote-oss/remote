@@ -69,6 +69,15 @@
     },
     {
       "path": "packages/lib-ssh/tsconfig.test.json"
+    },
+    {
+      "path": "packages/lib-product"
+    },
+    {
+      "path": "packages/lib-product/tsconfig.test.json"
+    },
+    {
+      "path": "tests/acceptance"
     }
   ]
 }

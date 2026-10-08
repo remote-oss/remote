@@ -53,5 +53,23 @@ jobs:
       - run: pnpm identifiers
       - run: pnpm ${{ matrix.check }}
 
+  # The editor under test against the SSH host container of tests/acceptance, one job per slice. The runner's Docker,
+  # OpenSSH client and xvfb are preinstalled.
+  acceptance-slice-1:
+    name: acceptance (slice 1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Ubuntu 24.04 restricts unprivileged user namespaces, which the editor's renderer sandbox needs.
+      - run: sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
+      - run: xvfb-run --auto-servernum pnpm test:acceptance
+
   # integration:  pnpm test:integration under xvfb, after the testing ADR
   # conformance:  per package and profile, runner in tests/conformance/runner, after the testing ADR

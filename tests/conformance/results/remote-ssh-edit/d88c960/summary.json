@@ -1,0 +1,51 @@
+{
+  "suite": "remote-oss/remote-ssh-edit tests/conformance @ e8a14f3",
+  "build": "remote-oss/remote @ d88c960, remote-ssh-edit-0.0.0.vsix",
+  "gate_cases": 772,
+  "gate_profiles": [
+    "linux-none-bad-homeconfig",
+    "linux-none-bad-largefile",
+    "linux-none-bad-noext",
+    "linux-none-bad-readonly",
+    "linux-none-clean",
+    "linux-none-clean-gitrepo",
+    "linux-none-clean-restricted",
+    "linux-none-dirty",
+    "linux-none-dirty-locale",
+    "linux-none-dirty-pseudolocale",
+    "linux-none-dirty-untrusted",
+    "linux-none-dirty-virtual"
+  ],
+  "original": {
+    "pass": 690,
+    "fail": 82
+  },
+  "after_fixture_rerun": {
+    "pass": 704,
+    "fail": 68
+  },
+  "fixture_rerun": {
+    "cases": 17,
+    "counts": {
+      "pass": 14,
+      "fail": 3
+    }
+  },
+  "rerun_2x_wait_not_counted": {
+    "cases": 25,
+    "counts": {
+      "pass": 22,
+      "fail": 3
+    },
+    "note": "runner copy with every wait doubled; not part of the gate count until remote-pm classifies"
+  },
+  "companion_not_run": {
+    "cases": 39,
+    "by_profile": {
+      "linux-none-clean-companions": 8,
+      "linux-none-clean-sshwindow": 21,
+      "linux-none-dirty-sshwindow": 7,
+      "linux-none-clean-sshrestricted": 3
+    }
+  }
+}

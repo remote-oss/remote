@@ -1,0 +1,12 @@
+{
+  "//": "Reduced product.json of VS Code 1.139.1: only the fields F-3902 section 3 states.",
+  "applicationName": "code",
+  "serverApplicationName": "code-server",
+  "serverDataFolderName": ".vscode-server",
+  "updateUrl": "https://update.code.visualstudio.com",
+  "serverLicense": ["*", "* Visual Studio Code Server", "*"],
+  "serverLicenseUrl": "https://aka.ms/vscode-server-license",
+  "version": "1.139.1",
+  "commit": "04c0d99f",
+  "quality": "stable"
+}

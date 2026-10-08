@@ -1,0 +1,31 @@
+/**
+ * @fileoverview lib-product: the running editor's product profile, and where its server archive comes from.
+ */
+
+export {
+  BASE_PLACEHOLDERS,
+  type Expansion,
+  expand,
+  type PlaceholderValues,
+} from './expand.ts';
+export {classifyLicence, type LicenceFacts} from './licence.ts';
+export {
+  type OverridePolicy,
+  OVERRIDE_POLICIES,
+  type SettingsLayer,
+} from './policies.ts';
+export {ACTIVE_LICENCE_RULES, type LicenceRuleName} from './product-table.ts';
+export {
+  type ProductProfile,
+  type ProfileReading,
+  readProfile,
+} from './profile.ts';
+export {
+  type ArchiveResolution,
+  type HostPlatform,
+  type OverrideValue,
+  type ResolutionStep,
+  resolveServerArchive,
+  type SkippedSource,
+  type TemplateProblem,
+} from './resolve.ts';
