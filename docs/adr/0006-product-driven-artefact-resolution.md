@@ -86,7 +86,9 @@ together whenever the CLI might not match the client; templates pre-expanded exc
 feed, and installs under `--cli-data-dir ~/<serverDataFolderName>/cli` → `cli/servers/<Quality>-<commit>/server/`;
 the CLI archive contains one file named `<applicationName>`; alpine x64/arm64 and linux armhf builds exist; errors come
 back in the serve reply (`StatusError` with url and status; `WrappedError` for templates), no separate stderr line;
-no licence prompt, no device flow, no telemetry during an install.
+no licence prompt, no device flow, no telemetry during an install. Only the patch's two messages are stable (`cannot expand ${name} for commit <sha> …`, `the download is not
+commit <sha>`); the upstream `StatusError`/`WrappedError` text is a Debug dump, so the extension matches `url:`,
+`status_code:`, `cannot expand` and `the download is not commit` loosely and shows the whole message as the fallback.
 
 ## Options considered
 
