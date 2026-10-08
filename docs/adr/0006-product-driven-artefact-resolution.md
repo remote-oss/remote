@@ -77,6 +77,17 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
    server URL; VSCodium) and one synthetic `product.json` with made-up names and both templates, so a build that
    hard-codes any product fails a case.
 
+## Facts from the VSCodium CLI patch (D-76, 2026-10-08, for the later revision)
+
+`cliDownloadUrlTemplate` exists next to `serverDownloadUrlTemplate` with the same shape; VSCodium bakes the release
+into both, so only `${os}` and `${arch}` remain; `${release}` resolves from `version` (no `release` field). The CLI
+honours `VSCODE_CLI_SERVER_DOWNLOAD_URL_TEMPLATE`, `VSCODE_CLI_COMMIT` and `VSCODE_CLI_QUALITY` at run time (set
+together whenever the CLI might not match the client; templates pre-expanded except os/arch), never falls back to a
+feed, and installs under `--cli-data-dir ~/<serverDataFolderName>/cli` → `cli/servers/<Quality>-<commit>/server/`;
+the CLI archive contains one file named `<applicationName>`; alpine x64/arm64 and linux armhf builds exist; errors come
+back in the serve reply (`StatusError` with url and status; `WrappedError` for templates), no separate stderr line;
+no licence prompt, no device flow, no telemetry during an install.
+
 ## Options considered
 
 | Option | For | Against |
