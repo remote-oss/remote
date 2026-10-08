@@ -1,4 +1,7 @@
-# Task card identity-01: remote-ssh-edit manifest and README to the approved identity card (D-56)
+# Task card identity-01: remote-ssh-edit README to the approved identity card (D-56)
+
+> Scope reduced 2026-10-08: the manifest and nls values landed in PR #91 for all packages; this card is the README
+> part only (section 2's table is kept as the reference of the values already in place; do not change the manifest).
 
 Source: the user's approved identity card (relayed by the lead; the values below are complete for this package).
 Reviewing coder: `remote-coding-worker-1`. ADR-0008 applies to every word.
