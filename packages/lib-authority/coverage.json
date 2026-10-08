@@ -1,0 +1,10 @@
+{
+  "ratchet": {
+    "lines": 99.17,
+    "branches": 97.76,
+    "functions": 100
+  },
+  "exclude": {
+    "src/codecs/types.ts": "types only; no executable code"
+  }
+}
