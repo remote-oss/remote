@@ -1031,6 +1031,49 @@ describe('the POSIX bootstrap script', () => {
       return {status, victim};
     }
 
+    /** Starts an install whose download takes a while, interrupts the shell with `signal`, and waits for it to end. */
+    async function installInterruptedBy(
+      signal: NodeJS.Signals,
+      shellProgram: string,
+    ): Promise<void> {
+      const shell = spawn(shellProgram, ['-s'], {
+        env: {...host.environment, STUB_FETCH_SLEEP: '2'},
+        stdio: ['pipe', 'ignore', 'ignore'],
+      });
+      shell.stdin.end(
+        scriptFor(single('install'), 'posixShell', parametersFor()),
+      );
+      const lock = path.join(
+        installFolder(host),
+        'boot-lock.user.abc123.target',
+      );
+      for (let wait = 0; wait < 50 && !existsSync(lock); wait++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      shell.kill(signal);
+      await new Promise(resolve => shell.once('exit', resolve));
+    }
+
+    for (const shellProgram of ['/bin/sh', '/bin/dash']) {
+      for (const signal of ['SIGTERM', 'SIGHUP'] as const) {
+        it(`F-2408.BR-4: an install interrupted by ${signal} under ${shellProgram} does not leave its link lock behind`, async () => {
+          await installInterruptedBy(signal, shellProgram);
+          deepStrictEqual(
+            existsSync(
+              path.join(installFolder(host), 'boot-lock.user.abc123.target'),
+            ),
+            false,
+          );
+        });
+      }
+    }
+
+    it('F-2408.BR-4: a lock another window holds is not released by an install that gave up on it', () => {
+      const lock = holdLinkLock(host);
+      runScript(host, single('install'), parametersFor());
+      deepStrictEqual(existsSync(`${lock}.target`), true);
+    });
+
     it('F-2408.BR-2: a lock in the temporary folder that is a symlink is refused', () => {
       const outcome = installOverSymlinkedLock();
       deepStrictEqual(outcome.status, 'LockBusy');

@@ -88,6 +88,7 @@ function downloader(name: string, outputFlag: string): string {
     `  if [ "$1" = ${outputFlag} ]; then OUT=$2; fi`,
     '  shift',
     'done',
+    '[ -z "$STUB_FETCH_SLEEP" ] || sleep "$STUB_FETCH_SLEEP"',
     '[ "${STUB_FETCH_FAILS:-no}" = yes ] && exit 1',
     'cp "$STUB_ARCHIVE" "$OUT"',
   ].join('\n');
