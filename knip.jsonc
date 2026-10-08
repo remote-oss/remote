@@ -11,12 +11,15 @@
         "tools/coverage.ts",
         "tools/integration-tests.ts",
         "tools/licences.ts",
+        "tools/acceptance.ts",
+        "tests/acceptance/vscode-test.mjs",
+        "tests/acceptance/suite/*.test.ts",
         "tools/identifiers.ts",
         "tools/string-tables.ts",
         "tools/package-extensions.ts",
         ".vscode-test.mjs",
       ],
-      "project": ["tools/**/*.ts", "*.config.ts"],
+      "project": ["tools/**/*.ts", "*.config.ts", "tests/acceptance/**/*.ts"],
     },
     // A library's entry is its index: its exports are the contract the extensions import, so they are not reported
     // as unused; everything behind the index is.
@@ -35,11 +38,14 @@
   // @vscode/test-cli reads the default export of its configuration file.
   "ignoreIssues": {
     ".vscode-test.mjs": ["exports"],
+    "tests/acceptance/vscode-test.mjs": ["exports"],
     // The editor calls an extension's activate().
     "packages/*/src/extension.ts": ["exports"],
   },
   "ignoreBinaries": ["shellcheck"],
   "ignoreDependencies": [
+    // The editor provides it to the acceptance tests at run time; @types/vscode types it.
+    "vscode",
     // @vscode/test-cli loads it to download and start the editor.
     "@vscode/test-electron",
     // tools/coverage.ts starts it through import.meta.resolve, which knip does not follow.

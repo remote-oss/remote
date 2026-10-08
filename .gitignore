@@ -6,3 +6,4 @@ dist/
 .tsc/
 coverage/
 packages/*/src/identifiers.generated.ts
+tests/acceptance/dist/

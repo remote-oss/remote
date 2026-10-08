@@ -1,0 +1,11 @@
+{
+  "name": "acceptance-runner",
+  "displayName": "Acceptance test runner",
+  "description": "Hosts the acceptance tests in the editor under test; it contributes nothing.",
+  "version": "0.0.0",
+  "publisher": "remote-oss",
+  "private": true,
+  "engines": {
+    "vscode": "^1.139.0"
+  }
+}

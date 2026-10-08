@@ -20,12 +20,13 @@
     "dead": "node tools/identifiers.ts && knip --no-progress --no-config-hints",
     "coverage": "node tools/identifiers.ts && node tools/coverage.ts",
     "coverage:update": "node tools/identifiers.ts && node tools/coverage.ts --update",
-    "lint:shell": "shellcheck tools/check-layout tools/spec-watch",
+    "lint:shell": "shellcheck tools/check-layout tools/spec-watch tests/acceptance/host/start-sshd",
     "check-licences": "node tools/licences.ts",
     "identifiers": "node tools/identifiers.ts",
     "check-identifiers": "node tools/identifiers.ts --check",
     "check-string-tables": "node tools/string-tables.ts",
-    "package": "pnpm build && node tools/package-extensions.ts"
+    "package": "pnpm build && node tools/package-extensions.ts",
+    "test:acceptance": "pnpm package && node tools/acceptance.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
