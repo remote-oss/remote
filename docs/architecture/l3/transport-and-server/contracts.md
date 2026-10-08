@@ -261,6 +261,27 @@ Rules:
   the text (F-2308 BR-2, BR-4).
 - It is never created trust-exempt (F-3903 rule 1).
 
+Rulings of 2026-10-08 for S9 and S10 (the process side):
+- Secrets never touch the registry file: lib-helper's record carries only endpoint, nonce, process id and the SOCKS
+  port; the shared record of F-2102 (remote port, OS, architecture, temp folder, connection token) lives in the
+  helper's memory, set once after the connection completes, and reaches a later lease through a `sharedRecord`
+  request after its hello. This satisfies "written only after the connection completes".
+- Helper messages are plain data over lib-helper's channel: requests `connect` (owner only), `sharedRecord`,
+  `setSharedRecord`, `answer {promptId, text}`, `kill`; events `prompt {promptId, surface, text}`, `promptClosed`,
+  `ownerChanged`, `connected {socksPort}`, `transportLost`, `waitingForOtherWindow`. S6 classifies prompts inside
+  the helper; no answer is stored or logged.
+- The SOCKS port: prefer `-D 0` with the allocated port read from `ssh -v` ("Allocated port N for ...") when the
+  local OpenSSH supports it (verified once against the local client and recorded as a fixture); otherwise pick a
+  free loopback port by binding port 0 and closing (allowed here; W1's "never probe by binding" is about the
+  forwarding search).
+- The first setup report that ends the connect wait is the `ssh -v` authentication line ("Authenticated to ... using
+  ..."), exposed by S5 as the marker `authenticated` (added to S5's rules; a one-row card).
+- S10 runs a script with input as `sh -c '<quoted>'` and a script without input as `sh -s` on standard input; the
+  quoting assumes a POSIX-reading login shell, which slice 1's harness provides; a fish or csh login shell is the
+  slice-3 variant of the harness, with the room's two-mode bootstrap answer.
+- The askpass endpoint is a second socket (mode 0600) in the runtime folder, reached by `ssh` through a bundled
+  `SSH_ASKPASS` script and two environment variables; its own PR after S9.
+
 ### S9 connection-server
 
 Provisional (lab) for Windows clients: named pipes, a script as `SSH_ASKPASS`, and the detached helper's survival
