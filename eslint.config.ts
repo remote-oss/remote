@@ -160,6 +160,7 @@ export default defineConfig(
       // The guide writes a multi-line implementation comment as several `//` lines; JSDoc is not affected.
       'multiline-comment-style': ['error', 'separate-lines'],
       'names/scoped-exceptions': 'error',
+      'names/edge-underscore': ['error', {imposedKeys: IMPOSED_PROPERTY_KEYS}],
       'id-length': [
         'error',
         {
