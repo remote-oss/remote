@@ -1,0 +1,3 @@
+remote-oss-server-result-begin
+  status=Ok
+remote-oss-server-result-end

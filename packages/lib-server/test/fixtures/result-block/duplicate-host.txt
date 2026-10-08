@@ -1,0 +1,5 @@
+remote-oss-server-result-begin
+status=Ok
+host.os=linux
+host.os=alpine
+remote-oss-server-result-end
