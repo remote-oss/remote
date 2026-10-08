@@ -28,7 +28,7 @@ export interface Scheduler { setTimer(milliseconds: number, callback: () => void
 export type PolicyOutcome = { kind: 'end' } | { kind: 'runActionThenEnd'; action: string };
 export class EndPolicyRunner {
   constructor(policy: EndPolicy, table: LeaseTable, scheduler: Scheduler, onOutcome: (outcome: PolicyOutcome) => void);
-  // arms when the live list becomes empty; disarms when a lease opens before the timer fires;
+  // armed at construction as if a lease had just closed (a helper that never receives a lease still ends; ruled 2026-10-08); re-arms whenever the live list becomes empty; disarms when a lease opens before the timer fires;
   // delayedCheck: when the timer fires, if the list is still empty → onOutcome({runActionThenEnd, action}); else nothing (disarmed by the open already)
   // grace and idle: when the timer fires and the list is still empty → onOutcome({end})
   dispose(): void;                       // cancels any armed timer
@@ -61,7 +61,7 @@ timer at a time.
 | two leases, close one, advance past the grace | no outcome (a lease is live) |
 | `dispose()` after close, then advance past the grace | no outcome |
 | policy `{kind: 'graceAfterLastLease', milliseconds: 0}` | constructor throws `PolicyError`; same for `-1` and `NaN` |
-| the runner with a table that is already empty at construction | not armed (a helper starts with its first lease pending): advance far → no outcome; then open, close, advance → outcome |
+| the runner with a table that is empty at construction | armed at once: advance past the policy's time with no lease ever opened → one outcome; a lease opened before the timer disarms it |
 | `FakeClock`: two timers 100 and 50 | the 50 fires first on `advance(100)`; a timer armed inside a callback for 10 fires within the same `advance` when it falls inside the window |
 | `FakeClock` cancel | a cancelled timer never fires |
 

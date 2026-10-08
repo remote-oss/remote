@@ -700,7 +700,9 @@ The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
 |---|---|---|---|
 | `serve` | endpoint, record payload, end policy, message handler | runs until the end policy fires or `stop` arrives | none raised; the helper logs to its own file and exits |
 
-End policies (data, no per-consumer branches):
+End policies (data, no per-consumer branches). The policy is armed at start as if a lease had just closed, so a
+helper that never receives a lease ends by the same rule (ruled 2026-10-08); a joiner never replaces a still-starting
+helper's record (the claim is atomic and the starter's hello window counts as alive):
 - `graceAfterLastLease(ms)`: end this long after the last lease closes. A new lease within the grace cancels it. SSH
   uses 2 to 4 s (F-2102 BR-3), and the value must also carry a reload.
 - `delayedCheckAfterLastLease(ms, action)`: after the last lease closes, wait, check again, then run the consumer's

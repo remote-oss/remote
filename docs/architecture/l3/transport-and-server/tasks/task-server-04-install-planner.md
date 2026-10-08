@@ -28,8 +28,8 @@ export function plan(input: PlanInput): { plan: Plan } | { failure: PlanFailure 
 
 Rules (from V3): the install path is checked first: an empty-after-trim setting, a relative path (not starting with
 `/`, `~`, or a Windows drive `X:`), or one containing `\n` is `invalidInstallPath`; `~` and `~/x` expand with
-`facts.homeFolder`; the data folder is `<installPath or home>/<serverDataFolderName>`; `lockPlace` is
-`<dataFolder>/install.lock`; reuse is decided before the source: a `bin` layout with the same commit, else a
+`facts.homeFolder`; the data folder is `<installPath or home>/<serverDataFolderName>`; `lockPlace` is the FOLDER the host lock lives in, `<dataFolder>/bin/<commit>` (F-2408 BR-1/BR-2: the lock file
+`<prefix>.<commit>` inside it, or the script's `/tmp` fallback, is composed by V1's script, not by the planner); reuse is decided before the source: a `bin` layout with the same commit, else a
 `cliServers` layout with the same commit (F-3902 rule 10), gives `reuse`; only then the source is read: `noSource` →
 failure, `invalidOverride` → failure; `where`: `hostFirst` → `host` with `clientFallback` = (mode === 'auto'),
 `hostFirst` mode `always` → `client` with `clientFallback` false, mode `off` → `host` false; `clientFirstThenHost` →
@@ -60,7 +60,7 @@ passed through.
 | `clientFirstThenHost` | `where 'client'`, `clientFallback true` |
 | `clientOnly` | `where 'client'`, `clientFallback false` |
 | `installFolder` for commit `abc`, dataFolder `/home/u/.vscode-server` | `/home/u/.vscode-server/bin/abc` |
-| `lockPlace` | `/home/u/.vscode-server/install.lock` |
+| `lockPlace` | `/home/u/.vscode-server/bin/abc` (ruled 2026-10-08: F-2408 governs; the file name is the script's) |
 | `useExecServerSetting: true` | `notes` contains `useExecServerIgnored` (download and reuse alike) |
 | `useExecServerSetting: false` | `notes` empty |
 | `address` | copied from the resolved source |
