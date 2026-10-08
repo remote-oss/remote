@@ -1,0 +1,7 @@
+#!/bin/sh
+# The lab driver (`lab`): text or, with LAB_JSON=1, JSON views of the VS Code window of slot $LAB_SLOT.
+R=$(cd "$(dirname "$0")/.." && pwd)
+export LAB_SLOTS_DIR="${ENCODE_SLOTS_DIR:-$HOME/conformance-work/slots}"
+export LAB_SHOTS_DIR="${LAB_SHOTS_DIR:-${ENCODE_RESULTS:-$HOME/conformance-work/results}/shots}"
+export LAB_PLAYWRIGHT="${LAB_PLAYWRIGHT:-$R/lab/node_modules/playwright-core}"
+exec node "$R/lab/lab.mjs" "$@"

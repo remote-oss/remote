@@ -1,0 +1,415 @@
+"""Drive one lab slot for the encode tools: `lab` calls in JSON mode (LAB_JSON=1), waits with explicit conditions,
+observations, and Docker queries against the run's PRIVATE daemon.
+
+Nothing here opens its own CDP or WebSocket connection: every UI interaction goes through the `lab` command.
+Docker is only ever asked for state, labels and mounts (never command lines, never exec into anything).
+"""
+import json
+import os
+import shlex
+import subprocess
+import time
+
+import caselib
+import normalize
+import redact
+
+# environment for subprocesses that must talk to the HOST's Docker / lab tooling, never to some DOCKER_HOST of ours
+BASE_ENV = {k: v for k, v in os.environ.items()
+            if k not in ("DOCKER_HOST", "DOCKER_CONTEXT", "LAB_DOCKER_SOCK", "LAB_HOME", "LAB_WINDOW", "LAB_JSON",
+                         "LAB_HOST", "LAB_SLOT", "LAB_PASSENV", "LAB_AGENT")}
+
+STATE_WHATS = ("title", "dialogs", "notifications", "statusbar", "contextmenu", "banner", "editors", "welcome",
+               "sidebar")
+SIMPLE_WHATS = STATE_WHATS + ("quickpick", "notification_center", "windows", "files")
+DICT_WHATS = ("view", "hover", "docker", "panel", "statusbar", "contextmenu", "suggest", "hovertext", "markers", "tokens", "folds", "outline",
+              "breadcrumbs")
+# Editor observations (lab verbs of the same name, remote-ssh-edit 2026-10-02): the payload keys kept from the verb's
+# JSON output. Expectation key: <kind>:<file or "active">[@line[:col]].
+EDITOR_PAYLOAD = {
+    "suggest": ("items", "total", "message"),
+    "hovertext": ("text", "parts", "actions"),
+    "markers": ("items",),
+    "tokens": ("text", "length", "language", "tokenType", "scopes"),
+    "folds": ("items",),
+    "outline": ("items",),
+    "breadcrumbs": ("items",),
+}
+# Arguments of an editor observation that the recorder reads itself and never hands to the lab verb (2026-10-03):
+# `timeout`, the seconds the verb may take (default EDITOR_TIMEOUT); `fields`, for suggest, the item fields kept
+# (`order` always), so a case records only what its AC asserts (a list whose documentation is not the contract).
+EDITOR_TIMEOUT = 120
+RECORDER_ARGS = ("timeout", "fields")
+SUGGEST_FIELDS = ("label", "kind", "preselected", "detail", "documentation", "links", "labelDetail", "qualifier",
+                  "description", "deprecated")
+
+
+def editor_key(kind, arg):
+    pos = f"@{arg['line']}" + (f":{arg['col']}" if "col" in arg else "") if "line" in arg else ""
+    return f"{kind}:{arg.get('file') or 'active'}{pos}"
+WAIT_KINDS = ("quickpick", "dialog", "no_dialog", "no_notification", "notification", "statusbar", "title", "windows", "view", "container",
+              "volume", "quiet")
+
+
+
+_SCALE = []
+
+
+def wait_scale():
+    """Every case wait times this factor: ENCODE_WAIT_SCALE, else the package's identity file (runner: wait_scale),
+    else 1. remote-ssh-edit runs at 2 (remote-oss/remote#72 triage: 22 timeouts passed at twice the wait)."""
+    if not _SCALE:
+        v = os.environ.get("ENCODE_WAIT_SCALE")
+        if not v:
+            try:
+                v = ((normalize.identity_config() or {}).get("runner") or {}).get("wait_scale")
+            except Exception:
+                v = None
+        _SCALE.append(float(v or 1))
+    return _SCALE[0]
+
+
+class Docker:
+    """docker CLI against one daemon (DOCKER_HOST=tcp://...)."""
+
+    def __init__(self, docker_host, remote=None):
+        self.docker_host, self.remote = docker_host, remote
+
+    def run(self, args, check=False, timeout=180):
+        p = subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout,
+                           env=dict(BASE_ENV, DOCKER_HOST=self.docker_host))
+        if check and p.returncode != 0:
+            raise RuntimeError(f"docker {' '.join(args[:3])} failed: {p.stderr.strip()[:300]}")
+        return p
+
+    def containers(self, ids=False):
+        """State, labels and mounts of every container (with ids=True also its id, for `bind`)."""
+        want_ids = ids
+        ids = self.run(["ps", "-aq", "--no-trunc"]).stdout.split()
+        if not ids:
+            return []
+        out = []
+        for c in json.loads(self.run(["inspect", *ids]).stdout or "[]"):
+            mounts = []
+            for m in c.get("Mounts") or []:
+                rec = {"type": m.get("Type"), "destination": m.get("Destination"), "rw": m.get("RW")}
+                if m.get("Type") == "volume":
+                    rec["name"] = m.get("Name")
+                else:
+                    rec["source"] = m.get("Source")
+                mounts.append(rec)
+            mounts.sort(key=lambda r: (r.get("destination") or ""))
+            out.append({"name": (c.get("Name") or "").lstrip("/"), "image": (c.get("Config") or {}).get("Image"),
+                        "state": (c.get("State") or {}).get("Status"),
+                        "labels": (c.get("Config") or {}).get("Labels") or {}, "mounts": mounts})
+            if want_ids:
+                out[-1]["id"] = c.get("Id")
+        return out
+
+    def volumes(self, containers=None):
+        names = self.run(["volume", "ls", "-q"]).stdout.split()
+        if not names:
+            return []
+        containers = self.containers() if containers is None else containers
+        out = []
+        for v in json.loads(self.run(["volume", "inspect", *names]).stdout or "[]"):
+            users = sorted(c["name"] for c in containers if any(m.get("name") == v["Name"] for m in c["mounts"]))
+            out.append({"name": v["Name"], "driver": v.get("Driver"), "labels": v.get("Labels") or {}, "used_by": users})
+        return out
+
+    def images(self):
+        ids = sorted(set(self.run(["images", "-q", "--no-trunc"]).stdout.split()))
+        if not ids:
+            return []
+        out = []
+        for i in json.loads(self.run(["image", "inspect", *ids]).stdout or "[]"):
+            out.append({"tags": sorted(i.get("RepoTags") or []), "labels": (i.get("Config") or {}).get("Labels") or {}})
+        return out
+
+
+def match_filter(rec, flt, kind):
+    """Case-scoped filters: {name: x} exact, {name_prefix: x}, {label: k} or {label: k=v}."""
+    names = rec.get("tags") if kind == "images" else [rec.get("name")]
+    names = [n for n in names or [] if n]
+    if "name" in flt and flt["name"] not in names:
+        return False
+    if "name_prefix" in flt and not any(n.startswith(flt["name_prefix"]) for n in names):
+        return False
+    if "label" in flt:
+        k, _, v = str(flt["label"]).partition("=")
+        labels = rec.get("labels") or {}
+        if k not in labels or ("=" in str(flt["label"]) and labels[k] != v):
+            return False
+    return True
+
+
+BOOKKEEPING = {"ok", "command", "args", "messages", "error", "errorDetail"}
+NAVIGATION_ERRORS = ("Execution context was destroyed", "Target page, context or browser has been closed",
+                     "frame was detached", "Target closed", "navigation", "has been closed")
+
+
+def screen_only(st):
+    """What `quiet` compares: the screen, without how long the `lab` call took (`_seconds`) or other bookkeeping;
+    on a busy host the timing changed on every poll and the quiet timer never settled (F-0419, 2026-10-01)."""
+    if isinstance(st, dict):
+        return {k: screen_only(v) for k, v in st.items() if not k.startswith("_") and k not in BOOKKEEPING}
+    if isinstance(st, list):
+        return [screen_only(v) for v in st]
+    return st
+
+
+class Session:
+    """One run's view of its slot: lab calls, waits, observations."""
+
+    def __init__(self, slot, host, ph, docker=None, known_names=(), log=None):
+        self.slot, self.host, self.ph, self.docker = slot, host, ph, docker
+        self.known_names = set(known_names)
+        self.window = None
+        self.log = log or (lambda *_: None)
+
+    # ---- lab
+    def lab(self, *args, timeout=180):
+        env = dict(BASE_ENV, LAB_SLOT=str(self.slot), LAB_JSON="1")
+        if self.window:
+            env["LAB_WINDOW"] = self.window
+        t0 = time.time()
+        try:
+            p = subprocess.run([caselib.LAB, *map(str, args)], capture_output=True, text=True, env=env, timeout=timeout)
+            out = p.stdout.strip().splitlines()
+            try:
+                res = json.loads(out[-1]) if out else {"ok": False, "error": "no output: " + p.stderr.strip()[:300]}
+            except json.JSONDecodeError:
+                res = {"ok": False, "error": "unparseable lab output", "raw": p.stdout[-2000:]}
+        except subprocess.TimeoutExpired:
+            res = {"ok": False, "error": f"lab {args[0]} timed out after {timeout}s"}
+        if isinstance(res, dict) and "ok" not in res:
+            res["ok"] = True
+        res["_seconds"] = round(time.time() - t0, 1)
+        # R-34: a command line shown on screen is redacted the moment it is captured, so waits, observations, step
+        # outputs and failure observations never hold one
+        return redact.redact_obj(res)
+
+    def state(self):
+        st = self.lab("state", timeout=60)
+        return st if st.get("ok") and "title" in st else None
+
+    def act(self, *args, timeout=180):
+        """An action verb. When its own action reloads or navigates the window, `lab` loses the page before it can
+        print the state ("Execution context was destroyed"); the action happened, so it counts as done as soon as a
+        fresh state read works (F-0419-AC14-13, 2026-10-01)."""
+        res = self.lab(*args, timeout=timeout)
+        err = str(res.get("error") or "") + " " + str(res.get("errorDetail") or "")
+        if res.get("ok") or not any(n in err for n in NAVIGATION_ERRORS):
+            return res
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            time.sleep(2)
+            st = self.state()
+            if st:
+                return {"ok": True, "navigated": True, "lostPage": str(res.get("error"))[:200], "state": st}
+        return res
+
+    # ---- waits
+    def wait(self, until, timeout):
+        conds = until if isinstance(until, list) else [until]
+        conds = [caselib.subst(c, self.ph) for c in conds]
+        timeout = float(timeout) * wait_scale()
+        deadline = time.time() + timeout
+        quiet = next((float(c["quiet"]) for c in conds if "quiet" in c), None)
+        last, since, polls = None, time.time(), 0
+        detail = {}
+        while True:
+            polls += 1
+            st = self.state()
+            snap = json.dumps(screen_only(st), sort_keys=True) if st else None
+            if snap != last:
+                last, since = snap, time.time()
+            ok_all = True
+            for c in conds:
+                (kind, arg), = c.items()
+                if kind == "quiet":
+                    ok = st is not None and time.time() - since >= quiet
+                else:
+                    ok = self._cond(kind, arg, st)
+                detail[kind] = ok
+                ok_all = ok_all and ok
+            if ok_all:
+                return {"ok": True, "polls": polls, "conditions": detail}
+            if time.time() > deadline:
+                return {"ok": False, "error": f"wait timed out after {timeout}s: " + json.dumps(conds)[:300],
+                        "polls": polls, "conditions": detail, "state": st}
+            time.sleep(1.0)
+
+    def _cond(self, kind, arg, st):
+        if kind in ("quickpick", "dialog", "no_dialog", "no_notification", "notification", "statusbar", "title") and st is None:
+            return False
+        if kind == "quickpick":
+            vis = bool(st["quickInput"].get("visible"))
+            if arg in ("visible", True):
+                return vis
+            if arg in ("hidden", False):
+                return not vis
+            q = st["quickInput"]
+            text = " ".join(str(x) for x in [q.get("title"), q.get("placeholder")] + [i["label"] for i in q.get("items", [])] if x)
+            return vis and str(arg.get("contains", "")) in text
+        if kind == "dialog":
+            return any(arg == "*" or arg in " ".join(filter(None, [d.get("message"), d.get("detail")] + d.get("body", [])))
+                       for d in st["dialogs"])
+        if kind == "no_dialog":
+            return not st["dialogs"]
+        if kind == "no_notification":   # R-49: no visible toast at all, or none whose text contains the given text
+            return not st["notifications"] if arg is True else not any(arg["contains"] in (n.get("text") or "") for n in st["notifications"])
+        if kind == "notification":
+            return any(arg in (n.get("text") or "") for n in st["notifications"])
+        if kind == "statusbar":
+            return any(arg in (i.get("text") or "") or arg in (i.get("aria") or "") for i in st["statusBar"])
+        if kind == "title":
+            return arg in st["title"]
+        if kind == "windows":
+            w = self.lab("windows", timeout=60)
+            return w.get("ok") and len([x for x in w.get("windows", []) if not x["auxiliary"]]) == int(arg)
+        if kind == "view":
+            v = self.lab("view", arg["name"], timeout=60)
+            if not v.get("ok") or "rows" not in v:
+                return False
+            if "row" in arg and not any(r["label"] == arg["row"] for r in v["rows"]):
+                return False
+            if "welcome" in arg and not any(arg["welcome"] in w for w in v["welcome"]):
+                return False
+            return True
+        if kind == "container":
+            recs = [c for c in self.docker.containers() if match_filter(c, arg, "containers")]
+            if arg.get("state") == "absent":
+                return not recs
+            return any(c["state"] == arg.get("state", "running") for c in recs)
+        if kind == "volume":
+            recs = [v for v in self.docker.volumes() if match_filter(v, arg, "volumes")]
+            return bool(recs) == bool(arg.get("exists", True))
+        raise ValueError(f"unknown wait condition {kind}")
+
+    # ---- observations
+    def observe(self, what):
+        what = caselib.subst(what, self.ph)
+        st = self.state() or {}
+        out = {}
+        for w in what:
+            if isinstance(w, str):
+                out[w] = self._observe_simple(w, st)
+            else:
+                (kind, arg), = w.items()
+                if kind == "view":
+                    v = self.lab("view", arg, timeout=60)
+                    out[f"view:{arg}"] = {k: v.get(k) for k in ("expanded", "titleActions", "welcome", "welcomeLinks", "messages", "rows")} \
+                        if v.get("ok") and "rows" in v else {"visible": False, "error": v.get("error")}
+                elif kind == "hover":
+                    h = self.lab("hover", arg["view"], arg["row"], timeout=60)
+                    out[f"hover:{arg['view']}/{arg['row']}"] = h.get("hovers", []) if h.get("ok") else {"error": h.get("error")}
+                elif kind == "docker":
+                    out["docker"] = self._observe_docker(arg)
+                # {contextmenu: {labels: [...]}} keeps only the named rows (plain label text) of each open menu, in menu
+                # order: VS Code core adds gallery-dependent rows a reimplementation not installed from a gallery lacks
+                # (remote-ssh-edit, F-4002 review). Generic, so the public runner replays such cases too.
+                elif kind == "contextmenu":
+                    keep = set(arg.get("labels") or [])
+                    out["contextmenu"] = [[i for i in m if isinstance(i, dict) and i.get("label") in keep]
+                                          for m in self._observe_simple("contextmenu", st)]
+                elif kind == "statusbar":   # the remote indicator and the extension's items, plus the core items named
+                    out["statusbar"] = self._observe_simple("statusbar", st, core=arg.get("core") or [])
+                elif kind == "panel":   # R-49: the panel part, its tabs, terminals and Output channel; never their text
+                    p = self.lab("panel", timeout=60)
+                    out["panel"] = {k: v for k, v in p.items() if k not in ("command", "args", "ok")} if p.get("ok") \
+                        else {"error": p.get("error")}
+                elif kind in EDITOR_PAYLOAD:
+                    out[editor_key(kind, arg)] = self._observe_editor(kind, arg)
+        return redact.redact_obj(out)
+
+    def _observe_editor(self, kind, arg):
+        """One editor observation through the lab verb of the same name (one JSON argument; LAB_JSON output)."""
+        verb_arg = {k: v for k, v in arg.items() if k not in RECORDER_ARGS}
+        r = self.lab(kind, json.dumps(verb_arg), timeout=int(arg.get("timeout") or EDITOR_TIMEOUT))
+        if not r.get("ok"):
+            return {"error": r.get("error")}
+        keys = EDITOR_PAYLOAD[kind]
+        if kind == "tokens" and "col" not in arg:
+            keys = ("tokens",)
+        out = {k: r.get(k) for k in keys} if len(keys) > 1 else r.get(keys[0])
+        if kind == "suggest" and arg.get("fields") and isinstance(out.get("items"), list):
+            want = ("order",) + tuple(f for f in SUGGEST_FIELDS if f in arg["fields"])
+            out["items"] = [{k: it[k] for k in want if k in it} if isinstance(it, dict) else it for it in out["items"]]
+        return out
+
+    def _observe_simple(self, w, st, core=()):
+        if w == "title":
+            return st.get("title")
+        if w == "dialogs":
+            return st.get("dialogs", [])
+        if w == "notifications":
+            return st.get("notifications", [])
+        if w == "statusbar":
+            ident = normalize.identity_config()
+            ids = [x["extension_id"] for x in (ident.get("reimplementation") or {},) if x.get("extension_id")]
+            # `core` (the dict form {statusbar: {core: [ids]}}): VS Code core's items with those ids too, e.g.
+            # status.editor.mode (the language), status.editor.eol, status.editor.indentation, status.editor.selection
+            return [i for i in st.get("statusBar", []) if i.get("id") == "status.host" or i.get("id") in core
+                    or any(e in (i.get("id") or "") for e in ids)]
+        if w == "contextmenu":
+            return st.get("contextMenus", [])
+        if w == "banner":
+            return st.get("banner")
+        if w == "editors":
+            return {"active": st.get("activeEditor"), "groups": st.get("editorTabs", [])}
+        if w == "welcome":
+            return st.get("welcome", [])
+        if w == "sidebar":
+            return {"title": st.get("sideBar"), "sections": st.get("sideBarSections", [])}
+        if w == "quickpick":
+            q = dict(st.get("quickInput") or {"visible": False})
+            if q.get("visible"):
+                q.pop("items", None)
+                it = self.lab("items", "400", timeout=120)
+                q["items"] = it.get("items", []) if it.get("ok") else {"error": it.get("error")}
+            return q
+        if w == "notification_center":
+            n = self.lab("notifications", timeout=60)
+            return n.get("notifications", []) if n.get("ok") else {"error": n.get("error")}
+        if w == "windows":
+            ws = self.lab("windows", timeout=60)
+            return sorted(({"title": x["title"], "auxiliary": x["auxiliary"]} for x in ws.get("windows", [])),
+                          key=lambda x: (x["auxiliary"], x["title"])) if ws.get("ok") else {"error": ws.get("error")}
+        if w == "files":
+            root = self.ph.get("WORKSPACE")
+            files = []
+            for d, dirs, fs in os.walk(root):
+                rel = os.path.relpath(d, root)
+                files += [os.path.join(rel, x).removeprefix("./") + "/" for x in dirs]
+                files += [os.path.join(rel, x).removeprefix("./") for x in fs]
+            return sorted(files)
+        raise ValueError(f"unknown observation {w}")
+
+    def _observe_docker(self, spec):
+        out = {}
+        cons = self.docker.containers(ids=bool(spec.get("ids")))
+        for c in cons:
+            if c["name"] not in self.known_names and normalize.GENERATED_NAME.match(c["name"]):
+                c["name"] = "<GENERATED_NAME>"
+        if "containers" in spec:
+            out["containers"] = sorted((c for c in cons if match_filter(c, spec["containers"], "containers")),
+                                       key=lambda c: (c["name"], c["image"] or ""))
+        if "volumes" in spec:
+            out["volumes"] = sorted((v for v in self.docker.volumes(cons) if match_filter(v, spec["volumes"], "volumes")),
+                                    key=lambda v: v["name"])
+        if "images" in spec:
+            out["images"] = sorted((i for i in self.docker.images() if match_filter(i, spec["images"], "images")),
+                                   key=lambda i: i["tags"])
+        return out
+
+    def full_observation(self):
+        """Everything observable at a failure point (UI plus the run's own daemon), for the transcript."""
+        obs = {"state": self.state(), "windows": self.lab("windows", timeout=60).get("windows")}
+        if self.docker:
+            try:
+                cons = self.docker.containers()
+                obs["docker"] = {"containers": cons, "volumes": self.docker.volumes(cons)}
+            except Exception as e:  # the profile may have taken the daemon away on purpose
+                obs["docker"] = {"error": str(e)[:300]}
+        return redact.redact_obj(obs)

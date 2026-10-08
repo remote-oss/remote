@@ -1,0 +1,13 @@
+# Identity values the normalizer replaces with placeholders before any comparison (encode/normalize.py):
+# the extension under test's id becomes ${EXT_ID}, its display name in notification sources ${EXT_NAME}, the
+# editor's product name in window titles ${APP_NAME}. Set reimplementation.extension_id (and display_name)
+# to your build's values; see runner/README.md.
+reimplementation:
+  extension_id: remote-oss.remote-ssh-edit
+  display_name: 'Remote - SSH: Editing Configuration Files'
+app_names:
+  - Visual Studio Code
+  - VSCodium
+  - Code - OSS
+runner:
+  wait_scale: 2.0
