@@ -348,7 +348,10 @@ Rules inside the scripts:
   `bin/<commit>-<epoch ms>`, unpack from the streamed archive stripping the top folder, rename to `bin/<commit>`
   atomically. The installed case is one inline script that sources the environment setup, reports process id,
   kernel and node path, and starts the server (F-6304 6.1, 6.2, BR-8).
-- Unpack percentage lines become progress events for the caller to render.
+- Unpack percentage lines become progress events for the caller to render. Their format is the family's own (no
+  spec defines one; ruled 2026-10-08): a whole line `remote-oss-server-progress unpack <percent>` with an integer 0–100,
+  printed at most once per 5 points and once at 100, outside the result block, and ignored by `parseResult`. The
+  same shape with `download` as the step is allowed for host-side downloads when the downloader reports progress.
 - The scripts are written from the specs only.
 
 ### V2 host-probe
