@@ -71,6 +71,12 @@
       "path": "packages/lib-ssh/tsconfig.test.json"
     },
     {
+      "path": "packages/lib-log"
+    },
+    {
+      "path": "packages/lib-log/tsconfig.test.json"
+    },
+    {
       "path": "packages/lib-product"
     },
     {

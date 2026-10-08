@@ -1,0 +1,10 @@
+{
+  "name": "lib-log",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing/memory-sink": "./src/testing/memory-sink.ts",
+    "./testing/once": "./src/testing/once.ts"
+  }
+}
