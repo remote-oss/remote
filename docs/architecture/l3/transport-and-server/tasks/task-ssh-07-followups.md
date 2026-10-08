@@ -38,7 +38,7 @@ and `src/config/hosts.ts`; their existing test files. Nothing else.
 | Include `conf.d/*` with files `x`, `.hidden` | `x` only |
 | Include `conf.d/.*` with files `x`, `.hidden` | `.hidden` only |
 | Include `conf.d/?idden` with `.hidden` | nothing |
-| Include `conf.d/[.]hidden` with `.hidden` | `.hidden` (a bracket class naming the dot explicitly starts with `.` as its own segment: treat `[.]` as a leading-dot pattern) — if the room's wording excludes this, stop and report |
+| Include `conf.d/[.]hidden` with `.hidden` | nothing (BR-12: only a pattern whose name segment itself starts with `.` matches a hidden file; a bracket class does not) |
 | Include of an exact hidden name `conf.d/.hidden` (no wildcard) | included (not a wildcard) |
 
 ## 4. Rule for the worker
@@ -52,4 +52,4 @@ PR title `lib-ssh: control characters, include cycle guard, hidden-file wildcard
 
 ## 6. Open rows (stop and report)
 
-The `[.]hidden` row above if the issue text contradicts it.
+None expected.

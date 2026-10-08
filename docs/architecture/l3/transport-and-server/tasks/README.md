@@ -44,3 +44,12 @@ Merge order: 01, 03, 02, 04, 05, 06.
 - Fixture recording (cards 03, 05, 06): local `ssh -G` prints `connecttimeout none` when unset and `localforward 8080 [127.0.0.1]:80`. A `ProxyCommand` script that writes chosen lines to stderr and exits 255 reproduces exact texts (an inline command breaks, because ssh expands `%`). An `SSH_ASKPASS` script with `SSH_ASKPASS_REQUIRE=force` records the real question texts against a local sshd; OpenSSH 10.3 prints the colon fingerprint form. Remove the local host-key fingerprint, user name and home paths from every recording before commit; record only against 127.0.0.1, `.invalid` names and TEST-NET addresses.
 - Test style: Mocha with `node:assert`, files named `*.test.ts` under `packages/lib-ssh/test/unit/`, helper files named `*.fixture.ts`.
 - The voice rule of the public-surface ADR applies to code comments and JSDoc: no feature, rule or decision ids and no origin framing. Test names keep the ids.
+
+
+## Card template rules (2026-10-08)
+
+- The file list is complete, including every `src/testing/*.ts` file; `package.json` `exports` lists the testing
+  entries by name, as `lib-host` does, never a glob.
+- Every exported name is at least four characters (ADR-0003); a contract name shorter than that is renamed in the
+  card (`onceKey`, not `key`).
+- An export the card's tests do not use is not in the card (knip fails otherwise).
