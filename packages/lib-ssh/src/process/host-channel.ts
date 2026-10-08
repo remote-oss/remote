@@ -63,6 +63,15 @@ export class SshHostChannel implements HostChannel {
 
   /** A channel to one host. */
   constructor(options: SshHostChannelOptions) {
+    const {timeoutMilliseconds} = options;
+    if (
+      timeoutMilliseconds !== undefined &&
+      !(Number.isFinite(timeoutMilliseconds) && timeoutMilliseconds > 0)
+    ) {
+      throw new RangeError(
+        `timeoutMilliseconds must be a positive finite number, not ${String(timeoutMilliseconds)}`,
+      );
+    }
     this.options = options;
   }
 
@@ -123,6 +132,7 @@ export class SshHostChannel implements HostChannel {
       lines.push(piece);
     });
     const errorText = this.collectError(session);
+    // The input is fed while the run is watched; a failure of the feed shows in the client's exit.
     void this.feed(session, plan.input);
     const ending = await this.supervise(session, cancellation);
     if (ending.kind !== 'exit') {

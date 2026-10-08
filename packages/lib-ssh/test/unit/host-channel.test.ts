@@ -1,4 +1,4 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -58,6 +58,27 @@ describe('SSH host channel', () => {
         ],
         ['user@host.invalid:22', 'linux', undefined],
       );
+    });
+  });
+
+  describe('construction', () => {
+    for (const timeoutMilliseconds of [
+      0,
+      -1,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+    ]) {
+      it(`refuses a timeout of ${String(timeoutMilliseconds)} ms`, () => {
+        throws(
+          () => new SshHostChannel({...channelBase(), timeoutMilliseconds}),
+          RangeError,
+        );
+      });
+    }
+
+    it('accepts a positive timeout and none at all', () => {
+      new SshHostChannel({...channelBase(), timeoutMilliseconds: 1});
+      new SshHostChannel(channelBase());
     });
   });
 
