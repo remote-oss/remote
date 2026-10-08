@@ -227,7 +227,23 @@ importers:
         specifier: ^2.9.1
         version: 2.9.1
 
+  packages/lib-host: {}
+
   packages/lib-identifiers: {}
+
+  packages/lib-log: {}
+
+  packages/lib-product: {}
+
+  packages/lib-server:
+    dependencies:
+      lib-host:
+        specifier: workspace:*
+        version: link:../lib-host
+
+  packages/lib-ssh: {}
+
+  packages/lib-standdown: {}
 
   packages/remote-containers: {}
 

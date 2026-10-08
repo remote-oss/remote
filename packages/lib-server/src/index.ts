@@ -19,3 +19,12 @@ export {CONTAINERS_POLICY, SSH_POLICY, wslPolicy} from './policy/rows.ts';
 export {validatePolicyRecord} from './policy/validate.ts';
 export {type ResultBlock, type ScriptStatus} from './scripts/result-block.ts';
 export {parseResult, RESULT_BEGIN, RESULT_END} from './scripts/result-block.ts';
+export {
+  type BootstrapRequest,
+  type ProxyVariables,
+  type ScriptParameters,
+  type ScriptStep,
+  scriptFor,
+  type StartParameters,
+  type StepwiseAction,
+} from './scripts/bootstrap.ts';
