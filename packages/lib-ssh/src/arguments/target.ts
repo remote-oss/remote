@@ -22,12 +22,32 @@ const FORBIDDEN_CHARACTERS = ['\\', "'", '"', '`', '!', '%'] as const;
 /** The leading character a host or user name must not start with. */
 const FORBIDDEN_START = '-';
 
+/** Whether a code point is a control character a host name must not contain. */
+function isControlCharacter(codePoint: number): boolean {
+  return codePoint < 0x20 || codePoint === 0x7f;
+}
+
+/**
+ * The first control character of a host name, named by its code point (`U+` and four upper-case hex digits), or
+ * undefined when the name holds none.
+ */
+function controlCharacter(name: string): string | undefined {
+  for (const character of name) {
+    const codePoint = character.charCodeAt(0);
+    if (isControlCharacter(codePoint)) {
+      return `U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}`;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Checks the host, then the user: a leading `-`, then a forbidden character, and returns the first problem found,
  * or undefined when the target may be handed to `ssh`. An empty user is not checked.
  */
 export function validateTarget(target: SshTarget): TargetProblem | undefined {
-  const hostProblem = nameProblem(target.host);
+  const hostProblem =
+    nameProblem(target.host) ?? hostControlProblem(target.host);
   if (hostProblem !== undefined) {
     return {
       kind: 'invalidHost',
@@ -58,4 +78,17 @@ function nameProblem(
     name.includes(forbidden),
   );
   return character === undefined ? undefined : {leading: false, character};
+}
+
+/** The host's first control character, when no leading or forbidden character already refused the name. */
+function hostControlProblem(name: string):
+  | {
+      leading: boolean;
+      character: string;
+    }
+  | undefined {
+  const control = controlCharacter(name);
+  return control === undefined
+    ? undefined
+    : {leading: false, character: control};
 }
