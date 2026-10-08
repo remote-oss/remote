@@ -1,0 +1,6 @@
+{
+  "name": "conformance-runner-lab-driver",
+  "private": true,
+  "description": "The lab driver's one dependency.",
+  "dependencies": { "playwright-core": "^1.55.0" }
+}
