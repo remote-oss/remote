@@ -89,6 +89,12 @@
       "path": "packages/lib-server/tsconfig.test.json"
     },
     {
+      "path": "packages/lib-helper"
+    },
+    {
+      "path": "packages/lib-helper/tsconfig.test.json"
+    },
+    {
       "path": "tests/acceptance"
     }
   ]
