@@ -692,6 +692,15 @@ describe('listHosts (the host entries of the files in effect)', () => {
     );
   });
 
+  it('F-2202.BR-12 (revised): a bracket-class include [.]hidden matches nothing (the class does not start with a dot)', () => {
+    deepStrictEqual(
+      names('Include conf.d/[.]hidden', [
+        ['/home/dev/.ssh/conf.d/.hidden', 'Host .hidden'],
+      ]),
+      [],
+    );
+  });
+
   it('F-2202.BR-11 (revised): an Include of an exact hidden name includes it', () => {
     deepStrictEqual(
       names('Include conf.d/.hidden', [
