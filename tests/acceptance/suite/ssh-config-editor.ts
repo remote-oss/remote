@@ -60,23 +60,3 @@ export async function trials(
   }
   return results;
 }
-
-/** One token as the editor reports it: its text and its innermost scope. */
-type ScopedToken = [string, string];
-
-/** The editor's own tokens of an SSH configuration file holding `text`, in order. */
-export async function fileTokens(text: string): Promise<ScopedToken[]> {
-  const folder = mkdtempSync(path.join(tmpdir(), 'ssh-config-'));
-  mkdirSync(path.join(folder, '.ssh'));
-  const file = path.join(folder, '.ssh', 'config');
-  writeFileSync(file, text);
-  const document = await vscode.workspace.openTextDocument(file);
-  await vscode.window.showTextDocument(document);
-  await delay(1000);
-  // The editor's own token capture, as its colorization tests use it: text `c` and scopes `t` per token.
-  const captured = await vscode.commands.executeCommand<
-    Array<{c: string; t: string}>
-  >('_workbench.captureSyntaxTokens', document.uri);
-  await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-  return captured.map(token => [token.c, token.t.split(' ').at(-1) ?? '']);
-}

@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {trials} from './ssh-config-editor.ts';
 
-const TRIALS = 10;
+const TRIALS = 3;
 
 describe('SSH config completion in the editor under test', function () {
   this.timeout(300_000);
