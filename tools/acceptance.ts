@@ -271,9 +271,7 @@ export async function runAcceptance(
     const variables = await prepare(root, dependencies, runFolder, started);
     return await runWithRetry(
       () => dependencies.runTests(root, variables),
-      line => {
-        console.log(line);
-      },
+      console.log.bind(console),
     );
   } catch (error) {
     console.error(`acceptance: ${messageOf(error)}`);
