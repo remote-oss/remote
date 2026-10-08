@@ -40,6 +40,7 @@ const REAL_TOOLS = [
   'mkdir',
   'mv',
   'nohup',
+  'ps',
   'rm',
   'sed',
   'sleep',
@@ -105,6 +106,7 @@ const LAUNCHER = [
   'echo "$*" >"$SERVER_ARGUMENTS"',
   'echo started >>"$SERVER_STARTS"',
   '[ -z "$SERVER_EXIT" ] || exit "$SERVER_EXIT"',
+  '[ -z "$SERVER_READY_AFTER" ] || sleep "$SERVER_READY_AFTER"',
   '[ "$SERVER_SILENT" = yes ] || echo "Extension host agent listening on 4321"',
   'sleep 20',
 ].join('\n');

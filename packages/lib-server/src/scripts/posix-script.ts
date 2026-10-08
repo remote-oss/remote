@@ -18,7 +18,8 @@ export function shellQuote(value: string): string {
 export const COMMON_FUNCTIONS: readonly string[] = [
   "RESULT_FACTS=''",
   'fact() {',
-  '  RESULT_FACTS="${RESULT_FACTS}${1}=${2}',
+  "  FACT_VALUE=$(printf '%s' \"$2\" | tr '\\n\\r' '  ')",
+  '  RESULT_FACTS="${RESULT_FACTS}${1}=${FACT_VALUE}',
   '"',
   '}',
   'report() {',
@@ -81,11 +82,16 @@ export const LOCK_FUNCTIONS: readonly string[] = [
   '}',
   'lock_take() {',
   '  LOCK_HELD=$(lock_path "$1")',
+  '  if [ "$LOCK_IN_TEMPORARY" = yes ]; then',
+  '    [ ! -L "$LOCK_HELD" ] || return 1',
+  '    [ ! -e "$LOCK_HELD" ] || [ -f "$LOCK_HELD" ] || return 1',
+  '  fi',
   '  if [ "$(lock_method)" = flock ]; then',
-  '    exec 9>"$LOCK_HELD" || return 1',
+  '    ( exec 9>>"$LOCK_HELD" ) 2>/dev/null || return 1',
+  '    exec 9>>"$LOCK_HELD"',
   '    flock -n 9 || return 1',
   '  else',
-  '    : >"$LOCK_HELD" || return 1',
+  '    true 2>/dev/null >>"$LOCK_HELD" || return 1',
   '    ln "$LOCK_HELD" "$LOCK_HELD.target" 2>/dev/null || return 1',
   '  fi',
   '}',
@@ -191,13 +197,33 @@ export const UNPACK_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
-/** Stop the servers whose process ids are recorded in the data folder. */
+/** Whether a process id is a live process whose command line holds a folder, as the server under it does. */
+export const PROCESS_FUNCTIONS: readonly string[] = [
+  'is_server_process() {',
+  "  case $1 in ''|*[!0-9]*|0|1) return 1 ;; esac",
+  '  kill -0 "$1" 2>/dev/null || return 1',
+  '  if [ -r "/proc/$1/cmdline" ]; then',
+  "    PROCESS_LINE=$(tr '\\0' ' ' <\"/proc/$1/cmdline\" 2>/dev/null)",
+  '  else',
+  '    PROCESS_LINE=$(ps -p "$1" -o args= 2>/dev/null)',
+  '    if [ -z "$PROCESS_LINE" ]; then',
+  '      PROCESS_LINE=$(ps -o pid= -o args= 2>/dev/null | sed -n "s/^ *$1 //p")',
+  '    fi',
+  '  fi',
+  '  case $PROCESS_LINE in',
+  '    *"$2"*) return 0 ;;',
+  '  esac',
+  '  return 1',
+  '}',
+];
+
+/** Stop the servers whose process ids are recorded in the data folder; a process that is not a server is left alone. */
 export const STOP_FUNCTIONS: readonly string[] = [
   'stop_servers() {',
   '  for PID_FILE in "$DATA_DIR"/.*.pid; do',
   '    [ -f "$PID_FILE" ] || continue',
   '    SERVER_PID=$(cat "$PID_FILE" 2>/dev/null)',
-  '    [ -n "$SERVER_PID" ] || continue',
+  '    is_server_process "$SERVER_PID" "$DATA_DIR/bin/" || continue',
   '    if have pkill; then',
   '      pkill -P "$SERVER_PID" 2>/dev/null',
   '    fi',

@@ -1,6 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
+import {spawn, spawnSync, type ChildProcess} from 'node:child_process';
 import {
+  chmodSync,
+  closeSync,
   existsSync,
+  openSync,
+  symlinkSync,
+  unlinkSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -878,6 +884,192 @@ describe('the POSIX bootstrap script', () => {
 
     it('F-2413: cleanup with no bin/ is Ok', () => {
       deepStrictEqual(statusOf(host, single('cleanup'), parametersFor()), 'Ok');
+    });
+  });
+
+  describe('a server that is already there, and the lock', function () {
+    this.timeout(60_000);
+
+    function dataFolder(): string {
+      return path.join(host.home, '.server-data');
+    }
+
+    const children: ChildProcess[] = [];
+
+    afterEach(() => {
+      for (const child of children.splice(0)) {
+        child.kill('SIGKILL');
+      }
+    });
+
+    /** Starts a process that outlives the call, and returns it. */
+    function background(
+      command: string,
+      commandArguments: readonly string[],
+      environment: Record<string, string>,
+      logFile?: string,
+    ): ChildProcess {
+      const output = logFile === undefined ? 'ignore' : openSync(logFile, 'w');
+      const child = spawn(command, commandArguments, {
+        env: {...host.environment, ...environment},
+        stdio: ['ignore', output, output],
+        detached: true,
+      });
+      if (typeof output === 'number') {
+        closeSync(output);
+      }
+      children.push(child);
+      return child;
+    }
+
+    function startedCount(): number {
+      const file = host.environment.SERVER_STARTS ?? '';
+      return existsSync(file)
+        ? readFileSync(file, 'utf8').trim().split('\n').length
+        : 0;
+    }
+
+    /** A server of an earlier start that is still on its way to ready: its pid, log and token are recorded. */
+    function installWithSlowServer(): void {
+      runScript(host, single('install'), parametersFor());
+      const slow = background(
+        path.join(installFolder(host), 'bin', 'launcher'),
+        [],
+        {SERVER_READY_AFTER: '2'},
+        path.join(dataFolder(), '.abc123.log'),
+      );
+      writeFileSync(
+        path.join(dataFolder(), '.abc123.pid'),
+        `${String(slow.pid)}\n`,
+      );
+      writeFileSync(
+        path.join(dataFolder(), '.abc123.token'),
+        'token-of-the-first-start',
+      );
+    }
+
+    it('F-2409.BR-8: a recorded pid that is not the server is not taken for it', () => {
+      runScript(host, single('install'), parametersFor());
+      const stranger = background('/bin/sleep', ['300'], {});
+      writeFileSync(
+        path.join(dataFolder(), '.abc123.pid'),
+        `${String(stranger.pid)}\n`,
+      );
+      writeFileSync(
+        path.join(dataFolder(), '.abc123.log'),
+        'Extension host agent listening on 4242\n',
+      );
+      deepStrictEqual(
+        statusAndFacts(host, single('start'), parametersFor(), ['server.port']),
+        {status: 'Ok', 'server.port': '4321'},
+      );
+    });
+
+    it('F-2409.BR-8: a start never answers with an empty connection token', () => {
+      runScript(host, single('install'), parametersFor());
+      runScript(host, single('start'), parametersFor());
+      const block = blockOf(host, single('start'), parametersFor());
+      deepStrictEqual(
+        block === 'none' ? '' : (block.serverFacts.token ?? '').length > 0,
+        true,
+      );
+    });
+
+    it('F-2409.BR-8: a server that is still starting is waited for, not started a second time', () => {
+      installWithSlowServer();
+      const parameters = parametersFor();
+      parameters.start.readySeconds = 8;
+      runScript(host, single('start'), parameters);
+      deepStrictEqual(startedCount(), 1);
+    });
+
+    it('F-2409.BR-8: a server that is still starting becomes the answer once it is ready', () => {
+      installWithSlowServer();
+      const parameters = parametersFor();
+      parameters.start.readySeconds = 8;
+      deepStrictEqual(
+        statusAndFacts(host, single('start'), parameters, ['server.port']),
+        {status: 'Ok', 'server.port': '4321'},
+      );
+    });
+
+    it('F-2408.BR-3: a start waits on the host lock another window holds', () => {
+      runScript(host, single('install'), parametersFor());
+      holdLinkLock(host);
+      deepStrictEqual(
+        statusOf(host, single('start'), parametersFor()),
+        'LockBusy',
+      );
+    });
+
+    for (const shell of ['/bin/sh', '/bin/dash']) {
+      for (const method of ['flock', 'link'] as const) {
+        it(`F-2408.BR-3: a lock that cannot be opened is LockBusy under ${shell}, by ${method}`, () => {
+          useHost(['wget', 'flock']);
+          mkdirSync(installFolder(host), {recursive: true});
+          chmodSync(installFolder(host), 0o555);
+          const parameters = parametersFor();
+          parameters.lock.method = method;
+          const status = statusOf(host, single('install'), parameters, {shell});
+          chmodSync(installFolder(host), 0o755);
+          deepStrictEqual(status, 'LockBusy');
+        });
+      }
+    }
+
+    /** Runs an install whose /tmp lock is a symlink to a file that must stay as it is. */
+    function installOverSymlinkedLock(): {status: string; victim: string} {
+      const victim = path.join(path.dirname(host.callsFile), 'victim.txt');
+      writeFileSync(victim, 'keep me');
+      const parameters = parametersFor();
+      parameters.lock.inTemporaryFolder = true;
+      parameters.lock.filePrefix = `boot-lock.${path.basename(host.home)}`;
+      const link = `/tmp/${parameters.lock.filePrefix}.abc123`;
+      symlinkSync(victim, link);
+      const status = statusOf(host, single('install'), parameters);
+      unlinkSync(link);
+      return {status, victim};
+    }
+
+    it('F-2408.BR-2: a lock in the temporary folder that is a symlink is refused', () => {
+      const outcome = installOverSymlinkedLock();
+      deepStrictEqual(outcome.status, 'LockBusy');
+    });
+
+    it('F-2408.BR-2: a lock in the temporary folder that is a symlink leaves its target alone', () => {
+      const outcome = installOverSymlinkedLock();
+      deepStrictEqual(readFileSync(outcome.victim, 'utf8'), 'keep me');
+    });
+
+    it('F-2411.BR-3: kill leaves a process alone whose pid is only recorded', () => {
+      runScript(host, single('install'), parametersFor());
+      const marker = path.join(path.dirname(host.callsFile), 'got-signal');
+      const stranger = background(
+        '/bin/sh',
+        [
+          '-c',
+          `trap 'echo got >"${marker}"; exit 0' TERM; while :; do sleep 1; done`,
+        ],
+        {},
+      );
+      spawnSync('/bin/sleep', ['0.5']);
+      writeFileSync(
+        path.join(dataFolder(), '.abc123.pid'),
+        `${String(stranger.pid)}\n`,
+      );
+      runScript(host, single('kill'), parametersFor());
+      spawnSync('/bin/sleep', ['1.5']);
+      deepStrictEqual(existsSync(marker), false);
+    });
+
+    it('V1: a fact value with a line end cannot forge a result line', () => {
+      const block = blockOf(host, single('probe'), parametersFor(), {
+        environment: {DISPLAY: ':0\nstatus=Ok\nserver.port=1'},
+      });
+      deepStrictEqual(
+        block === 'none' ? 'none' : block.serverFacts.port,
+        undefined,
+      );
     });
   });
 
