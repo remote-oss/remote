@@ -55,27 +55,12 @@ export class RecordShapeError extends Error {
 
 /**
  * Write the record to a line of JSON, keys in the registry's order. It rejects a field the
- * registry does not know, a payload value that is not a plain string, number or boolean, and a
- * payload key that would carry a prompt answer or credential.
+ * registry does not know, a field the record is missing, a payload value that is not a plain
+ * string, number or boolean, and a payload key that would carry a prompt answer or credential.
  */
 export function serializeRecord(record: HelperRecord): string {
-  const fields = record as unknown as Record<string, unknown>;
-  for (const name of Object.keys(fields)) {
-    if (!(FIELD_ORDER as readonly string[]).includes(name)) {
-      throw new RecordShapeError(`unknown field ${name}`);
-    }
-  }
-  for (const [name, value] of Object.entries(record.payload)) {
-    if (
-      typeof value !== 'string' &&
-      typeof value !== 'number' &&
-      typeof value !== 'boolean'
-    ) {
-      throw new RecordShapeError(`non-primitive payload value ${name}`);
-    }
-    if (REFUSED_PAYLOAD_KEYS.has(name.toLowerCase())) {
-      throw new RecordShapeError(`refused payload key ${name}`);
-    }
+  if (!isHelperRecordShape(record)) {
+    throw new RecordShapeError('a missing or unknown field');
   }
   return JSON.stringify({
     version: record.version,
@@ -92,8 +77,60 @@ export function serializeRecord(record: HelperRecord): string {
 }
 
 /**
- * Read a record back from its JSON. It returns `undefined` on any shape error or when the version
- * is not 1, so a corrupt or foreign file is never mistaken for a live helper.
+ * The one shape check the writer and the reader share, so the reader is as strict as the
+ * writer: a plain object with exactly the eight fields, the string fields as strings, the number
+ * fields as numbers, and a payload of primitives that carries no refused key.
+ */
+function isHelperRecordShape(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const fields = value as Record<string, unknown>;
+  for (const name of Object.keys(fields)) {
+    if (!(FIELD_ORDER as readonly string[]).includes(name)) {
+      return false;
+    }
+  }
+  for (const name of FIELD_ORDER) {
+    if (!(name in fields)) {
+      return false;
+    }
+  }
+  if (
+    fields.version !== 1 ||
+    typeof fields.namespace !== 'string' ||
+    typeof fields.key !== 'string' ||
+    typeof fields.endpoint !== 'string' ||
+    typeof fields.nonce !== 'string' ||
+    typeof fields.pid !== 'number' ||
+    typeof fields.startedAt !== 'number'
+  ) {
+    return false;
+  }
+  const payload = fields.payload;
+  if (typeof payload !== 'object' || payload === null) {
+    return false;
+  }
+  for (const [name, value] of Object.entries(
+    payload as Record<string, unknown>,
+  )) {
+    if (
+      typeof value !== 'string' &&
+      typeof value !== 'number' &&
+      typeof value !== 'boolean'
+    ) {
+      return false;
+    }
+    if (REFUSED_PAYLOAD_KEYS.has(name.toLowerCase())) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Read a record back from its JSON. It returns `undefined` on any shape error, so a corrupt or
+ * foreign file is never mistaken for a live helper.
  */
 export function parseRecord(text: string): HelperRecord | undefined {
   let data: unknown;
@@ -102,14 +139,8 @@ export function parseRecord(text: string): HelperRecord | undefined {
   } catch {
     return undefined;
   }
-  const fields = data as Record<string, unknown>;
-  if (fields.version !== 1) {
+  if (!isHelperRecordShape(data)) {
     return undefined;
-  }
-  for (const name of FIELD_ORDER) {
-    if (!(name in fields)) {
-      return undefined;
-    }
   }
   return data as HelperRecord;
 }

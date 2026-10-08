@@ -75,8 +75,57 @@ describe('record (card helper-01 table)', () => {
     });
   });
 
+  it('serializeRecord with the nonce field missing -> throws RecordShapeError', () => {
+    const withoutNonce: Record<string, unknown> = {...RECORD};
+    delete withoutNonce.nonce;
+    throws(() => serializeRecord(withoutNonce as unknown as HelperRecord), {
+      name: 'RecordShapeError',
+    });
+  });
+
   it("parseRecord('not json') -> undefined", () => {
     strictEqual(parseRecord('not json'), undefined);
+  });
+
+  it("parseRecord('null') -> undefined", () => {
+    strictEqual(parseRecord('null'), undefined);
+  });
+
+  it("parseRecord('[1]') -> undefined (a JSON array, not a record)", () => {
+    strictEqual(parseRecord('[1]'), undefined);
+  });
+
+  it("parseRecord('42') -> undefined (a JSON number, not a record)", () => {
+    strictEqual(parseRecord('42'), undefined);
+  });
+
+  it('parseRecord of a record whose payload is a string -> undefined', () => {
+    const payload = JSON.stringify({
+      ...JSON.parse(serializeRecord(RECORD)),
+      payload: 'x',
+    });
+    strictEqual(parseRecord(payload), undefined);
+  });
+
+  it('parseRecord of a record with a wrong-typed field (namespace a number) -> undefined', () => {
+    const wrongTyped = serializeRecord(RECORD).replace(
+      '"namespace":"ssh.connection"',
+      '"namespace":5',
+    );
+    strictEqual(parseRecord(wrongTyped), undefined);
+  });
+
+  it('parseRecord of a record with an unknown field -> undefined', () => {
+    const unknown = JSON.stringify({
+      ...JSON.parse(serializeRecord(RECORD)),
+      extra: 1,
+    });
+    strictEqual(parseRecord(unknown), undefined);
+  });
+
+  it("parseRecord of a record whose payload holds {password: 'p'} -> undefined", () => {
+    const payload = serializeRecord(RECORD).replace('}', ',"password":"p"}');
+    strictEqual(parseRecord(payload), undefined);
   });
 
   it('parseRecord of a record with version: 2 -> undefined', () => {
