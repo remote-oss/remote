@@ -1,0 +1,7 @@
+remote-oss-server-result-begin
+status=Ok
+host.os=linux
+host.arch=x64
+server.port=41263
+timing.download=1532
+remote-oss-server-result-end

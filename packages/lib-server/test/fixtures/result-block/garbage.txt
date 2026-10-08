@@ -1,0 +1,4 @@
+remote-oss-server-result-begin
+status=Ok
+garbage line
+remote-oss-server-result-end

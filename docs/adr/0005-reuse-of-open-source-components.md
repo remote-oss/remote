@@ -33,7 +33,12 @@ open, which is the user's decision through the register.
    (commands, pickers, views, the remote authority, the server install into the container, port forwarding, the
    recovery and error flows the specs name). The CLI is driven as a library or as a spawned program; the component
    view decides, and the conformance cases decide whether its observable behaviour matches the recorded one.
-2. **The editor's CLI: suspended for Tunnels, pending the user's decision (2026-10-06).** Reading the `cli/` crate
+2. **Remote - Tunnels is not built for now (the user, D-55, 2026-10-07): the dev tunnels terms of service.** Revisit
+   if the terms change. The tunnel client and `lib-tunnels` leave the build order; the Remote Explorer's tunnel rows
+   become a recorded deviation in the 0.3 brief; `resolveExecServer` on the `ssh-remote` resolver stays (containers
+   over SSH needs it). The spike's protocol result (`l3/transport-and-server/spike-tunnel-openssh.md`) is kept for
+   that day. The earlier text follows for the record.
+   **The editor's CLI: suspended for Tunnels, pending the user's decision (2026-10-06).** Reading the `cli/` crate
    showed it has no client relay mode and persists every token it is given, so it cannot meet F-8902; the options
    (an upstream client mode, the dev tunnels library in a detached helper under a scoped ADR-0004 exception, or
    native OpenSSH over a WebSocket bridge) are with the register. The earlier text follows for the record.

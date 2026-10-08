@@ -664,6 +664,15 @@ Fixed regardless of the choice:
 
 ## 9. lib-helper (draft for area C's review; lead's ruling 2026-10-06)
 
+Names (ADR-0003, ruled 2026-10-08): the record's `recordKey` (not `key`), `startedByProcessId` (not `pid`; it is the
+acquirer's process id, since the claim precedes the spawn; stopping always goes through the endpoint, never a kill
+by process id), `Lease.leaseId`, `close(leaseId)`, `Clock.now()` (the user allows `now` as a named exception to the four-character rule, 2026-10-08). The wire protocol is newline-delimited
+JSON (`hello`/`welcome` with the nonce, `request`/`reply` by `requestId`, pushed `leaseListChanged` and `message`,
+`stop`); helper parameters travel in one environment variable, never argv; the spawn is `process.execPath` with
+`ELECTRON_RUN_AS_NODE=1`, detached, stdio ignored, windowsHide, unref; the endpoint path is
+`$XDG_RUNTIME_DIR` or the temp folder plus `rh-<16 hex>.sock` under umask 0o077; helper scripts are bundled from
+`src/helpers/*.ts` into `dist/helpers/<name>.js` as separate entries without `vscode`.
+
 One pattern for every detached helper process the family runs on the client. A helper outlives the extension host
 that starts it, is shared by leases from several windows, and ends by a policy.
 
@@ -679,11 +688,11 @@ The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `acquire` | registry folder (per profile from global storage, or per user; the caller chooses), namespace (extension and kind), key, start specification (the bundled helper script and its parameters), end policy, cancellation | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed`, `endpointUnreachable` (after replacing a stale record once), `cancelled` |
+| `acquire` | registry folder (per profile from global storage, or per user; the caller chooses), namespace (extension and kind), recordKey, start specification (the bundled helper script and its parameters), end policy, cancellation | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed`, `endpointUnreachable` (after replacing a stale record once), `cancelled` |
 | `release` | lease | none; closing the lease's connection has the same effect, so a crashed extension host releases by itself | none |
 | `request` | lease, message (plain data) | reply (plain data) | `helperGone`, `timeout` (the caller's limit) |
 | `events` | lease | helper messages, `leaseListChanged`, `helperGone` | none |
-| `stop` | registry folder, namespace, key | done, also when nothing runs | none |
+| `stop` | registry folder, namespace, recordKey | done, also when nothing runs | none |
 
 ### X2 helper-runtime (bundled into each helper script)
 
@@ -691,7 +700,9 @@ The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
 |---|---|---|---|
 | `serve` | endpoint, record payload, end policy, message handler | runs until the end policy fires or `stop` arrives | none raised; the helper logs to its own file and exits |
 
-End policies (data, no per-consumer branches):
+End policies (data, no per-consumer branches). The policy is armed at start as if a lease had just closed, so a
+helper that never receives a lease ends by the same rule (ruled 2026-10-08); a joiner never replaces a still-starting
+helper's record (the claim is atomic and the starter's hello window counts as alive):
 - `graceAfterLastLease(ms)`: end this long after the last lease closes. A new lease within the grace cancels it. SSH
   uses 2 to 4 s (F-2102 BR-3), and the value must also carry a reload.
 - `delayedCheckAfterLastLease(ms, action)`: after the last lease closes, wait, check again, then run the consumer's
@@ -702,7 +713,7 @@ End policies (data, no per-consumer branches):
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `claim` | folder, namespace, key, record | `claimed`, or `existing` with the record | none |
+| `claim` | folder, namespace, recordKey, record | `claimed`, `existing` with the record, or `corrupt` | none |
 | `isStale` | record, result of one hello exchange | true when the helper does not answer within a short limit | none |
 
 Rules:

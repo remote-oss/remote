@@ -1,0 +1,307 @@
+{
+  "suite": "remote-oss/remote-ssh-edit tests/conformance @ e8a14f3",
+  "build": "remote-oss/remote @ d88c960, remote-ssh-edit-0.0.0.vsix",
+  "runner": "remote-oss/remote tests/conformance/runner (cleanroom-kit 69f3743), wait_scale 2",
+  "slots": 1,
+  "gate_rerun": {
+    "cases": 54,
+    "counts": {
+      "pass": 51,
+      "fail": 3
+    }
+  },
+  "informational": {
+    "cases": 3,
+    "counts": {
+      "pass": 0,
+      "fail": 3
+    }
+  },
+  "cases": {
+    "F-4201-AC11-3": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 30.6
+    },
+    "F-4201-AC31-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 45.5
+    },
+    "F-4201-AC32-5": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 51.3
+    },
+    "F-4201-AC36-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 43.2
+    },
+    "F-4201-AC37-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 33.2
+    },
+    "F-4201-AC39-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 22.1
+    },
+    "F-4201-AC39-3": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 22.2
+    },
+    "F-4201-AC39-6": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 54.5
+    },
+    "F-4201-AC41-2": {
+      "result": "pass",
+      "profile": "linux-none-dirty",
+      "seconds": 32.0
+    },
+    "F-4202-AC1-2": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 62.5
+    },
+    "F-4202-AC3-2": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 31.9
+    },
+    "F-4202-AC20-2": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 31.8
+    },
+    "F-4202-AC32-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 30.5
+    },
+    "F-4203-AC1-4": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 102.0
+    },
+    "F-4203-AC2-6": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 44.2
+    },
+    "F-4203-AC13-8": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 36.0
+    },
+    "F-4203-AC14-2": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 44.2
+    },
+    "F-4203-AC14-6": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 68.5
+    },
+    "F-4001-AC13-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 47.3
+    },
+    "F-4002-AC7-1": {
+      "result": "fail",
+      "profile": "linux-none-clean",
+      "seconds": 148.4
+    },
+    "F-4002-AC22-1": {
+      "result": "fail",
+      "profile": "linux-none-dirty-virtual",
+      "seconds": 152.9
+    },
+    "F-4101-AC1-4": {
+      "result": "pass",
+      "profile": "linux-none-dirty",
+      "seconds": 31.7
+    },
+    "F-4101-AC1-5": {
+      "result": "pass",
+      "profile": "linux-none-dirty",
+      "seconds": 31.7
+    },
+    "F-4202-AC17-2": {
+      "result": "pass",
+      "profile": "linux-none-dirty",
+      "seconds": 58.4
+    },
+    "F-4101-AC19-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 81.5
+    },
+    "F-4102-AC7-2": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 29.9
+    },
+    "F-4102-AC1-8": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 79.2
+    },
+    "F-4002-AC14-3": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 49.5
+    },
+    "F-4003-AC11-2": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 91.8
+    },
+    "F-4202-AC22-2": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 95.4
+    },
+    "F-4003-AC14-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 66.6
+    },
+    "F-4203-AC17-1": {
+      "result": "fail",
+      "profile": "linux-none-clean",
+      "seconds": 57.3
+    },
+    "F-4002-AC6-1": {
+      "result": "fail",
+      "profile": "linux-none-clean-restricted",
+      "seconds": 56.3
+    },
+    "F-4001-AC3-3": {
+      "result": "fail",
+      "profile": "linux-none-clean",
+      "seconds": 33.4
+    },
+    "F-4102-AC28-4": {
+      "result": "fail",
+      "profile": "linux-none-dirty",
+      "seconds": 48.2
+    },
+    "F-4001-AC1-4": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 20.5
+    },
+    "F-4001-AC11-1": {
+      "result": "pass",
+      "profile": "linux-none-bad-readonly",
+      "seconds": 25.8
+    },
+    "F-4001-AC24-2": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 52.7
+    },
+    "F-4001-AC27-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 23.7
+    },
+    "F-4001-AC38-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 33.9
+    },
+    "F-4001-AC4-1": {
+      "result": "pass",
+      "profile": "linux-none-dirty",
+      "seconds": 19.7
+    },
+    "F-4001-AC6-3": {
+      "result": "pass",
+      "profile": "linux-none-bad-readonly",
+      "seconds": 38.5
+    },
+    "F-4001-AC7-5": {
+      "result": "pass",
+      "profile": "linux-none-dirty",
+      "seconds": 18.9
+    },
+    "F-4002-AC32-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 99.0
+    },
+    "F-4003-AC12-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 34.6
+    },
+    "F-4101-AC15-3": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 48.0
+    },
+    "F-4101-AC30-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 29.5
+    },
+    "F-4101-AC30-8": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 77.6
+    },
+    "F-4102-AC31-4": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 62.2
+    },
+    "F-4102-AC35-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 72.5
+    },
+    "F-4102-AC35-3": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 41.0
+    },
+    "F-4201-AC27-3": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 79.8
+    },
+    "F-4201-AC9-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 33.1
+    },
+    "F-4201-AC9-2": {
+      "result": "pass",
+      "profile": "linux-none-dirty",
+      "seconds": 35.5
+    },
+    "F-4202-AC33-1": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 36.9
+    },
+    "F-4203-AC1-11": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 54.9
+    },
+    "F-4204-AC17-4": {
+      "result": "pass",
+      "profile": "linux-none-clean",
+      "seconds": 34.7
+    }
+  }
+}

@@ -1,0 +1,31 @@
+#!/bin/sh
+# Run the conformance suite against an extension build: see ../README.md.
+# usage: conformance build <mirror | engine/NAME | editor/NAME>   build a fixture from its definition
+#        conformance run --feature F-0201 [--profile P] [--slots 31-32]   replay the cases, compare with `expect`
+# CONFORMANCE_SUITE=<a suite's tests/conformance> runs that suite with this runner
+set -e
+R=$(cd "$(dirname "$0")/.." && pwd)            # .../tests/conformance/runner
+C=$(cd "${CONFORMANCE_SUITE:-$R/..}" && pwd)    # .../tests/conformance: this runner's suite, or CONFORMANCE_SUITE (a
+                                                # shared runner, the monorepo's, runs any package's suite)
+# the package's identity and encode rules: ENCODE_IDENTITY / ENCODE_RULES, else beside the suite, else this runner's own
+[ -n "${ENCODE_IDENTITY:-}" ] || [ ! -f "$C/identity.yaml" ] || export ENCODE_IDENTITY="$C/identity.yaml"
+[ -n "${ENCODE_RULES:-}" ] || [ ! -f "$C/rules.json" ] || export ENCODE_RULES="$C/rules.json"
+W="${CONFORMANCE_WORK:-$HOME/conformance-work}"  # scratch: fixtures built here, slots, workspaces, daemons, results
+case "$W" in /tmp/*|/tmp) echo "conformance: CONFORMANCE_WORK must not be under /tmp: the private daemons (docker:dind) mount a tmpfs over /tmp, which hides the case folders bind-mounted there" >&2; exit 2;; esac
+export ENCODE_ROOT="$W" ENCODE_TESTS="$C/suite" ENCODE_FIXTURES="$W/fixtures" ENCODE_REFERENCE_CATALOG="$C/fixtures/CATALOG.json"
+export ENCODE_WORKSPACES="$W/workspaces/encode" ENCODE_DIND_MOUNT="$W/workspaces" ENCODE_HOMES="$W/homes" ENCODE_ISO="$W/iso"
+export ENCODE_SLOTS_DIR="$W/slots" ENCODE_RESULTS="$W/results" ENCODE_RECORDINGS="$W/results/transcripts"
+export ENCODE_LAB="$R/bin/lab" ENCODE_LAB_CODE="$R/bin/lab-code" ENCODE_NO_SYSTEMD=1
+export ENCODE_SLOTS="${ENCODE_SLOTS:-31-32}"
+mkdir -p "$W/workspaces/encode" "$W/homes" "$W/iso" "$W/slots" "$W/results"
+if [ ! -f "$ENCODE_FIXTURES/CATALOG.json" ]; then   # definitions from the suite; the local catalogue starts empty
+  mkdir -p "$ENCODE_FIXTURES"; cp -r "$C/fixtures/." "$ENCODE_FIXTURES/"
+  echo '{"version": 1, "fixtures": []}' > "$ENCODE_FIXTURES/CATALOG.json"
+fi
+cd "$R/encode"
+case "$1" in
+  build) shift; exec python3 fixture.py build "$@" ;;
+  run) : "${ENCODE_EXTENSION:?set ENCODE_EXTENSION to the build under test (a .vsix path or publisher.name@version)}"
+       exec python3 suite.py "$@" ;;
+  *) sed -n '2,4p' "$0"; exit 2 ;;
+esac

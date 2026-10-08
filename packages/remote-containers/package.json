@@ -1,5 +1,22 @@
 {
   "name": "remote-containers",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "description": "Develop inside a container that carries its own toolchain, so each project brings its environment with it.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/remote-oss/remote.git",
+    "directory": "packages/remote-containers"
+  },
+  "bugs": {
+    "url": "https://github.com/remote-oss/remote/issues"
+  },
+  "keywords": [
+    "remote development",
+    "remote",
+    "containers",
+    "docker",
+    "devcontainer"
+  ]
 }

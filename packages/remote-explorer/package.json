@@ -1,5 +1,20 @@
 {
   "name": "remote-explorer",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "description": "Every remote target in one view: SSH hosts, containers and WSL distros, one click away.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/remote-oss/remote.git",
+    "directory": "packages/remote-explorer"
+  },
+  "bugs": {
+    "url": "https://github.com/remote-oss/remote/issues"
+  },
+  "keywords": [
+    "remote development",
+    "remote",
+    "explorer"
+  ]
 }

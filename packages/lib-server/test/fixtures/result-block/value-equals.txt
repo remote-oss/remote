@@ -1,0 +1,4 @@
+remote-oss-server-result-begin
+status=Ok
+server.path=/a/b=c
+remote-oss-server-result-end

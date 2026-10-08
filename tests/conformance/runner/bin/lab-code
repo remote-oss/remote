@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Start and stop VS Code for one runner slot (the runner's window launcher).
+
+usage: lab-code start|restart [folder] | stop | status
+environment:
+  LAB_SLOT          the slot (required); the lab driver (bin/lab) reaches this slot's window on port 9222 + LAB_SLOT
+  ENCODE_SLOTS_DIR  where slot profiles live (<dir>/<slot>/user-data, extensions, vscode-shared, dot-vscode)
+  ENCODE_VSCODE     the VS Code executable (default /usr/share/code/code)
+  LAB_HOME          HOME for VS Code (a fresh one per run); LAB_DOCKER_SOCK: the run's private daemon socket, shown to
+                    VS Code as /run/docker.sock (bubblewrap); LAB_PASSENV: names of extra variables to pass
+VS Code runs with a clean environment in its own process group; `stop` ends the group. Whether the window is up is
+judged by the caller through the lab driver (`lab state`), never here.
+"""
+import json, os, shutil, signal, subprocess, sys, time
+
+slot = int(os.environ.get("LAB_SLOT") or sys.exit("lab-code: LAB_SLOT is not set"))
+L = os.path.join(os.environ.get("ENCODE_SLOTS_DIR") or os.path.expanduser("~/conformance-work/slots"), str(slot))
+PID = os.path.join(L, "launcher.pid")
+
+
+def running():
+    try:
+        os.killpg(int(open(PID).read()), 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def main_pid(pid):
+    """VS Code's main process: bubblewrap's child, or the group leader itself when VS Code runs without bubblewrap."""
+    try:
+        if os.path.basename(os.readlink(f"/proc/{pid}/exe")) == "bwrap":
+            kids = open(f"/proc/{pid}/task/{pid}/children").read().split()
+            return int(kids[0]) if kids else pid
+    except (OSError, ValueError):
+        pass
+    return pid
+
+
+def stop():
+    try:
+        pid = int(open(PID).read())
+    except (OSError, ValueError):
+        return
+    # ask the main process to quit first, so VS Code writes its state as on a normal close; a SIGTERM to the whole
+    # group kills its helper processes first and the main process then aborts without saving
+    try:
+        os.kill(main_pid(pid), signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    end = time.time() + 15
+    while time.time() < end:
+        try:
+            os.killpg(pid, 0)
+            time.sleep(0.3)
+        except ProcessLookupError:
+            break
+    for sig, wait in ((signal.SIGTERM, 10), (signal.SIGKILL, 5)):
+        try:
+            os.killpg(pid, sig)
+        except ProcessLookupError:
+            break
+        end = time.time() + wait
+        while time.time() < end:
+            try:
+                os.killpg(pid, 0)
+                time.sleep(0.3)
+            except ProcessLookupError:
+                break
+    os.remove(PID)
+
+
+def start(folders):
+    for d in ("user-data/User", "extensions", "vscode-shared", "dot-vscode"):
+        os.makedirs(os.path.join(L, d), exist_ok=True)
+    vhome = os.environ.get("LAB_HOME") or os.path.expanduser("~")
+    for d in (".vscode-shared", ".vscode"):
+        os.makedirs(os.path.join(vhome, d), exist_ok=True)
+    sock, bwrap = os.environ.get("LAB_DOCKER_SOCK"), shutil.which("bwrap")
+    if sock and not bwrap:
+        sys.exit("lab-code: bubblewrap (bwrap) is needed to show the private daemon to VS Code as /run/docker.sock")
+    launcher = []
+    if bwrap:   # VS Code keeps state outside the profile too (~/.vscode-shared, ~/.vscode/argv.json): bind the slot's
+        launcher = [bwrap, "--dev-bind", "/", "/", "--bind", f"{L}/vscode-shared", f"{vhome}/.vscode-shared",
+                    "--bind", f"{L}/dot-vscode", f"{vhome}/.vscode"]
+        if sock:
+            launcher += ["--bind", sock, "/run/docker.sock"]
+        launcher += ["--"]
+    env = {k: os.environ[k] for k in ("PATH", "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY",
+                                      "DBUS_SESSION_BUS_ADDRESS", "LANG") if os.environ.get(k)}
+    env["HOME"] = vhome
+    # The recording environment (remote-pm triage of remote-oss/remote#72, 2026-10-08): a private, empty <slot>/tmp is
+    # the window's TMPDIR, and nothing writes ~/.config (the input method daemon keeps its bus file there): folder
+    # pickers over HOME and the temp folder then list what the recordings list.
+    for k, d in (("TMPDIR", "tmp"), ("XDG_CONFIG_HOME", "xdg-config")):
+        os.makedirs(os.path.join(L, d), mode=0o700, exist_ok=True)
+        env[k] = os.path.join(L, d)
+    if os.environ.get("ENCODE_SHIMS_DIR"):   # optional shims (an xdg-open that records URLs, ...) first on PATH
+        env["PATH"] = os.environ["ENCODE_SHIMS_DIR"] + ":" + env.get("PATH", "/usr/bin:/bin")
+    for v in (os.environ.get("LAB_PASSENV") or "").split():
+        if v in os.environ:
+            env[v] = os.environ[v]
+    code = os.environ.get("ENCODE_VSCODE") or "/usr/share/code/code"
+    cmd = launcher + [code, "--user-data-dir", f"{L}/user-data", "--extensions-dir", f"{L}/extensions",
+                      f"--remote-debugging-port={9222 + slot}", "--remote-allow-origins=*", "--password-store=basic",
+                      "--new-window", *[os.path.abspath(f) for f in folders]]
+    log = open(os.path.join(L, "launcher.log"), "a")
+    p = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, cwd=vhome)
+    open(PID, "w").write(str(p.pid))
+    time.sleep(3)
+    if p.poll() is not None:
+        sys.exit(f"lab-code: VS Code exited at once (code {p.returncode}); see {L}/launcher.log")
+    print(f"VS Code started for slot {slot} (pid {p.pid})")
+
+
+cmd, args = (sys.argv[1] if len(sys.argv) > 1 else "start"), sys.argv[2:]
+if cmd == "stop":
+    stop()
+elif cmd == "restart":
+    stop(); time.sleep(2); start(args)
+elif cmd == "start":
+    start(args)
+elif cmd == "status":
+    print(json.dumps({"slot": slot, "running": running()}))
+else:
+    sys.exit(__doc__)

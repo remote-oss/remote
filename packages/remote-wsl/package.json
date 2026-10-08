@@ -1,5 +1,22 @@
 {
   "name": "remote-wsl",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "description": "Open your Linux projects in WSL and use Linux tools from a Windows editor, without leaving it.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/remote-oss/remote.git",
+    "directory": "packages/remote-wsl"
+  },
+  "bugs": {
+    "url": "https://github.com/remote-oss/remote/issues"
+  },
+  "keywords": [
+    "remote development",
+    "remote",
+    "wsl",
+    "linux",
+    "windows"
+  ]
 }

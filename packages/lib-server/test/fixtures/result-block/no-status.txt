@@ -1,0 +1,3 @@
+remote-oss-server-result-begin
+host.os=linux
+remote-oss-server-result-end

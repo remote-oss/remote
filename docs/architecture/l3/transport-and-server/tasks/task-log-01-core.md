@@ -10,7 +10,7 @@ Create `packages/lib-log` in the shape of `packages/lib-host` on main: `package.
 `tsconfig.test.json` extending the root pair, `coverage.json`, `README.md` (two paragraphs in the product's voice:
 what the library does, allowed imports: none), and add the two tsconfig references to the root `tsconfig.json`
 exactly as `lib-host` is referenced. Files of this card: `src/index.ts`, `src/logger.ts`, `src/levels.ts`,
-`src/once.ts`, `src/redaction.ts`, `src/testing/memory-sink.ts`, and the tests
+`src/once.ts`, `src/redaction.ts`, `src/testing/memory-sink.ts`, `src/testing/once.ts` (exports `resetOncePerSession`), and the tests
 `test/unit/logger.test.ts`, `test/unit/levels.test.ts`, `test/unit/once.test.ts`, `test/unit/redaction.test.ts`.
 Nothing else changes. No `vscode` import anywhere in this card.
 
@@ -29,17 +29,15 @@ export interface Logger {
 }
 export interface LoggerOptions { minimumLevel: () => Level; clock?: () => number; secrets?: () => readonly string[] }
 export function createLogger(sink: Sink | undefined, options: LoggerOptions): Logger;
-export function secret(value: string): Secret;            // an opaque marker type, never a plain string
 export function redact(message: string, secrets: readonly string[]): string;
-export function logOncePerSession(logger: Logger, key: string, message: string, level?: Level): boolean;
+export function logOncePerSession(logger: Logger, onceKey: string, message: string, level?: Level): boolean;
 export function resetOncePerSession(): void;               // testing only, exported from ./testing/once
 export class MemorySink implements Sink { readonly lines: LogLine[]; write(line: LogLine): void }
 ```
 
 Rules the code must follow: a logger with `sink === undefined` accepts every call and writes nothing; `minimumLevel`
 is read on every call; `child` appends one scope name; `redact` runs on every message before the sink; a message that
-still matches the token shape `/\b[A-Za-z0-9_-]{32,}\b/` after redaction is replaced whole by `[redacted]`; a
-`Secret` cannot be concatenated into a message by accident (its `toString` returns `[secret]`); `logOncePerSession`
+still matches the token shape `/\b[A-Za-z0-9_-]{32,}\b/` after redaction is replaced whole by `[redacted]`; `logOncePerSession`
 returns true when it wrote and false when the key was already seen in this process; the registry of seen keys is a
 module-level `Set` cleared only by `resetOncePerSession`.
 
@@ -58,8 +56,6 @@ module-level `Set` cleared only by `resetOncePerSession`.
 | `redact('two abc and abc', ['abc'])` | `'two [redacted] and [redacted]'` |
 | `redact('plain text', [])` | `'plain text'` |
 | `redact('x', ['']) ` | `'x'` (empty secrets are ignored) |
-| `` `${secret('p4ss')}` `` | `'[secret]'` |
-| `String(secret('p4ss')).includes('p4ss')` | `false` |
 | logger with `secrets: () => ['hunter2']`; `info('pw hunter2')` | written message `'pw [redacted]'` |
 | `logOncePerSession(logger, 'k', 'm')` twice | returns `true` then `false`; sink has one line |
 | two keys `'k1'`, `'k2'` | both written, two lines |
