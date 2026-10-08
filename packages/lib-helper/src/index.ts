@@ -22,3 +22,22 @@ export {
   EndPolicyRunner,
   PolicyError,
 } from './runtime/end-policy.ts';
+export type {
+  EndpointConnection,
+  EndpointPort,
+  EndpointServer,
+} from './endpoint/protocol.ts';
+export {nodeEndpointPort} from './endpoint/node-endpoint.ts';
+export {endpointPath, runtimeFolder} from './endpoint/path.ts';
+export type {
+  ClientMessage,
+  HelperMessage,
+  PlainData,
+} from './endpoint/protocol.ts';
+export {
+  type MessageHandler,
+  type RequestContext,
+  serve,
+  type ServeEnd,
+  type ServeOptions,
+} from './runtime/serve.ts';

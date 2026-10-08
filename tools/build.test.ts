@@ -56,4 +56,24 @@ describe('build', () => {
       message: 'no package folder packages/remote-typo',
     });
   });
+
+  it('bundles each helper script of a package on its own', async () => {
+    workspace.write(
+      'packages/remote-a/src/helpers/connection-server.ts',
+      'console.log(1);\n',
+    );
+    workspace.write('packages/remote-a/src/helpers/notes.md', 'not a script\n');
+    deepStrictEqual(await buildPackages(workspace.root, ['remote-a']), [
+      'remote-a: dist/extension.js',
+      'remote-a: dist/helpers/connection-server.js',
+    ]);
+  });
+
+  it('refuses a helper script that imports vscode', async () => {
+    workspace.write(
+      'packages/remote-a/src/helpers/bad.ts',
+      "import * as vscode from 'vscode';\nvoid vscode;\n",
+    );
+    await rejects(buildPackages(workspace.root, ['remote-a']));
+  });
 });
