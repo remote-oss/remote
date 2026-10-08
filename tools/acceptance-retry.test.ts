@@ -6,6 +6,7 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import {
   HANG_MARKERS,
+  runAndCollect,
   runWithRetry,
   shouldRetry,
   type AttemptResult,
@@ -121,9 +122,25 @@ describe('runWithRetry', () => {
   });
 });
 
-it('HANG_MARKERS is frozen and contains exactly the one marker', () => {
+it('HANG_MARKERS contains exactly the one marker', () => {
+  deepStrictEqual(HANG_MARKERS, ['CodeWindow: detected unresponsive']);
+});
+
+it('runAndCollect with a child that writes in two parts and exits 4: both parts echoed in order, output kept whole, the code returned', async () => {
+  const chunks: string[] = [];
+  const result = await runAndCollect(
+    process.execPath,
+    [
+      '-e',
+      'process.stdout.write("part1 "); setTimeout(() => process.stdout.write("part2\\n"), 50); process.exitCode = 4',
+    ],
+    {},
+    chunk => {
+      chunks.push(chunk);
+    },
+  );
   deepStrictEqual(
-    [Object.isFrozen(HANG_MARKERS), HANG_MARKERS],
-    [true, ['CodeWindow: detected unresponsive']],
+    [result, chunks.join('')],
+    [{exitCode: 4, output: 'part1 part2\n'}, 'part1 part2\n'],
   );
 });

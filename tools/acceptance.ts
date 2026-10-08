@@ -10,7 +10,7 @@
  * folder are removed at the end, whatever the outcome. Run `pnpm package` first; `pnpm test:acceptance` does both.
  */
 
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -358,9 +358,9 @@ export function runCommand(
 }
 
 /** The lines in the editor's output that report a hung window; the run is retried once on them. */
-export const HANG_MARKERS: readonly string[] = Object.freeze([
+export const HANG_MARKERS: readonly string[] = [
   'CodeWindow: detected unresponsive',
-]);
+];
 
 /** The result of one attempt of the acceptance run: the process's exit code and its output. */
 export interface AttemptResult {
@@ -368,15 +368,14 @@ export interface AttemptResult {
   output: string;
 }
 
-/** Whether an attempt is retried: only a failing attempt below the limit whose output names a hung window. */
+/** Whether the first attempt is retried once: a failing first attempt whose output names a hung window. */
 export function shouldRetry(
   attempt: number,
   exitCode: number,
   output: string,
-  maxAttempts = 2,
 ): boolean {
   return (
-    attempt < maxAttempts &&
+    attempt === 1 &&
     exitCode !== 0 &&
     HANG_MARKERS.some(marker => output.includes(marker))
   );
@@ -384,48 +383,69 @@ export function shouldRetry(
 
 /** Runs the attempt; on a retriable result it logs the retry and runs once more; it returns the last exit code. */
 export async function runWithRetry(
-  // eslint-disable-next-line id-length -- the contract's parameter names
-  run: () => Promise<AttemptResult>,
-  // eslint-disable-next-line id-length -- the contract's parameter names
-  log: (line: string) => void,
-  maxAttempts = 2,
+  attempt: () => Promise<AttemptResult>,
+  report: (line: string) => void,
 ): Promise<number> {
-  const first = await run();
-  if (!shouldRetry(1, first.exitCode, first.output, maxAttempts)) {
+  const first = await attempt();
+  if (!shouldRetry(1, first.exitCode, first.output)) {
     return first.exitCode;
   }
-  log('acceptance: editor window unresponsive on attempt 1; retrying once');
-  const second = await run();
+  report('acceptance: editor window unresponsive on attempt 1; retrying once');
+  const second = await attempt();
   return second.exitCode;
 }
 
 /**
+ * Runs a program and returns its exit code and its output. Each output chunk is handed to `echo` as it
+ * arrives, so a run that hangs until the job's own timeout still shows its output in the job's log.
+ */
+export function runAndCollect(
+  program: string,
+  programArguments: readonly string[],
+  options: {cwd?: string; env?: NodeJS.ProcessEnv} = {},
+  echo: (chunk: string) => void = chunk => process.stdout.write(chunk),
+): Promise<AttemptResult> {
+  return new Promise<AttemptResult>((resolve, reject) => {
+    const child = spawn(program, [...programArguments], {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const chunks: Buffer[] = [];
+    for (const stream of [child.stdout, child.stderr]) {
+      stream.on('data', (chunk: Buffer) => {
+        chunks.push(chunk);
+        echo(chunk.toString('utf8'));
+      });
+    }
+    child.on('close', (code: number | null) => {
+      resolve({
+        exitCode: code ?? 1,
+        output: Buffer.concat(chunks).toString('utf8'),
+      });
+    });
+    child.on('error', reject);
+  });
+}
+
+/**
  * Starts test-cli with the acceptance configuration and the harness variables, and returns its result: the
- * editor's output is captured for the retry decision, and echoed to the job's log, so both attempts show there.
+ * editor's output streams to the job's log as it arrives, and is kept whole for the retry decision, so both
+ * attempts show there.
  */
 export function runTestCli(
   root: string,
   variables: HarnessVariables,
 ): Promise<AttemptResult> {
-  const result = spawnSync(
+  return runAndCollect(
     process.execPath,
     [
       path.join(path.dirname(resolveBinary('@vscode/test-cli')), 'bin.mjs'),
       '--config',
       path.join(root, 'tests', 'acceptance', 'vscode-test.mjs'),
     ],
-    {
-      cwd: root,
-      env: {...process.env, ...variables},
-      stdio: ['ignore', 'pipe', 'pipe'],
-      encoding: 'utf8',
-    },
+    {cwd: root, env: {...process.env, ...variables}},
   );
-  const output = `${result.stdout}${result.stderr}`;
-  if (output.length > 0) {
-    console.log(output.replace(/\n$/, ''));
-  }
-  return Promise.resolve({exitCode: result.status ?? 1, output});
 }
 
 if (isMainModule(import.meta.url)) {
