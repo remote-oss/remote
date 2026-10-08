@@ -85,7 +85,7 @@ describe('helper client', () => {
   const RECORD_PATH = recordPath('/registry', 'ssh.connection', 'user@host:22');
 
   /** The text of a record whose helper listens at `endpoint`, if anything does. */
-  function recordAt(endpoint: string): string {
+  function recordAt(endpoint: string, startedAt = 0): string {
     return serializeRecord({
       version: 1,
       namespace: 'ssh.connection',
@@ -93,7 +93,7 @@ describe('helper client', () => {
       endpoint,
       nonce: 'old',
       startedByProcessId: 1,
-      startedAt: 0,
+      startedAt,
       payload: {},
     });
   }
@@ -105,6 +105,18 @@ describe('helper client', () => {
       await remove(file);
       files.files.set(file, text);
     };
+  }
+
+  /** Starts an acquire, lets it reach its wait, cancels it, and returns how it ended. */
+  async function cancelledWhilePending(): Promise<AcquireOutcome> {
+    const controller = new AbortController();
+    const pending = acquire(
+      environment,
+      request({cancellation: controller.signal}),
+    );
+    await settled();
+    controller.abort();
+    return drive(pending);
   }
 
   function leaseOf(outcome: AcquireOutcome): HelperLease {
@@ -342,14 +354,48 @@ describe('helper client', () => {
 
     it('is cancelled while it waits for the helper to listen', async () => {
       helperListens = false;
-      const controller = new AbortController();
-      const pending = acquire(
-        environment,
-        request({cancellation: controller.signal}),
+      deepStrictEqual(await cancelledWhilePending(), {
+        kind: 'failed',
+        failure: 'cancelled',
+      });
+    });
+
+    it('waits for a helper that is still starting instead of replacing its record', async () => {
+      const starterRecord = recordAt('/run/starting.sock', clock.now());
+      files.files.set(RECORD_PATH, starterRecord);
+      clock.scheduler().setTimer(300, () => {
+        void serve({
+          endpoint: '/run/starting.sock',
+          nonce: 'old',
+          payload: {},
+          policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
+          handler,
+          port: endpoints,
+          clock: () => clock.now(),
+          scheduler: clock.scheduler(),
+          helloLimitMilliseconds: 500,
+          logLine: () => undefined,
+        });
+      });
+      const lease = leaseOf(await drive(acquire(environment, request())));
+      deepStrictEqual(
+        [lease.startedByMe, spawned.length, files.files.get(RECORD_PATH)],
+        [false, 0, starterRecord],
       );
-      await settled();
-      controller.abort();
-      deepStrictEqual(await drive(pending), {
+    });
+
+    it("replaces a silent record only after its starter's window has passed", async () => {
+      files.files.set(RECORD_PATH, recordAt('/run/gone.sock', clock.now()));
+      const lease = leaseOf(await drive(acquire(environment, request())));
+      deepStrictEqual(
+        [lease.startedByMe, spawned.length, clock.now() >= 2000],
+        [true, 1, true],
+      );
+    });
+
+    it('is cancelled while it waits for a helper that is still starting', async () => {
+      files.files.set(RECORD_PATH, recordAt('/run/gone.sock', clock.now()));
+      deepStrictEqual(await cancelledWhilePending(), {
         kind: 'failed',
         failure: 'cancelled',
       });
