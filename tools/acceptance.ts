@@ -22,6 +22,10 @@ import {
 import {tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import path from 'node:path';
+import {
+  downloadAndUnzipVSCode,
+  resolveCliPathFromVSCodeExecutablePath,
+} from '@vscode/test-electron';
 import {build} from 'esbuild';
 import {
   isMainModule,
@@ -84,6 +88,8 @@ export interface HarnessDependencies {
   command: CommandRunner;
   sleep: Sleeper;
   bundleSuite: (root: string) => Promise<void>;
+  /** The command line of the editor's CLI at the version under test, downloading the editor when it is missing. */
+  editorCli: () => Promise<string>;
   /** Starts test-cli with the harness variables and returns its exit code. */
   runTests: (root: string, variables: HarnessVariables) => number;
 }
@@ -231,12 +237,20 @@ async function prepare(
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
   await dependencies.bundleSuite(root);
+  const vsixFiles = packagedExtensions(root);
+  if (vsixFiles.length > 0) {
+    checked(command, await dependencies.editorCli(), [
+      `--extensions-dir=${path.join(runFolder, 'extensions')}`,
+      `--user-data-dir=${path.join(runFolder, 'user-data')}`,
+      ...vsixFiles.flatMap(file => ['--install-extension', file]),
+    ]);
+  }
   return {
     REMOTE_OSS_ACCEPTANCE: '1',
     HARNESS_SSH_CONFIG: configFile,
     HARNESS_CONTAINER: container,
     HARNESS_RUN_FOLDER: runFolder,
-    HARNESS_VSIX_FILES: packagedExtensions(root).join(path.delimiter),
+    HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
   };
 }
 
@@ -273,20 +287,17 @@ export function acceptanceConfiguration(
   version: string;
   extensionDevelopmentPath: string;
   files: string;
-  installExtensions: string[];
   launchArgs: string[];
   env: Record<string, string | undefined>;
   mocha: {ui: 'bdd'; timeout: number};
 } {
   const runFolder = environment.HARNESS_RUN_FOLDER ?? '';
-  const vsixFiles = environment.HARNESS_VSIX_FILES ?? '';
   return {
     label: 'acceptance',
     version: EDITOR_VERSION,
     extensionDevelopmentPath: path.join(root, 'tests', 'acceptance', 'runner'),
     // test-cli expands a glob relative to its configuration file, tests/acceptance/vscode-test.mjs.
     files: 'dist/**/*.test.cjs',
-    installExtensions: vsixFiles === '' ? [] : vsixFiles.split(path.delimiter),
     launchArgs: [
       `--user-data-dir=${path.join(runFolder, 'user-data')}`,
       `--extensions-dir=${path.join(runFolder, 'extensions')}`,
@@ -316,6 +327,15 @@ export async function bundleSuite(root: string): Promise<void> {
     external: ['vscode'],
     logLevel: 'warning',
   });
+}
+
+/**
+ * The editor's CLI at the version under test. The harness installs the VSIX files with it into the run's own
+ * extensions folder, the one the editor is started with; test-cli's own install would use its default folder.
+ */
+async function editorCli(): Promise<string> {
+  const executable = await downloadAndUnzipVSCode(EDITOR_VERSION);
+  return resolveCliPathFromVSCodeExecutablePath(executable);
 }
 
 /** Runs a program and collects its exit status and output. */
@@ -350,6 +370,7 @@ if (isMainModule(import.meta.url)) {
     command: runCommand,
     sleep: delay,
     bundleSuite,
+    editorCli,
     runTests: runTestCli,
   });
 }
