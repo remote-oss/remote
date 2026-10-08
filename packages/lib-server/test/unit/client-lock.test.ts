@@ -149,7 +149,7 @@ describe('client lock (card server-05 table)', () => {
     deepStrictEqual(port.files(), []);
   });
 
-  it('takeover race: after the remove, createExclusive returns exists (another waiter won); keep polling; when the file is later removed -> done; the takeover remove happens once', async () => {
+  it('takeover race: after the remove, createExclusive returns exists (another waiter won); keep polling; when the file is later removed -> done; the takeover remove happens once (row counts the takeover remove only)', async () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
     await port.createExclusive(PATH, IDENTITY);
@@ -172,8 +172,21 @@ describe('client lock (card server-05 table)', () => {
     deepStrictEqual(result, {kind: 'done', value: 'value'});
     strictEqual(waited, 1);
     strictEqual(createCalls, 3);
-    // The takeover remove plus the finally-remove after the work: two removes on the done path.
-    strictEqual(port.calls.filter(call => call === `remove ${PATH}`).length, 2);
+    // The row's "exactly one remove call" counts the takeover remove only: no remove while losing the
+    // race and none before the file disappears; the finally-remove after the work is a second.
+    const lastCreate = port.calls.lastIndexOf(
+      `createExclusive ${PATH} ${IDENTITY}`,
+    );
+    deepStrictEqual(
+      {
+        takeoverRemovesBeforeLastCreate: port.calls
+          .slice(0, lastCreate)
+          .filter(call => call === `remove ${PATH}`).length,
+        totalRemoves: port.calls.filter(call => call === `remove ${PATH}`)
+          .length,
+      },
+      {takeoverRemovesBeforeLastCreate: 1, totalRemoves: 2},
+    );
     deepStrictEqual(port.files(), []);
   });
 
