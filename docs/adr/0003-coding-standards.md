@@ -62,6 +62,14 @@ imposes, each listed once in the ESLint config with the API that imposes it. Abb
 `opts`, `args` are out. An unused trailing parameter is removed, not renamed; an unused leading parameter keeps its
 descriptive name.
 
+Short names that fail the rule but are worth keeping (the user's standing rule, 2026-10-08): deliberated by the lead
+for contract names and by the PM for cross-cutting tooling, never escalated to the user. Allowed only when the name
+is a widely recognised term or an external API's own name, clear in context, and renaming would cost more
+(awkward names spreading, disables across files); otherwise renamed (`key` → `onceKey`, `pid` → `startedByProcessId`).
+Mechanism: an exception line here citing the decision plus one tooling PR adding the name to
+`SHORT_NAME_EXCEPTIONS`; never a per-file disable. A contract that needs one says so in its card, and the tooling PR
+lands before the card is built. Current exceptions beyond the fixed list: `now` (2026-10-08).
+
 Check: `id-length` (`min: 4`, `properties: always`, the exception list); `id-denylist` for the abbreviations; a local
 rule `names/scoped-exceptions` for the scoped cases; `@typescript-eslint/no-unused-vars` with `args: after-used`
 and `noUnusedLocals` in `tsc`, and no `_`-prefix allowance; review question R2.
