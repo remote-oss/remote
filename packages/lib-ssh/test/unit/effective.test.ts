@@ -1,4 +1,4 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, match} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import {parseEffectiveOptions} from '../../src/index.ts';
 
@@ -57,6 +57,19 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
       parseEffectiveOptions('hostname h\nuser u\nport 22\nremotecommand none'),
       {options: {hostName: 'h', user: 'u', port: '22', localForwards: []}},
     );
+  });
+
+  it('F-2107.BR-1 (provisional): a remotecommand without a value leaves the option out', () => {
+    deepStrictEqual(
+      parseEffectiveOptions('hostname h\nuser u\nport 22\nremotecommand'),
+      {options: {hostName: 'h', user: 'u', port: '22', localForwards: []}},
+    );
+  });
+
+  it('F-2105.6.2 (provisional): keywords in any case fold to lower case', () => {
+    deepStrictEqual(parseEffectiveOptions('HostName h\nUSER dev\nPort 22'), {
+      options: {hostName: 'h', user: 'dev', port: '22', localForwards: []},
+    });
   });
 
   it('F-2107.BR-1: a remote command keeps its inner blanks', () => {
@@ -142,12 +155,10 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
     ['empty', ''],
   ] as const) {
     it(`S4 contract: text ${given} is a parse error`, () => {
-      const result = parseEffectiveOptions(text);
-      if ('options' in result) {
-        throw new Error(`no parse error for ${given}`);
-      }
-      strictEqual(typeof result.parseError, 'string');
-      strictEqual(result.parseError.length > 0, true);
+      match(
+        JSON.stringify(parseEffectiveOptions(text)),
+        /^\{"parseError":".+"\}$/,
+      );
     });
   }
 });

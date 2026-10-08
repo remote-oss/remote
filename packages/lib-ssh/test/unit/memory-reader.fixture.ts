@@ -23,9 +23,10 @@ export function memoryReader(
       }
       const entries = new Set<string>();
       for (const pathName of texts.keys()) {
-        const base = path.posix.dirname(pathName);
+        const paths = pathName.includes('\\') ? path.win32 : path.posix;
+        const base = paths.dirname(pathName);
         if (base === folder) {
-          entries.add(path.posix.basename(pathName));
+          entries.add(paths.basename(pathName));
         }
       }
       return entries.size === 0 ? undefined : [...entries];
