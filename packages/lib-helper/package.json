@@ -4,6 +4,6 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./testing/memory-file-port": "./src/testing/memory-file-port.ts"
+    "./testing/*": "./src/testing/*.ts"
   }
 }

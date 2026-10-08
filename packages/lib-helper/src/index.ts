@@ -15,3 +15,29 @@ export {
 export {type RegistryFilePort, recordPath} from './registry/file-port.ts';
 export {claim} from './registry/claim.ts';
 export {isStale, replaceStale} from './registry/stale.ts';
+export {type Lease, type LeaseEvent, LeaseTable} from './runtime/leases.ts';
+export {
+  type PolicyOutcome,
+  type Scheduler,
+  EndPolicyRunner,
+  PolicyError,
+} from './runtime/end-policy.ts';
+export type {
+  EndpointConnection,
+  EndpointPort,
+  EndpointServer,
+} from './endpoint/protocol.ts';
+export {nodeEndpointPort} from './endpoint/node-endpoint.ts';
+export {endpointPath, runtimeFolder} from './endpoint/path.ts';
+export type {
+  ClientMessage,
+  HelperMessage,
+  PlainData,
+} from './endpoint/protocol.ts';
+export {
+  type MessageHandler,
+  type RequestContext,
+  serve,
+  type ServeEnd,
+  type ServeOptions,
+} from './runtime/serve.ts';

@@ -106,7 +106,11 @@ function isHelperRecordShape(value: unknown): boolean {
     return false;
   }
   const payload = fields.payload;
-  if (typeof payload !== 'object' || payload === null) {
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    Array.isArray(payload)
+  ) {
     return false;
   }
   for (const [name, value] of Object.entries(
