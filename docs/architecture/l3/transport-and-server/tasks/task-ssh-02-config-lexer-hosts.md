@@ -62,7 +62,7 @@ Rows marked (provisional) rest on a spec reading, not a confirmed answer; they a
 | F-2202.BR-9 | U: `Host *`, `Host a`, `Include inc.conf` | inc is not listed |
 | F-2202.AC-11 | U: `Include conf.d/*.conf`; folder `/home/dev/.ssh/conf.d` holds `a.conf`, `b.conf`, `10.conf`, `z.txt`, each containing `Host <its file name>` | b.conf, a.conf, 10.conf; z.txt absent |
 | F-2202.BR-12 | same include; folder holds `Z.conf`, `c1.conf`, `c2.conf`, `c3.conf`, `m.conf` (port lists them in any order), each `Host <file name>` | m.conf, c3.conf, c2.conf, c1.conf, Z.conf |
-| F-2202.AC-12 | U: `Include tree/a.conf`, `Include tree/b.conf`, `Host own`; under `/home/dev/.ssh`: `tree/a.conf` = `Host tree-a` + `Include tree/a2.conf`; `tree/a2.conf` = `Host tree-a2` + `Include tree/a3.conf`; `tree/a3.conf` = `Host tree-a3`; `tree/b.conf` = `Host tree-b` + `Include tree/b2.conf`; `tree/b2.conf` = `Host tree-b2` | own, tree-a, tree-b, tree-a2, tree-b2, tree-a3 |
+| F-2202.AC-12 | U: `Include tree/a.conf`, `Include tree/b.conf`, `Host own`; under `/home/dev/.ssh`: `tree/a.conf` = `Include tree/a2.conf` + `Host tree-a`; `tree/a2.conf` = `Include tree/a3.conf` + `Host tree-a2`; `tree/a3.conf` = `Host tree-a3`; `tree/b.conf` = `Include tree/b2.conf` + `Host tree-b`; (each `Include` at the top of its file, F-2202.BR-9) `tree/b2.conf` = `Host tree-b2` | own, tree-a, tree-b, tree-a2, tree-b2, tree-a3 |
 | F-2202.AC-13 | (each) U top line `Include rel.conf`, `Include ../up.conf`, `Include ~/abs.conf`, `Include /opt/abs.conf`, `Include "q.conf"`, `include low.conf`, `Include=eq.conf` | the file read is `/home/dev/.ssh/rel.conf`, `/home/dev/up.conf`, `/home/dev/abs.conf`, `/opt/abs.conf`, `/home/dev/.ssh/q.conf`, `/home/dev/.ssh/low.conf`, `/home/dev/.ssh/eq.conf`; its host is listed |
 | F-2202.AC-14 | (each) U: `Include a.conf b.conf` (both exist), `Include ${HOME}/x.conf`, `Include %d/x.conf` | no included host |
 | F-2202.AC-15 | (each) U: `Include` of a missing file; of a folder; of a file the port cannot read; then `Host own` | own; no error |
@@ -90,9 +90,9 @@ Rows marked (provisional) rest on a spec reading, not a confirmed answer; they a
 | F-2201.Q1 (provisional) | U: `Host "abc` | the `parseError` reason is a non-empty string (its words are not asserted) |
 | F-2202.BR-1 (provisional) | U: `Host "a#b"`, `Host c#d` | a#b, c |
 | F-2202.BR-12 (provisional) | U: `Include conf.d/*`; folder `/home/dev/.ssh/conf.d` holds `.hidden`, `shown`, each containing `Host <its file name>` | shown; .hidden absent |
-| F-2202.BR-12 (provisional) | U: `Include conf.d/[a-b]*`; folder holds `a1`, `b1`, `c1`, each containing `Host <its file name>` | a1, b1 |
+| F-2202.BR-12 (provisional) | U: `Include conf.d/[a-b]*`; folder holds `a1`, `b1`, `c1`, each containing `Host <its file name>` | b1, a1 (reverse code-point order, F-2202.BR-12) |
 | F-2202.Q2 (lead 2026-10-07) | locations `{homeFolder:'C:\Users\dev', platform:'windows', programDataFolder:'C:\ProgramData'}`; U (`C:\Users\dev\.ssh\config`): `Include inc.conf`, `Include ~\other.conf`, `Include ~/third.conf`; `C:\Users\dev\.ssh\inc.conf` = `Host inc`, `C:\Users\dev\other.conf` = `Host other`, `C:\Users\dev\third.conf` = `Host third` | inc, other, third |
-| F-2202.BR-14 (provisional) | U: `Include a.conf`; `a.conf` = `Include b.conf`, `Host a`; `b.conf` = `Include c.conf`, `Host b`; `c.conf` = `Include d.conf`, `Host c`; `d.conf` = `Host d` (all under `/home/dev/.ssh`) | d, c, b, a (no depth limit) |
+| F-2202.BR-14 (provisional) | U: `Include a.conf`; `a.conf` = `Include b.conf`, `Host a`; `b.conf` = `Include c.conf`, `Host b`; `c.conf` = `Include d.conf`, `Host c`; `d.conf` = `Host d` (all under `/home/dev/.ssh`) | a, b, c, d (own entries first, then breadth first, F-2202.BR-13; no depth limit) |
 
 ## 4. Rule for the worker
 
