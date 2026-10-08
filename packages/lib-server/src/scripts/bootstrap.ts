@@ -179,6 +179,7 @@ const GUARD: readonly string[] = [
 
 const PROBE_BODY: readonly string[] = [
   'fact host.tmp "${TMPDIR:-/tmp}"',
+  'fact host.home "${HOME:-}"',
   'OS_NAME=$(uname -s 2>/dev/null)',
   'case $OS_NAME in',
   '  Linux) HOST_OS=linux ;;',
