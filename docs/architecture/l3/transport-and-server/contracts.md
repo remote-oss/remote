@@ -447,6 +447,9 @@ shows STR:S168 and falls back to 127.0.0.1 (F-2409).
 
 Grace time: read at each resolve that starts a server, and never passed to a Windows host (F-2413 7.E5).
 
+The `start` step takes the host lock (the script, 2026-10-08), so a second window starting at the same moment gets
+`LockBusy`; V7 runs `start` inside V5's `hostLockLoop`, the same as the install steps.
+
 Remote environment (F-2311, F-2312):
 - The session's `SSH_AUTH_SOCK` and `DISPLAY` are learned from the session at server start, once per connection,
   never built by us.
