@@ -13,6 +13,7 @@
 import {spawnSync} from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -122,6 +123,8 @@ export function harnessSshConfig(port: number, runFolder: string): string {
     '  IdentitiesOnly yes',
     '  IdentityAgent none',
     '  StrictHostKeyChecking accept-new',
+    '  BatchMode yes',
+    '  ConnectTimeout 10',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
     '',
   ].join('\n');
@@ -140,6 +143,16 @@ export function packagedExtensions(root: string): string[] {
       return packageName !== undefined && packageNames.has(packageName);
     })
     .map(entry => path.join(folder, entry.name));
+}
+
+/** The editor's user settings of the run: the extensions under test read the harness's ssh_config. */
+export function writeUserSettings(runFolder: string, configFile: string): void {
+  const folder = path.join(runFolder, 'user-data', 'User');
+  mkdirSync(folder, {recursive: true});
+  writeFileSync(
+    path.join(folder, 'settings.json'),
+    `${JSON.stringify({'remote.SSH.configFile': configFile}, null, 2)}\n`,
+  );
 }
 
 async function waitForHost(
@@ -211,6 +224,7 @@ async function prepare(
   );
   const configFile = path.join(runFolder, 'ssh_config');
   writeFileSync(configFile, harnessSshConfig(port, runFolder));
+  writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
   await dependencies.bundleSuite(root);
   return {

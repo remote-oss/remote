@@ -4,7 +4,7 @@ import {
   strictEqual,
   throws,
 } from 'node:assert';
-import {existsSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   acceptanceConfiguration,
@@ -18,6 +18,7 @@ import {
   runAcceptance,
   runCommand,
   runTestCli,
+  writeUserSettings,
 } from './acceptance.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -111,9 +112,24 @@ describe('acceptance', () => {
         '  IdentitiesOnly yes',
         '  IdentityAgent none',
         '  StrictHostKeyChecking accept-new',
+        '  BatchMode yes',
+        '  ConnectTimeout 10',
         '  UserKnownHostsFile /run/known_hosts',
         '',
       ].join('\n'),
+    );
+  });
+
+  it("gives the editor's user settings the harness ssh_config as remote.SSH.configFile", () => {
+    writeUserSettings(workspace.root, '/run/ssh_config');
+    deepStrictEqual(
+      JSON.parse(
+        readFileSync(
+          path.join(workspace.root, 'user-data', 'User', 'settings.json'),
+          'utf8',
+        ),
+      ),
+      {'remote.SSH.configFile': '/run/ssh_config'},
     );
   });
 

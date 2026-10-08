@@ -7,6 +7,13 @@ describe('the acceptance harness', () => {
     strictEqual(vscode.version, '1.139.1');
   });
 
+  it('gives the editor the harness ssh_config as remote.SSH.configFile', () => {
+    strictEqual(
+      vscode.workspace.getConfiguration('remote.SSH').get('configFile'),
+      process.env.HARNESS_SSH_CONFIG,
+    );
+  });
+
   it('reaches the host over SSH as the user harness', async () => {
     strictEqual((await overSsh('id -un')).trim(), 'harness');
   });
