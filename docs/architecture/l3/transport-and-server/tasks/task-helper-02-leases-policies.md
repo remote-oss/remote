@@ -11,13 +11,15 @@ opens sockets or spawns; the runtime's endpoint and the client are a Claude task
 
 ## 2. Contract
 
+Names ruled 2026-10-08 (ADR-0003): `recordKey`, `startedByProcessId`, `leaseId`, `close(leaseId)`, `nowMilliseconds()`; no eslint-disable for names anywhere.
+
 ```ts
-export interface Lease { readonly id: number; readonly openedAt: number }
+export interface Lease { readonly leaseId: number; readonly openedAt: number }
 export interface LeaseEvent { kind: 'leaseListChanged'; leases: readonly Lease[] }
 export class LeaseTable {
-  constructor(clock: () => number);
+  constructor(nowMilliseconds: () => number);
   open(): Lease;                         // ids 1, 2, 3, … in arrival order, never reused
-  close(id: number): boolean;            // false when unknown or already closed
+  close(leaseId: number): boolean;       // false when unknown or already closed
   live(): readonly Lease[];              // oldest first
   oldest(): Lease | undefined;
   onChange(listener: (event: LeaseEvent) => void): () => void;  // every open and close fires once
@@ -31,7 +33,7 @@ export class EndPolicyRunner {
   // grace and idle: when the timer fires and the list is still empty → onOutcome({end})
   dispose(): void;                       // cancels any armed timer
 }
-export class FakeClock { now(): number; advance(milliseconds: number): void; scheduler(): Scheduler }  // timers fire in order on advance, including those armed during a callback
+export class FakeClock { nowMilliseconds(): number; advance(milliseconds: number): void; scheduler(): Scheduler }  // timers fire in order on advance, including those armed during a callback
 ```
 
 Rules: an `EndPolicy` with `milliseconds <= 0` or a non-finite value throws `PolicyError` at construction; a policy
@@ -42,10 +44,10 @@ timer at a time.
 
 | Given | Expected |
 |---|---|
-| `open()` three times | ids 1, 2, 3; `live()` in that order; `oldest().id === 1` |
-| `close(1)` | `live()` is [2, 3]; `oldest().id === 2`; returns `true` |
+| `open()` three times | leaseIds 1, 2, 3; `live()` in that order; `oldest().leaseId === 1` |
+| `close(1)` | `live()` is [2, 3]; `oldest().leaseId === 2`; returns `true` |
 | `close(1)` again; `close(99)` | both `false`; no change event |
-| after closing all, `open()` | id 4 (never reused); `oldest().id === 4` |
+| after closing all, `open()` | leaseId 4 (never reused); `oldest().leaseId === 4` |
 | `onChange` listener; open, close | two events, `leases` arrays equal `live()` at each moment; the unsubscribe stops further events |
 | `openedAt` | equals the clock value at `open()` |
 | grace 3000: open, close, advance 2999 | no outcome |

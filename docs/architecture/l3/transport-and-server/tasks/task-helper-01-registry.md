@@ -14,9 +14,11 @@ for helper processes that outlive one window; allowed import `lib-log`), with th
 
 ## 2. Contract
 
+Names ruled 2026-10-08 (ADR-0003): `recordKey`, `startedByProcessId`, `leaseId`, `close(leaseId)`, `nowMilliseconds()`; no eslint-disable for names anywhere.
+
 ```ts
 export interface HelperRecord {
-  version: 1; namespace: string; key: string; endpoint: string; nonce: string; pid: number;
+  version: 1; namespace: string; recordKey: string; endpoint: string; nonce: string; startedByProcessId: number;
   startedAt: number; payload: Record<string, string | number | boolean>;
 }
 export type EndPolicy =

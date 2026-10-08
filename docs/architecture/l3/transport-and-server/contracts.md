@@ -664,6 +664,15 @@ Fixed regardless of the choice:
 
 ## 9. lib-helper (draft for area C's review; lead's ruling 2026-10-06)
 
+Names (ADR-0003, ruled 2026-10-08): the record's `recordKey` (not `key`), `startedByProcessId` (not `pid`; it is the
+acquirer's process id, since the claim precedes the spawn; stopping always goes through the endpoint, never a kill
+by process id), `Lease.leaseId`, `close(leaseId)`, `Clock.nowMilliseconds()`. The wire protocol is newline-delimited
+JSON (`hello`/`welcome` with the nonce, `request`/`reply` by `requestId`, pushed `leaseListChanged` and `message`,
+`stop`); helper parameters travel in one environment variable, never argv; the spawn is `process.execPath` with
+`ELECTRON_RUN_AS_NODE=1`, detached, stdio ignored, windowsHide, unref; the endpoint path is
+`$XDG_RUNTIME_DIR` or the temp folder plus `rh-<16 hex>.sock` under umask 0o077; helper scripts are bundled from
+`src/helpers/*.ts` into `dist/helpers/<name>.js` as separate entries without `vscode`.
+
 One pattern for every detached helper process the family runs on the client. A helper outlives the extension host
 that starts it, is shared by leases from several windows, and ends by a policy.
 
