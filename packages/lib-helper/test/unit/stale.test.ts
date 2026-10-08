@@ -40,7 +40,7 @@ const FRESH: HelperRecord = {
 const PATH = recordPath('/r', 'ssh.connection', 'user@host:22');
 
 // A port whose remove step is followed by the given file, so the create either finds a rival's
-// record (the caller joins with it) or a corrupt file (the caller proceeds as if it claimed).
+// record (the caller joins with it) or a corrupt file (the caller is told the file is corrupt).
 function racingPort(
   inner: MemoryFilePort,
   rivalText: string,
@@ -166,7 +166,7 @@ describe('replaceStale (card helper-01 table)', () => {
     deepStrictEqual(result, {outcome: 'claimed'});
   });
 
-  it('replaceStale when a corrupt file appears after the remove -> claimed', async () => {
+  it('replaceStale when a corrupt file appears after the remove -> corrupt (PM ruling: a rival unreadable file is not ours)', async () => {
     const inner = new MemoryFilePort();
     inner.files.set(PATH, serializeRecord(RECORD));
     const result = await replaceStale(
@@ -176,7 +176,7 @@ describe('replaceStale (card helper-01 table)', () => {
       'user@host:22',
       FRESH,
     );
-    deepStrictEqual(result, {outcome: 'claimed'});
+    deepStrictEqual(result, {outcome: 'corrupt'});
   });
 
   it('replaceStale when the file is absent -> remove still called once (idempotent)', async () => {
