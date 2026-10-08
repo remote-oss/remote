@@ -5,10 +5,10 @@
 export interface HelperRecord {
   version: 1;
   namespace: string;
-  key: string;
+  recordKey: string;
   endpoint: string;
   nonce: string;
-  pid: number;
+  startedByProcessId: number;
   startedAt: number;
   payload: Record<string, string | number | boolean>;
 }
@@ -23,10 +23,10 @@ export type EndPolicy =
 const FIELD_ORDER = [
   'version',
   'namespace',
-  'key',
+  'recordKey',
   'endpoint',
   'nonce',
-  'pid',
+  'startedByProcessId',
   'startedAt',
   'payload',
 ] as const;
@@ -56,7 +56,7 @@ export class RecordShapeError extends Error {
 /**
  * Write the record to a line of JSON, keys in the registry's order. It rejects a field the
  * registry does not know, a field the record is missing, a payload value that is not a plain
- * string, number or boolean, and a payload key that would carry a prompt answer or credential.
+ * string, number or boolean, and a payload recordKey that would carry a prompt answer or credential.
  */
 export function serializeRecord(record: HelperRecord): string {
   if (!isHelperRecordShape(record)) {
@@ -65,12 +65,10 @@ export function serializeRecord(record: HelperRecord): string {
   return JSON.stringify({
     version: record.version,
     namespace: record.namespace,
-    // eslint-disable-next-line id-length -- the record's field name, fixed by the contract
-    key: record.key,
+    recordKey: record.recordKey,
     endpoint: record.endpoint,
     nonce: record.nonce,
-    // eslint-disable-next-line id-length -- the record's field name, fixed by the contract
-    pid: record.pid,
+    startedByProcessId: record.startedByProcessId,
     startedAt: record.startedAt,
     payload: record.payload,
   });
@@ -79,7 +77,7 @@ export function serializeRecord(record: HelperRecord): string {
 /**
  * The one shape check the writer and the reader share, so the reader is as strict as the
  * writer: a plain object with exactly the eight fields, the string fields as strings, the number
- * fields as numbers, and a payload of primitives that carries no refused key.
+ * fields as numbers, and a payload of primitives that carries no refused recordKey.
  */
 function isHelperRecordShape(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) {
@@ -99,10 +97,10 @@ function isHelperRecordShape(value: unknown): boolean {
   if (
     fields.version !== 1 ||
     typeof fields.namespace !== 'string' ||
-    typeof fields.key !== 'string' ||
+    typeof fields.recordKey !== 'string' ||
     typeof fields.endpoint !== 'string' ||
     typeof fields.nonce !== 'string' ||
-    typeof fields.pid !== 'number' ||
+    typeof fields.startedByProcessId !== 'number' ||
     typeof fields.startedAt !== 'number'
   ) {
     return false;

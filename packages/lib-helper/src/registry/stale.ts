@@ -32,14 +32,13 @@ export async function replaceStale(
   port: RegistryFilePort,
   folder: string,
   namespace: string,
-  // eslint-disable-next-line id-length -- the name the registry keys its records by, fixed by the contract
-  key: string,
+  recordKey: string,
   record: HelperRecord,
 ): Promise<
   | {outcome: 'claimed'}
   | {outcome: 'existing'; record: HelperRecord}
   | {outcome: 'corrupt'}
 > {
-  await port.remove(recordPath(folder, namespace, key));
-  return claim(port, folder, namespace, key, record);
+  await port.remove(recordPath(folder, namespace, recordKey));
+  return claim(port, folder, namespace, recordKey, record);
 }

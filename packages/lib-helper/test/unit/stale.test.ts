@@ -12,12 +12,10 @@ import type {RegistryFilePort} from '../../src/registry/file-port.ts';
 const RECORD: HelperRecord = {
   version: 1,
   namespace: 'ssh.connection',
-  // eslint-disable-next-line id-length -- contract field name
-  key: 'user@host:22',
+  recordKey: 'user@host:22',
   endpoint: '/tmp/record.sock',
   nonce: 'n1',
-  // eslint-disable-next-line id-length -- contract field name
-  pid: 100,
+  startedByProcessId: 100,
   startedAt: 1,
   payload: {},
 };
@@ -26,12 +24,10 @@ const RECORD: HelperRecord = {
 const FRESH: HelperRecord = {
   version: 1,
   namespace: 'ssh.connection',
-  // eslint-disable-next-line id-length -- contract field name
-  key: 'user@host:22',
+  recordKey: 'user@host:22',
   endpoint: '/tmp/fresh.sock',
   nonce: 'fresh',
-  // eslint-disable-next-line id-length -- contract field name
-  pid: 777,
+  startedByProcessId: 777,
   startedAt: 3,
   payload: {},
 };

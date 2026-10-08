@@ -10,12 +10,10 @@ import {
 const RECORD: HelperRecord = {
   version: 1,
   namespace: 'ssh.connection',
-  // eslint-disable-next-line id-length -- contract field name
-  key: 'user@host:22',
+  recordKey: 'user@host:22',
   endpoint: '/tmp/remote-oss-helper.sock',
   nonce: 'a1b2c3',
-  // eslint-disable-next-line id-length -- contract field name
-  pid: 4242,
+  startedByProcessId: 4242,
   startedAt: 1760000000000,
   payload: {user: 'dev', port: 22, shared: true},
 };
@@ -31,13 +29,13 @@ describe('record (card helper-01 table)', () => {
     strictEqual(path, recordPath('/r', 'ssh.connection', 'user@host:22'));
   });
 
-  it("recordPath('/r', 'ssh.connection', 'user@host:22') -> a different key gives a different path", () => {
+  it("recordPath('/r', 'ssh.connection', 'user@host:22') -> a different recordKey gives a different path", () => {
     const path = recordPath('/r', 'ssh.connection', 'user@host:22');
     const other = recordPath('/r', 'ssh.connection', 'user@host:2222');
     ok(path !== other);
   });
 
-  it("recordPath('/r', 'ssh.connection', 'user@host:22') -> the key text does not appear in the path", () => {
+  it("recordPath('/r', 'ssh.connection', 'user@host:22') -> the recordKey text does not appear in the path", () => {
     strictEqual(
       recordPath('/r', 'ssh.connection', 'user@host:22').includes(
         'user@host:22',
@@ -69,7 +67,7 @@ describe('record (card helper-01 table)', () => {
     });
   });
 
-  it('serializeRecord with a refused key in another case (Answer) -> throws RecordShapeError', () => {
+  it('serializeRecord with a refused payload key in another case (Answer) -> throws RecordShapeError', () => {
     throws(() => serializeRecord({...RECORD, payload: {Answer: 'x'}}), {
       name: 'RecordShapeError',
     });

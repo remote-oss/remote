@@ -26,12 +26,10 @@ function readVanishes(inner: MemoryFilePort): RegistryFilePort {
 const FIRST: HelperRecord = {
   version: 1,
   namespace: 'ssh.connection',
-  // eslint-disable-next-line id-length -- contract field name
-  key: 'user@host:22',
+  recordKey: 'user@host:22',
   endpoint: '/tmp/first.sock',
   nonce: 'n1',
-  // eslint-disable-next-line id-length -- contract field name
-  pid: 100,
+  startedByProcessId: 100,
   startedAt: 1,
   payload: {},
 };
@@ -39,12 +37,10 @@ const FIRST: HelperRecord = {
 const SECOND: HelperRecord = {
   version: 1,
   namespace: 'ssh.connection',
-  // eslint-disable-next-line id-length -- contract field name
-  key: 'user@host:22',
+  recordKey: 'user@host:22',
   endpoint: '/tmp/second.sock',
   nonce: 'n2',
-  // eslint-disable-next-line id-length -- contract field name
-  pid: 200,
+  startedByProcessId: 200,
   startedAt: 2,
   payload: {},
 };
@@ -52,7 +48,7 @@ const SECOND: HelperRecord = {
 // The file path the rows share.
 const PATH = recordPath('/r', 'ssh.connection', 'user@host:22');
 
-// Both claimers for the same key, in one turn.
+// Both claimers for the same recordKey, in one turn.
 function concurrentClaims(port: MemoryFilePort) {
   return Promise.all([
     claim(port, '/r', 'ssh.connection', 'user@host:22', FIRST),
@@ -120,7 +116,7 @@ describe('claim (card helper-01 table)', () => {
     strictEqual(port.files.get(PATH), 'not json');
   });
 
-  it('two concurrent claim calls on the same key -> exactly one claimed', async () => {
+  it('two concurrent claim calls on the same recordKey -> exactly one claimed', async () => {
     const results = await concurrentClaims(new MemoryFilePort());
     strictEqual(
       results.filter(result => result.outcome === 'claimed').length,
@@ -128,7 +124,7 @@ describe('claim (card helper-01 table)', () => {
     );
   });
 
-  it('two concurrent claim calls on the same key -> the other existing with the winner record', async () => {
+  it('two concurrent claim calls on the same recordKey -> the other existing with the winner record', async () => {
     const results = await concurrentClaims(new MemoryFilePort());
     deepStrictEqual(
       results.filter(result => result.outcome === 'existing'),

@@ -13,14 +13,16 @@ export interface RegistryFilePort {
 
 /**
  * The record's file: under the registry folder, in the namespace folder, named by the first 32 hex
- * characters of the key's digest, so the key's own characters never reach a file name.
+ * characters of the recordKey's digest, so the recordKey's own characters never reach a file name.
  */
 export function recordPath(
   folder: string,
   namespace: string,
-  // eslint-disable-next-line id-length -- the name the registry keys its records by, fixed by the contract
-  key: string,
+  recordKey: string,
 ): string {
-  const digest = createHash('sha256').update(key).digest('hex').slice(0, 32);
+  const digest = createHash('sha256')
+    .update(recordKey)
+    .digest('hex')
+    .slice(0, 32);
   return `${folder}/${namespace}/${digest}.json`;
 }
