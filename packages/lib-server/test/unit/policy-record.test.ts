@@ -189,6 +189,30 @@ describe('policy record (card server-01 table)', () => {
     );
   });
 
+  it('F-6301 BR-13: prefetch onProductUpdate platformWindowDays 0 -> problem path prefetch.platformWindowDays (rule, no table row)', () => {
+    deepStrictEqual(
+      validatePolicyRecord(
+        recordWith({
+          prefetch: {
+            kind: 'onProductUpdate',
+            settingKey: 'k',
+            feedCheckIntervalMilliseconds: 3600000,
+            platformWindowDays: 0,
+            licence: 'skipUnaccepted',
+          },
+        }),
+      ),
+      {
+        problems: [
+          {
+            path: 'prefetch.platformWindowDays',
+            problem: 'must be a positive integer',
+          },
+        ],
+      },
+    );
+  });
+
   it('prefetch onProductUpdate licence "ask" -> problem path prefetch.licence', () => {
     deepStrictEqual(
       validatePolicyRecord(

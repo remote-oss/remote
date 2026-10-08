@@ -56,6 +56,7 @@ export function validatePolicyRecord(
     prefetch: {
       kind: string;
       feedCheckIntervalMilliseconds: number;
+      platformWindowDays: number;
       licence: string;
     };
     [field: string]: unknown;
@@ -115,6 +116,9 @@ export function validatePolicyRecord(
         'prefetch.feedCheckIntervalMilliseconds',
         'must be a positive integer',
       );
+    }
+    if (!positiveInteger(prefetch.platformWindowDays)) {
+      problem('prefetch.platformWindowDays', 'must be a positive integer');
     }
     if (prefetch.licence !== 'skipUnaccepted') {
       problem('prefetch.licence', 'invalid value');
