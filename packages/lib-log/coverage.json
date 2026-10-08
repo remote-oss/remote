@@ -1,4 +1,7 @@
 {
+  "exclude": {
+    "src/sinks/editor-port.ts": "types only; no executable code"
+  },
   "ratchet": {
     "lines": 100,
     "branches": 100,

@@ -14,3 +14,6 @@ export {
 } from './logger.ts';
 export {redact} from './redaction.ts';
 export {logOncePerSession, resetOncePerSession} from './once.ts';
+export {type EditorLogPort} from './sinks/editor-port.ts';
+export {createChannelSink, defaultFormat} from './sinks/channel-sink.ts';
+export {createTerminalSink} from './sinks/terminal-sink.ts';
