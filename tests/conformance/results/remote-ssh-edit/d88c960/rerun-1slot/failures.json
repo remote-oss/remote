@@ -1,0 +1,50 @@
+[
+  {
+    "case": "F-4002-AC7-1",
+    "feature": "F-4002",
+    "profile": "linux-none-clean",
+    "counts_for_gate": true,
+    "expected_vs_observed": "Disabled in Virtual Workspaces: expected the built-ins Grunt, Gulp and Jake support; the lab editor lists Grunt and Gulp only. Our extension is in neither list; the lab editor fixture differs from the recording's.",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4002-AC22-1",
+    "feature": "F-4002",
+    "profile": "linux-none-dirty-virtual",
+    "counts_for_gate": true,
+    "expected_vs_observed": "Same as F-4002-AC7-1: the built-in Jake support row is missing from Disabled in Virtual Workspaces.",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4203-AC17-1",
+    "feature": "F-4203",
+    "profile": "linux-none-clean",
+    "counts_for_gate": true,
+    "expected_vs_observed": "The lab driver could not undo the typed text; fixed by cleanroom-kit #161, not merged yet (waits for the lesson-29 replay).",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4002-AC6-1",
+    "feature": "F-4002",
+    "profile": "linux-none-clean-restricted",
+    "counts_for_gate": false,
+    "expected_vs_observed": "Limited in Restricted Mode: the built-in Microsoft Account row is missing in the lab editor (informational; already environment).",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4001-AC3-3",
+    "feature": "F-4001",
+    "profile": "linux-none-clean",
+    "counts_for_gate": false,
+    "expected_vs_observed": "After an editor restart the editor restores the config file; window restore is the editor's (informational; already environment).",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4102-AC28-4",
+    "feature": "F-4102",
+    "profile": "linux-none-dirty",
+    "counts_for_gate": false,
+    "expected_vs_observed": "After an editor restart the editor restores the cursor; window restore is the editor's (informational; already environment).",
+    "class_guess": "environment"
+  }
+]
