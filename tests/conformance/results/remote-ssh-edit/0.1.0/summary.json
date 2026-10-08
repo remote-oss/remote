@@ -1,0 +1,133 @@
+{
+  "build": "remote-oss/remote bbee32f, remote-ssh-edit-0.1.0.vsix",
+  "vsix_sha256": "b7380b2f6c5a35e44428eac3b7da800c60416a2fb7cc183d02ae639c6bca2201",
+  "suite": "remote-oss/remote-ssh-edit tests/conformance @ e8a14f3",
+  "profile": "linux-none-clean",
+  "slots": 1,
+  "counts": {
+    "pass": 30,
+    "fail": 0
+  },
+  "cases": {
+    "F-4001-AC1-1": {
+      "result": "pass",
+      "seconds": 12.3
+    },
+    "F-4001-AC1-2": {
+      "result": "pass",
+      "seconds": 20.6
+    },
+    "F-4001-AC12-1": {
+      "result": "pass",
+      "seconds": 24.3
+    },
+    "F-4002-AC1-1": {
+      "result": "pass",
+      "seconds": 154.1
+    },
+    "F-4002-AC1-4": {
+      "result": "pass",
+      "seconds": 74.5
+    },
+    "F-4002-AC12-1": {
+      "result": "pass",
+      "seconds": 55.3
+    },
+    "F-4003-AC1-1": {
+      "result": "pass",
+      "seconds": 50.3
+    },
+    "F-4003-AC1-2": {
+      "result": "pass",
+      "seconds": 96.4
+    },
+    "F-4003-AC1-4": {
+      "result": "pass",
+      "seconds": 112.8
+    },
+    "F-4101-AC1-1": {
+      "result": "pass",
+      "seconds": 80.2
+    },
+    "F-4101-AC10-1": {
+      "result": "pass",
+      "seconds": 25.0
+    },
+    "F-4101-AC11-1": {
+      "result": "pass",
+      "seconds": 22.7
+    },
+    "F-4102-AC1-1": {
+      "result": "pass",
+      "seconds": 24.9
+    },
+    "F-4102-AC1-2": {
+      "result": "pass",
+      "seconds": 24.6
+    },
+    "F-4102-AC1-6": {
+      "result": "pass",
+      "seconds": 49.6
+    },
+    "F-4201-AC1-1": {
+      "result": "pass",
+      "seconds": 18.0
+    },
+    "F-4201-AC1-3": {
+      "result": "pass",
+      "seconds": 29.3
+    },
+    "F-4201-AC1-4": {
+      "result": "pass",
+      "seconds": 46.1
+    },
+    "F-4202-AC1-1": {
+      "result": "pass",
+      "seconds": 18.1
+    },
+    "F-4202-AC10-1": {
+      "result": "pass",
+      "seconds": 24.1
+    },
+    "F-4202-AC10-2": {
+      "result": "pass",
+      "seconds": 24.3
+    },
+    "F-4203-AC1-1": {
+      "result": "pass",
+      "seconds": 18.0
+    },
+    "F-4203-AC1-14": {
+      "result": "pass",
+      "seconds": 25.3
+    },
+    "F-4203-AC1-2": {
+      "result": "pass",
+      "seconds": 36.9
+    },
+    "F-4204-AC1-1": {
+      "result": "pass",
+      "seconds": 132.7
+    },
+    "F-4204-AC1-2": {
+      "result": "pass",
+      "seconds": 80.4
+    },
+    "F-4204-AC1-3": {
+      "result": "pass",
+      "seconds": 86.3
+    },
+    "F-4201-AC39-1": {
+      "result": "pass",
+      "seconds": 22.0
+    },
+    "F-4202-AC1-2": {
+      "result": "pass",
+      "seconds": 62.4
+    },
+    "F-4203-AC14-2": {
+      "result": "pass",
+      "seconds": 44.3
+    }
+  }
+}
