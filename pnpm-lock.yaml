@@ -242,6 +242,9 @@ importers:
       lib-host:
         specifier: workspace:*
         version: link:../lib-host
+      lib-log:
+        specifier: workspace:*
+        version: link:../lib-log
 
   packages/lib-ssh:
     dependencies:

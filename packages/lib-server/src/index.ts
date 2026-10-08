@@ -55,3 +55,17 @@ export {
   type PlanInput,
   type PlanNote,
 } from './install/plan.ts';
+export {
+  type HostLockLoop,
+  isAcceptedBindHost,
+  isExtensionIdentifier,
+  isReversedRange,
+  type RuntimeDependencies,
+  type RuntimeOptions,
+  serverPort,
+  startOrReuse,
+  type StartedServer,
+  type StartFailure,
+  type StartNotice,
+  type StartOutcome,
+} from './lifecycle/runtime.ts';
