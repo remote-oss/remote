@@ -170,9 +170,11 @@ function includedFiles(
     return [];
   }
   const paths = pathsFor(locations.platform);
-  const expanded = include.startsWith('~/')
-    ? paths.join(locations.homeFolder, include.slice(2))
-    : include;
+  const windows = locations.platform === 'windows';
+  const expanded =
+    include.startsWith('~/') || (windows && include.startsWith('~\\'))
+      ? paths.join(locations.homeFolder, include.slice(2))
+      : include;
   const absolute = paths.isAbsolute(expanded)
     ? paths.normalize(expanded)
     : paths.join(includeBase, expanded);
