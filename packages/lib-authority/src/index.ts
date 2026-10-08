@@ -1,6 +1,6 @@
 /**
  * @fileoverview The library's contract: one codec per authority family, the registry that decodes an authority at
- * its first `+`, and the shapes every codec shares.
+ * its first `+`, the opener commands, and the mapping a failure gives core.
  */
 export type {
   Codec,
@@ -67,3 +67,8 @@ export {
   type WindowClaim,
 } from './gate/setup.ts';
 export {CLAIM_COMMAND, type ClaimHost, windowClaimOf} from './gate/claim.ts';
+
+export type {OpenCommand, OpenTarget, PathKind} from './opener/arguments.ts';
+export {openLocalCommand, openRemoteCommand} from './opener/arguments.ts';
+export type {FailedLike, ResolverOutcome} from './resolver/failure-mapping.ts';
+export {mapFailure} from './resolver/failure-mapping.ts';
