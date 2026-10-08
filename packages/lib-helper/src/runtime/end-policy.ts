@@ -33,6 +33,8 @@ export class EndPolicyRunner {
   private readonly table: LeaseTable;
   private readonly onOutcome: (outcome: PolicyOutcome) => void;
   private cancelTimer: (() => void) | undefined;
+  /** The table subscription; removed in `dispose()`. */
+  private readonly unsubscribe: () => void;
 
   /**
    * Build the runner: the policy's delay is checked, so a non-positive or non-finite delay
@@ -51,7 +53,7 @@ export class EndPolicyRunner {
     }
     this.table = table;
     this.onOutcome = onOutcome;
-    table.onChange(() => {
+    this.unsubscribe = table.onChange(() => {
       if (this.table.live().length > 0) {
         this.cancel();
       } else {
@@ -60,8 +62,12 @@ export class EndPolicyRunner {
     });
   }
 
-  /** Stop the runner, cancelling any armed timer. */
+  /**
+   * Stop the runner: the table subscription is removed and any armed timer is cancelled, so a
+   * disposed runner is unsubscribed, never arms again, and never ends the helper.
+   */
   dispose(): void {
+    this.unsubscribe();
     this.cancel();
   }
 

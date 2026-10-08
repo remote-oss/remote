@@ -29,6 +29,25 @@ function armed(policy: EndPolicy): {
   return {clock, table, outcomes};
 }
 
+// Like armed, but the runner is returned (no extra subscription), for the rows that dispose it.
+function armedRunner(policy: EndPolicy): {
+  clock: FakeClock;
+  table: LeaseTable;
+  outcomes: PolicyOutcome[];
+  runner: EndPolicyRunner;
+} {
+  const clock = new FakeClock();
+  const table = new LeaseTable(clock.now.bind(clock));
+  const outcomes: PolicyOutcome[] = [];
+  const runner = new EndPolicyRunner(
+    policy,
+    table,
+    clock.scheduler(),
+    outcome => outcomes.push(outcome),
+  );
+  return {clock, table, outcomes, runner};
+}
+
 // The grace re-armed rows: open, close, advance, open, close, then a final advance.
 function reArmed(finalAdvance: number, expected: PolicyOutcome[]): void {
   const {clock, table, outcomes} = armed(grace);
@@ -117,18 +136,22 @@ describe('end policies (card helper-02 table)', () => {
   });
 
   it('dispose() after close, then advance past the grace -> no outcome', () => {
-    const {clock, table} = armed(grace);
-    const outcomes: PolicyOutcome[] = [];
-    const runner = new EndPolicyRunner(
-      grace,
-      table,
-      clock.scheduler(),
-      outcome => outcomes.push(outcome),
-    );
+    const {clock, table, outcomes, runner} = armedRunner(grace);
     table.open();
     table.close(1);
     runner.dispose();
     clock.advance(10000);
+    deepStrictEqual(outcomes, []);
+  });
+
+  it('dispose() with an armed timer, then open, close, advance past the grace -> no outcome (the disposed runner is unsubscribed)', () => {
+    const {clock, table, outcomes, runner} = armedRunner(grace);
+    table.open();
+    table.close(1);
+    clock.advance(1000);
+    runner.dispose();
+    table.close(table.open().id);
+    clock.advance(5000);
     deepStrictEqual(outcomes, []);
   });
 
