@@ -113,6 +113,29 @@ async function hello(
   return new HelperLease(connection, welcome, startedByMe, environment.timer);
 }
 
+/**
+ * Joins the helper a record names. A helper that does not answer is still alive while the window of its starter
+ * counts, `startedAt` plus the start limit, so the hello is retried until that window has passed; only then is the
+ * helper stale. Resolves to undefined when it is stale and to 'cancelled' when the request is cancelled.
+ */
+async function join(
+  environment: ClientEnvironment,
+  request: AcquireRequest,
+  record: HelperRecord,
+): Promise<HelperLease | 'cancelled' | undefined> {
+  const deadline = record.startedAt + environment.startLimitMilliseconds;
+  for (;;) {
+    if (request.cancellation.aborted) {
+      return 'cancelled';
+    }
+    const lease = await hello(environment, record, false);
+    if (lease !== undefined || environment.clock() >= deadline) {
+      return lease;
+    }
+    await waitFor(environment.timer, environment.retryMilliseconds);
+  }
+}
+
 /** Starts the helper of a claimed record and waits until it welcomes, within the start limit. */
 async function start(
   environment: ClientEnvironment,
@@ -157,8 +180,8 @@ async function start(
 
 /**
  * Acquires a lease on the helper for the request's key: claims the key and starts the helper, or joins the helper
- * that holds it. A record whose helper does not answer is replaced once; a helper that cannot be reached after that
- * is `endpointUnreachable`.
+ * that holds it, waiting for one that is still starting. A record whose helper stays silent past its starter's window
+ * is replaced once; a helper that cannot be reached after that is `endpointUnreachable`.
  */
 export async function acquire(
   environment: ClientEnvironment,
@@ -194,9 +217,12 @@ export async function acquire(
     return start(environment, request, record);
   }
   if (claimed.outcome === 'existing') {
-    const lease = await hello(environment, claimed.record, false);
-    if (lease !== undefined) {
-      return {kind: 'acquired', lease};
+    const joined = await join(environment, request, claimed.record);
+    if (joined === 'cancelled') {
+      return {kind: 'failed', failure: 'cancelled'};
+    }
+    if (joined !== undefined) {
+      return {kind: 'acquired', lease: joined};
     }
   }
   const replaced = await replaceStale(
@@ -211,8 +237,11 @@ export async function acquire(
   }
   const lease =
     replaced.outcome === 'existing'
-      ? await hello(environment, replaced.record, false)
+      ? await join(environment, request, replaced.record)
       : undefined;
+  if (lease === 'cancelled') {
+    return {kind: 'failed', failure: 'cancelled'};
+  }
   return lease === undefined
     ? {kind: 'failed', failure: 'endpointUnreachable'}
     : {kind: 'acquired', lease};
