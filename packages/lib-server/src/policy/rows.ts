@@ -29,7 +29,6 @@ export const SSH_POLICY: ServerPolicyRecord = frozen({
 });
 
 /** The containers policy: the client downloads and copies the archive into the container. */
-
 export const CONTAINERS_POLICY: ServerPolicyRecord = frozen({
   downloadPlacement: {kind: 'clientOnly'},
   cache: 'kept',
