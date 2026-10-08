@@ -1,0 +1,503 @@
+[
+  {
+    "case": "F-4001-AC1-4",
+    "feature": "F-4001",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 15s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4001-AC11-1",
+    "feature": "F-4001",
+    "profile": "linux-none-bad-readonly",
+    "expected_vs_observed": "step timed out (wait timed out after 20s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4001-AC13-1",
+    "feature": "F-4001",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "the SSH Config entry never appears in the Select Language Mode picker (also at 2x wait)",
+    "class_guess": "code",
+    "rerun_2x_wait": "fail"
+  },
+  {
+    "case": "F-4001-AC24-2",
+    "feature": "F-4001",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 15s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4001-AC27-1",
+    "feature": "F-4001",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 15s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4001-AC3-3",
+    "feature": "F-4001",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after an editor restart: expected no restored config editor / cursor at Ln 1 Col 1; observed the config file restored with its cursor",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4001-AC38-1",
+    "feature": "F-4001",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 20s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4001-AC4-1",
+    "feature": "F-4001",
+    "profile": "linux-none-dirty",
+    "expected_vs_observed": "step timed out (wait timed out after 15s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4001-AC6-3",
+    "feature": "F-4001",
+    "profile": "linux-none-bad-readonly",
+    "expected_vs_observed": "step timed out (wait timed out after 20s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4001-AC7-5",
+    "feature": "F-4001",
+    "profile": "linux-none-dirty",
+    "expected_vs_observed": "step timed out (wait timed out after 20s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4002-AC14-3",
+    "feature": "F-4002",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "home folder picker lists .config, absent at recording; temp-root message differs (lab home contents)",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4002-AC22-1",
+    "feature": "F-4002",
+    "profile": "linux-none-dirty-virtual",
+    "expected_vs_observed": "the build is missing from the extensions view's virtual-workspace section (capability declaration)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4002-AC3-1",
+    "feature": "F-4002",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "completion documentation text: the case expects the older ssh_config wording; the build shows current text",
+    "class_guess": "spec"
+  },
+  {
+    "case": "F-4002-AC32-1",
+    "feature": "F-4002",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (MENU ITEM NOT FOUND: Disable); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4002-AC5-1",
+    "feature": "F-4002",
+    "profile": "linux-none-clean-restricted",
+    "expected_vs_observed": "completion documentation text: the case expects the older ssh_config wording; the build shows current text",
+    "class_guess": "spec"
+  },
+  {
+    "case": "F-4002-AC5-2",
+    "feature": "F-4002",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "completion documentation text: the case expects the older ssh_config wording; the build shows current text",
+    "class_guess": "spec"
+  },
+  {
+    "case": "F-4002-AC6-1",
+    "feature": "F-4002",
+    "profile": "linux-none-clean-restricted",
+    "expected_vs_observed": "the build is missing from the extensions view's restricted-mode section (capability declaration)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4002-AC7-1",
+    "feature": "F-4002",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "the build is missing from the extensions view's virtual-workspace section (capability declaration)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4003-AC11-2",
+    "feature": "F-4003",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "a folder picker lists one entry more than recorded (lab editor storage/log folders differ)",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4003-AC12-1",
+    "feature": "F-4003",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 30s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4003-AC14-1",
+    "feature": "F-4003",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "copied extension id not normalised: the runner was not given the build's identity (ENCODE_IDENTITY unset); re-check with it set",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4101-AC1-4",
+    "feature": "F-4101",
+    "profile": "linux-none-dirty",
+    "expected_vs_observed": "syntax tokens differ: expected token count/scopes per line not produced (grammar)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4101-AC1-5",
+    "feature": "F-4101",
+    "profile": "linux-none-dirty",
+    "expected_vs_observed": "syntax tokens differ: expected token count/scopes per line not produced (grammar)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4101-AC15-3",
+    "feature": "F-4101",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 20s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4101-AC19-1",
+    "feature": "F-4101",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "syntax tokens differ: expected token count/scopes per line not produced (grammar)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4101-AC24-1",
+    "feature": "F-4101",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "panel timing: expected 0.3 s, observed 0.2 s; a spec question if it recurs (the case asserts a duration)",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4101-AC30-1",
+    "feature": "F-4101",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 15s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4101-AC30-8",
+    "feature": "F-4101",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 20s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4102-AC1-8",
+    "feature": "F-4102",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "the ssh.config row the case selects is not found (also after the fixture rerun)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4102-AC28-4",
+    "feature": "F-4102",
+    "profile": "linux-none-dirty",
+    "expected_vs_observed": "after an editor restart: expected no restored config editor / cursor at Ln 1 Col 1; observed the config file restored with its cursor",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4102-AC31-4",
+    "feature": "F-4102",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (observation under-match holds a lab driver error: lab error: cannot go); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4102-AC35-1",
+    "feature": "F-4102",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 30s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4102-AC35-3",
+    "feature": "F-4102",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 20s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4102-AC7-2",
+    "feature": "F-4102",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "syntax tokens differ: expected token count/scopes per line not produced (grammar)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4201-AC11-3",
+    "feature": "F-4201",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 2, Col 20', observed 'Ln 3, Col 1' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4201-AC27-3",
+    "feature": "F-4201",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 20s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4201-AC31-1",
+    "feature": "F-4201",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 2, Col 21', observed 'Ln 3, Col 15' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4201-AC32-5",
+    "feature": "F-4201",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 3, Col 20', observed 'Ln 4, Col 1' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4201-AC36-1",
+    "feature": "F-4201",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 3, Col 10', observed 'Ln 3, Col 2' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4201-AC37-1",
+    "feature": "F-4201",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 2, Col 9', observed 'Ln 3, Col 1' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4201-AC39-1",
+    "feature": "F-4201",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 2, Col 16', observed 'Ln 3, Col 1' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4201-AC39-3",
+    "feature": "F-4201",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 8, Col 16', observed 'Ln 9, Col 1' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4201-AC39-6",
+    "feature": "F-4201",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 2, Col 20', observed 'Ln 10, Col 1' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4201-AC41-2",
+    "feature": "F-4201",
+    "profile": "linux-none-dirty",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 2, Col 16', observed 'Ln 3, Col 2' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4201-AC9-1",
+    "feature": "F-4201",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 20s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4201-AC9-2",
+    "feature": "F-4201",
+    "profile": "linux-none-dirty",
+    "expected_vs_observed": "step timed out (wait timed out after 20s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4202-AC1-2",
+    "feature": "F-4202",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected the placeholder selected (e.g. 'Ln 2, Col 11 (5 selected)'); observed no selection and the cursor elsewhere",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4202-AC17-2",
+    "feature": "F-4202",
+    "profile": "linux-none-dirty",
+    "expected_vs_observed": "syntax tokens differ: expected token count/scopes per line not produced (grammar)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4202-AC20-2",
+    "feature": "F-4202",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "syntax tokens differ: expected token count/scopes per line not produced (grammar)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4202-AC22-2",
+    "feature": "F-4202",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "first run: nothing to type into (no quick input open); at 2x wait it ran and differed only in the lab storage folder listing",
+    "class_guess": "environment",
+    "rerun_2x_wait": "fail"
+  },
+  {
+    "case": "F-4202-AC3-2",
+    "feature": "F-4202",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 2, Col 26', observed 'Ln 4, Col 1' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4202-AC32-1",
+    "feature": "F-4202",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected the placeholder selected (e.g. 'Ln 2, Col 11 (5 selected)'); observed no selection and the cursor elsewhere",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4202-AC33-1",
+    "feature": "F-4202",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (observation lines holds a lab driver error: lab error: cannot go to 6:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4203-AC1-11",
+    "feature": "F-4203",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 15s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4203-AC1-4",
+    "feature": "F-4203",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 1, Col 22', observed 'Ln 2, Col 5' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4203-AC13-8",
+    "feature": "F-4203",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 28, Col 15', observed 'Ln 29, Col 1' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4203-AC14-2",
+    "feature": "F-4203",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 21, Col 16', observed 'Ln 22, Col 1' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4203-AC14-6",
+    "feature": "F-4203",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected cursor at 'Ln 29, Col 20', observed 'Ln 30, Col 2' (the build moves on to a new line)",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4203-AC17-1",
+    "feature": "F-4203",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "lab driver could not undo the typed text before the observation (also at 2x wait)",
+    "class_guess": "environment",
+    "rerun_2x_wait": "fail"
+  },
+  {
+    "case": "F-4203-AC2-6",
+    "feature": "F-4203",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "after accepting a completion: expected the placeholder selected (e.g. 'Ln 2, Col 11 (5 selected)'); observed no selection and the cursor elsewhere",
+    "class_guess": "code"
+  },
+  {
+    "case": "F-4204-AC16-3",
+    "feature": "F-4204",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "a folder picker lists one entry more than recorded (lab editor storage/log folders differ)",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4204-AC17-4",
+    "feature": "F-4204",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "step timed out (wait timed out after 30s:); passed on the 2x-wait rerun",
+    "class_guess": "environment",
+    "rerun_2x_wait": "pass"
+  },
+  {
+    "case": "F-4204-AC3-1",
+    "feature": "F-4204",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "panel timing: expected 0.3 s, observed 0.2 s; a spec question if it recurs (the case asserts a duration)",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4204-AC3-2",
+    "feature": "F-4204",
+    "profile": "linux-none-dirty",
+    "expected_vs_observed": "panel timing: expected 0.3 s, observed 0.2 s; a spec question if it recurs (the case asserts a duration)",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4204-AC3-3",
+    "feature": "F-4204",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "panel timing: expected 0.3 s, observed 0.2 s; a spec question if it recurs (the case asserts a duration)",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4204-AC3-4",
+    "feature": "F-4204",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "panel timing: expected 0.3 s, observed 0.2 s; a spec question if it recurs (the case asserts a duration)",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4204-AC3-5",
+    "feature": "F-4204",
+    "profile": "linux-none-clean",
+    "expected_vs_observed": "panel timing: expected 0.3 s, observed 0.2 s; a spec question if it recurs (the case asserts a duration)",
+    "class_guess": "environment"
+  },
+  {
+    "case": "F-4204-AC3-6",
+    "feature": "F-4204",
+    "profile": "linux-none-bad-homeconfig",
+    "expected_vs_observed": "panel timing: expected 0.3 s, observed 0.2 s; a spec question if it recurs (the case asserts a duration)",
+    "class_guess": "environment"
+  }
+]
