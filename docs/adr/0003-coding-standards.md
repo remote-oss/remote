@@ -56,7 +56,7 @@ decoration with information the type carries, no `_` prefix or suffix, and `_` i
 hole takes an unused array element). The guide allows single-letter names in scopes of ten lines or fewer; **(ours)
 this ADR does not**: every identifier, property names included, has at least four characters and says what it
 holds. The only exceptions: `i`, `j`, `k` inside a `for` statement of at most five lines; `x`, `y` as coordinates;
-`id` as a property name; `now` (the clock's own word, decided 2026-10-08); single upper-case type parameters (`T`, `K`, `V`), checked by the local rule because `id-length` does not visit type parameters; and property keys that a third-party API
+`id` as a property name; single upper-case type parameters (`T`, `K`, `V`), checked by the local rule because `id-length` does not visit type parameters; and property keys that a third-party API
 imposes, each listed once in the ESLint config with the API that imposes it. Abbreviations are not words: `cfg`,
 `ctx`, `res`, `req`, `err`, `evt`, `fn`, `cb`, `tmp`, `val`, `idx`, `len`, `num`, `str`, `obj`, `arr`, `elem`, `msg`,
 `opts`, `args` are out. An unused trailing parameter is removed, not renamed; an unused leading parameter keeps its
