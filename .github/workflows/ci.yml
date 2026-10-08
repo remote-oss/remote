@@ -67,6 +67,8 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Ubuntu 24.04 restricts unprivileged user namespaces, which the editor's renderer sandbox needs.
+      - run: sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
       - run: xvfb-run --auto-servernum pnpm test:acceptance
 
   # integration:  pnpm test:integration under xvfb, after the testing ADR
