@@ -228,7 +228,8 @@ Rules:
 - The connect wait is the timeout plus 2 seconds. It starts at the spawn in shared mode and at the platform choice in
   terminal mode. It pauses while a prompt is open, restarts after each answer, counts time spent in an external
   askpass, and stops at the first setup report (F-2105, F-2308 BR-5). The maximum for `ConnectTimeout 0` is an R-79
-  bound.
+  bound: `unboundedWaitSeconds`, a policy value the package passes in, and it is the final limit (no +2 s margin;
+  ruled 2026-10-08).
 
 ### S7 prompt-ui
 
