@@ -33,6 +33,13 @@ open, which is the user's decision through the register.
    (commands, pickers, views, the remote authority, the server install into the container, port forwarding, the
    recovery and error flows the specs name). The CLI is driven as a library or as a spawned program; the component
    view decides, and the conformance cases decide whether its observable behaviour matches the recorded one.
+2a. **D-76 (the user, 2026-10-08): once the editor names a CLI source, Remote-SSH uses the CLI by default as the
+   reference does.** The user, a VSCodium contributor, prepares the upstream patch (a `cliDownloadUrlTemplate`
+   product.json field, a CLI that honours the server download template instead of VSCodium's release feed, alpine and
+   armhf CLI builds); our requirements went to that work on 2026-10-08. Then: this ADR and ADR-0006 are revised
+   (CLI for Remote-SSH where the editor names a CLI source and the host platform has a build; direct install stays
+   the fallback forever), F-2103's exec-server bootstrap returns to scope in a later slice, and F-3902 rule 5 is
+   revised on pull. Nothing changes in slice 1.
 2. **Remote - Tunnels is not built for now (the user, D-55, 2026-10-07): the dev tunnels terms of service.** Revisit
    if the terms change. The tunnel client and `lib-tunnels` leave the build order; the Remote Explorer's tunnel rows
    become a recorded deviation in the 0.3 brief; `resolveExecServer` on the `ssh-remote` resolver stays (containers

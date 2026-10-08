@@ -53,7 +53,9 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
    An unknown placeholder or an unexpandable template is never an empty string: in the product's template it is
    logged and resolution falls through to the next source (F-3902 rule 3); in the user's setting it is the dialog.
    (Revised 2026-10-06 from the area A dossier and the constraints list, items A1 and A2.)
-3. **The editor CLI is not downloaded by the family.** Withdrawn 2026-10-06: Remote-SSH never uses the CLI
+3. **The editor CLI is not downloaded by the family** (until D-76's patch ships: then a `cliDownloadUrlTemplate`
+   field with the same placeholders, resolved in the same order as the server template, returns; recorded in
+   ADR-0005 decision 2a). Withdrawn 2026-10-06: Remote-SSH never uses the CLI
    (F-3902 rule 5, constraint 43); Remote - Tunnels downloads nothing on the client and uses the tunnel executable
    the editor ships in its own bin folder, named by `tunnelApplicationName` (F-8902 rule 4, constraint 44); the host
    side of a tunnel is the editor's own. So there is no `cliDownloadUrlTemplate`, no CLI table and no CLI dialog.
