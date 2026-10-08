@@ -39,9 +39,9 @@ export class SshSession {
     this.handle.onError(listener);
   }
 
-  /** Writes to the client's standard input. */
-  write(data: string | Uint8Array): void {
-    this.handle.write(data);
+  /** Writes to the client's standard input; resolves when the data has been handed on. */
+  write(data: string | Uint8Array): Promise<void> {
+    return this.handle.write(data);
   }
 
   /** Closes the client's standard input. */

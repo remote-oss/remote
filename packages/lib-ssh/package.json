@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "lib-helper": "workspace:*"
+    "lib-helper": "workspace:*",
+    "lib-host": "workspace:*"
   }
 }

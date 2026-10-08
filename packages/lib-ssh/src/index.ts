@@ -78,3 +78,15 @@ export {
   spawnSession,
   SshSession,
 } from './process/session.ts';
+export {
+  type RunBase,
+  SshHostChannel,
+  type SshHostChannelOptions,
+} from './process/host-channel.ts';
+export {LineSplitter} from './process/line-splitter.ts';
+export {type LocalFiles, nodeLocalFiles} from './process/node-files.ts';
+export {
+  planScript,
+  posixQuote,
+  type ScriptPlan,
+} from './process/remote-program.ts';

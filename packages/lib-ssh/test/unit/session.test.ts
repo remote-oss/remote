@@ -1,7 +1,7 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {FakeClientProcess} from './fake-client-process.ts';
 import {
   nodeProcessSpawner,
-  type ProcessHandle,
   type ProcessSpawner,
   type ProcessSpecification,
   sessionEnvironment,
@@ -15,59 +15,6 @@ const INVOCATION = {
   arguments: ['-v', 'host'],
   environment: {INVOCATION_VARIABLE: 'one'},
 };
-
-/** A process handle that records writes and lets a test drive its streams. */
-class FakeHandle implements ProcessHandle {
-  readonly written: Array<string | Uint8Array> = [];
-  inputEnded = false;
-  killed = false;
-  private readonly outputListeners: Array<(chunk: string) => void> = [];
-  private readonly errorListeners: Array<(chunk: string) => void> = [];
-  private readonly exitListeners: Array<(status: number | undefined) => void> =
-    [];
-
-  onOutput(listener: (chunk: string) => void): void {
-    this.outputListeners.push(listener);
-  }
-
-  onError(listener: (chunk: string) => void): void {
-    this.errorListeners.push(listener);
-  }
-
-  onExit(listener: (status: number | undefined) => void): void {
-    this.exitListeners.push(listener);
-  }
-
-  write(data: string | Uint8Array): void {
-    this.written.push(data);
-  }
-
-  endInput(): void {
-    this.inputEnded = true;
-  }
-
-  kill(): void {
-    this.killed = true;
-  }
-
-  output(chunk: string): void {
-    this.outputListeners.forEach(listener => {
-      listener(chunk);
-    });
-  }
-
-  error(chunk: string): void {
-    this.errorListeners.forEach(listener => {
-      listener(chunk);
-    });
-  }
-
-  exit(status: number | undefined): void {
-    this.exitListeners.forEach(listener => {
-      listener(status);
-    });
-  }
-}
 
 /** A start error as the system gives it: an Error, with a code when it has one. */
 function failing(message: string, code?: string): Error {
@@ -83,12 +30,16 @@ function sessionOf(outcome: SpawnOutcome): SshSession {
 
 describe('S3 session spawner', () => {
   let specifications: ProcessSpecification[];
-  let handle: FakeHandle;
+  let handle: FakeClientProcess;
   let spawner: ProcessSpawner;
 
   beforeEach(() => {
     specifications = [];
-    handle = new FakeHandle();
+    handle = new FakeClientProcess({
+      program: 'ssh',
+      programArguments: [],
+      environment: {},
+    });
     spawner = specification => {
       specifications.push(specification);
       return Promise.resolve(handle);
@@ -237,12 +188,18 @@ describe('S3 session spawner', () => {
       const session = sessionOf(
         await spawnSession(spawner, INVOCATION, {}, {}),
       );
-      session.write('text');
-      session.write(Uint8Array.of(1, 2));
+      await session.write('text');
+      await session.write(Uint8Array.of(1, 2));
       session.endInput();
       deepStrictEqual(
-        [handle.written, handle.inputEnded],
-        [['text', Uint8Array.of(1, 2)], true],
+        [handle.input.map(piece => [...piece]), handle.inputEnded],
+        [
+          [
+            [116, 101, 120, 116],
+            [1, 2],
+          ],
+          true,
+        ],
       );
     });
 
@@ -293,7 +250,7 @@ describe('Node.js process spawner', () => {
     session.onError(chunk => {
       error += chunk;
     });
-    session.write('hello');
+    await session.write('hello');
     session.endInput();
     deepStrictEqual(
       [await session.exit(), output, error],
@@ -341,7 +298,7 @@ describe('Node.js process spawner', () => {
       ),
     );
     await session.exit();
-    session.write('late');
+    await session.write('late');
     session.endInput();
   });
 });
