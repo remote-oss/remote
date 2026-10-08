@@ -69,6 +69,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Ubuntu 24.04 restricts unprivileged user namespaces, which the editor's renderer sandbox needs.
       - run: sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
+      # The run retries once inside the tool when the editor window is reported unresponsive; both attempts land in this log.
       - run: xvfb-run --auto-servernum pnpm test:acceptance
 
   # integration:  pnpm test:integration under xvfb, after the testing ADR

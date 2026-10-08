@@ -8,6 +8,7 @@ import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   acceptanceConfiguration,
+  type AttemptResult,
   bundleSuite,
   type CommandResult,
   harnessSshConfig,
@@ -31,7 +32,7 @@ class FakeHarness implements HarnessDependencies {
   variables: HarnessVariables | undefined;
   runFolder = '';
   sshFailures = 0;
-  testStatus = 0;
+  testResult: AttemptResult = {exitCode: 0, output: ''};
   readonly answers = new Map<string, CommandResult>();
 
   readonly command = (
@@ -73,9 +74,12 @@ class FakeHarness implements HarnessDependencies {
 
   readonly editorCli = (): Promise<string> => Promise.resolve('code');
 
-  readonly runTests = (root: string, variables: HarnessVariables): number => {
+  readonly runTests = (
+    root: string,
+    variables: HarnessVariables,
+  ): Promise<AttemptResult> => {
     this.variables = variables;
-    return this.testStatus;
+    return Promise.resolve(this.testResult);
   };
 }
 
@@ -197,7 +201,7 @@ describe('acceptance', () => {
     });
 
     it("returns the tests' exit code", async () => {
-      harness.testStatus = 3;
+      harness.testResult = {exitCode: 3, output: ''};
       strictEqual(await runAcceptance(workspace.root, harness), 3);
     });
 
@@ -297,15 +301,17 @@ describe('acceptance', () => {
     );
   });
 
-  it("returns test-cli's failure when it cannot load the configuration", () => {
+  it("returns test-cli's failure when it cannot load the configuration", async () => {
     notStrictEqual(
-      runTestCli(workspace.root, {
-        REMOTE_OSS_ACCEPTANCE: '1',
-        HARNESS_SSH_CONFIG: '',
-        HARNESS_CONTAINER: '',
-        HARNESS_RUN_FOLDER: '',
-        HARNESS_VSIX_FILES: '',
-      }),
+      (
+        await runTestCli(workspace.root, {
+          REMOTE_OSS_ACCEPTANCE: '1',
+          HARNESS_SSH_CONFIG: '',
+          HARNESS_CONTAINER: '',
+          HARNESS_RUN_FOLDER: '',
+          HARNESS_VSIX_FILES: '',
+        })
+      ).exitCode,
       0,
     );
   });
