@@ -17,8 +17,13 @@ export {
 } from './policy/record.ts';
 export {CONTAINERS_POLICY, SSH_POLICY, wslPolicy} from './policy/rows.ts';
 export {validatePolicyRecord} from './policy/validate.ts';
-export {type ResultBlock, type ScriptStatus} from './scripts/result-block.ts';
-export {parseResult, RESULT_BEGIN, RESULT_END} from './scripts/result-block.ts';
+export {
+  type ResultBlock,
+  type ScriptStatus,
+  parseResult,
+  RESULT_BEGIN,
+  RESULT_END,
+} from './scripts/result-block.ts';
 export {
   type BootstrapRequest,
   type ProxyVariables,
@@ -41,3 +46,12 @@ export {
   type MaintenanceOutcome,
   uninstall,
 } from './lifecycle/maintenance.ts';
+export {
+  plan,
+  type ExistingLayout,
+  type HostFacts,
+  type Plan,
+  type PlanFailure,
+  type PlanInput,
+  type PlanNote,
+} from './install/plan.ts';
