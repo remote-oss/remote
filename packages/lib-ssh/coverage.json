@@ -1,0 +1,8 @@
+{
+  "exclude": {},
+  "ratchet": {
+    "lines": 99.94,
+    "branches": 98.06,
+    "functions": 100
+  }
+}

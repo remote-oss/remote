@@ -1,11 +1,7 @@
-> Status (2026-10-07, `remote-architect`): drafts, 261 table rows and 43 open rows. Before any card is assigned,
-> `remote-coding-worker-1` reviews the shape of `feature/lib-ssh-pure` against contracts.md §3 and brings the branch
-> to the contract (the contract governs where the draft differs: option parsing ends at the destination; terminal
-> mode runs `sh`; no `-l`/`-p`/`user@`/`-P` beyond the contract; `candidates(setting, PATH, platform)` and `ssh.exe` on
-> Windows; `channelClosed` on "Connection closed."; `authentication` carries the PermissionDenied hint; an `ssh -G`
-> argument builder exists; the "Server host key" debug line is kept; the fixed `choices` switches go), and resolves
-> each open row either into a table row (when the contract or a confirmed room answer decides it) or into a note to
-> the lead (when it does not). Only then does the PM assign the cards.
+> Status (2026-10-07, `remote-coding-worker-1`): `feature/lib-ssh-pure` is at the contract (contracts.md section 3,
+> amended with the lead's rulings of 2026-10-07) and follows the library convention. Every open row is decided: no
+> card has a section 6 row left. Rows marked (provisional) rest on a spec reading rather than a confirmed answer; the
+> lead receives their list after the cards have run.
 
 # Local-worker task cards: lib-ssh pure parts
 
@@ -33,17 +29,18 @@ Every card has exactly six sections:
 
 ## Order
 
-The sources of all six cards already exist on `feature/lib-ssh-pure` (3c0463a), so cards 01 to 06 may run in parallel. The import edges decide the order of merging:
+The sources of all six cards already exist on `feature/lib-ssh-pure` (its head), so cards 01 to 06 may run in parallel. The import edges decide the order of merging:
 
 - 03 first among the config cards: `hosts.ts` (02) and `locate.ts` (06) import `config/files.ts`, and 03 owns the shared test helper `memory-reader.fixture.ts` that 02 uses.
 - `config/files.ts` imports `expandHome` from `arguments/invocation.ts`, and `invocation.ts` imports the type `EffectiveOptions` from `config/effective.ts`: merge 01 and 03 in the same window, 01 first.
-- 04 imports nothing from the other cards (only `choices.ts`); 05 imports nothing.
+- 04 and 05 import nothing from the other cards.
 
 Merge order: 01, 03, 02, 04, 05, 06.
 
 ## Shared notes
 
-- `packages/lib-ssh/NOTES.md` applies. Its packaging convention (items 1 to 7: `exports`, root `tsconfig.json` pair, `coverage.json` ratchet, README, the identifiers check) is not part of any card: it is done once by the integrator before the branch merges, and no card touches `package.json`, `tsconfig*`, `coverage.json` or `knip.jsonc`. Its gate traps (property names of four characters, no `const` arrow helpers, JSDoc on public class members, five-line clones inside one file) apply to every card. Its fixture recording notes apply to cards 03, 05 and 06; the NOTES file is deleted before the merge.
+- The packaging is done on the branch (`src/index.ts`, `exports`, README, root `tsconfig.json` pair); no card touches `package.json`, `tsconfig*`, `coverage.json` or `knip.jsonc`. The integrator records the coverage ratchet (`pnpm coverage:update`) once the cards have merged; until then `pnpm coverage` fails for lib-ssh only.
+- Gate traps: property names of four characters or more; no `const` arrow helpers (`func-style`); JSDoc on public class members; jscpd also flags five-line clones inside one file. Tests import through `../../src/index.ts` where the export exists.
+- Fixture recording (cards 03, 05, 06): local `ssh -G` prints `connecttimeout none` when unset and `localforward 8080 [127.0.0.1]:80`. A `ProxyCommand` script that writes chosen lines to stderr and exits 255 reproduces exact texts (an inline command breaks, because ssh expands `%`). An `SSH_ASKPASS` script with `SSH_ASKPASS_REQUIRE=force` records the real question texts against a local sshd; OpenSSH 10.3 prints the colon fingerprint form. Remove the local host-key fingerprint, user name and home paths from every recording before commit; record only against 127.0.0.1, `.invalid` names and TEST-NET addresses.
 - Test style: Mocha with `node:assert`, files named `*.test.ts` under `packages/lib-ssh/test/unit/`, helper files named `*.fixture.ts`.
-- `choices.ts` is not touched by any card; card 04 and card 05 raise it as an open row.
 - The voice rule of the public-surface ADR applies to code comments and JSDoc: no feature, rule or decision ids and no origin framing. Test names keep the ids.

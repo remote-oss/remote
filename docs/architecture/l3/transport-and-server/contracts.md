@@ -129,8 +129,13 @@ The argument rules:
   (F-2107). S2 does not decide whether the feature is in effect; R1 does (F-2107 BR-1).
 - `-v` at the level S5 needs (F-2109 BR-3).
 - `-D 127.0.0.1:<port>`, `-L <port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (F-2104 BR-1, F-2410).
-- The host and user go in as their own arguments.
-- `scp` gets the same `-F` and the alias (F-2405 BR-6).
+- The host goes in as its own argument; a user carried by the target as `-l <user>`, and a port carried by the
+  target as `-p <port>`, only then and never from the configuration (F-2501 BR-2, AC-9).
+- `scp` gets the same `-F` and the alias (F-2405 BR-6); an IPv6 host is bracketed.
+- `~/` (and `~\` on Windows) in `configFile` expands against the home folder with the platform's separator;
+  `C:/x` stays as written (F-2201 Q4, lead's ruling 2026-10-07).
+- `buildOptionsQuery` (target, `configFile`, the accepted `ssh`, home folder, platform) gives the `ssh -G` run of
+  S4's `effectiveOptions`: `-F` when set, `-G`, the host.
 
 Never: add `ControlMaster`, `ControlPath`, `ControlPersist`, host-key, identity or proxy options; quote for a shell.
 
@@ -154,6 +159,10 @@ An unrecognised failure yields `unknown` with an empty reason, which B shows as 
 stays unrecognised, and a session that ends early without a recognised line is `unknown` (F-2105, F-2109). Of
 ssh's debug1 lines, only "Server host key" is kept for the log (F-2109).
 
+`logLinesOf` returns the error lines that go to the log: every line except ssh's debug1 lines, of which only "Server
+host key" stays (F-2109 BR-4). `endWithFullStop` gives a reason its one closing full stop, not after text that already
+ends a sentence (F-2603 BR-10).
+
 Never: log or return prompt answers.
 
 ### S6 prompt-classifier
@@ -176,10 +185,17 @@ The rules, first match wins:
 | `filesInEffect` | settings snapshot, home folder | the ordered files (user file, then the system file and its includes; or the one configured file) with their existence | none |
 | `listHosts` | the file texts through a file port | host entries in the order and with the inclusion rules of F-2202 BR-1 to BR-20 | `parseError` with file and reason (F-2201 BR-8) |
 | `effectiveOptions` | target | `ConnectTimeout`, `RemoteCommand`, `HostName`, `User`, `Port`, `LocalForward` as OpenSSH computes them (`ssh -G` through S3) | `parseError` |
+
+`effectiveOptions` is two pure halves around S3's run: S2's `buildOptionsQuery` gives the `ssh -G` argument list, and
+`parseEffectiveOptions` reads the printed text into the options or a `parseError`.
+
 | `parseAddHostCommand` | the text the user typed | a Host block (keywords mapped by F-2204 BR-5) | one of the four errors of F-2204 |
 | `writeHostBlock` | file text, block | the new file text with the block placed by F-2204 BR-10 to BR-17 | none (B's command writes the file) |
 
 Rules:
+- `parseAddHostCommand` parses as ssh does (F-2204 BR-3, checked against OpenSSH 10.2p1): options before and
+  directly after the destination are read, and the first other word after the destination starts the remote
+  command, which is not written.
 - `listHosts` reads fresh on every call and never caches (F-2202).
 - The match-back of F-2202 BR-21 uses `effectiveOptions` until the spec answers dossier question 5.
 
@@ -187,12 +203,13 @@ Rules:
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `candidates` | `remote.SSH.path` user value, PATH, platform | the ordered candidates (F-2101 BR-1) | none |
+| `candidates` | `remote.SSH.path` user value, the environment's PATH and `ProgramFiles`, platform | the ordered candidates (F-2101 BR-1): the setting; the bare name (`ssh.exe` on Windows) when PATH is not empty; on Windows `<ProgramFiles>\Git\usr\bin\ssh.exe` when `ProgramFiles` is known | none |
+| `scpProgram` | the accepted candidate, platform | the `scp` beside a configured `ssh`, otherwise the bare name (F-2405 BR-6) | none |
 | `judge` | a candidate's `-V` exit status and output | accepted or rejected (F-2101 BR-4, BR-5) | none |
 
 Rules:
+- `judge` runs on the output of the one check argument list `VERSION_ARGUMENTS` (`-V`, F-2101 BR-3).
 - Empty output with exit status 0 is rejected (F-2101 Q2, recommended (b)).
-- `scp` is looked for beside the accepted `ssh`, then on PATH (F-2405 BR-6).
 - Nothing is remembered between runs (F-2101 BR-10).
 
 ---

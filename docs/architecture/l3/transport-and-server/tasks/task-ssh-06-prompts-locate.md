@@ -1,6 +1,6 @@
 # Task ssh-06: the prompt classifier (S6) and the client locator's decision part (S1)
 
-Base: branch `feature/lib-ssh-pure` (3c0463a). The modules exist; this card writes their tests and fixes what fails. `locate.ts` imports `pathsFor` and `ClientPlatform` from `config/files.ts` (task ssh-03).
+Base: branch `feature/lib-ssh-pure` (its head), brought to the contract. The modules exist; this card writes their tests and fixes what fails. `locate.ts` imports `pathsFor` and `ClientPlatform` from `config/files.ts` (task ssh-03).
 
 ## 1. Package and file boundary
 
@@ -18,13 +18,15 @@ Nothing else may change. Fixture origin: recorded with the worker's own OpenSSH 
 `contracts.md` section 3, headings "### S6 prompt-classifier" (rules 1 to 5, first match wins) and "### S1 client-locator (decision part)". The contract governs. Branch signatures:
 
 - `classifyPrompt(text: string, displayHost: string): PromptSurface`; surfaces `fingerprintPick` and `continuationPick` carry `title`, `placeholder`, `items`; `maskedInput` carries `placeholder`.
-- `candidates(settingValue: string, platform: ClientPlatform, programFilesFolder: string): {program, origin}[]` (the contract lists the inputs setting, PATH, platform: section 6 row 1).
+- `candidates(settingValue: string, environment: {searchPath: string, programFilesFolder: string}, platform: ClientPlatform): {program, origin}[]`; `E(path, files)` below stands for `{searchPath: path, programFilesFolder: files}`.
 - `judge(exitStatus: number | undefined, output: string): boolean`
 - `scpProgram(accepted: ClientCandidate, platform: ClientPlatform): string`, `VERSION_ARGUMENTS`.
 
 Notation. `PICK(host, fp)` is `{surface:'fingerprintPick', title:{id:'S001', values:[host, fp]}, placeholder:{id:'S013', values:[]}, items:[{label:{id:'S028', values:[]}, answer:'yes'}, {label:{id:'S015', values:[]}, answer:'no'}]}`. `MASK(t)` is `{surface:'maskedInput', placeholder:{text:t}}`, `MASKID(id, values)` the same with `{id, values}`. `Q` is `Are you sure you want to continue connecting (yes/no/[fingerprint])? `. `A` is `The authenticity of host 'h.invalid (192.0.2.1)' can't be established.` and a line end. Display host is `myalias`. (each) means one `it` per listed input.
 
 ## 3. Test table
+
+Rows marked (provisional) rest on a spec reading, not a confirmed answer; they are tested like any other row.
 
 | Cite | Given (`classifyPrompt` text) | Expected |
 |---|---|---|
@@ -50,11 +52,11 @@ Notation. `PICK(host, fp)` is `{surface:'fingerprintPick', title:{id:'S001', val
 
 | Cite | Given (S1) | Expected |
 |---|---|---|
-| F-2101.BR-1 | `candidates('', 'linux', '')` | `[{program:'ssh', origin:'path'}]` |
-| F-2101.BR-1 | `candidates('/opt/ssh/bin/ssh', 'linux', '')` | setting first, then path: `[{program:'/opt/ssh/bin/ssh', origin:'setting'}, {program:'ssh', origin:'path'}]` |
-| F-2101.BR-1 | `candidates('', 'macOS', '')` | `[{program:'ssh', origin:'path'}]` |
-| F-2101.BR-1 | `candidates('', 'windows', 'C:\Program Files')` | origins in order `path`, `gitForWindows` |
-| F-2101.BR-1 | `candidates('C:\x\ssh.exe', 'windows', 'C:\Program Files')` | origins in order `setting`, `path`, `gitForWindows`; the setting entry's program is `C:\x\ssh.exe` |
+| F-2101.BR-1 | `candidates('', E('/usr/bin:/bin', ''), 'linux')` | `[{program:'ssh', origin:'path'}]` |
+| F-2101.BR-1 | `candidates('/opt/ssh/bin/ssh', E('/usr/bin', ''), 'linux')` | setting first, then path: `[{program:'/opt/ssh/bin/ssh', origin:'setting'}, {program:'ssh', origin:'path'}]` |
+| F-2101.BR-1 | `candidates('', E('/usr/bin', ''), 'macOS')` | `[{program:'ssh', origin:'path'}]` |
+| F-2101.BR-1 | `candidates('', E('C:\Windows\System32', 'C:\Program Files'), 'windows')` | `[{program:'ssh.exe', origin:'path'}, {program:'C:\Program Files\Git\usr\bin\ssh.exe', origin:'gitForWindows'}]` |
+| F-2101.BR-1 | `candidates('C:\x\ssh.exe', E('C:\Windows\System32', 'C:\Program Files'), 'windows')` | origins in order `setting`, `path`, `gitForWindows`; the setting entry's program is `C:\x\ssh.exe` |
 | F-2101.BR-2 | (each) setting `~/bin/ssh`, `$HOME/ssh`, `ssh-custom`, `C:\Program Files\OpenSSH\ssh.exe`, `   ` | the first entry is origin `setting`, program equal to the input |
 | F-2101.BR-3 | `VERSION_ARGUMENTS` | `['-V']` |
 | F-2101.BR-4 | (each) `judge(0, ...)` with `OpenSSH_9.6p1 Ubuntu-3ubuntu13, OpenSSL 3.0.13 30 Jan 2024`; `openssh_9.0p1`; `OpenSSH_for_Windows_9.5p1, LibreSSL 3.8.2`; `OpenSSH_6.5p1, OpenSSL 1.0.1 14 Mar 2012` | true |
@@ -65,6 +67,14 @@ Notation. `PICK(host, fp)` is `{surface:'fingerprintPick', title:{id:'S001', val
 | F-2405.BR-6 | `scpProgram({program:'/opt/ssh/bin/ssh', origin:'setting'}, 'linux')`; `({program:'/opt/s/ssh', origin:'setting'}, 'macOS')` | `/opt/ssh/bin/scp`; `/opt/s/scp` |
 | F-2405.BR-6 | `({program:'ssh', origin:'path'}, 'linux')`; `({program:'ssh-custom', origin:'setting'}, 'linux')` | `scp`; `scp` |
 | F-2405.BR-6 | `({program:'C:\Tools\OpenSSH\ssh.exe', origin:'setting'}, 'windows')`; `({program:'ssh', origin:'path'}, 'windows')`; `({program:'C:\Program Files\Git\usr\bin\ssh.exe', origin:'gitForWindows'}, 'windows')` | `C:\Tools\OpenSSH\scp.exe`; `scp.exe`; `C:\Program Files\Git\usr\bin\scp.exe` |
+| F-2405.BR-6 | `scpProgram({program:'ssh.exe', origin:'path'}, 'windows')` | `scp.exe` |
+| F-2307.BR-3 | (each) `Enter passphrase for /home/dev/.ssh/id_x: `; `Enter PIN for ED25519-SK key /home/dev/.ssh/id_sk: ` | MASK(the text, which already starts with no space, plus one leading space) |
+| F-2101.BR-1 (lead 2026-10-07) | `candidates('', E('', ''), 'linux')` | `[]` |
+| F-2101.BR-1 (lead 2026-10-07) | `candidates('', E('', 'D:\Apps'), 'windows')` | `[{program:'D:\Apps\Git\usr\bin\ssh.exe', origin:'gitForWindows'}]` |
+| F-2101.BR-1 (lead 2026-10-07) | `candidates('', E('C:\Windows', ''), 'windows')` | `[{program:'ssh.exe', origin:'path'}]` |
+| F-2306.BR-2.4 (provisional) | ` Verification code for x: ` (already starts with a space) | MASK(the text unchanged) |
+| S6 rule 5 (provisional) | `` (empty) | MASK(` `) |
+| F-2306.BR-2.1 (provisional) | `'s password: ` | MASKID(`S066`, `['']`) |
 
 ## 4. Rule for the worker
 
@@ -80,12 +90,4 @@ Reviewer: remote-coding-worker-1. PR title: `lib-ssh: tests and fixes for the pr
 
 ## 6. Open rows (stop and report)
 
-| # | Case | Question |
-|---|---|---|
-| 1 | Contract `candidates(setting, PATH, platform)` against the branch `candidates(setting, platform, programFilesFolder)`; the contract has no Program Files input, the branch no PATH input | Which signature governs? |
-| 2 | On Windows the branch tries the bare name `ssh` (`locate.ts:39`), and the Git for Windows path `<Program Files>\Git\usr\bin\ssh.exe`; the lookup is described with `ssh.exe` on Windows, and the Git location is not given exactly | Program name on Windows, and the exact Git location(s) and their order? |
-| 3 | Contract: `scp` beside the accepted `ssh`, then on PATH; `scpProgram` returns one program | Does the caller try a second candidate, or must the module return two? |
-| 4 | The one-space rule of the masked placeholder: the branch adds a space only when the text has none; texts with a leading space in the host-key class and texts without one in the password class are untested | Add always, or only when missing? |
-| 5 | Empty prompt text; a passphrase question that does not follow the quoted-path form (`Enter passphrase for /path:`); a PIN question | Which surface and placeholder? |
-| 6 | A password question where the word before `'s password:` is missing (`'s password:` alone) | Which value? |
-| 7 | Windows `candidates` when `programFilesFolder` is empty | Skip the Git entry, or join anyway? |
+None: every row is decided in section 3.

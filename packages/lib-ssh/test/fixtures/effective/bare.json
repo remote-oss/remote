@@ -1,0 +1,4 @@
+{
+  "source": "OpenSSH_10.3p1, LibreSSL 3.3.6\nssh -G -F rec.cfg bare",
+  "text": "user dev\nhostname 192.0.2.10\nport 22\nconnecttimeout none\n"
+}

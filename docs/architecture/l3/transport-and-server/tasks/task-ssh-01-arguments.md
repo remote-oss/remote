@@ -1,17 +1,17 @@
 # Task ssh-01: the argument builder (S2)
 
-Base: branch `feature/lib-ssh-pure` (3c0463a). The modules exist; this card writes their tests and fixes what fails.
+Base: branch `feature/lib-ssh-pure` (its head), brought to the contract. The modules exist; this card writes their tests and fixes what fails.
 
 ## 1. Package and file boundary
 
 | File | Role |
 |---|---|
 | `packages/lib-ssh/src/arguments/target.ts` | `validateTarget` |
-| `packages/lib-ssh/src/arguments/invocation.ts` | `buildInvocation`, `expandHome` |
+| `packages/lib-ssh/src/arguments/invocation.ts` | `buildInvocation`, `buildOptionsQuery`, `expandHome` |
 | `packages/lib-ssh/test/unit/target.test.ts` | new |
 | `packages/lib-ssh/test/unit/invocation.test.ts` | new |
 
-Nothing else may change (no `package.json`, `tsconfig*`, `coverage.json`, `choices.ts`, other modules). No fixtures: every input is an inline literal of the table.
+Nothing else may change (no `package.json`, `tsconfig*`, `coverage.json`, other modules). No fixtures: every input is an inline literal of the table.
 
 ## 2. Contract
 
@@ -19,9 +19,10 @@ Nothing else may change (no `package.json`, `tsconfig*`, `coverage.json`, `choic
 
 - `validateTarget(target: SshTarget): TargetProblem | undefined`
 - `buildInvocation(request: InvocationRequest): Invocation`
-- `expandHome(file: string, homeFolder: string): string`
+- `buildOptionsQuery(request: {target, configFile, sshProgram, homeFolder, platform}): Invocation` (the `ssh -G` run)
+- `expandHome(file: string, homeFolder: string, platform: 'linux'|'macOS'|'windows'): string`
 
-Base request for the `buildInvocation` rows (a row changes only what it names): `target {host:'alias'}`, `settings {configFile:'', connectTimeout:15, permitPtyAllocation:false, remoteCommandInEffect:false}`, `effective {hostName:'h.invalid', user:'dev', port:'22', localForwards:[]}`, `programs {ssh:'/x/ssh', scp:'/x/scp'}`, `homeFolder '/home/dev'`, `purpose 'connection'`. Argument rows assert that the named adjacent pair or single argument is present (position among options is not asserted, see section 6 row 1) and that the host is the last argument unless the row says otherwise.
+Base request for the `buildInvocation` rows (a row changes only what it names): `target {host:'alias'}`, `settings {configFile:'', connectTimeout:15, permitPtyAllocation:false, remoteCommandInEffect:false}`, `effective {hostName:'h.invalid', user:'dev', port:'22', localForwards:[]}`, `programs {sshProgram:'/x/ssh', scpProgram:'/x/scp'}`, `homeFolder '/home/dev'`, `platform 'linux'`, `purpose 'connection'`. Argument rows assert that the named adjacent pair or single argument is present (position among options is not asserted: no spec fixes it beyond the host, then the remote program, last) and that the host is the last argument unless the row says otherwise.
 
 ## 3. Test table
 
@@ -57,7 +58,9 @@ Base request for the `buildInvocation` rows (a row changes only what it names): 
 | F-2201.BR-3 | `configFile '~'` | pair `-F`, `/home/dev` |
 | F-2201.BR-3 | (each) `configFile` `config`, `$HOME/x`, `${env:HOME}/x` | pair `-F`, the same text unchanged |
 | F-2201.BR-2 | `configFile '   '` (spaces only) | pair `-F`, `   ` |
-| F-2201.BR-3 | `expandHome('~/a b', '/home/dev')`, `expandHome('~x', '/home/dev')`, `expandHome('/abs', '/home/dev')` | `/home/dev/a b`, `~x`, `/abs` |
+| F-2201.BR-3 | `expandHome` with `'/home/dev'`, `'linux'` of `~/a b`, `~x`, `/abs`, `~\x` | `/home/dev/a b`, `~x`, `/abs`, `~\x` |
+| F-2201.Q4 (lead 2026-10-07) | (each) `expandHome` with `'C:\Users\dev'`, `'windows'` of `~/x`, `~\x`, `C:/x`, `~` | `C:\Users\dev\x`, `C:\Users\dev\x`, `C:/x`, `C:\Users\dev` |
+| F-2201.Q4 (lead 2026-10-07) | purpose connection, `platform 'windows'`, `homeFolder 'C:\Users\dev'`, `configFile '~\ssh_alt'` | pair `-F`, `C:\Users\dev\ssh_alt` |
 | F-2106.BR-1 | purpose connection, (each) `permitPtyAllocation` `false`, `0`, `''`, `null`, `undefined` | `-T` present once |
 | F-2106.BR-1 | purpose connection, (each) `permitPtyAllocation` `true`, `1`, `'yes'` | no `-T` |
 | F-2106.BR-8 | (each) purpose tunnel, oneShot, `permitPtyAllocation false` | no `-T` |
@@ -78,12 +81,23 @@ Base request for the `buildInvocation` rows (a row changes only what it names): 
 | F-2205.7.E10 | target `{host:'h', user:''}` | no user argument |
 | S2 contract | purpose oneShot, `remoteProgram 'uname -s'` | last two arguments `alias`, `uname -s` (one argument, unquoted) |
 | S2 contract | purpose oneShot, `remoteProgram` absent; purpose connection | last argument `alias` |
-| S2 contract | purposes connection, tunnel, oneShot, `programs.ssh '/x/ssh'` | `program '/x/ssh'` |
+| S2 contract | purposes connection, tunnel, oneShot, `programs.sshProgram '/x/ssh'` | `program '/x/ssh'` |
 | F-2309.BR-2 | every purpose | `environment` deep-equals `{}` |
 | F-2405.BR-6 | purpose copy, `copy {localFile:'/tmp/boot.sh', remotePath:'/tmp/x/boot.sh'}`, `configFile ''` | `program '/x/scp'`, `arguments ['/tmp/boot.sh','alias:/tmp/x/boot.sh']` |
 | F-2405.BR-6 | purpose copy, `configFile '/etc/custom/config'` | `arguments ['-F','/etc/custom/config','/tmp/boot.sh','alias:/tmp/x/boot.sh']` |
 | F-2405.BR-6 | purpose copy | no `-T`, `-v`, `-o`, `-D`, `-L` |
 | ADR-0004.2 | for every purpose, with and without `configFile`, `connectTimeout`, `remoteCommand`, one forward of each kind | no argument starts with `ControlMaster`, `ControlPath`, `ControlPersist`, `IdentityFile`, `IdentityAgent`, `ProxyCommand`, `ProxyJump`, `UserKnownHostsFile`, `StrictHostKeyChecking`, `HostKeyAlias`; no `-i`, `-J`, `-S`, `-M`; every `-o` value is `ConnectTimeout=<n>` or `RemoteCommand=none` |
+| S2 contract | target `{host:'alias', user:'u'}` | pair `-l`, `u`; last argument `alias` |
+| F-2501.BR-2 / AC-9 | target `{host:'alias', port:2222}` | pair `-p`, `2222`; last argument `alias` |
+| F-2501.BR-2 | target `{host:'alias'}`, `effective.port '2200'` | no `-p` (a port never comes from the configuration) |
+| F-2704.BR-1 | purpose connection, `remoteProgram 'sh'` | `-T` present; last two arguments `alias`, `sh` |
+| F-2106.6.3 | purpose connection, `remoteProgram 'sh'`, `permitPtyAllocation true` | no `-T`; last two arguments `alias`, `sh` |
+| F-2405.BR-6 | purpose copy, target `{host:'alias', user:'u', port:2222}` | `arguments ['/tmp/boot.sh','alias:/tmp/x/boot.sh']` (no `-P`, no `u@`) |
+| S4 contract | `buildOptionsQuery({target:{host:'alias'}, configFile:'', sshProgram:'/x/ssh', homeFolder:'/home/dev', platform:'linux'})` | `{program:'/x/ssh', arguments:['-G','alias'], environment:{}}` |
+| S4 contract | `buildOptionsQuery` with `configFile '~/c'` | `arguments ['-F','/home/dev/c','-G','alias']` |
+| ADR-0004.2 | `buildOptionsQuery`, with and without `configFile` | no `-o`, `-T`, `-v`, `-D`, `-L`, `-l`, `-p` |
+| F-2405.BR-6 (provisional) | purpose copy, target `{host:'::1'}` | last argument `[::1]:/tmp/x/boot.sh` |
+| F-2105.BR-2 (provisional) | `settings.connectTimeout 2.5` | pair `-o`, `ConnectTimeout=2.5` (written as given; the settings reader owns invalid values) |
 
 ## 4. Rule for the worker
 
@@ -99,11 +113,4 @@ Reviewer: remote-coding-worker-1. PR title: `lib-ssh: tests and fixes for the ar
 
 ## 6. Open rows (stop and report)
 
-| # | Case | Question |
-|---|---|---|
-| 1 | Position of options in the list; spelling of the user and port arguments. The branch emits `-l <user>` and `-p <port>` (`invocation.ts:108-113`); the contract says only "host and user go in as their own arguments" and never mentions a port | Which spelling (`-l`/`-p` or `-o User=`/`-o Port=`), and is the order fixed? |
-| 2 | Terminal mode: the contract says the remote program is `sh`; the branch ignores `remoteProgram` for purpose `connection` (`invocation.ts:115`) | Is terminal mode purpose `oneShot`, or must `connection` accept a remote program? |
-| 3 | `copy` with a user, a port or an IPv6 host: the branch adds `-P`, `user@` and `[..]` (`invocation.ts:158-173`); the contract says the same `-F` and the alias | Keep or remove? |
-| 4 | Windows home folder with `~/`: `expandHome` joins with `/` (`invocation.ts:140`) | What does `~/x` and `~\x` expand to on Windows? |
-| 5 | Invalid `connectTimeout` setting values (0, negative, fraction, NaN) | What is written into `ConnectTimeout=`? |
-| 6 | Contract line "bootstrap on standard input, no remote command in shared mode" | Is it the caller's alone (nothing to test here)? |
+None: every row is decided in section 3.
