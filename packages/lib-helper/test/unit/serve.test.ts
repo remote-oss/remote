@@ -119,6 +119,7 @@ describe('serve', () => {
     start();
     const client = await connect(null);
     clock.advance(500);
+    await settled();
     deepStrictEqual(
       [client.closed, logged],
       [true, ['a connection did not say hello in time']],

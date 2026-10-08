@@ -19,7 +19,7 @@ describe('FakeEndpointPort', () => {
     deepStrictEqual(received, [{list: [1, 2]}]);
   });
 
-  it('delivers nothing after either end closed', async () => {
+  it('delivers what was sent before a close, and nothing after it', async () => {
     const port = new FakeEndpointPort();
     const received: unknown[] = [];
     let helperSide: {send(message: unknown): void} | undefined;
@@ -33,7 +33,7 @@ describe('FakeEndpointPort', () => {
     client.send('after close');
     helperSide?.send('to a closed client');
     await settled();
-    deepStrictEqual(received, []);
+    deepStrictEqual(received, ['in flight']);
   });
 
   it('reports a close once to each end', async () => {
@@ -46,6 +46,7 @@ describe('FakeEndpointPort', () => {
     client.onClose(() => closes.push('client'));
     client.close();
     client.close();
+    await settled();
     deepStrictEqual(closes, ['client', 'helper']);
   });
 
