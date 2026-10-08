@@ -1,0 +1,494 @@
+/**
+ * @fileoverview The bootstrap scripts of the server lifecycle: for each step, the text of one script that runs on
+ * the host and ends with a result block. Only the POSIX `sh` script exists; the PowerShell script answers with a
+ * clear failure until it has been captured on a Windows host.
+ */
+
+import type {Interpreter} from 'lib-host';
+import type {Cleanup} from '../policy/record.ts';
+import {
+  BUSYBOX_FUNCTIONS,
+  COMMON_FUNCTIONS,
+  ENVIRONMENT_FUNCTIONS,
+  FETCH_FUNCTIONS,
+  FOLDER_KIND_FUNCTIONS,
+  LOCK_FUNCTIONS,
+  PROCESS_FUNCTIONS,
+  READY_LINE,
+  shellQuote,
+  STOP_FUNCTIONS,
+  UNPACK_FUNCTIONS,
+} from './posix-script.ts';
+import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
+
+/** The steps of a single-script install. */
+export type ScriptStep =
+  'probe' | 'install' | 'start' | 'kill' | 'uninstall' | 'cleanup';
+
+/** The extra actions of a stepwise install, in the order they run. */
+export type StepwiseAction = 'prepare' | 'unpack' | 'activate';
+
+/** What a script is asked to do: a step, in one of the two install modes. */
+export type BootstrapRequest =
+  | {installMode: 'singleScript'; step: ScriptStep}
+  | {
+      installMode: 'stepwise';
+      step: Exclude<ScriptStep, 'install'> | StepwiseAction;
+    };
+
+/** The proxy variables to export when the host's own environment sets none, as the final text. */
+export interface ProxyVariables {
+  http: string;
+  https: string;
+}
+
+/** The options of one server start. */
+export interface StartParameters {
+  bindHost: string;
+  /** A port, or a range such as `8000-9000`; `0` lets the server choose. */
+  port: string;
+  /** Whether the user has accepted the server's licence terms. */
+  licenceAccepted: boolean;
+  /** Seconds of reconnection grace; 0 passes no option. */
+  graceSeconds: number;
+  /** Extensions the server installs when it starts. */
+  extensions: readonly string[];
+  /** The polling interval of the file watcher in milliseconds, when the policy allows it; 0 for none. */
+  fileWatcherPollingMilliseconds: number;
+  /** How many seconds the start waits for the ready line before it fails. */
+  readySeconds: number;
+}
+
+/** Everything a script needs, as data; nothing in it is specific to one product. */
+export interface ScriptParameters {
+  /** The folder that holds the data folder; empty for the user's home. */
+  installRoot: string;
+  /** The name of the data folder under the install root. */
+  dataFolderName: string;
+  /** The launcher's path inside an installed server folder. */
+  launcher: string;
+  commit: string;
+  /** Where the host downloads the archive from. */
+  archiveUrl: string;
+  /** An archive already on the host, used instead of a download; empty for none. */
+  archivePath: string;
+  archiveFormat: 'tar.gz' | 'zip';
+  /** The epoch milliseconds that name the staging folder of a stepwise install. */
+  epochMilliseconds: number;
+  proxy: ProxyVariables;
+  downloader: {
+    /** Whether `curl` and `wget` read their configuration files. */
+    useConfigurationFiles: boolean;
+    timeoutSeconds: number;
+  };
+  lock: {
+    method: 'flock' | 'link';
+    /** Whether the lock file goes in /tmp rather than in the install folder. */
+    inTemporaryFolder: boolean;
+    /** The lock file's name before the commit: `<prefix>.<commit>`. */
+    filePrefix: string;
+  };
+  /** A host path to source before an install or a start; empty for none. */
+  environmentSetup: string;
+  cleanup: Cleanup;
+  start: StartParameters;
+}
+
+function yesNo(value: boolean): string {
+  return value ? 'yes' : 'no';
+}
+
+function assignment(name: string, value: string | number): string {
+  return `${name}=${shellQuote(String(value))}`;
+}
+
+function cleanupKind(cleanup: Cleanup): string {
+  return cleanup.kind;
+}
+
+function keepCount(cleanup: Cleanup): number {
+  return cleanup.kind === 'keepNewest' ? cleanup.count : 0;
+}
+
+/** The parameter block: one quoted assignment per value. */
+function parameterBlock(parameters: ScriptParameters): string[] {
+  const {start} = parameters;
+  return [
+    assignment('INSTALL_ROOT', parameters.installRoot),
+    assignment('DATA_FOLDER', parameters.dataFolderName),
+    assignment('LAUNCHER', parameters.launcher),
+    assignment('COMMIT', parameters.commit),
+    assignment('ARCHIVE_URL', parameters.archiveUrl),
+    assignment('ARCHIVE_PATH', parameters.archivePath),
+    assignment('ARCHIVE_FORMAT', parameters.archiveFormat),
+    assignment('STAGING_SUFFIX', parameters.epochMilliseconds),
+    assignment('PROXY_HTTP', parameters.proxy.http),
+    assignment('PROXY_HTTPS', parameters.proxy.https),
+    assignment(
+      'USE_CONFIGURATION_FILES',
+      yesNo(parameters.downloader.useConfigurationFiles),
+    ),
+    assignment('DOWNLOAD_SECONDS', parameters.downloader.timeoutSeconds),
+    assignment('LOCK_METHOD', parameters.lock.method),
+    assignment('LOCK_IN_TEMPORARY', yesNo(parameters.lock.inTemporaryFolder)),
+    assignment('LOCK_PREFIX', parameters.lock.filePrefix),
+    assignment('ENVIRONMENT_SETUP', parameters.environmentSetup),
+    assignment('CLEANUP_KIND', cleanupKind(parameters.cleanup)),
+    assignment('KEEP_COUNT', keepCount(parameters.cleanup)),
+    assignment('BIND_HOST', start.bindHost),
+    assignment('SERVER_PORT', start.port),
+    assignment('READY_SECONDS', start.readySeconds),
+  ];
+}
+
+/** The `set --` line that holds the server's start options, each as one quoted word. */
+function startOptions(start: StartParameters): string {
+  const words = [
+    '--start-server',
+    '--host',
+    start.bindHost,
+    '--port',
+    start.port,
+    '--connection-token-file',
+  ];
+  const tail = ['--telemetry-level', 'off', '--enable-remote-auto-shutdown'];
+  const optional = [
+    ...(start.licenceAccepted ? ['--accept-server-license-terms'] : []),
+    ...(start.graceSeconds > 0
+      ? ['--reconnection-grace-time', String(start.graceSeconds)]
+      : []),
+    ...start.extensions.flatMap(extension => [
+      '--install-extension',
+      extension,
+    ]),
+    ...(start.fileWatcherPollingMilliseconds > 0
+      ? ['--file-watcher-polling', String(start.fileWatcherPollingMilliseconds)]
+      : []),
+  ];
+  const quoted = [...words, '"$TOKEN_FILE"', ...tail, ...optional].map(word =>
+    word.startsWith('"') ? word : shellQuote(word),
+  );
+  return `set -- ${quoted.join(' ')}`;
+}
+
+const GUARD: readonly string[] = [
+  'if [ -n "${ZSH_VERSION:-}" ]; then',
+  '  emulate sh',
+  'fi',
+];
+
+const PROBE_BODY: readonly string[] = [
+  'fact host.tmp "${TMPDIR:-/tmp}"',
+  'OS_NAME=$(uname -s 2>/dev/null)',
+  'case $OS_NAME in',
+  '  Linux) HOST_OS=linux ;;',
+  '  Darwin) HOST_OS=darwin ;;',
+  '  *)',
+  '    fact host.os "$OS_NAME"',
+  '    finish UnsupportedPlatform',
+  '    ;;',
+  'esac',
+  'fact host.os "$HOST_OS"',
+  'MACHINE=$(uname -m 2>/dev/null)',
+  'case $MACHINE in',
+  '  x86_64) HOST_ARCH=x64 ;;',
+  '  aarch64 | arm64) HOST_ARCH=arm64 ;;',
+  '  armv7l | armv8l) HOST_ARCH=armhf ;;',
+  '  *)',
+  '    fact host.arch "$MACHINE"',
+  '    finish UnsupportedArch',
+  '    ;;',
+  'esac',
+  'fact host.arch "$HOST_ARCH"',
+  'HOST_LIBC=unknown',
+  'if [ "$HOST_OS" = linux ]; then',
+  '  if ls /lib/ld-musl-* /usr/lib/ld-musl-* >/dev/null 2>&1; then',
+  '    HOST_LIBC=musl',
+  '  elif have getconf && getconf GNU_LIBC_VERSION >/dev/null 2>&1; then',
+  '    HOST_LIBC=glibc',
+  '  fi',
+  'fi',
+  'fact host.libc "$HOST_LIBC"',
+  'fact host.kernel "$(uname -r 2>/dev/null)"',
+  'RELEASE_ID=$(. /etc/os-release >/dev/null 2>&1 </dev/null; echo "${ID:-}")',
+  'fact host.release "${RELEASE_ID:-$OS_NAME}"',
+  'for TOOL in wget curl tar unzip flock; do',
+  '  if have "$TOOL"; then',
+  '    fact "host.tool.$TOOL" yes',
+  '  else',
+  '    fact "host.tool.$TOOL" no',
+  '  fi',
+  'done',
+  'if have wget && wget_is_busybox; then',
+  '  fact host.wgetBusybox yes',
+  'else',
+  '  fact host.wgetBusybox no',
+  'fi',
+  'fact host.shell "${SHELL##*/}"',
+  'fact host.sshAuthSock "${SSH_AUTH_SOCK:-}"',
+  'fact host.display "${DISPLAY:-}"',
+  'fact server.installDir "$INSTALL_DIR"',
+  'if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+  '  fact server.installed yes',
+  'else',
+  '  fact server.installed no',
+  'fi',
+  'finish Ok',
+];
+
+const LEAVE: readonly string[] = [
+  'leave() {',
+  '  lock_release',
+  '  finish "$1"',
+  '}',
+];
+
+const INSTALL_BODY: readonly string[] = [
+  'STARTED_AT=$(now_seconds)',
+  '[ -n "$DATA_ROOT" ] || finish CreateInstallDirFailed',
+  'mkdir -p "$INSTALL_DIR" 2>/dev/null || finish CreateInstallDirFailed',
+  'lock_take "$COMMIT" || finish LockBusy',
+  'if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+  '  fact server.installDir "$INSTALL_DIR"',
+  '  leave Ok',
+  'fi',
+  'prepare_environment',
+  'if [ -n "$ARCHIVE_PATH" ]; then',
+  '  ARCHIVE=$ARCHIVE_PATH',
+  'else',
+  '  have wget || have curl || leave NoDownloaderAvailable',
+  '  ARCHIVE=$INSTALL_DIR/.archive.$$',
+  '  fetch_archive "$ARCHIVE_URL" "$ARCHIVE" || leave ServerDownloadFailed',
+  'fi',
+  'DOWNLOADED_AT=$(now_seconds)',
+  'unpack_into "$ARCHIVE" "$INSTALL_DIR" || UNPACK_FAILED=yes',
+  '[ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
+  '[ -z "${UNPACK_FAILED:-}" ] && [ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed',
+  'fact server.installDir "$INSTALL_DIR"',
+  'fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
+  'fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"',
+  'leave Ok',
+];
+
+const STEPWISE_BODIES: Readonly<Record<StepwiseAction, readonly string[]>> = {
+  prepare: [
+    '[ -n "$DATA_ROOT" ] || finish CreateInstallDirFailed',
+    'STAGING=$DATA_DIR/bin/$COMMIT-$STAGING_SUFFIX',
+    'mkdir -p "$STAGING" 2>/dev/null || finish CreateInstallDirFailed',
+    'fact server.stagingDir "$STAGING"',
+    'finish Ok',
+  ],
+  unpack: [
+    'STAGING=$DATA_DIR/bin/$COMMIT-$STAGING_SUFFIX',
+    'cat >"$STAGING.archive" || finish UnpackFailed',
+    'unpack_into "$STAGING.archive" "$STAGING" || UNPACK_FAILED=yes',
+    'rm -f "$STAGING.archive"',
+    '[ -z "${UNPACK_FAILED:-}" ] && [ -x "$STAGING/$LAUNCHER" ] || finish UnpackFailed',
+    'finish Ok',
+  ],
+  activate: [
+    'STAGING=$DATA_DIR/bin/$COMMIT-$STAGING_SUFFIX',
+    'if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+    '  rm -rf "$STAGING"',
+    '  fact server.installDir "$INSTALL_DIR"',
+    '  finish Ok',
+    'fi',
+    '[ -x "$STAGING/$LAUNCHER" ] || finish UnpackFailed',
+    'ASIDE=$INSTALL_DIR.old.$$',
+    'if [ -d "$INSTALL_DIR" ]; then',
+    '  mv "$INSTALL_DIR" "$ASIDE" || finish UnpackFailed',
+    'fi',
+    'if ! mv "$STAGING" "$INSTALL_DIR"; then',
+    '  [ ! -d "$ASIDE" ] || mv "$ASIDE" "$INSTALL_DIR"',
+    '  finish UnpackFailed',
+    'fi',
+    'rm -rf "${ASIDE:?}"',
+    'fact server.installDir "$INSTALL_DIR"',
+    'finish Ok',
+  ],
+};
+
+function startBody(start: StartParameters): string[] {
+  return [
+    'PID_FILE=$BOOT_PREFIX.pid',
+    'LOG_FILE=$BOOT_PREFIX.log',
+    'TOKEN_FILE=$BOOT_PREFIX.token',
+    'STARTED_AT=$(now_seconds)',
+    'ready_port() {',
+    `  sed -n 's/.*${READY_LINE} \\([0-9][0-9]*\\).*/\\1/p' "$LOG_FILE" 2>/dev/null | tail -n 1`,
+    '}',
+    'started() {',
+    '  [ -s "$TOKEN_FILE" ] || leave ServerFailedToStart',
+    '  fact server.port "$1"',
+    '  fact server.pid "$2"',
+    '  fact server.token "$(cat "$TOKEN_FILE" 2>/dev/null)"',
+    '  fact server.log "$LOG_FILE"',
+    '  fact host.kernel "$(uname -r 2>/dev/null)"',
+    '  fact timing.start "$(elapsed_milliseconds "$STARTED_AT")"',
+    '  leave Ok',
+    '}',
+    '[ -x "$INSTALL_DIR/$LAUNCHER" ] || finish ServerFailedToStart',
+    'lock_take "$COMMIT" || finish LockBusy',
+    'RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
+    'if is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then',
+    '  SERVER_PID=$RUNNING_PID',
+    '  LAUNCHED=no',
+    'else',
+    '  prepare_environment',
+    '  if [ ! -s "$TOKEN_FILE" ]; then',
+    '    (umask 077; tr -dc \'A-Za-z0-9\' </dev/urandom | head -c 32 >"$TOKEN_FILE")',
+    '  fi',
+    '  [ -s "$TOKEN_FILE" ] || leave ServerFailedToStart',
+    `  ${startOptions(start)}`,
+    '  (umask 077; printf \'\' >"$LOG_FILE") || leave ServerFailedToStart',
+    '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 9>&- &',
+    '  SERVER_PID=$!',
+    '  echo "$SERVER_PID" >"$PID_FILE"',
+    '  LAUNCHED=yes',
+    'fi',
+    'if sleep 0.2 2>/dev/null; then TICK=0.2; TICKS=$((READY_SECONDS * 5)); else TICK=1; TICKS=$READY_SECONDS; fi',
+    'WAITED=0',
+    'while [ "$WAITED" -lt "$TICKS" ]; do',
+    '  SERVER_PORT_READ=$(ready_port)',
+    '  [ -z "$SERVER_PORT_READ" ] || started "$SERVER_PORT_READ" "$SERVER_PID"',
+    '  if ! kill -0 "$SERVER_PID" 2>/dev/null; then',
+    '    [ "$LAUNCHED" = yes ] || leave ServerFailedToStart',
+    '    wait "$SERVER_PID"',
+    '    EXIT_CODE=$?',
+    '    [ "$EXIT_CODE" != 207 ] || leave LinuxPrereqs',
+    '    leave ServerFailedToStart',
+    '  fi',
+    '  sleep "$TICK"',
+    '  WAITED=$((WAITED + 1))',
+    'done',
+    'leave ServerFailedToStart',
+  ];
+}
+
+const KILL_BODY: readonly string[] = [
+  '[ -n "$DATA_ROOT" ] && [ -n "$DATA_FOLDER" ] || finish Ok',
+  'stop_servers',
+  'rm -f "${DATA_DIR:?}"/.*.pid',
+  'rm -rf "${DATA_DIR:?}/bin"',
+  'finish Ok',
+];
+
+const UNINSTALL_BODY: readonly string[] = [
+  '[ -n "$DATA_ROOT" ] && [ -n "$DATA_FOLDER" ] || finish Ok',
+  'stop_servers',
+  'rm -rf "${DATA_DIR:?}"',
+  'finish Ok',
+];
+
+const CLEANUP_BODY: readonly string[] = [
+  '[ -n "$DATA_ROOT" ] && [ -n "$DATA_FOLDER" ] || finish Ok',
+  '[ -d "$DATA_DIR/bin" ] || finish Ok',
+  'INDEX=0',
+  'ls -t "$DATA_DIR/bin" 2>/dev/null | while IFS= read -r NAME; do',
+  '  INDEX=$((INDEX + 1))',
+  '  [ "$NAME" != "$COMMIT" ] || continue',
+  '  KIND=$(folder_kind "$NAME")',
+  '  case $CLEANUP_KIND in',
+  '    keepNewest)',
+  '      [ "$INDEX" -gt "$KEEP_COUNT" ] && remove_install "$NAME"',
+  '      ;;',
+  '    onlyCurrentRemoveLeftovers)',
+  '      [ "$KIND" = other ] || remove_install "$NAME"',
+  '      ;;',
+  '    *)',
+  '      [ "$KIND" != commit ] || remove_install "$NAME"',
+  '      ;;',
+  '  esac',
+  'done',
+  'finish Ok',
+];
+
+type BodyStep = Exclude<BootstrapRequest['step'], 'start'>;
+
+function bodyOf(step: BodyStep): readonly string[] {
+  switch (step) {
+    case 'probe':
+      return PROBE_BODY;
+    case 'install':
+      return INSTALL_BODY;
+    case 'kill':
+      return KILL_BODY;
+    case 'uninstall':
+      return UNINSTALL_BODY;
+    case 'cleanup':
+      return CLEANUP_BODY;
+    default:
+      return STEPWISE_BODIES[step];
+  }
+}
+
+/** The function groups each step needs, so that a script holds only what it uses. */
+const FUNCTION_GROUPS: Readonly<
+  Record<BootstrapRequest['step'], ReadonlyArray<readonly string[]>>
+> = {
+  probe: [COMMON_FUNCTIONS, BUSYBOX_FUNCTIONS],
+  install: [
+    COMMON_FUNCTIONS,
+    ENVIRONMENT_FUNCTIONS,
+    LOCK_FUNCTIONS,
+    BUSYBOX_FUNCTIONS,
+    FETCH_FUNCTIONS,
+    UNPACK_FUNCTIONS,
+    LEAVE,
+  ],
+  prepare: [COMMON_FUNCTIONS],
+  unpack: [COMMON_FUNCTIONS, UNPACK_FUNCTIONS],
+  activate: [COMMON_FUNCTIONS],
+  start: [
+    COMMON_FUNCTIONS,
+    ENVIRONMENT_FUNCTIONS,
+    LOCK_FUNCTIONS,
+    PROCESS_FUNCTIONS,
+    LEAVE,
+  ],
+  kill: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
+  uninstall: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
+  cleanup: [COMMON_FUNCTIONS, LOCK_FUNCTIONS, FOLDER_KIND_FUNCTIONS],
+};
+
+function posixScript(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): string {
+  const body =
+    request.step === 'start'
+      ? startBody(parameters.start)
+      : bodyOf(request.step);
+  return [
+    ...GUARD,
+    ...parameterBlock(parameters),
+    ...FUNCTION_GROUPS[request.step].flat(),
+    ...body,
+    '',
+  ].join('\n');
+}
+
+/** What the PowerShell twin prints until it exists: a result block that names the missing piece. */
+const POWERSHELL_UNAVAILABLE: string = [
+  `Write-Output ''`,
+  `Write-Output '${RESULT_BEGIN}'`,
+  `Write-Output 'status=ServerFailedToStart'`,
+  `Write-Output 'host.note=the Windows bootstrap script is not available yet'`,
+  `Write-Output '${RESULT_END}'`,
+  '',
+].join('\n');
+
+/**
+ * The text of the script for one step, for the interpreter the host has. The POSIX script runs under any `sh` and
+ * prints a result block that `parseResult` reads. The PowerShell script is provisional until it has been captured on
+ * a Windows host, so it answers with a failure that says so.
+ */
+export function scriptFor(
+  request: BootstrapRequest,
+  interpreter: Interpreter,
+  parameters: ScriptParameters,
+): string {
+  return interpreter === 'powershell'
+    ? POWERSHELL_UNAVAILABLE
+    : posixScript(request, parameters);
+}
