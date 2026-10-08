@@ -55,3 +55,57 @@ ruleTester.run('scoped-exceptions', namesPlugin.rules['scoped-exceptions'], {
     },
   ],
 });
+
+ruleTester.run('edge-underscore', namesPlugin.rules['edge-underscore'], {
+  valid: [
+    {code: 'const MAX_RETRIES = 3;'},
+    {code: "const value = {'__proto__': null};"},
+    {
+      code: 'const value = {inner_key: 1};',
+      options: [{imposedKeys: ['inner_key']}],
+    },
+    {code: 'const counter = 1;'},
+  ],
+  invalid: [
+    {
+      code: 'const _value = 1;',
+      errors: [{messageId: 'edgeUnderscore', data: {name: '_value'}}],
+    },
+    {
+      code: 'const value_ = 1;',
+      errors: [{messageId: 'edgeUnderscore', data: {name: 'value_'}}],
+    },
+    {
+      code: 'function run(_unused: number) {}',
+      errors: [{messageId: 'edgeUnderscore', data: {name: '_unused'}}],
+    },
+    {
+      code: 'class Box { private _items = []; }',
+      errors: [{messageId: 'edgeUnderscore', data: {name: '_items'}}],
+    },
+    {
+      code: 'interface Shape { _kind: string }',
+      errors: [{messageId: 'edgeUnderscore', data: {name: '_kind'}}],
+    },
+    {
+      code: 'type Pair<_Left> = [_Left];',
+      errors: [{messageId: 'edgeUnderscore', data: {name: '_Left'}}],
+    },
+    {
+      code: 'enum Mode { _Fast }',
+      errors: [{messageId: 'edgeUnderscore', data: {name: '_Fast'}}],
+    },
+    {
+      code: "import {thing as _thing} from './thing.js';",
+      errors: [{messageId: 'edgeUnderscore', data: {name: '_thing'}}],
+    },
+    {
+      code: 'class Box { _run() {} }',
+      errors: [{messageId: 'edgeUnderscore', data: {name: '_run'}}],
+    },
+    {
+      code: 'export {thing as _thing};',
+      errors: [{messageId: 'edgeUnderscore', data: {name: '_thing'}}],
+    },
+  ],
+});
