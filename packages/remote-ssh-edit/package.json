@@ -12,7 +12,7 @@
     "directory": "packages/remote-ssh-edit"
   },
   "bugs": {
-    "url": "https://github.com/remote-oss/remote-ssh-edit/issues"
+    "url": "https://github.com/remote-oss/remote/issues"
   },
   "engines": {
     "vscode": "^1.139.0"
@@ -24,7 +24,8 @@
   "keywords": [
     "remote development",
     "remote",
-    "ssh"
+    "ssh",
+    "ssh config"
   ],
   "extensionKind": [
     "ui"
