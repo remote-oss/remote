@@ -85,7 +85,7 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
   table.onChange(event => {
     broadcast({
       type: 'leaseListChanged',
-      leases: event.leases.map(lease => lease.id),
+      leases: event.leases.map(lease => lease.leaseId),
     });
   });
   function accept(connection: EndpointConnection): void {
@@ -113,13 +113,13 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
           return;
         }
         cancelHello();
-        const granted = table.open().id;
+        const granted = table.open().leaseId;
         lease = granted;
         connections.set(granted, connection);
         connection.send({
           type: 'welcome',
           lease: granted,
-          leases: table.live().map(live => live.id),
+          leases: table.live().map(live => live.leaseId),
           payload: options.payload,
         } satisfies HelperMessage);
         return;

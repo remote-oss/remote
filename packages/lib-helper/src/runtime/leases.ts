@@ -1,9 +1,9 @@
 /** One lease on a helper: its number and when it was opened. */
 export interface Lease {
   /** The lease's number, 1, 2, 3, ... in arrival order; never reused. */
-  id: number;
+  readonly leaseId: number;
   /** The clock value when the lease was opened. */
-  openedAt: number;
+  readonly openedAt: number;
 }
 
 /** One report that the live leases changed. */
@@ -36,7 +36,7 @@ export class LeaseTable {
 
   /** Open a lease: the next id in arrival order, stamped with the clock's value. */
   open(): Lease {
-    const lease: Lease = {id: this.nextId, openedAt: this.clock()};
+    const lease: Lease = {leaseId: this.nextId, openedAt: this.clock()};
     this.nextId += 1;
     this.active.push(lease);
     this.fire();
@@ -44,14 +44,11 @@ export class LeaseTable {
   }
 
   /**
-   * Close a lease by id. False when the id is unknown or the lease already closed, with no
+   * Close a lease by its leaseId. False when the leaseId is unknown or the lease already closed, with no
    * change event.
    */
-  close(
-    // eslint-disable-next-line names/scoped-exceptions -- the lease's number, fixed by the contract
-    id: number,
-  ): boolean {
-    const index = this.active.findIndex(lease => lease.id === id);
+  close(leaseId: number): boolean {
+    const index = this.active.findIndex(lease => lease.leaseId === leaseId);
     if (index === -1) {
       return false;
     }

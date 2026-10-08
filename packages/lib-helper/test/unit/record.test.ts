@@ -18,6 +18,17 @@ const RECORD: HelperRecord = {
   payload: {user: 'dev', port: 22, shared: true},
 };
 
+/** A value the registry must refuse, typed as a record so that the serializer can be called with it. */
+function asRecord(value: Record<string, unknown>): HelperRecord {
+  // The serializer checks at run time what this cast hides from the compiler.
+  return value as unknown as HelperRecord;
+}
+
+/** The sample record with `fields` laid over it, however wrong they are. */
+function untyped(fields: Record<string, unknown>): HelperRecord {
+  return asRecord({...RECORD, ...fields});
+}
+
 describe('record (card helper-01 table)', () => {
   it("recordPath('/r', 'ssh.connection', 'user@host:22') -> /r/ssh.connection/<32 hex>.json", () => {
     const path = recordPath('/r', 'ssh.connection', 'user@host:22');
@@ -49,16 +60,28 @@ describe('record (card helper-01 table)', () => {
   });
 
   it('serializeRecord with an extra field -> throws RecordShapeError', () => {
-    const withExtra = {...RECORD, extra: 1} as unknown as HelperRecord;
-    throws(() => serializeRecord(withExtra), {name: 'RecordShapeError'});
+    throws(() => serializeRecord(untyped({extra: 1})), {
+      name: 'RecordShapeError',
+    });
   });
 
   it('serializeRecord with payload {answer: {nested: 1}} -> throws RecordShapeError', () => {
-    const withNested = {
-      ...RECORD,
-      payload: {answer: {nested: 1}},
-    } as unknown as HelperRecord;
-    throws(() => serializeRecord(withNested), {name: 'RecordShapeError'});
+    throws(() => serializeRecord(untyped({payload: {answer: {nested: 1}}})), {
+      name: 'RecordShapeError',
+    });
+  });
+
+  it('serializeRecord with an array payload -> throws RecordShapeError', () => {
+    throws(() => serializeRecord(untyped({payload: [1, 'a']})), {
+      name: 'RecordShapeError',
+    });
+  });
+
+  it('parseRecord of a record with an array payload -> undefined', () => {
+    strictEqual(
+      parseRecord(JSON.stringify({...RECORD, payload: [1, 'a']})),
+      undefined,
+    );
   });
 
   it("serializeRecord with payload {password: 'x'} -> throws RecordShapeError", () => {
@@ -76,7 +99,7 @@ describe('record (card helper-01 table)', () => {
   it('serializeRecord with the nonce field missing -> throws RecordShapeError', () => {
     const withoutNonce: Record<string, unknown> = {...RECORD};
     delete withoutNonce.nonce;
-    throws(() => serializeRecord(withoutNonce as unknown as HelperRecord), {
+    throws(() => serializeRecord(asRecord(withoutNonce)), {
       name: 'RecordShapeError',
     });
   });

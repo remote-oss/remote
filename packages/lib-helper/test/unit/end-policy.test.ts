@@ -175,7 +175,7 @@ describe('end policies (card helper-02 table)', () => {
       outcome => outcomes.push(outcome),
     );
     runner.dispose();
-    table.close(table.open().id);
+    table.close(table.open().leaseId);
     clock.advance(10000);
     deepStrictEqual(outcomes, []);
   });

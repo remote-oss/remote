@@ -16,7 +16,6 @@ export class FakeClock {
   private pending: PendingTimer[] = [];
 
   /** The clock's current time. */
-  // eslint-disable-next-line id-length -- the clock's method name, fixed by the contract
   now(): number {
     return this.time;
   }
