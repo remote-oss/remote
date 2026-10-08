@@ -71,6 +71,8 @@ class FakeHarness implements HarnessDependencies {
     return Promise.resolve();
   };
 
+  readonly editorCli = (): Promise<string> => Promise.resolve('code');
+
   readonly runTests = (root: string, variables: HarnessVariables): number => {
     this.variables = variables;
     return this.testStatus;
@@ -137,8 +139,10 @@ describe('acceptance', () => {
     it('finds the VSIX of each extension under test and no other', () => {
       workspace.write('dist/remote-ssh-0.0.0.vsix', '');
       workspace.write('dist/remote-ssh-edit-0.0.0.vsix', '');
+      workspace.write('dist/remote-wsl-0.0.0.vsix', '');
       deepStrictEqual(packagedExtensions(workspace.root), [
         path.join(workspace.root, 'dist', 'remote-ssh-0.0.0.vsix'),
+        path.join(workspace.root, 'dist', 'remote-ssh-edit-0.0.0.vsix'),
       ]);
     });
 
@@ -173,6 +177,23 @@ describe('acceptance', () => {
         HARNESS_RUN_FOLDER: harness.runFolder,
         HARNESS_VSIX_FILES: '',
       });
+    });
+
+    it("installs the packaged VSIX into the run's own extensions folder before the tests", async () => {
+      workspace.write('dist/remote-ssh-edit-0.0.0.vsix', '');
+      await runAcceptance(workspace.root, harness);
+      deepStrictEqual(
+        harness.calls.filter(call => call.startsWith('code ')),
+        [
+          [
+            'code',
+            `--extensions-dir=${path.join(harness.runFolder, 'extensions')}`,
+            `--user-data-dir=${path.join(harness.runFolder, 'user-data')}`,
+            '--install-extension',
+            path.join(workspace.root, 'dist', 'remote-ssh-edit-0.0.0.vsix'),
+          ].join(' '),
+        ],
+      );
     });
 
     it("returns the tests' exit code", async () => {
@@ -231,23 +252,6 @@ describe('acceptance', () => {
             '--disable-workspace-trust',
           ],
         ],
-      );
-    });
-
-    it('installs no extension before one is packaged', () => {
-      deepStrictEqual(
-        acceptanceConfiguration('/repo', {HARNESS_VSIX_FILES: ''})
-          .installExtensions,
-        [],
-      );
-    });
-
-    it('installs every packaged VSIX it is given', () => {
-      deepStrictEqual(
-        acceptanceConfiguration('/repo', {
-          HARNESS_VSIX_FILES: ['/a.vsix', '/b.vsix'].join(path.delimiter),
-        }).installExtensions,
-        ['/a.vsix', '/b.vsix'],
       );
     });
 

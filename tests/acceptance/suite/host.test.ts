@@ -7,6 +7,13 @@ describe('the acceptance harness', () => {
     strictEqual(vscode.version, '1.139.1');
   });
 
+  it('loads the packaged SSH config editing extension', () => {
+    strictEqual(
+      vscode.extensions.getExtension('remote-oss.remote-ssh-edit')?.id,
+      'remote-oss.remote-ssh-edit',
+    );
+  });
+
   it('gives the editor the harness ssh_config as remote.SSH.configFile', () => {
     strictEqual(
       vscode.workspace.getConfiguration('remote.SSH').get('configFile'),
