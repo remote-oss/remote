@@ -161,8 +161,11 @@ describe('install planner (card server-04 table)', () => {
   it('an existing cliServers layout with the commit and no bin layout -> reuse of the cliServers layout', () => {
     const layout = cliLayout('abc');
     const result = plan(input({facts: {...facts, existingLayouts: [layout]}}));
-    deepStrictEqual(asPlan(result).kind, 'reuse');
-    deepStrictEqual((asPlan(result) as Plan & {kind: 'reuse'}).layout, layout);
+    const planOf = asPlan(result);
+    deepStrictEqual(
+      [planOf.kind, (planOf as Plan & {kind: 'reuse'}).layout],
+      ['reuse', layout],
+    );
   });
 
   it('an existing bin layout with another commit and a resolved source -> download', () => {
@@ -199,10 +202,11 @@ describe('install planner (card server-04 table)', () => {
     const result = plan(
       input({source: {kind: 'resolved', address: 'https://x/s.tgz'}}),
     );
-    const planOf = asPlan(result);
-    deepStrictEqual(planOf.kind, 'download');
-    deepStrictEqual(planOf.where, 'host');
-    deepStrictEqual(planOf.clientFallback, true);
+    const planOf = asPlan(result) as Plan & {kind: 'download'};
+    deepStrictEqual(
+      [planOf.kind, planOf.where, planOf.clientFallback],
+      ['download', 'host', true],
+    );
   });
 
   it('hostFirst always -> where client, clientFallback false', () => {

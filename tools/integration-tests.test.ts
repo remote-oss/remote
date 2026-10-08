@@ -45,20 +45,24 @@ describe('integration-tests', () => {
   });
 
   it('does not start the editor when no package has integration tests', () => {
-    strictEqual(runIntegrationTests(workspace.root, [], recordingRunner), 0);
-    deepStrictEqual(started, []);
+    deepStrictEqual(
+      [runIntegrationTests(workspace.root, [], recordingRunner), started],
+      [0, []],
+    );
   });
 
   it('starts the runner with the arguments and returns its exit code', () => {
     workspace.write('packages/remote-a/test/integration/.keep', '');
-    strictEqual(
-      runIntegrationTests(
-        workspace.root,
-        ['--label', 'remote-a'],
-        recordingRunner,
-      ),
-      3,
+    deepStrictEqual(
+      [
+        runIntegrationTests(
+          workspace.root,
+          ['--label', 'remote-a'],
+          recordingRunner,
+        ),
+        started,
+      ],
+      [3, [['--label', 'remote-a']]],
     );
-    deepStrictEqual(started, [['--label', 'remote-a']]);
   });
 });

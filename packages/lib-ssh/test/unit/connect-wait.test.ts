@@ -22,17 +22,17 @@ describe('connect wait', () => {
   it('F-2105: runs out at the connect timeout plus 2 s', () => {
     waitFor().start();
     clock.advance(11999);
-    deepStrictEqual(timeouts, 0);
+    const before = timeouts;
     clock.advance(1);
-    deepStrictEqual(timeouts, 1);
+    deepStrictEqual([before, timeouts], [0, 1]);
   });
 
   it('F-2105: with ConnectTimeout 0 the wait is exactly the unbounded limit, with no margin', () => {
     waitFor({connectTimeoutSeconds: 0, unboundedWaitSeconds: 120}).start();
     clock.advance(119999);
-    deepStrictEqual(timeouts, 0);
+    const before = timeouts;
     clock.advance(1);
-    deepStrictEqual(timeouts, 1);
+    deepStrictEqual([before, timeouts], [0, 1]);
   });
 
   it('F-2308 BR-5: pauses while a prompt is open', () => {
@@ -51,9 +51,9 @@ describe('connect wait', () => {
     wait.promptOpened();
     wait.promptAnswered();
     clock.advance(11999);
-    deepStrictEqual(timeouts, 0);
+    const before = timeouts;
     clock.advance(1);
-    deepStrictEqual(timeouts, 1);
+    deepStrictEqual([before, timeouts], [0, 1]);
   });
 
   it('counts time that no prompt of ours pauses, as with a user askpass', () => {

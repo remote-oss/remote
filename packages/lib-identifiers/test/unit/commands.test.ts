@@ -166,12 +166,15 @@ describe('registerCommands', () => {
   });
 
   it('registers no command when one has no handler', () => {
-    throws(() =>
+    let thrown = false;
+    try {
       // @ts-expect-error: the table names a command the handlers leave out.
       registerCommands(host, 'serving', COMMANDS, {
         open: {execute: () => undefined},
-      }),
-    );
-    deepStrictEqual([...host.callbacks.keys()], []);
+      });
+    } catch {
+      thrown = true;
+    }
+    deepStrictEqual([thrown, [...host.callbacks.keys()]], [true, []]);
   });
 });

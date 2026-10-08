@@ -1,4 +1,4 @@
-import {deepStrictEqual, throws} from 'node:assert';
+import {deepStrictEqual} from 'node:assert';
 import {
   EndPolicyRunner,
   type EndPolicy,
@@ -135,19 +135,23 @@ describe('end policies (card helper-02 table)', () => {
   it('policy {kind: graceAfterLastLease, milliseconds: 0} -> constructor throws PolicyError; same for -1 and NaN', () => {
     const {clock, table} = armed(grace);
     const outcomes: PolicyOutcome[] = [];
-    for (const milliseconds of [0, -1, NaN]) {
-      throws(
-        () =>
-          new EndPolicyRunner(
-            {kind: 'graceAfterLastLease', milliseconds},
-            table,
-            clock.scheduler(),
-            outcome => outcomes.push(outcome),
-          ),
-        /delay/,
-      );
+    function throwsDelay(milliseconds: number): boolean {
+      try {
+        new EndPolicyRunner(
+          {kind: 'graceAfterLastLease', milliseconds},
+          table,
+          clock.scheduler(),
+          outcome => outcomes.push(outcome),
+        );
+      } catch (error) {
+        return error instanceof Error && error.message.includes('delay');
+      }
+      return false;
     }
-    deepStrictEqual(outcomes, []);
+    deepStrictEqual(
+      [throwsDelay(0), throwsDelay(-1), throwsDelay(NaN), outcomes],
+      [true, true, true, []],
+    );
   });
 
   it('the runner with a table that is already empty at construction -> armed as if a lease had just closed: advance the delay -> end', () => {
