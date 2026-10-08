@@ -1,25 +1,35 @@
 # Remote - SSH: Editing Configuration Files
 
-Language support for OpenSSH configuration files in Code - OSS and the editors built on it:
+Highlighting and completion for SSH config files, with every keyword documented as you type.
 
-- **Syntax highlighting** of keywords, values and comments.
-- **Keyword completion**: at the start of a line, the list of `ssh_config` keywords, each with its documentation.
-- **A tunnel template**: the "Configure tunnel" completion inserts a `Host` block with `HostName`, `LocalForward`
-  and `User`, ready to fill in.
-- **Editing aids**: line comments with `#`, bracket matching and auto-closing, indentation after a `Host` line.
+## What you get
 
-It applies to `~/.ssh/config`, `/etc/ssh/ssh_config`, files named `ssh.config`, and any file whose language you set
-to "SSH Config". It works the same in local and remote windows and in Restricted Mode, and it pairs with
-[remote-oss.remote-ssh](https://github.com/remote-oss/remote-ssh), which connects to the hosts these files describe.
+- Syntax highlighting for `ssh_config` files.
+- Keyword completion, with the OpenSSH manual's wording for each keyword as you type.
+- A snippet that sets up a port forward.
 
-## Questions, feedback and contributing
+## Get started
 
-- Report a problem or ask a question: [remote-oss/remote-ssh-edit issues](https://github.com/remote-oss/remote-ssh-edit/issues)
-- Source code: [remote-oss/remote](https://github.com/remote-oss/remote), folder `packages/remote-ssh-edit`
+1. Install the extension.
+2. Open `~/.ssh/config`, or a file named `ssh.config`.
+3. Start typing a keyword at the beginning of a line.
 
-## Data collection
+## Requirements
 
-This extension collects no telemetry or usage data and sends nothing anywhere.
+None beyond the editor.
+
+## Settings and commands
+
+This extension contributes no settings or commands.
+
+## Part of remote-oss
+
+Part of remote-oss, a collection of extensions that bring remote development to Code - OSS and the editors built on
+it; install the Remote Development pack to get all of them.
+
+## Support
+
+Report a problem or ask a question in the issue tracker, https://github.com/remote-oss/remote/issues.
 
 ## License
 
