@@ -33,6 +33,7 @@ const REAL_TOOLS = [
   'date',
   'dirname',
   'grep',
+  'gzip',
   'head',
   'id',
   'ln',
