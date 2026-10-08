@@ -31,6 +31,9 @@ export const LICENCE_HOSTS: readonly string[] = [
   'vscode.download.prss.microsoft.com',
 ];
 
+/** The page of the server licence terms, for an editor whose product.json names none. */
+export const SERVER_TERMS_URL = 'https://aka.ms/vscode-server-license';
+
 /** URL prefixes of the built-in MIT sources: a server from these needs no licence acceptance. */
 export const MIT_RELEASE_PREFIXES: readonly string[] = [
   'https://github.com/VSCodium/vscodium/releases/',

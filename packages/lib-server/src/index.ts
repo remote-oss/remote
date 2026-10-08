@@ -69,3 +69,14 @@ export {
   type StartNotice,
   type StartOutcome,
 } from './lifecycle/runtime.ts';
+export {
+  type AcceptanceStore,
+  acceptanceKey,
+  classifyServerLicence,
+  ensureAccepted,
+  type GateOutcome,
+  type LicenceClassification,
+  type LicenceModal,
+  type LicenceTerms,
+  type ModalAnswer,
+} from './gate/licence-gate.ts';

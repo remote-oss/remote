@@ -245,6 +245,9 @@ importers:
       lib-log:
         specifier: workspace:*
         version: link:../lib-log
+      lib-product:
+        specifier: workspace:*
+        version: link:../lib-product
 
   packages/lib-ssh:
     dependencies:
