@@ -18,13 +18,13 @@ and the existing test that checks nls key parity (adjust expected values only). 
 | `displayName` | `Remote - SSH: Editing Configuration Files` (literal, unchanged) |
 | `description` | `%description%` with the English text `Highlighting and completion for SSH config files, with every keyword documented as you type.` in `package.nls.json` and in every `package.nls.<locale>.json` (English in all 14 for now) |
 | `keywords` | `["remote development", "remote", "ssh", "ssh config"]` |
-| `repository` | `{ "type": "git", "url": "https://github.com/remote-oss/remote" }` |
+| `repository` | `{ "type": "git", "url": "https://github.com/remote-oss/remote.git", "directory": "packages/remote-ssh-edit" }` (as #91 set it) |
 | `bugs` | `{ "url": "https://github.com/remote-oss/remote/issues" }` |
-| `homepage` | `https://github.com/remote-oss/remote#readme` |
 | `license` | `MIT` (unchanged) |
 | `icon` | absent (the family icon is a later card) |
 
-README (replace the body, keep the maintainers' table at the end as it is), in this order and voice, no other
+README (replace the body; the maintainers' table at the end stays for 0.1 and leaves every shipped README before any
+publication, #108, because it names internal component ids), in this order and voice, no other
 sections: (1) the display name as the title and the one-sentence description; (2) **What you get**: three bullets:
 syntax highlighting for `ssh_config` files; keyword completion with the OpenSSH manual's wording for each keyword as
 you type; a snippet that sets up a port forward; (3) **Get started**: three steps: install the extension; open
