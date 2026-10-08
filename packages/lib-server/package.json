@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing/fake-clock": "./src/testing/fake-clock.ts",
+    "./testing/memory-lock-port": "./src/testing/memory-lock-port.ts"
   },
   "dependencies": {
     "lib-host": "workspace:*",
