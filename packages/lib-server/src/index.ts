@@ -28,3 +28,16 @@ export {
   type StartParameters,
   type StepwiseAction,
 } from './scripts/bootstrap.ts';
+export {
+  type ProbedHost,
+  type ProbeFailure,
+  type ProbeOutcome,
+  probe,
+} from './lifecycle/probe.ts';
+export {type StepOptions, type StepRun, runStep} from './lifecycle/run-step.ts';
+export {
+  cleanup,
+  kill,
+  type MaintenanceOutcome,
+  uninstall,
+} from './lifecycle/maintenance.ts';
