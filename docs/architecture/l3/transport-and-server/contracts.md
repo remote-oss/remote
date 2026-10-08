@@ -362,6 +362,8 @@ Rules inside the scripts:
 - Lowercase `http_proxy` and `https_proxy` are exported in F-2404 BR-5's text, and the host's login environment
   wins (F-2404 BR-10).
 - Locks use `flock` or atomic `ln` (F-2408, F-2702).
+- The scripts trap HUP, INT and TERM and release the host lock before exiting, so a killed `ssh` never leaves later
+  connects at `LockBusy` (found in review, 2026-10-08).
 - macOS sockets go in `TMPDIR` (F-2702).
 - Windows uses no WMI process query, and a standard Windows user is not failed on purpose: no setting, and the
   reference's recorded failure is drift (R-86, F-3908). The PowerShell script's details are provisional (lab) until
@@ -442,6 +444,9 @@ Rules:
   stays in the table as an inactive entry.
 - An acceptance is stored per profile under a key derived from the terms URL, and is never synced.
 - The modal offers "Accept and Continue" and "Cancel" (R-68).
+- An explicit acceptance is the user's acceptance for this connection even when storing it fails: the connect
+  proceeds, the gate reports `remembered: false`, the store failure is logged once, and the user is asked again next
+  time. A server is never installed or started without an acceptance in the same session (ruled 2026-10-08).
 
 Never: accept for the user.
 
