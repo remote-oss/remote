@@ -630,4 +630,74 @@ describe('listHosts (the host entries of the files in effect)', () => {
       ['inc', 'other', 'third'],
     );
   });
+
+  it('F-2202.BR-10 (revised): an include cycle reads each file once and ends', () => {
+    deepStrictEqual(
+      names('Include b.conf\nHost a', [
+        ['/home/dev/.ssh/b.conf', 'Include config\nHost b'],
+      ]),
+      ['a', 'b'],
+    );
+  });
+
+  it('F-2202.BR-10 (revised): a file that includes itself is read once', () => {
+    deepStrictEqual(names('Include config\nHost a'), ['a']);
+  });
+
+  it('F-2202.BR-10 (revised): a file reached twice through different paths is read once', () => {
+    deepStrictEqual(
+      names('Include b.conf\nInclude c.conf\nHost a', [
+        ['/home/dev/.ssh/b.conf', 'Include c.conf\nHost b'],
+        ['/home/dev/.ssh/c.conf', 'Host c'],
+      ]),
+      ['a', 'b', 'c'],
+    );
+  });
+
+  it('F-2202.BR-10 (revised): a second Include of the same file is skipped', () => {
+    deepStrictEqual(
+      names('Include b.conf\nInclude b.conf\nHost a', [
+        ['/home/dev/.ssh/b.conf', 'Host b'],
+      ]),
+      ['a', 'b'],
+    );
+  });
+
+  it('F-2202.BR-11 (revised): a star include skips a hidden file', () => {
+    deepStrictEqual(
+      names('Include conf.d/*', [
+        ['/home/dev/.ssh/conf.d/.hidden', 'Host .hidden'],
+        ['/home/dev/.ssh/conf.d/x', 'Host x'],
+      ]),
+      ['x'],
+    );
+  });
+
+  it('F-2202.BR-11 (revised): a dot-star include reads only the hidden file', () => {
+    deepStrictEqual(
+      names('Include conf.d/.*', [
+        ['/home/dev/.ssh/conf.d/.hidden', 'Host .hidden'],
+        ['/home/dev/.ssh/conf.d/x', 'Host x'],
+      ]),
+      ['.hidden'],
+    );
+  });
+
+  it('F-2202.BR-11 (revised): a question-mark include does not match a hidden file', () => {
+    deepStrictEqual(
+      names('Include conf.d/?idden', [
+        ['/home/dev/.ssh/conf.d/.hidden', 'Host .hidden'],
+      ]),
+      [],
+    );
+  });
+
+  it('F-2202.BR-11 (revised): an Include of an exact hidden name includes it', () => {
+    deepStrictEqual(
+      names('Include conf.d/.hidden', [
+        ['/home/dev/.ssh/conf.d/.hidden', 'Host .hidden'],
+      ]),
+      ['.hidden'],
+    );
+  });
 });
