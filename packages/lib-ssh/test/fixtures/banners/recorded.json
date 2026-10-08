@@ -1,0 +1,4 @@
+{
+  "source": "OpenSSH_10.3p1, LibreSSL 3.3.6\nssh -V",
+  "text": "OpenSSH_10.3p1, LibreSSL 3.3.6\n"
+}
