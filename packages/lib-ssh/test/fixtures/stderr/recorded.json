@@ -1,0 +1,21 @@
+[
+  {
+    "source": "OpenSSH_10.3p1, LibreSSL 3.3.6\nssh -F /dev/null -o BatchMode=yes -o ConnectTimeout=1 nosuch.invalid exit",
+    "errorLines": [
+      "ssh: Could not resolve hostname nosuch.invalid: nodename nor servname provided, or not known"
+    ],
+    "exitStatus": 255
+  },
+  {
+    "source": "OpenSSH_10.3p1, LibreSSL 3.3.6\nssh -F /dev/null -o BatchMode=yes -o ConnectTimeout=1 -p 1 127.0.0.1 exit",
+    "errorLines": ["ssh: connect to host 127.0.0.1 port 1: Connection refused"],
+    "exitStatus": 255
+  },
+  {
+    "source": "OpenSSH_10.3p1, LibreSSL 3.3.6\nssh -F /dev/null -o BatchMode=yes -o ConnectTimeout=1 192.0.2.1 exit",
+    "errorLines": [
+      "ssh: connect to host 192.0.2.1 port 22: Operation timed out"
+    ],
+    "exitStatus": 255
+  }
+]
