@@ -1,0 +1,9 @@
+{
+  "name": "lib-helper",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing/memory-file-port": "./src/testing/memory-file-port.ts"
+  }
+}
