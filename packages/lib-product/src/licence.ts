@@ -8,6 +8,7 @@ import {
   LICENCE_HOSTS,
   type LicenceRuleName,
   MIT_RELEASE_PREFIXES,
+  SERVER_TERMS_URL,
 } from './product-table.ts';
 
 /** What is known about the server at the moment of use. */
@@ -57,4 +58,17 @@ export function classifyLicence(
   activeRules: readonly LicenceRuleName[] = ACTIVE_LICENCE_RULES,
 ): boolean {
   return activeRules.some(rule => RULES[rule](facts));
+}
+
+/**
+ * The page of the server licence terms the user is shown: the editor's own link when its product.json lists licence
+ * lines and names one, otherwise the page of the product table.
+ */
+export function licenceTermsUrl(
+  serverLicenseEmpty: boolean,
+  serverLicenseUrl: string,
+): string {
+  return !serverLicenseEmpty && serverLicenseUrl !== ''
+    ? serverLicenseUrl
+    : SERVER_TERMS_URL;
 }

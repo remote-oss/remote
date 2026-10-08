@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "lib-host": "workspace:*",
-    "lib-log": "workspace:*"
+    "lib-log": "workspace:*",
+    "lib-product": "workspace:*"
   }
 }

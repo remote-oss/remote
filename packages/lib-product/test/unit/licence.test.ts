@@ -3,6 +3,7 @@ import {
   ACTIVE_LICENCE_RULES,
   classifyLicence,
   type LicenceFacts,
+  licenceTermsUrl,
 } from '../../src/index.ts';
 
 const VSCODE = {
@@ -126,6 +127,29 @@ describe('classifyLicence (F-3902 rule 11, R-80)', () => {
         ['clientLicence'],
       ),
       true,
+    );
+  });
+});
+
+describe('licenceTermsUrl (the page the modal links)', () => {
+  it("F-3902.11: the editor's own link when its licence lines are listed", () => {
+    strictEqual(
+      licenceTermsUrl(false, 'https://terms.example/server'),
+      'https://terms.example/server',
+    );
+  });
+
+  it('F-3902.11: the page of the product table when the editor names no link', () => {
+    strictEqual(
+      licenceTermsUrl(false, ''),
+      'https://aka.ms/vscode-server-license',
+    );
+  });
+
+  it('F-3902.11: the page of the product table when the editor lists no licence lines', () => {
+    strictEqual(
+      licenceTermsUrl(true, 'https://terms.example/server'),
+      'https://aka.ms/vscode-server-license',
     );
   });
 });

@@ -8,7 +8,11 @@ export {
   expand,
   type PlaceholderValues,
 } from './expand.ts';
-export {classifyLicence, type LicenceFacts} from './licence.ts';
+export {
+  classifyLicence,
+  type LicenceFacts,
+  licenceTermsUrl,
+} from './licence.ts';
 export {
   type OverridePolicy,
   OVERRIDE_POLICIES,
