@@ -38,6 +38,9 @@ const SYSTEM_FILES = {
   windowsUnderProgramData: ['ssh', 'ssh_config'],
 } as const;
 
+/** The Windows program-data folder, when the client names none. */
+const WINDOWS_PROGRAM_DATA = 'C:\\ProgramData';
+
 /** The path functions of a platform. */
 export function pathsFor(platform: ClientPlatform): path.PlatformPath {
   return platform === 'windows' ? path.win32 : path.posix;
@@ -76,7 +79,7 @@ export function filesInEffect(
   const systemFile =
     locations.platform === 'windows'
       ? paths.join(
-          locations.programDataFolder ?? '',
+          locations.programDataFolder ?? WINDOWS_PROGRAM_DATA,
           ...SYSTEM_FILES.windowsUnderProgramData,
         )
       : SYSTEM_FILES.posix;

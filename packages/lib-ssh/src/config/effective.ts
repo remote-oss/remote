@@ -20,8 +20,8 @@ export interface EffectiveOptions {
 export type EffectiveOptionsResult =
   {options: EffectiveOptions} | {parseError: string};
 
-/** The value `ssh -G` prints for an option that is not set. */
-const UNSET_VALUE = 'none';
+/** The values `ssh -G` prints for an option that is not set. */
+const UNSET_VALUES = new Set(['', 'none']);
 
 /** Parses the text `ssh -G` printed for one target. */
 export function parseEffectiveOptions(text: string): EffectiveOptionsResult {
@@ -32,7 +32,9 @@ export function parseEffectiveOptions(text: string): EffectiveOptionsResult {
       continue;
     }
     const separator = trimmed.indexOf(' ');
-    const keyword = separator < 0 ? trimmed : trimmed.slice(0, separator);
+    const keyword = (
+      separator < 0 ? trimmed : trimmed.slice(0, separator)
+    ).toLowerCase();
     const value = separator < 0 ? '' : trimmed.slice(separator + 1);
     values.set(keyword, [...(values.get(keyword) ?? []), value]);
   }
@@ -49,11 +51,11 @@ export function parseEffectiveOptions(text: string): EffectiveOptionsResult {
     localForwards: values.get('localforward') ?? [],
   };
   const connectTimeout = values.get('connecttimeout')?.[0];
-  if (connectTimeout !== undefined && connectTimeout !== UNSET_VALUE) {
+  if (connectTimeout !== undefined && !UNSET_VALUES.has(connectTimeout)) {
     options.connectTimeout = connectTimeout;
   }
   const remoteCommand = values.get('remotecommand')?.[0];
-  if (remoteCommand !== undefined && remoteCommand !== UNSET_VALUE) {
+  if (remoteCommand !== undefined && !UNSET_VALUES.has(remoteCommand)) {
     options.remoteCommand = remoteCommand;
   }
   return {options};
