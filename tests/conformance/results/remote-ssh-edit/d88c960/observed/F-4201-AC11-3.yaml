@@ -1,0 +1,449 @@
+case: F-4201-AC11-3
+feature: F-4201
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/accepted-after-equals/statusbar[1]/text: 'Ln 2, Col 20' != 'Ln 3, Col 1'"
+  - "/accepted-after-equals/statusbar[1]/aria: 'Ln 2, Col 20' != 'Ln 3, Col 1'"
+  - "/accepted-after-equals/tokens:active@2[0]/text: 'Port=AddKeysToAgent' != 'Port=A'"
+  - '/accepted-after-equals/tokens:active@2[0]/length: 19 != 6'
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - goto:
+      line: 2
+      col: 1
+  - key: P
+  - key: o
+  - key: r
+  - key: t
+  - key: '='
+  - key: A
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - observe:
+      id: accepted-after-equals
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 2
+expect:
+  accepted-after-equals:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 2, Col 20
+        aria: Ln 2, Col 20
+        tooltip: null
+    tokens:active@2:
+      - col: 1
+        text: Port=AddKeysToAgent
+        length: 19
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+observed:
+  normalized:
+    accepted-after-equals:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 1
+          aria: Ln 3, Col 1
+          tooltip: null
+      tokens:active@2:
+        - col: 1
+          text: Port=A
+          length: 6
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 0.8
+    - i: 2
+      step:
+        goto:
+          line: 2
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.5
+      at: 3.5
+      position:
+        line: 2
+        col: 1
+    - i: 3
+      step:
+        key: P
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 4.0
+      selection: Ln 2, Col 2
+      state_after:
+        title: ● config - F-4201-AC11-3 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: PasswordAuthentication, Property
+                focused: true
+              - text: PermitLocalCommand, Property
+                focused: false
+              - text: PKCS11Provider, Property
+                focused: false
+              - text: Port, Property
+                focused: false
+              - text: PreferredAuthentications, Property
+                focused: false
+              - text: Protocol, Property
+                focused: false
+              - text: ProxyCommand, Property
+                focused: false
+              - text: ProxyJump, Property
+                focused: false
+              - text: ProxyUseFdpass, Property
+                focused: false
+              - text: PubkeyAuthentication, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: UsePrivilegedPort, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC11-3
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 4
+      step:
+        key: o
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 5.7
+      selection: Ln 2, Col 3
+      state_after:
+        title: ● config - F-4201-AC11-3 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Port, Property
+                focused: true
+              - text: Protocol, Property
+                focused: false
+              - text: ProxyCommand, Property
+                focused: false
+              - text: ProxyJump, Property
+                focused: false
+              - text: ProxyUseFdpass, Property
+                focused: false
+              - text: PasswordAuthentication, Property
+                focused: false
+              - text: GatewayPorts, Property
+                focused: false
+              - text: PermitLocalCommand, Property
+                focused: false
+              - text: PKCS11Provider, Property
+                focused: false
+              - text: UsePrivilegedPort, Property
+                focused: false
+              - text: NumberOfPasswordPrompts, Property
+                focused: false
+              - text: PubkeyAuthentication, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC11-3
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 5
+      step:
+        key: r
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 7.4
+      selection: Ln 2, Col 4
+      state_after:
+        title: ● config - F-4201-AC11-3 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Port, Property
+                focused: true
+              - text: Protocol, Property
+                focused: false
+              - text: ProxyCommand, Property
+                focused: false
+              - text: ProxyJump, Property
+                focused: false
+              - text: ProxyUseFdpass, Property
+                focused: false
+              - text: PasswordAuthentication, Property
+                focused: false
+              - text: GatewayPorts, Property
+                focused: false
+              - text: PKCS11Provider, Property
+                focused: false
+              - text: UsePrivilegedPort, Property
+                focused: false
+              - text: PermitLocalCommand, Property
+                focused: false
+              - text: NumberOfPasswordPrompts, Property
+                focused: false
+              - text: PreferredAuthentications, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC11-3
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 6
+      step:
+        key: t
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 9.2
+      selection: Ln 2, Col 5
+      state_after:
+        title: ● config - F-4201-AC11-3 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Port, Property
+                focused: true
+              - text: Protocol, Property
+                focused: false
+              - text: GatewayPorts, Property
+                focused: false
+              - text: UsePrivilegedPort, Property
+                focused: false
+              - text: PasswordAuthentication, Property
+                focused: false
+              - text: NumberOfPasswordPrompts, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC11-3
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 7
+      step:
+        key: '='
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 10.9
+      selection: Ln 2, Col 6
+      state_after:
+        title: ● config - F-4201-AC11-3 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC11-3
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 8
+      step:
+        key: A
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 12.7
+      selection: Ln 2, Col 7
+      state_after:
+        title: ● config - F-4201-AC11-3 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: true
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: KexAlgorithms, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: ClearAllForwardings, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: PubkeyAuthentication, Property
+                focused: false
+              - text: ServerAliveCountMax, Property
+                focused: false
+              - text: ServerAliveInterval, Property
+                focused: false
+              - text: ForwardAgent, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC11-3
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 9
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 14.4
+    - i: 10
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 17.1
+      selection: Ln 3, Col 1
+      state_after:
+        title: ● config - F-4201-AC11-3 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC11-3
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 11
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 18.8
+    - i: 12
+      step:
+        observe:
+          id: accepted-after-equals
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 2
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 21.5
+      observation_raw: null

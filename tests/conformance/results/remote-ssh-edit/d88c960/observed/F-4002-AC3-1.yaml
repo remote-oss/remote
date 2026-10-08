@@ -1,0 +1,454 @@
+case: F-4002-AC3-1
+feature: F-4002
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - '/first-keystrokes/suggest:active@5:1/items[0]/documentation: "Specifies whether the connection to the authentication agent
+    (if any) will be forwarded to the remote machine. The argument must be ``yes'''' or ``no .'''' The default is ``no .''''\nAgent
+    forwarding should be enabled with caution. Users with the ability to bypass file permissions on the remote host (for the
+    agent''s Unix-domain socket) can ac'
+  - '/first-keystrokes/suggest:active@5:1/items[1]/documentation: "Specifies whether X11 connections will be automatically redirected
+    over the secure channel and DISPLAY set. The argument must be ``yes'''' or ``no .'''' The default is ``no .''''\nX11 forwarding
+    should be enabled with caution. Users with the ability to bypass file permissions on the remote host (for the user''s X11
+    authorization database) can '
+  - "/first-keystrokes/suggest:active@5:1/items[2]/documentation: 'Specify a timeout for untrusted X11 forwarding using the
+    format described in the TIME FORMATS section of sshd_config(5). X11 connections received by ssh(1) after this time will
+    be refused. The default is to disable untrusted X11 forwarding after twenty minutes has elapsed.' != 'Specify a timeout
+    for untrusted X11 forwarding using the fo"
+  - '/first-keystrokes/suggest:active@5:1/items[3]/documentation: "If this option is set to ``yes ,'''' remote X11 clients will
+    have full access to the original X11 display.\nIf this option is set to ``no ,'''' remote X11 clients will be considered
+    untrusted and prevented from stealing or tampering with data belonging to trusted X11 clients. Furthermore, the xauth(1)
+    token used for the session will be set '
+  - '/first-keystrokes/suggest:active@5:1/items[4]/documentation: "Specifies that a TCP port on the local machine be forwarded
+    over the secure channel to the specified host and port from the remote machine. The first argument must be off [ on and
+    the second argument must be host : hostport . IPv6 addresses can be specified by enclosing addresses in square brackets.
+    Multiple forwardings may be specified'
+  - '/first-keystrokes/suggest:active@5:1/items[5]/documentation: "Specifies whether ssh(1) should terminate the connection
+    if it cannot set up all requested dynamic, tunnel, local, and remote port forwardings. The argument must be ``yes'''' or
+    ``no .'''' The default is ``no .''''" != ''Specifies whether ssh(1) should terminate the connection if it cannot set up
+    all requested dynamic, tunnel, local, and remot'
+  - '/first-keystrokes/suggest:active@5:1/items[6]/documentation: "Specifies that a TCP port on the remote machine be forwarded
+    over the secure channel to the specified host and port from the local machine. The first argument must be off [ on and the
+    second argument must be host : hostport . IPv6 addresses can be specified by enclosing addresses in square brackets. Multiple
+    forwardings may be specified'
+  - '/first-keystrokes/suggest:active@5:1/items[7]/documentation: "Specifies that a TCP port on the local machine be forwarded
+    over the secure channel, and the application protocol is then used to determine where to connect to from the remote machine.\nThe
+    argument must be off [ on IPv6 addresses can be specified by enclosing addresses in square brackets. By default, the local
+    port is bound in accordan'
+  - '/first-keystrokes/suggest:active@5:1/items[8]/documentation: "Specifies that all local, remote, and dynamic port forwardings
+    specified in the configuration files or on the command line be cleared. This option is primarily useful when used from the
+    ssh(1) command line to clear port forwardings set in configuration files, and is automatically set by scp(1) and sftp(1).
+    The argument must be ``yes'''' o'
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: ssh.config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 60
+  - observe:
+      id: first-keystrokes
+      what:
+        - suggest:
+            line: 5
+            col: 1
+            type: Forward
+            fields:
+              - label
+              - kind
+              - preselected
+              - documentation
+  - observe:
+      id: after-completion
+      what:
+        - title
+        - editors
+        - statusbar:
+            core:
+              - status.editor.mode
+              - status.editor.selection
+        - notifications
+        - notification_center
+        - dialogs
+        - banner
+        - quickpick
+        - panel: {}
+expect:
+  first-keystrokes:
+    suggest:active@5:1:
+      items:
+        - order: 0
+          label: ForwardAgent
+          kind: symbol-property
+          preselected: true
+          documentation:
+            "Specifies whether the connection to the authentication agent (if any) will be forwarded to the remote
+            machine. The argument must be ``yes'' or ``no .'' The default is ``no .''
+
+            Agent forwarding should be enabled with caution. Users with the ability to bypass file permissions on the remote
+            host (for the agent's Unix-domain socket) can access the local agent through the forwarded connection. attacker
+            cannot obtain key material from the agent, however they can perform operations on the keys that enable them to authenticate
+            using the identities loaded into the agent."
+        - order: 1
+          label: ForwardX11
+          kind: symbol-property
+          preselected: false
+          documentation:
+            "Specifies whether X11 connections will be automatically redirected over the secure channel and DISPLAY
+            set. The argument must be ``yes'' or ``no .'' The default is ``no .''
+
+            X11 forwarding should be enabled with caution. Users with the ability to bypass file permissions on the remote host
+            (for the user's X11 authorization database) can access the local X11 display through the forwarded connection.
+            attacker may then be able to perform activities such as keystroke monitoring if the ForwardX11Trusted option is
+            also enabled."
+        - order: 2
+          label: ForwardX11Timeout
+          kind: symbol-property
+          preselected: false
+          documentation:
+            Specify a timeout for untrusted X11 forwarding using the format described in the TIME FORMATS section
+            of sshd_config(5). X11 connections received by ssh(1) after this time will be refused. The default is to disable
+            untrusted X11 forwarding after twenty minutes has elapsed.
+        - order: 3
+          label: ForwardX11Trusted
+          kind: symbol-property
+          preselected: false
+          documentation:
+            "If this option is set to ``yes ,'' remote X11 clients will have full access to the original X11
+            display.
+
+            If this option is set to ``no ,'' remote X11 clients will be considered untrusted and prevented from stealing
+            or tampering with data belonging to trusted X11 clients. Furthermore, the xauth(1) token used for the session will
+            be set to expire after 20 minutes. Remote clients will be refused access after this time.
+
+            The default is ``no .''
+
+            See the X11 SECURITY extension specification for full details on the restrictions imposed on untrusted clients."
+        - order: 4
+          label: LocalForward
+          kind: symbol-property
+          preselected: false
+          documentation:
+            "Specifies that a TCP port on the local machine be forwarded over the secure channel to the specified
+            host and port from the remote machine. The first argument must be off [ on and the second argument must be host
+            : hostport . IPv6 addresses can be specified by enclosing addresses in square brackets. Multiple forwardings may
+            be specified, and additional forwardings can be given on the command line. Only the superuser can forward privileged
+            ports. By default, the local port is bound in accordance with the GatewayPorts setting. However, an explicit bind_address
+            may be used to bind the connection to a specific address. The bind_address of ``localhost'' indicates that the
+            listening port be bound for local use only, while an empty address or `*' indicates that the port should be available
+            from all interfaces."
+        - order: 5
+          label: ExitOnForwardFailure
+          kind: symbol-property
+          preselected: false
+          documentation:
+            Specifies whether ssh(1) should terminate the connection if it cannot set up all requested dynamic,
+            tunnel, local, and remote port forwardings. The argument must be ``yes'' or ``no .'' The default is ``no .''
+        - order: 6
+          label: RemoteForward
+          kind: symbol-property
+          preselected: false
+          documentation:
+            "Specifies that a TCP port on the remote machine be forwarded over the secure channel to the specified
+            host and port from the local machine. The first argument must be off [ on and the second argument must be host :
+            hostport . IPv6 addresses can be specified by enclosing addresses in square brackets. Multiple forwardings may be
+            specified, and additional forwardings can be given on the command line. Privileged ports can be forwarded only when
+            logging in as root on the remote machine.
+
+            If the port argument is `0 ,' the listen port will be dynamically allocated on the server and reported to the client
+            at run time.
+
+            If the bind_address is not specified, the default is to only bind to loopback addresses. If the bind_address is
+            `*' or an empty string, then the forwarding is requested to listen on all interfaces. Specifying a remote bind_address
+            will only succeed if the server's GatewayPorts option is enabled (see sshd_config(5)) ."
+        - order: 7
+          label: DynamicForward
+          kind: symbol-property
+          preselected: false
+          documentation:
+            "Specifies that a TCP port on the local machine be forwarded over the secure channel, and the application
+            protocol is then used to determine where to connect to from the remote machine.
+
+            The argument must be off [ on IPv6 addresses can be specified by enclosing addresses in square brackets. By default,
+            the local port is bound in accordance with the GatewayPorts setting. However, an explicit bind_address may be used
+            to bind the connection to a specific address. The bind_address of ``localhost'' indicates that the listening port
+            be bound for local use only, while an empty address or `*' indicates that the port should be available from all
+            interfaces.
+
+            Currently the SOCKS4 and SOCKS5 protocols are supported, and ssh(1) will act as a SOCKS server. Multiple forwardings
+            may be specified, and additional forwardings can be given on the command line. Only the superuser can forward privileged
+            ports."
+        - order: 8
+          label: ClearAllForwardings
+          kind: symbol-property
+          preselected: false
+          documentation:
+            Specifies that all local, remote, and dynamic port forwardings specified in the configuration files
+            or on the command line be cleared. This option is primarily useful when used from the ssh(1) command line to clear
+            port forwardings set in configuration files, and is automatically set by scp(1) and sftp(1). The argument must be
+            ``yes'' or ``no .'' The default is ``no .''
+      total: 9
+      message: null
+  after-completion:
+    title: ssh.config - F-4002-AC3-1 - ${APP_NAME}
+    editors:
+      active: ssh.config
+      groups:
+        - - title: ssh.config
+            active: true
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: SSH Config
+        aria: SSH Config
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 5, Col 1
+        aria: Ln 5, Col 1
+        tooltip: null
+    notifications: []
+    notification_center: []
+    dialogs: []
+    banner: null
+    quickpick:
+      visible: false
+    panel:
+      visible: false
+      _seconds: 0.2
+observed:
+  normalized:
+    first-keystrokes:
+      suggest:active@5:1:
+        items:
+          - order: 0
+            label: ForwardAgent
+            kind: symbol-property
+            preselected: true
+            documentation:
+              "Specifies whether the connection to the authentication agent (if any) will be forwarded to the remote
+              machine. The argument may be yes, no (the default), an explicit path to an agent socket or the name of an environment
+              variable (beginning with `$') in which to find the path.
+
+              Agent forwarding should be enabled with caution. Users with the ability to bypass file permissions on the remote
+              host (for the agent's Unix-domain socket) can access the local agent through the forwarded connection. An attacker
+              cannot obtain key material from the agent, however they can perform operations on the keys that enable them to
+              authenticate using the identities loaded into the agent."
+          - order: 1
+            label: ForwardX11
+            kind: symbol-property
+            preselected: false
+            documentation:
+              "Specifies whether X11 connections will be automatically redirected over the secure channel and DISPLAY
+              set. The argument must be yes or no (the default).
+
+              X11 forwarding should be enabled with caution. Users with the ability to bypass file permissions on the remote
+              host (for the user's X11 authorization database) can access the local X11 display through the forwarded connection.
+              An attacker may then be able to perform activities such as keystroke monitoring if the ForwardX11Trusted option
+              is also enabled."
+          - order: 2
+            label: ForwardX11Timeout
+            kind: symbol-property
+            preselected: false
+            documentation:
+              Specify a timeout for untrusted X11 forwarding using the format described in the TIME FORMATS section
+              of sshd_config(5). X11 connections received by ssh(1) after this time will be refused. Setting ForwardX11Timeout
+              to zero will disable the timeout and permit X11 forwarding for the life of the connection. The default is to disable
+              untrusted X11 forwarding after twenty minutes has elapsed.
+          - order: 3
+            label: ForwardX11Trusted
+            kind: symbol-property
+            preselected: false
+            documentation:
+              "If this option is set to ``yes ,'' remote X11 clients will have full access to the original X11
+              display.
+
+              If this option is set to no (the default), remote X11 clients will be considered untrusted and prevented from
+              stealing or tampering with data belonging to trusted X11 clients. Furthermore, the xauth(1) token used for the
+              session will be set to expire after 20 minutes. Remote clients will be refused access after this time.
+
+              See the X11 SECURITY extension specification for full details on the restrictions imposed on untrusted clients."
+          - order: 4
+            label: LocalForward
+            kind: symbol-property
+            preselected: false
+            documentation:
+              "Specifies that a TCP port on the local machine be forwarded over the secure channel to the specified
+              host and port from the remote machine. For a TCP port, the first argument must be [bind_address:]port or a Unix
+              domain socket path. The second argument is the destination and may be host:hostport or a Unix domain socket path
+              if the remote host supports it.
+
+              IPv6 addresses can be specified by enclosing addresses in square brackets.
+
+              If either argument contains a '/' in it, that argument will be interpreted as a Unix-domain socket (on the corresponding
+              host) rather than a TCP port.
+
+              Multiple forwardings may be specified, and additional forwardings can be given on the command line. Only the superuser
+              can forward privileged ports. By default, the local port is bound in accordance with the GatewayPorts setting.
+              However, an explicit bind_address may be used to bind the connection to a specific address. The bind_address of
+              localhost indicates that the listening port be bound for local use only, while an empty address or `*' indicates
+              that the port should be available from all interfaces. Unix domain socket paths may use the tokens described in
+              the TOKENS section and environment variables as described in the ENVIRONMENT VARIABLES section."
+          - order: 5
+            label: ExitOnForwardFailure
+            kind: symbol-property
+            preselected: false
+            documentation:
+              Specifies whether ssh(1) should terminate the connection if it cannot set up all requested dynamic,
+              tunnel, local, and remote port forwardings. Note that ExitOnForwardFailure does not apply to connections made
+              over port forwardings and will not, for example, cause ssh(1) to exit if TCP connections to the ultimate forwarding
+              destination fail. The argument must be yes or no (the default).
+          - order: 6
+            label: RemoteForward
+            kind: symbol-property
+            preselected: false
+            documentation:
+              "Specifies that a TCP port on the remote machine be forwarded over the secure channel to the specified
+              host and port from the local machine. The remote port may either be forwarded to a specified host and port or
+              Unix-domain socket from the local machine, or may act as a SOCKS 4/5 proxy that allows a remote client to connect
+              to arbitrary destinations from the local machine. The first argument is the listening specification and may be
+              [bind_address:]port or, if the remote host supports it, a Unix domain socket path. If forwarding to a specific
+              destination then the second argument must be host:hostport or a Unix domain socket path, otherwise if no destination
+              argument is specified then the remote forwarding will be established as a SOCKS proxy. When acting as a SOCKS
+              proxy, the destination of the connection can be restricted by PermitRemoteOpen.
+
+              IPv6 addresses can be specified by enclosing addresses in square brackets.
+
+              If either argument contains a '/' in it, that argument will be interpreted as a Unix-domain socket (on the corresponding
+              host) rather than a TCP port.
+
+              Multiple forwardings may be specified, and additional forwardings can be given on the command line. Privileged
+              ports can be forwarded only when logging in as root on the remote machine. Unix domain socket paths may use the
+              tokens described in the TOKENS section and environment variables as described in the ENVIRONMENT VARIABLES section.
+
+              If the port argument is 0, the listen port will be dynamically allocated on the server and reported to the client
+              at run time.
+
+              If the bind_address is not specified, the default is to only bind to loopback addresses. If the bind_address is
+              `*' or an empty string, then the forwarding is requested to listen on all interfaces. Specifying a remote bind_address
+              will only succeed if the server's GatewayPorts option is enabled (see sshd_config(5))."
+          - order: 7
+            label: DynamicForward
+            kind: symbol-property
+            preselected: false
+            documentation:
+              "Specifies that a TCP port on the local machine be forwarded over the secure channel, and the application
+              protocol is then used to determine where to connect to from the remote machine.
+
+              The argument must be [bind_address:]port. IPv6 addresses can be specified by enclosing addresses in square brackets.
+              By default, the local port is bound in accordance with the GatewayPorts setting. However, an explicit bind_address
+              may be used to bind the connection to a specific address. The bind_address of localhost indicates that the listening
+              port be bound for local use only, while an empty address or `*' indicates that the port should be available from
+              all interfaces.
+
+              Currently the SOCKS4 and SOCKS5 protocols are supported, and ssh(1) will act as a SOCKS server. Multiple forwardings
+              may be specified, and additional forwardings can be given on the command line. Only the superuser can forward
+              privileged ports."
+          - order: 8
+            label: ClearAllForwardings
+            kind: symbol-property
+            preselected: false
+            documentation:
+              Specifies that all local, remote, and dynamic port forwardings specified in the configuration files
+              or on the command line be cleared. This option is primarily useful when used from the ssh(1) command line to clear
+              port forwardings set in configuration files, and is automatically set by scp(1) and sftp(1). The argument must
+              be yes or no (the default).
+        total: 9
+        message: null
+    after-completion:
+      title: ssh.config - F-4002-AC3-1 - ${APP_NAME}
+      editors:
+        active: ssh.config
+        groups:
+          - - title: ssh.config
+              active: true
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.mode
+          text: SSH Config
+          aria: SSH Config
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 5, Col 1
+          aria: Ln 5, Col 1
+          tooltip: null
+      notifications: []
+      notification_center: []
+      dialogs: []
+      banner: null
+      quickpick:
+        visible: false
+      panel:
+        visible: false
+        _seconds: 0.2
+  per_step:
+    - i: 0
+      step:
+        open: ssh.config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 60
+      ok: true
+      error: null
+      seconds: 2.6
+      at: 0.8
+    - i: 2
+      step:
+        observe:
+          id: first-keystrokes
+          what:
+            - suggest:
+                line: 5
+                col: 1
+                type: Forward
+                fields:
+                  - label
+                  - kind
+                  - preselected
+                  - documentation
+      ok: true
+      error: null
+      seconds: 3.8
+      at: 3.4
+      observation_raw: null
+    - i: 3
+      step:
+        observe:
+          id: after-completion
+          what:
+            - title
+            - editors
+            - statusbar:
+                core:
+                  - status.editor.mode
+                  - status.editor.selection
+            - notifications
+            - notification_center
+            - dialogs
+            - banner
+            - quickpick
+            - panel: {}
+      ok: true
+      error: null
+      seconds: 2.2
+      at: 7.2
+      observation_raw: null

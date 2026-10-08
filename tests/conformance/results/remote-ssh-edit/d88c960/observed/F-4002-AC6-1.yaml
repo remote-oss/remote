@@ -1,0 +1,387 @@
+case: F-4002-AC6-1
+feature: F-4002
+profile: linux-none-clean-restricted@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/unsupported-sections/view:Limited in Restricted Mode/rows: 5 vs 4 items: [{'depth': 1, 'label': '', 'description':
+    None, 'expanded': None, 'icon': 'codicon-extension-default-icon', 'tooltip': None, 'actions': [], 'aria': 'GitHub
+    Authentication, 0.0.2, Publisher vscode, GitHub Authentication Provider '}, {'depth': 1, 'label': '', 'description':
+    None, 'expanded': None, 'icon': 'codicon-extension-default-icon', 'tooltip': None, 'actions': [], 'aria': 'JavaScript
+    Debugger, 1.117.0, Publisher ms-vscode, An extension for debugging Node.js programs and Chrome. '}, {'depth': 1, 'label':
+    '', 'descript"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: ssh.config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - statusbar: Restricted Mode
+        - quiet: 2
+      timeout: 60
+  - cmd: 'Extensions: Show Installed Extensions'
+  - wait:
+      until:
+        - view:
+            name: Installed
+        - quiet: 2
+      timeout: 60
+  - observe:
+      id: row-restricted
+      what:
+        - hover:
+            view: Installed
+            row: '#1'
+      bind:
+        ext_name:
+          path: '["hover:Installed/#1"][0]'
+          match: ^(.+?)\s+v\d
+        ext_version:
+          path: '["hover:Installed/#1"][0]'
+          match: \s(v\d+(?:\.\d+)+)
+        ext_desc:
+          path: '["hover:Installed/#1"][0]'
+          match: ^[^\n]*\n+([^\n]+)
+  - cmd: 'Extensions: Show Extensions Unsupported By Workspace'
+  - wait:
+      until:
+        - view:
+            name: Disabled in Restricted Mode
+        - view:
+            name: Limited in Restricted Mode
+        - quiet: 2
+      timeout: 60
+  - observe:
+      id: unsupported-sections
+      what:
+        - sidebar
+        - notifications
+        - view: Disabled in Restricted Mode
+        - view: Limited in Restricted Mode
+expect:
+  row-restricted:
+    hover:Installed/#1:
+      - '${bind.ext_name}  ${bind.ext_version}
+
+
+        ${bind.ext_desc}
+
+
+        Activation time: <DURATION>
+
+
+        Hold Alt key to mouse over'
+  unsupported-sections:
+    sidebar:
+      title: Extensions
+      sections:
+        - title: Disabled in Restricted Mode
+          expanded: true
+        - title: Limited in Restricted Mode
+          expanded: true
+    notifications: []
+    view:Disabled in Restricted Mode:
+      expanded: true
+      titleActions: []
+      welcome: []
+      welcomeLinks: []
+      messages: []
+      rows:
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria: 'Git, 10.0.0, Publisher vscode, Git SCM Integration '
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria:
+            'JavaScript and TypeScript Language Features, 10.0.0, Publisher vscode, Provides rich language support for JavaScript
+            and TypeScript. '
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria:
+            'Terminal Suggest for VS Code, 1.0.1, Publisher vscode, Extension to add terminal completions for zsh, bash,
+            and fish terminals. '
+    view:Limited in Restricted Mode:
+      expanded: true
+      titleActions: []
+      welcome: []
+      welcomeLinks: []
+      messages: []
+      rows:
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria: 'GitHub Authentication, 0.0.2, Publisher vscode, GitHub Authentication Provider '
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria: 'JavaScript Debugger, 1.117.0, Publisher ms-vscode, An extension for debugging Node.js programs and Chrome. '
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria: 'JSON Language Features, 10.0.0, Publisher vscode, Provides rich language support for JSON files. '
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria: 'Markdown Language Features, 10.0.0, Publisher vscode, Provides rich language support for Markdown. '
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria: 'Microsoft Account, 0.0.1, Publisher vscode, Microsoft authentication provider '
+observed:
+  normalized:
+    row-restricted:
+      hover:Installed/#1:
+        - '${bind.ext_name}  ${bind.ext_version}
+
+
+          ${bind.ext_desc}
+
+
+          Activation time: <DURATION>
+
+
+          Hold Alt key to mouse over'
+    unsupported-sections:
+      sidebar:
+        title: Extensions
+        sections:
+          - title: Disabled in Restricted Mode
+            expanded: true
+          - title: Limited in Restricted Mode
+            expanded: true
+      notifications: []
+      view:Disabled in Restricted Mode:
+        expanded: true
+        titleActions: []
+        welcome: []
+        welcomeLinks: []
+        messages: []
+        rows:
+          - depth: 1
+            label: ''
+            description: null
+            expanded: null
+            icon: codicon-extension-default-icon
+            tooltip: null
+            actions: []
+            aria: 'Git, 10.0.0, Publisher vscode, Git SCM Integration '
+          - depth: 1
+            label: ''
+            description: null
+            expanded: null
+            icon: codicon-extension-default-icon
+            tooltip: null
+            actions: []
+            aria:
+              'JavaScript and TypeScript Language Features, 10.0.0, Publisher vscode, Provides rich language support for
+              JavaScript and TypeScript. '
+          - depth: 1
+            label: ''
+            description: null
+            expanded: null
+            icon: codicon-extension-default-icon
+            tooltip: null
+            actions: []
+            aria:
+              'Terminal Suggest for VS Code, 1.0.1, Publisher vscode, Extension to add terminal completions for zsh, bash,
+              and fish terminals. '
+      view:Limited in Restricted Mode:
+        expanded: true
+        titleActions: []
+        welcome: []
+        welcomeLinks: []
+        messages: []
+        rows:
+          - depth: 1
+            label: ''
+            description: null
+            expanded: null
+            icon: codicon-extension-default-icon
+            tooltip: null
+            actions: []
+            aria: 'GitHub Authentication, 0.0.2, Publisher vscode, GitHub Authentication Provider '
+          - depth: 1
+            label: ''
+            description: null
+            expanded: null
+            icon: codicon-extension-default-icon
+            tooltip: null
+            actions: []
+            aria: 'JavaScript Debugger, 1.117.0, Publisher ms-vscode, An extension for debugging Node.js programs and Chrome. '
+          - depth: 1
+            label: ''
+            description: null
+            expanded: null
+            icon: codicon-extension-default-icon
+            tooltip: null
+            actions: []
+            aria: 'JSON Language Features, 10.0.0, Publisher vscode, Provides rich language support for JSON files. '
+          - depth: 1
+            label: ''
+            description: null
+            expanded: null
+            icon: codicon-extension-default-icon
+            tooltip: null
+            actions: []
+            aria: 'Markdown Language Features, 10.0.0, Publisher vscode, Provides rich language support for Markdown. '
+  per_step:
+    - i: 0
+      step:
+        open: ssh.config
+      ok: true
+      error: null
+      seconds: 0.7
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - statusbar: Restricted Mode
+            - quiet: 2
+          timeout: 60
+      ok: true
+      error: null
+      seconds: 2.6
+      at: 0.7
+    - i: 2
+      step:
+        cmd: 'Extensions: Show Installed Extensions'
+      ok: true
+      error: null
+      seconds: 3.4
+      at: 3.3
+      selection: Ln 1, Col 1
+      state_after:
+        title: ssh.config - F-4002-AC6-1 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        banner: Restricted Mode is intended for safe code browsing. Trust this folder to enable all features.ManageLearn More
+    - i: 3
+      step:
+        wait:
+          until:
+            - view:
+                name: Installed
+            - quiet: 2
+          timeout: 60
+      ok: true
+      error: null
+      seconds: 3.2
+      at: 6.7
+    - i: 4
+      step:
+        observe:
+          id: row-restricted
+          what:
+            - hover:
+                view: Installed
+                row: '#1'
+          bind:
+            ext_name:
+              path: '["hover:Installed/#1"][0]'
+              match: ^(.+?)\s+v\d
+            ext_version:
+              path: '["hover:Installed/#1"][0]'
+              match: \s(v\d+(?:\.\d+)+)
+            ext_desc:
+              path: '["hover:Installed/#1"][0]'
+              match: ^[^\n]*\n+([^\n]+)
+      ok: true
+      error: null
+      seconds: 32.3
+      at: 9.9
+      observation_raw: null
+    - i: 5
+      step:
+        cmd: 'Extensions: Show Extensions Unsupported By Workspace'
+      ok: true
+      error: null
+      seconds: 3.3
+      at: 42.2
+      selection: Ln 1, Col 1
+      state_after:
+        title: ssh.config - F-4002-AC6-1 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: Disabled in Restricted Mode
+            expanded: true
+          - title: Limited in Restricted Mode
+            expanded: true
+        banner: Restricted Mode is intended for safe code browsing. Trust this folder to enable all features.ManageLearn More
+    - i: 6
+      step:
+        wait:
+          until:
+            - view:
+                name: Disabled in Restricted Mode
+            - view:
+                name: Limited in Restricted Mode
+            - quiet: 2
+          timeout: 60
+      ok: true
+      error: null
+      seconds: 3.8
+      at: 45.5
+    - i: 7
+      step:
+        observe:
+          id: unsupported-sections
+          what:
+            - sidebar
+            - notifications
+            - view: Disabled in Restricted Mode
+            - view: Limited in Restricted Mode
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 49.3
+      observation_raw: null

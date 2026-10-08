@@ -1,0 +1,235 @@
+case: F-4201-AC39-1
+feature: F-4201
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/space-opened-list/statusbar[1]/text: 'Ln 2, Col 16' != 'Ln 3, Col 1'"
+  - "/space-opened-list/statusbar[1]/aria: 'Ln 2, Col 16' != 'Ln 3, Col 1'"
+  - "/space-opened-list/tokens:active@2[0]/text: ' AddKeysToAgent' != ' '"
+  - '/space-opened-list/tokens:active@2[0]/length: 15 != 1'
+  - "/space-opened-list/tokens:active@2[0]/tokenType: 'Other' != 'String'"
+  - "/space-opened-list/tokens:active@2[0]/scopes[1]: 'support.type.property-name.ssh_config' != 'string.quoted.double.ssh_config'"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - goto:
+      line: 2
+      col: 1
+  - key: Space
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - observe:
+      id: space-opened-list
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 2
+expect:
+  space-opened-list:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 2, Col 16
+        aria: Ln 2, Col 16
+        tooltip: null
+    tokens:active@2:
+      - col: 1
+        text: ' AddKeysToAgent'
+        length: 15
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+observed:
+  normalized:
+    space-opened-list:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 1
+          aria: Ln 3, Col 1
+          tooltip: null
+      tokens:active@2:
+        - col: 1
+          text: ' '
+          length: 1
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 0.8
+    - i: 2
+      step:
+        goto:
+          line: 2
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.5
+      at: 3.5
+      position:
+        line: 2
+        col: 1
+    - i: 3
+      step:
+        key: Space
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 4.0
+      selection: Ln 2, Col 2
+      state_after:
+        title: ● config - F-4201-AC39-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: true
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC39-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 4
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 3.9
+      at: 5.8
+    - i: 5
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 9.7
+      selection: Ln 3, Col 1
+      state_after:
+        title: ● config - F-4201-AC39-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC39-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 6
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 11.5
+    - i: 7
+      step:
+        observe:
+          id: space-opened-list
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 2
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 14.2
+      observation_raw: null

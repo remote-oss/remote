@@ -1,0 +1,674 @@
+case: F-4201-AC36-1
+feature: F-4201
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/no-list-after-space/statusbar[1]/text: 'Ln 3, Col 10' != 'Ln 3, Col 2'"
+  - "/no-list-after-space/statusbar[1]/aria: 'Ln 3, Col 10' != 'Ln 3, Col 2'"
+  - "/ctrl-space-after-space/suggest:active@2:10/items: 31 vs 6 items: [{'order': 0, 'label': 'A1', 'kind': 'symbol-text'},
+    {'order': 1, 'label': 'A2', 'kind': 'symbol-text'}, {'order': 2, 'label': 'A3', 'kind': 'symbol-text'},
+    {'order': 3, 'label': 'A4', 'kind': 'symbol-text'}, {'order': 4, 'label': 'A5', 'kind': 'symbol-text'},
+    {'order': 5, 'label': 'A6', 'kind': 'symbol-text'}, {'order': 6, 'label': 'A7', 'kind': 'symbol-text'},
+    {'order': 7, 'label': 'A8', 'kind': 'symbol-text'}, {'order': 8, 'label': 'A9', 'kind': 'symbol-text'},
+    {'order': 9, 'label': 'by', 'kind': 'symbol-text'}, {'order': 10,"
+  - '/ctrl-space-after-space/suggest:active@2:10/total: 31 != 6'
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - goto:
+      line: 2
+      col: 1
+  - key: h
+  - key: o
+  - key: s
+  - key: t
+  - key: n
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: Space
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: ArrowDown
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - observe:
+      id: no-list-after-space
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+  - observe:
+      id: ctrl-space-after-space
+      what:
+        - suggest:
+            line: 2
+            col: 10
+            fields:
+              - label
+              - kind
+expect:
+  no-list-after-space:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 3, Col 10
+        aria: Ln 3, Col 10
+        tooltip: null
+  ctrl-space-after-space:
+    suggest:active@2:10:
+      items:
+        - order: 0
+          label: A1
+          kind: symbol-text
+        - order: 1
+          label: A2
+          kind: symbol-text
+        - order: 2
+          label: A3
+          kind: symbol-text
+        - order: 3
+          label: A4
+          kind: symbol-text
+        - order: 4
+          label: A5
+          kind: symbol-text
+        - order: 5
+          label: A6
+          kind: symbol-text
+        - order: 6
+          label: A7
+          kind: symbol-text
+        - order: 7
+          label: A8
+          kind: symbol-text
+        - order: 8
+          label: A9
+          kind: symbol-text
+        - order: 9
+          label: by
+          kind: symbol-text
+        - order: 10
+          label: F
+          kind: symbol-text
+        - order: 11
+          label: f4201a
+          kind: symbol-text
+        - order: 12
+          label: f4201b
+          kind: symbol-text
+        - order: 13
+          label: fixture
+          kind: symbol-text
+        - order: 14
+          label: ForwardAgent
+          kind: symbol-text
+        - order: 15
+          label: Host
+          kind: symbol-text
+        - order: 16
+          label: host
+          kind: symbol-text
+        - order: 17
+          label: HostName
+          kind: symbol-text
+        - order: 18
+          label: invalid
+          kind: symbol-text
+        - order: 19
+          label: keyword
+          kind: symbol-text
+        - order: 20
+          label: lab
+          kind: symbol-text
+        - order: 21
+          label: lower
+          kind: symbol-text
+        - order: 22
+          label: Match
+          kind: symbol-text
+        - order: 23
+          label: Port
+          kind: symbol-text
+        - order: 24
+          label: positions
+          kind: symbol-text
+        - order: 25
+          label: room
+          kind: symbol-text
+        - order: 26
+          label: S1
+          kind: symbol-text
+        - order: 27
+          label: the
+          kind: symbol-text
+        - order: 28
+          label: User
+          kind: symbol-text
+        - order: 29
+          label: written
+          kind: symbol-text
+        - order: 30
+          label: 'yes'
+          kind: symbol-text
+      total: 31
+      message: null
+observed:
+  normalized:
+    no-list-after-space:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 2
+          aria: Ln 3, Col 2
+          tooltip: null
+    ctrl-space-after-space:
+      suggest:active@2:10:
+        items:
+          - order: 0
+            label: HostName
+            kind: symbol-property
+          - order: 1
+            label: HostbasedAuthentication
+            kind: symbol-property
+          - order: 2
+            label: CanonicalizeHostname
+            kind: symbol-property
+          - order: 3
+            label: NoHostAuthenticationForLocalhost
+            kind: symbol-property
+          - order: 4
+            label: VerifyHostKeyDNS
+            kind: symbol-property
+          - order: 5
+            label: StrictHostKeyChecking
+            kind: symbol-property
+        total: 6
+        message: null
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 0.8
+    - i: 2
+      step:
+        goto:
+          line: 2
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 3.5
+      position:
+        line: 2
+        col: 1
+    - i: 3
+      step:
+        key: h
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 4.1
+      selection: Ln 2, Col 2
+      state_after:
+        title: ● config - F-4201-AC36-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: HashKnownHosts, Property
+                focused: true
+              - text: Host, Property
+                focused: false
+              - text: HostbasedAuthentication, Property
+                focused: false
+              - text: HostbasedKeyTypes, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: false
+              - text: HostKeyAlias, Property
+                focused: false
+              - text: HostName, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC36-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 4
+      step:
+        key: o
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 5.8
+      selection: Ln 2, Col 3
+      state_after:
+        title: ● config - F-4201-AC36-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Host, Property
+                focused: true
+              - text: HostbasedAuthentication, Property
+                focused: false
+              - text: HostbasedKeyTypes, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: false
+              - text: HostKeyAlias, Property
+                focused: false
+              - text: HostName, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+              - text: VisualHostKey, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC36-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 5
+      step:
+        key: s
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 7.5
+      selection: Ln 2, Col 4
+      state_after:
+        title: ● config - F-4201-AC36-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Host, Property
+                focused: true
+              - text: HostbasedAuthentication, Property
+                focused: false
+              - text: HostbasedKeyTypes, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: false
+              - text: HostKeyAlias, Property
+                focused: false
+              - text: HostName, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+              - text: VisualHostKey, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC36-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 6
+      step:
+        key: t
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 9.2
+      selection: Ln 2, Col 5
+      state_after:
+        title: ● config - F-4201-AC36-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Host, Property
+                focused: true
+              - text: HostbasedAuthentication, Property
+                focused: false
+              - text: HostbasedKeyTypes, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: false
+              - text: HostKeyAlias, Property
+                focused: false
+              - text: HostName, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+              - text: VisualHostKey, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC36-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 7
+      step:
+        key: n
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 10.9
+      selection: Ln 2, Col 6
+      state_after:
+        title: ● config - F-4201-AC36-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: HostName, Property
+                focused: true
+              - text: HostbasedAuthentication, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC36-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 8
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 12.6
+    - i: 9
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 15.3
+      selection: Ln 3, Col 1
+      state_after:
+        title: ● config - F-4201-AC36-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC36-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 10
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 17.0
+    - i: 11
+      step:
+        key: Space
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 19.7
+      selection: Ln 3, Col 2
+      state_after:
+        title: ● config - F-4201-AC36-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: true
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC36-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 12
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 21.4
+    - i: 13
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 24.1
+      selection: Ln 3, Col 2
+      state_after:
+        title: ● config - F-4201-AC36-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: false
+              - text: AddressFamily, Property
+                focused: true
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC36-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 14
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 25.8
+    - i: 15
+      step:
+        observe:
+          id: no-list-after-space
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+      ok: true
+      error: null
+      seconds: 0.2
+      at: 27.3
+      observation_raw: null
+    - i: 16
+      step:
+        observe:
+          id: ctrl-space-after-space
+          what:
+            - suggest:
+                line: 2
+                col: 10
+                fields:
+                  - label
+                  - kind
+      ok: true
+      error: null
+      seconds: 3.5
+      at: 27.5
+      observation_raw: null

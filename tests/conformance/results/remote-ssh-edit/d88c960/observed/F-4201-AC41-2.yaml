@@ -1,0 +1,387 @@
+case: F-4201-AC41-2
+feature: F-4201
+profile: linux-none-dirty@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/ctrl-space-opens-list/statusbar[1]/text: 'Ln 2, Col 16' != 'Ln 3, Col 2'"
+  - "/ctrl-space-opens-list/statusbar[1]/aria: 'Ln 2, Col 16' != 'Ln 3, Col 2'"
+  - "/ctrl-space-opens-list/tokens:active@2[0]/text: ' AddKeysToAgent' != ' A'"
+  - '/ctrl-space-opens-list/tokens:active@2[0]/length: 15 != 2'
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - goto:
+      line: 2
+      col: 1
+  - key: Space
+  - key: A
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: ArrowDown
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - observe:
+      id: nothing-opens
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+  - goto:
+      line: 2
+      col: 3
+  - key: Control+Space
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - observe:
+      id: ctrl-space-opens-list
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 2
+expect:
+  nothing-opens:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 3, Col 3
+        aria: Ln 3, Col 3
+        tooltip: null
+  ctrl-space-opens-list:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 2, Col 16
+        aria: Ln 2, Col 16
+        tooltip: null
+    tokens:active@2:
+      - col: 1
+        text: ' AddKeysToAgent'
+        length: 15
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+observed:
+  normalized:
+    nothing-opens:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 3
+          aria: Ln 3, Col 3
+          tooltip: null
+    ctrl-space-opens-list:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 2
+          aria: Ln 3, Col 2
+          tooltip: null
+      tokens:active@2:
+        - col: 1
+          text: ' A'
+          length: 2
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 0.8
+    - i: 2
+      step:
+        goto:
+          line: 2
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 3.5
+      position:
+        line: 2
+        col: 1
+    - i: 3
+      step:
+        key: Space
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 4.1
+      selection: Ln 2, Col 2
+      state_after:
+        title: ● config - F-4201-AC41-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC41-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 4
+      step:
+        key: A
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 5.9
+      selection: Ln 2, Col 3
+      state_after:
+        title: ● config - F-4201-AC41-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC41-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 5
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 7.6
+    - i: 6
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 10.3
+      selection: Ln 3, Col 3
+      state_after:
+        title: ● config - F-4201-AC41-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC41-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 7
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 12.1
+    - i: 8
+      step:
+        observe:
+          id: nothing-opens
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+      ok: true
+      error: null
+      seconds: 0.2
+      at: 13.6
+      observation_raw: null
+    - i: 9
+      step:
+        goto:
+          line: 2
+          col: 3
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 13.8
+      position:
+        line: 2
+        col: 3
+    - i: 10
+      step:
+        key: Control+Space
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 14.4
+      selection: Ln 2, Col 3
+      state_after:
+        title: ● config - F-4201-AC41-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: true
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: KexAlgorithms, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: ClearAllForwardings, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: PubkeyAuthentication, Property
+                focused: false
+              - text: ServerAliveCountMax, Property
+                focused: false
+              - text: ServerAliveInterval, Property
+                focused: false
+              - text: ForwardAgent, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC41-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 11
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 3.9
+      at: 16.2
+    - i: 12
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 20.1
+      selection: Ln 3, Col 2
+      state_after:
+        title: ● config - F-4201-AC41-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC41-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 13
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 21.8
+    - i: 14
+      step:
+        observe:
+          id: ctrl-space-opens-list
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 2
+      ok: true
+      error: null
+      seconds: 1.6
+      at: 24.5
+      observation_raw: null

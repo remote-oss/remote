@@ -1,0 +1,541 @@
+case: F-4101-AC1-4
+feature: F-4101
+profile: linux-none-dirty@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/home-config/tokens:active@7: [{'col': 1, 'text': 'Host', 'length': 4, 'truncated': False, 'language': 'ssh_config',
+    'tokenType': 'Other', 'scopes': ['source.config.ssh', 'support.type.property-name.ssh_config'], 'semanticType':
+    None, 'modifiers': None, 'tmText': None, 'tmLength': None}, {'col': 5, 'text': ' *', 'length': 2, 'truncated':
+    False, 'language': 'ssh_config', 'tokenType': 'String', 'sco"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - cmd: Go to File...
+  - wait:
+      until:
+        - quickpick: visible
+        - quiet: 1
+      timeout: 20
+  - type: ${HOME}/.ssh/config
+  - wait:
+      until:
+        - quickpick:
+            contains: config
+        - quiet: 1
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quickpick: hidden
+        - quiet: 2
+      timeout: 30
+  - observe:
+      id: home-config
+      what:
+        - title
+        - statusbar:
+            core:
+              - status.editor.mode
+        - tokens:
+            line: 1
+        - tokens:
+            line: 2
+        - tokens:
+            line: 3
+        - tokens:
+            line: 4
+        - tokens:
+            line: 5
+        - tokens:
+            line: 6
+        - tokens:
+            line: 7
+        - tokens:
+            line: 8
+expect:
+  home-config:
+    title: config - F-4101-AC1-4 - ${APP_NAME}
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: SSH Config
+        aria: SSH Config
+        tooltip: null
+    tokens:active@1:
+      - col: 1
+        text: '# private HOME ssh c…oom-written fixture)'
+        length: 48
+        truncated: true
+        language: ssh_config
+        tokenType: Comment
+        scopes:
+          - source.config.ssh
+          - comment.line.hash.azcli
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@2: []
+    tokens:active@3:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' home-alpha'
+        length: 11
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@4:
+      - col: 1
+        text: '    HostName'
+        length: 12
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 13
+        text: ' 192.0.2.20'
+        length: 11
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@5:
+      - col: 1
+        text: '    User'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' lab'
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@6:
+      - col: 1
+        text: '    '
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@7:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' *'
+        length: 2
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@8:
+      - col: 1
+        text: '    ServerAliveInterval'
+        length: 23
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 24
+        text: ' 30'
+        length: 3
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+observed:
+  normalized:
+    home-config:
+      title: config - F-4101-AC1-4 - ${APP_NAME}
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.mode
+          text: SSH Config
+          aria: SSH Config
+          tooltip: null
+      tokens:active@1:
+        - col: 1
+          text: '# private HOME ssh c…oom-written fixture)'
+          length: 48
+          truncated: true
+          language: ssh_config
+          tokenType: Comment
+          scopes:
+            - source.config.ssh
+            - comment.line.hash.azcli
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@2: []
+      tokens:active@3:
+        - col: 1
+          text: Host
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 5
+          text: ' home-alpha'
+          length: 11
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@4:
+        - col: 1
+          text: '    HostName'
+          length: 12
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 13
+          text: ' 192.0.2.20'
+          length: 11
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@5:
+        - col: 1
+          text: '    User'
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 9
+          text: ' lab'
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@6:
+        - col: 1
+          text: '    '
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@7:
+        error: lab tokens timed out after <DURATION>
+      tokens:active@8:
+        - col: 1
+          text: '    ServerAliveInterval'
+          length: 23
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 24
+          text: ' 30'
+          length: 3
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+  per_step:
+    - i: 0
+      step:
+        cmd: Go to File...
+      ok: true
+      error: null
+      seconds: 3.4
+      at: 0.0
+      state_after:
+        title: F-4101-AC1-4 - Visual Studio Code
+        editorTabs:
+          - []
+        quickInput:
+          visible: true
+          title: null
+          placeholder: 'Search files by name (append : to go to line or @ to go to symbol)'
+          value: ''
+          message: null
+          count: null
+          titleButtons: []
+          buttons: []
+          multiSelect: null
+          items: []
+        sideBarSections:
+          - title: F-4101-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 1
+      step:
+        wait:
+          until:
+            - quickpick: visible
+            - quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 3.4
+    - i: 2
+      step:
+        type: ${HOME}/.ssh/config
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 4.8
+      state_after:
+        title: F-4101-AC1-4 - Visual Studio Code
+        editorTabs:
+          - []
+        quickInput:
+          visible: true
+          title: null
+          placeholder: 'Search files by name (append : to go to line or @ to go to symbol)'
+          value: ${HOME}/.ssh/config
+          message: null
+          count: null
+          titleButtons: []
+          buttons: []
+          multiSelect: null
+          items:
+            - label: config
+              description: ~/.ssh
+              detail: null
+              separator: file results
+              focused: true
+              checked: null
+              icons: []
+              buttons:
+                - Open to the Side
+              aria: config ~/.ssh, file results
+        sideBarSections:
+          - title: F-4101-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 3
+      step:
+        wait:
+          until:
+            - quickpick:
+                contains: config
+            - quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 6.2
+    - i: 4
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 7.6
+      selection: Ln 1, Col 1
+      state_after:
+        title: config - F-4101-AC1-4 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4101-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 5
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quickpick: hidden
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.6
+      at: 9.3
+    - i: 6
+      step:
+        observe:
+          id: home-config
+          what:
+            - title
+            - statusbar:
+                core:
+                  - status.editor.mode
+            - tokens:
+                line: 1
+            - tokens:
+                line: 2
+            - tokens:
+                line: 3
+            - tokens:
+                line: 4
+            - tokens:
+                line: 5
+            - tokens:
+                line: 6
+            - tokens:
+                line: 7
+            - tokens:
+                line: 8
+      ok: true
+      error: null
+      seconds: 782.8
+      at: 11.9
+      observation_raw: null

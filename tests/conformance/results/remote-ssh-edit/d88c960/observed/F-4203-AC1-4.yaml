@@ -1,0 +1,3844 @@
+case: F-4203-AC1-4
+feature: F-4203
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/accepted-after-tab/statusbar[1]/text: 'Ln 1, Col 22' != 'Ln 2, Col 5'"
+  - "/accepted-after-tab/statusbar[1]/aria: 'Ln 1, Col 22' != 'Ln 2, Col 5'"
+  - '/accepted-after-tab/tokens:active@1: 2 vs 1 items: [{''col'': 1, ''text'': ''\tUsePrivilegedPorter'', ''length'': 20, ''truncated'':
+    False, ''language'': ''ssh_config'', ''tokenType'': ''Other'', ''scopes'': [''source.config.ssh'', ''support.type.property-name.ssh_config''],
+    ''semanticType'': None, ''modifiers'': None, ''tmText'': None, ''tmLength'': None}, {''col'': 21, ''text'': '' qquser'',
+    ''length'': 7, ''truncated'': False, ''language'': ''ssh_config'', ''tokenType'': ''String'', ''scopes'': [''source.config.ssh'',
+    ''string.quoted.double.ssh_config''], ''semanticType'': None, ''modifiers'': None, ''tmText'': None, ''tmLength'': None}]
+    != [{''col'': 1, '
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: tabs/ssh.config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - goto:
+      line: 1
+      col: 1
+  - key: ArrowRight
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - observe:
+      id: tab-then-user
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - suggest:
+            fields:
+              - label
+              - kind
+            timeout: 300
+  - key: ArrowRight
+  - key: ArrowRight
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - observe:
+      id: tab-us
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - suggest:
+            fields:
+              - label
+              - kind
+              - preselected
+  - key: ArrowRight
+  - key: ArrowRight
+  - key: ArrowRight
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - observe:
+      id: tab-user-value
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - suggest:
+            fields:
+              - label
+              - kind
+  - goto:
+      line: 2
+      col: 1
+  - key: Home
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - observe:
+      id: mixed-blanks-then-hostname
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - suggest:
+            fields:
+              - label
+              - kind
+            timeout: 300
+  - key: ArrowRight
+  - key: ArrowRight
+  - key: ArrowRight
+  - key: ArrowRight
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - observe:
+      id: mixed-blanks-host
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - suggest:
+            fields:
+              - label
+              - kind
+              - preselected
+  - goto:
+      line: 3
+      col: 1
+  - key: End
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - observe:
+      id: tab-only-line
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - suggest:
+            fields:
+              - label
+              - kind
+            timeout: 300
+  - goto:
+      line: 4
+      col: 1
+  - key: Home
+  - key: ArrowRight
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - observe:
+      id: tab-hash
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - suggest:
+            fields:
+              - label
+              - kind
+            timeout: 300
+  - key: ArrowRight
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - observe:
+      id: tab-comment-text
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - suggest:
+            fields:
+              - label
+              - kind
+  - goto:
+      line: 1
+      col: 1
+  - key: ArrowRight
+  - key: ArrowRight
+  - key: ArrowRight
+  - key: Control+Space
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - observe:
+      id: accepted-after-tab
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 1
+expect:
+  tab-then-user:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 1, Col 5
+        aria: Ln 1, Col 5
+        tooltip: null
+    suggest:active:
+      items:
+        - order: 0
+          label: AddKeysToAgent
+          kind: symbol-property
+        - order: 1
+          label: AddressFamily
+          kind: symbol-property
+        - order: 2
+          label: AskPassGUI
+          kind: symbol-property
+        - order: 3
+          label: BatchMode
+          kind: symbol-property
+        - order: 4
+          label: BindAddress
+          kind: symbol-property
+        - order: 5
+          label: CanonicalDomains
+          kind: symbol-property
+        - order: 6
+          label: CanonicalizeFallbackLocal
+          kind: symbol-property
+        - order: 7
+          label: CanonicalizeHostname
+          kind: symbol-property
+        - order: 8
+          label: CanonicalizeMaxDots
+          kind: symbol-property
+        - order: 9
+          label: CanonicalizePermittedCNAMEs
+          kind: symbol-property
+        - order: 10
+          label: ChallengeResponseAuthentication
+          kind: symbol-property
+        - order: 11
+          label: CheckHostIP
+          kind: symbol-property
+        - order: 12
+          label: Cipher
+          kind: symbol-property
+        - order: 13
+          label: Ciphers
+          kind: symbol-property
+        - order: 14
+          label: ClearAllForwardings
+          kind: symbol-property
+        - order: 15
+          label: Compression
+          kind: symbol-property
+        - order: 16
+          label: CompressionLevel
+          kind: symbol-property
+        - order: 17
+          label: Configure tunnel
+          kind: symbol-snippet
+        - order: 18
+          label: ConnectionAttempts
+          kind: symbol-property
+        - order: 19
+          label: ConnectTimeout
+          kind: symbol-property
+        - order: 20
+          label: ControlMaster
+          kind: symbol-property
+        - order: 21
+          label: ControlPath
+          kind: symbol-property
+        - order: 22
+          label: ControlPersist
+          kind: symbol-property
+        - order: 23
+          label: DynamicForward
+          kind: symbol-property
+        - order: 24
+          label: EnableSSHKeysign
+          kind: symbol-property
+        - order: 25
+          label: EscapeChar
+          kind: symbol-property
+        - order: 26
+          label: ExitOnForwardFailure
+          kind: symbol-property
+        - order: 27
+          label: FingerprintHash
+          kind: symbol-property
+        - order: 28
+          label: ForwardAgent
+          kind: symbol-property
+        - order: 29
+          label: ForwardX11
+          kind: symbol-property
+        - order: 30
+          label: ForwardX11Timeout
+          kind: symbol-property
+        - order: 31
+          label: ForwardX11Trusted
+          kind: symbol-property
+        - order: 32
+          label: GatewayPorts
+          kind: symbol-property
+        - order: 33
+          label: GlobalKnownHostsFile
+          kind: symbol-property
+        - order: 34
+          label: GSSAPIAuthentication
+          kind: symbol-property
+        - order: 35
+          label: GSSAPIClientIdentity
+          kind: symbol-property
+        - order: 36
+          label: GSSAPIDelegateCredentials
+          kind: symbol-property
+        - order: 37
+          label: GSSAPIKeyExchange
+          kind: symbol-property
+        - order: 38
+          label: GSSAPIRenewalForcesRekey
+          kind: symbol-property
+        - order: 39
+          label: GSSAPIServerIdentity
+          kind: symbol-property
+        - order: 40
+          label: GSSAPITrustDns
+          kind: symbol-property
+        - order: 41
+          label: HashKnownHosts
+          kind: symbol-property
+        - order: 42
+          label: Host
+          kind: symbol-property
+        - order: 43
+          label: HostbasedAuthentication
+          kind: symbol-property
+        - order: 44
+          label: HostbasedKeyTypes
+          kind: symbol-property
+        - order: 45
+          label: HostKeyAlgorithms
+          kind: symbol-property
+        - order: 46
+          label: HostKeyAlias
+          kind: symbol-property
+        - order: 47
+          label: HostName
+          kind: symbol-property
+        - order: 48
+          label: IdentitiesOnly
+          kind: symbol-property
+        - order: 49
+          label: IdentityFile
+          kind: symbol-property
+        - order: 50
+          label: IgnoreUnknown
+          kind: symbol-property
+        - order: 51
+          label: IPQoS
+          kind: symbol-property
+        - order: 52
+          label: KbdInteractiveAuthentication
+          kind: symbol-property
+        - order: 53
+          label: KbdInteractiveDevices
+          kind: symbol-property
+        - order: 54
+          label: KexAlgorithms
+          kind: symbol-property
+        - order: 55
+          label: KeychainIntegration
+          kind: symbol-property
+        - order: 56
+          label: LocalCommand
+          kind: symbol-property
+        - order: 57
+          label: LocalForward
+          kind: symbol-property
+        - order: 58
+          label: LogLevel
+          kind: symbol-property
+        - order: 59
+          label: MACs
+          kind: symbol-property
+        - order: 60
+          label: Match
+          kind: symbol-property
+        - order: 61
+          label: NoHostAuthenticationForLocalhost
+          kind: symbol-property
+        - order: 62
+          label: NumberOfPasswordPrompts
+          kind: symbol-property
+        - order: 63
+          label: PasswordAuthentication
+          kind: symbol-property
+        - order: 64
+          label: PermitLocalCommand
+          kind: symbol-property
+        - order: 65
+          label: PKCS11Provider
+          kind: symbol-property
+        - order: 66
+          label: Port
+          kind: symbol-property
+        - order: 67
+          label: PreferredAuthentications
+          kind: symbol-property
+        - order: 68
+          label: Protocol
+          kind: symbol-property
+        - order: 69
+          label: ProxyCommand
+          kind: symbol-property
+        - order: 70
+          label: ProxyJump
+          kind: symbol-property
+        - order: 71
+          label: ProxyUseFdpass
+          kind: symbol-property
+        - order: 72
+          label: PubkeyAuthentication
+          kind: symbol-property
+        - order: 73
+          label: RekeyLimit
+          kind: symbol-property
+        - order: 74
+          label: RemoteCommand
+          kind: symbol-property
+        - order: 75
+          label: RemoteForward
+          kind: symbol-property
+        - order: 76
+          label: RequestTTY
+          kind: symbol-property
+        - order: 77
+          label: RevokedHostKeys
+          kind: symbol-property
+        - order: 78
+          label: RhostsRSAAuthentication
+          kind: symbol-property
+        - order: 79
+          label: RSAAuthentication
+          kind: symbol-property
+        - order: 80
+          label: SendEnv
+          kind: symbol-property
+        - order: 81
+          label: ServerAliveCountMax
+          kind: symbol-property
+        - order: 82
+          label: ServerAliveInterval
+          kind: symbol-property
+        - order: 83
+          label: StreamLocalBindMask
+          kind: symbol-property
+        - order: 84
+          label: StreamLocalBindUnlink
+          kind: symbol-property
+        - order: 85
+          label: StrictHostKeyChecking
+          kind: symbol-property
+        - order: 86
+          label: TCPKeepAlive
+          kind: symbol-property
+        - order: 87
+          label: Tunnel
+          kind: symbol-property
+        - order: 88
+          label: TunnelDevice
+          kind: symbol-property
+        - order: 89
+          label: UpdateHostKeys
+          kind: symbol-property
+        - order: 90
+          label: UsePrivilegedPort
+          kind: symbol-property
+        - order: 91
+          label: User
+          kind: symbol-property
+        - order: 92
+          label: UserKnownHostsFile
+          kind: symbol-property
+        - order: 93
+          label: VerifyHostKeyDNS
+          kind: symbol-property
+        - order: 94
+          label: VisualHostKey
+          kind: symbol-property
+        - order: 95
+          label: XAuthLocation
+          kind: symbol-property
+      total: 96
+      message: null
+  tab-us:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 1, Col 7
+        aria: Ln 1, Col 7
+        tooltip: null
+    suggest:active:
+      items:
+        - order: 0
+          label: UsePrivilegedPort
+          kind: symbol-property
+          preselected: true
+        - order: 1
+          label: User
+          kind: symbol-property
+          preselected: false
+        - order: 2
+          label: UserKnownHostsFile
+          kind: symbol-property
+          preselected: false
+        - order: 3
+          label: ProxyUseFdpass
+          kind: symbol-property
+          preselected: false
+        - order: 4
+          label: UpdateHostKeys
+          kind: symbol-property
+          preselected: false
+      total: 5
+      message: null
+  tab-user-value:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 1, Col 10
+        aria: Ln 1, Col 10
+        tooltip: null
+    suggest:active:
+      items:
+        - order: 0
+          label: Host
+          kind: symbol-text
+        - order: 1
+          label: HostName
+          kind: symbol-text
+        - order: 2
+          label: qqname
+          kind: symbol-text
+        - order: 3
+          label: qqtab
+          kind: symbol-text
+        - order: 4
+          label: qqtabcomment
+          kind: symbol-text
+        - order: 5
+          label: User
+          kind: symbol-text
+      total: 6
+      message: null
+  mixed-blanks-then-hostname:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 2, Col 6
+        aria: Ln 2, Col 6
+        tooltip: null
+    suggest:active:
+      items:
+        - order: 0
+          label: AddKeysToAgent
+          kind: symbol-property
+        - order: 1
+          label: AddressFamily
+          kind: symbol-property
+        - order: 2
+          label: AskPassGUI
+          kind: symbol-property
+        - order: 3
+          label: BatchMode
+          kind: symbol-property
+        - order: 4
+          label: BindAddress
+          kind: symbol-property
+        - order: 5
+          label: CanonicalDomains
+          kind: symbol-property
+        - order: 6
+          label: CanonicalizeFallbackLocal
+          kind: symbol-property
+        - order: 7
+          label: CanonicalizeHostname
+          kind: symbol-property
+        - order: 8
+          label: CanonicalizeMaxDots
+          kind: symbol-property
+        - order: 9
+          label: CanonicalizePermittedCNAMEs
+          kind: symbol-property
+        - order: 10
+          label: ChallengeResponseAuthentication
+          kind: symbol-property
+        - order: 11
+          label: CheckHostIP
+          kind: symbol-property
+        - order: 12
+          label: Cipher
+          kind: symbol-property
+        - order: 13
+          label: Ciphers
+          kind: symbol-property
+        - order: 14
+          label: ClearAllForwardings
+          kind: symbol-property
+        - order: 15
+          label: Compression
+          kind: symbol-property
+        - order: 16
+          label: CompressionLevel
+          kind: symbol-property
+        - order: 17
+          label: Configure tunnel
+          kind: symbol-snippet
+        - order: 18
+          label: ConnectionAttempts
+          kind: symbol-property
+        - order: 19
+          label: ConnectTimeout
+          kind: symbol-property
+        - order: 20
+          label: ControlMaster
+          kind: symbol-property
+        - order: 21
+          label: ControlPath
+          kind: symbol-property
+        - order: 22
+          label: ControlPersist
+          kind: symbol-property
+        - order: 23
+          label: DynamicForward
+          kind: symbol-property
+        - order: 24
+          label: EnableSSHKeysign
+          kind: symbol-property
+        - order: 25
+          label: EscapeChar
+          kind: symbol-property
+        - order: 26
+          label: ExitOnForwardFailure
+          kind: symbol-property
+        - order: 27
+          label: FingerprintHash
+          kind: symbol-property
+        - order: 28
+          label: ForwardAgent
+          kind: symbol-property
+        - order: 29
+          label: ForwardX11
+          kind: symbol-property
+        - order: 30
+          label: ForwardX11Timeout
+          kind: symbol-property
+        - order: 31
+          label: ForwardX11Trusted
+          kind: symbol-property
+        - order: 32
+          label: GatewayPorts
+          kind: symbol-property
+        - order: 33
+          label: GlobalKnownHostsFile
+          kind: symbol-property
+        - order: 34
+          label: GSSAPIAuthentication
+          kind: symbol-property
+        - order: 35
+          label: GSSAPIClientIdentity
+          kind: symbol-property
+        - order: 36
+          label: GSSAPIDelegateCredentials
+          kind: symbol-property
+        - order: 37
+          label: GSSAPIKeyExchange
+          kind: symbol-property
+        - order: 38
+          label: GSSAPIRenewalForcesRekey
+          kind: symbol-property
+        - order: 39
+          label: GSSAPIServerIdentity
+          kind: symbol-property
+        - order: 40
+          label: GSSAPITrustDns
+          kind: symbol-property
+        - order: 41
+          label: HashKnownHosts
+          kind: symbol-property
+        - order: 42
+          label: Host
+          kind: symbol-property
+        - order: 43
+          label: HostbasedAuthentication
+          kind: symbol-property
+        - order: 44
+          label: HostbasedKeyTypes
+          kind: symbol-property
+        - order: 45
+          label: HostKeyAlgorithms
+          kind: symbol-property
+        - order: 46
+          label: HostKeyAlias
+          kind: symbol-property
+        - order: 47
+          label: HostName
+          kind: symbol-property
+        - order: 48
+          label: IdentitiesOnly
+          kind: symbol-property
+        - order: 49
+          label: IdentityFile
+          kind: symbol-property
+        - order: 50
+          label: IgnoreUnknown
+          kind: symbol-property
+        - order: 51
+          label: IPQoS
+          kind: symbol-property
+        - order: 52
+          label: KbdInteractiveAuthentication
+          kind: symbol-property
+        - order: 53
+          label: KbdInteractiveDevices
+          kind: symbol-property
+        - order: 54
+          label: KexAlgorithms
+          kind: symbol-property
+        - order: 55
+          label: KeychainIntegration
+          kind: symbol-property
+        - order: 56
+          label: LocalCommand
+          kind: symbol-property
+        - order: 57
+          label: LocalForward
+          kind: symbol-property
+        - order: 58
+          label: LogLevel
+          kind: symbol-property
+        - order: 59
+          label: MACs
+          kind: symbol-property
+        - order: 60
+          label: Match
+          kind: symbol-property
+        - order: 61
+          label: NoHostAuthenticationForLocalhost
+          kind: symbol-property
+        - order: 62
+          label: NumberOfPasswordPrompts
+          kind: symbol-property
+        - order: 63
+          label: PasswordAuthentication
+          kind: symbol-property
+        - order: 64
+          label: PermitLocalCommand
+          kind: symbol-property
+        - order: 65
+          label: PKCS11Provider
+          kind: symbol-property
+        - order: 66
+          label: Port
+          kind: symbol-property
+        - order: 67
+          label: PreferredAuthentications
+          kind: symbol-property
+        - order: 68
+          label: Protocol
+          kind: symbol-property
+        - order: 69
+          label: ProxyCommand
+          kind: symbol-property
+        - order: 70
+          label: ProxyJump
+          kind: symbol-property
+        - order: 71
+          label: ProxyUseFdpass
+          kind: symbol-property
+        - order: 72
+          label: PubkeyAuthentication
+          kind: symbol-property
+        - order: 73
+          label: RekeyLimit
+          kind: symbol-property
+        - order: 74
+          label: RemoteCommand
+          kind: symbol-property
+        - order: 75
+          label: RemoteForward
+          kind: symbol-property
+        - order: 76
+          label: RequestTTY
+          kind: symbol-property
+        - order: 77
+          label: RevokedHostKeys
+          kind: symbol-property
+        - order: 78
+          label: RhostsRSAAuthentication
+          kind: symbol-property
+        - order: 79
+          label: RSAAuthentication
+          kind: symbol-property
+        - order: 80
+          label: SendEnv
+          kind: symbol-property
+        - order: 81
+          label: ServerAliveCountMax
+          kind: symbol-property
+        - order: 82
+          label: ServerAliveInterval
+          kind: symbol-property
+        - order: 83
+          label: StreamLocalBindMask
+          kind: symbol-property
+        - order: 84
+          label: StreamLocalBindUnlink
+          kind: symbol-property
+        - order: 85
+          label: StrictHostKeyChecking
+          kind: symbol-property
+        - order: 86
+          label: TCPKeepAlive
+          kind: symbol-property
+        - order: 87
+          label: Tunnel
+          kind: symbol-property
+        - order: 88
+          label: TunnelDevice
+          kind: symbol-property
+        - order: 89
+          label: UpdateHostKeys
+          kind: symbol-property
+        - order: 90
+          label: UsePrivilegedPort
+          kind: symbol-property
+        - order: 91
+          label: User
+          kind: symbol-property
+        - order: 92
+          label: UserKnownHostsFile
+          kind: symbol-property
+        - order: 93
+          label: VerifyHostKeyDNS
+          kind: symbol-property
+        - order: 94
+          label: VisualHostKey
+          kind: symbol-property
+        - order: 95
+          label: XAuthLocation
+          kind: symbol-property
+      total: 96
+      message: null
+  mixed-blanks-host:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 2, Col 10
+        aria: Ln 2, Col 10
+        tooltip: null
+    suggest:active:
+      items:
+        - order: 0
+          label: Host
+          kind: symbol-property
+          preselected: true
+        - order: 1
+          label: HostbasedAuthentication
+          kind: symbol-property
+          preselected: false
+        - order: 2
+          label: HostbasedKeyTypes
+          kind: symbol-property
+          preselected: false
+        - order: 3
+          label: HostKeyAlgorithms
+          kind: symbol-property
+          preselected: false
+        - order: 4
+          label: HostKeyAlias
+          kind: symbol-property
+          preselected: false
+        - order: 5
+          label: HostName
+          kind: symbol-property
+          preselected: false
+        - order: 6
+          label: NoHostAuthenticationForLocalhost
+          kind: symbol-property
+          preselected: false
+        - order: 7
+          label: CheckHostIP
+          kind: symbol-property
+          preselected: false
+        - order: 8
+          label: StrictHostKeyChecking
+          kind: symbol-property
+          preselected: false
+        - order: 9
+          label: UpdateHostKeys
+          kind: symbol-property
+          preselected: false
+        - order: 10
+          label: VerifyHostKeyDNS
+          kind: symbol-property
+          preselected: false
+        - order: 11
+          label: VisualHostKey
+          kind: symbol-property
+          preselected: false
+        - order: 12
+          label: RevokedHostKeys
+          kind: symbol-property
+          preselected: false
+        - order: 13
+          label: HashKnownHosts
+          kind: symbol-property
+          preselected: false
+        - order: 14
+          label: UserKnownHostsFile
+          kind: symbol-property
+          preselected: false
+        - order: 15
+          label: GlobalKnownHostsFile
+          kind: symbol-property
+          preselected: false
+        - order: 16
+          label: CanonicalizeHostname
+          kind: symbol-property
+          preselected: false
+      total: 17
+      message: null
+  tab-only-line:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 3, Col 5
+        aria: Ln 3, Col 5
+        tooltip: null
+    suggest:active:
+      items:
+        - order: 0
+          label: AddKeysToAgent
+          kind: symbol-property
+        - order: 1
+          label: AddressFamily
+          kind: symbol-property
+        - order: 2
+          label: AskPassGUI
+          kind: symbol-property
+        - order: 3
+          label: BatchMode
+          kind: symbol-property
+        - order: 4
+          label: BindAddress
+          kind: symbol-property
+        - order: 5
+          label: CanonicalDomains
+          kind: symbol-property
+        - order: 6
+          label: CanonicalizeFallbackLocal
+          kind: symbol-property
+        - order: 7
+          label: CanonicalizeHostname
+          kind: symbol-property
+        - order: 8
+          label: CanonicalizeMaxDots
+          kind: symbol-property
+        - order: 9
+          label: CanonicalizePermittedCNAMEs
+          kind: symbol-property
+        - order: 10
+          label: ChallengeResponseAuthentication
+          kind: symbol-property
+        - order: 11
+          label: CheckHostIP
+          kind: symbol-property
+        - order: 12
+          label: Cipher
+          kind: symbol-property
+        - order: 13
+          label: Ciphers
+          kind: symbol-property
+        - order: 14
+          label: ClearAllForwardings
+          kind: symbol-property
+        - order: 15
+          label: Compression
+          kind: symbol-property
+        - order: 16
+          label: CompressionLevel
+          kind: symbol-property
+        - order: 17
+          label: Configure tunnel
+          kind: symbol-snippet
+        - order: 18
+          label: ConnectionAttempts
+          kind: symbol-property
+        - order: 19
+          label: ConnectTimeout
+          kind: symbol-property
+        - order: 20
+          label: ControlMaster
+          kind: symbol-property
+        - order: 21
+          label: ControlPath
+          kind: symbol-property
+        - order: 22
+          label: ControlPersist
+          kind: symbol-property
+        - order: 23
+          label: DynamicForward
+          kind: symbol-property
+        - order: 24
+          label: EnableSSHKeysign
+          kind: symbol-property
+        - order: 25
+          label: EscapeChar
+          kind: symbol-property
+        - order: 26
+          label: ExitOnForwardFailure
+          kind: symbol-property
+        - order: 27
+          label: FingerprintHash
+          kind: symbol-property
+        - order: 28
+          label: ForwardAgent
+          kind: symbol-property
+        - order: 29
+          label: ForwardX11
+          kind: symbol-property
+        - order: 30
+          label: ForwardX11Timeout
+          kind: symbol-property
+        - order: 31
+          label: ForwardX11Trusted
+          kind: symbol-property
+        - order: 32
+          label: GatewayPorts
+          kind: symbol-property
+        - order: 33
+          label: GlobalKnownHostsFile
+          kind: symbol-property
+        - order: 34
+          label: GSSAPIAuthentication
+          kind: symbol-property
+        - order: 35
+          label: GSSAPIClientIdentity
+          kind: symbol-property
+        - order: 36
+          label: GSSAPIDelegateCredentials
+          kind: symbol-property
+        - order: 37
+          label: GSSAPIKeyExchange
+          kind: symbol-property
+        - order: 38
+          label: GSSAPIRenewalForcesRekey
+          kind: symbol-property
+        - order: 39
+          label: GSSAPIServerIdentity
+          kind: symbol-property
+        - order: 40
+          label: GSSAPITrustDns
+          kind: symbol-property
+        - order: 41
+          label: HashKnownHosts
+          kind: symbol-property
+        - order: 42
+          label: Host
+          kind: symbol-property
+        - order: 43
+          label: HostbasedAuthentication
+          kind: symbol-property
+        - order: 44
+          label: HostbasedKeyTypes
+          kind: symbol-property
+        - order: 45
+          label: HostKeyAlgorithms
+          kind: symbol-property
+        - order: 46
+          label: HostKeyAlias
+          kind: symbol-property
+        - order: 47
+          label: HostName
+          kind: symbol-property
+        - order: 48
+          label: IdentitiesOnly
+          kind: symbol-property
+        - order: 49
+          label: IdentityFile
+          kind: symbol-property
+        - order: 50
+          label: IgnoreUnknown
+          kind: symbol-property
+        - order: 51
+          label: IPQoS
+          kind: symbol-property
+        - order: 52
+          label: KbdInteractiveAuthentication
+          kind: symbol-property
+        - order: 53
+          label: KbdInteractiveDevices
+          kind: symbol-property
+        - order: 54
+          label: KexAlgorithms
+          kind: symbol-property
+        - order: 55
+          label: KeychainIntegration
+          kind: symbol-property
+        - order: 56
+          label: LocalCommand
+          kind: symbol-property
+        - order: 57
+          label: LocalForward
+          kind: symbol-property
+        - order: 58
+          label: LogLevel
+          kind: symbol-property
+        - order: 59
+          label: MACs
+          kind: symbol-property
+        - order: 60
+          label: Match
+          kind: symbol-property
+        - order: 61
+          label: NoHostAuthenticationForLocalhost
+          kind: symbol-property
+        - order: 62
+          label: NumberOfPasswordPrompts
+          kind: symbol-property
+        - order: 63
+          label: PasswordAuthentication
+          kind: symbol-property
+        - order: 64
+          label: PermitLocalCommand
+          kind: symbol-property
+        - order: 65
+          label: PKCS11Provider
+          kind: symbol-property
+        - order: 66
+          label: Port
+          kind: symbol-property
+        - order: 67
+          label: PreferredAuthentications
+          kind: symbol-property
+        - order: 68
+          label: Protocol
+          kind: symbol-property
+        - order: 69
+          label: ProxyCommand
+          kind: symbol-property
+        - order: 70
+          label: ProxyJump
+          kind: symbol-property
+        - order: 71
+          label: ProxyUseFdpass
+          kind: symbol-property
+        - order: 72
+          label: PubkeyAuthentication
+          kind: symbol-property
+        - order: 73
+          label: RekeyLimit
+          kind: symbol-property
+        - order: 74
+          label: RemoteCommand
+          kind: symbol-property
+        - order: 75
+          label: RemoteForward
+          kind: symbol-property
+        - order: 76
+          label: RequestTTY
+          kind: symbol-property
+        - order: 77
+          label: RevokedHostKeys
+          kind: symbol-property
+        - order: 78
+          label: RhostsRSAAuthentication
+          kind: symbol-property
+        - order: 79
+          label: RSAAuthentication
+          kind: symbol-property
+        - order: 80
+          label: SendEnv
+          kind: symbol-property
+        - order: 81
+          label: ServerAliveCountMax
+          kind: symbol-property
+        - order: 82
+          label: ServerAliveInterval
+          kind: symbol-property
+        - order: 83
+          label: StreamLocalBindMask
+          kind: symbol-property
+        - order: 84
+          label: StreamLocalBindUnlink
+          kind: symbol-property
+        - order: 85
+          label: StrictHostKeyChecking
+          kind: symbol-property
+        - order: 86
+          label: TCPKeepAlive
+          kind: symbol-property
+        - order: 87
+          label: Tunnel
+          kind: symbol-property
+        - order: 88
+          label: TunnelDevice
+          kind: symbol-property
+        - order: 89
+          label: UpdateHostKeys
+          kind: symbol-property
+        - order: 90
+          label: UsePrivilegedPort
+          kind: symbol-property
+        - order: 91
+          label: User
+          kind: symbol-property
+        - order: 92
+          label: UserKnownHostsFile
+          kind: symbol-property
+        - order: 93
+          label: VerifyHostKeyDNS
+          kind: symbol-property
+        - order: 94
+          label: VisualHostKey
+          kind: symbol-property
+        - order: 95
+          label: XAuthLocation
+          kind: symbol-property
+      total: 96
+      message: null
+  tab-hash:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 4, Col 6
+        aria: Ln 4, Col 6
+        tooltip: null
+    suggest:active:
+      items:
+        - order: 0
+          label: AddKeysToAgent
+          kind: symbol-property
+        - order: 1
+          label: AddressFamily
+          kind: symbol-property
+        - order: 2
+          label: AskPassGUI
+          kind: symbol-property
+        - order: 3
+          label: BatchMode
+          kind: symbol-property
+        - order: 4
+          label: BindAddress
+          kind: symbol-property
+        - order: 5
+          label: CanonicalDomains
+          kind: symbol-property
+        - order: 6
+          label: CanonicalizeFallbackLocal
+          kind: symbol-property
+        - order: 7
+          label: CanonicalizeHostname
+          kind: symbol-property
+        - order: 8
+          label: CanonicalizeMaxDots
+          kind: symbol-property
+        - order: 9
+          label: CanonicalizePermittedCNAMEs
+          kind: symbol-property
+        - order: 10
+          label: ChallengeResponseAuthentication
+          kind: symbol-property
+        - order: 11
+          label: CheckHostIP
+          kind: symbol-property
+        - order: 12
+          label: Cipher
+          kind: symbol-property
+        - order: 13
+          label: Ciphers
+          kind: symbol-property
+        - order: 14
+          label: ClearAllForwardings
+          kind: symbol-property
+        - order: 15
+          label: Compression
+          kind: symbol-property
+        - order: 16
+          label: CompressionLevel
+          kind: symbol-property
+        - order: 17
+          label: Configure tunnel
+          kind: symbol-snippet
+        - order: 18
+          label: ConnectionAttempts
+          kind: symbol-property
+        - order: 19
+          label: ConnectTimeout
+          kind: symbol-property
+        - order: 20
+          label: ControlMaster
+          kind: symbol-property
+        - order: 21
+          label: ControlPath
+          kind: symbol-property
+        - order: 22
+          label: ControlPersist
+          kind: symbol-property
+        - order: 23
+          label: DynamicForward
+          kind: symbol-property
+        - order: 24
+          label: EnableSSHKeysign
+          kind: symbol-property
+        - order: 25
+          label: EscapeChar
+          kind: symbol-property
+        - order: 26
+          label: ExitOnForwardFailure
+          kind: symbol-property
+        - order: 27
+          label: FingerprintHash
+          kind: symbol-property
+        - order: 28
+          label: ForwardAgent
+          kind: symbol-property
+        - order: 29
+          label: ForwardX11
+          kind: symbol-property
+        - order: 30
+          label: ForwardX11Timeout
+          kind: symbol-property
+        - order: 31
+          label: ForwardX11Trusted
+          kind: symbol-property
+        - order: 32
+          label: GatewayPorts
+          kind: symbol-property
+        - order: 33
+          label: GlobalKnownHostsFile
+          kind: symbol-property
+        - order: 34
+          label: GSSAPIAuthentication
+          kind: symbol-property
+        - order: 35
+          label: GSSAPIClientIdentity
+          kind: symbol-property
+        - order: 36
+          label: GSSAPIDelegateCredentials
+          kind: symbol-property
+        - order: 37
+          label: GSSAPIKeyExchange
+          kind: symbol-property
+        - order: 38
+          label: GSSAPIRenewalForcesRekey
+          kind: symbol-property
+        - order: 39
+          label: GSSAPIServerIdentity
+          kind: symbol-property
+        - order: 40
+          label: GSSAPITrustDns
+          kind: symbol-property
+        - order: 41
+          label: HashKnownHosts
+          kind: symbol-property
+        - order: 42
+          label: Host
+          kind: symbol-property
+        - order: 43
+          label: HostbasedAuthentication
+          kind: symbol-property
+        - order: 44
+          label: HostbasedKeyTypes
+          kind: symbol-property
+        - order: 45
+          label: HostKeyAlgorithms
+          kind: symbol-property
+        - order: 46
+          label: HostKeyAlias
+          kind: symbol-property
+        - order: 47
+          label: HostName
+          kind: symbol-property
+        - order: 48
+          label: IdentitiesOnly
+          kind: symbol-property
+        - order: 49
+          label: IdentityFile
+          kind: symbol-property
+        - order: 50
+          label: IgnoreUnknown
+          kind: symbol-property
+        - order: 51
+          label: IPQoS
+          kind: symbol-property
+        - order: 52
+          label: KbdInteractiveAuthentication
+          kind: symbol-property
+        - order: 53
+          label: KbdInteractiveDevices
+          kind: symbol-property
+        - order: 54
+          label: KexAlgorithms
+          kind: symbol-property
+        - order: 55
+          label: KeychainIntegration
+          kind: symbol-property
+        - order: 56
+          label: LocalCommand
+          kind: symbol-property
+        - order: 57
+          label: LocalForward
+          kind: symbol-property
+        - order: 58
+          label: LogLevel
+          kind: symbol-property
+        - order: 59
+          label: MACs
+          kind: symbol-property
+        - order: 60
+          label: Match
+          kind: symbol-property
+        - order: 61
+          label: NoHostAuthenticationForLocalhost
+          kind: symbol-property
+        - order: 62
+          label: NumberOfPasswordPrompts
+          kind: symbol-property
+        - order: 63
+          label: PasswordAuthentication
+          kind: symbol-property
+        - order: 64
+          label: PermitLocalCommand
+          kind: symbol-property
+        - order: 65
+          label: PKCS11Provider
+          kind: symbol-property
+        - order: 66
+          label: Port
+          kind: symbol-property
+        - order: 67
+          label: PreferredAuthentications
+          kind: symbol-property
+        - order: 68
+          label: Protocol
+          kind: symbol-property
+        - order: 69
+          label: ProxyCommand
+          kind: symbol-property
+        - order: 70
+          label: ProxyJump
+          kind: symbol-property
+        - order: 71
+          label: ProxyUseFdpass
+          kind: symbol-property
+        - order: 72
+          label: PubkeyAuthentication
+          kind: symbol-property
+        - order: 73
+          label: RekeyLimit
+          kind: symbol-property
+        - order: 74
+          label: RemoteCommand
+          kind: symbol-property
+        - order: 75
+          label: RemoteForward
+          kind: symbol-property
+        - order: 76
+          label: RequestTTY
+          kind: symbol-property
+        - order: 77
+          label: RevokedHostKeys
+          kind: symbol-property
+        - order: 78
+          label: RhostsRSAAuthentication
+          kind: symbol-property
+        - order: 79
+          label: RSAAuthentication
+          kind: symbol-property
+        - order: 80
+          label: SendEnv
+          kind: symbol-property
+        - order: 81
+          label: ServerAliveCountMax
+          kind: symbol-property
+        - order: 82
+          label: ServerAliveInterval
+          kind: symbol-property
+        - order: 83
+          label: StreamLocalBindMask
+          kind: symbol-property
+        - order: 84
+          label: StreamLocalBindUnlink
+          kind: symbol-property
+        - order: 85
+          label: StrictHostKeyChecking
+          kind: symbol-property
+        - order: 86
+          label: TCPKeepAlive
+          kind: symbol-property
+        - order: 87
+          label: Tunnel
+          kind: symbol-property
+        - order: 88
+          label: TunnelDevice
+          kind: symbol-property
+        - order: 89
+          label: UpdateHostKeys
+          kind: symbol-property
+        - order: 90
+          label: UsePrivilegedPort
+          kind: symbol-property
+        - order: 91
+          label: User
+          kind: symbol-property
+        - order: 92
+          label: UserKnownHostsFile
+          kind: symbol-property
+        - order: 93
+          label: VerifyHostKeyDNS
+          kind: symbol-property
+        - order: 94
+          label: VisualHostKey
+          kind: symbol-property
+        - order: 95
+          label: XAuthLocation
+          kind: symbol-property
+      total: 96
+      message: null
+  tab-comment-text:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 4, Col 7
+        aria: Ln 4, Col 7
+        tooltip: null
+    suggest:active:
+      items:
+        - order: 0
+          label: Host
+          kind: symbol-text
+        - order: 1
+          label: HostName
+          kind: symbol-text
+        - order: 2
+          label: qqname
+          kind: symbol-text
+        - order: 3
+          label: qqtab
+          kind: symbol-text
+        - order: 4
+          label: qquser
+          kind: symbol-text
+        - order: 5
+          label: User
+          kind: symbol-text
+      total: 6
+      message: null
+  accepted-after-tab:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 1, Col 22
+        aria: Ln 1, Col 22
+        tooltip: null
+    tokens:active@1:
+      - col: 1
+        text: "\tUsePrivilegedPorter"
+        length: 20
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 21
+        text: ' qquser'
+        length: 7
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+observed:
+  normalized:
+    tab-then-user:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 1, Col 5
+          aria: Ln 1, Col 5
+          tooltip: null
+      suggest:active:
+        items:
+          - order: 0
+            label: AddKeysToAgent
+            kind: symbol-property
+          - order: 1
+            label: AddressFamily
+            kind: symbol-property
+          - order: 2
+            label: AskPassGUI
+            kind: symbol-property
+          - order: 3
+            label: BatchMode
+            kind: symbol-property
+          - order: 4
+            label: BindAddress
+            kind: symbol-property
+          - order: 5
+            label: CanonicalDomains
+            kind: symbol-property
+          - order: 6
+            label: CanonicalizeFallbackLocal
+            kind: symbol-property
+          - order: 7
+            label: CanonicalizeHostname
+            kind: symbol-property
+          - order: 8
+            label: CanonicalizeMaxDots
+            kind: symbol-property
+          - order: 9
+            label: CanonicalizePermittedCNAMEs
+            kind: symbol-property
+          - order: 10
+            label: ChallengeResponseAuthentication
+            kind: symbol-property
+          - order: 11
+            label: CheckHostIP
+            kind: symbol-property
+          - order: 12
+            label: Cipher
+            kind: symbol-property
+          - order: 13
+            label: Ciphers
+            kind: symbol-property
+          - order: 14
+            label: ClearAllForwardings
+            kind: symbol-property
+          - order: 15
+            label: Compression
+            kind: symbol-property
+          - order: 16
+            label: CompressionLevel
+            kind: symbol-property
+          - order: 17
+            label: Configure tunnel
+            kind: symbol-snippet
+          - order: 18
+            label: ConnectionAttempts
+            kind: symbol-property
+          - order: 19
+            label: ConnectTimeout
+            kind: symbol-property
+          - order: 20
+            label: ControlMaster
+            kind: symbol-property
+          - order: 21
+            label: ControlPath
+            kind: symbol-property
+          - order: 22
+            label: ControlPersist
+            kind: symbol-property
+          - order: 23
+            label: DynamicForward
+            kind: symbol-property
+          - order: 24
+            label: EnableSSHKeysign
+            kind: symbol-property
+          - order: 25
+            label: EscapeChar
+            kind: symbol-property
+          - order: 26
+            label: ExitOnForwardFailure
+            kind: symbol-property
+          - order: 27
+            label: FingerprintHash
+            kind: symbol-property
+          - order: 28
+            label: ForwardAgent
+            kind: symbol-property
+          - order: 29
+            label: ForwardX11
+            kind: symbol-property
+          - order: 30
+            label: ForwardX11Timeout
+            kind: symbol-property
+          - order: 31
+            label: ForwardX11Trusted
+            kind: symbol-property
+          - order: 32
+            label: GatewayPorts
+            kind: symbol-property
+          - order: 33
+            label: GlobalKnownHostsFile
+            kind: symbol-property
+          - order: 34
+            label: GSSAPIAuthentication
+            kind: symbol-property
+          - order: 35
+            label: GSSAPIClientIdentity
+            kind: symbol-property
+          - order: 36
+            label: GSSAPIDelegateCredentials
+            kind: symbol-property
+          - order: 37
+            label: GSSAPIKeyExchange
+            kind: symbol-property
+          - order: 38
+            label: GSSAPIRenewalForcesRekey
+            kind: symbol-property
+          - order: 39
+            label: GSSAPIServerIdentity
+            kind: symbol-property
+          - order: 40
+            label: GSSAPITrustDns
+            kind: symbol-property
+          - order: 41
+            label: HashKnownHosts
+            kind: symbol-property
+          - order: 42
+            label: Host
+            kind: symbol-property
+          - order: 43
+            label: HostbasedAuthentication
+            kind: symbol-property
+          - order: 44
+            label: HostbasedKeyTypes
+            kind: symbol-property
+          - order: 45
+            label: HostKeyAlgorithms
+            kind: symbol-property
+          - order: 46
+            label: HostKeyAlias
+            kind: symbol-property
+          - order: 47
+            label: HostName
+            kind: symbol-property
+          - order: 48
+            label: IdentitiesOnly
+            kind: symbol-property
+          - order: 49
+            label: IdentityFile
+            kind: symbol-property
+          - order: 50
+            label: IgnoreUnknown
+            kind: symbol-property
+          - order: 51
+            label: IPQoS
+            kind: symbol-property
+          - order: 52
+            label: KbdInteractiveAuthentication
+            kind: symbol-property
+          - order: 53
+            label: KbdInteractiveDevices
+            kind: symbol-property
+          - order: 54
+            label: KexAlgorithms
+            kind: symbol-property
+          - order: 55
+            label: KeychainIntegration
+            kind: symbol-property
+          - order: 56
+            label: LocalCommand
+            kind: symbol-property
+          - order: 57
+            label: LocalForward
+            kind: symbol-property
+          - order: 58
+            label: LogLevel
+            kind: symbol-property
+          - order: 59
+            label: MACs
+            kind: symbol-property
+          - order: 60
+            label: Match
+            kind: symbol-property
+          - order: 61
+            label: NoHostAuthenticationForLocalhost
+            kind: symbol-property
+          - order: 62
+            label: NumberOfPasswordPrompts
+            kind: symbol-property
+          - order: 63
+            label: PasswordAuthentication
+            kind: symbol-property
+          - order: 64
+            label: PermitLocalCommand
+            kind: symbol-property
+          - order: 65
+            label: PKCS11Provider
+            kind: symbol-property
+          - order: 66
+            label: Port
+            kind: symbol-property
+          - order: 67
+            label: PreferredAuthentications
+            kind: symbol-property
+          - order: 68
+            label: Protocol
+            kind: symbol-property
+          - order: 69
+            label: ProxyCommand
+            kind: symbol-property
+          - order: 70
+            label: ProxyJump
+            kind: symbol-property
+          - order: 71
+            label: ProxyUseFdpass
+            kind: symbol-property
+          - order: 72
+            label: PubkeyAuthentication
+            kind: symbol-property
+          - order: 73
+            label: RekeyLimit
+            kind: symbol-property
+          - order: 74
+            label: RemoteCommand
+            kind: symbol-property
+          - order: 75
+            label: RemoteForward
+            kind: symbol-property
+          - order: 76
+            label: RequestTTY
+            kind: symbol-property
+          - order: 77
+            label: RevokedHostKeys
+            kind: symbol-property
+          - order: 78
+            label: RhostsRSAAuthentication
+            kind: symbol-property
+          - order: 79
+            label: RSAAuthentication
+            kind: symbol-property
+          - order: 80
+            label: SendEnv
+            kind: symbol-property
+          - order: 81
+            label: ServerAliveCountMax
+            kind: symbol-property
+          - order: 82
+            label: ServerAliveInterval
+            kind: symbol-property
+          - order: 83
+            label: StreamLocalBindMask
+            kind: symbol-property
+          - order: 84
+            label: StreamLocalBindUnlink
+            kind: symbol-property
+          - order: 85
+            label: StrictHostKeyChecking
+            kind: symbol-property
+          - order: 86
+            label: TCPKeepAlive
+            kind: symbol-property
+          - order: 87
+            label: Tunnel
+            kind: symbol-property
+          - order: 88
+            label: TunnelDevice
+            kind: symbol-property
+          - order: 89
+            label: UpdateHostKeys
+            kind: symbol-property
+          - order: 90
+            label: UsePrivilegedPort
+            kind: symbol-property
+          - order: 91
+            label: User
+            kind: symbol-property
+          - order: 92
+            label: UserKnownHostsFile
+            kind: symbol-property
+          - order: 93
+            label: VerifyHostKeyDNS
+            kind: symbol-property
+          - order: 94
+            label: VisualHostKey
+            kind: symbol-property
+          - order: 95
+            label: XAuthLocation
+            kind: symbol-property
+        total: 96
+        message: null
+    tab-us:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 1, Col 7
+          aria: Ln 1, Col 7
+          tooltip: null
+      suggest:active:
+        items:
+          - order: 0
+            label: UsePrivilegedPort
+            kind: symbol-property
+            preselected: true
+          - order: 1
+            label: User
+            kind: symbol-property
+            preselected: false
+          - order: 2
+            label: UserKnownHostsFile
+            kind: symbol-property
+            preselected: false
+          - order: 3
+            label: ProxyUseFdpass
+            kind: symbol-property
+            preselected: false
+          - order: 4
+            label: UpdateHostKeys
+            kind: symbol-property
+            preselected: false
+        total: 5
+        message: null
+    tab-user-value:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 1, Col 10
+          aria: Ln 1, Col 10
+          tooltip: null
+      suggest:active:
+        items:
+          - order: 0
+            label: Host
+            kind: symbol-text
+          - order: 1
+            label: HostName
+            kind: symbol-text
+          - order: 2
+            label: qqname
+            kind: symbol-text
+          - order: 3
+            label: qqtab
+            kind: symbol-text
+          - order: 4
+            label: qqtabcomment
+            kind: symbol-text
+          - order: 5
+            label: User
+            kind: symbol-text
+        total: 6
+        message: null
+    mixed-blanks-then-hostname:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 2, Col 6
+          aria: Ln 2, Col 6
+          tooltip: null
+      suggest:active:
+        items:
+          - order: 0
+            label: AddKeysToAgent
+            kind: symbol-property
+          - order: 1
+            label: AddressFamily
+            kind: symbol-property
+          - order: 2
+            label: AskPassGUI
+            kind: symbol-property
+          - order: 3
+            label: BatchMode
+            kind: symbol-property
+          - order: 4
+            label: BindAddress
+            kind: symbol-property
+          - order: 5
+            label: CanonicalDomains
+            kind: symbol-property
+          - order: 6
+            label: CanonicalizeFallbackLocal
+            kind: symbol-property
+          - order: 7
+            label: CanonicalizeHostname
+            kind: symbol-property
+          - order: 8
+            label: CanonicalizeMaxDots
+            kind: symbol-property
+          - order: 9
+            label: CanonicalizePermittedCNAMEs
+            kind: symbol-property
+          - order: 10
+            label: ChallengeResponseAuthentication
+            kind: symbol-property
+          - order: 11
+            label: CheckHostIP
+            kind: symbol-property
+          - order: 12
+            label: Cipher
+            kind: symbol-property
+          - order: 13
+            label: Ciphers
+            kind: symbol-property
+          - order: 14
+            label: ClearAllForwardings
+            kind: symbol-property
+          - order: 15
+            label: Compression
+            kind: symbol-property
+          - order: 16
+            label: CompressionLevel
+            kind: symbol-property
+          - order: 17
+            label: Configure tunnel
+            kind: symbol-snippet
+          - order: 18
+            label: ConnectionAttempts
+            kind: symbol-property
+          - order: 19
+            label: ConnectTimeout
+            kind: symbol-property
+          - order: 20
+            label: ControlMaster
+            kind: symbol-property
+          - order: 21
+            label: ControlPath
+            kind: symbol-property
+          - order: 22
+            label: ControlPersist
+            kind: symbol-property
+          - order: 23
+            label: DynamicForward
+            kind: symbol-property
+          - order: 24
+            label: EnableSSHKeysign
+            kind: symbol-property
+          - order: 25
+            label: EscapeChar
+            kind: symbol-property
+          - order: 26
+            label: ExitOnForwardFailure
+            kind: symbol-property
+          - order: 27
+            label: FingerprintHash
+            kind: symbol-property
+          - order: 28
+            label: ForwardAgent
+            kind: symbol-property
+          - order: 29
+            label: ForwardX11
+            kind: symbol-property
+          - order: 30
+            label: ForwardX11Timeout
+            kind: symbol-property
+          - order: 31
+            label: ForwardX11Trusted
+            kind: symbol-property
+          - order: 32
+            label: GatewayPorts
+            kind: symbol-property
+          - order: 33
+            label: GlobalKnownHostsFile
+            kind: symbol-property
+          - order: 34
+            label: GSSAPIAuthentication
+            kind: symbol-property
+          - order: 35
+            label: GSSAPIClientIdentity
+            kind: symbol-property
+          - order: 36
+            label: GSSAPIDelegateCredentials
+            kind: symbol-property
+          - order: 37
+            label: GSSAPIKeyExchange
+            kind: symbol-property
+          - order: 38
+            label: GSSAPIRenewalForcesRekey
+            kind: symbol-property
+          - order: 39
+            label: GSSAPIServerIdentity
+            kind: symbol-property
+          - order: 40
+            label: GSSAPITrustDns
+            kind: symbol-property
+          - order: 41
+            label: HashKnownHosts
+            kind: symbol-property
+          - order: 42
+            label: Host
+            kind: symbol-property
+          - order: 43
+            label: HostbasedAuthentication
+            kind: symbol-property
+          - order: 44
+            label: HostbasedKeyTypes
+            kind: symbol-property
+          - order: 45
+            label: HostKeyAlgorithms
+            kind: symbol-property
+          - order: 46
+            label: HostKeyAlias
+            kind: symbol-property
+          - order: 47
+            label: HostName
+            kind: symbol-property
+          - order: 48
+            label: IdentitiesOnly
+            kind: symbol-property
+          - order: 49
+            label: IdentityFile
+            kind: symbol-property
+          - order: 50
+            label: IgnoreUnknown
+            kind: symbol-property
+          - order: 51
+            label: IPQoS
+            kind: symbol-property
+          - order: 52
+            label: KbdInteractiveAuthentication
+            kind: symbol-property
+          - order: 53
+            label: KbdInteractiveDevices
+            kind: symbol-property
+          - order: 54
+            label: KexAlgorithms
+            kind: symbol-property
+          - order: 55
+            label: KeychainIntegration
+            kind: symbol-property
+          - order: 56
+            label: LocalCommand
+            kind: symbol-property
+          - order: 57
+            label: LocalForward
+            kind: symbol-property
+          - order: 58
+            label: LogLevel
+            kind: symbol-property
+          - order: 59
+            label: MACs
+            kind: symbol-property
+          - order: 60
+            label: Match
+            kind: symbol-property
+          - order: 61
+            label: NoHostAuthenticationForLocalhost
+            kind: symbol-property
+          - order: 62
+            label: NumberOfPasswordPrompts
+            kind: symbol-property
+          - order: 63
+            label: PasswordAuthentication
+            kind: symbol-property
+          - order: 64
+            label: PermitLocalCommand
+            kind: symbol-property
+          - order: 65
+            label: PKCS11Provider
+            kind: symbol-property
+          - order: 66
+            label: Port
+            kind: symbol-property
+          - order: 67
+            label: PreferredAuthentications
+            kind: symbol-property
+          - order: 68
+            label: Protocol
+            kind: symbol-property
+          - order: 69
+            label: ProxyCommand
+            kind: symbol-property
+          - order: 70
+            label: ProxyJump
+            kind: symbol-property
+          - order: 71
+            label: ProxyUseFdpass
+            kind: symbol-property
+          - order: 72
+            label: PubkeyAuthentication
+            kind: symbol-property
+          - order: 73
+            label: RekeyLimit
+            kind: symbol-property
+          - order: 74
+            label: RemoteCommand
+            kind: symbol-property
+          - order: 75
+            label: RemoteForward
+            kind: symbol-property
+          - order: 76
+            label: RequestTTY
+            kind: symbol-property
+          - order: 77
+            label: RevokedHostKeys
+            kind: symbol-property
+          - order: 78
+            label: RhostsRSAAuthentication
+            kind: symbol-property
+          - order: 79
+            label: RSAAuthentication
+            kind: symbol-property
+          - order: 80
+            label: SendEnv
+            kind: symbol-property
+          - order: 81
+            label: ServerAliveCountMax
+            kind: symbol-property
+          - order: 82
+            label: ServerAliveInterval
+            kind: symbol-property
+          - order: 83
+            label: StreamLocalBindMask
+            kind: symbol-property
+          - order: 84
+            label: StreamLocalBindUnlink
+            kind: symbol-property
+          - order: 85
+            label: StrictHostKeyChecking
+            kind: symbol-property
+          - order: 86
+            label: TCPKeepAlive
+            kind: symbol-property
+          - order: 87
+            label: Tunnel
+            kind: symbol-property
+          - order: 88
+            label: TunnelDevice
+            kind: symbol-property
+          - order: 89
+            label: UpdateHostKeys
+            kind: symbol-property
+          - order: 90
+            label: UsePrivilegedPort
+            kind: symbol-property
+          - order: 91
+            label: User
+            kind: symbol-property
+          - order: 92
+            label: UserKnownHostsFile
+            kind: symbol-property
+          - order: 93
+            label: VerifyHostKeyDNS
+            kind: symbol-property
+          - order: 94
+            label: VisualHostKey
+            kind: symbol-property
+          - order: 95
+            label: XAuthLocation
+            kind: symbol-property
+        total: 96
+        message: null
+    mixed-blanks-host:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 2, Col 10
+          aria: Ln 2, Col 10
+          tooltip: null
+      suggest:active:
+        items:
+          - order: 0
+            label: Host
+            kind: symbol-property
+            preselected: true
+          - order: 1
+            label: HostbasedAuthentication
+            kind: symbol-property
+            preselected: false
+          - order: 2
+            label: HostbasedKeyTypes
+            kind: symbol-property
+            preselected: false
+          - order: 3
+            label: HostKeyAlgorithms
+            kind: symbol-property
+            preselected: false
+          - order: 4
+            label: HostKeyAlias
+            kind: symbol-property
+            preselected: false
+          - order: 5
+            label: HostName
+            kind: symbol-property
+            preselected: false
+          - order: 6
+            label: NoHostAuthenticationForLocalhost
+            kind: symbol-property
+            preselected: false
+          - order: 7
+            label: CheckHostIP
+            kind: symbol-property
+            preselected: false
+          - order: 8
+            label: StrictHostKeyChecking
+            kind: symbol-property
+            preselected: false
+          - order: 9
+            label: UpdateHostKeys
+            kind: symbol-property
+            preselected: false
+          - order: 10
+            label: VerifyHostKeyDNS
+            kind: symbol-property
+            preselected: false
+          - order: 11
+            label: VisualHostKey
+            kind: symbol-property
+            preselected: false
+          - order: 12
+            label: RevokedHostKeys
+            kind: symbol-property
+            preselected: false
+          - order: 13
+            label: HashKnownHosts
+            kind: symbol-property
+            preselected: false
+          - order: 14
+            label: UserKnownHostsFile
+            kind: symbol-property
+            preselected: false
+          - order: 15
+            label: GlobalKnownHostsFile
+            kind: symbol-property
+            preselected: false
+          - order: 16
+            label: CanonicalizeHostname
+            kind: symbol-property
+            preselected: false
+        total: 17
+        message: null
+    tab-only-line:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 5
+          aria: Ln 3, Col 5
+          tooltip: null
+      suggest:active:
+        items:
+          - order: 0
+            label: AddKeysToAgent
+            kind: symbol-property
+          - order: 1
+            label: AddressFamily
+            kind: symbol-property
+          - order: 2
+            label: AskPassGUI
+            kind: symbol-property
+          - order: 3
+            label: BatchMode
+            kind: symbol-property
+          - order: 4
+            label: BindAddress
+            kind: symbol-property
+          - order: 5
+            label: CanonicalDomains
+            kind: symbol-property
+          - order: 6
+            label: CanonicalizeFallbackLocal
+            kind: symbol-property
+          - order: 7
+            label: CanonicalizeHostname
+            kind: symbol-property
+          - order: 8
+            label: CanonicalizeMaxDots
+            kind: symbol-property
+          - order: 9
+            label: CanonicalizePermittedCNAMEs
+            kind: symbol-property
+          - order: 10
+            label: ChallengeResponseAuthentication
+            kind: symbol-property
+          - order: 11
+            label: CheckHostIP
+            kind: symbol-property
+          - order: 12
+            label: Cipher
+            kind: symbol-property
+          - order: 13
+            label: Ciphers
+            kind: symbol-property
+          - order: 14
+            label: ClearAllForwardings
+            kind: symbol-property
+          - order: 15
+            label: Compression
+            kind: symbol-property
+          - order: 16
+            label: CompressionLevel
+            kind: symbol-property
+          - order: 17
+            label: Configure tunnel
+            kind: symbol-snippet
+          - order: 18
+            label: ConnectionAttempts
+            kind: symbol-property
+          - order: 19
+            label: ConnectTimeout
+            kind: symbol-property
+          - order: 20
+            label: ControlMaster
+            kind: symbol-property
+          - order: 21
+            label: ControlPath
+            kind: symbol-property
+          - order: 22
+            label: ControlPersist
+            kind: symbol-property
+          - order: 23
+            label: DynamicForward
+            kind: symbol-property
+          - order: 24
+            label: EnableSSHKeysign
+            kind: symbol-property
+          - order: 25
+            label: EscapeChar
+            kind: symbol-property
+          - order: 26
+            label: ExitOnForwardFailure
+            kind: symbol-property
+          - order: 27
+            label: FingerprintHash
+            kind: symbol-property
+          - order: 28
+            label: ForwardAgent
+            kind: symbol-property
+          - order: 29
+            label: ForwardX11
+            kind: symbol-property
+          - order: 30
+            label: ForwardX11Timeout
+            kind: symbol-property
+          - order: 31
+            label: ForwardX11Trusted
+            kind: symbol-property
+          - order: 32
+            label: GatewayPorts
+            kind: symbol-property
+          - order: 33
+            label: GlobalKnownHostsFile
+            kind: symbol-property
+          - order: 34
+            label: GSSAPIAuthentication
+            kind: symbol-property
+          - order: 35
+            label: GSSAPIClientIdentity
+            kind: symbol-property
+          - order: 36
+            label: GSSAPIDelegateCredentials
+            kind: symbol-property
+          - order: 37
+            label: GSSAPIKeyExchange
+            kind: symbol-property
+          - order: 38
+            label: GSSAPIRenewalForcesRekey
+            kind: symbol-property
+          - order: 39
+            label: GSSAPIServerIdentity
+            kind: symbol-property
+          - order: 40
+            label: GSSAPITrustDns
+            kind: symbol-property
+          - order: 41
+            label: HashKnownHosts
+            kind: symbol-property
+          - order: 42
+            label: Host
+            kind: symbol-property
+          - order: 43
+            label: HostbasedAuthentication
+            kind: symbol-property
+          - order: 44
+            label: HostbasedKeyTypes
+            kind: symbol-property
+          - order: 45
+            label: HostKeyAlgorithms
+            kind: symbol-property
+          - order: 46
+            label: HostKeyAlias
+            kind: symbol-property
+          - order: 47
+            label: HostName
+            kind: symbol-property
+          - order: 48
+            label: IdentitiesOnly
+            kind: symbol-property
+          - order: 49
+            label: IdentityFile
+            kind: symbol-property
+          - order: 50
+            label: IgnoreUnknown
+            kind: symbol-property
+          - order: 51
+            label: IPQoS
+            kind: symbol-property
+          - order: 52
+            label: KbdInteractiveAuthentication
+            kind: symbol-property
+          - order: 53
+            label: KbdInteractiveDevices
+            kind: symbol-property
+          - order: 54
+            label: KexAlgorithms
+            kind: symbol-property
+          - order: 55
+            label: KeychainIntegration
+            kind: symbol-property
+          - order: 56
+            label: LocalCommand
+            kind: symbol-property
+          - order: 57
+            label: LocalForward
+            kind: symbol-property
+          - order: 58
+            label: LogLevel
+            kind: symbol-property
+          - order: 59
+            label: MACs
+            kind: symbol-property
+          - order: 60
+            label: Match
+            kind: symbol-property
+          - order: 61
+            label: NoHostAuthenticationForLocalhost
+            kind: symbol-property
+          - order: 62
+            label: NumberOfPasswordPrompts
+            kind: symbol-property
+          - order: 63
+            label: PasswordAuthentication
+            kind: symbol-property
+          - order: 64
+            label: PermitLocalCommand
+            kind: symbol-property
+          - order: 65
+            label: PKCS11Provider
+            kind: symbol-property
+          - order: 66
+            label: Port
+            kind: symbol-property
+          - order: 67
+            label: PreferredAuthentications
+            kind: symbol-property
+          - order: 68
+            label: Protocol
+            kind: symbol-property
+          - order: 69
+            label: ProxyCommand
+            kind: symbol-property
+          - order: 70
+            label: ProxyJump
+            kind: symbol-property
+          - order: 71
+            label: ProxyUseFdpass
+            kind: symbol-property
+          - order: 72
+            label: PubkeyAuthentication
+            kind: symbol-property
+          - order: 73
+            label: RekeyLimit
+            kind: symbol-property
+          - order: 74
+            label: RemoteCommand
+            kind: symbol-property
+          - order: 75
+            label: RemoteForward
+            kind: symbol-property
+          - order: 76
+            label: RequestTTY
+            kind: symbol-property
+          - order: 77
+            label: RevokedHostKeys
+            kind: symbol-property
+          - order: 78
+            label: RhostsRSAAuthentication
+            kind: symbol-property
+          - order: 79
+            label: RSAAuthentication
+            kind: symbol-property
+          - order: 80
+            label: SendEnv
+            kind: symbol-property
+          - order: 81
+            label: ServerAliveCountMax
+            kind: symbol-property
+          - order: 82
+            label: ServerAliveInterval
+            kind: symbol-property
+          - order: 83
+            label: StreamLocalBindMask
+            kind: symbol-property
+          - order: 84
+            label: StreamLocalBindUnlink
+            kind: symbol-property
+          - order: 85
+            label: StrictHostKeyChecking
+            kind: symbol-property
+          - order: 86
+            label: TCPKeepAlive
+            kind: symbol-property
+          - order: 87
+            label: Tunnel
+            kind: symbol-property
+          - order: 88
+            label: TunnelDevice
+            kind: symbol-property
+          - order: 89
+            label: UpdateHostKeys
+            kind: symbol-property
+          - order: 90
+            label: UsePrivilegedPort
+            kind: symbol-property
+          - order: 91
+            label: User
+            kind: symbol-property
+          - order: 92
+            label: UserKnownHostsFile
+            kind: symbol-property
+          - order: 93
+            label: VerifyHostKeyDNS
+            kind: symbol-property
+          - order: 94
+            label: VisualHostKey
+            kind: symbol-property
+          - order: 95
+            label: XAuthLocation
+            kind: symbol-property
+        total: 96
+        message: null
+    tab-hash:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 4, Col 6
+          aria: Ln 4, Col 6
+          tooltip: null
+      suggest:active:
+        items:
+          - order: 0
+            label: AddKeysToAgent
+            kind: symbol-property
+          - order: 1
+            label: AddressFamily
+            kind: symbol-property
+          - order: 2
+            label: AskPassGUI
+            kind: symbol-property
+          - order: 3
+            label: BatchMode
+            kind: symbol-property
+          - order: 4
+            label: BindAddress
+            kind: symbol-property
+          - order: 5
+            label: CanonicalDomains
+            kind: symbol-property
+          - order: 6
+            label: CanonicalizeFallbackLocal
+            kind: symbol-property
+          - order: 7
+            label: CanonicalizeHostname
+            kind: symbol-property
+          - order: 8
+            label: CanonicalizeMaxDots
+            kind: symbol-property
+          - order: 9
+            label: CanonicalizePermittedCNAMEs
+            kind: symbol-property
+          - order: 10
+            label: ChallengeResponseAuthentication
+            kind: symbol-property
+          - order: 11
+            label: CheckHostIP
+            kind: symbol-property
+          - order: 12
+            label: Cipher
+            kind: symbol-property
+          - order: 13
+            label: Ciphers
+            kind: symbol-property
+          - order: 14
+            label: ClearAllForwardings
+            kind: symbol-property
+          - order: 15
+            label: Compression
+            kind: symbol-property
+          - order: 16
+            label: CompressionLevel
+            kind: symbol-property
+          - order: 17
+            label: Configure tunnel
+            kind: symbol-snippet
+          - order: 18
+            label: ConnectionAttempts
+            kind: symbol-property
+          - order: 19
+            label: ConnectTimeout
+            kind: symbol-property
+          - order: 20
+            label: ControlMaster
+            kind: symbol-property
+          - order: 21
+            label: ControlPath
+            kind: symbol-property
+          - order: 22
+            label: ControlPersist
+            kind: symbol-property
+          - order: 23
+            label: DynamicForward
+            kind: symbol-property
+          - order: 24
+            label: EnableSSHKeysign
+            kind: symbol-property
+          - order: 25
+            label: EscapeChar
+            kind: symbol-property
+          - order: 26
+            label: ExitOnForwardFailure
+            kind: symbol-property
+          - order: 27
+            label: FingerprintHash
+            kind: symbol-property
+          - order: 28
+            label: ForwardAgent
+            kind: symbol-property
+          - order: 29
+            label: ForwardX11
+            kind: symbol-property
+          - order: 30
+            label: ForwardX11Timeout
+            kind: symbol-property
+          - order: 31
+            label: ForwardX11Trusted
+            kind: symbol-property
+          - order: 32
+            label: GatewayPorts
+            kind: symbol-property
+          - order: 33
+            label: GlobalKnownHostsFile
+            kind: symbol-property
+          - order: 34
+            label: GSSAPIAuthentication
+            kind: symbol-property
+          - order: 35
+            label: GSSAPIClientIdentity
+            kind: symbol-property
+          - order: 36
+            label: GSSAPIDelegateCredentials
+            kind: symbol-property
+          - order: 37
+            label: GSSAPIKeyExchange
+            kind: symbol-property
+          - order: 38
+            label: GSSAPIRenewalForcesRekey
+            kind: symbol-property
+          - order: 39
+            label: GSSAPIServerIdentity
+            kind: symbol-property
+          - order: 40
+            label: GSSAPITrustDns
+            kind: symbol-property
+          - order: 41
+            label: HashKnownHosts
+            kind: symbol-property
+          - order: 42
+            label: Host
+            kind: symbol-property
+          - order: 43
+            label: HostbasedAuthentication
+            kind: symbol-property
+          - order: 44
+            label: HostbasedKeyTypes
+            kind: symbol-property
+          - order: 45
+            label: HostKeyAlgorithms
+            kind: symbol-property
+          - order: 46
+            label: HostKeyAlias
+            kind: symbol-property
+          - order: 47
+            label: HostName
+            kind: symbol-property
+          - order: 48
+            label: IdentitiesOnly
+            kind: symbol-property
+          - order: 49
+            label: IdentityFile
+            kind: symbol-property
+          - order: 50
+            label: IgnoreUnknown
+            kind: symbol-property
+          - order: 51
+            label: IPQoS
+            kind: symbol-property
+          - order: 52
+            label: KbdInteractiveAuthentication
+            kind: symbol-property
+          - order: 53
+            label: KbdInteractiveDevices
+            kind: symbol-property
+          - order: 54
+            label: KexAlgorithms
+            kind: symbol-property
+          - order: 55
+            label: KeychainIntegration
+            kind: symbol-property
+          - order: 56
+            label: LocalCommand
+            kind: symbol-property
+          - order: 57
+            label: LocalForward
+            kind: symbol-property
+          - order: 58
+            label: LogLevel
+            kind: symbol-property
+          - order: 59
+            label: MACs
+            kind: symbol-property
+          - order: 60
+            label: Match
+            kind: symbol-property
+          - order: 61
+            label: NoHostAuthenticationForLocalhost
+            kind: symbol-property
+          - order: 62
+            label: NumberOfPasswordPrompts
+            kind: symbol-property
+          - order: 63
+            label: PasswordAuthentication
+            kind: symbol-property
+          - order: 64
+            label: PermitLocalCommand
+            kind: symbol-property
+          - order: 65
+            label: PKCS11Provider
+            kind: symbol-property
+          - order: 66
+            label: Port
+            kind: symbol-property
+          - order: 67
+            label: PreferredAuthentications
+            kind: symbol-property
+          - order: 68
+            label: Protocol
+            kind: symbol-property
+          - order: 69
+            label: ProxyCommand
+            kind: symbol-property
+          - order: 70
+            label: ProxyJump
+            kind: symbol-property
+          - order: 71
+            label: ProxyUseFdpass
+            kind: symbol-property
+          - order: 72
+            label: PubkeyAuthentication
+            kind: symbol-property
+          - order: 73
+            label: RekeyLimit
+            kind: symbol-property
+          - order: 74
+            label: RemoteCommand
+            kind: symbol-property
+          - order: 75
+            label: RemoteForward
+            kind: symbol-property
+          - order: 76
+            label: RequestTTY
+            kind: symbol-property
+          - order: 77
+            label: RevokedHostKeys
+            kind: symbol-property
+          - order: 78
+            label: RhostsRSAAuthentication
+            kind: symbol-property
+          - order: 79
+            label: RSAAuthentication
+            kind: symbol-property
+          - order: 80
+            label: SendEnv
+            kind: symbol-property
+          - order: 81
+            label: ServerAliveCountMax
+            kind: symbol-property
+          - order: 82
+            label: ServerAliveInterval
+            kind: symbol-property
+          - order: 83
+            label: StreamLocalBindMask
+            kind: symbol-property
+          - order: 84
+            label: StreamLocalBindUnlink
+            kind: symbol-property
+          - order: 85
+            label: StrictHostKeyChecking
+            kind: symbol-property
+          - order: 86
+            label: TCPKeepAlive
+            kind: symbol-property
+          - order: 87
+            label: Tunnel
+            kind: symbol-property
+          - order: 88
+            label: TunnelDevice
+            kind: symbol-property
+          - order: 89
+            label: UpdateHostKeys
+            kind: symbol-property
+          - order: 90
+            label: UsePrivilegedPort
+            kind: symbol-property
+          - order: 91
+            label: User
+            kind: symbol-property
+          - order: 92
+            label: UserKnownHostsFile
+            kind: symbol-property
+          - order: 93
+            label: VerifyHostKeyDNS
+            kind: symbol-property
+          - order: 94
+            label: VisualHostKey
+            kind: symbol-property
+          - order: 95
+            label: XAuthLocation
+            kind: symbol-property
+        total: 96
+        message: null
+    tab-comment-text:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 4, Col 7
+          aria: Ln 4, Col 7
+          tooltip: null
+      suggest:active:
+        items:
+          - order: 0
+            label: Host
+            kind: symbol-text
+          - order: 1
+            label: HostName
+            kind: symbol-text
+          - order: 2
+            label: qqname
+            kind: symbol-text
+          - order: 3
+            label: qqtab
+            kind: symbol-text
+          - order: 4
+            label: qquser
+            kind: symbol-text
+          - order: 5
+            label: User
+            kind: symbol-text
+        total: 6
+        message: null
+    accepted-after-tab:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 2, Col 5
+          aria: Ln 2, Col 5
+          tooltip: null
+      tokens:active@1:
+        - col: 1
+          text: "\tUs"
+          length: 3
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+  per_step:
+    - i: 0
+      step:
+        open: tabs/ssh.config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 0.8
+    - i: 2
+      step:
+        goto:
+          line: 1
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.5
+      at: 3.5
+      position:
+        line: 1
+        col: 1
+    - i: 3
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 4.0
+      selection: Ln 1, Col 5
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 4
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 5.7
+    - i: 5
+      step:
+        observe:
+          id: tab-then-user
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - suggest:
+                fields:
+                  - label
+                  - kind
+                timeout: 300
+      ok: true
+      error: null
+      seconds: 6.3
+      at: 7.1
+      observation_raw: null
+    - i: 6
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 13.4
+      selection: Ln 1, Col 6
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 7
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 15.1
+      selection: Ln 1, Col 7
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 8
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 16.8
+    - i: 9
+      step:
+        observe:
+          id: tab-us
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - suggest:
+                fields:
+                  - label
+                  - kind
+                  - preselected
+      ok: true
+      error: null
+      seconds: 2.9
+      at: 18.3
+      observation_raw: null
+    - i: 10
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 21.2
+      selection: Ln 1, Col 8
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 11
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 22.9
+      selection: Ln 1, Col 9
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 12
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 24.6
+      selection: Ln 1, Col 10
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 13
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 26.3
+    - i: 14
+      step:
+        observe:
+          id: tab-user-value
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - suggest:
+                fields:
+                  - label
+                  - kind
+      ok: true
+      error: null
+      seconds: 2.2
+      at: 27.8
+      observation_raw: null
+    - i: 15
+      step:
+        goto:
+          line: 2
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.5
+      at: 30.0
+      position:
+        line: 2
+        col: 1
+    - i: 16
+      step:
+        key: Home
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 30.5
+      selection: Ln 2, Col 6
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 17
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 32.2
+    - i: 18
+      step:
+        observe:
+          id: mixed-blanks-then-hostname
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - suggest:
+                fields:
+                  - label
+                  - kind
+                timeout: 300
+      ok: true
+      error: null
+      seconds: 6.2
+      at: 33.7
+      observation_raw: null
+    - i: 19
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 39.9
+      selection: Ln 2, Col 7
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 20
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 41.6
+      selection: Ln 2, Col 8
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 21
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 43.3
+      selection: Ln 2, Col 9
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 22
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 45.1
+      selection: Ln 2, Col 10
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 23
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 46.9
+    - i: 24
+      step:
+        observe:
+          id: mixed-blanks-host
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - suggest:
+                fields:
+                  - label
+                  - kind
+                  - preselected
+      ok: true
+      error: null
+      seconds: 3.4
+      at: 48.4
+      observation_raw: null
+    - i: 25
+      step:
+        goto:
+          line: 3
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 51.8
+      position:
+        line: 3
+        col: 1
+    - i: 26
+      step:
+        key: End
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 52.4
+      selection: Ln 3, Col 5
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 27
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 54.2
+    - i: 28
+      step:
+        observe:
+          id: tab-only-line
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - suggest:
+                fields:
+                  - label
+                  - kind
+                timeout: 300
+      ok: true
+      error: null
+      seconds: 6.0
+      at: 55.7
+      observation_raw: null
+    - i: 29
+      step:
+        goto:
+          line: 4
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 61.7
+      position:
+        line: 4
+        col: 1
+    - i: 30
+      step:
+        key: Home
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 62.3
+      selection: Ln 4, Col 5
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 31
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 64.0
+      selection: Ln 4, Col 6
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 32
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 65.7
+    - i: 33
+      step:
+        observe:
+          id: tab-hash
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - suggest:
+                fields:
+                  - label
+                  - kind
+                timeout: 300
+      ok: true
+      error: null
+      seconds: 6.0
+      at: 67.2
+      observation_raw: null
+    - i: 34
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 73.2
+      selection: Ln 4, Col 7
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 35
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 74.9
+    - i: 36
+      step:
+        observe:
+          id: tab-comment-text
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - suggest:
+                fields:
+                  - label
+                  - kind
+      ok: true
+      error: null
+      seconds: 2.2
+      at: 76.4
+      observation_raw: null
+    - i: 37
+      step:
+        goto:
+          line: 1
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 78.6
+      position:
+        line: 1
+        col: 1
+    - i: 38
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 79.2
+      selection: Ln 1, Col 5
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 39
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 80.9
+      selection: Ln 1, Col 6
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 40
+      step:
+        key: ArrowRight
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 82.7
+      selection: Ln 1, Col 7
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 41
+      step:
+        key: Control+Space
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 84.4
+      selection: Ln 1, Col 7
+      state_after:
+        title: ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        suggest:
+          - rows:
+              - text: UsePrivilegedPort, Property
+                focused: true
+              - text: User, Property
+                focused: false
+              - text: UserKnownHostsFile, Property
+                focused: false
+              - text: ProxyUseFdpass, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 42
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 86.1
+    - i: 43
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 88.8
+      selection: Ln 2, Col 5
+      state_after:
+        title: ● ssh.config - F-4203-AC1-4 - Visual Studio Code
+        activeEditor: ssh.config
+        editorTabs:
+          - - title: ssh.config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC1-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 44
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 90.6
+    - i: 45
+      step:
+        observe:
+          id: accepted-after-tab
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 1
+      ok: true
+      error: null
+      seconds: 1.6
+      at: 93.3
+      observation_raw: null

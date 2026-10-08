@@ -1,0 +1,671 @@
+case: F-4102-AC28-4
+feature: F-4102
+profile: linux-none-dirty@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/after-restart-unit/statusbar[4]/text: 'Ln 1, Col 1' != 'Ln 2, Col 11'"
+  - "/after-restart-unit/statusbar[4]/aria: 'Ln 1, Col 1' != 'Ln 2, Col 11'"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - observe:
+      id: before
+      what:
+        - statusbar:
+            core:
+              - status.editor.mode
+              - status.editor.eol
+              - status.editor.indentation
+              - status.editor.selection
+  - goto:
+      line: 2
+      col: 11
+  - key: Enter
+  - wait:
+      until:
+        - statusbar: Ln 3, Col
+        - quiet: 1
+      timeout: 15
+  - observe:
+      id: before-change
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 3
+  - key: Control+z
+  - settings:
+      '[ssh_config]':
+        editor.autoIndent: advanced
+        editor.detectIndentation: false
+        editor.tabSize: 2
+  - wait:
+      until:
+        - statusbar: 'Spaces: 2'
+        - quiet: 2
+      timeout: 60
+  - goto:
+      line: 2
+      col: 11
+  - key: Enter
+  - wait:
+      until:
+        - statusbar: Ln 3, Col
+        - quiet: 1
+      timeout: 15
+  - observe:
+      id: after-live-change
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 3
+  - key: Control+z
+  - restart: true
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - observe:
+      id: after-restart-unit
+      what:
+        - statusbar:
+            core:
+              - status.editor.mode
+              - status.editor.eol
+              - status.editor.indentation
+              - status.editor.selection
+  - goto:
+      line: 2
+      col: 11
+  - key: Enter
+  - wait:
+      until:
+        - statusbar: Ln 3, Col
+        - quiet: 1
+      timeout: 15
+  - observe:
+      id: after-restart
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 3
+  - key: Control+z
+expect:
+  before:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: SSH Config
+        aria: SSH Config
+        tooltip: null
+      - id: status.editor.eol
+        text: LF
+        aria: LF
+        tooltip: null
+      - id: status.editor.indentation
+        text: 'Spaces: 4'
+        aria: 'Spaces: 4'
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 1, Col 1
+        aria: Ln 1, Col 1
+        tooltip: null
+  before-change:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 3, Col 5
+        aria: Ln 3, Col 5
+        tooltip: null
+    tokens:active@3:
+      - col: 1
+        text: '    '
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+  after-live-change:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 3, Col 3
+        aria: Ln 3, Col 3
+        tooltip: null
+    tokens:active@3:
+      - col: 1
+        text: '  '
+        length: 2
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+  after-restart-unit:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: SSH Config
+        aria: SSH Config
+        tooltip: null
+      - id: status.editor.eol
+        text: LF
+        aria: LF
+        tooltip: null
+      - id: status.editor.indentation
+        text: 'Spaces: 2'
+        aria: 'Spaces: 2'
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 1, Col 1
+        aria: Ln 1, Col 1
+        tooltip: null
+  after-restart:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 3, Col 1
+        aria: Ln 3, Col 1
+        tooltip: null
+    tokens:active@3: []
+observed:
+  normalized:
+    before:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.mode
+          text: SSH Config
+          aria: SSH Config
+          tooltip: null
+        - id: status.editor.eol
+          text: LF
+          aria: LF
+          tooltip: null
+        - id: status.editor.indentation
+          text: 'Spaces: 4'
+          aria: 'Spaces: 4'
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 1, Col 1
+          aria: Ln 1, Col 1
+          tooltip: null
+    before-change:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 5
+          aria: Ln 3, Col 5
+          tooltip: null
+      tokens:active@3:
+        - col: 1
+          text: '    '
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+    after-live-change:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 3
+          aria: Ln 3, Col 3
+          tooltip: null
+      tokens:active@3:
+        - col: 1
+          text: '  '
+          length: 2
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+    after-restart-unit:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.mode
+          text: SSH Config
+          aria: SSH Config
+          tooltip: null
+        - id: status.editor.eol
+          text: LF
+          aria: LF
+          tooltip: null
+        - id: status.editor.indentation
+          text: 'Spaces: 2'
+          aria: 'Spaces: 2'
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 2, Col 11
+          aria: Ln 2, Col 11
+          tooltip: null
+    after-restart:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 1
+          aria: Ln 3, Col 1
+          tooltip: null
+      tokens:active@3: []
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.8
+      at: 0.8
+    - i: 2
+      step:
+        observe:
+          id: before
+          what:
+            - statusbar:
+                core:
+                  - status.editor.mode
+                  - status.editor.eol
+                  - status.editor.indentation
+                  - status.editor.selection
+      ok: true
+      error: null
+      seconds: 0.2
+      at: 3.6
+      observation_raw: null
+    - i: 3
+      step:
+        goto:
+          line: 2
+          col: 11
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 3.8
+      position:
+        line: 2
+        col: 11
+    - i: 4
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 4.4
+      selection: Ln 3, Col 5
+      state_after:
+        title: ● config - F-4102-AC28-4 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC28-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 5
+      step:
+        wait:
+          until:
+            - statusbar: Ln 3, Col
+            - quiet: 1
+          timeout: 15
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 6.2
+    - i: 6
+      step:
+        observe:
+          id: before-change
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 3
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 7.7
+      observation_raw: null
+    - i: 7
+      step:
+        key: Control+z
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 9.4
+      selection: Ln 2, Col 11
+      state_after:
+        title: config - F-4102-AC28-4 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC28-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 8
+      step:
+        settings:
+          '[ssh_config]':
+            editor.autoIndent: advanced
+            editor.detectIndentation: false
+            editor.tabSize: 2
+      ok: true
+      error: null
+      seconds: 0.0
+      at: 11.2
+    - i: 9
+      step:
+        wait:
+          until:
+            - statusbar: 'Spaces: 2'
+            - quiet: 2
+          timeout: 60
+      ok: true
+      error: null
+      seconds: 3.9
+      at: 11.2
+    - i: 10
+      step:
+        goto:
+          line: 2
+          col: 11
+      ok: true
+      error: null
+      seconds: 0.5
+      at: 15.1
+      position:
+        line: 2
+        col: 11
+    - i: 11
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 15.6
+      selection: Ln 3, Col 3
+      state_after:
+        title: ● config - F-4102-AC28-4 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC28-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 12
+      step:
+        wait:
+          until:
+            - statusbar: Ln 3, Col
+            - quiet: 1
+          timeout: 15
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 17.3
+    - i: 13
+      step:
+        observe:
+          id: after-live-change
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 3
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 18.8
+      observation_raw: null
+    - i: 14
+      step:
+        key: Control+z
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 20.5
+      selection: Ln 2, Col 11
+      state_after:
+        title: config - F-4102-AC28-4 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC28-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 15
+      step:
+        restart: true
+      ok: true
+      error: null
+      seconds: 9.3
+      at: 22.3
+    - i: 16
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.3
+      at: 31.6
+      position:
+        line: 2
+        col: 11
+    - i: 17
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 31.9
+    - i: 18
+      step:
+        observe:
+          id: after-restart-unit
+          what:
+            - statusbar:
+                core:
+                  - status.editor.mode
+                  - status.editor.eol
+                  - status.editor.indentation
+                  - status.editor.selection
+      ok: true
+      error: null
+      seconds: 0.2
+      at: 34.6
+      observation_raw: null
+    - i: 19
+      step:
+        goto:
+          line: 2
+          col: 11
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 34.8
+      position:
+        line: 2
+        col: 11
+    - i: 20
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 35.4
+      selection: Ln 3, Col 1
+      state_after:
+        title: ● config - F-4102-AC28-4 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC28-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 21
+      step:
+        wait:
+          until:
+            - statusbar: Ln 3, Col
+            - quiet: 1
+          timeout: 15
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 37.1
+    - i: 22
+      step:
+        observe:
+          id: after-restart
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 3
+      ok: true
+      error: null
+      seconds: 1.2
+      at: 38.5
+      observation_raw: null
+    - i: 23
+      step:
+        key: Control+z
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 39.7
+      selection: Ln 2, Col 11
+      state_after:
+        title: config - F-4102-AC28-4 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC28-4
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false

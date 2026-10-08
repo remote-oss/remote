@@ -1,0 +1,417 @@
+case: F-4102-AC7-2
+feature: F-4102
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/added-twice/tokens:active@4: 1 vs 2 items: [{'col': 1, 'text': '    # # User admin', 'length': 18, 'truncated':
+    False, 'language': 'ssh_config', 'tokenType': 'Comment', 'scopes': ['source.config.ssh', 'comment.line.hash.azcli'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}] != [{'col': 1, 'text': '    # #
+    User admin', 'length': 18, 'truncated': False, 'language': 'ssh_config', 'tokenType': 'Comment', 'scopes':
+    ['source.config.ssh', 'comment.line.hash.azcli'], 'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength':
+    None}, {'col': 19, 'text': '    # # "
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - goto:
+      line: 4
+      col: 5
+  - key: Control+k
+  - key: Control+c
+  - wait:
+      until:
+        quiet: 1
+      timeout: 15
+  - key: Control+k
+  - key: Control+c
+  - wait:
+      until:
+        quiet: 1
+      timeout: 15
+  - observe:
+      id: added-twice
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 4
+  - goto:
+      line: 4
+      col: 9
+  - key: Control+k
+  - key: Control+u
+  - wait:
+      until:
+        quiet: 1
+      timeout: 15
+  - observe:
+      id: removed-once
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 4
+expect:
+  added-twice:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 4, Col 9
+        aria: Ln 4, Col 9
+        tooltip: null
+    tokens:active@4:
+      - col: 1
+        text: '    # # User admin'
+        length: 18
+        truncated: false
+        language: ssh_config
+        tokenType: Comment
+        scopes:
+          - source.config.ssh
+          - comment.line.hash.azcli
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+  removed-once:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 4, Col 7
+        aria: Ln 4, Col 7
+        tooltip: null
+    tokens:active@4:
+      - col: 1
+        text: '    # User admin'
+        length: 16
+        truncated: false
+        language: ssh_config
+        tokenType: Comment
+        scopes:
+          - source.config.ssh
+          - comment.line.hash.azcli
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+observed:
+  normalized:
+    added-twice:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 4, Col 9
+          aria: Ln 4, Col 9
+          tooltip: null
+      tokens:active@4:
+        - col: 1
+          text: '    # # User admin'
+          length: 18
+          truncated: false
+          language: ssh_config
+          tokenType: Comment
+          scopes:
+            - source.config.ssh
+            - comment.line.hash.azcli
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 19
+          text: '    # # User admin'
+          length: 18
+          truncated: false
+          language: ssh_config
+          tokenType: Comment
+          scopes:
+            - source.config.ssh
+            - comment.line.hash.azcli
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+    removed-once:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 4, Col 7
+          aria: Ln 4, Col 7
+          tooltip: null
+      tokens:active@4:
+        - col: 1
+          text: '    # User admin'
+          length: 16
+          truncated: false
+          language: ssh_config
+          tokenType: Comment
+          scopes:
+            - source.config.ssh
+            - comment.line.hash.azcli
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 0.8
+    - i: 2
+      step:
+        goto:
+          line: 4
+          col: 5
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 3.5
+      position:
+        line: 4
+        col: 5
+    - i: 3
+      step:
+        key: Control+k
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 4.1
+      selection: Ln 4, Col 5
+      state_after:
+        title: config - F-4102-AC7-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC7-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 4
+      step:
+        key: Control+c
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 5.8
+      selection: Ln 4, Col 7
+      state_after:
+        title: ● config - F-4102-AC7-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC7-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 5
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 15
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 7.6
+    - i: 6
+      step:
+        key: Control+k
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 9.0
+      selection: Ln 4, Col 7
+      state_after:
+        title: ● config - F-4102-AC7-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC7-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 7
+      step:
+        key: Control+c
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 10.7
+      selection: Ln 4, Col 9
+      state_after:
+        title: ● config - F-4102-AC7-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC7-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 8
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 15
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 12.4
+    - i: 9
+      step:
+        observe:
+          id: added-twice
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 4
+      ok: true
+      error: null
+      seconds: 2.0
+      at: 13.9
+      observation_raw: null
+    - i: 10
+      step:
+        goto:
+          line: 4
+          col: 9
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 15.9
+      position:
+        line: 4
+        col: 9
+    - i: 11
+      step:
+        key: Control+k
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 16.5
+      selection: Ln 4, Col 9
+      state_after:
+        title: ● config - F-4102-AC7-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC7-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 12
+      step:
+        key: Control+u
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 18.2
+      selection: Ln 4, Col 7
+      state_after:
+        title: ● config - F-4102-AC7-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4102-AC7-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 13
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 15
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 19.9
+    - i: 14
+      step:
+        observe:
+          id: removed-once
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 4
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 21.3
+      observation_raw: null
