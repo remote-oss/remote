@@ -95,6 +95,12 @@
       "path": "packages/lib-helper/tsconfig.test.json"
     },
     {
+      "path": "packages/lib-forwarding"
+    },
+    {
+      "path": "packages/lib-forwarding/tsconfig.test.json"
+    },
+    {
       "path": "tests/acceptance"
     }
   ]

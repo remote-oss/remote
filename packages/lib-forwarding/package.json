@@ -1,0 +1,9 @@
+{
+  "name": "lib-forwarding",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing/fake-prober": "./src/testing/fake-prober.ts"
+  }
+}
