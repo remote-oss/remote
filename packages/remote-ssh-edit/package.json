@@ -2,7 +2,7 @@
   "name": "remote-ssh-edit",
   "displayName": "Remote - SSH: Editing Configuration Files",
   "description": "%description%",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "publisher": "remote-oss",
   "private": true,
   "license": "MIT",
