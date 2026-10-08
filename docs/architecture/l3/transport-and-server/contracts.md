@@ -688,11 +688,11 @@ The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `acquire` | registry folder (per profile from global storage, or per user; the caller chooses), namespace (extension and kind), key, start specification (the bundled helper script and its parameters), end policy, cancellation | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed`, `endpointUnreachable` (after replacing a stale record once), `cancelled` |
+| `acquire` | registry folder (per profile from global storage, or per user; the caller chooses), namespace (extension and kind), recordKey, start specification (the bundled helper script and its parameters), end policy, cancellation | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed`, `endpointUnreachable` (after replacing a stale record once), `cancelled` |
 | `release` | lease | none; closing the lease's connection has the same effect, so a crashed extension host releases by itself | none |
 | `request` | lease, message (plain data) | reply (plain data) | `helperGone`, `timeout` (the caller's limit) |
 | `events` | lease | helper messages, `leaseListChanged`, `helperGone` | none |
-| `stop` | registry folder, namespace, key | done, also when nothing runs | none |
+| `stop` | registry folder, namespace, recordKey | done, also when nothing runs | none |
 
 ### X2 helper-runtime (bundled into each helper script)
 
@@ -711,7 +711,7 @@ End policies (data, no per-consumer branches):
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `claim` | folder, namespace, key, record | `claimed`, or `existing` with the record | none |
+| `claim` | folder, namespace, recordKey, record | `claimed`, `existing` with the record, or `corrupt` | none |
 | `isStale` | record, result of one hello exchange | true when the helper does not answer within a short limit | none |
 
 Rules:

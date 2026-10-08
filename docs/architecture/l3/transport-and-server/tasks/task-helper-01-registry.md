@@ -30,14 +30,14 @@ export interface RegistryFilePort {
   read(path: string): Promise<string | undefined>;
   remove(path: string): Promise<void>;
 }
-export function recordPath(folder: string, namespace: string, key: string): string;  // `${folder}/${namespace}/${sha256hex(key).slice(0, 32)}.json`, '/' joined, no other characters of key used
+export function recordPath(folder: string, namespace: string, recordKey: string): string;  // `${folder}/${namespace}/${sha256hex(recordKey).slice(0, 32)}.json`, '/' joined, no other characters of the key used
 export function serializeRecord(record: HelperRecord): string;      // JSON, keys in the order above; throws RecordShapeError on an unknown or missing field or a non-primitive payload value
 export function parseRecord(text: string): HelperRecord | undefined; // undefined on any shape error or version !== 1
-export function claim(port: RegistryFilePort, folder: string, namespace: string, key: string, record: HelperRecord):
+export function claim(port: RegistryFilePort, folder: string, namespace: string, recordKey: string, record: HelperRecord):
   Promise<{ outcome: 'claimed' } | { outcome: 'existing'; record: HelperRecord } | { outcome: 'corrupt' }>;
 export function isStale(record: HelperRecord, hello: { answered: boolean; nonceMatched: boolean; elapsedMilliseconds: number }, limitMilliseconds: number): boolean;
-export function replaceStale(port: RegistryFilePort, folder: string, namespace: string, key: string, record: HelperRecord):
-  Promise<{ outcome: 'claimed' } | { outcome: 'existing'; record: HelperRecord }>;  // remove then claim, exactly once; never loops
+export function replaceStale(port: RegistryFilePort, folder: string, namespace: string, recordKey: string, record: HelperRecord):
+  Promise<{ outcome: 'claimed' } | { outcome: 'existing'; record: HelperRecord } | { outcome: 'corrupt' }>;  // remove then claim, exactly once; never loops
 export class MemoryFilePort implements RegistryFilePort { readonly files: Map<string, string>; /* createExclusive is atomic per call */ }
 ```
 
