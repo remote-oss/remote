@@ -90,3 +90,22 @@ export {
   posixQuote,
   type ScriptPlan,
 } from './process/remote-program.ts';
+export {
+  firstSetupMarker,
+  type SetupMarker,
+  setupMarkerOf,
+} from './diagnostics/setup-report.ts';
+export {
+  type ConnectionEvent,
+  type ConnectionReply,
+  type ConnectionRequest,
+  type PromptSurface as ConnectionPromptSurface,
+  type Refusal,
+  readConnectionRequest,
+  type SharedRecord,
+} from './connection-server/messages.ts';
+export {
+  LoginOwnership,
+  type OpenPrompt,
+  PromptBook,
+} from './connection-server/ownership.ts';

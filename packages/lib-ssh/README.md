@@ -49,11 +49,26 @@ Failures are values; no operation throws.
   lib-host's closed set, with the client's message as detail: status 255 is `channelClosed`, a missing `scp` is
   `copyToolMissing`, a failed copy is `copyFailed`, and a run that is cancelled or out of time is killed.
 
+## The connection server's logic
+
+`src/connection-server/` holds the pure parts of the connection that every window of a host shares. The helper
+process, the client side and the askpass endpoint come in later changes.
+
+- `messages.ts`: the requests a window sends the helper (connect, read or set the shared record, answer a question,
+  kill) and the events the helper sends its leases. Everything is plain data. The shared record (remote port,
+  operating system, architecture, temporary folder and connection token) lives in the helper's memory and is never
+  written to a file.
+- `ownership.ts`: `LoginOwnership` gives the login to the first lease and hands it to the oldest waiting lease when
+  the owner closes, cancels or fails. `PromptBook` holds the open questions: the first answer to a question closes
+  it for every window, and the text of an answer passes through to the client and is not kept.
+- `diagnostics/setup-report.ts`: `setupMarkerOf` names the line of `ssh -v` that says the login succeeded
+  (`Authenticated to <host> … using "<method>".`), which ends the connect wait.
+
 ## For maintainers
 
 | | |
 |---|---|
 | Maintainers | remote-oss |
 | Entry points | `lib-ssh` (`src/index.ts`) |
-| Allowed imports | `node:path`; in `src/process/`, `node:child_process`, `node:fs`, `lib-host` and `lib-helper` (types and its test clock); no extension, no `vscode` |
+| Allowed imports | `node:path`; in `src/process/`, `node:child_process`, `node:fs`, `lib-host` and `lib-helper` (types, the plain-data type of its messages, and its test clock); no extension, no `vscode` |
 | Coverage exclusions | `src/process/ports.ts`: it declares types only, and nothing in it runs |
