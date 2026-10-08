@@ -8,6 +8,26 @@ import {hostLockLoop} from '../../src/index.ts';
 import {FakeClock} from '../../src/testing/fake-clock.ts';
 import {settle} from './clock-driver.fixture.ts';
 
+/**
+ * Drive the loop with a step that always reports the host lock as taken, recording each retry; the two
+ * unbounded rows share it.
+ */
+function busyLoop(
+  clock: FakeClock,
+  attempts?: number,
+  intervalMilliseconds?: number,
+) {
+  const retries: number[] = [];
+  const promise = hostLockLoop(
+    () => Promise.resolve({kind: 'lockBusy'} as const),
+    clock,
+    attempt => retries.push(attempt),
+    attempts,
+    intervalMilliseconds,
+  );
+  return {promise, retries};
+}
+
 describe('host lock loop (card server-05 table)', () => {
   it('step returns result at once: done, onRetry never called, the clock unchanged', async () => {
     const clock = new FakeClock();
@@ -43,12 +63,7 @@ describe('host lock loop (card server-05 table)', () => {
 
   it('busy 30 times: retriesExhausted; onRetry called 1..29 (no wait after the last attempt)', async () => {
     const clock = new FakeClock();
-    const retries: number[] = [];
-    const promise = hostLockLoop(
-      () => Promise.resolve({kind: 'lockBusy'} as const),
-      clock,
-      attempt => retries.push(attempt),
-    );
+    const {promise, retries} = busyLoop(clock);
     const result = await settle(promise, clock, 1000, 29000);
     deepStrictEqual(result, {kind: 'retriesExhausted'});
     const expected = new Array<number>(29);
@@ -79,14 +94,7 @@ describe('host lock loop (card server-05 table)', () => {
 
   it('attempts = 1, busy once: retriesExhausted, onRetry not called', async () => {
     const clock = new FakeClock();
-    const retries: number[] = [];
-    const promise = hostLockLoop(
-      () => Promise.resolve({kind: 'lockBusy'} as const),
-      clock,
-      attempt => retries.push(attempt),
-      1,
-      1000,
-    );
+    const {promise, retries} = busyLoop(clock, 1, 1000);
     const result = await settle(promise, clock, 1000, 0);
     deepStrictEqual(result, {kind: 'retriesExhausted'});
     deepStrictEqual(retries, []);

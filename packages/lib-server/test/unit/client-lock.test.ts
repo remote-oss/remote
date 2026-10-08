@@ -9,6 +9,23 @@ const FOLDER = '/srv/locks';
 const IDENTITY = 'u@h:22';
 const PATH = `${FOLDER}/${lockIdFor(IDENTITY)}.lock`;
 
+// Every polling row of this file holds the lock while the same work runs; onWaiting reports
+// through `onWaiting`.
+function startLocked(
+  port: MemoryLockPort,
+  clock: FakeClock,
+  onWaiting: () => void,
+): Promise<{kind: 'done'; value: string} | {kind: 'lockTimeout'}> {
+  return withClientLock(
+    port,
+    FOLDER,
+    IDENTITY,
+    clock,
+    () => Promise.resolve('value'),
+    onWaiting,
+  );
+}
+
 describe('client lock (card server-05 table)', () => {
   it("lockIdFor('u@h:22') -> 8 lower-case hex chars; same twice; differs for 'u@h:23'", () => {
     const lockId = lockIdFor(IDENTITY);
@@ -77,16 +94,9 @@ describe('client lock (card server-05 table)', () => {
       return ageValue;
     };
     let waited = 0;
-    const promise = withClientLock(
-      port,
-      FOLDER,
-      IDENTITY,
-      clock,
-      () => Promise.resolve('value'),
-      () => {
-        waited += 1;
-      },
-    );
+    const promise = startLocked(port, clock, () => {
+      waited += 1;
+    });
     const result = await settle(promise, clock, 500, 1500);
     deepStrictEqual(result, {kind: 'done', value: 'value'});
     strictEqual(clock.now(), 1500);
@@ -102,16 +112,9 @@ describe('client lock (card server-05 table)', () => {
     await port.createExclusive(PATH, IDENTITY);
     port.setAge(PATH, 1000);
     let waited = 0;
-    const promise = withClientLock(
-      port,
-      FOLDER,
-      IDENTITY,
-      clock,
-      () => Promise.resolve('value'),
-      () => {
-        waited += 1;
-      },
-    );
+    const promise = startLocked(port, clock, () => {
+      waited += 1;
+    });
     const result = await settle(promise, clock, 500, 120000);
     deepStrictEqual(result, {kind: 'lockTimeout'});
     strictEqual(waited, 1);
@@ -125,16 +128,9 @@ describe('client lock (card server-05 table)', () => {
     await port.createExclusive(PATH, IDENTITY);
     port.setAge(PATH, 240000);
     let waited = 0;
-    const promise = withClientLock(
-      port,
-      FOLDER,
-      IDENTITY,
-      clock,
-      () => Promise.resolve('value'),
-      () => {
-        waited += 1;
-      },
-    );
+    const promise = startLocked(port, clock, () => {
+      waited += 1;
+    });
     const result = await settle(promise, clock, 500, 500);
     deepStrictEqual(result, {kind: 'done', value: 'value'});
     strictEqual(waited, 0);
@@ -146,14 +142,7 @@ describe('client lock (card server-05 table)', () => {
     const port = new MemoryLockPort(clock);
     await port.createExclusive(PATH, IDENTITY);
     port.setAge(PATH, 239999);
-    const promise = withClientLock(
-      port,
-      FOLDER,
-      IDENTITY,
-      clock,
-      () => Promise.resolve('value'),
-      () => undefined,
-    );
+    const promise = startLocked(port, clock, () => undefined);
     const result = await settle(promise, clock, 500, 2000);
     deepStrictEqual(result, {kind: 'done', value: 'value'});
     strictEqual(clock.now(), 500);
@@ -176,16 +165,9 @@ describe('client lock (card server-05 table)', () => {
       return originalCreate(path, text);
     };
     let waited = 0;
-    const promise = withClientLock(
-      port,
-      FOLDER,
-      IDENTITY,
-      clock,
-      () => Promise.resolve('value'),
-      () => {
-        waited += 1;
-      },
-    );
+    const promise = startLocked(port, clock, () => {
+      waited += 1;
+    });
     const result = await settle(promise, clock, 500, 5000);
     deepStrictEqual(result, {kind: 'done', value: 'value'});
     strictEqual(waited, 1);
