@@ -251,6 +251,9 @@ importers:
       lib-helper:
         specifier: workspace:*
         version: link:../lib-helper
+      lib-host:
+        specifier: workspace:*
+        version: link:../lib-host
 
   packages/lib-standdown: {}
 

@@ -42,6 +42,12 @@ Failures are values; no operation throws.
   is open, started over after each answer, stopped at the first setup report. With a connect timeout of 0 the wait is
   exactly the unbounded limit the caller passes in, with no margin.
 - `nodeProcessSpawner` is the process port on Node.js; tests use a recording port.
+- `SshHostChannel` is the host channel of `lib-host` over `ssh` and `scp`, and passes lib-host's contract suite.
+  `runScript` runs `sh` on the host: a script without input travels on the input of `sh -s`, and a script with input
+  as the one quoted argument of `sh -c`, so that the input has the standard input to itself. The PowerShell
+  interpreter is refused until it has been run on a Windows host. `copyToHost` runs `scp`. Failures are values of
+  lib-host's closed set, with the client's message as detail: status 255 is `channelClosed`, a missing `scp` is
+  `copyToolMissing`, a failed copy is `copyFailed`, and a run that is cancelled or out of time is killed.
 
 ## For maintainers
 
@@ -49,5 +55,5 @@ Failures are values; no operation throws.
 |---|---|
 | Maintainers | remote-oss |
 | Entry points | `lib-ssh` (`src/index.ts`) |
-| Allowed imports | `node:path`; in `src/process/`, `node:child_process` and `lib-helper` (types and its test clock); no extension, no `vscode` |
+| Allowed imports | `node:path`; in `src/process/`, `node:child_process`, `node:fs`, `lib-host` and `lib-helper` (types and its test clock); no extension, no `vscode` |
 | Coverage exclusions | `src/process/ports.ts`: it declares types only, and nothing in it runs |

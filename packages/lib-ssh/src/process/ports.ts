@@ -11,8 +11,8 @@ export interface ProcessHandle {
   onError(listener: (chunk: string) => void): void;
   /** Calls `listener` once, with the exit status, or undefined when a signal ended the process. */
   onExit(listener: (status: number | undefined) => void): void;
-  /** Writes to standard input; bytes are written unchanged. */
-  write(data: string | Uint8Array): void;
+  /** Writes to standard input, bytes unchanged; resolves when the data has been handed on, so a caller can pace itself. */
+  write(data: string | Uint8Array): Promise<void>;
   /** Closes standard input. */
   endInput(): void;
   /** Ends the process. */

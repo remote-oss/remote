@@ -35,7 +35,13 @@ export function nodeProcessSpawner(
             listener(status ?? undefined);
           });
         },
-        write: data => child.stdin.write(data),
+        write: data =>
+          new Promise<void>(resolve => {
+            // The callback runs once the data is flushed or the pipe has failed; a failure shows in the exit.
+            child.stdin.write(data, () => {
+              resolve();
+            });
+          }),
         endInput: () => child.stdin.end(),
         kill: () => child.kill(),
       });
