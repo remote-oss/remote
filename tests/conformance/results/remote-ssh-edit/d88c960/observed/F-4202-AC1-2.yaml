@@ -1,0 +1,956 @@
+case: F-4202-AC1-2
+feature: F-4202
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/accepted/statusbar[1]/text: 'Ln 2, Col 11 (5 selected)' != 'Ln 6, Col 5'"
+  - "/accepted/statusbar[1]/aria: 'Ln 2, Col 11 (5 selected)' != 'Ln 6, Col 5'"
+  - "/inserted/tokens:active@2: 2 vs 0 items: [{'col': 1, 'text': 'Host', 'length': 4, 'truncated': False, 'language':
+    'ssh_config', 'tokenType': 'Other', 'scopes': ['source.config.ssh', 'support.type.property-name.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}, {'col': 5, 'text': ' alias', 'length':
+    6, 'truncated': False, 'language': 'ssh_config', 'tokenType': 'String', 'scopes': ['source.config.ssh', 'string.quoted.double.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}] != []"
+  - "/inserted/tokens:active@3[0]/text: '    HostName' != 'Host'"
+  - '/inserted/tokens:active@3[0]/length: 12 != 4'
+  - '/inserted/tokens:active@3[1]/col: 13 != 5'
+  - "/inserted/tokens:active@3[1]/text: ' hostname' != ' alpha'"
+  - '/inserted/tokens:active@3[1]/length: 9 != 6'
+  - "/inserted/tokens:active@4[0]/text: '    LocalForward' != '    HostName'"
+  - '/inserted/tokens:active@4[0]/length: 16 != 12'
+  - '/inserted/tokens:active@4[1]/col: 17 != 13'
+  - "/inserted/tokens:active@4[1]/text: ' port localhost:port' != ' alpha.example.invalid'"
+  - '/inserted/tokens:active@4[1]/length: 20 != 22'
+  - "/inserted/tokens:active@5: 2 vs 0 items: [{'col': 1, 'text': '    User', 'length': 8, 'truncated': False, 'language':
+    'ssh_config', 'tokenType': 'Other', 'scopes': ['source.config.ssh', 'support.type.property-name.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}, {'col': 9, 'text': ' user', 'length':
+    5, 'truncated': False, 'language': 'ssh_config', 'tokenType': 'String', 'scopes': ['source.config.ssh', 'string.quoted.double.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}] != []"
+  - "/inserted/tokens:active@6: 2 vs 1 items: [{'col': 1, 'text': 'Host', 'length': 4, 'truncated': False, 'language':
+    'ssh_config', 'tokenType': 'Other', 'scopes': ['source.config.ssh', 'support.type.property-name.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}, {'col': 5, 'text': ' alpha', 'length':
+    6, 'truncated': False, 'language': 'ssh_config', 'tokenType': 'String', 'scopes': ['source.config.ssh', 'string.quoted.double.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}] != [{'col': 1, 'text': '    ',
+    'length': 4, '"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - goto:
+      line: 2
+      col: 1
+  - key: Control+Space
+  - wait:
+      until:
+        - quiet: 2
+      timeout: 20
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - wait:
+      until:
+        - quiet: 1
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        - quiet: 2
+      timeout: 20
+  - observe:
+      id: accepted
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - title
+  - key: Escape
+  - wait:
+      until:
+        - quiet: 1
+      timeout: 20
+  - observe:
+      id: inserted
+      what:
+        - tokens:
+            line: 2
+        - tokens:
+            line: 3
+        - tokens:
+            line: 4
+        - tokens:
+            line: 5
+        - tokens:
+            line: 6
+expect:
+  accepted:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 2, Col 11 (5 selected)
+        aria: Ln 2, Col 11 (5 selected)
+        tooltip: null
+    title: ● config - F-4202-AC1-2 - ${APP_NAME}
+  inserted:
+    tokens:active@2:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' alias'
+        length: 6
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@3:
+      - col: 1
+        text: '    HostName'
+        length: 12
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 13
+        text: ' hostname'
+        length: 9
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@4:
+      - col: 1
+        text: '    LocalForward'
+        length: 16
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 17
+        text: ' port localhost:port'
+        length: 20
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@5:
+      - col: 1
+        text: '    User'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' user'
+        length: 5
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@6:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' alpha'
+        length: 6
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+observed:
+  normalized:
+    accepted:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 6, Col 5
+          aria: Ln 6, Col 5
+          tooltip: null
+      title: ● config - F-4202-AC1-2 - ${APP_NAME}
+    inserted:
+      tokens:active@2: []
+      tokens:active@3:
+        - col: 1
+          text: Host
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 5
+          text: ' alpha'
+          length: 6
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@4:
+        - col: 1
+          text: '    HostName'
+          length: 12
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 13
+          text: ' alpha.example.invalid'
+          length: 22
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@5: []
+      tokens:active@6:
+        - col: 1
+          text: '    '
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 0.8
+    - i: 2
+      step:
+        goto:
+          line: 2
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 3.5
+      position:
+        line: 2
+        col: 1
+    - i: 3
+      step:
+        key: Control+Space
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 4.1
+      selection: Ln 2, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: true
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 4
+      step:
+        wait:
+          until:
+            - quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 5.8
+    - i: 5
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 8.5
+      selection: Ln 2, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: false
+              - text: AddressFamily, Property
+                focused: true
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 6
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 10.2
+      selection: Ln 3, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 7
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 12.0
+      selection: Ln 4, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 8
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 13.7
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 9
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 15.4
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 10
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 17.1
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 11
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 18.8
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 12
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 20.5
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 13
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 22.2
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 14
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 23.9
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 15
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 25.7
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 16
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 27.4
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 17
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 29.1
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 18
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 30.8
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 19
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 32.5
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 20
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 34.2
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 21
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 36.0
+      selection: Ln 5, Col 1
+      state_after:
+        title: config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 22
+      step:
+        wait:
+          until:
+            - quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 37.7
+    - i: 23
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 39.2
+      selection: Ln 6, Col 5
+      state_after:
+        title: ● config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 24
+      step:
+        wait:
+          until:
+            - quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 40.9
+    - i: 25
+      step:
+        observe:
+          id: accepted
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - title
+      ok: true
+      error: null
+      seconds: 0.2
+      at: 43.6
+      observation_raw: null
+    - i: 26
+      step:
+        key: Escape
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 43.8
+      selection: Ln 6, Col 5
+      state_after:
+        title: ● config - F-4202-AC1-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC1-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 27
+      step:
+        wait:
+          until:
+            - quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 45.5
+    - i: 28
+      step:
+        observe:
+          id: inserted
+          what:
+            - tokens:
+                line: 2
+            - tokens:
+                line: 3
+            - tokens:
+                line: 4
+            - tokens:
+                line: 5
+            - tokens:
+                line: 6
+      ok: true
+      error: null
+      seconds: 6.9
+      at: 46.9
+      observation_raw: null

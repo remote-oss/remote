@@ -1,0 +1,269 @@
+case: F-4001-AC3-3
+feature: F-4001
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/after-restart/title: 'F-4001-AC3-3 - ${APP_NAME}' != 'config - F-4001-AC3-3 - ${APP_NAME}'"
+  - "/after-restart/editors/active: None != 'config'"
+  - "/after-restart/editors/groups[0]: 0 vs 1 items: [] != [{'title': 'config', 'active': True}]"
+  - "/after-restart/statusbar: 1 vs 2 items: [{'id': 'status.host', 'text': '', 'aria': 'remote', 'tooltip': None}]
+    != [{'id': 'status.host', 'text': '', 'aria': 'remote', 'tooltip': None}, {'id': 'status.editor.mode',
+    'text': 'SSH Config', 'aria': 'SSH Config', 'tooltip': None}]"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - observe:
+      id: before-restart
+      what:
+        - title
+        - statusbar:
+            core:
+              - status.editor.mode
+  - restart: true
+  - wait:
+      until:
+        quiet: 5
+      timeout: 90
+  - observe:
+      id: after-restart
+      what:
+        - title
+        - editors
+        - statusbar:
+            core:
+              - status.editor.mode
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - observe:
+      id: opened-after-restart
+      what:
+        - title
+        - statusbar:
+            core:
+              - status.editor.mode
+        - breadcrumbs:
+            line: 1
+            col: 1
+        - tokens:
+            line: 2
+            col: 1
+expect:
+  before-restart:
+    title: config - F-4001-AC3-3 - ${APP_NAME}
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: SSH Config
+        aria: SSH Config
+        tooltip: null
+  after-restart:
+    title: F-4001-AC3-3 - ${APP_NAME}
+    editors:
+      active: null
+      groups:
+        - []
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+  opened-after-restart:
+    title: config - F-4001-AC3-3 - ${APP_NAME}
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: SSH Config
+        aria: SSH Config
+        tooltip: null
+    breadcrumbs:active@1:1:
+      - name: .ssh
+        kind: null
+      - name: config
+        kind: file
+    tokens:active@2:1:
+      text: Host
+      length: 4
+      language: ssh_config
+      tokenType: Other
+      scopes:
+        - source.config.ssh
+        - support.type.property-name.ssh_config
+observed:
+  normalized:
+    before-restart:
+      title: config - F-4001-AC3-3 - ${APP_NAME}
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.mode
+          text: SSH Config
+          aria: SSH Config
+          tooltip: null
+    after-restart:
+      title: config - F-4001-AC3-3 - ${APP_NAME}
+      editors:
+        active: config
+        groups:
+          - - title: config
+              active: true
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.mode
+          text: SSH Config
+          aria: SSH Config
+          tooltip: null
+    opened-after-restart:
+      title: config - F-4001-AC3-3 - ${APP_NAME}
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.mode
+          text: SSH Config
+          aria: SSH Config
+          tooltip: null
+      breadcrumbs:active@1:1:
+        - name: .ssh
+          kind: null
+        - name: config
+          kind: file
+      tokens:active@2:1:
+        text: Host
+        length: 4
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.6
+      at: 0.8
+    - i: 2
+      step:
+        observe:
+          id: before-restart
+          what:
+            - title
+            - statusbar:
+                core:
+                  - status.editor.mode
+      ok: true
+      error: null
+      seconds: 0.2
+      at: 3.4
+      observation_raw: null
+    - i: 3
+      step:
+        restart: true
+      ok: true
+      error: null
+      seconds: 9.3
+      at: 3.6
+    - i: 4
+      step:
+        wait:
+          until:
+            quiet: 5
+          timeout: 90
+      ok: true
+      error: null
+      seconds: 6.3
+      at: 12.9
+    - i: 5
+      step:
+        observe:
+          id: after-restart
+          what:
+            - title
+            - editors
+            - statusbar:
+                core:
+                  - status.editor.mode
+      ok: true
+      error: null
+      seconds: 0.2
+      at: 19.2
+      observation_raw: null
+    - i: 6
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.3
+      at: 19.4
+      position:
+        line: 1
+        col: 1
+    - i: 7
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.6
+      at: 19.7
+    - i: 8
+      step:
+        observe:
+          id: opened-after-restart
+          what:
+            - title
+            - statusbar:
+                core:
+                  - status.editor.mode
+            - breadcrumbs:
+                line: 1
+                col: 1
+            - tokens:
+                line: 2
+                col: 1
+      ok: true
+      error: null
+      seconds: 2.1
+      at: 22.3
+      observation_raw: null

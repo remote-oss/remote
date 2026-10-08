@@ -1,0 +1,705 @@
+case: F-4102-AC1-8
+feature: F-4102
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - 'step failed: ROW NOT FOUND: ssh.config'
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - cmd: 'MemFS: Setup Workspace'
+  - wait:
+      until:
+        - title: Untitled (Workspace)
+        - quiet: 3
+      timeout: 60
+  - cmd: 'View: Show Explorer'
+  - wait:
+      until:
+        - view:
+            name: Untitled (Workspace)
+            row: ssh.config
+        - quiet: 2
+      timeout: 60
+  - rowmenu:
+      view: Untitled (Workspace)
+      row: ssh.config
+  - menu: Copy
+  - rowmenu:
+      view: Untitled (Workspace)
+      row: MemFS - Sample
+  - menu: Paste
+  - wait:
+      until:
+        quiet: 2
+      timeout: 60
+  - cmd: 'View: Close All Editors'
+  - wait:
+      until:
+        quiet: 2
+      timeout: 30
+  - rowmenu:
+      view: Untitled (Workspace)
+      row: ${WORKSPACE_NAME}
+  - menu: Remove Folder from Workspace
+  - wait:
+      until:
+        quiet: 3
+      timeout: 60
+  - observe:
+      id: virtual
+      what:
+        - title
+        - view: Untitled (Workspace)
+  - rowmenu:
+      view: Untitled (Workspace)
+      row: ssh.config
+  - menu: Open to the Side
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 60
+  - observe:
+      id: opened
+      what:
+        - title
+        - editors
+        - statusbar:
+            core:
+              - status.editor.mode
+              - status.editor.selection
+        - folds: {}
+  - goto:
+      line: 2
+      col: 3
+  - key: Control+/
+  - wait:
+      until:
+        quiet: 1
+      timeout: 15
+  - observe:
+      id: toggle
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 2
+  - key: Control+z
+  - goto:
+      line: 2
+      col: 11
+  - key: Enter
+  - wait:
+      until:
+        - statusbar: Ln 3, Col
+        - quiet: 1
+      timeout: 15
+  - observe:
+      id: enter
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 3
+  - key: Control+z
+  - goto:
+      line: 6
+      col: 1
+  - key: '"'
+  - wait:
+      until:
+        quiet: 1
+      timeout: 15
+  - observe:
+      id: quote
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 6
+  - observe:
+      id: nothing-shown
+      what:
+        - notifications
+        - notification_center
+        - dialogs
+        - markers: {}
+expect:
+  virtual:
+    title: Untitled (Workspace) - ${APP_NAME}
+    view:Untitled (Workspace):
+      expanded: true
+      titleActions:
+        - New File...
+        - New Folder...
+        - Refresh Explorer
+        - Collapse Folders in Explorer
+      welcome: []
+      welcomeLinks: []
+      messages: []
+      rows:
+        - depth: 1
+          label: MemFS - Sample
+          description: null
+          expanded: true
+          icon: null
+          tooltip: null
+          actions: []
+          aria: MemFS - Sample
+        - depth: 2
+          label: ssh.config
+          description: null
+          expanded: null
+          icon: null
+          tooltip: null
+          actions: []
+          aria: ssh.config
+  opened:
+    title: ssh.config - Untitled (Workspace) - ${APP_NAME}
+    editors:
+      active: ssh.config, Editor Group 2
+      groups:
+        - []
+        - - title: ssh.config, Editor Group 2
+            active: true
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: SSH Config
+        aria: SSH Config
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 1, Col 1
+        aria: Ln 1, Col 1
+        tooltip: null
+    folds:active:
+      - start: 2
+        end: 6
+        collapsed: false
+      - start: 7
+        end: 9
+        collapsed: false
+  toggle:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 2, Col 5
+        aria: Ln 2, Col 5
+        tooltip: null
+    tokens:active@2:
+      - col: 1
+        text: '# Host alpha'
+        length: 12
+        truncated: false
+        language: ssh_config
+        tokenType: Comment
+        scopes:
+          - source.config.ssh
+          - comment.line.hash.azcli
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+  enter:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 3, Col 5
+        aria: Ln 3, Col 5
+        tooltip: null
+    tokens:active@3:
+      - col: 1
+        text: '    '
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+  quote:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 6, Col 2
+        aria: Ln 6, Col 2
+        tooltip: null
+    tokens:active@6:
+      - col: 1
+        text: '""'
+        length: 2
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+  nothing-shown:
+    notifications: []
+    notification_center: []
+    dialogs: []
+    markers:active: []
+observed:
+  normalized:
+    virtual:
+      title: Untitled (Workspace) - ${APP_NAME}
+      view:Untitled (Workspace):
+        expanded: true
+        titleActions:
+          - New File...
+          - New Folder...
+          - Refresh Explorer
+          - Collapse Folders in Explorer
+        welcome: []
+        welcomeLinks: []
+        messages: []
+        rows:
+          - depth: 1
+            label: MemFS - Sample
+            description: null
+            expanded: true
+            icon: null
+            tooltip: null
+            actions: []
+            aria: MemFS - Sample
+          - depth: 2
+            label: file.txt
+            description: null
+            expanded: null
+            icon: null
+            tooltip: null
+            actions: []
+            aria: file.txt
+  per_step:
+    - i: 0
+      step:
+        cmd: 'MemFS: Setup Workspace'
+      ok: true
+      error: null
+      seconds: 3.4
+      at: 0.0
+      state_after:
+        title: Untitled (Workspace) - Visual Studio Code
+        editorTabs:
+          - []
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: Untitled (Workspace)
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 1
+      step:
+        wait:
+          until:
+            - title: Untitled (Workspace)
+            - quiet: 3
+          timeout: 60
+      ok: true
+      error: null
+      seconds: 4.0
+      at: 3.4
+    - i: 2
+      step:
+        cmd: 'View: Show Explorer'
+      ok: true
+      error: null
+      seconds: 3.4
+      at: 7.4
+      state_after:
+        title: Untitled (Workspace) - Visual Studio Code
+        editorTabs:
+          - []
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: Untitled (Workspace)
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 3
+      step:
+        wait:
+          until:
+            - view:
+                name: Untitled (Workspace)
+                row: ssh.config
+            - quiet: 2
+          timeout: 60
+      ok: true
+      error: null
+      seconds: 4.9
+      at: 10.8
+    - i: 4
+      step:
+        rowmenu:
+          view: Untitled (Workspace)
+          row: ssh.config
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 15.7
+      state_after:
+        title: Untitled (Workspace) - Visual Studio Code
+        editorTabs:
+          - []
+        quickInput:
+          visible: false
+        contextMenus:
+          - - label: Open to the Side
+              key: Ctrl+Enter
+              disabled: false
+              submenu: false
+            - label: Open Containing Folder
+              key: Ctrl+Alt+R
+              disabled: false
+              submenu: false
+            - label: Open With...
+              key: null
+              disabled: false
+              submenu: false
+            - label: Open in Integrated Terminal
+              key: null
+              disabled: false
+              submenu: false
+            - label: Select for Compare
+              key: null
+              disabled: false
+              submenu: false
+            - label: Open Timeline
+              key: null
+              disabled: false
+              submenu: false
+            - label: Cut
+              key: Ctrl+X
+              disabled: false
+              submenu: false
+            - label: Copy
+              key: Ctrl+C
+              disabled: false
+              submenu: false
+            - label: Copy Path
+              key: Ctrl+Alt+C
+              disabled: false
+              submenu: false
+            - label: Copy Relative Path
+              key: Ctrl+Shift+Alt+C
+              disabled: false
+              submenu: false
+            - label: Rename...
+              key: F2
+              disabled: false
+              submenu: false
+            - label: Delete
+              key: Del
+              disabled: false
+              submenu: false
+        sideBarSections:
+          - title: Untitled (Workspace)
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 5
+      step:
+        menu: Copy
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 17.2
+      state_after:
+        title: Untitled (Workspace) - Visual Studio Code
+        editorTabs:
+          - []
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: Untitled (Workspace)
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 6
+      step:
+        rowmenu:
+          view: Untitled (Workspace)
+          row: MemFS - Sample
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 19.0
+      state_after:
+        title: Untitled (Workspace) - Visual Studio Code
+        editorTabs:
+          - []
+        quickInput:
+          visible: false
+        contextMenus:
+          - - label: New File...
+              key: null
+              disabled: false
+              submenu: false
+            - label: New Folder...
+              key: null
+              disabled: false
+              submenu: false
+            - label: Open in Images Preview
+              key: null
+              disabled: false
+              submenu: false
+            - label: Add Folder to Workspace...
+              key: null
+              disabled: false
+              submenu: false
+            - label: Open Folder Settings
+              key: null
+              disabled: false
+              submenu: false
+            - label: Remove Folder from Workspace
+              key: null
+              disabled: false
+              submenu: false
+            - label: Find in Folder...
+              key: Shift+Alt+F
+              disabled: false
+              submenu: false
+            - label: Paste
+              key: Ctrl+V
+              disabled: false
+              submenu: false
+            - label: Download...
+              key: null
+              disabled: false
+              submenu: false
+            - label: Copy Path
+              key: Ctrl+Alt+C
+              disabled: false
+              submenu: false
+            - label: Copy Relative Path
+              key: Ctrl+Shift+Alt+C
+              disabled: false
+              submenu: false
+        sideBarSections:
+          - title: Untitled (Workspace)
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 7
+      step:
+        menu: Paste
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 20.5
+      selection: Ln 1, Col 1
+      state_after:
+        title: file.txt - Untitled (Workspace) - Visual Studio Code
+        activeEditor: file.txt
+        editorTabs:
+          - - title: file.txt
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: Untitled (Workspace)
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 8
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 60
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 22.3
+    - i: 9
+      step:
+        cmd: 'View: Close All Editors'
+      ok: true
+      error: null
+      seconds: 3.4
+      at: 25.0
+      state_after:
+        title: Untitled (Workspace) - Visual Studio Code
+        editorTabs:
+          - []
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: Untitled (Workspace)
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 10
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.8
+      at: 28.4
+    - i: 11
+      step:
+        rowmenu:
+          view: Untitled (Workspace)
+          row: ${WORKSPACE_NAME}
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 31.2
+      state_after:
+        title: Untitled (Workspace) - Visual Studio Code
+        editorTabs:
+          - []
+        quickInput:
+          visible: false
+        contextMenus:
+          - - label: New File...
+              key: null
+              disabled: false
+              submenu: false
+            - label: New Folder...
+              key: null
+              disabled: false
+              submenu: false
+            - label: Open Containing Folder
+              key: Ctrl+Alt+R
+              disabled: false
+              submenu: false
+            - label: Open in Images Preview
+              key: null
+              disabled: false
+              submenu: false
+            - label: Open in Integrated Terminal
+              key: null
+              disabled: false
+              submenu: false
+            - label: Add Folder to Workspace...
+              key: null
+              disabled: false
+              submenu: false
+            - label: Open Folder Settings
+              key: null
+              disabled: false
+              submenu: false
+            - label: Remove Folder from Workspace
+              key: null
+              disabled: false
+              submenu: false
+            - label: Find in Folder...
+              key: Shift+Alt+F
+              disabled: false
+              submenu: false
+            - label: Paste
+              key: Ctrl+V
+              disabled: false
+              submenu: false
+            - label: Copy Path
+              key: Ctrl+Alt+C
+              disabled: false
+              submenu: false
+            - label: Copy Relative Path
+              key: Ctrl+Shift+Alt+C
+              disabled: false
+              submenu: false
+        sideBarSections:
+          - title: Untitled (Workspace)
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 12
+      step:
+        menu: Remove Folder from Workspace
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 32.7
+      state_after:
+        title: Untitled (Workspace) - Visual Studio Code
+        editorTabs:
+          - []
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: Untitled (Workspace)
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 13
+      step:
+        wait:
+          until:
+            quiet: 3
+          timeout: 60
+      ok: true
+      error: null
+      seconds: 4.1
+      at: 34.5
+    - i: 14
+      step:
+        observe:
+          id: virtual
+          what:
+            - title
+            - view: Untitled (Workspace)
+      ok: true
+      error: null
+      seconds: 0.5
+      at: 38.6
+      observation_raw: null
+    - i: 15
+      step:
+        rowmenu:
+          view: Untitled (Workspace)
+          row: ssh.config
+      ok: false
+      error: 'ROW NOT FOUND: ssh.config'
+      seconds: 0.3
+      at: 39.1

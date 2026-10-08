@@ -1,0 +1,834 @@
+case: F-4001-AC13-1
+feature: F-4001
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - 'step failed: wait timed out after 15s: [{"quickpick": {"contains": "SSH Config"}}, {"quiet": 1}]'
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - cmd: 'File: New Untitled Text File'
+  - wait:
+      until:
+        - statusbar: Plain Text
+        - quiet: 2
+      timeout: 20
+  - cmd: Change Language Mode
+  - wait:
+      until:
+        - quickpick:
+            contains: Select Language Mode
+        - quiet: 1
+      timeout: 20
+  - type: ssh
+  - wait:
+      until:
+        - quickpick:
+            contains: SSH Config
+        - quiet: 1
+      timeout: 15
+  - observe:
+      id: typed-ssh
+      what:
+        - quickpick
+  - type: ssh_
+  - wait:
+      until:
+        - quickpick:
+            contains: SSH Config
+        - quiet: 1
+      timeout: 15
+  - observe:
+      id: typed-ssh-underscore
+      what:
+        - quickpick
+  - type: ssh_config
+  - wait:
+      until:
+        - quickpick:
+            contains: SSH Config
+        - quiet: 1
+      timeout: 15
+  - observe:
+      id: typed-language-id
+      what:
+        - quickpick
+  - type: SSH Config
+  - wait:
+      until:
+        - quickpick:
+            contains: SSH Config
+        - quiet: 1
+      timeout: 15
+  - observe:
+      id: typed-display-name
+      what:
+        - quickpick
+  - type: ssh config
+  - wait:
+      until:
+        - quickpick:
+            contains: SSH Config
+        - quiet: 1
+      timeout: 15
+  - observe:
+      id: typed-lower-words
+      what:
+        - quickpick
+  - type: sshconfig
+  - wait:
+      until:
+        - quickpick:
+            contains: SSH Config
+        - quiet: 1
+      timeout: 15
+  - observe:
+      id: typed-joined
+      what:
+        - quickpick
+  - key: Enter
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quickpick: hidden
+        - quiet: 2
+      timeout: 30
+  - observe:
+      id: accepted-focused
+      what:
+        - statusbar:
+            core:
+              - status.editor.mode
+expect:
+  typed-ssh:
+    quickpick:
+      visible: true
+      title: null
+      placeholder: Select Language Mode
+      value: ssh
+      message: null
+      count: null
+      titleButtons: []
+      buttons: []
+      multiSelect: null
+      items:
+        - label: SSH Config
+          description: (ssh_config)
+          detail: null
+          separator: null
+          checked: null
+          icons: []
+  typed-ssh-underscore:
+    quickpick:
+      visible: true
+      title: null
+      placeholder: Select Language Mode
+      value: ssh_
+      message: null
+      count: null
+      titleButtons: []
+      buttons: []
+      multiSelect: null
+      items:
+        - label: SSH Config
+          description: (ssh_config)
+          detail: null
+          separator: null
+          checked: null
+          icons: []
+  typed-language-id:
+    quickpick:
+      visible: true
+      title: null
+      placeholder: Select Language Mode
+      value: ssh_config
+      message: null
+      count: null
+      titleButtons: []
+      buttons: []
+      multiSelect: null
+      items:
+        - label: SSH Config
+          description: (ssh_config)
+          detail: null
+          separator: null
+          checked: null
+          icons: []
+  typed-display-name:
+    quickpick:
+      visible: true
+      title: null
+      placeholder: Select Language Mode
+      value: SSH Config
+      message: null
+      count: null
+      titleButtons: []
+      buttons: []
+      multiSelect: null
+      items:
+        - label: SSH Config
+          description: (ssh_config)
+          detail: null
+          separator: null
+          checked: null
+          icons: []
+  typed-lower-words:
+    quickpick:
+      visible: true
+      title: null
+      placeholder: Select Language Mode
+      value: ssh config
+      message: null
+      count: null
+      titleButtons: []
+      buttons: []
+      multiSelect: null
+      items:
+        - label: SSH Config
+          description: (ssh_config)
+          detail: null
+          separator: null
+          checked: null
+          icons: []
+  typed-joined:
+    quickpick:
+      visible: true
+      title: null
+      placeholder: Select Language Mode
+      value: sshconfig
+      message: null
+      count: null
+      titleButtons: []
+      buttons: []
+      multiSelect: null
+      items:
+        - label: SSH Config
+          description: (ssh_config)
+          detail: null
+          separator: null
+          checked: null
+          icons: []
+  accepted-focused:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: SSH Config
+        aria: SSH Config
+        tooltip: null
+observed:
+  normalized:
+    typed-ssh:
+      quickpick:
+        visible: true
+        title: null
+        placeholder: Select Language Mode
+        value: ssh
+        message: null
+        count: null
+        titleButtons: []
+        buttons: []
+        multiSelect: null
+        items:
+          - label: SSH Config
+            description: (ssh_config)
+            detail: null
+            separator: null
+            checked: null
+            icons: []
+    typed-ssh-underscore:
+      quickpick:
+        visible: true
+        title: null
+        placeholder: Select Language Mode
+        value: ssh_
+        message: null
+        count: null
+        titleButtons: []
+        buttons: []
+        multiSelect: null
+        items:
+          - label: SSH Config
+            description: (ssh_config)
+            detail: null
+            separator: null
+            checked: null
+            icons: []
+    typed-language-id:
+      quickpick:
+        visible: true
+        title: null
+        placeholder: Select Language Mode
+        value: ssh_config
+        message: null
+        count: null
+        titleButtons: []
+        buttons: []
+        multiSelect: null
+        items:
+          - label: SSH Config
+            description: (ssh_config)
+            detail: null
+            separator: null
+            checked: null
+            icons: []
+    typed-display-name:
+      quickpick:
+        visible: true
+        title: null
+        placeholder: Select Language Mode
+        value: SSH Config
+        message: null
+        count: null
+        titleButtons: []
+        buttons: []
+        multiSelect: null
+        items:
+          - label: SSH Config
+            description: (ssh_config)
+            detail: null
+            separator: null
+            checked: null
+            icons: []
+  per_step:
+    - i: 0
+      step:
+        cmd: 'File: New Untitled Text File'
+      ok: true
+      error: null
+      seconds: 3.4
+      at: 0.0
+      selection: Ln 1, Col 1
+      state_after:
+        title: Untitled-1 - F-4001-AC13-1 - Visual Studio Code
+        activeEditor: Untitled-1
+        editorTabs:
+          - - title: Untitled-1
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4001-AC13-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: Plain Text
+            - quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.6
+      at: 3.4
+    - i: 2
+      step:
+        cmd: Change Language Mode
+      ok: true
+      error: null
+      seconds: 3.3
+      at: 6.0
+      selection: Ln 1, Col 1
+      state_after:
+        title: Untitled-1 - F-4001-AC13-1 - Visual Studio Code
+        activeEditor: Untitled-1
+        editorTabs:
+          - - title: Untitled-1
+              active: true
+        quickInput:
+          visible: true
+          title: null
+          placeholder: Select Language Mode
+          value: ''
+          message: null
+          count: null
+          titleButtons: []
+          buttons: []
+          multiSelect: null
+          items:
+            - label: Agent
+              description: (chatagent)
+              detail: null
+              separator: languages (identifier)
+              focused: true
+              checked: null
+              icons: []
+              buttons: []
+              aria: Agent, (chatagent), languages (identifier)
+            - label: Batch
+              description: (bat)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: Batch, (bat)
+            - label: BibTeX
+              description: (bibtex)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: BibTeX, (bibtex)
+            - label: Binary
+              description: (code-text-binary)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: Binary, (code-text-binary)
+            - label: C
+              description: (c)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: C, (c)
+            - label: C#
+              description: (csharp)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: C#, (csharp)
+            - label: C++
+              description: (cpp)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: C++, (cpp)
+            - label: Clojure
+              description: (clojure)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: Clojure, (clojure)
+            - label: Code Snippets
+              description: (snippets)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: Code Snippets, (snippets)
+            - label: CoffeeScript
+              description: (coffeescript)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: CoffeeScript, (coffeescript)
+            - label: Compose
+              description: (dockercompose)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: Compose, (dockercompose)
+            - label: CSS
+              description: (css)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: CSS, (css)
+            - label: CUDA C++
+              description: (cuda-cpp)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: CUDA C++, (cuda-cpp)
+            - label: Dart
+              description: (dart)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: Dart, (dart)
+            - label: Diff
+              description: (diff)
+              detail: null
+              separator: null
+              focused: false
+              checked: null
+              icons: []
+              buttons: []
+              aria: Diff, (diff)
+        sideBarSections:
+          - title: F-4001-AC13-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 3
+      step:
+        wait:
+          until:
+            - quickpick:
+                contains: Select Language Mode
+            - quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 9.3
+    - i: 4
+      step:
+        type: ssh
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 10.7
+      selection: Ln 1, Col 1
+      state_after:
+        title: Untitled-1 - F-4001-AC13-1 - Visual Studio Code
+        activeEditor: Untitled-1
+        editorTabs:
+          - - title: Untitled-1
+              active: true
+        quickInput:
+          visible: true
+          title: null
+          placeholder: Select Language Mode
+          value: ssh
+          message: null
+          count: null
+          titleButtons: []
+          buttons: []
+          multiSelect: null
+          items:
+            - label: SSH Config
+              description: (ssh_config)
+              detail: null
+              separator: null
+              focused: true
+              checked: null
+              icons: []
+              buttons: []
+              aria: SSH Config, (ssh_config)
+        sideBarSections:
+          - title: F-4001-AC13-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 5
+      step:
+        wait:
+          until:
+            - quickpick:
+                contains: SSH Config
+            - quiet: 1
+          timeout: 15
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 12.1
+    - i: 6
+      step:
+        observe:
+          id: typed-ssh
+          what:
+            - quickpick
+      ok: true
+      error: null
+      seconds: 0.4
+      at: 13.5
+      observation_raw: null
+    - i: 7
+      step:
+        type: ssh_
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 13.9
+      selection: Ln 1, Col 1
+      state_after:
+        title: Untitled-1 - F-4001-AC13-1 - Visual Studio Code
+        activeEditor: Untitled-1
+        editorTabs:
+          - - title: Untitled-1
+              active: true
+        quickInput:
+          visible: true
+          title: null
+          placeholder: Select Language Mode
+          value: ssh_
+          message: null
+          count: null
+          titleButtons: []
+          buttons: []
+          multiSelect: null
+          items:
+            - label: SSH Config
+              description: (ssh_config)
+              detail: null
+              separator: null
+              focused: true
+              checked: null
+              icons: []
+              buttons: []
+              aria: SSH Config, (ssh_config)
+        sideBarSections:
+          - title: F-4001-AC13-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 8
+      step:
+        wait:
+          until:
+            - quickpick:
+                contains: SSH Config
+            - quiet: 1
+          timeout: 15
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 15.3
+    - i: 9
+      step:
+        observe:
+          id: typed-ssh-underscore
+          what:
+            - quickpick
+      ok: true
+      error: null
+      seconds: 0.4
+      at: 16.7
+      observation_raw: null
+    - i: 10
+      step:
+        type: ssh_config
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 17.1
+      selection: Ln 1, Col 1
+      state_after:
+        title: Untitled-1 - F-4001-AC13-1 - Visual Studio Code
+        activeEditor: Untitled-1
+        editorTabs:
+          - - title: Untitled-1
+              active: true
+        quickInput:
+          visible: true
+          title: null
+          placeholder: Select Language Mode
+          value: ssh_config
+          message: null
+          count: null
+          titleButtons: []
+          buttons: []
+          multiSelect: null
+          items:
+            - label: SSH Config
+              description: (ssh_config)
+              detail: null
+              separator: null
+              focused: true
+              checked: null
+              icons: []
+              buttons: []
+              aria: SSH Config, (ssh_config)
+        sideBarSections:
+          - title: F-4001-AC13-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 11
+      step:
+        wait:
+          until:
+            - quickpick:
+                contains: SSH Config
+            - quiet: 1
+          timeout: 15
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 18.5
+    - i: 12
+      step:
+        observe:
+          id: typed-language-id
+          what:
+            - quickpick
+      ok: true
+      error: null
+      seconds: 0.4
+      at: 19.9
+      observation_raw: null
+    - i: 13
+      step:
+        type: SSH Config
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 20.3
+      selection: Ln 1, Col 1
+      state_after:
+        title: Untitled-1 - F-4001-AC13-1 - Visual Studio Code
+        activeEditor: Untitled-1
+        editorTabs:
+          - - title: Untitled-1
+              active: true
+        quickInput:
+          visible: true
+          title: null
+          placeholder: Select Language Mode
+          value: SSH Config
+          message: null
+          count: null
+          titleButtons: []
+          buttons: []
+          multiSelect: null
+          items:
+            - label: SSH Config
+              description: (ssh_config)
+              detail: null
+              separator: null
+              focused: true
+              checked: null
+              icons: []
+              buttons: []
+              aria: SSH Config, (ssh_config)
+        sideBarSections:
+          - title: F-4001-AC13-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 14
+      step:
+        wait:
+          until:
+            - quickpick:
+                contains: SSH Config
+            - quiet: 1
+          timeout: 15
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 21.7
+    - i: 15
+      step:
+        observe:
+          id: typed-display-name
+          what:
+            - quickpick
+      ok: true
+      error: null
+      seconds: 0.5
+      at: 23.1
+      observation_raw: null
+    - i: 16
+      step:
+        type: ssh config
+      ok: true
+      error: null
+      seconds: 1.5
+      at: 23.6
+      selection: Ln 1, Col 1
+      state_after:
+        title: Untitled-1 - F-4001-AC13-1 - Visual Studio Code
+        activeEditor: Untitled-1
+        editorTabs:
+          - - title: Untitled-1
+              active: true
+        quickInput:
+          visible: true
+          title: null
+          placeholder: Select Language Mode
+          value: ssh config
+          message: null
+          count: null
+          titleButtons: []
+          buttons: []
+          multiSelect: null
+          items:
+            - label: SSH Config
+              description: (ssh_config)
+              detail: null
+              separator: null
+              focused: true
+              checked: null
+              icons: []
+              buttons: []
+              aria: SSH Config, (ssh_config)
+        sideBarSections:
+          - title: F-4001-AC13-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 17
+      step:
+        wait:
+          until:
+            - quickpick:
+                contains: SSH Config
+            - quiet: 1
+          timeout: 15
+      ok: false
+      error: 'wait timed out after 15s: [{"quickpick": {"contains": "SSH Config"}}, {"quiet": 1}]'
+      seconds: 16.1
+      at: 25.1
+      selection: Ln 1, Col 1
+      state_after:
+        title: Untitled-1 - F-4001-AC13-1 - Visual Studio Code
+        activeEditor: Untitled-1
+        editorTabs:
+          - - title: Untitled-1
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4001-AC13-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false

@@ -1,0 +1,490 @@
+case: F-4202-AC20-2
+feature: F-4202
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/lines/tokens:active@2: 2 vs 0 items: [{'col': 1, 'text': 'Host', 'length': 4, 'truncated': False, 'language':
+    'ssh_config', 'tokenType': 'Other', 'scopes': ['source.config.ssh', 'support.type.property-name.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}, {'col': 5, 'text': ' alias', 'length':
+    6, 'truncated': False, 'language': 'ssh_config', 'tokenType': 'String', 'scopes': ['source.config.ssh', 'string.quoted.double.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}] != []"
+  - "/lines/tokens:active@3: 2 vs 0 items: [{'col': 1, 'text': '    HostName', 'length': 12, 'truncated': False, 'language':
+    'ssh_config', 'tokenType': 'Other', 'scopes': ['source.config.ssh', 'support.type.property-name.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}, {'col': 13, 'text': ' hostname',
+    'length': 9, 'truncated': False, 'language': 'ssh_config', 'tokenType': 'String', 'scopes': ['source.config.ssh',
+    'string.quoted.double.ssh_config'], 'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}]
+    != []"
+  - "/lines/tokens:active@4[0]/text: '    LocalForward' != 'Host'"
+  - '/lines/tokens:active@4[0]/length: 16 != 4'
+  - '/lines/tokens:active@4[1]/col: 17 != 5'
+  - "/lines/tokens:active@4[1]/text: ' port localhost:port' != ' alpha'"
+  - '/lines/tokens:active@4[1]/length: 20 != 6'
+  - "/lines/tokens:active@5[0]/text: '    User' != '    HostName'"
+  - '/lines/tokens:active@5[0]/length: 8 != 12'
+  - '/lines/tokens:active@5[1]/col: 9 != 13'
+  - "/lines/tokens:active@5[1]/text: ' user' != ' alpha.example.invalid'"
+  - '/lines/tokens:active@5[1]/length: 5 != 22'
+  - "/lines/tokens:active@6: 2 vs 0 items: [{'col': 1, 'text': 'Host', 'length': 4, 'truncated': False, 'language':
+    'ssh_config', 'tokenType': 'Other', 'scopes': ['source.config.ssh', 'support.type.property-name.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}, {'col': 5, 'text': ' alpha', 'length':
+    6, 'truncated': False, 'language': 'ssh_config', 'tokenType': 'String', 'scopes': ['source.config.ssh', 'string.quoted.double.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}] != []"
+  - "/accepted/statusbar[1]/text: 'Ln 2, Col 11 (5 selected)' != 'Ln 3, Col 1'"
+  - "/accepted/statusbar[1]/aria: 'Ln 2, Col 11 (5 selected)' != 'Ln 3, Col 1'"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - goto:
+      line: 2
+      col: 1
+  - key: Control+Space
+  - wait:
+      until:
+        - quiet: 2
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        - quiet: 2
+      timeout: 20
+  - observe:
+      id: accepted
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+  - key: Escape
+  - wait:
+      until:
+        - quiet: 1
+      timeout: 20
+  - observe:
+      id: lines
+      what:
+        - tokens:
+            line: 2
+        - tokens:
+            line: 3
+        - tokens:
+            line: 4
+        - tokens:
+            line: 5
+        - tokens:
+            line: 6
+expect:
+  accepted:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 2, Col 11 (5 selected)
+        aria: Ln 2, Col 11 (5 selected)
+        tooltip: null
+  lines:
+    tokens:active@2:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' alias'
+        length: 6
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@3:
+      - col: 1
+        text: '    HostName'
+        length: 12
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 13
+        text: ' hostname'
+        length: 9
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@4:
+      - col: 1
+        text: '    LocalForward'
+        length: 16
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 17
+        text: ' port localhost:port'
+        length: 20
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@5:
+      - col: 1
+        text: '    User'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' user'
+        length: 5
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@6:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' alpha'
+        length: 6
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+observed:
+  normalized:
+    accepted:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 1
+          aria: Ln 3, Col 1
+          tooltip: null
+    lines:
+      tokens:active@2: []
+      tokens:active@3: []
+      tokens:active@4:
+        - col: 1
+          text: Host
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 5
+          text: ' alpha'
+          length: 6
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@5:
+        - col: 1
+          text: '    HostName'
+          length: 12
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 13
+          text: ' alpha.example.invalid'
+          length: 22
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@6: []
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 0.8
+    - i: 2
+      step:
+        goto:
+          line: 2
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.5
+      at: 3.5
+      position:
+        line: 2
+        col: 1
+    - i: 3
+      step:
+        key: Control+Space
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 4.0
+      selection: Ln 2, Col 1
+      state_after:
+        title: config - F-4202-AC20-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Configure tunnel, Snippet
+                focused: true
+              - text: AddKeysToAgent, Property
+                focused: false
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC20-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 4
+      step:
+        wait:
+          until:
+            - quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 5.2
+      at: 5.7
+    - i: 5
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 10.9
+      selection: Ln 3, Col 1
+      state_after:
+        title: ● config - F-4202-AC20-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC20-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 6
+      step:
+        wait:
+          until:
+            - quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 12.6
+    - i: 7
+      step:
+        observe:
+          id: accepted
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+      ok: true
+      error: null
+      seconds: 0.2
+      at: 15.3
+      observation_raw: null
+    - i: 8
+      step:
+        key: Escape
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 15.5
+      selection: Ln 3, Col 1
+      state_after:
+        title: ● config - F-4202-AC20-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC20-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 9
+      step:
+        wait:
+          until:
+            - quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 17.3
+    - i: 10
+      step:
+        observe:
+          id: lines
+          what:
+            - tokens:
+                line: 2
+            - tokens:
+                line: 3
+            - tokens:
+                line: 4
+            - tokens:
+                line: 5
+            - tokens:
+                line: 6
+      ok: true
+      error: null
+      seconds: 6.3
+      at: 18.7
+      observation_raw: null

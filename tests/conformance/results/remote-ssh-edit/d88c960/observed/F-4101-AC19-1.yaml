@@ -1,0 +1,2403 @@
+case: F-4101-AC19-1
+feature: F-4101
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - '/crlf-lines/tokens:active@7: 2 vs 3 items: [{''col'': 1, ''text'': ''\tUser'', ''length'': 5, ''truncated'': False, ''language'':
+    ''ssh_config'', ''tokenType'': ''Other'', ''scopes'': [''source.config.ssh'', ''support.type.property-name.ssh_config''],
+    ''semanticType'': None, ''modifiers'': None, ''tmText'': None, ''tmLength'': None}, {''col'': 6, ''text'': ''\ttabuser'',
+    ''length'': 8, ''truncated'': False, ''language'': ''ssh_config'', ''tokenType'': ''String'', ''scopes'': [''source.config.ssh'',
+    ''string.quoted.double.ssh_config''], ''semanticType'': None, ''modifiers'': None, ''tmText'': None, ''tmLength'': None}]
+    != [{''col'': 1, ''text'': ''\tUser'', ''leng'
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - statusbar: CRLF
+        - quiet: 2
+      timeout: 30
+  - observe:
+      id: crlf-opened
+      what:
+        - statusbar:
+            core:
+              - status.editor.mode
+              - status.editor.eol
+  - observe:
+      id: crlf-lines
+      what:
+        - tokens:
+            line: 1
+        - tokens:
+            line: 2
+        - tokens:
+            line: 3
+        - tokens:
+            line: 4
+        - tokens:
+            line: 5
+        - tokens:
+            line: 6
+        - tokens:
+            line: 7
+        - tokens:
+            line: 8
+        - tokens:
+            line: 9
+        - tokens:
+            line: 10
+        - tokens:
+            line: 11
+        - tokens:
+            line: 12
+        - tokens:
+            line: 13
+        - tokens:
+            line: 14
+        - tokens:
+            line: 15
+        - tokens:
+            line: 16
+        - tokens:
+            line: 17
+        - tokens:
+            line: 18
+        - tokens:
+            line: 19
+        - tokens:
+            line: 20
+        - tokens:
+            line: 21
+        - tokens:
+            line: 22
+        - tokens:
+            line: 23
+        - tokens:
+            line: 24
+        - tokens:
+            line: 25
+        - tokens:
+            line: 26
+        - tokens:
+            line: 27
+        - tokens:
+            line: 28
+        - tokens:
+            line: 29
+        - tokens:
+            line: 30
+        - tokens:
+            line: 31
+        - tokens:
+            line: 32
+        - tokens:
+            line: 33
+        - tokens:
+            line: 34
+        - tokens:
+            line: 35
+        - tokens:
+            line: 36
+        - tokens:
+            line: 37
+        - tokens:
+            line: 38
+        - tokens:
+            line: 39
+        - tokens:
+            line: 40
+        - tokens:
+            line: 41
+        - tokens:
+            line: 42
+        - tokens:
+            line: 43
+        - tokens:
+            line: 44
+        - tokens:
+            line: 45
+        - tokens:
+            line: 46
+expect:
+  crlf-opened:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: SSH Config
+        aria: SSH Config
+        tooltip: null
+      - id: status.editor.eol
+        text: CRLF
+        aria: CRLF
+        tooltip: null
+  crlf-lines:
+    tokens:active@1:
+      - col: 1
+        text: '# full-line comment'
+        length: 19
+        truncated: false
+        language: ssh_config
+        tokenType: Comment
+        scopes:
+          - source.config.ssh
+          - comment.line.hash.azcli
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@2:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' alpha beta*.example !gamma ?x'
+        length: 30
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@3:
+      - col: 1
+        text: '    HostName'
+        length: 12
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 13
+        text: ' alpha.example.com'
+        length: 18
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@4:
+      - col: 1
+        text: '    Port'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' 2222'
+        length: 5
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@5:
+      - col: 1
+        text: '    Port=2222'
+        length: 13
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@6:
+      - col: 1
+        text: '    Port'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' = 2222'
+        length: 7
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@7:
+      - col: 1
+        text: "\tUser"
+        length: 5
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 6
+        text: "\ttabuser"
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@8:
+      - col: 1
+        text: '    IdentityFile'
+        length: 16
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 17
+        text: ' "~/.ssh/id with space"'
+        length: 23
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@9:
+      - col: 1
+        text: '    IdentityFile'
+        length: 16
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 17
+        text: ' ~/.ssh/id_%h_%r_%%'
+        length: 19
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@10:
+      - col: 1
+        text: '    ControlPath'
+        length: 15
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 16
+        text: ' ${HOME}/.ssh/cm-%C'
+        length: 19
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@11:
+      - col: 1
+        text: '    ProxyCommand'
+        length: 16
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 17
+        text: ' ssh -W %h:%p bastion # trailing comment'
+        length: 40
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@12:
+      - col: 1
+        text: '    # indented comment'
+        length: 22
+        truncated: false
+        language: ssh_config
+        tokenType: Comment
+        scopes:
+          - source.config.ssh
+          - comment.line.hash.azcli
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@13:
+      - col: 1
+        text: "\t# tab-indented comment"
+        length: 23
+        truncated: false
+        language: ssh_config
+        tokenType: Comment
+        scopes:
+          - source.config.ssh
+          - comment.line.hash.azcli
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@14: []
+    tokens:active@15:
+      - col: 1
+        text: '    '
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@16:
+      - col: 1
+        text: Match
+        length: 5
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 6
+        text: ' host *.corp exec "t…-f /tmp/x" user root'
+        length: 44
+        truncated: true
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@17:
+      - col: 1
+        text: '    ForwardAgent'
+        length: 16
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 17
+        text: ' yes'
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@18:
+      - col: 1
+        text: '    foobarunknown'
+        length: 17
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 18
+        text: ' value here'
+        length: 11
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@19:
+      - col: 1
+        text: '    hostname'
+        length: 12
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 13
+        text: ' lower.example'
+        length: 14
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@20:
+      - col: 1
+        text: '    HOSTNAME'
+        length: 12
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 13
+        text: ' UPPER.example'
+        length: 14
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@21:
+      - col: 1
+        text: '    LocalForward'
+        length: 16
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 17
+        text: ' 8080 localhost:<PORT>'
+        length: 18
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@22:
+      - col: 1
+        text: '    SendEnv'
+        length: 11
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 12
+        text: ' LANG LC_*'
+        length: 10
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@23:
+      - col: 1
+        text: '    Ciphers'
+        length: 11
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 12
+        text: ' +aes256-ctr,chacha2…poly1305@openssh.com'
+        length: 42
+        truncated: true
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@24:
+      - col: 1
+        text: '    RemoteCommand'
+        length: 17
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 18
+        text: ' echo "quoted" ''single'''
+        length: 23
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@25:
+      - col: 1
+        text: '#comment-no-space'
+        length: 17
+        truncated: false
+        language: ssh_config
+        tokenType: Comment
+        scopes:
+          - source.config.ssh
+          - comment.line.hash.azcli
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@26:
+      - col: 1
+        text: '   #  comment after spaces'
+        length: 26
+        truncated: false
+        language: ssh_config
+        tokenType: Comment
+        scopes:
+          - source.config.ssh
+          - comment.line.hash.azcli
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@27:
+      - col: 1
+        text: Port
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@28:
+      - col: 1
+        text: '='
+        length: 1
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 2
+        text: ' value'
+        length: 6
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@29:
+      - col: 1
+        text: '"Quoted"'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' keyword'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@30:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' "quoted host"'
+        length: 14
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@31:
+      - col: 1
+        text: '    User'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' user#hash'
+        length: 10
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@32:
+      - col: 1
+        text: '    Hostname'
+        length: 12
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 13
+        text: ' 10.0.0.1 #comment'
+        length: 18
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@33:
+      - col: 1
+        text: Include
+        length: 7
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 8
+        text: ' ~/.ssh/config.d/*'
+        length: 18
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@34:
+      - col: 1
+        text: KeyWord#notcomment
+        length: 18
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 19
+        text: ' value'
+        length: 6
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@35:
+      - col: 1
+        text: '    Port'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' 2222  '
+        length: 7
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@36:
+      - col: 1
+        text: IdentityFile=~/.ssh/id_ed25519
+        length: 30
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@37:
+      - col: 1
+        text: IdentityFile
+        length: 12
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 13
+        text: ' ="x"'
+        length: 5
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@38:
+      - col: 1
+        text: '    !negated'
+        length: 12
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@39:
+      - col: 1
+        text: '*'
+        length: 1
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@40:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' *'
+        length: 2
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@41:
+      - col: 1
+        text: '    Tag'
+        length: 7
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 8
+        text: ' 123'
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@42:
+      - col: 1
+        text: '    User'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' jörg'
+        length: 5
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@43:
+      - col: 1
+        text: '    RemoteCommand'
+        length: 17
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 18
+        text: ' echo "unterminated'
+        length: 19
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@44:
+      - col: 1
+        text: '    User'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' next'
+        length: 5
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@45:
+      - col: 1
+        text: '    User'
+        length: 8
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 9
+        text: ' last'
+        length: 5
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@46: []
+observed:
+  normalized:
+    crlf-opened:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.mode
+          text: SSH Config
+          aria: SSH Config
+          tooltip: null
+        - id: status.editor.eol
+          text: CRLF
+          aria: CRLF
+          tooltip: null
+    crlf-lines:
+      tokens:active@1:
+        - col: 1
+          text: '# full-line comment'
+          length: 19
+          truncated: false
+          language: ssh_config
+          tokenType: Comment
+          scopes:
+            - source.config.ssh
+            - comment.line.hash.azcli
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@2:
+        - col: 1
+          text: Host
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 5
+          text: ' alpha beta*.example !gamma ?x'
+          length: 30
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@3:
+        - col: 1
+          text: '    HostName'
+          length: 12
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 13
+          text: ' alpha.example.com'
+          length: 18
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@4:
+        - col: 1
+          text: '    Port'
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 9
+          text: ' 2222'
+          length: 5
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@5:
+        - col: 1
+          text: '    Port=2222'
+          length: 13
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@6:
+        - col: 1
+          text: '    Port'
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 9
+          text: ' = 2222'
+          length: 7
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@7:
+        - col: 1
+          text: "\tUser"
+          length: 5
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 6
+          text: "\ttabuser"
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 14
+          text: "\ttabuser"
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@8:
+        - col: 1
+          text: '    IdentityFile'
+          length: 16
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 17
+          text: ' "~/.ssh/id with space"'
+          length: 23
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@9:
+        - col: 1
+          text: '    IdentityFile'
+          length: 16
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 17
+          text: ' ~/.ssh/id_%h_%r_%%'
+          length: 19
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@10:
+        - col: 1
+          text: '    ControlPath'
+          length: 15
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 16
+          text: ' ${HOME}/.ssh/cm-%C'
+          length: 19
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@11:
+        - col: 1
+          text: '    ProxyCommand'
+          length: 16
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 17
+          text: ' ssh -W %h:%p bastion # trailing comment'
+          length: 40
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@12:
+        - col: 1
+          text: '    # indented comment'
+          length: 22
+          truncated: false
+          language: ssh_config
+          tokenType: Comment
+          scopes:
+            - source.config.ssh
+            - comment.line.hash.azcli
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@13:
+        - col: 1
+          text: "\t# tab-indented comment"
+          length: 23
+          truncated: false
+          language: ssh_config
+          tokenType: Comment
+          scopes:
+            - source.config.ssh
+            - comment.line.hash.azcli
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@14: []
+      tokens:active@15:
+        - col: 1
+          text: '    '
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@16:
+        - col: 1
+          text: Match
+          length: 5
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 6
+          text: ' host *.corp exec "t…-f /tmp/x" user root'
+          length: 44
+          truncated: true
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@17:
+        - col: 1
+          text: '    ForwardAgent'
+          length: 16
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 17
+          text: ' yes'
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@18:
+        - col: 1
+          text: '    foobarunknown'
+          length: 17
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 18
+          text: ' value here'
+          length: 11
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@19:
+        - col: 1
+          text: '    hostname'
+          length: 12
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 13
+          text: ' lower.example'
+          length: 14
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@20:
+        - col: 1
+          text: '    HOSTNAME'
+          length: 12
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 13
+          text: ' UPPER.example'
+          length: 14
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@21:
+        - col: 1
+          text: '    LocalForward'
+          length: 16
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 17
+          text: ' 8080 localhost:<PORT>'
+          length: 18
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@22:
+        - col: 1
+          text: '    SendEnv'
+          length: 11
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 12
+          text: ' LANG LC_*'
+          length: 10
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@23:
+        - col: 1
+          text: '    Ciphers'
+          length: 11
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 12
+          text: ' +aes256-ctr,chacha2…poly1305@openssh.com'
+          length: 42
+          truncated: true
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@24:
+        - col: 1
+          text: '    RemoteCommand'
+          length: 17
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 18
+          text: ' echo "quoted" ''single'''
+          length: 23
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@25:
+        - col: 1
+          text: '#comment-no-space'
+          length: 17
+          truncated: false
+          language: ssh_config
+          tokenType: Comment
+          scopes:
+            - source.config.ssh
+            - comment.line.hash.azcli
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@26:
+        - col: 1
+          text: '   #  comment after spaces'
+          length: 26
+          truncated: false
+          language: ssh_config
+          tokenType: Comment
+          scopes:
+            - source.config.ssh
+            - comment.line.hash.azcli
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@27:
+        - col: 1
+          text: Port
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@28:
+        - col: 1
+          text: '='
+          length: 1
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 2
+          text: ' value'
+          length: 6
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@29:
+        - col: 1
+          text: '"Quoted"'
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 9
+          text: ' keyword'
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@30:
+        - col: 1
+          text: Host
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 5
+          text: ' "quoted host"'
+          length: 14
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@31:
+        - col: 1
+          text: '    User'
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 9
+          text: ' user#hash'
+          length: 10
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@32:
+        - col: 1
+          text: '    Hostname'
+          length: 12
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 13
+          text: ' 10.0.0.1 #comment'
+          length: 18
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@33:
+        - col: 1
+          text: Include
+          length: 7
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 8
+          text: ' ~/.ssh/config.d/*'
+          length: 18
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@34:
+        - col: 1
+          text: KeyWord#notcomment
+          length: 18
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 19
+          text: ' value'
+          length: 6
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@35:
+        - col: 1
+          text: '    Port'
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 9
+          text: ' 2222  '
+          length: 7
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@36:
+        - col: 1
+          text: IdentityFile=~/.ssh/id_ed25519
+          length: 30
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@37:
+        - col: 1
+          text: IdentityFile
+          length: 12
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 13
+          text: ' ="x"'
+          length: 5
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@38:
+        - col: 1
+          text: '    !negated'
+          length: 12
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@39:
+        - col: 1
+          text: '*'
+          length: 1
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@40:
+        - col: 1
+          text: Host
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 5
+          text: ' *'
+          length: 2
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@41:
+        - col: 1
+          text: '    Tag'
+          length: 7
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 8
+          text: ' 123'
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@42:
+        - col: 1
+          text: '    User'
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 9
+          text: ' jörg'
+          length: 5
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@43:
+        - col: 1
+          text: '    RemoteCommand'
+          length: 17
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 18
+          text: ' echo "unterminated'
+          length: 19
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@44:
+        - col: 1
+          text: '    User'
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 9
+          text: ' next'
+          length: 5
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@45:
+        - col: 1
+          text: '    User'
+          length: 8
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 9
+          text: ' last'
+          length: 5
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@46: []
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - statusbar: CRLF
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.6
+      at: 0.8
+    - i: 2
+      step:
+        observe:
+          id: crlf-opened
+          what:
+            - statusbar:
+                core:
+                  - status.editor.mode
+                  - status.editor.eol
+      ok: true
+      error: null
+      seconds: 0.2
+      at: 3.4
+      observation_raw: null
+    - i: 3
+      step:
+        observe:
+          id: crlf-lines
+          what:
+            - tokens:
+                line: 1
+            - tokens:
+                line: 2
+            - tokens:
+                line: 3
+            - tokens:
+                line: 4
+            - tokens:
+                line: 5
+            - tokens:
+                line: 6
+            - tokens:
+                line: 7
+            - tokens:
+                line: 8
+            - tokens:
+                line: 9
+            - tokens:
+                line: 10
+            - tokens:
+                line: 11
+            - tokens:
+                line: 12
+            - tokens:
+                line: 13
+            - tokens:
+                line: 14
+            - tokens:
+                line: 15
+            - tokens:
+                line: 16
+            - tokens:
+                line: 17
+            - tokens:
+                line: 18
+            - tokens:
+                line: 19
+            - tokens:
+                line: 20
+            - tokens:
+                line: 21
+            - tokens:
+                line: 22
+            - tokens:
+                line: 23
+            - tokens:
+                line: 24
+            - tokens:
+                line: 25
+            - tokens:
+                line: 26
+            - tokens:
+                line: 27
+            - tokens:
+                line: 28
+            - tokens:
+                line: 29
+            - tokens:
+                line: 30
+            - tokens:
+                line: 31
+            - tokens:
+                line: 32
+            - tokens:
+                line: 33
+            - tokens:
+                line: 34
+            - tokens:
+                line: 35
+            - tokens:
+                line: 36
+            - tokens:
+                line: 37
+            - tokens:
+                line: 38
+            - tokens:
+                line: 39
+            - tokens:
+                line: 40
+            - tokens:
+                line: 41
+            - tokens:
+                line: 42
+            - tokens:
+                line: 43
+            - tokens:
+                line: 44
+            - tokens:
+                line: 45
+            - tokens:
+                line: 46
+      ok: true
+      error: null
+      seconds: 69.9
+      at: 3.6
+      observation_raw: null

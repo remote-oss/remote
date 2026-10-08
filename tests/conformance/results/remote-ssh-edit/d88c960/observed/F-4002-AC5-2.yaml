@@ -1,0 +1,219 @@
+case: F-4002-AC5-2
+feature: F-4002
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - '/restricted-features/suggest:active@5:1/items[0]/documentation: "Specifies whether to use compression. The argument must
+    be ``yes'''' or ``no .'''' The default is ``no .''''" != ''Specifies whether to use compression. The argument must be yes
+    or no (the default).'''
+  - "/restricted-features/suggest:active@5:1/items[1]/documentation: 'Specifies the compression level to use if compression
+    is enabled. The argument must be an integer from 1 (fast) to 9 (slow, best). The default level is 6, which is good for most
+    applications. The meaning of the values is the same as in gzip(1). Note that this option applies to protocol version 1 only.'
+    != 'Specifies the compression l"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: ssh.config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 60
+  - observe:
+      id: restricted-features
+      what:
+        - title
+        - statusbar:
+            core:
+              - status.editor.mode
+              - status.workspaceTrust
+        - notifications
+        - dialogs
+        - tokens:
+            line: 2
+        - folds: {}
+        - suggest:
+            line: 5
+            col: 1
+            type: Compr
+            fields:
+              - label
+              - kind
+              - preselected
+              - documentation
+expect:
+  restricted-features:
+    title: ssh.config - F-4002-AC5-2 - ${APP_NAME}
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: SSH Config
+        aria: SSH Config
+        tooltip: null
+    notifications: []
+    dialogs: []
+    tokens:active@2:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' f4001-sample'
+        length: 13
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    folds:active:
+      - start: 2
+        end: 5
+        collapsed: false
+    suggest:active@5:1:
+      items:
+        - order: 0
+          label: Compression
+          kind: symbol-property
+          preselected: true
+          documentation:
+            Specifies whether to use compression. The argument must be ``yes'' or ``no .'' The default is ``no
+            .''
+        - order: 1
+          label: CompressionLevel
+          kind: symbol-property
+          preselected: false
+          documentation:
+            Specifies the compression level to use if compression is enabled. The argument must be an integer from
+            1 (fast) to 9 (slow, best). The default level is 6, which is good for most applications. The meaning of the values
+            is the same as in gzip(1). Note that this option applies to protocol version 1 only.
+      total: 2
+      message: null
+observed:
+  normalized:
+    restricted-features:
+      title: ssh.config - F-4002-AC5-2 - ${APP_NAME}
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.mode
+          text: SSH Config
+          aria: SSH Config
+          tooltip: null
+      notifications: []
+      dialogs: []
+      tokens:active@2:
+        - col: 1
+          text: Host
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+        - col: 5
+          text: ' f4001-sample'
+          length: 13
+          truncated: false
+          language: ssh_config
+          tokenType: String
+          scopes:
+            - source.config.ssh
+            - string.quoted.double.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      folds:active:
+        - start: 2
+          end: 5
+          collapsed: false
+      suggest:active@5:1:
+        items:
+          - order: 0
+            label: Compression
+            kind: symbol-property
+            preselected: true
+            documentation: Specifies whether to use compression. The argument must be yes or no (the default).
+          - order: 1
+            label: CompressionLevel
+            kind: symbol-property
+            preselected: false
+            documentation: Specifies the compression level to use if compression is enabled.
+        total: 2
+        message: null
+  per_step:
+    - i: 0
+      step:
+        open: ssh.config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 60
+      ok: true
+      error: null
+      seconds: 2.6
+      at: 0.8
+    - i: 2
+      step:
+        observe:
+          id: restricted-features
+          what:
+            - title
+            - statusbar:
+                core:
+                  - status.editor.mode
+                  - status.workspaceTrust
+            - notifications
+            - dialogs
+            - tokens:
+                line: 2
+            - folds: {}
+            - suggest:
+                line: 5
+                col: 1
+                type: Compr
+                fields:
+                  - label
+                  - kind
+                  - preselected
+                  - documentation
+      ok: true
+      error: null
+      seconds: 8.5
+      at: 3.4
+      observation_raw: null

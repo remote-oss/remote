@@ -1,0 +1,244 @@
+case: F-4002-AC22-1
+feature: F-4002
+profile: linux-none-dirty-virtual@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "step failed: ProvisionError: extension install: /usr/share/code/bin/code --user-data-dir ${SLOT_DIR}/user-data --extensions-dir:\
+    \ Error: ENOENT: no such file or directory, open '${ROOT}/vsix/memfs-sample.vsix'\n    at Vd (file:///usr/share/code/resources/app/o"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: ssh.config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 60
+  - cmd: 'Extensions: Show Installed Extensions'
+  - wait:
+      until:
+        - view:
+            name: Installed
+        - quiet: 2
+      timeout: 60
+  - observe:
+      id: name-probe
+      what:
+        - hover:
+            view: Installed
+            row: ms
+      bind:
+        ext_name:
+          path: '["hover:Installed/ms"][0]'
+          match: ^(.+?)\s+v\d
+        ext_version:
+          path: '["hover:Installed/ms"][0]'
+          match: \s(v\d+(?:\.\d+)+)
+        ext_desc:
+          path: '["hover:Installed/ms"][0]'
+          match: ^[^\n]*\n+([^\n]+)
+  - cmd: 'View: Close All Editors'
+  - cmd: 'MemFS: Setup Workspace'
+  - wait:
+      until:
+        - title: Untitled (Workspace)
+        - quiet: 3
+      timeout: 60
+  - cmd: 'View: Show Explorer'
+  - wait:
+      until:
+        - view:
+            name: Untitled (Workspace)
+            row: ssh.config
+        - quiet: 2
+      timeout: 60
+  - rowmenu:
+      view: Untitled (Workspace)
+      row: ssh.config
+  - menu: Copy
+  - rowmenu:
+      view: Untitled (Workspace)
+      row: ${WORKSPACE_NAME}
+  - menu: Remove Folder from Workspace
+  - wait:
+      until:
+        - quiet: 3
+      timeout: 60
+  - cmd: 'Developer: Reload Window'
+  - wait:
+      until:
+        - title: Untitled (Workspace)
+        - quiet: 5
+      timeout: 180
+  - cmd: 'View: Show Explorer'
+  - wait:
+      until:
+        - view:
+            name: Untitled (Workspace)
+            row: MemFS - Sample
+        - quiet: 2
+      timeout: 60
+  - rowmenu:
+      view: Untitled (Workspace)
+      row: MemFS - Sample
+  - menu: Paste
+  - wait:
+      until:
+        - statusbar: Plain Text
+        - quiet: 3
+      timeout: 60
+  - observe:
+      id: plain
+      what:
+        - title
+        - editors
+        - statusbar:
+            core:
+              - status.editor.mode
+        - notifications
+        - notification_center
+        - dialogs
+        - tokens:
+            line: 2
+            col: 1
+  - observe:
+      id: no-keyword-completion
+      what:
+        - suggest:
+            line: 5
+            col: 1
+            type: Compr
+            fields:
+              - label
+              - kind
+  - cmd: 'Extensions: Show Installed Extensions'
+  - wait:
+      until:
+        - view:
+            name: Installed
+        - quiet: 2
+      timeout: 60
+  - observe:
+      id: row
+      what:
+        - notifications
+        - hover:
+            view: Installed
+            row: ${bind.ext_name}
+  - cmd: 'Extensions: Show Extensions Unsupported By Workspace'
+  - wait:
+      until:
+        - view:
+            name: Disabled in Virtual Workspaces
+        - quiet: 2
+      timeout: 60
+  - observe:
+      id: unsupported-sections
+      what:
+        - sidebar
+        - notifications
+        - view: Disabled in Virtual Workspaces
+expect:
+  name-probe:
+    hover:Installed/ms:
+      - '${bind.ext_name}  ${bind.ext_version}
+
+
+        ${bind.ext_desc}
+
+
+        Activation time: <DURATION>
+
+
+        Hold Alt key to mouse over'
+  plain:
+    title: ssh.config - Untitled (Workspace) - ${APP_NAME}
+    editors:
+      active: ssh.config
+      groups:
+        - - title: ssh.config
+            active: true
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.mode
+        text: Plain Text
+        aria: Plain Text
+        tooltip: null
+    notifications: []
+    notification_center: []
+    dialogs: []
+    tokens:active@2:1:
+      text: null
+      length: null
+      language: null
+      tokenType: null
+      scopes: []
+  no-keyword-completion:
+    suggest:active@5:1:
+      items: []
+      total: 0
+      message: No suggestions.
+  row:
+    notifications: []
+    hover:Installed/${bind.ext_name}:
+      - '${bind.ext_name}  ${bind.ext_version}
+
+
+        ${bind.ext_desc}
+
+
+        This extension has been disabled because it does not support virtual workspaces.
+
+
+        Hold Alt key to mouse over'
+  unsupported-sections:
+    sidebar:
+      title: Extensions
+      sections:
+        - title: Disabled in Restricted Mode
+          expanded: true
+        - title: Limited in Restricted Mode
+          expanded: true
+        - title: Disabled in Virtual Workspaces
+          expanded: true
+        - title: Limited in Virtual Workspaces
+          expanded: true
+    notifications: []
+    view:Disabled in Virtual Workspaces:
+      expanded: true
+      titleActions: []
+      welcome: []
+      welcomeLinks: []
+      messages: []
+      rows:
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria: 'Grunt support for VS Code, 10.0.0, Publisher vscode, Extension to add Grunt capabilities to VS Code. '
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria: 'Gulp support for VSCode, 10.0.0, Publisher vscode, Extension to add Gulp capabilities to VSCode. '
+        - depth: 1
+          label: ''
+          description: null
+          expanded: null
+          icon: codicon-extension-default-icon
+          tooltip: null
+          actions: []
+          aria: 'Jake support for VS Code, 10.0.0, Publisher vscode, Extension to add Jake capabilities to VS Code. '
+observed:
+  normalized: {}
+  per_step: []

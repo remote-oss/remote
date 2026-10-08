@@ -1,0 +1,457 @@
+case: F-4202-AC3-2
+feature: F-4202
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/second-row-accepted/statusbar[1]/text: 'Ln 2, Col 26' != 'Ln 4, Col 1'"
+  - "/second-row-accepted/statusbar[1]/aria: 'Ln 2, Col 26' != 'Ln 4, Col 1'"
+  - "/second-row-accepted/tokens:active@2[0]/text: 'CanonicalizeFallbackLocal' != 'Conf'"
+  - '/second-row-accepted/tokens:active@2[0]/length: 25 != 4'
+  - "/second-row-accepted/tokens:active@3: 2 vs 1 items: [{'col': 1, 'text': 'Host', 'length': 4, 'truncated': False,
+    'language': 'ssh_config', 'tokenType': 'Other', 'scopes': ['source.config.ssh', 'support.type.property-name.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}, {'col': 5, 'text': ' alpha', 'length':
+    6, 'truncated': False, 'language': 'ssh_config', 'tokenType': 'String', 'scopes': ['source.config.ssh', 'string.quoted.double.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}] != [{'col': 1, 'text': 'Host',
+    'le"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - goto:
+      line: 2
+      col: 1
+  - key: C
+  - key: o
+  - key: n
+  - key: f
+  - wait:
+      until:
+        - statusbar: Ln 2, Col 5
+        - quiet: 2
+      timeout: 20
+  - key: ArrowDown
+  - wait:
+      until:
+        - quiet: 1
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        - quiet: 2
+      timeout: 20
+  - observe:
+      id: second-row-accepted
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 2
+        - tokens:
+            line: 3
+expect:
+  second-row-accepted:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 2, Col 26
+        aria: Ln 2, Col 26
+        tooltip: null
+    tokens:active@2:
+      - col: 1
+        text: CanonicalizeFallbackLocal
+        length: 25
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+    tokens:active@3:
+      - col: 1
+        text: Host
+        length: 4
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 5
+        text: ' alpha'
+        length: 6
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+observed:
+  normalized:
+    second-row-accepted:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 4, Col 1
+          aria: Ln 4, Col 1
+          tooltip: null
+      tokens:active@2:
+        - col: 1
+          text: Conf
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+      tokens:active@3:
+        - col: 1
+          text: Host
+          length: 4
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 0.8
+    - i: 2
+      step:
+        goto:
+          line: 2
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.5
+      at: 3.5
+      position:
+        line: 2
+        col: 1
+    - i: 3
+      step:
+        key: C
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 4.0
+      selection: Ln 2, Col 2
+      state_after:
+        title: ● config - F-4202-AC3-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: CanonicalDomains, Property
+                focused: true
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: Cipher, Property
+                focused: false
+              - text: Ciphers, Property
+                focused: false
+              - text: ClearAllForwardings, Property
+                focused: false
+              - text: Compression, Property
+                focused: false
+              - text: CompressionLevel, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC3-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 4
+      step:
+        key: o
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 5.7
+      selection: Ln 2, Col 3
+      state_after:
+        title: ● config - F-4202-AC3-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Compression, Property
+                focused: true
+              - text: CompressionLevel, Property
+                focused: false
+              - text: Configure tunnel, Snippet
+                focused: false
+              - text: ConnectionAttempts, Property
+                focused: false
+              - text: ConnectTimeout, Property
+                focused: false
+              - text: ControlMaster, Property
+                focused: false
+              - text: ControlPath, Property
+                focused: false
+              - text: ControlPersist, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC3-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 5
+      step:
+        key: n
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 7.4
+      selection: Ln 2, Col 4
+      state_after:
+        title: ● config - F-4202-AC3-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Configure tunnel, Snippet
+                focused: true
+              - text: ConnectionAttempts, Property
+                focused: false
+              - text: ConnectTimeout, Property
+                focused: false
+              - text: ControlMaster, Property
+                focused: false
+              - text: ControlPath, Property
+                focused: false
+              - text: ControlPersist, Property
+                focused: false
+              - text: Compression, Property
+                focused: false
+              - text: CompressionLevel, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC3-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 6
+      step:
+        key: f
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 9.1
+      selection: Ln 2, Col 5
+      state_after:
+        title: ● config - F-4202-AC3-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Configure tunnel, Snippet
+                focused: true
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC3-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 7
+      step:
+        wait:
+          until:
+            - statusbar: Ln 2, Col 5
+            - quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 5.1
+      at: 10.8
+    - i: 8
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 15.9
+      selection: Ln 3, Col 5
+      state_after:
+        title: ● config - F-4202-AC3-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC3-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 9
+      step:
+        wait:
+          until:
+            - quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 1.4
+      at: 17.7
+    - i: 10
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 19.1
+      selection: Ln 4, Col 1
+      state_after:
+        title: ● config - F-4202-AC3-2 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4202-AC3-2
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 11
+      step:
+        wait:
+          until:
+            - quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 20.8
+    - i: 12
+      step:
+        observe:
+          id: second-row-accepted
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 2
+            - tokens:
+                line: 3
+      ok: true
+      error: null
+      seconds: 3.1
+      at: 23.5
+      observation_raw: null

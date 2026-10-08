@@ -1,0 +1,695 @@
+case: F-4201-AC31-1
+feature: F-4201
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/accepted-after-toggles/statusbar[1]/text: 'Ln 2, Col 21' != 'Ln 3, Col 15'"
+  - "/accepted-after-toggles/statusbar[1]/aria: 'Ln 2, Col 21' != 'Ln 3, Col 15'"
+  - "/accepted-after-toggles/tokens:active@2: 1 vs 0 items: [{'col': 1, 'text': 'CanonicalizeHostname', 'length': 20,
+    'truncated': False, 'language': 'ssh_config', 'tokenType': 'Other', 'scopes': ['source.config.ssh', 'support.type.property-name.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}] != []"
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - goto:
+      line: 2
+      col: 1
+  - key: Control+Space
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: Control+Space
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: Control+Space
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - observe:
+      id: accepted-after-toggles
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 2
+expect:
+  accepted-after-toggles:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 2, Col 21
+        aria: Ln 2, Col 21
+        tooltip: null
+    tokens:active@2:
+      - col: 1
+        text: CanonicalizeHostname
+        length: 20
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+observed:
+  normalized:
+    accepted-after-toggles:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 3, Col 15
+          aria: Ln 3, Col 15
+          tooltip: null
+      tokens:active@2: []
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.6
+      at: 0.8
+    - i: 2
+      step:
+        goto:
+          line: 2
+          col: 1
+      ok: true
+      error: null
+      seconds: 0.6
+      at: 3.4
+      position:
+        line: 2
+        col: 1
+    - i: 3
+      step:
+        key: Control+Space
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 4.0
+      selection: Ln 2, Col 1
+      state_after:
+        title: config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: true
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 4
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 5.8
+    - i: 5
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 8.5
+      selection: Ln 2, Col 1
+      state_after:
+        title: config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: false
+              - text: AddressFamily, Property
+                focused: true
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 6
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 10.3
+      selection: Ln 2, Col 1
+      state_after:
+        title: config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: false
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: true
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 7
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 12.0
+      selection: Ln 2, Col 1
+      state_after:
+        title: config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: false
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: true
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 8
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 13.7
+      selection: Ln 2, Col 1
+      state_after:
+        title: config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: false
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: true
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 9
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 15.4
+      selection: Ln 2, Col 1
+      state_after:
+        title: config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: false
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: true
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 10
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 17.1
+      selection: Ln 2, Col 1
+      state_after:
+        title: config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: false
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: true
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 11
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 18.9
+      selection: Ln 3, Col 1
+      state_after:
+        title: config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 12
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 20.7
+    - i: 13
+      step:
+        key: Control+Space
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 23.4
+      selection: Ln 3, Col 1
+      state_after:
+        title: config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: true
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 14
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 25.1
+    - i: 15
+      step:
+        key: Control+Space
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 27.8
+      selection: Ln 3, Col 1
+      state_after:
+        title: config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: AddKeysToAgent, Property
+                focused: true
+              - text: AddressFamily, Property
+                focused: false
+              - text: AskPassGUI, Property
+                focused: false
+              - text: BatchMode, Property
+                focused: false
+              - text: BindAddress, Property
+                focused: false
+              - text: CanonicalDomains, Property
+                focused: false
+              - text: CanonicalizeFallbackLocal, Property
+                focused: false
+              - text: CanonicalizeHostname, Property
+                focused: false
+              - text: CanonicalizeMaxDots, Property
+                focused: false
+              - text: CanonicalizePermittedCNAMEs, Property
+                focused: false
+              - text: ChallengeResponseAuthentication, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 16
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.8
+      at: 29.5
+    - i: 17
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 32.3
+      selection: Ln 3, Col 15
+      state_after:
+        title: ● config - F-4201-AC31-1 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4201-AC31-1
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 18
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 34.1
+    - i: 19
+      step:
+        observe:
+          id: accepted-after-toggles
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 2
+      ok: true
+      error: null
+      seconds: 1.2
+      at: 36.8
+      observation_raw: null

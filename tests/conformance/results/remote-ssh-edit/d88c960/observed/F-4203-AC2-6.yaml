@@ -1,0 +1,905 @@
+case: F-4203-AC2-6
+feature: F-4203
+profile: linux-none-clean@1
+build: remote-oss/remote d88c960 (remote-ssh-edit-0.0.0.vsix)
+suite: remote-oss/remote-ssh-edit e8a14f3
+result: fail
+mismatches_expected_vs_observed:
+  - "/accepted-hostname/statusbar[1]/text: 'Ln 21, Col 9' != 'Ln 22, Col 1'"
+  - "/accepted-hostname/statusbar[1]/aria: 'Ln 21, Col 9' != 'Ln 22, Col 1'"
+  - "/accepted-hostname/tokens:active@21: 2 vs 1 items: [{'col': 1, 'text': 'HostNamestName', 'length': 14, 'truncated':
+    False, 'language': 'ssh_config', 'tokenType': 'Other', 'scopes': ['source.config.ssh', 'support.type.property-name.ssh_config'],
+    'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}, {'col': 15, 'text': ' qqname',
+    'length': 7, 'truncated': False, 'language': 'ssh_config', 'tokenType': 'String', 'scopes': ['source.config.ssh',
+    'string.quoted.double.ssh_config'], 'semanticType': None, 'modifiers': None, 'tmText': None, 'tmLength': None}]
+    != [{'col': 1, 'text':"
+  - '/after/suggest:active@21:3/items[0]/preselected: False != True'
+  - '/after/suggest:active@21:3/items[5]/preselected: True != False'
+timing: "'at' is seconds since the window was ready; the runner does not record the extension's activation time"
+steps:
+  - open: .ssh/config
+  - wait:
+      until:
+        - statusbar: SSH Config
+        - quiet: 2
+      timeout: 30
+  - observe:
+      id: before
+      what:
+        - suggest:
+            line: 21
+            col: 3
+            fields:
+              - label
+              - kind
+              - preselected
+  - goto:
+      line: 21
+      col: 3
+  - key: Control+Space
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - key: ArrowDown
+  - wait:
+      until:
+        quiet: 1
+      timeout: 20
+  - key: Enter
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - observe:
+      id: accepted-hostname
+      what:
+        - statusbar:
+            core:
+              - status.editor.selection
+        - tokens:
+            line: 21
+  - key: Control+z
+  - wait:
+      until:
+        quiet: 2
+      timeout: 20
+  - observe:
+      id: after
+      what:
+        - suggest:
+            line: 21
+            col: 3
+            fields:
+              - label
+              - kind
+              - preselected
+expect:
+  before:
+    suggest:active@21:3:
+      items:
+        - order: 0
+          label: Host
+          kind: symbol-property
+          preselected: true
+        - order: 1
+          label: HostbasedAuthentication
+          kind: symbol-property
+          preselected: false
+        - order: 2
+          label: HostbasedKeyTypes
+          kind: symbol-property
+          preselected: false
+        - order: 3
+          label: HostKeyAlgorithms
+          kind: symbol-property
+          preselected: false
+        - order: 4
+          label: HostKeyAlias
+          kind: symbol-property
+          preselected: false
+        - order: 5
+          label: HostName
+          kind: symbol-property
+          preselected: false
+        - order: 6
+          label: NoHostAuthenticationForLocalhost
+          kind: symbol-property
+          preselected: false
+        - order: 7
+          label: CheckHostIP
+          kind: symbol-property
+          preselected: false
+        - order: 8
+          label: StrictHostKeyChecking
+          kind: symbol-property
+          preselected: false
+        - order: 9
+          label: UpdateHostKeys
+          kind: symbol-property
+          preselected: false
+        - order: 10
+          label: VerifyHostKeyDNS
+          kind: symbol-property
+          preselected: false
+        - order: 11
+          label: VisualHostKey
+          kind: symbol-property
+          preselected: false
+        - order: 12
+          label: RevokedHostKeys
+          kind: symbol-property
+          preselected: false
+        - order: 13
+          label: HashKnownHosts
+          kind: symbol-property
+          preselected: false
+        - order: 14
+          label: UserKnownHostsFile
+          kind: symbol-property
+          preselected: false
+        - order: 15
+          label: GlobalKnownHostsFile
+          kind: symbol-property
+          preselected: false
+        - order: 16
+          label: CanonicalizeHostname
+          kind: symbol-property
+          preselected: false
+      total: 17
+      message: null
+  accepted-hostname:
+    statusbar:
+      - id: status.host
+        text: ''
+        aria: remote
+        tooltip: null
+      - id: status.editor.selection
+        text: Ln 21, Col 9
+        aria: Ln 21, Col 9
+        tooltip: null
+    tokens:active@21:
+      - col: 1
+        text: HostNamestName
+        length: 14
+        truncated: false
+        language: ssh_config
+        tokenType: Other
+        scopes:
+          - source.config.ssh
+          - support.type.property-name.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+      - col: 15
+        text: ' qqname'
+        length: 7
+        truncated: false
+        language: ssh_config
+        tokenType: String
+        scopes:
+          - source.config.ssh
+          - string.quoted.double.ssh_config
+        semanticType: null
+        modifiers: null
+        tmText: null
+        tmLength: null
+  after:
+    suggest:active@21:3:
+      items:
+        - order: 0
+          label: Host
+          kind: symbol-property
+          preselected: false
+        - order: 1
+          label: HostbasedAuthentication
+          kind: symbol-property
+          preselected: false
+        - order: 2
+          label: HostbasedKeyTypes
+          kind: symbol-property
+          preselected: false
+        - order: 3
+          label: HostKeyAlgorithms
+          kind: symbol-property
+          preselected: false
+        - order: 4
+          label: HostKeyAlias
+          kind: symbol-property
+          preselected: false
+        - order: 5
+          label: HostName
+          kind: symbol-property
+          preselected: true
+        - order: 6
+          label: NoHostAuthenticationForLocalhost
+          kind: symbol-property
+          preselected: false
+        - order: 7
+          label: CheckHostIP
+          kind: symbol-property
+          preselected: false
+        - order: 8
+          label: StrictHostKeyChecking
+          kind: symbol-property
+          preselected: false
+        - order: 9
+          label: UpdateHostKeys
+          kind: symbol-property
+          preselected: false
+        - order: 10
+          label: VerifyHostKeyDNS
+          kind: symbol-property
+          preselected: false
+        - order: 11
+          label: VisualHostKey
+          kind: symbol-property
+          preselected: false
+        - order: 12
+          label: RevokedHostKeys
+          kind: symbol-property
+          preselected: false
+        - order: 13
+          label: HashKnownHosts
+          kind: symbol-property
+          preselected: false
+        - order: 14
+          label: UserKnownHostsFile
+          kind: symbol-property
+          preselected: false
+        - order: 15
+          label: GlobalKnownHostsFile
+          kind: symbol-property
+          preselected: false
+        - order: 16
+          label: CanonicalizeHostname
+          kind: symbol-property
+          preselected: false
+      total: 17
+      message: null
+observed:
+  normalized:
+    before:
+      suggest:active@21:3:
+        items:
+          - order: 0
+            label: Host
+            kind: symbol-property
+            preselected: true
+          - order: 1
+            label: HostbasedAuthentication
+            kind: symbol-property
+            preselected: false
+          - order: 2
+            label: HostbasedKeyTypes
+            kind: symbol-property
+            preselected: false
+          - order: 3
+            label: HostKeyAlgorithms
+            kind: symbol-property
+            preselected: false
+          - order: 4
+            label: HostKeyAlias
+            kind: symbol-property
+            preselected: false
+          - order: 5
+            label: HostName
+            kind: symbol-property
+            preselected: false
+          - order: 6
+            label: NoHostAuthenticationForLocalhost
+            kind: symbol-property
+            preselected: false
+          - order: 7
+            label: CheckHostIP
+            kind: symbol-property
+            preselected: false
+          - order: 8
+            label: StrictHostKeyChecking
+            kind: symbol-property
+            preselected: false
+          - order: 9
+            label: UpdateHostKeys
+            kind: symbol-property
+            preselected: false
+          - order: 10
+            label: VerifyHostKeyDNS
+            kind: symbol-property
+            preselected: false
+          - order: 11
+            label: VisualHostKey
+            kind: symbol-property
+            preselected: false
+          - order: 12
+            label: RevokedHostKeys
+            kind: symbol-property
+            preselected: false
+          - order: 13
+            label: HashKnownHosts
+            kind: symbol-property
+            preselected: false
+          - order: 14
+            label: UserKnownHostsFile
+            kind: symbol-property
+            preselected: false
+          - order: 15
+            label: GlobalKnownHostsFile
+            kind: symbol-property
+            preselected: false
+          - order: 16
+            label: CanonicalizeHostname
+            kind: symbol-property
+            preselected: false
+        total: 17
+        message: null
+    accepted-hostname:
+      statusbar:
+        - id: status.host
+          text: ''
+          aria: remote
+          tooltip: null
+        - id: status.editor.selection
+          text: Ln 22, Col 1
+          aria: Ln 22, Col 1
+          tooltip: null
+      tokens:active@21:
+        - col: 1
+          text: Ho
+          length: 2
+          truncated: false
+          language: ssh_config
+          tokenType: Other
+          scopes:
+            - source.config.ssh
+            - support.type.property-name.ssh_config
+          semanticType: null
+          modifiers: null
+          tmText: null
+          tmLength: null
+    after:
+      suggest:active@21:3:
+        items:
+          - order: 0
+            label: Host
+            kind: symbol-property
+            preselected: true
+          - order: 1
+            label: HostbasedAuthentication
+            kind: symbol-property
+            preselected: false
+          - order: 2
+            label: HostbasedKeyTypes
+            kind: symbol-property
+            preselected: false
+          - order: 3
+            label: HostKeyAlgorithms
+            kind: symbol-property
+            preselected: false
+          - order: 4
+            label: HostKeyAlias
+            kind: symbol-property
+            preselected: false
+          - order: 5
+            label: HostName
+            kind: symbol-property
+            preselected: false
+          - order: 6
+            label: NoHostAuthenticationForLocalhost
+            kind: symbol-property
+            preselected: false
+          - order: 7
+            label: CheckHostIP
+            kind: symbol-property
+            preselected: false
+          - order: 8
+            label: StrictHostKeyChecking
+            kind: symbol-property
+            preselected: false
+          - order: 9
+            label: UpdateHostKeys
+            kind: symbol-property
+            preselected: false
+          - order: 10
+            label: VerifyHostKeyDNS
+            kind: symbol-property
+            preselected: false
+          - order: 11
+            label: VisualHostKey
+            kind: symbol-property
+            preselected: false
+          - order: 12
+            label: RevokedHostKeys
+            kind: symbol-property
+            preselected: false
+          - order: 13
+            label: HashKnownHosts
+            kind: symbol-property
+            preselected: false
+          - order: 14
+            label: UserKnownHostsFile
+            kind: symbol-property
+            preselected: false
+          - order: 15
+            label: GlobalKnownHostsFile
+            kind: symbol-property
+            preselected: false
+          - order: 16
+            label: CanonicalizeHostname
+            kind: symbol-property
+            preselected: false
+        total: 17
+        message: null
+  per_step:
+    - i: 0
+      step:
+        open: .ssh/config
+      ok: true
+      error: null
+      seconds: 0.8
+      at: 0.0
+      position:
+        line: 1
+        col: 1
+    - i: 1
+      step:
+        wait:
+          until:
+            - statusbar: SSH Config
+            - quiet: 2
+          timeout: 30
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 0.8
+    - i: 2
+      step:
+        observe:
+          id: before
+          what:
+            - suggest:
+                line: 21
+                col: 3
+                fields:
+                  - label
+                  - kind
+                  - preselected
+      ok: true
+      error: null
+      seconds: 4.0
+      at: 3.5
+      observation_raw: null
+    - i: 3
+      step:
+        goto:
+          line: 21
+          col: 3
+      ok: true
+      error: null
+      seconds: 0.5
+      at: 7.5
+      position:
+        line: 21
+        col: 3
+    - i: 4
+      step:
+        key: Control+Space
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 8.0
+      selection: Ln 21, Col 3
+      state_after:
+        title: config - F-4203-AC2-6 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Host, Property
+                focused: true
+              - text: HostbasedAuthentication, Property
+                focused: false
+              - text: HostbasedKeyTypes, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: false
+              - text: HostKeyAlias, Property
+                focused: false
+              - text: HostName, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+              - text: VisualHostKey, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC2-6
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 5
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 9.7
+    - i: 6
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 12.4
+      selection: Ln 21, Col 3
+      state_after:
+        title: config - F-4203-AC2-6 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Host, Property
+                focused: false
+              - text: HostbasedAuthentication, Property
+                focused: true
+              - text: HostbasedKeyTypes, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: false
+              - text: HostKeyAlias, Property
+                focused: false
+              - text: HostName, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+              - text: VisualHostKey, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC2-6
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 7
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 14.2
+      selection: Ln 21, Col 3
+      state_after:
+        title: config - F-4203-AC2-6 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Host, Property
+                focused: false
+              - text: HostbasedAuthentication, Property
+                focused: false
+              - text: HostbasedKeyTypes, Property
+                focused: true
+              - text: HostKeyAlgorithms, Property
+                focused: false
+              - text: HostKeyAlias, Property
+                focused: false
+              - text: HostName, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+              - text: VisualHostKey, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC2-6
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 8
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 15.9
+      selection: Ln 21, Col 3
+      state_after:
+        title: config - F-4203-AC2-6 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Host, Property
+                focused: false
+              - text: HostbasedAuthentication, Property
+                focused: false
+              - text: HostbasedKeyTypes, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: true
+              - text: HostKeyAlias, Property
+                focused: false
+              - text: HostName, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+              - text: VisualHostKey, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC2-6
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 9
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 17.6
+      selection: Ln 21, Col 3
+      state_after:
+        title: config - F-4203-AC2-6 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Host, Property
+                focused: false
+              - text: HostbasedAuthentication, Property
+                focused: false
+              - text: HostbasedKeyTypes, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: false
+              - text: HostKeyAlias, Property
+                focused: true
+              - text: HostName, Property
+                focused: false
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+              - text: VisualHostKey, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC2-6
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 10
+      step:
+        key: ArrowDown
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 19.3
+      selection: Ln 21, Col 3
+      state_after:
+        title: config - F-4203-AC2-6 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        suggest:
+          - rows:
+              - text: Host, Property
+                focused: false
+              - text: HostbasedAuthentication, Property
+                focused: false
+              - text: HostbasedKeyTypes, Property
+                focused: false
+              - text: HostKeyAlgorithms, Property
+                focused: false
+              - text: HostKeyAlias, Property
+                focused: false
+              - text: HostName, Property
+                focused: true
+              - text: NoHostAuthenticationForLocalhost, Property
+                focused: false
+              - text: CheckHostIP, Property
+                focused: false
+              - text: StrictHostKeyChecking, Property
+                focused: false
+              - text: UpdateHostKeys, Property
+                focused: false
+              - text: VerifyHostKeyDNS, Property
+                focused: false
+              - text: VisualHostKey, Property
+                focused: false
+            message: null
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC2-6
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 11
+      step:
+        wait:
+          until:
+            quiet: 1
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 21.0
+    - i: 12
+      step:
+        key: Enter
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 23.7
+      selection: Ln 22, Col 1
+      state_after:
+        title: ● config - F-4203-AC2-6 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC2-6
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 13
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 25.5
+    - i: 14
+      step:
+        observe:
+          id: accepted-hostname
+          what:
+            - statusbar:
+                core:
+                  - status.editor.selection
+            - tokens:
+                line: 21
+      ok: true
+      error: null
+      seconds: 1.7
+      at: 28.2
+      observation_raw: null
+    - i: 15
+      step:
+        key: Control+z
+      ok: true
+      error: null
+      seconds: 1.8
+      at: 29.9
+      selection: Ln 21, Col 3
+      state_after:
+        title: config - F-4203-AC2-6 - Visual Studio Code
+        activeEditor: config
+        editorTabs:
+          - - title: config
+              active: true
+        quickInput:
+          visible: false
+        sideBarSections:
+          - title: F-4203-AC2-6
+            expanded: true
+          - title: Outline
+            expanded: false
+          - title: Timeline
+            expanded: false
+    - i: 16
+      step:
+        wait:
+          until:
+            quiet: 2
+          timeout: 20
+      ok: true
+      error: null
+      seconds: 2.7
+      at: 31.7
+    - i: 17
+      step:
+        observe:
+          id: after
+          what:
+            - suggest:
+                line: 21
+                col: 3
+                fields:
+                  - label
+                  - kind
+                  - preselected
+      ok: true
+      error: null
+      seconds: 3.6
+      at: 34.4
+      observation_raw: null
