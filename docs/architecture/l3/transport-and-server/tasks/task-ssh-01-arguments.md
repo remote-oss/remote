@@ -22,7 +22,7 @@ Nothing else may change (no `package.json`, `tsconfig*`, `coverage.json`, other 
 - `buildOptionsQuery(request: {target, configFile, sshProgram, homeFolder, platform}): Invocation` (the `ssh -G` run)
 - `expandHome(file: string, homeFolder: string, platform: 'linux'|'macOS'|'windows'): string`
 
-Base request for the `buildInvocation` rows (a row changes only what it names): `target {host:'alias'}`, `settings {configFile:'', connectTimeout:15, permitPtyAllocation:false, remoteCommandInEffect:false}`, `effective {hostName:'h.invalid', user:'dev', port:'22', localForwards:[]}`, `programs {ssh:'/x/ssh', scp:'/x/scp'}`, `homeFolder '/home/dev'`, `platform 'linux'`, `purpose 'connection'`. Argument rows assert that the named adjacent pair or single argument is present (position among options is not asserted: no spec fixes it beyond the host, then the remote program, last) and that the host is the last argument unless the row says otherwise.
+Base request for the `buildInvocation` rows (a row changes only what it names): `target {host:'alias'}`, `settings {configFile:'', connectTimeout:15, permitPtyAllocation:false, remoteCommandInEffect:false}`, `effective {hostName:'h.invalid', user:'dev', port:'22', localForwards:[]}`, `programs {sshProgram:'/x/ssh', scpProgram:'/x/scp'}`, `homeFolder '/home/dev'`, `platform 'linux'`, `purpose 'connection'`. Argument rows assert that the named adjacent pair or single argument is present (position among options is not asserted: no spec fixes it beyond the host, then the remote program, last) and that the host is the last argument unless the row says otherwise.
 
 ## 3. Test table
 
@@ -81,7 +81,7 @@ Base request for the `buildInvocation` rows (a row changes only what it names): 
 | F-2205.7.E10 | target `{host:'h', user:''}` | no user argument |
 | S2 contract | purpose oneShot, `remoteProgram 'uname -s'` | last two arguments `alias`, `uname -s` (one argument, unquoted) |
 | S2 contract | purpose oneShot, `remoteProgram` absent; purpose connection | last argument `alias` |
-| S2 contract | purposes connection, tunnel, oneShot, `programs.ssh '/x/ssh'` | `program '/x/ssh'` |
+| S2 contract | purposes connection, tunnel, oneShot, `programs.sshProgram '/x/ssh'` | `program '/x/ssh'` |
 | F-2309.BR-2 | every purpose | `environment` deep-equals `{}` |
 | F-2405.BR-6 | purpose copy, `copy {localFile:'/tmp/boot.sh', remotePath:'/tmp/x/boot.sh'}`, `configFile ''` | `program '/x/scp'`, `arguments ['/tmp/boot.sh','alias:/tmp/x/boot.sh']` |
 | F-2405.BR-6 | purpose copy, `configFile '/etc/custom/config'` | `arguments ['-F','/etc/custom/config','/tmp/boot.sh','alias:/tmp/x/boot.sh']` |

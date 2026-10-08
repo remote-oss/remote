@@ -67,8 +67,7 @@ function makeRequest(changes: RequestChanges = {}): SshRequest {
     target: changes.target ?? {host: 'alias'},
     settings: baseSettings(changes),
     effective: baseOptions(changes.effective ?? {}),
-    // eslint-disable-next-line id-length -- the two keys of the public programs type
-    programs: {ssh: '/x/ssh', scp: '/x/scp'},
+    programs: {sshProgram: '/x/ssh', scpProgram: '/x/scp'},
     homeFolder: changes.homeFolder ?? '/home/dev',
     platform: changes.platform ?? 'linux',
   };
@@ -96,8 +95,7 @@ function makeCopyRequest(
     target: changes.target ?? {host: 'alias'},
     settings: baseSettings(changes),
     effective: baseOptions({}),
-    // eslint-disable-next-line id-length -- the two keys of the public programs type
-    programs: {ssh: '/x/ssh', scp: '/x/scp'},
+    programs: {sshProgram: '/x/ssh', scpProgram: '/x/scp'},
     homeFolder: changes.homeFolder ?? '/home/dev',
     platform: changes.platform ?? 'linux',
     copy: changes.copy ?? {

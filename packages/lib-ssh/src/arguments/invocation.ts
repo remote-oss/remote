@@ -42,7 +42,7 @@ interface RequestBase {
   /** The options OpenSSH computes for the target. */
   effective: EffectiveOptions;
   /** The `ssh` and `scp` programs the client check accepted. */
-  programs: {ssh: string; scp: string};
+  programs: {sshProgram: string; scpProgram: string};
   /** The editor's home folder, against which a leading `~/` of the configuration file expands. */
   homeFolder: string;
   /** The client platform, which decides the separator of an expanded path. */
@@ -123,7 +123,7 @@ export function buildInvocation(request: InvocationRequest): Invocation {
     argumentList.push(request.remoteProgram);
   }
   return {
-    program: request.programs.ssh,
+    program: request.programs.sshProgram,
     arguments: argumentList,
     environment: {},
   };
@@ -209,7 +209,7 @@ function copyInvocation(request: CopyRunRequest, common: string[]): Invocation {
     `${host}:${request.copy.remotePath}`,
   ];
   return {
-    program: request.programs.scp,
+    program: request.programs.scpProgram,
     arguments: argumentList,
     environment: {},
   };
