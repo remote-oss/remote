@@ -153,12 +153,8 @@ describe('filesInEffect (the configuration files in reading order)', () => {
     contents.delete('/srv/ssh/custom');
     const second = filesInEffect('/srv/ssh/custom', {...LINUX}, reader);
     deepStrictEqual(
-      first.map(entry => entry.exists),
-      [true],
-    );
-    deepStrictEqual(
-      second.map(entry => entry.exists),
-      [false],
+      [first, second].map(list => list.map(entry => entry.exists)),
+      [[true], [false]],
     );
   });
 

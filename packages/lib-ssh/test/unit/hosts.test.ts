@@ -315,6 +315,29 @@ describe('listHosts (the host entries of the files in effect)', () => {
     );
   });
 
+  it('F-2202.BR-14 (provisional): nested includes have no depth limit', () => {
+    deepStrictEqual(
+      names('Include a.conf', [
+        ['/home/dev/.ssh/a.conf', 'Include b.conf\nHost a'],
+        ['/home/dev/.ssh/b.conf', 'Include c.conf\nHost b'],
+        ['/home/dev/.ssh/c.conf', 'Include d.conf\nHost c'],
+        ['/home/dev/.ssh/d.conf', 'Host d'],
+      ]),
+      ['a', 'b', 'c', 'd'],
+    );
+  });
+
+  it('F-2202.BR-12 (provisional): a bracket class of an include glob', () => {
+    deepStrictEqual(
+      names('Include conf.d/[a-b]*', [
+        ['/home/dev/.ssh/conf.d/a1', 'Host a1'],
+        ['/home/dev/.ssh/conf.d/b1', 'Host b1'],
+        ['/home/dev/.ssh/conf.d/c1', 'Host c1'],
+      ]),
+      ['b1', 'a1'],
+    );
+  });
+
   const AC13_INCLUDES = [
     ['Include rel.conf', '/home/dev/.ssh/rel.conf', 'relhost'],
     ['Include ../up.conf', '/home/dev/up.conf', 'uphost'],

@@ -375,4 +375,92 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
   it('F-2204.BR-8 (provisional): a trailing colon names no port', () => {
     deepStrictEqual(parse('host:'), block('host'));
   });
+
+  const FLAG_PROBLEMS = [
+    ['F-2204.7.E2', 'ssh -Z x host', 'unknownFlag', 'Unknown flag Z'],
+    [
+      'F-2204.7.E3',
+      'ssh -p',
+      'missingFlagArgument',
+      'Expected flag -p to have an argument but it did not',
+    ],
+    [
+      'F-2204.AC-23 / 7.E3',
+      'ssh host48 -p',
+      'missingFlagArgument',
+      'Expected flag -p to have an argument but it did not',
+    ],
+    [
+      'F-2204.7.E4',
+      '-o "ProxyCommand nc %h %p" h',
+      'optionWithoutValue',
+      'Argument missing for option ProxyCommand nc %h %p',
+    ],
+  ] as const;
+  for (const [cite, command, kind, message] of FLAG_PROBLEMS) {
+    it(`${cite}: ${command} is the problem ${kind}`, () => {
+      deepStrictEqual(parse(command), {problem: {kind, message}});
+    });
+  }
+
+  const AFTER_DESTINATION = [
+    ['F-2204.BR-3', 'ssh host19 ls -la', block('host19')],
+    [
+      'F-2204.BR-3',
+      'ssh host -p 2222 -l bob',
+      block('host', [
+        ['Port', '2222'],
+        ['User', 'bob'],
+      ]),
+    ],
+    [
+      'F-2204.AC-12',
+      'ssh user@host7 -p 2200 -i k7',
+      block('host7', [
+        ['User', 'user'],
+        ['Port', '2200'],
+        ['IdentityFile', 'k7'],
+      ]),
+    ],
+    ['F-2204.BR-3', 'ssh host20 ls -p 2222', block('host20')],
+  ] as const;
+  for (const [cite, command, expected] of AFTER_DESTINATION) {
+    it(`${cite}: ${command} reads the options before the remote command`, () => {
+      deepStrictEqual(parse(command), expected);
+    });
+  }
+
+  const SHELL_CHARACTERS = [
+    ['host50;id', ';'],
+    ['host53|x', '|'],
+    ['host62&', '&'],
+    ['host61>out', '>'],
+    ['host65<in', '<'],
+    ['host66(x)', '('],
+    ['host66)', ')'],
+    ['host64*', '*'],
+    ['host67?', '?'],
+    ['host63 # c', '#'],
+    ['host73#c', '#'],
+  ] as const;
+  for (const [command, character] of SHELL_CHARACTERS) {
+    it(`F-2204.7.E5: ${command} names the shell character ${character}`, () => {
+      deepStrictEqual(parse(command), {
+        problem: {kind: 'shellCharacter', character},
+      });
+    });
+  }
+
+  const QUOTED_OR_ORDINARY = [
+    ["'host57;id'", 'host57;id'],
+    ['"host72*"', 'host72*'],
+    ['host68`id`', 'host68`id`'],
+    ['host69[1]', 'host69[1]'],
+    ['host70{a,b}', 'host70{a,b}'],
+  ] as const;
+  for (const [command, alias] of QUOTED_OR_ORDINARY) {
+    it(`F-2204.7.E5: ${command} is the alias ${alias}`, () => {
+      deepStrictEqual(parse(command), block(alias));
+    });
+  }
 });

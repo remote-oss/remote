@@ -209,11 +209,8 @@ function expandGlob(
   return candidates;
 }
 
-/** Orders names from the highest code point sequence to the lowest. */
+/** Orders the distinct names of one folder from the highest code point sequence to the lowest. */
 function compareReverseCodePoints(first: string, second: string): number {
-  if (first === second) {
-    return 0;
-  }
   return first < second ? 1 : -1;
 }
 

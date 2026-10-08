@@ -178,14 +178,10 @@ function plain(kind: FailureKind, reason?: FailureReason): Classification {
 function lastPermissionDenied(
   errorLines: readonly string[],
 ): string | undefined {
-  for (let index = errorLines.length - 1; index >= 0; index--) {
-    const line = errorLines[index] ?? '';
-    const start = line.indexOf(FAILURE_TEXTS.permissionDenied);
-    if (start >= 0) {
-      return line.slice(start).trimEnd();
-    }
-  }
-  return undefined;
+  const line = errorLines.findLast(errorLine =>
+    errorLine.includes(FAILURE_TEXTS.permissionDenied),
+  );
+  return line?.slice(line.indexOf(FAILURE_TEXTS.permissionDenied)).trimEnd();
 }
 
 /**
