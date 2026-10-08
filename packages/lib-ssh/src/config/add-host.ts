@@ -293,7 +293,7 @@ function readDestination(
   if (user !== '') {
     collector.addDestinationUser(user);
   }
-  if (port !== undefined) {
+  if (port !== undefined && port !== '') {
     collector.record('Port', port);
   }
   return undefined;

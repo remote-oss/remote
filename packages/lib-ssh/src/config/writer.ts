@@ -18,7 +18,7 @@ const DEFAULT_OPTION_INDENT = '  ';
 export function writeHostBlock(fileText: string, block: HostBlock): string {
   const lineEnd = fileText.includes('\r\n') ? '\r\n' : '\n';
   if (fileText.trim() === '') {
-    return renderBlock(block, '', DEFAULT_OPTION_INDENT, lineEnd);
+    return `${fileText}${renderBlock(block, '', DEFAULT_OPTION_INDENT, lineEnd)}`;
   }
   const lines = fileText.split('\n');
   const firstBlock = lines.findIndex(line => BLOCK_START.test(line));
