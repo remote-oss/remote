@@ -36,7 +36,7 @@ The extension host sees these variables:
 
 | Variable | Value |
 |---|---|
-| `REMOTE_OSS_ACCEPTANCE` | `1`. The one switch with which an extension installs its harness adapters: dialogs answered from a script and recorded, the log readable by the tests. A user's editor never sets it. |
+| `REMOTE_OSS_ACCEPTANCE` | `1`. The one switch with which an extension installs its harness adapters: dialogs answered from a script and recorded, the log readable by the tests. A user's editor never sets it. A package reads it in exactly one place, the adapter selection at activation, and no shipped README or string mentions it. |
 | `HARNESS_SSH_CONFIG` | The `ssh_config` with `Host harness`; pass it to the extension's configuration-file setting. |
 | `HARNESS_CONTAINER` | The host container's id. |
 | `HARNESS_RUN_FOLDER` | The run's folder: keys, known hosts, user data, extensions. |
