@@ -151,7 +151,7 @@ describe('install planner (card server-04 table)', () => {
           layout,
           dataFolder: '/home/u/.vscode-server',
           launcher: 'code-server',
-          lockPlace: '/home/u/.vscode-server/install.lock',
+          lockPlace: '/home/u/.vscode-server/bin/abc',
           notes: [],
         },
       },
@@ -243,13 +243,13 @@ describe('install planner (card server-04 table)', () => {
     );
   });
 
-  it('lockPlace -> /home/u/.vscode-server/install.lock', () => {
+  it('lockPlace -> /home/u/.vscode-server/bin/abc', () => {
     const result = plan(
       input({source: {kind: 'resolved', address: 'https://x/s.tgz'}}),
     );
     deepStrictEqual(
       (asPlan(result) as Plan & {kind: 'download'}).lockPlace,
-      '/home/u/.vscode-server/install.lock',
+      '/home/u/.vscode-server/bin/abc',
     );
   });
 

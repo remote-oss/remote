@@ -93,7 +93,9 @@ export function plan(input: PlanInput): {plan: Plan} | {failure: PlanFailure} {
       ? input.facts.homeFolder
       : expandHome(setting, input.facts.homeFolder);
   const dataFolder = `${root}/${input.serverDataFolderName}`;
-  const lockPlace = `${dataFolder}/install.lock`;
+  // The host lock lives in a folder, <dataFolder>/bin/<commit>, the same as the install folder;
+  // the lock file's own name is composed by V1's script, not here.
+  const lockPlace = `${dataFolder}/bin/${input.commit}`;
   const notes: PlanNote[] = input.useExecServerSetting
     ? ['useExecServerIgnored']
     : [];
