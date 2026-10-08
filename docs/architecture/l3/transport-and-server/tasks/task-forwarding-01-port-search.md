@@ -15,7 +15,7 @@ export type PortRange = { first: number; last: number };   // inclusive, 1 ≤ f
 export function parseRange(settingValue: unknown): { range: PortRange } | { none: true; reason: string };
 // accepted forms: a string "A-B" (digits, one hyphen, optional spaces around) with 1 ≤ A ≤ B ≤ 65535; anything else → none with reason 'notAString' | 'badFormat' | 'outOfBounds' | 'reversed'; an empty or whitespace string → none, reason 'empty'
 export interface PortProber { probe(port: number): Promise<'refused' | 'open' | 'error'> }   // 'refused' = nobody listens (the port is free)
-export interface FindOptions { timeBudgetMilliseconds: number; nowMilliseconds: () => number; randomPort: () => number }  // defaults 3000, Date.now, a function returning a random port in 49152–65535
+export interface FindOptions { timeBudgetMilliseconds: number; now: () => number; randomPort: () => number }  // defaults 3000, Date.now, a function returning a random port in 49152–65535
 export function findFreePort(prober: PortProber, range: PortRange | undefined, options?: FindOptions): Promise<{ port: number } | { failure: 'noFreePort' }>;
 // with a range: probe first..last in order; the first 'refused' wins; 'open' and 'error' continue; stop with noFreePort after the whole range or when the time budget is exhausted (checked before each probe)
 // without a range: up to 10 random candidates from randomPort(); the first 'refused' wins; else noFreePort
