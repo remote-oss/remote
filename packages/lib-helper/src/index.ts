@@ -41,3 +41,25 @@ export {
   type ServeEnd,
   type ServeOptions,
 } from './runtime/serve.ts';
+export {
+  acquire,
+  type AcquireFailure,
+  type AcquireOutcome,
+  type AcquireRequest,
+  type ClientEnvironment,
+  stop,
+} from './client/acquire.ts';
+export {
+  type HelperEvent,
+  HelperLease,
+  type RequestOutcome,
+  type Timer,
+} from './client/lease.ts';
+export {nodeClientEnvironment} from './client/node-environment.ts';
+export {
+  type HelperParameters,
+  type SpawnSpecification,
+  type Spawner,
+  spawnSpecification,
+} from './client/spawn.ts';
+export {runHelper} from './runtime/helper-main.ts';

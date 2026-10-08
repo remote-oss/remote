@@ -24,7 +24,8 @@
     // A library's entry is its index: its exports are the contract the extensions import, so they are not reported
     // as unused; everything behind the index is.
     "packages/lib-*": {
-      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      // Test fixtures run as separate processes.
+      "entry": ["src/index.ts", "test/**/*.test.ts", "test/fixtures/*.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"],
       "includeEntryExports": false,
     },
