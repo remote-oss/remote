@@ -14,7 +14,7 @@ for helper processes that outlive one window; allowed import `lib-log`), with th
 
 ## 2. Contract
 
-Names ruled 2026-10-08 (ADR-0003): `recordKey`, `startedByProcessId`, `leaseId`, `close(leaseId)`, `nowMilliseconds()`; no eslint-disable for names anywhere.
+Names ruled 2026-10-08 (ADR-0003): `recordKey`, `startedByProcessId`, `leaseId`, `close(leaseId)`, `now()`; no eslint-disable for names anywhere.
 
 ```ts
 export interface HelperRecord {

@@ -666,7 +666,7 @@ Fixed regardless of the choice:
 
 Names (ADR-0003, ruled 2026-10-08): the record's `recordKey` (not `key`), `startedByProcessId` (not `pid`; it is the
 acquirer's process id, since the claim precedes the spawn; stopping always goes through the endpoint, never a kill
-by process id), `Lease.leaseId`, `close(leaseId)`, `Clock.nowMilliseconds()`. The wire protocol is newline-delimited
+by process id), `Lease.leaseId`, `close(leaseId)`, `Clock.now()` (the user allows `now` as a named exception to the four-character rule, 2026-10-08). The wire protocol is newline-delimited
 JSON (`hello`/`welcome` with the nonce, `request`/`reply` by `requestId`, pushed `leaseListChanged` and `message`,
 `stop`); helper parameters travel in one environment variable, never argv; the spawn is `process.execPath` with
 `ELECTRON_RUN_AS_NODE=1`, detached, stdio ignored, windowsHide, unref; the endpoint path is
