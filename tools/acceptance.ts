@@ -40,6 +40,7 @@ const HOST_IMAGE = 'remote-oss-acceptance-host';
 /** The packages whose VSIX files are installed into the editor under test, by their extension id. */
 const EXTENSIONS_UNDER_TEST = new Map([
   ['remote-oss.remote-ssh', 'remote-ssh'],
+  ['remote-oss.remote-ssh-edit', 'remote-ssh-edit'],
 ]);
 
 /**
