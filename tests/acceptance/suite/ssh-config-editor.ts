@@ -13,7 +13,7 @@ import * as vscode from 'vscode';
 export type CompletionTrigger = {invoke: true} | {typed: string};
 
 /** The text of line 2 after opening completion there, waiting, and accepting the focused item. */
-export async function acceptedAfterWait(
+async function acceptedAfterWait(
   trigger: CompletionTrigger,
   waitMilliseconds: number,
 ): Promise<string> {

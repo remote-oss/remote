@@ -137,8 +137,10 @@ describe('acceptance', () => {
     it('finds the VSIX of each extension under test and no other', () => {
       workspace.write('dist/remote-ssh-0.0.0.vsix', '');
       workspace.write('dist/remote-ssh-edit-0.0.0.vsix', '');
+      workspace.write('dist/remote-wsl-0.0.0.vsix', '');
       deepStrictEqual(packagedExtensions(workspace.root), [
         path.join(workspace.root, 'dist', 'remote-ssh-0.0.0.vsix'),
+        path.join(workspace.root, 'dist', 'remote-ssh-edit-0.0.0.vsix'),
       ]);
     });
 

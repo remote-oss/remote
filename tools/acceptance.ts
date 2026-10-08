@@ -43,6 +43,9 @@ const EXTENSIONS_UNDER_TEST = new Map([
   ['remote-oss.remote-ssh-edit', 'remote-ssh-edit'],
 ]);
 
+/** The extensions under test that use proposed API, enabled for them on the command line. */
+const PROPOSED_API_EXTENSIONS: readonly string[] = ['remote-oss.remote-ssh'];
+
 /**
  * The variables the harness passes to the extension host. `REMOTE_OSS_ACCEPTANCE` is the one switch with which a
  * package installs its harness adapters (dialogs answered from a script, the log readable by the tests); a user's
@@ -287,7 +290,7 @@ export function acceptanceConfiguration(
     launchArgs: [
       `--user-data-dir=${path.join(runFolder, 'user-data')}`,
       `--extensions-dir=${path.join(runFolder, 'extensions')}`,
-      ...[...EXTENSIONS_UNDER_TEST.keys()].map(
+      ...PROPOSED_API_EXTENSIONS.map(
         extensionId => `--enable-proposed-api=${extensionId}`,
       ),
       '--disable-workspace-trust',
