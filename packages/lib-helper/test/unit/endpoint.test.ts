@@ -184,6 +184,16 @@ describe('Node.js endpoint', () => {
     silent.destroy();
   });
 
+  it('joins a message that arrives in two pieces', () => {
+    const socket = new Socket();
+    const connection = lineConnection(socket);
+    const received: unknown[] = [];
+    connection.onMessage(message => received.push(message));
+    socket.emit('data', '{"type":');
+    socket.emit('data', '"stop"}\n{"type"');
+    deepStrictEqual(received, [{type: 'stop'}]);
+  });
+
   it('closes a connection whose socket fails', async () => {
     const socket = new Socket();
     const connection = lineConnection(socket);

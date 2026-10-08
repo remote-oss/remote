@@ -14,11 +14,12 @@ class FakeConnection implements EndpointConnection {
   private readonly messageListeners: Array<(message: unknown) => void> = [];
   private readonly closeListeners: Array<() => void> = [];
   private closed = false;
+  private closing = false;
 
   send(message: unknown): void {
     const text = JSON.stringify(message);
     const receiver = this.peer;
-    if (this.closed || receiver === undefined) {
+    if (this.closing || this.closed || receiver === undefined) {
       return;
     }
     queueMicrotask(() => {
@@ -34,9 +35,13 @@ class FakeConnection implements EndpointConnection {
     this.closeListeners.push(listener);
   }
 
+  /** Closes both ends after the messages already sent, as a socket flushes before it ends. */
   close(): void {
-    this.end();
-    this.peer?.end();
+    this.closing = true;
+    queueMicrotask(() => {
+      this.end();
+      this.peer?.end();
+    });
   }
 
   private deliver(message: unknown): void {

@@ -22,8 +22,12 @@ export function lineConnection(socket: Socket): EndpointConnection {
   socket.setEncoding('utf8');
   socket.on('data', (chunk: string) => {
     buffered += chunk;
-    const lines = buffered.split('\n');
-    buffered = lines.pop() ?? '';
+    const lastEnd = buffered.lastIndexOf('\n');
+    if (lastEnd < 0) {
+      return;
+    }
+    const lines = buffered.slice(0, lastEnd).split('\n');
+    buffered = buffered.slice(lastEnd + 1);
     for (const line of lines) {
       let message: unknown;
       try {
