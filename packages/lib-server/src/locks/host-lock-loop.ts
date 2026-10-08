@@ -20,15 +20,16 @@ export async function hostLockLoop<T>(
   attempts = 30,
   intervalMilliseconds = 1000,
 ): Promise<{kind: 'done'; value: T} | {kind: 'retriesExhausted'}> {
-  for (let attempt = 1; ; attempt += 1) {
+  for (let attempt = 1; attempt < attempts; attempt += 1) {
     const result = await step();
     if (result.kind === 'result') {
       return {kind: 'done', value: result.value};
     }
-    if (attempt >= attempts) {
-      return {kind: 'retriesExhausted'};
-    }
     onRetry(attempt);
     await clock.wait(intervalMilliseconds);
   }
+  const last = await step();
+  return last.kind === 'result'
+    ? {kind: 'done', value: last.value}
+    : {kind: 'retriesExhausted'};
 }
