@@ -3,6 +3,10 @@
 Status: `remote-architect`, 2026-10-07, for release 0.2 slice 1 (project item #40) and slice 2 (#41). The slice
 order lives in the project; this page gives the component order inside a slice and the acceptance harness.
 
+Decisions since the first version: D-55 (2026-10-07) Remote - Tunnels is not built for now; D-56 the identity card is
+approved (manifest updates and the icon as low-priority cards); D-65 an 8-row recorded gate for slice 1, pilot
+F-2301 on Monday.
+
 ## Slice 1: connect to a Linux host over SSH with key authentication and open a folder
 
 Feature rows (the PM's cut, confirmed against the area A and B matrices): foundation F-2001, F-3901, F-3903;

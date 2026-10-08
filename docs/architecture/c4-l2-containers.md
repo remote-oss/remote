@@ -17,7 +17,7 @@ Seven extension packages and ten shared libraries, all under `packages/` (layout
 | `remote-ssh-edit` | `remote-oss.remote-ssh-edit` | none | 9 + 2 | Declarative language plus one completion provider; the first conformance target (744 cases) |
 | `remote-explorer` | `remote-oss.remote-explorer` | none | 9 + 2 | The hub view `remoteTargets`; the companion protocol's server |
 | `remote-wsl` | `remote-oss.remote-wsl` | `wsl` | 12 + 1 published, 16 pending | Area D waits for the drafts; its window side is B, its server side reuses A |
-| `remote-server` | `remote-oss.remote-server` | `tunnel` | 11 + 2 | Remote - Tunnels; the relay is the editor's shipped tunnel executable |
+| `remote-server` | `remote-oss.remote-server` | `tunnel` | 11 + 2 | Remote - Tunnels: **not built for now (D-55, the terms of service)**; its design stays on file |
 | `remote-extensionpack` | `remote-oss.vscode-remote-extensionpack` | none | 5 + 1 | Code-less manifest (R-62) |
 
 ### Libraries
@@ -37,7 +37,7 @@ A library exists only when at least two packages need the same behaviour; everyt
 | `lib-ssh` | `ssh`/`scp` discovery and checks; argument building and spawning; the local connection server (one `ssh` per host string across windows); prompt relay and the hidden login terminal; the `ssh_config` model (files in effect, host list, `ssh -G`, Host-block writer); stderr classification into failure kinds and hints; the host-channel implementation over `ssh` | ssh; containers for its over-SSH hop (F-1302, placement open); ssh-edit does not use it | `lib-host`, `lib-identifiers`, `lib-log` |
 | `lib-server` | Host bootstrap (POSIX `sh` and PowerShell scripts shipped as text); server download (host-first, client fallback), install, locks, commit rewrite, licence gate (R-68, one rule pending K5), caches (R-58); server start, reuse, socket mode, kill, uninstall, lifetime; default extensions handed to a starting server | ssh, wsl, containers (install into a container, F-0503/F-0419/F-0505) | `lib-host`, `lib-product`, `lib-log` |
 | `lib-wsl` | The `wsl.exe` runner, distro inventory, path mapper and the WSL host-channel implementation (added 2026-10-06, area D dossier) | wsl; containers for Docker-in-WSL (F-0204, F-0207, F-1301) | `lib-host`, `lib-log` |
-| `lib-helper` | The detached-helper pattern: a client, a runtime with end policies as data (grace, delayed check with an action, idle), a registry per profile or per user with atomic claim and nonce (added 2026-10-06, area A draft, area C reviews) | lib-ssh (the local connection server), containers (the F-0417 watchdog), server (if the relay stays) | `lib-log` |
+| `lib-helper` | The detached-helper pattern: a client, a runtime with end policies as data (grace, delayed check with an action, idle), a registry per profile or per user with atomic claim and nonce (added 2026-10-06, area A draft, area C reviews) | lib-ssh (the local connection server), containers (the F-0417 watchdog) | `lib-log` |
 | `lib-forwarding` | The window tunnel to the server (local port range search, relay or socket); the resolver's tunnel factory; default and static forwards (`tunnels` proposal); port attributes | ssh, wsl, containers, server | `lib-log` |
 
 Not a library, by the two-consumer rule: the tunnel client (service calls through the shipped executable, sign-in
