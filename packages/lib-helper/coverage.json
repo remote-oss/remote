@@ -1,0 +1,11 @@
+{
+  "exclude": {
+    "src/types.ts": "declares types only; nothing in it runs",
+    "src/registry/file-port.ts": "declares an interface only; nothing in it runs"
+  },
+  "ratchet": {
+    "lines": 100,
+    "branches": 100,
+    "functions": 100
+  }
+}

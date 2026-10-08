@@ -5,10 +5,28 @@
       "path": "tools"
     },
     {
+      "path": "packages/lib-helper"
+    },
+    {
+      "path": "packages/lib-helper/tsconfig.test.json"
+    },
+    {
+      "path": "packages/lib-host"
+    },
+    {
+      "path": "packages/lib-host/tsconfig.test.json"
+    },
+    {
       "path": "packages/lib-identifiers"
     },
     {
       "path": "packages/lib-identifiers/tsconfig.test.json"
+    },
+    {
+      "path": "packages/lib-product"
+    },
+    {
+      "path": "packages/lib-product/tsconfig.test.json"
     },
     {
       "path": "packages/lib-standdown"
@@ -57,18 +75,6 @@
     },
     {
       "path": "packages/remote-wsl/tsconfig.test.json"
-    },
-    {
-      "path": "packages/lib-host"
-    },
-    {
-      "path": "packages/lib-host/tsconfig.test.json"
-    },
-    {
-      "path": "packages/lib-product"
-    },
-    {
-      "path": "packages/lib-product/tsconfig.test.json"
     },
     {
       "path": "tests/acceptance"
