@@ -80,6 +80,22 @@ function downloadersCalled(host: FakeHost): string[] {
     .map(call => call.split(' ')[0] ?? '');
 }
 
+/** The unpack percents a run printed, in order. */
+function unpackPercents(lines: readonly string[]): number[] {
+  return lines.flatMap(line => {
+    const match = /^remote-oss-server-progress unpack (\d+)$/.exec(line);
+    return match?.[1] === undefined ? [] : [Number(match[1])];
+  });
+}
+
+/** The smallest step between consecutive percents, ignoring the closing 100. */
+function smallestStep(percents: readonly number[]): number {
+  const steps = percents
+    .slice(0, -1)
+    .map((percent, index) => (percents[index + 1] ?? percent) - percent);
+  return Math.min(...steps.slice(0, -1));
+}
+
 /** Another window's link lock on the baseline install: both names exist. Returns the lock file's path. */
 function holdLinkLock(host: FakeHost): string {
   mkdirSync(installFolder(host), {recursive: true});
@@ -431,6 +447,45 @@ describe('the POSIX bootstrap script', () => {
       const parameters = parametersFor();
       parameters.dataFolderName = "it's a folder";
       deepStrictEqual(statusOf(host, single('install'), parameters), 'Ok');
+    });
+
+    it('V1: the unpack starts at 0 and ends at 100', () => {
+      const percents = unpackPercents(
+        runScript(host, single('install'), parametersFor()),
+      );
+      deepStrictEqual([percents.at(0), percents.at(-1)], [0, 100]);
+    });
+
+    it('V1: the unpack percents never go down', () => {
+      const percents = unpackPercents(
+        runScript(host, single('install'), parametersFor()),
+      );
+      deepStrictEqual(
+        percents,
+        [...percents].sort((first, second) => first - second),
+      );
+    });
+
+    it('V1: the unpack prints a percent at most once per 5 points', () => {
+      const percents = unpackPercents(
+        runScript(host, single('install'), parametersFor()),
+      );
+      deepStrictEqual(smallestStep(percents) >= 5, true);
+    });
+
+    it('V1: the progress lines come before the result block', () => {
+      const lines = runScript(host, single('install'), parametersFor());
+      const begin = lines.indexOf('remote-oss-server-result-begin');
+      deepStrictEqual(
+        lines
+          .slice(begin)
+          .some(line => line.startsWith('remote-oss-server-progress')),
+        false,
+      );
+    });
+
+    it('V1: a run that prints progress lines still has its result block', () => {
+      deepStrictEqual(statusOf(host, single('install'), parametersFor()), 'Ok');
     });
 
     it('V1: the install reports its timings as whole milliseconds', () => {

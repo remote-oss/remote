@@ -128,15 +128,51 @@ export const FETCH_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
-/** Unpack an archive into a folder, then move the archive's one top folder up into the target. */
+/** The progress line: the step and an integer percent, a whole line outside the result block. */
+const PROGRESS_MARKER = 'remote-oss-server-progress';
+
+/**
+ * Unpack an archive into a folder, then move the archive's one top folder up into the target. A tar archive is listed
+ * first so that the unpack can report whole percents, at most once per 5 points and once at 100.
+ */
 export const UNPACK_FUNCTIONS: readonly string[] = [
+  'progress() {',
+  `  printf '%s %s %s\\n' ${shellQuote(PROGRESS_MARKER)} "$1" "$2"`,
+  '}',
+  'unpack_progress() {',
+  '  COUNT=0',
+  '  LAST=0',
+  '  while read -r ENTRY_NAME; do',
+  '    COUNT=$((COUNT + 1))',
+  '    PERCENT=$((COUNT * 100 / $1))',
+  '    if [ "$PERCENT" -lt 100 ] && [ $((PERCENT - LAST)) -ge 5 ]; then',
+  '      progress unpack "$PERCENT"',
+  '      LAST=$PERCENT',
+  '    fi',
+  '  done',
+  '}',
+  'extract_tar() {',
+  '  TOTAL=$(tar -tzf "$1" </dev/null 2>/dev/null | wc -l | tr -d " ")',
+  '  [ "${TOTAL:-0}" -gt 0 ] || return 1',
+  '  progress unpack 0',
+  '  { tar -xzvf "$1" -C "$2" </dev/null 2>&1; echo $? >"$2.status"; } | unpack_progress "$TOTAL"',
+  '  EXTRACT_CODE=$(cat "$2.status" 2>/dev/null)',
+  '  rm -f "$2.status"',
+  '  [ "$EXTRACT_CODE" = 0 ] || return 1',
+  '  progress unpack 100',
+  '}',
+  'extract_zip() {',
+  '  progress unpack 0',
+  '  unzip -q "$1" -d "$2" </dev/null || return 1',
+  '  progress unpack 100',
+  '}',
   'unpack_into() {',
   '  UNPACK_STAGE=$2.stage.$$',
   '  rm -rf "$UNPACK_STAGE"',
   '  mkdir -p "$UNPACK_STAGE" "$2" || return 1',
   '  case $ARCHIVE_FORMAT in',
-  '    zip) unzip -q "$1" -d "$UNPACK_STAGE" </dev/null || return 1 ;;',
-  '    *) tar -xzf "$1" -C "$UNPACK_STAGE" </dev/null || return 1 ;;',
+  '    zip) extract_zip "$1" "$UNPACK_STAGE" || return 1 ;;',
+  '    *) extract_tar "$1" "$UNPACK_STAGE" || return 1 ;;',
   '  esac',
   '  unpack_move_top "$UNPACK_STAGE" "$2"',
   '}',

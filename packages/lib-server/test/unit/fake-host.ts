@@ -145,6 +145,10 @@ function buildArchive(folder: string): string {
   mkdirSync(path.join(source, 'bin'), {recursive: true});
   writeExecutable(path.join(source, 'bin', 'launcher'), LAUNCHER);
   writeFileSync(path.join(source, 'product.json'), '{}\n');
+  mkdirSync(path.join(source, 'files'));
+  for (let index = 0; index < 60; index++) {
+    writeFileSync(path.join(source, 'files', `file-${String(index)}`), '');
+  }
   const archive = path.join(folder, 'server.tar.gz');
   spawnSync('tar', [
     '-czf',
