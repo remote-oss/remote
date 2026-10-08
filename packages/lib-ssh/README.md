@@ -30,11 +30,24 @@ results. It is bundled into the extensions that use it and never published on it
 
 Failures are values; no operation throws.
 
+## The process side
+
+`src/process/` starts the client and watches the connection:
+
+- `spawnSession` starts an invocation as one program with its arguments, never through a shell, with the editor's own
+  environment, then the invocation's added variables, then the askpass variables. `SSH_ASKPASS_REQUIRE` is never
+  set. It yields a session with output, error and input streams and the exit status, or a failure as a value:
+  `clientVanished` when the program is gone or not executable, `spawnFailed` for any other start error.
+- `ConnectWait` is the wait for the connection to be set up: the connect timeout plus 2 seconds, paused while a prompt
+  is open, started over after each answer, stopped at the first setup report. With a connect timeout of 0 the wait is
+  exactly the unbounded limit the caller passes in, with no margin.
+- `nodeProcessSpawner` is the process port on Node.js; tests use a recording port.
+
 ## For maintainers
 
 | | |
 |---|---|
 | Maintainers | remote-oss |
 | Entry points | `lib-ssh` (`src/index.ts`) |
-| Allowed imports | `node:path`; no library, no extension, no `vscode` |
-| Coverage exclusions | none |
+| Allowed imports | `node:path`; in `src/process/`, `node:child_process` and `lib-helper` (types and its test clock); no extension, no `vscode` |
+| Coverage exclusions | `src/process/ports.ts`: it declares types only, and nothing in it runs |

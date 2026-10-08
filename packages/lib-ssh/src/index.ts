@@ -63,3 +63,18 @@ export {
   scpProgram,
   VERSION_ARGUMENTS,
 } from './client/locate.ts';
+export {ConnectWait, type ConnectWaitSettings} from './process/connect-wait.ts';
+export {nodeProcessSpawner} from './process/node-spawner.ts';
+export type {
+  ProcessHandle,
+  ProcessSpawner,
+  ProcessSpecification,
+  StartError,
+} from './process/ports.ts';
+export {
+  sessionEnvironment,
+  type SpawnFailure,
+  type SpawnOutcome,
+  spawnSession,
+  SshSession,
+} from './process/session.ts';
