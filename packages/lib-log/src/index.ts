@@ -12,5 +12,5 @@ export {
   createLogger,
   type Sink,
 } from './logger.ts';
-export {type Secret, redact, secret} from './redaction.ts';
+export {redact} from './redaction.ts';
 export {logOncePerSession, resetOncePerSession} from './once.ts';

@@ -1,5 +1,5 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
-import {redact, secret} from '../../src/index.ts';
+import {strictEqual} from 'node:assert';
+import {redact} from '../../src/index.ts';
 
 describe('redaction (card log-01 table)', () => {
   it('redact(token abcdefghijklmnopqrstuvwxyz012345 ok, []) (32 chars) -> [redacted]', () => {
@@ -26,13 +26,5 @@ describe('redaction (card log-01 table)', () => {
 
   it('redact(x, [""]) -> x (empty secrets are ignored)', () => {
     strictEqual(redact('x', ['']), 'x');
-  });
-
-  it('`${secret(p4ss)}` -> [secret]', () => {
-    strictEqual(String(secret('p4ss')), '[secret]');
-  });
-
-  it('String(secret(p4ss)).includes(p4ss) -> false', () => {
-    deepStrictEqual(String(secret('p4ss')).includes('p4ss'), false);
   });
 });

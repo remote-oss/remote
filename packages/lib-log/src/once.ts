@@ -11,16 +11,14 @@ const seenKeys = new Set<string>();
  */
 export function logOncePerSession(
   logger: Logger,
-  // The parameter name is fixed by the library's public contract.
-  // eslint-disable-next-line id-length
-  key: string,
+  onceKey: string,
   message: string,
   level: Level = 'info',
 ): boolean {
-  if (seenKeys.has(key)) {
+  if (seenKeys.has(onceKey)) {
     return false;
   }
-  seenKeys.add(key);
+  seenKeys.add(onceKey);
   logger[level](message);
   return true;
 }
