@@ -37,8 +37,13 @@ const VERIFICATION_CODE_PLACEHOLDER = 'Enter verification code';
 const CONTINUE_QUESTION =
   /^Are you sure you want to continue connecting( \(.*\))?\?$/;
 
-/** The classic fingerprint line: type, the words, one space, the fingerprint and a final full stop. */
-const CLASSIC_FINGERPRINT = /^\S+ key fingerprint is (\S+)\.$/;
+/**
+ * The fingerprint line of a host-key question: the key type, the words, an optional colon, one space and the
+ * fingerprint with an optional final full stop. OpenSSH before 10 writes no colon and ends the line with a full stop;
+ * OpenSSH 10.3 writes `ED25519 key fingerprint is: SHA256:...` with no full stop. Either form makes a pick when the
+ * continue-connecting question follows it.
+ */
+const FINGERPRINT_LINE = /^\S+ key fingerprint is:? (\S+?)\.?$/;
 
 /** The two lines of an address key that differs from the host key. */
 const OFFENDING_LINE = /^Offending key for IP in .+:\d+$/;
@@ -95,9 +100,9 @@ export function classifyPrompt(
 /** The fingerprint of the host-key line before the question. */
 function fingerprintOf(linesBeforeQuestion: string[]): string | undefined {
   for (const line of linesBeforeQuestion) {
-    const classic = CLASSIC_FINGERPRINT.exec(line);
-    if (classic !== null) {
-      return classic[1];
+    const found = FINGERPRINT_LINE.exec(line);
+    if (found !== null) {
+      return found[1];
     }
   }
   return undefined;
