@@ -16,10 +16,12 @@ ruled 2026-10-08). Which variables are exported and the per-host selection are n
 export function proxyVariableText(configuredValue: string): string;
 ```
 
-The scheme is the text before the first `:`. When it is exactly `http` or `https` (lower case), parse the rest as
-scheme, optional `//authority` (userinfo, host, port), path, `?query`, `#fragment` with the semantics of
-`[oss] src/vs/base/common/uri.ts` (`URI.parse` then `toString()`), and return the serialisation. Otherwise return the
-input unchanged.
+The scheme is the text before the first `:`. When it is exactly `http` or `https` (lower case), the result is
+EXACTLY `URI.parse(value).toString()` of `[oss] src/vs/base/common/uri.ts` at the 1.139.1 tag (ruled 2026-10-08,
+#180): the same percent-decoding on parse (`percentDecode` with its graceful fallback for a run that does not
+decode), the same encoding on `toString` (`encodeURIComponentFast` with its table and its unreserved set; only the
+host is lower-cased, never the user info; the drive-letter rule of `_asFormatted`). Where this card and that source
+disagree, the source wins and the row is an open row. Otherwise return the input unchanged.
 
 ## 3. Test table
 
@@ -37,6 +39,12 @@ input unchanged.
 | `ftp://proxy.example:3128` | unchanged |
 | `proxy.example:3128` | unchanged (the "scheme" is the host) |
 | `` (empty) | `` (unchanged) |
+| `http://User:PassWord@proxy.example:3128` | `http://User:PassWord@proxy.example:3128/` (user info keeps its case; only the host is lower-cased) |
+| `http://proxy.example/a!b'c(d)e*f` | `http://proxy.example/a%21b%27c%28d%29e%2Af` |
+| `http://proxy.example/😀` | `http://proxy.example/%F0%9F%98%80` (a character outside the BMP is one encoded pair, never a throw) |
+| `http://proxy.example/%zz` | `http://proxy.example/%25zz` (a run that does not decode is kept, then its `%` encoded) |
+| `http://proxy.example/%FF` | `http://proxy.example/%25FF` |
+| `http://proxy.example/C:/dir` | `http://proxy.example/c%3A/dir` (the drive-letter rule) |
 
 Add one row per branch of the parser the worker writes (query, fragment, missing port) so every branch is covered.
 
