@@ -13,22 +13,20 @@ export interface HelpLinks {
   feedback: string;
 }
 
-/** The part of the manifest that holds the help addresses. */
+/** The part of the manifest that holds the help addresses: the editor's flat `remoteHelp` object. */
 export interface HelpManifest {
   readonly contributes?: {
-    readonly remoteHelp?: Readonly<
-      Record<string, {readonly urls?: Readonly<Record<string, string>>}>
-    >;
+    readonly remoteHelp?: Readonly<Record<string, unknown>>;
   };
 }
 
-/** The help addresses the manifest names for the `ssh-remote` authority; an address it lacks is an error. */
+/** The help addresses the manifest's `remoteHelp` names; an address it lacks is an error. */
 export function helpLinksOf(manifest: HelpManifest): HelpLinks {
-  const urls = manifest.contributes?.remoteHelp?.['ssh-remote']?.urls ?? {};
+  const help = manifest.contributes?.remoteHelp ?? {};
   function address(name: keyof HelpLinks): string {
-    const found = urls[name];
-    if (found === undefined || found === '') {
-      throw new Error(`the manifest names no ${name} address for ssh-remote`);
+    const found = help[name];
+    if (typeof found !== 'string' || found === '') {
+      throw new Error(`the manifest names no ${name} address in remoteHelp`);
     }
     return found;
   }

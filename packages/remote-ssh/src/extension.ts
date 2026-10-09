@@ -23,7 +23,7 @@ interface Manifest {
   extensionPack?: string[];
   contributes?: {
     commands?: Array<{command: string; title: string}>;
-    remoteHelp?: Record<string, {urls?: Record<string, string>}>;
+    remoteHelp?: Record<string, unknown>;
   };
 }
 

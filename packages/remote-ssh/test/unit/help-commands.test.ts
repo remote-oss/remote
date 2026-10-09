@@ -138,11 +138,11 @@ describe('the help addresses of the manifest', () => {
 
   it('fail, naming the address, when the manifest names none or an empty one', () => {
     const empty = {
-      contributes: {remoteHelp: {'ssh-remote': {urls: {documentation: ''}}}},
+      contributes: {remoteHelp: {documentation: ''}},
     };
     deepStrictEqual([{}, empty].map(failureOf), [
-      'the manifest names no documentation address for ssh-remote',
-      'the manifest names no documentation address for ssh-remote',
+      'the manifest names no documentation address in remoteHelp',
+      'the manifest names no documentation address in remoteHelp',
     ]);
   });
 });
