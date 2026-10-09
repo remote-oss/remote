@@ -216,6 +216,7 @@ export function parametersFor(): ScriptParameters {
     commit: 'abc123',
     archiveUrl: 'https://example.invalid/server.tar.gz',
     archivePath: '',
+    removeArchive: false,
     archiveFormat: 'tar.gz',
     epochMilliseconds: 1700000000000,
     proxy: {http: '', https: ''},

@@ -23,7 +23,7 @@ import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
 
 /** The steps of a single-script install. */
 export type ScriptStep =
-  'probe' | 'install' | 'start' | 'kill' | 'uninstall' | 'cleanup';
+  'probe' | 'install' | 'discard' | 'start' | 'kill' | 'uninstall' | 'cleanup';
 
 /** The extra actions of a stepwise install, in the order they run. */
 export type StepwiseAction = 'prepare' | 'unpack' | 'activate';
@@ -72,6 +72,11 @@ export interface ScriptParameters {
   archiveUrl: string;
   /** An archive already on the host, used instead of a download; empty for none. */
   archivePath: string;
+  /**
+   * Whether the archive at `archivePath` is deleted when the script ends, whatever its status, except while the host
+   * lock is busy and the step is tried again.
+   */
+  removeArchive: boolean;
   archiveFormat: 'tar.gz' | 'zip';
   /** The epoch milliseconds that name the staging folder of a stepwise install. */
   epochMilliseconds: number;
@@ -120,6 +125,7 @@ function parameterBlock(parameters: ScriptParameters): string[] {
     assignment('COMMIT', parameters.commit),
     assignment('ARCHIVE_URL', parameters.archiveUrl),
     assignment('ARCHIVE_PATH', parameters.archivePath),
+    assignment('ARCHIVE_REMOVE', yesNo(parameters.removeArchive)),
     assignment('ARCHIVE_FORMAT', parameters.archiveFormat),
     assignment('STAGING_SUFFIX', parameters.epochMilliseconds),
     assignment('PROXY_HTTP', parameters.proxy.http),
@@ -374,6 +380,8 @@ const KILL_BODY: readonly string[] = [
   'finish Ok',
 ];
 
+const DISCARD_BODY: readonly string[] = ['finish Ok'];
+
 const UNINSTALL_BODY: readonly string[] = [
   '[ -n "$DATA_ROOT" ] && [ -n "$DATA_FOLDER" ] || finish Ok',
   'stop_servers',
@@ -412,6 +420,8 @@ function bodyOf(step: BodyStep): readonly string[] {
       return PROBE_BODY;
     case 'install':
       return INSTALL_BODY;
+    case 'discard':
+      return DISCARD_BODY;
     case 'kill':
       return KILL_BODY;
     case 'uninstall':
@@ -437,6 +447,7 @@ const FUNCTION_GROUPS: Readonly<
     UNPACK_FUNCTIONS,
     LEAVE,
   ],
+  discard: [COMMON_FUNCTIONS],
   prepare: [COMMON_FUNCTIONS],
   unpack: [COMMON_FUNCTIONS, UNPACK_FUNCTIONS],
   activate: [COMMON_FUNCTIONS],

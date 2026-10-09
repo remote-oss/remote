@@ -1,6 +1,7 @@
 {
   "exclude": {
-    "src/policy/record.ts": "types only; no executable code"
+    "src/policy/record.ts": "types only; no executable code",
+    "src/transfer/ports.ts": "types only; no executable code"
   },
   "ratchet": {
     "lines": 100,

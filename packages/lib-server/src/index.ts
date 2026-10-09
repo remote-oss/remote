@@ -95,3 +95,19 @@ export {
   withClientLock,
 } from './locks/client-lock.ts';
 export {type HostLockStep, hostLockLoop} from './locks/host-lock-loop.ts';
+export type {
+  ClientFilePort,
+  DownloadPort,
+  DownloadRequest,
+  DownloadResult,
+} from './transfer/ports.ts';
+export {
+  DISCARD_DEADLINE_MILLISECONDS,
+  type DownloadPlan,
+  transfer,
+  type TransferDependencies,
+  type TransferFailure,
+  type TransferInput,
+  type TransferOutcome,
+  type TransferPhase,
+} from './transfer/transfer.ts';
