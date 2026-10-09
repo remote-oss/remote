@@ -6,12 +6,14 @@
  */
 
 import type {
+  EndpointConnection,
   HelperControl,
   MessageHandler,
   PlainData,
   RequestContext,
   Scheduler,
 } from 'lib-helper';
+import {AskpassEndpoint} from '../askpass/endpoint.ts';
 import type {Invocation} from '../arguments/invocation.ts';
 import {classify} from '../diagnostics/classify.ts';
 import {setupMarkerOf} from '../diagnostics/setup-report.ts';
@@ -42,6 +44,12 @@ export interface ConnectionHandlerOptions {
   editorEnvironment: Readonly<Record<string, string | undefined>>;
   waitSettings: ConnectWaitSettings;
   scheduler: Scheduler;
+  /** What the askpass endpoint needs: the nonce its program presents, the host's name and its first-message deadline. */
+  askpass: {
+    nonce: string;
+    displayHost: string;
+    firstMessageMilliseconds: number;
+  };
   logLine: (line: string) => void;
 }
 
@@ -51,7 +59,10 @@ type ConnectionState = 'idle' | 'connecting' | 'connected';
 export class ConnectionHandler implements MessageHandler {
   private readonly options: ConnectionHandlerOptions;
   private readonly ownership: LoginOwnership;
+  private readonly askpass: AskpassEndpoint;
   private control!: HelperControl;
+  private wait: ConnectWait | undefined;
+  private leaseCount = 0;
   private state: ConnectionState = 'idle';
   private session: SshSession | undefined;
   private sharedRecord: SharedRecord | null = null;
@@ -63,6 +74,24 @@ export class ConnectionHandler implements MessageHandler {
     this.ownership = new LoginOwnership(owner => {
       this.tell({type: 'ownerChanged', owner});
     });
+    this.askpass = new AskpassEndpoint({
+      ...options.askpass,
+      scheduler: options.scheduler,
+      logLine: options.logLine,
+      onPrompt: prompt => {
+        this.tell({type: 'prompt', ...prompt});
+        this.wait?.promptOpened();
+      },
+      onPromptClosed: promptId => {
+        this.tell({type: 'promptClosed', promptId});
+        this.wait?.promptAnswered();
+      },
+    });
+  }
+
+  /** Takes a connection of the askpass program; pass it to the askpass endpoint's `listen`. */
+  acceptAskpass(connection: EndpointConnection): void {
+    this.askpass.accept(connection);
   }
 
   /** Takes the helper's control, before the endpoint listens. */
@@ -73,6 +102,13 @@ export class ConnectionHandler implements MessageHandler {
   /** Passes the live leases to the login ownership. */
   onLeasesChanged(leaseIds: readonly number[]): void {
     this.ownership.leasesChanged(leaseIds);
+    if (leaseIds.length > this.leaseCount) {
+      // A window that joined has not seen the questions that are open; windows that have seen them ignore the repeat.
+      for (const prompt of this.askpass.pending()) {
+        this.tell({type: 'prompt', ...prompt});
+      }
+    }
+    this.leaseCount = leaseIds.length;
   }
 
   /** The helper has no end action: its policy only waits out a grace. */
@@ -101,16 +137,25 @@ export class ConnectionHandler implements MessageHandler {
         this.sharedRecord = request.record;
         return {type: 'accepted'};
       case 'answer':
-        // No question is open: the askpass endpoint that opens them is a slice of its own.
-        return {type: 'answered', accepted: false};
+        return this.answer(request.promptId, request.text);
       case 'kill':
         this.killed = true;
         this.session?.kill();
+        this.askpass.closeAll();
         this.control.stop();
         return {type: 'accepted'};
       default:
         throw new Error('not a connection request');
     }
+  }
+
+  private answer(promptId: number, text: string): PlainData {
+    const accepted = this.askpass.answer(promptId, text);
+    if (accepted) {
+      this.tell({type: 'promptClosed', promptId});
+      this.wait?.promptAnswered();
+    }
+    return {type: 'answered', accepted};
   }
 
   private async connect(
@@ -156,6 +201,7 @@ export class ConnectionHandler implements MessageHandler {
         session.kill();
       },
     );
+    this.wait = wait;
     const lines = new LineSplitter(line => {
       if (this.state !== 'connecting') {
         return;
@@ -163,6 +209,7 @@ export class ConnectionHandler implements MessageHandler {
       errorLines.push(line);
       if (setupMarkerOf(line) === 'authenticated') {
         wait.stop();
+        this.askpass.closeAll();
         this.state = 'connected';
         this.ownership.finish();
         this.tell({type: 'connected', socksPort: this.options.socksPort});
@@ -174,6 +221,7 @@ export class ConnectionHandler implements MessageHandler {
     wait.start();
     void session.exit().then(status => {
       wait.stop();
+      this.askpass.closeAll();
       lines.flush();
       if (this.killed) {
         return;

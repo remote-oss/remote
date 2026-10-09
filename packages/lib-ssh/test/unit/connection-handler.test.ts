@@ -1,6 +1,7 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
-import type {HelperControl, PlainData} from 'lib-helper';
+import type {EndpointConnection, HelperControl, PlainData} from 'lib-helper';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
+import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {
   ConnectionHandler,
   type ConnectionHandlerOptions,
@@ -19,6 +20,8 @@ const RECORD = {
   temporaryFolder: '/tmp',
   connectionToken: 'token-value',
 };
+const ASKPASS_NONCE = 'askpass-nonce';
+const ASKPASS_ENDPOINT = '/run/ra-0123456789abcdef.sock';
 const AUTHENTICATED =
   'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n';
 
@@ -45,6 +48,11 @@ describe('connection handler (contracts §4 S9)', () => {
       editorEnvironment: {},
       waitSettings: {connectTimeoutSeconds: 10, unboundedWaitSeconds: 120},
       scheduler: clock.scheduler(),
+      askpass: {
+        nonce: ASKPASS_NONCE,
+        displayHost: 'h.invalid',
+        firstMessageMilliseconds: 5000,
+      },
       logLine: line => logged.push(line),
       ...changes,
     });
@@ -315,6 +323,145 @@ describe('connection handler (contracts §4 S9)', () => {
       start?.();
       await connecting;
       deepStrictEqual([slow.started[0]?.killed, events, stops], [true, [], 1]);
+    });
+  });
+
+  describe('the questions of ssh', () => {
+    const QUESTION = "dev@h.invalid's password: ";
+    let port: FakeEndpointPort;
+    let program: {connection: EndpointConnection; received: unknown[]};
+
+    /** The askpass program asks `text` over the askpass endpoint. */
+    async function askQuestion(text = QUESTION): Promise<void> {
+      program = {
+        connection: await port.connect(ASKPASS_ENDPOINT),
+        received: [],
+      };
+      program.connection.onMessage(message => program.received.push(message));
+      program.connection.send({type: 'ask', nonce: ASKPASS_NONCE, text});
+      await settled();
+    }
+
+    beforeEach(async () => {
+      port = new FakeEndpointPort();
+      await port.listen(ASKPASS_ENDPOINT, connection => {
+        handler.acceptAskpass(connection);
+      });
+      handler.onLeasesChanged([1, 2]);
+      await send(1, {type: 'connect'});
+      events.length = 0;
+    });
+
+    it('goes to the windows as a prompt', async () => {
+      await askQuestion();
+      deepStrictEqual(events, [
+        {type: 'prompt', promptId: 1, surface: 'maskedInput', text: QUESTION},
+      ]);
+    });
+
+    it("passes the first window's answer to ssh and closes the question for the others", async () => {
+      await askQuestion();
+      const reply = await send(2, {
+        type: 'answer',
+        promptId: 1,
+        text: 'secret',
+      });
+      await settled();
+      deepStrictEqual(
+        [reply, program.received, events.slice(1)],
+        [
+          {type: 'answered', accepted: true},
+          [{type: 'answer', text: 'secret'}],
+          [{type: 'promptClosed', promptId: 1}],
+        ],
+      );
+    });
+
+    it('refuses a second answer to the same question', async () => {
+      await askQuestion();
+      await send(1, {type: 'answer', promptId: 1, text: 'first'});
+      deepStrictEqual(
+        await send(2, {type: 'answer', promptId: 1, text: 'second'}),
+        {type: 'answered', accepted: false},
+      );
+    });
+
+    it('closes the question when ssh drops it', async () => {
+      await askQuestion();
+      program.connection.close();
+      await settled();
+      deepStrictEqual(events.slice(1), [{type: 'promptClosed', promptId: 1}]);
+    });
+
+    it('stops the connect wait while a question is open', async () => {
+      await askQuestion();
+      clock.advance(60000);
+      deepStrictEqual(wasKilled(), false);
+    });
+
+    it('starts the whole connect wait over once the question is answered', async () => {
+      await askQuestion();
+      clock.advance(60000);
+      await send(1, {type: 'answer', promptId: 1, text: 'secret'});
+      clock.advance(11999);
+      const early = wasKilled();
+      clock.advance(1);
+      deepStrictEqual([early, wasKilled()], [false, true]);
+    });
+
+    it('resumes the connect wait when ssh drops the question', async () => {
+      await askQuestion();
+      program.connection.close();
+      await settled();
+      clock.advance(12000);
+      deepStrictEqual(wasKilled(), true);
+    });
+
+    it('shows an open question again to a window that joins, and not to one that leaves', async () => {
+      await askQuestion();
+      handler.onLeasesChanged([1, 2, 3]);
+      handler.onLeasesChanged([1, 2]);
+      deepStrictEqual(
+        events.map(event => (event as {type: string}).type),
+        ['prompt', 'prompt'],
+      );
+    });
+
+    it('closes the open question before the login is reported failed', async () => {
+      await askQuestion();
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(
+        events.slice(1, 3).map(event => (event as {type: string}).type),
+        ['promptClosed', 'loginFailed'],
+      );
+    });
+
+    it('closes the connection of the program when the login ends', async () => {
+      await askQuestion();
+      let closed = false;
+      program.connection.onClose(() => {
+        closed = true;
+      });
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(closed, true);
+    });
+
+    it('closes the open question when the server is killed', async () => {
+      await askQuestion();
+      await send(1, {type: 'kill'});
+      deepStrictEqual(
+        events.slice(1).map(event => (event as {type: string}).type),
+        ['promptClosed'],
+      );
+    });
+
+    it('ignores a question whose program does not know the nonce', async () => {
+      const stranger = await port.connect(ASKPASS_ENDPOINT);
+      stranger.send({type: 'ask', nonce: 'other', text: QUESTION});
+      await settled();
+      deepStrictEqual(events, []);
     });
   });
 
