@@ -768,6 +768,18 @@ describe('the connect pipeline, steps before the connection opens and the decisi
       ['cancelled', false],
     );
   });
+
+  it('a gate that ends as cancelled ends the connect as cancelled and gives the lease back', async () => {
+    deepStrictEqual(
+      await cancelledBy(
+        () => ({
+          gate: () => Promise.resolve({kind: 'cancelled'}),
+        }),
+        'transfer',
+      ),
+      ['cancelled', false],
+    );
+  });
 });
 
 describe('the connect pipeline, what it keeps and gives back', () => {

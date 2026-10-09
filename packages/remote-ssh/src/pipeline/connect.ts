@@ -277,6 +277,9 @@ async function runSteps(
   if (gate.kind === 'licenceDeclined') {
     return failure({kind: 'licenceDeclined'});
   }
+  if (gate.kind === 'cancelled') {
+    return failure({kind: 'cancelled'});
+  }
   if (planned.plan.kind === 'download') {
     const transferred = await steps.transfer(
       input,

@@ -358,6 +358,25 @@ describe('the server steps: gate', () => {
       kind: 'licenceDeclined',
     });
   });
+
+  it('is a cancellation when the signal is aborted, without asking and without a flag', async () => {
+    const asked: string[] = [];
+    const store = storeOf();
+    const controller = new AbortController();
+    controller.abort();
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, serverLicense: ['terms']},
+        store,
+        modal: modalAnswering('accept', asked),
+      }),
+    );
+    steps.plan(INPUT, {...HOST, installed: true});
+    deepStrictEqual(
+      [await steps.gate(INPUT, controller.signal), asked],
+      [{kind: 'cancelled'}, []],
+    );
+  });
 });
 
 describe('the server steps: transfer and start', () => {

@@ -97,12 +97,14 @@ function gate(
   classification: Parameters<typeof ensureAccepted>[0],
   store: AcceptanceStore,
   modal: LicenceModal,
+  cancellation: AbortSignal = new AbortController().signal,
 ): ReturnType<typeof ensureAccepted> {
   return ensureAccepted(
     classification,
     store,
     modal,
     loggerOver(new MemorySink()),
+    cancellation,
   );
 }
 
@@ -257,6 +259,7 @@ describe('ensureAccepted (V6)', () => {
         new FailingStore(),
         new ScriptedModal('accept'),
         loggerOver(sink),
+        new AbortController().signal,
       );
     }
     return sink.lines.map(line => line.message);
@@ -276,6 +279,7 @@ describe('ensureAccepted (V6)', () => {
       new MemoryStore(),
       new ScriptedModal('accept'),
       loggerOver(sink),
+      new AbortController().signal,
     );
     deepStrictEqual(sink.lines, []);
   });
@@ -290,5 +294,59 @@ describe('ensureAccepted (V6)', () => {
       modal,
     );
     deepStrictEqual(modal.asked, ['https://terms.example/other']);
+  });
+
+  it('an already-aborted signal is a cancellation without a question, nothing stored', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const store = new MemoryStore();
+    const modal = new ScriptedModal('accept');
+    deepStrictEqual(
+      [
+        await gate(LICENSED, store, modal, controller.signal),
+        modal.asked,
+        store.writes,
+      ],
+      [{kind: 'cancelled'}, [], []],
+    );
+  });
+
+  it('a question that is aborted while it is open is a cancellation, whatever the modal answers afterwards', async () => {
+    const store = new MemoryStore();
+    const modal = new ScriptedModal('accept');
+    const controller = new AbortController();
+    const asking = gate(LICENSED, store, modal, controller.signal);
+    controller.abort();
+    deepStrictEqual([await asking, store.writes], [{kind: 'cancelled'}, []]);
+  });
+
+  it('a free server and a stored acceptance never read the signal', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const store = new MemoryStore();
+    const stored = new ScriptedModal('accept');
+    await gate(LICENSED, store, stored);
+    deepStrictEqual(
+      [
+        await gate(
+          {kind: 'free'},
+          new MemoryStore(),
+          new ScriptedModal('accept'),
+          controller.signal,
+        ),
+        await gate(
+          LICENSED,
+          store,
+          new ScriptedModal('cancel'),
+          controller.signal,
+        ),
+        stored.asked,
+      ],
+      [
+        {kind: 'cleared', acceptanceFlag: false, remembered: false},
+        {kind: 'cleared', acceptanceFlag: true, remembered: true},
+        ['https://terms.example/server'],
+      ],
+    );
   });
 });
