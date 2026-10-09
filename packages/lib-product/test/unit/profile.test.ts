@@ -1,5 +1,11 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import {readProfile} from '../../src/index.ts';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
+import {
+  readProfile,
+  serverDataFolderNameOrDefault,
+  type ProductProfile,
+} from '../../src/index.ts';
 import {fixtureProfile} from './fixture.ts';
 
 describe('readProfile', () => {
@@ -68,4 +74,69 @@ describe('readProfile', () => {
       strictEqual(readProfile(text).kind, 'unreadable');
     });
   }
+});
+
+describe('serverDataFolderNameOrDefault (card product-02 table)', () => {
+  it('keeps the declared folder', () => {
+    strictEqual(
+      serverDataFolderNameOrDefault({
+        serverDataFolderName: '.vscodium-server',
+        applicationName: 'codium',
+      }),
+      '.vscodium-server',
+    );
+  });
+
+  it('derives the folder from the application name when the field is absent', () => {
+    const absent: Pick<
+      ProductProfile,
+      'serverDataFolderName' | 'applicationName'
+    > = {applicationName: 'synthetic-editor'};
+    strictEqual(
+      serverDataFolderNameOrDefault(absent),
+      '.synthetic-editor-server',
+    );
+  });
+
+  it('counts an empty folder as absent and derives', () => {
+    strictEqual(
+      serverDataFolderNameOrDefault({
+        serverDataFolderName: '',
+        applicationName: 'x',
+      }),
+      '.x-server',
+    );
+  });
+
+  it('derives for the synthetic fixture without the field; VS Code and VSCodium keep theirs', () => {
+    const synthetic = fixtureProfile('synthetic');
+    const withoutField: Pick<
+      ProductProfile,
+      'serverDataFolderName' | 'applicationName'
+    > = {applicationName: synthetic.applicationName};
+    deepStrictEqual(
+      [
+        serverDataFolderNameOrDefault(withoutField),
+        serverDataFolderNameOrDefault(fixtureProfile('vscode-reduced')),
+        serverDataFolderNameOrDefault(fixtureProfile('vscodium-reduced')),
+      ],
+      ['.fixture-editor-server', '.vscode-server', '.vscodium-server'],
+    );
+  });
+
+  it('names no product in the function (ADR-0006)', () => {
+    const file = readFileSync(
+      path.join(import.meta.dirname, '..', '..', 'src', 'profile.ts'),
+      'utf8',
+    );
+    const functionText = file.slice(
+      file.indexOf('export function serverDataFolderNameOrDefault'),
+    );
+    strictEqual(
+      /codium|vscodium|vscode-server|code\.visualstudio\.com/i.test(
+        functionText,
+      ),
+      false,
+    );
+  });
 });
