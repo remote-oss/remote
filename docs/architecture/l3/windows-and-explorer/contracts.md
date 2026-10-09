@@ -112,7 +112,7 @@ Failure presenter (per extension, B): it renders by `Failed.kind` and returns an
 at once, because their buttons act later (F-2601). The WSL presenter keeps the resolve open until the user picks
 (F-6208 BR-4): Retry gives `reload`, Close WSL Window gives `closeRemote`, Ignore gives `handled`. WSL kinds
 `distroUnknown` and `proxyFailed` show STR:S053 and STR:S022 from `reason` (area D's contract). The kinds `noServerSource` and
-`invalidServerTemplate` show remote-ssh F-3902 rule 8's dialog ("Open Setting" or "Cancel"), and remote-containers
+`invalidServerTemplate` show remote-ssh F-3902 rule 8's dialog ("Open Setting" or "Cancel"; its text has no reference counterpart, so the wording is the product's own under ADR-0008, ruled 2026-10-09: `noServerSource` — "{2} knows no download location for the server of {0}. Set {1} to a URL template for this editor's server builds."; `invalidServerTemplate` — "The value of {1} is not a usable server download URL template: {3}."; {0} the client's `applicationName`, {1} `remote.SSH.serverDownloadUrlTemplate`, {2} the extension's display name, {3} the problem; never the name of another product; the two strings get ids of their own in the package's string table), and remote-containers
 shows F-1402's no-default dialog in its place. `licenceDeclined` shows F-2601's dialog with STR:S027 (F-3902 rule 11).
 Every other kind shows F-2601's dialog (remote-ssh) or F-0502 7.E4's (remote-containers), with `reason` and `hints`.
 An empty `reason` (kinds `unknown` and `brokenPipe`) shows STR:S030. `channelClosed` arrives with the reason
