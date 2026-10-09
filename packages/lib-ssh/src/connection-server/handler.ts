@@ -111,6 +111,13 @@ export class ConnectionHandler implements MessageHandler {
     this.leaseCount = leaseIds.length;
   }
 
+  /** The helper ends: `ssh` ends with it and the open questions close, whichever way the helper came to its end. */
+  close(): void {
+    this.killed = true;
+    this.session?.kill();
+    this.askpass.closeAll();
+  }
+
   /** The helper has no end action: its policy only waits out a grace. */
   runAction(): Promise<void> {
     return Promise.resolve();
@@ -139,9 +146,7 @@ export class ConnectionHandler implements MessageHandler {
       case 'answer':
         return this.answer(request.promptId, request.text);
       case 'kill':
-        this.killed = true;
-        this.session?.kill();
-        this.askpass.closeAll();
+        this.close();
         this.control.stop();
         return {type: 'accepted'};
       default:
@@ -180,7 +185,13 @@ export class ConnectionHandler implements MessageHandler {
     );
     if (outcome.kind === 'failed') {
       this.options.logLine(`ssh did not start: ${outcome.failure}`);
-      this.loginFailed([outcome.detail], undefined, false);
+      this.state = 'idle';
+      this.tell({
+        type: 'spawnFailed',
+        cause: outcome.failure,
+        detail: outcome.detail,
+      });
+      this.ownership.ownerGaveUp();
     } else if (this.killed) {
       outcome.session.kill();
     } else {

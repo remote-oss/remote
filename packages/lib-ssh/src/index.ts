@@ -150,3 +150,21 @@ export {
   type LauncherFiles,
   nodeLauncherFiles,
 } from './askpass/launcher.ts';
+export {
+  acquireConnection,
+  type AcquireConnectionOutcome,
+  type ConnectedState,
+  type ConnectionClientEnvironment,
+  type ConnectionFailure,
+  type ConnectionLimits,
+  type ConnectionNotice,
+  type ConnectionAcquireRequest,
+  CONNECTION_NAMESPACE,
+  type ConnectOutcome,
+  killConnection,
+  SharedConnection,
+} from './connection-server/client.ts';
+export {
+  readConnectionEvent,
+  readConnectionReply,
+} from './connection-server/messages.ts';

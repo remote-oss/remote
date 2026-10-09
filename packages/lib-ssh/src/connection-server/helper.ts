@@ -127,6 +127,7 @@ export async function runConnectionHelper(
         logLine: environment.logLine,
       });
     } finally {
+      handler.close();
       await askpassServer.close();
     }
   } finally {

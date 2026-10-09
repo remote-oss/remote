@@ -1,0 +1,506 @@
+/**
+ * @fileoverview S9, the window side: a window acquires the shared connection of a host (starting its helper or
+ * joining the one that runs), waits for the login, answers the questions `ssh` asks, and releases it. Nothing here
+ * logs or keeps an answer.
+ */
+
+import {
+  acquire,
+  type AcquireFailure,
+  type ClientEnvironment,
+  type EndPolicy,
+  type HelperEvent,
+  type HelperLease,
+  type PlainData,
+  recordPath,
+  stop,
+  type Timer,
+} from 'lib-helper';
+import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
+import type {FailureKind} from '../diagnostics/rules.ts';
+import type {SpawnFailure} from '../process/session.ts';
+import type {ConnectionHelperOptions} from './helper.ts';
+import {
+  type ConnectionEvent,
+  type ConnectionReply,
+  readConnectionEvent,
+  readConnectionReply,
+  type Refusal,
+  type SharedRecord,
+} from './messages.ts';
+
+/** The registry namespace of the connection helpers. */
+export const CONNECTION_NAMESPACE = 'ssh.connection';
+
+/** What a window asks of the helper registry: the host's helper, started if none runs. */
+export interface ConnectionAcquireRequest {
+  /** The registry folder of the profile. */
+  folder: string;
+  /** The host string exactly as written: one helper per host string. */
+  hostString: string;
+  /** The bundled helper script. */
+  script: string;
+  /** The helper's start values; the client adds the SOCKS port and the record's file. */
+  options: Omit<ConnectionHelperOptions, 'socksPort' | 'recordFile'>;
+  /** The end policy of the helper: the grace after its last lease (a policy value, 2 to 4 seconds). */
+  policy: EndPolicy;
+  cancellation: AbortSignal;
+}
+
+/** What the client side needs beyond lib-helper's environment. */
+export interface ConnectionClientEnvironment {
+  helper: ClientEnvironment;
+  /** A free loopback port for the SOCKS forward; it is bound and released, never held. */
+  freePort: () => Promise<number>;
+}
+
+/** The limits of the waits of one connection, all in milliseconds and all policy values. */
+export interface ConnectionLimits {
+  /** How long the helper may take to answer one request. */
+  requestMilliseconds: number;
+  /** How long the whole wait for the login may take. */
+  loginMilliseconds: number;
+}
+
+/** What a window is told while it holds the connection, or waits for it. */
+export type ConnectionNotice =
+  | {
+      type: 'prompt';
+      promptId: number;
+      surface: Extract<ConnectionEvent, {type: 'prompt'}>['surface'];
+      text: string;
+    }
+  | {type: 'promptClosed'; promptId: number}
+  | {type: 'ownerChanged'; owner: number}
+  | {type: 'waitingForOtherWindow'}
+  | {type: 'transportLost'}
+  | {type: 'helperGone'};
+
+/** Why the connection is not there. */
+export type ConnectionFailure =
+  | {
+      kind: 'loginFailed';
+      failure: FailureKind;
+      reason?: FailureReason;
+      hints: FailureHint[];
+    }
+  | {kind: 'spawnFailed'; cause: SpawnFailure; detail: string}
+  | {kind: 'transportLost'}
+  | {kind: 'helperGone'}
+  | {kind: 'helperRefused'; reason: string}
+  | {kind: 'timeout'}
+  | {kind: 'cancelled'};
+
+/** The connection a window holds once the login is done. */
+export interface ConnectedState {
+  socksPort: number;
+  /** What an earlier window left for reuse, or null when nothing was stored yet. */
+  sharedRecord: SharedRecord | null;
+}
+
+/** How the wait for the login ended. */
+export type ConnectOutcome =
+  | ({kind: 'connected'} & ConnectedState)
+  | {kind: 'failed'; failure: ConnectionFailure};
+
+/** What one wait for the login needs from the connection that holds it. */
+interface LoginSteps {
+  limitMilliseconds: number;
+  timer: Timer;
+  leaseId: number;
+  askConnect(): Promise<Asked>;
+  /** The state of a connection that is set up: the SOCKS port the helper announced, if it did. */
+  setUp(announced: number | undefined): Promise<ConnectOutcome>;
+  /** Another window owns the login. */
+  waiting(): void;
+}
+
+/**
+ * One wait for the login. The helper's answer to the request to connect says whether this window owns the login, and
+ * what follows is told by events, so an event that comes before the answer waits for it. The time limit stops while a
+ * question is open, because only the user can answer it, and starts over when the last question closes.
+ */
+class LoginWait {
+  private readonly steps: LoginSteps;
+  private readonly finish: (outcome: ConnectOutcome) => void;
+  private readonly early: ConnectionEvent[] = [];
+  private readonly openPrompts = new Set<number>();
+  private cancelTimer: (() => void) | undefined;
+  private owner = false;
+  private asking = false;
+  private finished = false;
+
+  /** A wait that has not started; `finish` receives how it ended, once. */
+  constructor(steps: LoginSteps, finish: (outcome: ConnectOutcome) => void) {
+    this.steps = steps;
+    this.finish = finish;
+  }
+
+  /** Starts the time limit and asks to connect. */
+  start(): void {
+    this.armTimer();
+    void this.request();
+  }
+
+  /** The caller cancelled. */
+  abort(): void {
+    this.end({kind: 'failed', failure: {kind: 'cancelled'}});
+  }
+
+  /** An event of the helper, or the loss of the helper itself. */
+  hear(event: ConnectionEvent | 'helperGone'): void {
+    if (event === 'helperGone') {
+      this.end({kind: 'failed', failure: {kind: 'helperGone'}});
+    } else if (event.type === 'transportLost') {
+      this.end({kind: 'failed', failure: {kind: 'transportLost'}});
+    } else if (this.asking) {
+      this.early.push(event);
+    } else {
+      this.handle(event);
+    }
+  }
+
+  private end(outcome: ConnectOutcome): void {
+    if (!this.finished) {
+      this.finished = true;
+      this.cancelTimer?.();
+      this.finish(outcome);
+    }
+  }
+
+  private armTimer(): void {
+    this.cancelTimer?.();
+    this.cancelTimer = this.steps.timer(this.steps.limitMilliseconds, () => {
+      this.end({kind: 'failed', failure: {kind: 'timeout'}});
+    });
+  }
+
+  private async request(): Promise<void> {
+    this.asking = true;
+    const asked = await this.steps.askConnect();
+    this.asking = false;
+    if (asked.kind === 'failed') {
+      this.end({kind: 'failed', failure: asked.failure});
+    } else if (asked.reply.type === 'accepted') {
+      this.owner = true;
+    } else if (asked.reply.type === 'refused') {
+      await this.refused(asked.reply.reason);
+    } else {
+      this.end({
+        kind: 'failed',
+        failure: {kind: 'helperRefused', reason: 'unexpected reply'},
+      });
+    }
+    for (const event of this.early.splice(0)) {
+      this.handle(event);
+    }
+  }
+
+  private async refused(reason: Refusal): Promise<void> {
+    if (reason === 'alreadyConnected') {
+      this.end(await this.steps.setUp(undefined));
+    } else {
+      this.steps.waiting();
+    }
+  }
+
+  private handle(event: ConnectionEvent): void {
+    switch (event.type) {
+      case 'prompt':
+        this.openPrompts.add(event.promptId);
+        this.cancelTimer?.();
+        break;
+      case 'promptClosed':
+        this.openPrompts.delete(event.promptId);
+        if (this.openPrompts.size === 0) {
+          this.armTimer();
+        }
+        break;
+      case 'connected':
+        void this.steps.setUp(event.socksPort).then(outcome => {
+          this.end(outcome);
+        });
+        break;
+      case 'loginFailed':
+        if (this.owner) {
+          this.end({
+            kind: 'failed',
+            failure: {
+              kind: 'loginFailed',
+              failure: event.kind,
+              ...(event.reason === undefined ? {} : {reason: event.reason}),
+              hints: event.hints,
+            },
+          });
+        }
+        break;
+      case 'spawnFailed':
+        if (this.owner) {
+          this.end({
+            kind: 'failed',
+            failure: {
+              kind: 'spawnFailed',
+              cause: event.cause,
+              detail: event.detail,
+            },
+          });
+        }
+        break;
+      case 'ownerChanged':
+        if (event.owner === this.steps.leaseId && !this.owner) {
+          void this.request();
+        }
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+/** The helper's answer to one request, or why there is none. */
+type Asked =
+  | {kind: 'answered'; reply: ConnectionReply}
+  | {kind: 'failed'; failure: ConnectionFailure};
+
+/** The shared connection of one host, as one window holds it. */
+export class SharedConnection {
+  private readonly lease: HelperLease;
+  private readonly limits: ConnectionLimits;
+  private readonly timer: Timer;
+  private readonly listeners = new Set<(notice: ConnectionNotice) => void>();
+  private readonly openPrompts = new Set<number>();
+  private watcher:
+    ((event: ConnectionEvent | 'helperGone') => void) | undefined;
+
+  /** A connection over `lease`. */
+  constructor(lease: HelperLease, limits: ConnectionLimits, timer: Timer) {
+    this.lease = lease;
+    this.limits = limits;
+    this.timer = timer;
+    lease.onEvent(event => {
+      this.receive(event);
+    });
+  }
+
+  /** Calls `listener` with each notice from now on; the returned function stops it. */
+  onNotice(listener: (notice: ConnectionNotice) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  /**
+   * Waits until the connection is set up. This window asks to connect when it owns the login, waits while another
+   * window owns it, and asks again when the login falls to it after the owner gave up. Cancelling ends the wait
+   * only; the lease stays until it is released.
+   */
+  connect(cancellation: AbortSignal): Promise<ConnectOutcome> {
+    return new Promise(resolve => {
+      function onAbort(): void {
+        wait.abort();
+      }
+      const wait = new LoginWait(
+        {
+          limitMilliseconds: this.limits.loginMilliseconds,
+          timer: this.timer,
+          leaseId: this.lease.leaseId,
+          askConnect: () => this.askHelper({type: 'connect'}),
+          setUp: announced => this.connected(announced),
+          waiting: () => {
+            this.notify({type: 'waitingForOtherWindow'});
+          },
+        },
+        outcome => {
+          this.watcher = undefined;
+          cancellation.removeEventListener('abort', onAbort);
+          resolve(outcome);
+        },
+      );
+      this.watcher = event => {
+        wait.hear(event);
+      };
+      if (cancellation.aborted) {
+        wait.abort();
+      } else {
+        cancellation.addEventListener('abort', onAbort, {once: true});
+        wait.start();
+      }
+    });
+  }
+
+  /** Gives the answer to a question that `ssh` asked; true when it was the first answer and went to `ssh`. */
+  async answer(promptId: number, text: string): Promise<boolean> {
+    const asked = await this.askHelper({type: 'answer', promptId, text});
+    return (
+      asked.kind === 'answered' &&
+      asked.reply.type === 'answered' &&
+      asked.reply.accepted
+    );
+  }
+
+  /** Leaves what a later window needs to reuse the server; true when the helper took it. */
+  async storeSharedRecord(record: SharedRecord): Promise<boolean> {
+    const asked = await this.askHelper({
+      type: 'setSharedRecord',
+      record: {...record},
+    });
+    return asked.kind === 'answered' && asked.reply.type === 'accepted';
+  }
+
+  /** Ends this window's lease; the helper ends a short grace after the last one. */
+  release(): void {
+    this.lease.release();
+  }
+
+  /** The state of a connection that is set up: the SOCKS port (given, or the helper's) and the shared record. */
+  private async connected(
+    announced: number | undefined,
+  ): Promise<ConnectOutcome> {
+    const socksPort = announced ?? this.lease.payload.socksPort;
+    if (typeof socksPort !== 'number') {
+      return {
+        kind: 'failed',
+        failure: {kind: 'helperRefused', reason: 'no SOCKS port'},
+      };
+    }
+    const asked = await this.askHelper({type: 'sharedRecord'});
+    if (asked.kind === 'failed') {
+      return asked;
+    }
+    return {
+      kind: 'connected',
+      socksPort,
+      sharedRecord:
+        asked.reply.type === 'sharedRecord' ? asked.reply.record : null,
+    };
+  }
+
+  private async askHelper(body: PlainData): Promise<Asked> {
+    const outcome = await this.lease.request(
+      body,
+      this.limits.requestMilliseconds,
+    );
+    switch (outcome.kind) {
+      case 'reply': {
+        const reply = readConnectionReply(outcome.body);
+        return reply === undefined
+          ? {
+              kind: 'failed',
+              failure: {kind: 'helperRefused', reason: 'unreadable reply'},
+            }
+          : {kind: 'answered', reply};
+      }
+      case 'rejected':
+        return {
+          kind: 'failed',
+          failure: {kind: 'helperRefused', reason: outcome.reason},
+        };
+      case 'helperGone':
+        return {kind: 'failed', failure: {kind: 'helperGone'}};
+      default:
+        return {kind: 'failed', failure: {kind: 'timeout'}};
+    }
+  }
+
+  private receive(event: HelperEvent): void {
+    if (event.kind === 'helperGone') {
+      this.notify({type: 'helperGone'});
+      this.watcher?.('helperGone');
+      return;
+    }
+    if (event.kind !== 'message') {
+      return;
+    }
+    const parsed = readConnectionEvent(event.body);
+    if (parsed === undefined) {
+      return;
+    }
+    this.noticeOf(parsed);
+    this.watcher?.(parsed);
+  }
+
+  /** The notice a window shows for an event; a question already open is not shown twice. */
+  private noticeOf(event: ConnectionEvent): void {
+    switch (event.type) {
+      case 'prompt':
+        if (!this.openPrompts.has(event.promptId)) {
+          this.openPrompts.add(event.promptId);
+          this.notify(event);
+        }
+        break;
+      case 'promptClosed':
+        if (this.openPrompts.delete(event.promptId)) {
+          this.notify(event);
+        }
+        break;
+      case 'ownerChanged':
+      case 'waitingForOtherWindow':
+      case 'transportLost':
+        this.notify(event);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private notify(notice: ConnectionNotice): void {
+    for (const listener of this.listeners) {
+      listener(notice);
+    }
+  }
+}
+
+/** Why no connection was acquired, or the connection to wait on. */
+export type AcquireConnectionOutcome =
+  | {kind: 'acquired'; connection: SharedConnection}
+  | {kind: 'failed'; failure: AcquireFailure};
+
+/**
+ * Takes this window's lease on the helper of a host, starting the helper when none runs. The login is not waited
+ * for: the window subscribes to the notices it needs, then calls `connect`.
+ */
+export async function acquireConnection(
+  environment: ConnectionClientEnvironment,
+  request: ConnectionAcquireRequest,
+  limits: ConnectionLimits,
+): Promise<AcquireConnectionOutcome> {
+  const socksPort = await environment.freePort();
+  const outcome = await acquire(environment.helper, {
+    folder: request.folder,
+    namespace: CONNECTION_NAMESPACE,
+    helperKey: request.hostString,
+    script: request.script,
+    options: {
+      ...request.options,
+      socksPort,
+      recordFile: recordPath(
+        request.folder,
+        CONNECTION_NAMESPACE,
+        request.hostString,
+      ),
+    },
+    policy: request.policy,
+    payload: {socksPort},
+    cancellation: request.cancellation,
+  });
+  return outcome.kind === 'acquired'
+    ? {
+        kind: 'acquired',
+        connection: new SharedConnection(
+          outcome.lease,
+          limits,
+          environment.helper.timer,
+        ),
+      }
+    : outcome;
+}
+
+/** Ends the helper of a host and its `ssh`, silently; done also when no helper runs. */
+export function killConnection(
+  environment: ConnectionClientEnvironment,
+  folder: string,
+  hostString: string,
+): Promise<void> {
+  return stop(environment.helper, folder, CONNECTION_NAMESPACE, hostString);
+}

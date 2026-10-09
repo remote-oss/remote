@@ -240,7 +240,7 @@ describe('connection handler (contracts §4 S9)', () => {
   });
 
   describe('ssh that cannot start', () => {
-    it('is a failed login of an unknown kind and is logged', async () => {
+    it('is told to the windows as a failed start, and logged', async () => {
       spawner = new ScriptedSpawner(startError('ENOENT', 'spawn ssh ENOENT'));
       create();
       handler.onLeasesChanged([1, 2]);
@@ -251,7 +251,11 @@ describe('connection handler (contracts §4 S9)', () => {
         [
           {type: 'accepted'},
           [
-            {type: 'loginFailed', kind: 'unknown', hints: []},
+            {
+              type: 'spawnFailed',
+              cause: 'clientVanished',
+              detail: 'spawn ssh ENOENT',
+            },
             {type: 'ownerChanged', owner: 2},
           ],
           ['ssh did not start: clientVanished'],
@@ -461,6 +465,22 @@ describe('connection handler (contracts §4 S9)', () => {
       const stranger = await port.connect(ASKPASS_ENDPOINT);
       stranger.send({type: 'ask', nonce: 'other', text: QUESTION});
       await settled();
+      deepStrictEqual(events, []);
+    });
+  });
+
+  describe('close', () => {
+    it('ends ssh without an event when the helper ends', async () => {
+      handler.onLeasesChanged([1]);
+      await send(1, {type: 'connect'});
+      events.length = 0;
+      handler.close();
+      await settled();
+      deepStrictEqual([wasKilled(), events], [true, []]);
+    });
+
+    it('is harmless when nothing runs', () => {
+      handler.close();
       deepStrictEqual(events, []);
     });
   });
