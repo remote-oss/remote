@@ -24,6 +24,7 @@
     "check-licences": "node tools/licences.ts",
     "identifiers": "node tools/identifiers.ts",
     "check-identifiers": "node tools/identifiers.ts --check",
+    "check-public-surface": "node tools/public-surface.ts",
     "check-string-tables": "node tools/string-tables.ts",
     "package": "pnpm build && node tools/package-extensions.ts",
     "test:acceptance": "pnpm package && node tools/acceptance.ts"

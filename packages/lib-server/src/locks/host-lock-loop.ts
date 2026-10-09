@@ -11,7 +11,7 @@ export type HostLockStep<T> = () => Promise<
 /**
  * Drive the host-lock wait: attempt once immediately, and after each busy result report the
  * attempt number and wait the interval, up to `attempts` busy results. After the last attempt
- * there is no wait. The host lock is bounded by the attempt count, so it needs no R-79 rule.
+ * there is no wait. The host lock is bounded by the attempt count, so it needs no deadline of its own.
  */
 export async function hostLockLoop<T>(
   step: HostLockStep<T>,

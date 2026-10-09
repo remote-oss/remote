@@ -1,6 +1,6 @@
 /**
  * @fileoverview The rules of the CI check `identifiers` over one package's sources (ADR draft "Identifier tables",
- * decision 5; ADR draft "Stand-down gating"): the R-27 ledger and namespaces, the internal ids, the stand-down
+ * decision 5; ADR draft "Stand-down gating"): the ledger of invented identifiers and the namespaces, the internal ids, the stand-down
  * gating of static contributions, and the references between identifiers.json and the manifest.
  */
 
@@ -19,7 +19,7 @@ export interface RuleOutcome {
   notes: string[];
 }
 
-/** The standing-down key as a one-element list once the room has named it, else an empty list. */
+/** The standing-down key as a one-element list once the identity decision has named it, else an empty list. */
 function namedStandingDownKey(declared: DeclaredIdentifiers): string[] {
   const standingDownKey = declared.standingDownKey ?? '';
   return standingDownKey === '' ? [] : [standingDownKey];
@@ -130,7 +130,7 @@ function exempts(exemption: UngatedEntry, entry: MenuEntry): boolean {
   return exemption.menu === entry.menu && exemption.item === entry.item;
 }
 
-/** Whether a when clause gates its entry: the reference's clause followed by the negated key, or that alone. */
+/** Whether a when clause gates its entry: the clause that tests for the other extension followed by the negated key, or that alone. */
 function isGated(when: string, standingDownKey: string): boolean {
   return (
     when === `!${standingDownKey}` ||
@@ -145,7 +145,7 @@ function gatingProblems(
 ): string[] {
   const {manifest, declared} = sources;
   const problems: string[] = [];
-  // An entry hidden with `when: "false"` shows nothing, so it cannot duplicate the reference's.
+  // An entry hidden with `when: "false"` shows nothing, so it cannot duplicate an entry of the extension it stands down for.
   for (const entry of manifest.menuEntries.filter(
     candidate => candidate.when !== 'false',
   )) {

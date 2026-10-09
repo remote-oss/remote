@@ -1,5 +1,15 @@
-# remote-extensionpack
+# Remote Development
 
-Extension `remote-oss.vscode-remote-extensionpack` (Remote Development). Specifications and conformance suite: `remote-oss/remote-extensionpack`.
+Remote development in one install: SSH, containers and WSL.
 
-Status: placeholder. Owner, feature ids and allowed imports are filled in by the component view.
+This extension is under development; its features arrive in coming releases.
+
+## For maintainers
+
+| | |
+|---|---|
+| Maintainers | remote-oss |
+| Features | none yet (they arrive in a later release) |
+| Components | none yet |
+| Allowed imports | none yet |
+| Coverage exclusions | none |

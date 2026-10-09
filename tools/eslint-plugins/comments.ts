@@ -6,6 +6,7 @@
 
 import type {AST, Rule} from 'eslint';
 import tseslint from 'typescript-eslint';
+import {forbiddenMatches} from '../public-surface-terms.ts';
 
 type Comment = AST.Program['comments'][number];
 
@@ -242,6 +243,40 @@ const lineComments: Rule.RuleModule = {
   },
 };
 
+const publicSurface: Rule.RuleModule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Keep the wording of the process out of comments, which describe the product',
+    },
+    schema: [],
+    messages: {
+      processWording:
+        "'{{term}}' is wording of the process; a comment describes what the code does (ADR-0008).",
+    },
+  },
+  create(context) {
+    return {
+      Program() {
+        const comments = context.sourceCode.getAllComments();
+        for (const group of groupComments(comments)) {
+          if (group.first.loc == null) {
+            continue;
+          }
+          for (const match of forbiddenMatches(group.text)) {
+            context.report({
+              loc: group.first.loc,
+              messageId: 'processWording',
+              data: {term: match.term},
+            });
+          }
+        }
+      },
+    };
+  },
+};
+
 const todoIssue: Rule.RuleModule = {
   meta: {
     type: 'problem',
@@ -270,13 +305,14 @@ const todoIssue: Rule.RuleModule = {
   },
 };
 
-/** The `comments` plugin: `line-comments`, `no-commented-out-code`, `no-conversation` and `todo-issue`. */
+/** The `comments` plugin: `line-comments`, `no-commented-out-code`, `no-conversation`, `public-surface` and `todo-issue`. */
 export const commentsPlugin = {
   meta: {name: 'comments'},
   rules: {
     'line-comments': lineComments,
     'no-commented-out-code': noCommentedOutCode,
     'no-conversation': noConversation,
+    'public-surface': publicSurface,
     'todo-issue': todoIssue,
   },
 };

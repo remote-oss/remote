@@ -1,6 +1,5 @@
 /**
- * @fileoverview string-tables: the build check of a package's string tables (contracts §1.2; F-0103, F-2002,
- * F-4003, F-5001).
+ * @fileoverview string-tables: the build check of a package's string tables (contracts §1.2).
  *
  *     node tools/string-tables.ts                  every package in packages/
  *     node tools/string-tables.ts remote-ssh ...   the named package folders
@@ -8,7 +7,7 @@
  * Every `%key%` of package.json has a text in package.nls.json. Each locale has package.nls.<locale>.json with
  * exactly the keys of package.nls.json. When l10n/ exists, each locale has l10n/bundle.l10n.<locale>.json with
  * exactly the keys of the default bundle l10n/bundle.l10n.json, or, in a package that ships no default bundle
- * (F-4003 AC-8), the same keys as every other locale's bundle; the folder holds nothing else. Every text is a non-empty string. The locales are
+ * the same keys as every other locale's bundle; the folder holds nothing else. Every text is a non-empty string. The locales are
  * identifiers.json's `locales`, or the locales of the tables present when it names none.
  */
 

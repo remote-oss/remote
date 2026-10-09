@@ -1,5 +1,15 @@
-# remote-wsl
+# WSL
 
-Extension `remote-oss.remote-wsl` (WSL). Specifications and conformance suite: `remote-oss/remote-wsl`.
+Open your Linux projects in WSL and use Linux tools from a Windows editor, without leaving it.
 
-Status: placeholder. Owner, feature ids and allowed imports are filled in by the component view.
+This extension is under development; its features arrive in coming releases.
+
+## For maintainers
+
+| | |
+|---|---|
+| Maintainers | remote-oss |
+| Features | none yet (they arrive in a later release) |
+| Components | none yet |
+| Allowed imports | none yet |
+| Coverage exclusions | none |

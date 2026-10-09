@@ -162,7 +162,7 @@ function placementOf(placement: DownloadPlacement): {
 
 /**
  * The layout reused before the source is read: a bin layout with the same commit, else a
- * cliServers one (F-3902 rule 10), else none.
+ * cliServers one, else none.
  */
 function reuseBeforeSource(
   layouts: readonly ExistingLayout[],

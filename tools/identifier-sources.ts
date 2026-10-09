@@ -1,7 +1,8 @@
 /**
  * @fileoverview Reads the two sources of a package's identifiers (ADR draft "Identifier tables"): the manifest
  * `package.json`, which contributes them, and the hand-written `identifiers.json`, which holds what the manifest
- * cannot say: the stand-down identity, the context keys, the R-46 policy, the internal ids, the R-27 ledger, the
+ * cannot say: the stand-down identity, the context keys, the policy for commands invoked outside their context, the internal ids,
+ * the ledger of invented identifiers, the
  * legacy setting pairs and the locales.
  */
 
@@ -64,14 +65,14 @@ interface DeclaredContextKey {
   setter: 'extension' | 'core';
 }
 
-/** An id core sees but the manifest does not contribute (F-5902 §5). */
+/** An id core sees but the manifest does not contribute. */
 interface InternalCommand {
   id: string;
   role: 'served' | 'called';
   kind: 'query' | 'change' | 'push';
 }
 
-/** A row of the R-27 ledger. */
+/** A row of the ledger of invented identifiers. */
 interface InventedIdentifier {
   id: string;
   kind: LedgerKind;
@@ -79,7 +80,7 @@ interface InventedIdentifier {
   date: string;
 }
 
-/** A current setting key and its legacy twin, with the side that wins when both are set (F-0102 BR-4). */
+/** A current setting key and its legacy twin, with the side that wins when both are set. */
 interface SettingPair {
   current: string;
   legacy: string;
@@ -100,7 +101,7 @@ export interface DeclaredIdentifiers {
   /** The id of the extension this package stands down for when both are enabled. */
   standsDownFor: string;
   /**
-   * Absent for a package that never stands down (F-4901 §6); empty while the room's identity decision has not
+   * Absent for a package that never stands down; empty while the identity decision has not
    * named the key.
    */
   standingDownKey?: string;

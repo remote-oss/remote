@@ -15,6 +15,7 @@
         "tests/acceptance/vscode-test.mjs",
         "tests/acceptance/suite/*.test.ts",
         "tools/identifiers.ts",
+        "tools/public-surface.ts",
         "tools/string-tables.ts",
         "tools/package-extensions.ts",
         ".vscode-test.mjs",
