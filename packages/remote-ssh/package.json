@@ -502,12 +502,15 @@
     "lib-authority": "workspace:*",
     "lib-helper": "workspace:*",
     "lib-host": "workspace:*",
+    "lib-identifiers": "workspace:*",
     "lib-log": "workspace:*",
     "lib-product": "workspace:*",
     "lib-server": "workspace:*",
-    "lib-ssh": "workspace:*"
+    "lib-ssh": "workspace:*",
+    "lib-standdown": "workspace:*"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"
-  }
+  },
+  "l10n": "./l10n"
 }

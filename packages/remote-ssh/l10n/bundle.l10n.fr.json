@@ -1,0 +1,5 @@
+{
+  "Remote - SSH stays inactive in this window because another extension that provides SSH remotes is enabled. Both use the same commands and settings. Disable one of the two and reload the window.": "Remote - SSH stays inactive in this window because another extension that provides SSH remotes is enabled. Both use the same commands and settings. Disable one of the two and reload the window.",
+  "Show Other Extension": "Show Other Extension",
+  "'{0}' is not possible in the current context.": "'{0}' is not possible in the current context."
+}

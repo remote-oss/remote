@@ -287,6 +287,9 @@ importers:
       lib-host:
         specifier: workspace:*
         version: link:../lib-host
+      lib-identifiers:
+        specifier: workspace:*
+        version: link:../lib-identifiers
       lib-log:
         specifier: workspace:*
         version: link:../lib-log
@@ -299,6 +302,9 @@ importers:
       lib-ssh:
         specifier: workspace:*
         version: link:../lib-ssh
+      lib-standdown:
+        specifier: workspace:*
+        version: link:../lib-standdown
     devDependencies:
       esbuild:
         specifier: ^0.28.2
