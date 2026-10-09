@@ -38,13 +38,12 @@ export interface OpenRequest {
   target: OpenTarget;
 }
 
+/** Runs the call that asks the editor, and turns a refusal, thrown or rejected, into a value. */
 async function attempt(
-  host: OpenerHost,
-  command: string,
-  ...parameters: unknown[]
+  editorCall: () => PromiseLike<unknown>,
 ): Promise<OpenOutcome> {
   try {
-    await host.executeCommand(command, ...parameters);
+    await editorCall();
     return {kind: 'opened'};
   } catch (caught) {
     return {
@@ -54,16 +53,20 @@ async function attempt(
   }
 }
 
-/** Runs what the argument builder decided, turning its plain address into the editor's. */
+/**
+ * Runs what the argument builder decided, turning its plain address into the editor's. The editor may refuse to
+ * build an address, so that happens inside the guard too.
+ */
 function execute(host: OpenerHost, command: OpenCommand): Promise<OpenOutcome> {
   if (command.command === 'vscode.newWindow') {
-    return attempt(host, command.command, command.options);
+    return attempt(() => host.executeCommand(command.command, command.options));
   }
-  return attempt(
-    host,
-    command.command,
-    host.addressOf(command.uri),
-    command.options,
+  return attempt(() =>
+    host.executeCommand(
+      command.command,
+      host.addressOf(command.uri),
+      command.options,
+    ),
   );
 }
 
@@ -100,10 +103,10 @@ export function openLocal(
 
 /** Reloads the window. */
 export function reload(host: OpenerHost): Promise<OpenOutcome> {
-  return attempt(host, RELOAD_COMMAND);
+  return attempt(() => host.executeCommand(RELOAD_COMMAND));
 }
 
 /** Leaves the remote side and returns the window to this machine. */
 export function closeRemote(host: OpenerHost): Promise<OpenOutcome> {
-  return attempt(host, CLOSE_REMOTE_COMMAND);
+  return attempt(() => host.executeCommand(CLOSE_REMOTE_COMMAND));
 }

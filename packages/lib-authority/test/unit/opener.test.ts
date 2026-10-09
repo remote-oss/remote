@@ -17,7 +17,10 @@ function refusing(reason: unknown): PromiseLike<never> {
   };
 }
 
-function recordingHost(refusal?: unknown): {
+function recordingHost(
+  refusal?: unknown,
+  addressRefusal?: Error,
+): {
   host: OpenerHost;
   calls: unknown[][];
 } {
@@ -31,7 +34,12 @@ function recordingHost(refusal?: unknown): {
           ? Promise.resolve(undefined)
           : refusing(refusal);
       },
-      addressOf: parts => ({address: parts}),
+      addressOf: parts => {
+        if (addressRefusal !== undefined) {
+          throw addressRefusal;
+        }
+        return {address: parts};
+      },
     },
   };
 }
@@ -123,6 +131,24 @@ describe('opening a window on a remote authority (F-2502, F-5902 section 5)', ()
     );
   });
 
+  it('F-5902: an address the editor refuses to build is a refusal as a value, and no command runs', async () => {
+    const {host, calls} = recordingHost(
+      undefined,
+      new Error('path not absolute'),
+    );
+    deepStrictEqual(
+      [
+        await openRemote(host, 'ssh-remote+h', {
+          path: 'relative',
+          pathKind: 'folder',
+          target: 'current',
+        }),
+        calls,
+      ],
+      [{kind: 'rejected', reason: 'path not absolute'}, []],
+    );
+  });
+
   it('F-5902: a refusal that is not an Error is worded from its text', async () => {
     const {host} = recordingHost('cancelled');
     deepStrictEqual(
@@ -160,6 +186,18 @@ describe('opening a window on this machine (F-0406)', () => {
     deepStrictEqual(calls, [
       ['vscode.newWindow', {remoteAuthority: null, reuseWindow: true}],
     ]);
+  });
+
+  it('F-0406: an address the editor refuses to build is a refusal as a value', async () => {
+    const {host} = recordingHost(undefined, new Error('path not absolute'));
+    deepStrictEqual(
+      await openLocal(host, {
+        path: 'relative',
+        pathKind: 'folder',
+        target: 'current',
+      }),
+      {kind: 'rejected', reason: 'path not absolute'},
+    );
   });
 
   it('F-0406: a refusal is a value', async () => {
