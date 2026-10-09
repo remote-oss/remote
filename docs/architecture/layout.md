@@ -59,6 +59,6 @@ it never ships (ruled 2026-10-08, card tooling-04).
 ## Libraries
 
 Confirmed by the container view (`c4-l2-containers.md` §1, 2026-10-06): `lib-log`, `lib-identifiers`,
-`lib-standdown`, `lib-product`, `lib-authority`, `lib-companion`, `lib-host`, `lib-ssh`, `lib-server`,
+`lib-standdown`, `lib-product`, `lib-authority`, `lib-companion`, `lib-host`, `lib-ssh`, `lib-server`, `lib-wsl` (no milestone; cards wsl-00..06, 2026-10-09),
 `lib-forwarding`. A library exists only with at least two consumers; the import graph in the container view is the
 one the lint enforces. Folders are created by the coding worker of the first package that needs them.
