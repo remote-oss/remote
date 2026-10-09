@@ -3,7 +3,13 @@
  * test file with a key of its own, and a host channel over `ssh` and `scp` to it. Nothing here needs the editor.
  */
 
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  appendFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
@@ -32,6 +38,18 @@ export interface RunningHost {
   channel: SshHostChannel;
   /** What every `ssh` run to the host shares: the target, the settings and the options `ssh -G` computes. */
   base: RunBase;
+  /** The same for another `Host` of the run's ssh_config, such as one added with `appendConfig`. */
+  baseOf(alias: string): RunBase;
+  /** Adds text to the run's ssh_config. */
+  appendConfig(text: string): void;
+  /** Makes an Ed25519 key pair at `keyFile`, its private key protected by `passphrase`. */
+  generateKey(keyFile: string, passphrase: string): void;
+  /** Lets the user `harness` log in with the public key in the local file. */
+  authorize(publicKeyFile: string): void;
+  /** The port on this machine that reaches the host's `sshd`. */
+  port: number;
+  /** The run's folder: its keys and known hosts. */
+  runFolder: string;
   /** How many logins the host's `sshd` has accepted since it started. */
   logins(): number;
   /** The output of a command run in the container as the user harness, outside SSH. */
@@ -69,16 +87,16 @@ async function waitForHost(configFile: string): Promise<void> {
   }
 }
 
-/** What every run to `Host harness` of an ssh_config shares, with the options `ssh -G` computes for it. */
-function baseFor(configFile: string): RunBase {
+/** What every run to a `Host` of an ssh_config shares, with the options `ssh -G` computes for it. */
+function baseFor(configFile: string, alias: string): RunBase {
   const parsed = parseEffectiveOptions(
-    checked('ssh', ['-F', configFile, '-G', 'harness']),
+    checked('ssh', ['-F', configFile, '-G', alias]),
   );
   if ('parseError' in parsed) {
-    throw new Error(`ssh -G harness: ${parsed.parseError}`);
+    throw new Error(`ssh -G ${alias}: ${parsed.parseError}`);
   }
   return {
-    target: {host: 'harness'},
+    target: {host: alias},
     settings: {
       configFile,
       connectTimeout: 10,
@@ -154,7 +172,7 @@ export async function startHost(): Promise<RunningHost> {
     const configFile = path.join(runFolder, 'ssh_config');
     writeFileSync(configFile, harnessSshConfig(port, runFolder));
     await waitForHost(configFile);
-    const base = baseFor(configFile);
+    const base = baseFor(configFile, 'harness');
     const channel = channelTo(base);
     function stop(): void {
       runCommand('docker', ['rm', '--force', container]);
@@ -163,6 +181,35 @@ export async function startHost(): Promise<RunningHost> {
     return {
       channel,
       base,
+      baseOf: alias => baseFor(configFile, alias),
+      appendConfig: text => {
+        appendFileSync(configFile, text);
+      },
+      port,
+      runFolder,
+      generateKey: (keyFile, passphrase) => {
+        checked('ssh-keygen', [
+          '-q',
+          '-t',
+          'ed25519',
+          '-N',
+          passphrase,
+          '-f',
+          keyFile,
+        ]);
+      },
+      authorize: publicKeyFile => {
+        const key = readFileSync(publicKeyFile, 'utf8').trim();
+        checked('docker', [
+          'exec',
+          '--user',
+          'harness',
+          container,
+          'sh',
+          '-c',
+          `printf '%s\\n' '${key}' >> /home/harness/.ssh/authorized_keys`,
+        ]);
+      },
       logins: () => {
         const output = runCommand('docker', ['logs', container]);
         return (
