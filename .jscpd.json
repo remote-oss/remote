@@ -8,7 +8,8 @@
     "**/node_modules/**",
     "**/.tsc/**",
     "**/dist/**",
-    "**/.vscode-test/**"
+    "**/.vscode-test/**",
+    "**/vscode-dts/**"
   ],
   "reporters": ["console"]
 }
