@@ -29,6 +29,12 @@ describe('tunnel codec (card authority-01 table)', () => {
     });
   });
 
+  it("decodeAuthority('tunnel+/Ubuntu') -> malformed empty (an empty name with a distro)", () => {
+    deepStrictEqual(decodeAuthority('tunnel+/Ubuntu'), {
+      malformed: {family: 'tunnel', payload: '/Ubuntu', reason: 'empty'},
+    });
+  });
+
   it('encode of a tunnel target -> the name, or the name and the distro', () => {
     deepStrictEqual(
       [

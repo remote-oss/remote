@@ -29,6 +29,20 @@ describe('authority registry (card authority-01 table)', () => {
     });
   });
 
+  it('a bare family without + (wsl, exec, tunnel, ssh-remote) -> malformed unknownFamily', () => {
+    deepStrictEqual(
+      ['wsl', 'exec', 'tunnel', 'ssh-remote'].map(authority => {
+        const outcome = decodeAuthority(authority);
+        return 'malformed' in outcome ? outcome.malformed : undefined;
+      }),
+      ['wsl', 'exec', 'tunnel', 'ssh-remote'].map(authority => ({
+        family: authority,
+        payload: authority,
+        reason: 'unknownFamily',
+      })),
+    );
+  });
+
   it('encodeAuthority(decodeAuthority(a)) for one authority per family -> equals a', () => {
     deepStrictEqual(
       [

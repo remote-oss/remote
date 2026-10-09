@@ -63,40 +63,6 @@ export function outerPayload(
   return outer === undefined ? name : `${name}@${encodeAuthority(outer)}`;
 }
 
-/** The outcome a codec's decode gives, re-stamped with the family and the payload as written. */
-function finish<T extends UnionTarget>(
-  family: Family,
-  payload: string,
-  outcome: DecodedOrMalformed<T>,
-): DecodedOrMalformed<UnionTarget> {
-  if ('malformed' in outcome) {
-    const refusal: MalformedAuthority = {
-      family,
-      payload,
-      reason: outcome.malformed.reason,
-    };
-    return {malformed: refusal};
-  }
-  return {target: outcome.target, rawHostString: outcome.rawHostString};
-}
-
-/** Decodes the payload with the family's codec, keeping the family and payload. */
-function decodePayload(
-  family: Family,
-  payload: string,
-): DecodedOrMalformed<UnionTarget> {
-  if (family === 'ssh-remote') {
-    return finish(family, payload, sshRemoteCodec.decode(payload));
-  }
-  if (family === 'wsl') {
-    return finish(family, payload, wslCodec.decode(payload));
-  }
-  if (family === 'tunnel') {
-    return finish(family, payload, tunnelCodec.decode(payload));
-  }
-  return finish(family, payload, containerCodec(family).decode(payload));
-}
-
 /** Encodes the target with the family's codec. */
 function encodePayload(decoded: DecodedTarget): string {
   const {family, target} = decoded;
@@ -112,22 +78,37 @@ function encodePayload(decoded: DecodedTarget): string {
   return containerCodec(family).encode(target as ContainerTarget);
 }
 
-/** Splits an authority at its first `+` and decodes the payload with the family's codec. */
+/**
+ * Splits an authority at its first `+` and decodes the payload with the family's codec. An authority without
+ * a `+` has no family to hand the payload to, so it is refused as `unknownFamily` before any lookup.
+ */
 export function decodeAuthority(
   authority: string,
 ): DecodedTarget | {malformed: MalformedAuthority} {
   const plus = authority.indexOf('+');
-  const family = (plus === -1 ? authority : authority.slice(0, plus)) as Family;
-  const payload = plus === -1 ? '' : authority.slice(plus + 1);
-  if (!FAMILIES.includes(family)) {
+  if (plus === -1) {
     const refusal: MalformedAuthority = {
-      family,
+      family: authority as Family,
       payload: authority,
       reason: 'unknownFamily',
     };
     return {malformed: refusal};
   }
-  const outcome = decodePayload(family, payload);
+  const family = authority.slice(0, plus) as Family;
+  const payload = authority.slice(plus + 1);
+  if (!FAMILIES.includes(family)) {
+    return {
+      malformed: {family, payload: authority, reason: 'unknownFamily'},
+    };
+  }
+  const outcome: DecodedOrMalformed<UnionTarget> =
+    family === 'ssh-remote'
+      ? sshRemoteCodec.decode(payload)
+      : family === 'wsl'
+        ? wslCodec.decode(payload)
+        : family === 'tunnel'
+          ? tunnelCodec.decode(payload)
+          : containerCodec(family).decode(payload);
   if ('malformed' in outcome) {
     return {malformed: outcome.malformed};
   }

@@ -10,25 +10,27 @@ import type {
 
 const FAMILY = 'tunnel';
 
-/** Decodes a tunnel payload `<tunnelName>[/<distro>]`; an empty name is a refusal. */
+/** A refusal, carrying the payload and the reason the contract names. */
+function refuse(payload: string, reason: string): MalformedAuthority {
+  return {family: FAMILY, payload, reason};
+}
+
+/** Decodes a tunnel payload `<tunnelName>[/<distro>]`; an empty name, with or without a distro, is a refusal. */
 function decode(payload: string): DecodedOrMalformed<TunnelTarget> {
   if (payload === '') {
-    const refusal: MalformedAuthority = {
-      family: FAMILY,
-      payload,
-      reason: 'empty',
-    };
-    return {malformed: refusal};
+    return {malformed: refuse(payload, 'empty')};
   }
   const slash = payload.indexOf('/');
-  if (slash === -1) {
-    return {target: {tunnelName: payload}, rawHostString: payload};
+  const tunnelName = slash === -1 ? payload : payload.slice(0, slash);
+  if (tunnelName === '') {
+    return {malformed: refuse(payload, 'empty')};
+  }
+  const target: TunnelTarget = {tunnelName};
+  if (slash !== -1) {
+    target.distro = payload.slice(slash + 1);
   }
   return {
-    target: {
-      tunnelName: payload.slice(0, slash),
-      distro: payload.slice(slash + 1),
-    },
+    target,
     rawHostString: payload,
   };
 }

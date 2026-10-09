@@ -1,7 +1,7 @@
 /**
  * @fileoverview The ssh-remote codec: a JSON host, as the lower-case hex of a compact
  * {hostName, user?, port?}, and every other payload as a plain host string taken as written
- * (F-2301 BR-4; F-2008 BR-5).
+ * (the plain form keeps an upper-case letter or a /, + or \ separator plain out).
  */
 import {TextDecoder, TextEncoder} from 'node:util';
 import type {
@@ -20,8 +20,8 @@ const LOWER_HEX = /^[0-9a-f]+$/;
 const WHITESPACE = /[\t\n\r ]/;
 
 /**
- * A character that keeps an encoded text plain out, per F-2301 BR-4: an upper-case letter in any
- * script, or one of the three separators the reference never leaves plain.
+ * A character that keeps an encoded text plain out: an upper-case letter in any script, or one of
+ * the three separators we never leave plain.
  */
 const PLAIN_REFUSERS = /\p{Uppercase_Letter}|[/+\\]/u;
 
@@ -32,12 +32,10 @@ function refuse(payload: string, reason: string): MalformedAuthority {
 
 /** Whether the text holds a control character, including DEL. */
 function hasControl(text: string): boolean {
-  for (const character of text) {
-    for (let index = 0; index < character.length; index += 1) {
-      const code = character.charCodeAt(index);
-      if (code < 0x20 || code === 0x7f) {
-        return true;
-      }
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code < 0x20 || code === 0x7f) {
+      return true;
     }
   }
   return false;
@@ -60,7 +58,7 @@ function hexBytes(payload: string): Uint8Array {
 }
 
 /**
- * The port of a JSON payload: an integer 1-65535, or a string of digits in that range (F-2501 AC-6). The reason
+ * The port of a JSON payload: an integer 1-65535, or a string of digits in that range. The reason
  * when the value is present but not one of those; absent stays absent.
  */
 function decodePort(
@@ -156,7 +154,7 @@ function decode(payload: string): DecodedOrMalformed<SshTarget> {
 }
 
 /**
- * Encodes an ssh-remote target, per F-2301 BR-4: plain, exactly as written, when there is no user and
+ * Encodes an ssh-remote target: plain, exactly as written, when there is no user and
  * no port and the text carries no upper-case letter and none of the three separators; the hex of the
  * compact JSON otherwise. Brackets are never added or stripped.
  */
