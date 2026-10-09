@@ -45,3 +45,15 @@ export type LicenceRuleName = 'clientLicence' | 'sourceBased';
 
 /** The rules in force. `clientLicence` stays in the table, inactive. */
 export const ACTIVE_LICENCE_RULES: readonly LicenceRuleName[] = ['sourceBased'];
+
+/**
+ * The application names that keep the reference layout: an editor whose `applicationName` is one of these keeps
+ * the reference editor's folders and settings, and the others do not (ADR-0006).
+ */
+export const REFERENCE_LAYOUT_APPLICATION_NAMES: readonly string[] =
+  Object.freeze(['code', 'code-insiders']);
+
+/** Whether the editor keeps the reference layout, matched exactly against the table's names. */
+export function keepsReferenceLayout(applicationName: string): boolean {
+  return REFERENCE_LAYOUT_APPLICATION_NAMES.includes(applicationName);
+}
