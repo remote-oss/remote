@@ -615,6 +615,13 @@ contract (area C) defines the volume.
 
 ## 6. lib-forwarding
 
+Rulings from the build (2026-10-09, #223): the connection contract `Duplex` carries back-pressure (`send` returns
+whether more may be fed, `onDrain`, `pause`, `resume`) and the relay bridge honours it both ways, so a slow side
+slows the other instead of growing a queue; the SOCKS5 dialer over the shared connection's `-D` relay (no
+authentication, connect to the host's IPv4 loopback port, every handshake wait bounded by a policy value) and the
+`node:net` loopback adapter (127.0.0.1 only, errors as closes, early bytes held until the first listener) live in
+lib-forwarding as the window tunnel's adapters; the `ssh -N -L` second-session adapter stays lib-ssh's.
+
 ### W1 port-search
 
 | Operation | Inputs | Output | Failures |
