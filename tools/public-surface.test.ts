@@ -107,6 +107,35 @@ describe('public-surface', () => {
     deepStrictEqual(checkPublicSurface(workspace.root), []);
   });
 
+  it('reports process wording in the pull request template', () => {
+    workspace.write(
+      '.github/pull_request_template.md',
+      'Line one.\nSee the card.\n',
+    );
+    deepStrictEqual(
+      checkPublicSurface(workspace.root).map(problem =>
+        problem.slice(0, problem.indexOf(' is wording')),
+      ),
+      [".github/pull_request_template.md:2: 'card'"],
+    );
+  });
+
+  it('reports process wording in the root contributing guide', () => {
+    workspace.write('CONTRIBUTING.md', 'Line one.\nAsk the worker.\n');
+    deepStrictEqual(
+      checkPublicSurface(workspace.root).map(problem =>
+        problem.slice(0, problem.indexOf(' is wording')),
+      ),
+      ["CONTRIBUTING.md:2: 'worker'"],
+    );
+  });
+
+  it('passes a contributing guide and template that speak as a product', () => {
+    workspace.write('.github/pull_request_template.md', 'What changes.\n');
+    workspace.write('CONTRIBUTING.md', 'Answer the six questions.\n');
+    deepStrictEqual(checkPublicSurface(workspace.root), []);
+  });
+
   it('passes a tree without a docs folder', () => {
     deepStrictEqual(checkPublicSurface(workspace.root), []);
   });

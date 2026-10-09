@@ -43,6 +43,10 @@ function filesBelow(directory: string): string[] {
 /** The shipped and user-facing files under `root`, as paths relative to it. */
 function surfaceFiles(root: string): string[] {
   const absolute: string[] = [];
+  if (existsSync(path.join(root, 'CONTRIBUTING.md'))) {
+    absolute.push(path.join(root, 'CONTRIBUTING.md'));
+  }
+  absolute.push(...filesBelow(path.join(root, '.github')));
   for (const folder of packageFolders(root)) {
     const directory = path.join(root, 'packages', folder);
     absolute.push(

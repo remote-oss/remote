@@ -7,7 +7,6 @@
 /** Words that name the process wherever they appear. */
 const BARE_TERMS: readonly RegExp[] = [
   /\bcards?\b/gi,
-  /\bconformance\b/gi,
   /\bspecs?\b/gi,
   /\brooms?\b/gi,
   /\bworkers?\b/gi,
@@ -32,7 +31,6 @@ const PROCESS_SENSES: readonly RegExp[] = [
   /\breference\s+(?:extension|implementation|behaviou?r|client|manifest|product)s?\b/gi,
   /\b(?:spec|specification)s?\s+issues?\b/gi,
   /\b(?:published|written)\s+specifications?\b/gi,
-  /\bspecifications?\s+(?:and|&)\s+conformance\b/gi,
   /\b(?:coding|design|architecture|review|agent)\s+sessions?\b/gi,
 ];
 
