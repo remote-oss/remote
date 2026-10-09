@@ -501,7 +501,7 @@ Never: accept for the user.
 |---|---|---|---|
 | `startOrReuse` | H1, installed server, options (bind host, port range, socket mode, grace time, default extensions, licence accepted, extra start options from the record's allow-list, environment setup) | port or socket, connection token, process id, remote environment additions | `serverStart` (STR:S135 at the end of the start wait), `invalidPortRange` (before any ssh), `cancelled` |
 | `serverPort` | the connection | the TCP port the running server listens on at the host's loopback, or `none` in socket mode or when no server runs; it never contacts the host (F-2509 option (a), ruled by the lead 2026-10-06, for B's Open Web UI) | none |
-| `installExtensions` | H1, server, ids filtered by F-2506 BR-2 | done; failures are logged per id (F-2506 Q1 (b)) | none raised |
+| `installExtensions` | H1, server, ids filtered by F-2506 BR-2, a deadline (the library's named default of 120 s unless the caller passes one) | done with one result per id, or `notRun` with its reason (`cancelled` is the caller's, `deadline` the step's); failures are logged per id (F-2506 Q1 (b)); no host lock, so a second window never waits on it (ruled 2026-10-08, #151) | none raised |
 
 `startOrReuse` reports `reused: boolean`; the pipeline calls `installExtensions` only when `reused` is true, since a
 freshly started server receives the default ids on its command line (ruled 2026-10-08). The launcher accepts `--install-extension` without `--start-server`: confirmed at the floor tag ([oss]
