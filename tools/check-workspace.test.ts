@@ -403,6 +403,66 @@ describe('check-workspace', () => {
     });
   });
 
+  describe('the listed-files rule', () => {
+    const remoteATsconfig = path.join('packages', 'remote-a', 'tsconfig.json');
+
+    function declarationProjects(): void {
+      write('tsconfig.base.json', {
+        compilerOptions: {
+          strict: true,
+          composite: true,
+          emitDeclarationOnly: true,
+          declaration: true,
+          outDir: '${configDir}/.tsc',
+          module: 'preserve',
+          moduleResolution: 'bundler',
+          skipLibCheck: true,
+        },
+        files: [],
+        include: ['${configDir}/src'],
+      });
+      manifest('remote-a', {dependencies: {'lib-x': 'workspace:*'}});
+      manifest('lib-x', {
+        exports: {
+          '.': {types: './.tsc/src/index.d.ts', default: './src/index.ts'},
+        },
+      });
+      write('packages/lib-x/tsconfig.json', {
+        extends: '../../tsconfig.base.json',
+      });
+      write('packages/lib-x/src/index.ts', 'export const x = 1;');
+      write(
+        'packages/remote-a/src/index.ts',
+        "import {x} from 'lib-x';\nexport const a = x;",
+      );
+      link('packages/remote-a/node_modules/lib-x', 'packages/lib-x');
+      link('node_modules/mocha', 'node_modules/.pnpm/mocha');
+    }
+
+    it('accepts a package that references its library dependency', function () {
+      // Each test spawns tsc --listFilesOnly, which the CI runner runs more than five times slower
+      // than locally.
+      this.timeout(10_000);
+      declarationProjects();
+      write('packages/remote-a/tsconfig.json', {
+        extends: '../../tsconfig.base.json',
+        references: [{path: '../lib-x'}],
+      });
+      deepStrictEqual(problems(), []);
+    });
+
+    it('names a package that compiles its library dependency sources', function () {
+      this.timeout(10_000);
+      declarationProjects();
+      write('packages/remote-a/tsconfig.json', {
+        extends: '../../tsconfig.base.json',
+      });
+      deepStrictEqual(problems(), [
+        `${remoteATsconfig}: compiles lib-x sources; remote-a declares lib-x but is missing a reference to packages/lib-x`,
+      ]);
+    });
+  });
+
   describe('dependency cycles', () => {
     it('reports a cycle of three libraries once', () => {
       manifest('lib-x', {dependencies: {'lib-y': 'workspace:*'}});

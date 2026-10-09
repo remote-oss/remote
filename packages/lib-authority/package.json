@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./.tsc/src/index.d.ts",
+      "default": "./src/index.ts"
+    }
   }
 }

@@ -7,6 +7,7 @@
  * links an install creates in node_modules.
  */
 
+import {spawnSync} from 'node:child_process';
 import {
   existsSync,
   lstatSync,
@@ -25,6 +26,7 @@ import {
   packageFolders,
   REPOSITORY_ROOT,
   sortedEntries,
+  resolveBinary,
 } from './repository.ts';
 
 const DEPENDENCY_FIELDS = [
@@ -165,6 +167,8 @@ class WorkspaceChecker {
   private readonly packagesByName: Map<string, WorkspacePackage>;
   private readonly workspaceFile: WorkspaceFile;
   private readonly rootManifest: Manifest;
+  private readonly tscPath: string;
+  private readonly realDirectories = new Map<WorkspacePackage, string>();
   private readonly dependencyGraph = new Map<
     WorkspacePackage,
     Set<WorkspacePackage>
@@ -182,6 +186,7 @@ class WorkspaceChecker {
     );
     this.workspaceFile = this.readFile('pnpm-workspace.yaml', parseYaml) ?? {};
     this.rootManifest = this.readFile('package.json', JSON.parse) ?? {};
+    this.tscPath = resolveBinary('typescript/lib/tsc.js');
   }
 
   findProblems(): string[] {
@@ -195,6 +200,7 @@ class WorkspaceChecker {
     this.checkSymbolicLinks();
     this.checkInstalledLinks();
     this.checkDependencyCycles();
+    this.checkConsumption();
     return this.problems;
   }
 
@@ -755,6 +761,120 @@ class WorkspaceChecker {
         );
       }
     }
+  }
+
+  /**
+   * A consumer's program compiles another package's declaration output, never its sources: the
+   * library's `exports` types condition points at its emitted declarations, and a project
+   * reference is what makes `tsc` take them. `tsc --listFilesOnly` per package, and every
+   * listed source path must be inside the package or in node_modules; a package that compiles
+   * another package's sources is named with what is missing, its reference and, when the
+   * dependency is undeclared, the dependency.
+   */
+  private checkConsumption(): void {
+    for (const owner of this.packages) {
+      if (this.installedWorkspaceTargets(owner).length === 0) {
+        continue;
+      }
+      for (const config of [...filesBelow(owner.directory)].filter(
+        isTsconfig,
+      )) {
+        this.checkConsumerProgram(owner, config);
+      }
+    }
+  }
+
+  /** The workspace packages a package's installed node_modules links reach, except itself. */
+  private installedWorkspaceTargets(
+    owner: WorkspacePackage,
+  ): WorkspacePackage[] {
+    const found = new Map<string, WorkspacePackage>();
+    for (const [, resolved] of installedLinks(owner.directory)) {
+      const target = this.packages.find(
+        candidate =>
+          candidate !== owner &&
+          isInside(this.realDirectory(candidate), resolved),
+      );
+      if (target !== undefined) {
+        found.set(target.name, target);
+      }
+    }
+    return [...found.values()];
+  }
+
+  /** The package's directory without symlinks, so a listed path and a package resolve to the same tree. */
+  private realDirectory(thePackage: WorkspacePackage): string {
+    let real = this.realDirectories.get(thePackage);
+    if (real === undefined) {
+      real = realpathSync(thePackage.directory);
+      this.realDirectories.set(thePackage, real);
+    }
+    return real;
+  }
+
+  private checkConsumerProgram(owner: WorkspacePackage, config: string): void {
+    const where = this.relative(config);
+    // The config is relative to the root and run there: an absolute path would resolve the
+    // referenced project and the node_modules link through different symlinks.
+    const result = spawnSync(
+      process.execPath,
+      [this.tscPath, '-p', where, '--listFilesOnly'],
+      {encoding: 'utf8', cwd: this.root},
+    );
+    const offenders = new Set<WorkspacePackage>();
+    for (const line of result.stdout.split('\n')) {
+      const file = line.trim();
+      if (
+        file === '' ||
+        /: error TS\d{4}/.test(file) ||
+        file.endsWith('.d.ts') ||
+        file.includes(`${path.sep}node_modules${path.sep}`)
+      ) {
+        continue;
+      }
+      const resolved = path.resolve(this.root, file);
+      if (!existsSync(resolved) || !resolved.endsWith('.ts')) {
+        continue;
+      }
+      const real = realpathSync(resolved);
+      if (isInside(this.realDirectory(owner), real)) {
+        continue;
+      }
+      const other = this.packages.find(
+        candidate =>
+          candidate !== owner && isInside(this.realDirectory(candidate), real),
+      );
+      if (other !== undefined) {
+        offenders.add(other);
+      }
+    }
+    for (const other of [...offenders].sort((left, right) =>
+      left.name < right.name ? -1 : 1,
+    )) {
+      const declares = this.declaredDependencyNames(owner).includes(other.name);
+      this.problems.push(
+        `${where}: compiles ${other.name} sources; ${owner.name} ${
+          declares
+            ? `declares ${other.name} but is missing a reference to ${other.manifestDir}`
+            : `neither declares ${other.name} nor references ${other.manifestDir}`
+        }`,
+      );
+    }
+  }
+
+  /** The package names a package declares as `workspace:` dependencies in any dependency field. */
+  private declaredDependencyNames(owner: WorkspacePackage): string[] {
+    const names = new Set<string>();
+    for (const field of DEPENDENCY_FIELDS) {
+      for (const [name, specifier] of Object.entries(
+        owner.manifest[field] ?? {},
+      )) {
+        if (specifier.startsWith('workspace:')) {
+          names.add(name);
+        }
+      }
+    }
+    return [...names];
   }
 
   private linkedPackage(
