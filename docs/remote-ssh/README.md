@@ -41,7 +41,7 @@ You do not install anything on the host yourself, and you do not need administra
 | **Remote-SSH: New Window on Active Host** | In a connected window, opens another window on the same host without asking again. |
 | **Remote-SSH: Kill Local Connection Server For Host...** | Ends the shared connection to a host. Windows of that host reconnect, and ask for a password again where one is needed. |
 | **Remote-SSH: Show Log** | Opens the *Remote - SSH* output channel. |
-| **Remote-SSH: Help**, **Get Started with SSH**, **Provide Feedback**, **Settings**, **Report Issue...** | Open this guide, the getting-started page, the feedback page, the extension's settings and the issue reporter. |
+| **Remote-SSH: Help**, **Remote-SSH: Get Started with SSH**, **Remote-SSH: Provide Feedback**, **Remote-SSH: Settings**, **Remote-SSH: Report Issue...** | Open this guide, the getting-started page, the feedback page, the extension's settings and the issue reporter. |
 
 The first three are also in the menu of the remote indicator at the left of the status bar.
 
@@ -65,7 +65,7 @@ settings: a workspace cannot change them.
 | `remote.SSH.bindHost` | `127.0.0.1` | Per host: the address the server listens on. |
 | `remote.SSH.httpProxy`, `remote.SSH.httpsProxy` | empty | A proxy for the host's downloads. Either a text for all hosts, or a map from host name (or `*`) to a proxy address. |
 | `remote.SSH.useCurlAndWgetConfigurationFiles` | off | Let `curl` and `wget` on the host read the user's own configuration files. |
-| `remote.SSH.useFlock` | on | Take the install lock on the host with `flock` where the host is Linux; otherwise a hard link is used. |
+| `remote.SSH.useFlock` | on | Take the install lock on the host with `flock` whenever the host has it; otherwise a hard link is used. |
 | `remote.SSH.lockfilesInTmp` | off | Keep the install lock in `/tmp` instead of the server's folder; useful for home folders on a network file system. |
 | `remote.SSH.enableRemoteCommand` *(application)* | off | Experimental: run a `RemoteCommand` from your SSH configuration. It applies only while the shared connection is on and the host has no `remote.SSH.remotePlatform` entry. |
 | `remote.SSH.defaultExtensions` | empty | Extension identifiers to install on every host you connect to. |
