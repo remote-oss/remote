@@ -442,4 +442,27 @@ describe('the cap on the bytes a bridge holds before the host side opens', () =>
       [true, true],
     );
   });
+
+  it('holds nothing and sends nothing for a client that has already gone past the cap', async () => {
+    const {fixture, client, host} = await connected(['work', 'later']);
+    client?.receive(Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8, 9));
+    client?.receive(Uint8Array.of(10));
+    fixture.dialer.openNext();
+    await settled();
+    deepStrictEqual(
+      [host()?.closed, client?.closed, host()?.sent, host()?.paused],
+      [true, true, [], false],
+    );
+  });
+
+  it('treats a cap that is not a number as failing safe, so the first byte closes the client', async () => {
+    const {fixture, client} = await connected(['work', 'later'], Number.NaN);
+    client?.receive(Uint8Array.of(1));
+    fixture.dialer.openNext();
+    await settled();
+    deepStrictEqual(
+      [fixture.dialer.connections[1]?.closed, client?.closed],
+      [true, true],
+    );
+  });
 });
