@@ -19,6 +19,9 @@ Reviewing coder: `remote-coding-worker-1`.
   64-hex ids (`\b[0-9a-fA-F]{40}\b|\b[0-9a-fA-F]{64}\b`), apply the run rule to the pieces between them, join. So a
   hyphen does not break a run, a name like `server-<commit>-<epoch>` stays readable, and a UUID (36 characters with
   its hyphens) is still redacted. Underscores stay word characters: `<commit>_x` is one run of 42 and is redacted.
+- A run never starts or ends with `-`: the edge hyphens of a candidate run are trimmed before it is replaced, so the
+  hyphen that joined a carved-out id to a token survives (`<commit>-[redacted]`); a UUID is still one run (ruled by
+  remote-pm 2026-10-08, confirmed by the lead).
 - The marker is never applied twice to the same span.
 
 ## 3. Test table
@@ -39,6 +42,7 @@ Reviewing coder: `remote-coding-worker-1`.
 | 40 hex + `'-'` + 32 letters | 40 hex + `'-[redacted]'` |
 | `'lease 123e4567-e89b-12d3-a456-426614174000 ended'` | `'lease [redacted] ended'` |
 | 64 hex + `'-'` + 40 hex | unchanged |
+| `'-'` + 32 letters + `'-'` | `'-[redacted]-'` |
 
 ## 4. Rule for the worker
 
