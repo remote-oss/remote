@@ -22,6 +22,7 @@ export function openRemoteCommand(authority: string, path: string | undefined, p
 // path given → vscode.openFolder with the vscode-remote uri (pathKind 'workspace' uses the same command; the uri path is the .code-workspace file); target 'current' → forceReuseWindow true, forceNewWindow false; 'new' → forceNewWindow true, forceReuseWindow false
 // no path → vscode.newWindow with remoteAuthority; reuseWindow = (target === 'current')
 export function openLocalCommand(path: string | undefined, pathKind: PathKind, target: OpenTarget): OpenCommand;   // file scheme with forceLocalWindow true; no path → { command: 'vscode.newWindow', options: { remoteAuthority: null, reuseWindow: target === 'current' } }
+// Wiring note (2026-10-08, #181): `vscode.openFolder` accepts only the editor's own `Uri` instances, so the opener adapter turns the plain `uri` object into one with `Uri.from(uri)` behind its port; the pure command stays a plain object.
 // Amended 2026-10-08 (#96; [oss] src/vs/workbench/browser/actions/workspaceCommands.ts at 1.139.1): `vscode.newWindow` without `remoteAuthority` opens a window on the CURRENT window's authority, so a local empty window needs `remoteAuthority: null`; `vscode.openFolder` reaches a local window by `forceLocalWindow: true`, never by the uri scheme alone.
 export type FailedLike = { kind: string; retryable: boolean; isReconnection: boolean; silent: boolean; userAlreadyNotified: boolean };
 export type ResolverOutcome = { kind: 'temporarilyNotAvailable' } | { kind: 'notAvailable'; handled: boolean } | { kind: 'presenter' };
