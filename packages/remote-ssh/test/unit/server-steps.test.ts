@@ -100,6 +100,9 @@ function leaseOn(channel: RecordingChannel): ConnectionLease {
     channel,
     socksPort: 1080,
     storeSharedRecord: () => Promise.resolve(true),
+    onNotice: () => () => undefined,
+    answer: () => Promise.resolve(false),
+    refuse: () => Promise.resolve(false),
     release: () => undefined,
   };
 }

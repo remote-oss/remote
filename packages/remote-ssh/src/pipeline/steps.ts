@@ -17,7 +17,7 @@ import type {
 } from 'lib-server';
 import type {Connected} from 'lib-authority';
 import type {HostChannel, PlatformHint} from 'lib-host';
-import type {FailureHint, SharedRecord} from 'lib-ssh';
+import type {ConnectionNotice, FailureHint, SharedRecord} from 'lib-ssh';
 import type {FailureDetail} from './failure.ts';
 
 /** The target of a connect as the authority decoded it: a plain host string, or a host with a user and a port. */
@@ -67,6 +67,12 @@ export interface ConnectionLease {
   storeSharedRecord(record: SharedRecord): Promise<boolean>;
   /** Gives the lease back, or ends the direct session; called once, after a failure or when the window ends. */
   release(): void;
+  /** Hears the notices of the login; the returned function stops it. */
+  onNotice(listener: (notice: ConnectionNotice) => void): () => void;
+  /** Gives the answer to one of the login's questions; true when it reached `ssh`. */
+  answer(promptId: number, text: string): Promise<boolean>;
+  /** Cancels one of the login's questions; true when it was open. */
+  refuse(promptId: number): Promise<boolean>;
 }
 
 /** What opening the window's tunnel gives: where the window connects, and what it can do over the tunnel. */
