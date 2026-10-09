@@ -1,0 +1,11 @@
+{
+  "exclude": {
+    "src/extension.ts": "loads the editor",
+    "src/identifiers.generated.ts": "generated; nothing imports it until activation registers commands"
+  },
+  "ratchet": {
+    "lines": 100,
+    "branches": 100,
+    "functions": 100
+  }
+}

@@ -1,0 +1,4 @@
+**
+!package.json
+!package.nls*.json
+!dist/extension.js
