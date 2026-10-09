@@ -97,11 +97,15 @@ export {
 export {type HostLockStep, hostLockLoop} from './locks/host-lock-loop.ts';
 export type {
   ClientFilePort,
+  DownloadBounds,
+  DownloadFacts,
+  DownloadFailureCause,
   DownloadPort,
   DownloadRequest,
   DownloadResult,
 } from './transfer/ports.ts';
 export {
+  type ArchiveCache,
   DISCARD_DEADLINE_MILLISECONDS,
   type DownloadPlan,
   transfer,

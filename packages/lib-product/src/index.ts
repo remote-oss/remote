@@ -20,6 +20,7 @@ export {
 } from './policies.ts';
 export {
   ACTIVE_LICENCE_RULES,
+  allowedRedirectHosts,
   type LicenceRuleName,
   REFERENCE_LAYOUT_APPLICATION_NAMES,
   keepsReferenceLayout,

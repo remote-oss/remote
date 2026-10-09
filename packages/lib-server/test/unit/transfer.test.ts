@@ -9,6 +9,8 @@ import {
   type ScriptAnswer,
 } from 'lib-host/testing/recording-channel';
 import {
+  type ArchiveCache,
+  type DownloadBounds,
   type DownloadPlan,
   type DownloadRequest,
   type DownloadResult,
@@ -18,6 +20,7 @@ import {
   transfer,
   type TransferOutcome,
   type TransferPhase,
+  type Verification,
 } from '../../src/index.ts';
 import {parametersFor} from './fake-host.ts';
 
@@ -29,7 +32,9 @@ const HOST_FOLDER = '/host/tmp';
 
 const INSTALL_FOLDER = '/home/user/.server-data/bin/abc123';
 
-const ARCHIVE_NAME = 'server-abc123-1700000000000.tar.gz';
+const TOKEN = 'token1';
+
+const ARCHIVE_NAME = `server-abc123-1700000000000-${TOKEN}.tar.gz`;
 
 const LOCAL_FILE = path.join(CLIENT_FOLDER, ARCHIVE_NAME);
 
@@ -42,7 +47,21 @@ const NEVER_CANCELLED = new AbortController().signal;
 /** Short, so that a stalled channel ends a test quickly. */
 const TEST_DEADLINE_MILLISECONDS = 30;
 
-const DOWNLOADED: DownloadResult = {kind: 'downloaded'};
+const DOWNLOADED: DownloadResult = {
+  kind: 'downloaded',
+  facts: {},
+  finalAddress: ADDRESS,
+};
+
+const BOUNDS = {
+  deadlineMilliseconds: 30_000,
+  stallMilliseconds: 5000,
+  maximumBytes: 1_000_000,
+};
+
+const KEPT = '/client/cache/abc123/server.tar.gz';
+
+const TEMPORARY = `${KEPT}_1700000000000-${TOKEN}`;
 
 const CHANNEL_CLOSED: ChannelFailure = {
   kind: 'channelClosed',
@@ -91,6 +110,8 @@ interface TransferRun {
   channel: RecordingChannel;
   downloads: DownloadRequest[];
   removed: string[];
+  /** The renames of the client files, as `from -> to`. */
+  renames: string[];
   /** The log lines of the transfer, as `level message`. */
   logLines: string[];
 }
@@ -111,6 +132,21 @@ interface Setup {
   downloadRejects?: boolean;
   /** Makes deleting a client file fail. */
   removeRejects?: boolean;
+  cache?: ArchiveCache;
+  token?: string;
+  bounds?: DownloadBounds;
+  /** Makes the download port take the request and never answer. */
+  downloadNever?: boolean;
+  verification?: readonly Verification[];
+  /** The client files that exist before the transfer. */
+  existing?: readonly string[];
+  /** A client file that exists once the transfer has renamed something, as when another window renamed first. */
+  appearsAfterRename?: string;
+  /** The sizes and SHA-256 digests the client files have. */
+  sizes?: Readonly<Record<string, number>>;
+  digests?: Readonly<Record<string, string>>;
+  /** How a rename of a client file ends; it succeeds when absent. */
+  renameResult?: {kind: 'renamed'} | {kind: 'failed'; detail: string};
   /** Collects the deleted client files even when the transfer throws. */
   removed?: string[];
 }
@@ -121,11 +157,16 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
     platformHint: 'linux',
     scripts: setup.answers ?? (setup.installs ?? [INSTALLED]).map(answering),
     copies: setup.copies ?? [{matches: () => true, ending: {kind: 'copied'}}],
-    hostPaths: new Map(setup.inPlace === true ? [[LOCAL_FILE, IN_PLACE]] : []),
+    hostPaths: new Map(
+      setup.inPlace === true
+        ? [[setup.cache?.kind === 'kept' ? KEPT : LOCAL_FILE, IN_PLACE]]
+        : [],
+    ),
   });
   const phases: TransferPhase[] = [];
   const downloads: DownloadRequest[] = [];
   const removed = setup.removed ?? [];
+  const renames: string[] = [];
   const sink = new MemorySink();
   const results = [...(setup.downloadResults ?? [DOWNLOADED])];
   const outcome = await transfer(
@@ -133,6 +174,10 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
       plan: plan(setup.plan),
       parameters: parametersFor(),
       clientFolder: CLIENT_FOLDER,
+      downloadBounds: setup.bounds ?? BOUNDS,
+      temporaryToken: setup.token ?? TOKEN,
+      cache: setup.cache ?? {kind: 'none'},
+      verification: setup.verification ?? ['none'],
       hostFolder: HOST_FOLDER,
       cancellation: setup.cancellation ?? NEVER_CANCELLED,
       discardDeadlineMilliseconds: TEST_DEADLINE_MILLISECONDS,
@@ -142,6 +187,9 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
       download: {
         download: request => {
           downloads.push(request);
+          if (setup.downloadNever === true) {
+            return new Promise<DownloadResult>(() => undefined);
+          }
           if (setup.downloadRejects === true) {
             return Promise.reject(new Error('port crashed'));
           }
@@ -158,6 +206,17 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
             ? Promise.reject(new Error('file is busy'))
             : Promise.resolve();
         },
+        exists: file =>
+          Promise.resolve(
+            (setup.existing?.includes(file) ?? false) ||
+              (renames.length > 0 && setup.appearsAfterRename === file),
+          ),
+        size: file => Promise.resolve(setup.sizes?.[file] ?? 0),
+        sha256: file => Promise.resolve(setup.digests?.[file] ?? ''),
+        rename: (source, destination) => {
+          renames.push(`${source} -> ${destination}`);
+          return Promise.resolve(setup.renameResult ?? {kind: 'renamed'});
+        },
       },
       lockLoop: setup.lockLoop ?? runOnce,
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
@@ -172,6 +231,7 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
     channel,
     downloads,
     removed,
+    renames,
     logLines: sink.lines.map(line => `${line.level} ${line.message}`),
   };
 }
@@ -762,16 +822,632 @@ describe('the copy left on the host is deleted (V4)', () => {
       [failureOf(outcome), logLines],
       [
         {kind: 'cancelled'},
-        [`warn copied archive left on the host: ${REMOTE_COPY}`],
+        [
+          `info downloaded from ${ADDRESS}`,
+          `warn copied archive left in ${HOST_FOLDER}`,
+        ],
       ],
     );
   });
 
-  it('V4: a deletion that works logs nothing', async () => {
+  it('V4: a deletion that works logs no warning', async () => {
     const {logLines} = await runTransfer({
       plan: CLIENT,
       copies: copiesFailing({kind: 'copyFailed', detail: 'no space'}),
     });
-    deepStrictEqual(logLines, []);
+    deepStrictEqual(
+      logLines.filter(line => line.startsWith('warn')),
+      [],
+    );
+  });
+});
+
+describe('the kept cache (F-6301.BR-4, BR-5, BR-14)', () => {
+  const KEEP: Setup = {
+    plan: {where: 'client'},
+    cache: {kind: 'kept', archivePath: KEPT},
+  };
+
+  it('F-6301.BR-5: the download goes to a temporary name beside the cache entry', async () => {
+    const {downloads} = await runTransfer(KEEP);
+    deepStrictEqual(
+      downloads.map(request => request.destination),
+      [TEMPORARY],
+    );
+  });
+
+  it('F-6301.BR-5: the download is renamed into the cache once it is checked', async () => {
+    const {renames} = await runTransfer(KEEP);
+    deepStrictEqual(renames, [`${TEMPORARY} -> ${KEPT}`]);
+  });
+
+  it('F-6301.BR-4: the cache entry is the file that is copied to the host', async () => {
+    const {channel} = await runTransfer(KEEP);
+    deepStrictEqual(copiesOf(channel), [`${KEPT} -> ${REMOTE_COPY}`]);
+  });
+
+  it('F-6301.BR-4: the cache entry is not deleted when the transfer ends', async () => {
+    const {removed} = await runTransfer(KEEP);
+    deepStrictEqual(removed, [TEMPORARY]);
+  });
+
+  it('F-6301.BR-4: an entry already in the cache is used without a download', async () => {
+    const {downloads} = await runTransfer({...KEEP, existing: [KEPT]});
+    deepStrictEqual(downloads, []);
+  });
+
+  it('F-6301.BR-4: an entry already in the cache is copied to the host', async () => {
+    const {channel} = await runTransfer({...KEEP, existing: [KEPT]});
+    deepStrictEqual(copiesOf(channel), [`${KEPT} -> ${REMOTE_COPY}`]);
+  });
+
+  it('F-6301.BR-4: an entry already in the cache is left in place afterwards', async () => {
+    const {removed} = await runTransfer({...KEEP, existing: [KEPT]});
+    deepStrictEqual(removed, []);
+  });
+
+  it('F-6301.BR-4: an entry already in the cache shows no download phase', async () => {
+    const {phases} = await runTransfer({...KEEP, existing: [KEPT]});
+    deepStrictEqual(
+      phases.map(phase => phase.kind),
+      ['copying', 'installing'],
+    );
+  });
+
+  it('F-6301.6.7: a cache entry the host reads in place is not copied', async () => {
+    const {channel} = await runTransfer({...KEEP, inPlace: true});
+    deepStrictEqual(copiesOf(channel), []);
+  });
+
+  it('F-6301.BR-14: a window that loses the rename to another uses the entry that won', async () => {
+    const {outcome} = await runTransfer({
+      ...KEEP,
+      renameResult: {kind: 'failed', detail: 'target exists'},
+      appearsAfterRename: KEPT,
+    });
+    deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('F-6301.BR-5: a rename that fails without leaving an entry is a download failure', async () => {
+    const {outcome} = await runTransfer({
+      ...KEEP,
+      renameResult: {kind: 'failed', detail: 'disk is read-only'},
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'localDownload',
+      detail: 'disk is read-only',
+    });
+  });
+});
+
+describe('the check of a download (F-6301.BR-6)', () => {
+  const KEEP: Setup = {
+    plan: {where: 'client'},
+    cache: {kind: 'kept', archivePath: KEPT},
+  };
+  const ANNOUNCED = 'ab12';
+
+  function announcing(facts: {
+    announcedSha256?: string;
+    announcedLength?: number;
+  }): DownloadResult {
+    return {kind: 'downloaded', facts, finalAddress: ADDRESS};
+  }
+
+  const KEPT_MISMATCH: Setup = {
+    ...KEEP,
+    verification: ['headerHash'],
+    downloadResults: [announcing({announcedSha256: ANNOUNCED})],
+    digests: {[TEMPORARY]: 'ffff'},
+  };
+
+  const NOT_KEPT_MISMATCH: Setup = {
+    plan: {where: 'client'},
+    verification: ['headerHash'],
+    downloadResults: [announcing({announcedSha256: ANNOUNCED})],
+    digests: {[LOCAL_FILE]: 'ffff'},
+  };
+
+  it('F-6301.AC-12: a body that does not match the announced checksum is a checksum failure', async () => {
+    const {outcome} = await runTransfer({
+      ...KEEP,
+      verification: ['headerHash', 'lengthOnly'],
+      downloadResults: [announcing({announcedSha256: ANNOUNCED})],
+      digests: {[TEMPORARY]: 'ffff'},
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'verification',
+      mismatch: 'checksum',
+    });
+  });
+
+  it('F-6301.AC-12: a body that does not match is not renamed into the cache', async () => {
+    const {renames} = await runTransfer(KEPT_MISMATCH);
+    deepStrictEqual(renames, []);
+  });
+
+  it('F-6301.AC-12: a body that does not match is deleted', async () => {
+    const {removed} = await runTransfer(KEPT_MISMATCH);
+    deepStrictEqual(removed, [TEMPORARY]);
+  });
+
+  /** The failure of a kept download whose body is shorter than the length the response announced. */
+  async function shortBodyFailure(
+    rules: readonly Verification[],
+  ): Promise<unknown> {
+    const {outcome} = await runTransfer({
+      ...KEEP,
+      verification: rules,
+      downloadResults: [announcing({announcedLength: 100})],
+      sizes: {[TEMPORARY]: 60},
+    });
+    return failureOf(outcome);
+  }
+
+  const LENGTH_FAILURE = {kind: 'verification', mismatch: 'length'};
+
+  it('F-6301.AC-13: a body shorter than the announced length is a length failure', async () => {
+    deepStrictEqual(await shortBodyFailure(['lengthOnly']), LENGTH_FAILURE);
+  });
+
+  it('F-6301.BR-6: a body that matches the announced checksum is kept', async () => {
+    const {renames} = await runTransfer({
+      ...KEEP,
+      verification: ['headerHash'],
+      downloadResults: [announcing({announcedSha256: ANNOUNCED.toUpperCase()})],
+      digests: {[TEMPORARY]: ANNOUNCED},
+    });
+    deepStrictEqual(renames, [`${TEMPORARY} -> ${KEPT}`]);
+  });
+
+  it('F-6301.BR-12: with no announced checksum the length decides', async () => {
+    deepStrictEqual(
+      await shortBodyFailure(['headerHash', 'lengthOnly']),
+      LENGTH_FAILURE,
+    );
+  });
+
+  it('F-6301.7.E4: a failed check falls back to a download on the host when the plan allows it', async () => {
+    const {outcome} = await runTransfer({
+      ...KEEP,
+      plan: {where: 'client', clientFallback: true},
+      verification: ['headerHash'],
+      downloadResults: [announcing({announcedSha256: ANNOUNCED})],
+      digests: {[TEMPORARY]: 'ffff'},
+    });
+    deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('V4: a download that is not kept is checked too', async () => {
+    const {outcome} = await runTransfer(NOT_KEPT_MISMATCH);
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'verification',
+      mismatch: 'checksum',
+    });
+  });
+
+  it('V4: a download that is not kept is deleted after a failed check', async () => {
+    const {removed} = await runTransfer(NOT_KEPT_MISMATCH);
+    deepStrictEqual(removed, [LOCAL_FILE]);
+  });
+});
+
+describe('the bounds of a download (R-79)', () => {
+  const CLIENT: Setup = {plan: {where: 'client'}};
+
+  function failing(cause: 'stalled' | 'deadline' | 'tooLarge'): DownloadResult {
+    return {kind: 'failed', detail: '', cause};
+  }
+
+  it('R-79: the request carries the deadline, the stall time and the size ceiling', async () => {
+    const {downloads} = await runTransfer(CLIENT);
+    deepStrictEqual(
+      downloads.map(request => [
+        request.deadlineMilliseconds,
+        request.stallMilliseconds,
+        request.maximumBytes,
+      ]),
+      [[30_000, 5000, 1_000_000]],
+    );
+  });
+
+  it('R-79: the request names the hosts the download may end on', async () => {
+    const {downloads} = await runTransfer({
+      plan: {
+        where: 'client',
+        address: 'https://github.com/example/releases/download/1/server.tar.gz',
+      },
+    });
+    deepStrictEqual(
+      downloads.map(request => request.allowedHosts),
+      [
+        [
+          'github.com',
+          'objects.githubusercontent.com',
+          'release-assets.githubusercontent.com',
+        ],
+      ],
+    );
+  });
+
+  it('R-79: a body longer than the ceiling is too large even when the port did not say so', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      sizes: {[LOCAL_FILE]: BOUNDS.maximumBytes + 1},
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'serverDownload',
+      cause: 'tooLarge',
+    });
+  });
+
+  it('R-79: a body exactly at the ceiling is accepted', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      sizes: {[LOCAL_FILE]: BOUNDS.maximumBytes},
+    });
+    deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('R-79: a download that stalled is a timeout of that reason', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [failing('stalled')],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'downloadTimeout',
+      reason: 'stalled',
+    });
+  });
+
+  it('R-79: a deadline the port reports is a timeout of that reason', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [failing('deadline')],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'downloadTimeout',
+      reason: 'deadline',
+    });
+  });
+
+  it('R-79: a stalled client download falls back to the host when the plan allows it', async () => {
+    const {outcome} = await runTransfer({
+      plan: {where: 'client', clientFallback: true},
+      downloadResults: [failing('stalled')],
+    });
+    deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('R-79: a body that overran is a server download failure of the size', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [failing('tooLarge')],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'serverDownload',
+      cause: 'tooLarge',
+    });
+  });
+
+  it('R-79: a body that overran does not fall back to the host', async () => {
+    const {channel} = await runTransfer({
+      plan: {where: 'client', clientFallback: true},
+      downloadResults: [failing('tooLarge')],
+    });
+    deepStrictEqual(scriptsOf(channel), []);
+  });
+
+  it('R-79: a port that never answers ends at the deadline', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      downloadNever: true,
+      bounds: {...BOUNDS, deadlineMilliseconds: 30},
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'downloadTimeout',
+      reason: 'deadline',
+    });
+  });
+
+  it('R-79: a port that never answers is told to stop at the deadline', async () => {
+    const {downloads} = await runTransfer({
+      ...CLIENT,
+      downloadNever: true,
+      bounds: {...BOUNDS, deadlineMilliseconds: 30},
+    });
+    deepStrictEqual(
+      downloads.map(request => request.cancellation.aborted),
+      [true],
+    );
+  });
+
+  it('R-79: a port that never answers still has its file deleted', async () => {
+    const {removed} = await runTransfer({
+      ...CLIENT,
+      downloadNever: true,
+      bounds: {...BOUNDS, deadlineMilliseconds: 30},
+    });
+    deepStrictEqual(removed, [LOCAL_FILE]);
+  });
+
+  it('R-79: a cancellation of the caller ends a port that never answers as a cancellation', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('window closed'));
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      downloadNever: true,
+      cancellation: controller.signal,
+    });
+    deepStrictEqual(failureOf(outcome), {kind: 'cancelled'});
+  });
+});
+
+describe('the host of the final response (contracts V4, redirects)', () => {
+  const CLIENT: Setup = {plan: {where: 'client'}};
+  const GITHUB = 'https://github.com/example/releases/download/1/server.tar.gz';
+
+  function endingAt(finalAddress: string): DownloadResult {
+    return {kind: 'downloaded', facts: {}, finalAddress};
+  }
+
+  it('V4: a response from the source host is accepted', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [endingAt(`${ADDRESS}?token=1`)],
+    });
+    deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('V4: a response from another host is a server download failure of the redirect', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [endingAt('https://elsewhere.example.invalid/x')],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'serverDownload',
+      cause: 'redirectHost',
+    });
+  });
+
+  it('V4: release assets of github.com may come from the hosts the table lists', async () => {
+    const {outcome} = await runTransfer({
+      plan: {where: 'client', address: GITHUB},
+      downloadResults: [
+        endingAt('https://release-assets.githubusercontent.com/x'),
+      ],
+    });
+    deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('V4: a host the table does not list for github.com is refused', async () => {
+    const {outcome} = await runTransfer({
+      plan: {where: 'client', address: GITHUB},
+      downloadResults: [endingAt('https://cdn.example.invalid/x')],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'serverDownload',
+      cause: 'redirectHost',
+    });
+  });
+
+  it('V4: a final address that is not an address is refused', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [endingAt('not an address')],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'serverDownload',
+      cause: 'redirectHost',
+    });
+  });
+
+  it('V4: a download from https must not end over http on the source host', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [
+        endingAt('http://download.example.invalid/server.tar.gz'),
+      ],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'serverDownload',
+      cause: 'redirectHost',
+    });
+  });
+
+  it('V4: a download from https must not end over http on a host the table lists', async () => {
+    const {outcome} = await runTransfer({
+      plan: {where: 'client', address: GITHUB},
+      downloadResults: [
+        endingAt('http://release-assets.githubusercontent.com/x'),
+      ],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'serverDownload',
+      cause: 'redirectHost',
+    });
+  });
+
+  it('V4: a download from http may end over http', async () => {
+    const address = 'http://download.example.invalid/server.tar.gz';
+    const {outcome} = await runTransfer({
+      plan: {where: 'client', address},
+      downloadResults: [endingAt(address)],
+    });
+    deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('V4: a download from http may end over https', async () => {
+    const {outcome} = await runTransfer({
+      plan: {where: 'client', address: 'http://download.example.invalid/x'},
+      downloadResults: [endingAt('https://download.example.invalid/x')],
+    });
+    deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('V4: a final address of another scheme is refused', async () => {
+    const {outcome} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [endingAt('ftp://download.example.invalid/x')],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'serverDownload',
+      cause: 'redirectHost',
+    });
+  });
+
+  it('V4: the log has the origin and path of the final address, not its query', async () => {
+    const {logLines} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [endingAt(`${ADDRESS}?sig=abc&expires=1`)],
+    });
+    deepStrictEqual(logLines, [`info downloaded from ${ADDRESS}`]);
+  });
+
+  it('V4: the log has no fragment and no user name of the final address', async () => {
+    const {logLines} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [
+        endingAt(
+          'https://user:secret@download.example.invalid/server.tar.gz#frag',
+        ),
+      ],
+    });
+    deepStrictEqual(logLines, [`info downloaded from ${ADDRESS}`]);
+  });
+
+  it('V4: a final address that is not an address is logged as such', async () => {
+    const {logLines} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [endingAt('not an address')],
+    });
+    deepStrictEqual(logLines, ['info downloaded from (not an address)']);
+  });
+
+  it('V4: the final address is logged', async () => {
+    const {logLines} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [endingAt('https://elsewhere.example.invalid/x')],
+    });
+    deepStrictEqual(logLines, [
+      'info downloaded from https://elsewhere.example.invalid/x',
+    ]);
+  });
+
+  it('V4: a refused host does not fall back to the host download', async () => {
+    const {channel} = await runTransfer({
+      plan: {where: 'client', clientFallback: true},
+      downloadResults: [endingAt('https://elsewhere.example.invalid/x')],
+    });
+    deepStrictEqual(scriptsOf(channel), []);
+  });
+
+  it('V4: a refused download is deleted', async () => {
+    const {removed} = await runTransfer({
+      ...CLIENT,
+      downloadResults: [endingAt('https://elsewhere.example.invalid/x')],
+    });
+    deepStrictEqual(removed, [LOCAL_FILE]);
+  });
+});
+
+describe('a cache entry the host cannot unpack (F-6301.BR-4)', () => {
+  const FOUND: Setup = {
+    plan: {where: 'client'},
+    cache: {kind: 'kept', archivePath: KEPT},
+    existing: [KEPT],
+    copies: [
+      {matches: () => true, ending: {kind: 'copied'}},
+      {matches: () => true, ending: {kind: 'copied'}},
+    ],
+  };
+  const BAD_ENTRY = {
+    ...FOUND,
+    installs: [block('UnpackFailed'), INSTALLED],
+  };
+
+  it('V4: is deleted and downloaded once more in the same transfer', async () => {
+    const {outcome} = await runTransfer(BAD_ENTRY);
+    deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('V4: the entry is deleted', async () => {
+    const {removed} = await runTransfer(BAD_ENTRY);
+    deepStrictEqual(removed, [KEPT, TEMPORARY]);
+  });
+
+  it('V4: the new download takes its place', async () => {
+    const {renames} = await runTransfer(BAD_ENTRY);
+    deepStrictEqual(renames, [`${TEMPORARY} -> ${KEPT}`]);
+  });
+
+  it('V4: it is downloaded once, not in a loop', async () => {
+    const {downloads} = await runTransfer({
+      ...FOUND,
+      installs: [block('UnpackFailed'), block('UnpackFailed')],
+    });
+    deepStrictEqual(downloads.length, 1);
+  });
+
+  it('V4: a second failure to unpack is the outcome', async () => {
+    const {outcome} = await runTransfer({
+      ...FOUND,
+      installs: [block('UnpackFailed'), block('UnpackFailed')],
+    });
+    deepStrictEqual(failureOf(outcome), {kind: 'unpack'});
+  });
+
+  it('V4: another failure with a found entry leaves the entry alone', async () => {
+    const {removed} = await runTransfer({
+      ...FOUND,
+      installs: [block('CreateInstallDirFailed')],
+    });
+    deepStrictEqual(removed, []);
+  });
+
+  it('V4: a download of this run that the host cannot unpack is not downloaded again', async () => {
+    const {downloads} = await runTransfer({
+      plan: {where: 'client'},
+      cache: {kind: 'kept', archivePath: KEPT},
+      installs: [block('UnpackFailed')],
+    });
+    deepStrictEqual(downloads.length, 1);
+  });
+});
+
+describe("the names of the transfer's files (F-6301.BR-14)", () => {
+  const KEEP: Setup = {
+    plan: {where: 'client'},
+    cache: {kind: 'kept', archivePath: KEPT},
+  };
+
+  async function destinationFor(token: string): Promise<string[]> {
+    const {downloads} = await runTransfer({...KEEP, token});
+    return downloads.map(request => request.destination);
+  }
+
+  it('F-6301.BR-14: two windows that start in the same millisecond write different files', async () => {
+    deepStrictEqual(
+      [await destinationFor('a'), await destinationFor('b')],
+      [[`${KEPT}_1700000000000-a`], [`${KEPT}_1700000000000-b`]],
+    );
+  });
+
+  it('F-6301.BR-14: the copy on the host carries the token too', async () => {
+    const {channel} = await runTransfer({...KEEP, token: 'b'});
+    deepStrictEqual(copiesOf(channel), [
+      `${KEPT} -> ${HOST_FOLDER}/server-abc123-1700000000000-b.tar.gz`,
+    ]);
+  });
+
+  it('F-6301.BR-14: a download that is not kept carries the token in the client folder', async () => {
+    const {downloads} = await runTransfer({
+      plan: {where: 'client'},
+      token: 'b',
+    });
+    deepStrictEqual(
+      downloads.map(request => request.destination),
+      [path.join(CLIENT_FOLDER, 'server-abc123-1700000000000-b.tar.gz')],
+    );
   });
 });

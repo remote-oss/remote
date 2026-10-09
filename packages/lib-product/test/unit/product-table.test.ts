@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {
+  allowedRedirectHosts,
   REFERENCE_LAYOUT_APPLICATION_NAMES,
   keepsReferenceLayout,
 } from '../../src/index.ts';
@@ -32,5 +33,22 @@ describe('reference-layout application names (card product-01 table)', () => {
       ],
       [false, false, false, false],
     );
+  });
+});
+
+describe('the hosts a download may be redirected to', () => {
+  it('release assets of github.com come from two other hosts', () => {
+    deepStrictEqual(allowedRedirectHosts('github.com'), [
+      'objects.githubusercontent.com',
+      'release-assets.githubusercontent.com',
+    ]);
+  });
+
+  it('the source host is matched in any letter case', () => {
+    deepStrictEqual(allowedRedirectHosts('GitHub.com').length, 2);
+  });
+
+  it('a source with no entry may not be redirected to another host', () => {
+    deepStrictEqual(allowedRedirectHosts('download.example.invalid'), []);
   });
 });

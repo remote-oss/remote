@@ -40,6 +40,22 @@ export const MIT_RELEASE_PREFIXES: readonly string[] = [
   'https://github.com/VSCodium/vscodium-insiders/releases/',
 ];
 
+/**
+ * The hosts a download from a source host may be redirected to, keyed by the source host. A source that serves its
+ * files from another host (release assets) lists it here; every other final host is refused.
+ */
+const ALLOWED_REDIRECT_HOSTS: Readonly<Record<string, readonly string[]>> = {
+  'github.com': [
+    'objects.githubusercontent.com',
+    'release-assets.githubusercontent.com',
+  ],
+};
+
+/** The hosts a download from `sourceHost` may be redirected to, besides `sourceHost` itself. */
+export function allowedRedirectHosts(sourceHost: string): readonly string[] {
+  return ALLOWED_REDIRECT_HOSTS[sourceHost.toLowerCase()] ?? [];
+}
+
 /** The licence rules, by name. */
 export type LicenceRuleName = 'clientLicence' | 'sourceBased';
 
