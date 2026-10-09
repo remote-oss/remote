@@ -66,4 +66,4 @@ PR title `lib-forwarding: tunnel path selection (card forwarding-04)`. Reviewer:
 2. Ruled 2026-10-10 (#244): stays unimplemented. F-2104 BR-11 states the removal for `installConnection` only; OpenSSH's
    `ClearAllForwardings` clears command-line forwardings too, so the local connection server's own `-D` would go as
    well, and the family adds no option to prevent it (S2). What the reference does there is a spec question on F-2104
-   (the PM files it); the answer decides whether a rule is needed at all.
+   (the PM files it); the answer (2026-10-10: the reference hangs, S14) made it card ssh-14's adaptation: detected from `ssh -G` and failed before any ssh runs; nothing in this card changes.
