@@ -615,6 +615,12 @@ contract (area C) defines the volume.
 
 ## 6. lib-forwarding
 
+Ruling 2026-10-10 (F-2104 BR-11 answered by the room): `ClearAllForwardings yes` with the shared connection on
+drops the server's own `-D` in the reference and the window hangs (7.E4). The family detects it from `ssh -G` before
+any `ssh` runs and fails the connect at once as `invalidSetting` with a reason naming the option (card ssh-14; an
+`[adaptation]`, R-79 forbids the hang); the second-ssh and socket paths are not blocked. In socket mode the user's
+forwardings are applied by the tunnel ssh (the family's interim rule; BR-11 keeps a lab need for it).
+
 Rulings from the build (2026-10-09, #223): the connection contract `Duplex` carries back-pressure (`send` returns
 whether more may be fed, `onDrain`, `pause`, `resume`) and the relay bridge honours it both ways, so a slow side
 slows the other instead of growing a queue; the SOCKS5 dialer over the shared connection's `-D` relay (no
