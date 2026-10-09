@@ -16,9 +16,25 @@ exports beyond `decodeOuter`'s injection type. Nothing else.
 3. In the JSON form, `"user": ""` is treated as absent (the decoded target has no `user`; `encode` omits the key).
 4. `label` never returns English text: the WSL default-distro label is the id `wsl.defaultDistro`; every other
    `label` result is the raw text or the composed `user@host:port` form.
-5. `container.ts` does not import `registry.ts`: `containerCodec(family, decodeOuter)` receives the outer-hop
-   decoder as a function; `registry.ts` passes `decodeAuthority`. No import cycle inside the package (a test
-   greps the imports of the four codec files for `registry`).
+5. Neither `container.ts` nor `wsl.ts` imports `registry.ts` (amended 2026-10-08 with exact signatures; the
+   first wording injected only a decoder, but `encode` needs the outer's encoder too and both files share the
+   outer-hop helpers). A new leaf module `src/codecs/outer-hop.ts` (imports only `types.ts`) holds:
+   ```ts
+   export interface OuterCodec {
+     decode(authority: string): DecodedTarget | {malformed: MalformedAuthority};
+     encode(decoded: DecodedTarget): string;
+   }
+   export type OuterHop = {name: string; outer: DecodedTarget | undefined} | {name: string; refusal: MalformedAuthority};
+   export function outerHop(family: Family, payload: string, outer: OuterCodec): OuterHop;   // today's registry function, the outer decoded through `outer.decode`
+   export function outerPayload(name: string, outer: DecodedTarget | undefined, codec: OuterCodec): string;  // `name` or `${name}@${codec.encode(outer)}`
+   ```
+   `container.ts`: `export function containerCodec(family: ContainerFamily, outer: OuterCodec): Codec<ContainerTarget>`.
+   `wsl.ts`: `export function wslCodecOf(outer: OuterCodec): Codec<WslTarget>` (a factory now).
+   `registry.ts`: `const REGISTRY_OUTER: OuterCodec = {decode: decodeAuthority, encode: encodeAuthority}`, the
+   container codecs built with it, and `export const wslCodec: Codec<WslTarget> = wslCodecOf(REGISTRY_OUTER)` so
+   the exported name stays; `outerHop`/`outerPayload` leave `registry.ts`. `src/index.ts` keeps exporting
+   `wslCodec` (from `registry.ts`) and adds `OuterCodec`. A test greps the imports of `container.ts`, `wsl.ts`,
+   `ssh-remote.ts`, `tunnel.ts` and `outer-hop.ts` for `registry`: none.
 
 ## 3. Test table
 
@@ -34,7 +50,9 @@ exports beyond `decodeOuter`'s injection type. Nothing else.
 | `wslCodec.label({distro:''})` | `'wsl.defaultDistro'` |
 | `wslCodec.label({distro:'Ubuntu'})` | `'Ubuntu'` |
 | a grep test over `src/codecs/*.ts` | no file but `registry.ts` mentions `registry` |
-| `containerCodec('dev-container', decodeAuthority).decode('abcd@ssh-remote+h')` | outer decoded through the injected function |
+| `containerCodec('dev-container', {decode: decodeAuthority, encode: encodeAuthority}).decode('abcd@ssh-remote+h')` | outer decoded through the injected codec |
+| the same codec's `encode({payload:'abcd', outer: <decoded ssh-remote+h>})` | `'abcd@ssh-remote+h'` (re-encoded through the injected codec) |
+| `wslCodecOf(fakeOuter).decode('Ubuntu@x')` with `fakeOuter.decode` returning a fixed target | the fixed target as `outer` (the fake proves the injection) |
 | the existing authority-01 tests | unchanged results |
 
 ## 4. Rule for the worker
