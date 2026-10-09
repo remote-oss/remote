@@ -7,6 +7,7 @@
 import {randomBytes} from 'node:crypto';
 import {
   helperParameters,
+  inheritedEnvironment,
   nodeEndpointPort,
   nodeFilePort,
   nodeTimer,
@@ -34,7 +35,7 @@ runConnectionHelper({
   launcherFiles: nodeLauncherFiles,
   newNonce: () => randomBytes(16).toString('hex'),
   spawner: nodeProcessSpawner,
-  editorEnvironment: process.env,
+  editorEnvironment: inheritedEnvironment(process.env),
   helloLimitMilliseconds: HELLO_LIMIT_MILLISECONDS,
   logLine,
 }).catch((caught: unknown) => {

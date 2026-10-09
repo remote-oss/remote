@@ -64,4 +64,8 @@ export {
   type Spawner,
   spawnSpecification,
 } from './client/spawn.ts';
-export {helperParameters, runHelper} from './runtime/helper-main.ts';
+export {
+  helperParameters,
+  inheritedEnvironment,
+  runHelper,
+} from './runtime/helper-main.ts';
