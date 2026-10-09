@@ -29,6 +29,13 @@ const OPTIONS: RuntimeOptions = {
   readySeconds: 10,
 };
 
+/** The outcome of a start that found the server of `outcome` already running. */
+function asReused(outcome: StartOutcome): StartOutcome {
+  return outcome.kind === 'started'
+    ? {...outcome, server: {...outcome.server, reused: true}}
+    : outcome;
+}
+
 describe('F-2409 the start of the server', function () {
   this.timeout(120000);
   let host: RunningHost;
@@ -154,7 +161,7 @@ describe('F-2409 the start of the server', function () {
     const parameters = await installed();
     const first = await start(parameters);
     const second = await start(parameters);
-    deepStrictEqual(second, first);
+    deepStrictEqual(second, asReused(first));
   });
 
   it('F-2409: refuses a reversed port range before it asks the host anything', async () => {
