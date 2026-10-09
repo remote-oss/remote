@@ -67,11 +67,16 @@ describe('a helper process', function () {
     first.release();
     second.release();
     await delay(1500);
+    const reconnect = await nodeEndpointPort()
+      .connect(endpoint)
+      .then(
+        () => 'connected',
+        () => 'refused',
+      );
     deepStrictEqual(
-      [first.startedByMe, second.startedByMe, secondPosition, reply],
-      [true, false, 1, {kind: 'reply', body: {echo: 'ping'}}],
+      [first.startedByMe, second.startedByMe, secondPosition, reply, reconnect],
+      [true, false, 1, {kind: 'reply', body: {echo: 'ping'}}, 'refused'],
     );
-    await rejects(nodeEndpointPort().connect(endpoint));
   });
 });
 
@@ -128,13 +133,21 @@ describe('the Node.js registry file port', () => {
   });
 
   it('passes on other failures of create and read', async () => {
-    await rejects(
-      nodeFilePort
+    const outcomes = [
+      await nodeFilePort
         .createExclusive(path.join(folder, 'ns'), 'x')
         .then(() =>
           nodeFilePort.createExclusive(path.join(folder, 'ns', 'a.json'), 'x'),
+        )
+        .then(
+          () => 'resolved',
+          () => 'rejected',
         ),
-    );
-    await rejects(nodeFilePort.read(folder));
+      await nodeFilePort.read(folder).then(
+        () => 'resolved',
+        () => 'rejected',
+      ),
+    ];
+    deepStrictEqual(outcomes, ['rejected', 'rejected']);
   });
 });

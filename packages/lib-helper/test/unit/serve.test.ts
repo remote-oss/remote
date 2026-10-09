@@ -1,4 +1,4 @@
-import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual} from 'node:assert';
 import type {EndpointConnection} from '../../src/endpoint/protocol.ts';
 import type {EndPolicy} from '../../src/index.ts';
 import {
@@ -370,7 +370,10 @@ describe('serve', () => {
 
   it('never starts without a usable policy', async () => {
     start({kind: 'graceAfterLastLease', milliseconds: 0});
-    await rejects(ending);
-    strictEqual(port.isListening(ENDPOINT), false);
+    const outcome = await ending.then(
+      () => 'resolved',
+      () => 'rejected',
+    );
+    deepStrictEqual([outcome, port.isListening(ENDPOINT)], ['rejected', false]);
   });
 });
