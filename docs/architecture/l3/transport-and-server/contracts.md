@@ -176,7 +176,7 @@ Adaptation (ruled 2026-10-09, from connect-05's run with OpenSSH 10.3): the host
 AC-43 and BR-2 pin the colon form and the missing full stop as a masked input, which is the reference's behaviour
 with an older client, not a rule worth keeping: the family's `fingerprintPick` also matches
 `^\S+ key fingerprint is:? (\S+?)\.?$`, the three pinned cases flip to the pick, and the change is recorded as an
-`[adaptation]` of AC-43/BR-2 with a spec question on F-2305 through the PM (a spec pull a slice needs, D-62). The
+`[adaptation]` of AC-43/BR-2 with the spec question remote-oss/remote-ssh#38 (issuecomment-6074980367, filed 2026-10-09; a spec pull a slice needs, D-62). The
 answer mapping is unchanged (`yes` continues, `no` is `hostKeyRejected`).
 
 The rules, first match wins:
