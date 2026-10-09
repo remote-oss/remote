@@ -17,6 +17,11 @@ family's own form, and gives the label the resource label formatter uses.
 - `Connected` and `Failed` are what a connect hands back. The host reads their structured fields (`retryable`, `silent`,
   `userAlreadyNotified`, `reason`, `hints`, `diagnostics`) and never a kind, which is a string each extension narrows
   to its own list. The tunnel pieces of `Connected` are type parameters, so the package needs no editor types.
+- `probeProposals(editor, request)` asks the editor, for each proposed API the extension declares, whether it is granted:
+  it reads a member the editor guards with the proposal and sees whether it throws, so no state is written and nothing
+  is remembered between two probes. `contribViewsRemote` is read from the focus commands of the extension's remote
+  views; `contribRemoteHelp` and `extensionsAny` cannot be probed. `probeApiOf(vscode)` gives the editor's API the
+  narrow shape the probes read.
 - `decode(encode(target))` returns `target` and `encode(decode(authority))` returns `authority` for every form the
   codec defines.
 
@@ -26,5 +31,6 @@ family's own form, and gives the label the resource label formatter uses.
 |---|---|
 | Maintainers | remote-oss |
 | Entry points | `lib-authority` (`src/index.ts`) |
-| Allowed imports | `lib-identifiers`, `lib-standdown`, `lib-log` |
+| Allowed imports | `lib-identifiers`, `lib-standdown`, `lib-log`; the `vscode` module for types only |
+| Editor declarations | `vscode-dts/` holds the editor's declaration files for the proposals the family uses (`resolvers`, `tunnels`, `contribViewsRemote`, `contribRemoteHelp`, `extensionsAny`, `terminalDataWriteEvent`), exactly as published for the supported editor floor (1.139.1), so the package compiles against the editor it supports. They are not linted or formatted. |
 | Coverage exclusions | `src/codecs/types.ts` and `src/connector/results.ts`: types only, no executable code |

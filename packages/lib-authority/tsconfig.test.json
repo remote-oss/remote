@@ -1,4 +1,5 @@
 {
   "extends": "../../tsconfig.base.test.json",
+  "include": ["${configDir}/test", "${configDir}/vscode-dts"],
   "references": [{"path": "./tsconfig.json"}]
 }

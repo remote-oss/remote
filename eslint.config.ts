@@ -148,6 +148,8 @@ export default defineConfig(
       '**/dist/',
       '**/.tsc/',
       '**/.vscode-test/',
+      // The editor's own declaration files, kept as published.
+      '**/vscode-dts/',
       'coverage/',
       'tests/conformance/runner/',
     ],

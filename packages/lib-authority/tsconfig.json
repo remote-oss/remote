@@ -1,3 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json"
+  "extends": "../../tsconfig.base.json",
+  // The declaration files of the editor's proposed API, which the package's code compiles against.
+  "include": ["${configDir}/src", "${configDir}/vscode-dts"]
 }

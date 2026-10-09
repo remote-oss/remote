@@ -26,3 +26,12 @@ export type {
   FailureReason,
   FilledString,
 } from './connector/results.ts';
+export {
+  type ProbeApi,
+  type ProbeRequest,
+  type ProposalName,
+  type ProposalProbe,
+  type ProposalState,
+  probeProposals,
+} from './gate/probe.ts';
+export {probeApiOf} from './gate/vscode-api.ts';
