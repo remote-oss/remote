@@ -3,6 +3,7 @@ import {spawn, spawnSync, type ChildProcess} from 'node:child_process';
 import {
   chmodSync,
   closeSync,
+  copyFileSync,
   existsSync,
   openSync,
   symlinkSync,
@@ -116,6 +117,14 @@ describe('the POSIX bootstrap script', () => {
 
   function useHost(stubs?: readonly Stub[]): void {
     host = fakeHost(stubs);
+  }
+
+  function copiedParameters(removeArchive: boolean): ScriptParameters {
+    const parameters = parametersFor();
+    parameters.archivePath = path.join(host.home, 'copied.tar.gz');
+    copyFileSync(host.archive, parameters.archivePath);
+    parameters.removeArchive = removeArchive;
+    return parameters;
   }
 
   beforeEach(() => {
@@ -423,6 +432,59 @@ describe('the POSIX bootstrap script', () => {
       parameters.archivePath = host.environment.STUB_ARCHIVE ?? '';
       runScript(host, single('install'), parameters);
       deepStrictEqual(existsSync(parameters.archivePath), true);
+    });
+
+    it('V4: an archive already on the host is removed when the parameters say so', () => {
+      const parameters = copiedParameters(true);
+      runScript(host, single('install'), parameters);
+      deepStrictEqual(existsSync(parameters.archivePath), false);
+    });
+
+    it('V4: a copied archive is removed when the unpack fails', () => {
+      const parameters = copiedParameters(true);
+      writeFileSync(parameters.archivePath, 'not an archive');
+      runScript(host, single('install'), parameters);
+      deepStrictEqual(existsSync(parameters.archivePath), false);
+    });
+
+    it('V4: a copied archive is removed when the install folder cannot be created', () => {
+      const parameters = copiedParameters(true);
+      writeFileSync(path.join(host.home, '.server-data'), '');
+      runScript(host, single('install'), parameters);
+      deepStrictEqual(existsSync(parameters.archivePath), false);
+    });
+
+    it('V4: a copied archive is removed when the server is already installed', () => {
+      runScript(host, single('install'), parametersFor());
+      const parameters = copiedParameters(true);
+      runScript(host, single('install'), parameters);
+      deepStrictEqual(existsSync(parameters.archivePath), false);
+    });
+
+    it('V4: a copied archive stays while the host lock is busy, because the step is tried again', () => {
+      holdLinkLock(host);
+      const parameters = copiedParameters(true);
+      runScript(host, single('install'), parameters);
+      deepStrictEqual(existsSync(parameters.archivePath), true);
+    });
+
+    it('V4: the discard step removes a copied archive', () => {
+      const parameters = copiedParameters(true);
+      runScript(host, single('discard'), parameters);
+      deepStrictEqual(existsSync(parameters.archivePath), false);
+    });
+
+    it('V4: the discard step keeps an archive the parameters do not mark', () => {
+      const parameters = copiedParameters(false);
+      runScript(host, single('discard'), parameters);
+      deepStrictEqual(existsSync(parameters.archivePath), true);
+    });
+
+    it('V4: the discard step reports Ok', () => {
+      deepStrictEqual(
+        statusOf(host, single('discard'), copiedParameters(true)),
+        'Ok',
+      );
     });
 
     it('F-2508: the environment setup is sourced before a fresh install', () => {
