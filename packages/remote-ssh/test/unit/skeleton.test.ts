@@ -107,6 +107,82 @@ function manifestKeys(): string[] {
   return [...found.keys()];
 }
 
+const INVENTORY_FIXTURE = path.join(
+  import.meta.dirname,
+  '..',
+  '..',
+  'test',
+  'fixtures',
+  'identity-inventory.json',
+);
+
+/** A setting of the inventory fixture, the fields the fidelity row compares. */
+interface InventorySetting {
+  key: string;
+  declared?: boolean;
+  type: string | string[];
+  default?: unknown;
+  scope?: string;
+  descriptionForm?: string;
+  enum?: unknown[];
+  enumDescriptions?: string[];
+  minimum?: number;
+  maximum?: number;
+  pattern?: string;
+  tags?: string[];
+  deprecationMessage?: string;
+  markdownDeprecationMessage?: string;
+  description: string;
+}
+
+/** A command of the inventory fixture. */
+interface InventoryCommand {
+  id: string;
+  title: string;
+  category: string;
+  enablement?: string | null;
+  icon?: string;
+}
+
+/** The inventory fixture, read once. */
+function inventory(): {
+  settings: InventorySetting[];
+  commands: InventoryCommand[];
+  menus: Array<{menu: string; command: string; group?: string; when: string}>;
+  remoteHelp: Record<string, unknown>;
+} {
+  return JSON.parse(readFileSync(INVENTORY_FIXTURE, 'utf8'));
+}
+
+/** The fields of a setting schema the fidelity row compares, with a single-element type array unwrapped. */
+function settingFields(value: Record<string, unknown>, typeArray?: string[]): Record<string, unknown> {
+  return {
+    type:
+      typeArray !== undefined
+        ? typeArray.length === 1
+          ? typeArray[0]
+          : typeArray
+        : value.type,
+    default: value.default,
+    scope: value.scope,
+    enum: value.enum,
+    enumDescriptions: value.enumDescriptions,
+    minimum: value.minimum,
+    maximum: value.maximum,
+    pattern: value.pattern,
+    tags: value.tags,
+    deprecationMessage: value.deprecationMessage,
+    markdownDeprecationMessage: value.markdownDeprecationMessage,
+  };
+}
+
+/** Which field holds a setting's description text. */
+function descriptionForm(schema: Record<string, unknown>): string {
+  return schema.markdownDescription !== undefined
+    ? 'markdownDescription'
+    : 'description';
+}
+
 describe('manifest (card remote-ssh-01 table)', () => {
   it('manifest top-level fields: the card values, one by one', () => {
     const fields = manifest();
@@ -244,15 +320,19 @@ describe('manifest (card remote-ssh-01 table)', () => {
         prefixes: Object.keys(properties).every(settingKey =>
           settingKey.startsWith('remote.SSH.'),
         ),
-        descriptionsAreKeys: Object.entries(properties).every(([, schema]) =>
-          /^%[\w.]+%$/.test(String(schema.description)),
+        descriptionFormsAreKeys: Object.values(properties).every(schema =>
+          /^%[\w.]+%$/.test(
+            String(schema.markdownDescription ?? schema.description),
+          ),
         ),
         prunedKeyPresent: 'remote.SSH.experimental.chat' in properties,
         invented: {
           type: invented.type,
           default: invented.default,
           scope: invented.scope,
-          descriptionIsKey: /^%[\w.]+%$/.test(String(invented.description)),
+          descriptionIsKey: /^%[\w.]+%$/.test(
+            String(invented.markdownDescription ?? invented.description),
+          ),
         },
         keys: Object.keys(properties).sort(),
         tableKeys: (Object.values(settings) as TableEntry[])
@@ -263,7 +343,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
         title: 'Remote - SSH',
         count: 35,
         prefixes: true,
-        descriptionsAreKeys: true,
+        descriptionFormsAreKeys: true,
         prunedKeyPresent: false,
         invented: {
           type: 'string',
@@ -364,23 +444,22 @@ describe('manifest (card remote-ssh-01 table)', () => {
     ]);
   });
 
-  it('remoteHelp: the name, the four urls, the three help commands', () => {
+  it('remoteHelp: the flat object with remoteName, the four urls, the help commands', () => {
     deepStrictEqual(manifest().contributes?.remoteHelp, {
-      'ssh-remote': {
-        urls: {
-          documentation:
-            'https://github.com/remote-oss/remote/tree/main/docs/remote-ssh',
-          feedback: 'https://github.com/remote-oss/remote/issues/new/choose',
-          getStarted:
-            'https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md',
-          issues:
-            'https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh',
-        },
-        commands: {
-          'opensshremotes.getHelp': 'documentation',
-          'opensshremotes.getStarted': 'getStarted',
-          'opensshremotes.provideFeedback': 'feedback',
-        },
+      remoteName: ['ssh-remote'],
+      urls: {
+        documentation:
+          'https://github.com/remote-oss/remote/tree/main/docs/remote-ssh',
+        feedback: 'https://github.com/remote-oss/remote/issues/new/choose',
+        getStarted:
+          'https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md',
+        issues:
+          'https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh',
+      },
+      commands: {
+        'opensshremotes.getHelp': 'documentation',
+        'opensshremotes.getStarted': 'getStarted',
+        'opensshremotes.provideFeedback': 'feedback',
       },
     });
   });
@@ -540,6 +619,78 @@ describe('manifest (card remote-ssh-01 table)', () => {
         'zh-tw',
       ],
     });
+  });
+
+  it('inventory fidelity: every setting, command, menu and remoteHelp matches the inventory', () => {
+    const {settings, commands, menus, remoteHelp} = inventory();
+    const nls = nlsTables().get('package.nls.json') as Record<string, string>;
+    const properties = manifest().contributes?.configuration?.properties ?? {};
+    const menuEntries = (
+      Object.entries(manifest().contributes?.menus ?? {}) as Array<
+        [string, Array<Record<string, unknown>>]
+      >
+    ).flatMap(([menu, entries]) =>
+      entries.map(entry => ({menu, command: String(entry.command), entry})),
+    );
+    deepStrictEqual(
+      {
+        settings: settings
+          .filter(row => row.declared !== false)
+          .map(row => {
+            const schema = properties[row.key] ?? {};
+            return {
+              key: row.key,
+              fields: settingFields(schema, row.type as string[]),
+              form: descriptionForm(schema),
+              formIsKey: /^%[\w.]+%$/.test(String(schema[descriptionForm(schema)])),
+            };
+          }),
+        commands: commands.map(row => {
+          const entry = (manifest().contributes?.commands ?? []).find(
+            command => String(command.command) === row.id,
+          );
+          const title = nls[String(entry?.title).replace(/^%|%/g, '')] ?? '';
+          return {
+            id: row.id,
+            title,
+            category: String(entry?.category),
+            enablement: entry?.enablement ?? null,
+            icon: entry?.icon ?? null,
+          };
+        }),
+        menus: menuEntries.map(row => ({
+          menu: row.menu,
+          command: row.command,
+          group: row.entry.group,
+          when: row.entry.when,
+        })),
+        remoteHelp: manifest().contributes?.remoteHelp,
+      },
+      {
+        settings: settings
+          .filter(row => row.declared !== false)
+          .map(row => ({
+            key: row.key,
+            fields: settingFields(row as unknown as Record<string, unknown>, row.type as string[]),
+            form: row.descriptionForm === 'markdownDescription' ? 'markdownDescription' : 'description',
+            formIsKey: true,
+          })),
+        commands: commands.map(row => ({
+          id: row.id,
+          title: row.title,
+          category: row.category,
+          enablement: row.enablement ?? null,
+          icon: row.icon ?? null,
+        })),
+        menus: menus.map(row => ({
+          menu: row.menu,
+          command: row.command,
+          group: row.group,
+          when: row.when,
+        })),
+        remoteHelp,
+      },
+    );
   });
 
   it('the generated table: the ids of the manifest, the keys, the authority and the stand-down', () => {

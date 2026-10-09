@@ -149,7 +149,7 @@
           "markdownDeprecationMessage": "Deprecated, please use `#remote.SSH.localServerDownload#`"
         },
         "remote.SSH.bindHost": {
-          "description": "%setting.Bindhost.description%",
+          "markdownDescription": "%setting.Bindhost.description%",
           "type": "object",
           "default": null,
           "scope": "application",
@@ -202,7 +202,7 @@
           }
         },
         "remote.SSH.enableAgentForwarding": {
-          "description": "%setting.Enableagentforwarding.description%",
+          "markdownDescription": "%setting.Enableagentforwarding.description%",
           "type": "boolean",
           "default": true,
           "scope": "application"
@@ -214,19 +214,19 @@
           "scope": "application"
         },
         "remote.SSH.enableRemoteCommand": {
-          "description": "%setting.Enableremotecommand.description%",
+          "markdownDescription": "%setting.Enableremotecommand.description%",
           "type": "boolean",
           "default": false,
           "scope": "application"
         },
         "remote.SSH.enableX11Forwarding": {
-          "description": "%setting.Enablex11forwarding.description%",
+          "markdownDescription": "%setting.Enablex11forwarding.description%",
           "type": "boolean",
           "default": true,
           "scope": "application"
         },
         "remote.SSH.experimental.enhancedSessionLogs": {
-          "description": "%setting.Enhancedsessionlogs.description%",
+          "markdownDescription": "%setting.Enhancedsessionlogs.description%",
           "type": "boolean",
           "default": true,
           "scope": "application",
@@ -235,13 +235,13 @@
           ]
         },
         "remote.SSH.externalSSH_ASKPASS": {
-          "description": "%setting.ExternalsshAskpass.description%",
+          "markdownDescription": "%setting.ExternalsshAskpass.description%",
           "type": "boolean",
           "default": false,
           "scope": "application"
         },
         "remote.SSH.httpProxy": {
-          "description": "%setting.Httpproxy.description%",
+          "markdownDescription": "%setting.Httpproxy.description%",
           "type": [
             "string",
             "object"
@@ -252,7 +252,7 @@
           }
         },
         "remote.SSH.httpsProxy": {
-          "description": "%setting.Httpsproxy.description%",
+          "markdownDescription": "%setting.Httpsproxy.description%",
           "type": [
             "string",
             "object"
@@ -279,7 +279,7 @@
           ]
         },
         "remote.SSH.lockfilesInTmp": {
-          "description": "%setting.Lockfilesintmp.description%",
+          "markdownDescription": "%setting.Lockfilesintmp.description%",
           "type": "boolean",
           "default": false,
           "scope": "application"
@@ -295,14 +295,15 @@
           ]
         },
         "remote.SSH.maxReconnectionAttempts": {
-          "description": "%setting.Maxreconnectionattempts.description%",
+          "markdownDescription": "%setting.Maxreconnectionattempts.description%",
           "type": [
             "number",
             "null"
           ],
           "default": null,
           "scope": "application",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 8
         },
         "remote.SSH.path": {
           "description": "%setting.Path.description%",
@@ -311,13 +312,13 @@
           "scope": "application"
         },
         "remote.SSH.permitPtyAllocation": {
-          "description": "%setting.Permitptyallocation.description%",
+          "markdownDescription": "%setting.Permitptyallocation.description%",
           "type": "boolean",
           "default": false,
           "scope": "application"
         },
         "remote.SSH.preconnect": {
-          "description": "%setting.Preconnect.description%",
+          "markdownDescription": "%setting.Preconnect.description%",
           "type": [
             "string",
             "object"
@@ -331,13 +332,14 @@
           ]
         },
         "remote.SSH.preferredLocalPortRange": {
-          "description": "%setting.Preferredlocalportrange.description%",
+          "markdownDescription": "%setting.Preferredlocalportrange.description%",
           "type": "string",
           "default": "",
-          "scope": "application"
+          "scope": "application",
+          "pattern": "^\\d+-\\d+$|^$"
         },
         "remote.SSH.reconnectionGraceTime": {
-          "description": "%setting.Reconnectiongracetime.description%",
+          "markdownDescription": "%setting.Reconnectiongracetime.description%",
           "type": [
             "number",
             "null"
@@ -347,7 +349,7 @@
           "minimum": 1
         },
         "remote.SSH.remotePlatform": {
-          "description": "%setting.Remoteplatform.description%",
+          "markdownDescription": "%setting.Remoteplatform.description%",
           "type": "object",
           "scope": "application",
           "additionalProperties": {
@@ -360,12 +362,12 @@
           }
         },
         "remote.SSH.remoteServerListenOnSocket": {
-          "description": "%setting.Remoteserverlistenonsocket.description%",
+          "markdownDescription": "%setting.Remoteserverlistenonsocket.description%",
           "type": "boolean",
           "default": false
         },
         "remote.SSH.serverDownloadUrlTemplate": {
-          "description": "%setting.Serverdownloadurltemplate.description%",
+          "markdownDescription": "%setting.Serverdownloadurltemplate.description%",
           "type": "string",
           "scope": "application"
         },
@@ -378,7 +380,7 @@
           }
         },
         "remote.SSH.serverPickPortsFromRange": {
-          "description": "%setting.Serverpickportsfromrange.description%",
+          "markdownDescription": "%setting.Serverpickportsfromrange.description%",
           "type": "object",
           "default": null,
           "scope": "application",
@@ -399,31 +401,31 @@
           "scope": "application"
         },
         "remote.SSH.useCurlAndWgetConfigurationFiles": {
-          "description": "%setting.Usecurlandwgetconfigurationfiles.description%",
+          "markdownDescription": "%setting.Usecurlandwgetconfigurationfiles.description%",
           "type": "boolean",
           "default": false,
           "scope": "application"
         },
         "remote.SSH.useExecServer": {
-          "description": "%setting.Useexecserver.description%",
+          "markdownDescription": "%setting.Useexecserver.description%",
           "type": "boolean",
           "default": true,
           "scope": "application"
         },
         "remote.SSH.useFlock": {
-          "description": "%setting.Useflock.description%",
+          "markdownDescription": "%setting.Useflock.description%",
           "type": "boolean",
           "default": true,
           "scope": "application"
         },
         "remote.SSH.useLocalServer": {
-          "description": "%setting.Uselocalserver.description%",
+          "markdownDescription": "%setting.Uselocalserver.description%",
           "type": "boolean",
           "default": true,
           "scope": "application"
         },
         "remote.SSH.windowsRemotes": {
-          "description": "%setting.Windowsremotes.description%",
+          "markdownDescription": "%setting.Windowsremotes.description%",
           "type": "array",
           "default": [],
           "scope": "application",
@@ -487,18 +489,19 @@
       }
     ],
     "remoteHelp": {
-      "ssh-remote": {
-        "urls": {
-          "getStarted": "https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md",
-          "documentation": "https://github.com/remote-oss/remote/tree/main/docs/remote-ssh",
-          "issues": "https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh",
-          "feedback": "https://github.com/remote-oss/remote/issues/new/choose"
-        },
-        "commands": {
-          "opensshremotes.getHelp": "documentation",
-          "opensshremotes.getStarted": "getStarted",
-          "opensshremotes.provideFeedback": "feedback"
-        }
+      "remoteName": [
+        "ssh-remote"
+      ],
+      "urls": {
+        "getStarted": "https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md",
+        "documentation": "https://github.com/remote-oss/remote/tree/main/docs/remote-ssh",
+        "issues": "https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh",
+        "feedback": "https://github.com/remote-oss/remote/issues/new/choose"
+      },
+      "commands": {
+        "opensshremotes.getHelp": "documentation",
+        "opensshremotes.getStarted": "getStarted",
+        "opensshremotes.provideFeedback": "feedback"
       }
     }
   },
