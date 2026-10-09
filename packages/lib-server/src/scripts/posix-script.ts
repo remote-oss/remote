@@ -4,6 +4,7 @@
  * given /dev/null, because the script itself may be arriving on standard input.
  */
 
+import {PROGRESS_PREFIX} from './progress-line.ts';
 import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
 
 /** The server's own line that says it is ready; the port follows it. */
@@ -139,16 +140,13 @@ export const FETCH_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
-/** The progress line: the step and an integer percent, a whole line outside the result block. */
-const PROGRESS_MARKER = 'remote-oss-server-progress';
-
 /**
  * Unpack an archive into a folder, then move the archive's one top folder up into the target. A tar archive is listed
  * first so that the unpack can report whole percents, at most once per 5 points and once at 100.
  */
 export const UNPACK_FUNCTIONS: readonly string[] = [
   'progress() {',
-  `  printf '%s %s %s\\n' ${shellQuote(PROGRESS_MARKER)} "$1" "$2"`,
+  `  printf '%s %s %s\\n' ${shellQuote(PROGRESS_PREFIX)} "$1" "$2"`,
   '}',
   'unpack_progress() {',
   '  COUNT=0',

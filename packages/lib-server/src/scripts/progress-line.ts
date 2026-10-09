@@ -46,8 +46,6 @@ export function parseProgressLine(line: string): ProgressLine | undefined {
     parts.length !== 3 ||
     step === undefined ||
     percent === undefined ||
-    step.length === 0 ||
-    percent.length === 0 ||
     !isProgressStep(step) ||
     !isPercent(percent)
   ) {
