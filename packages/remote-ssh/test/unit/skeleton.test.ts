@@ -27,10 +27,12 @@ interface Manifest {
   capabilities?: {untrustedWorkspaces?: {supported?: boolean}};
   activationEvents?: unknown[];
   extensionPack?: string[];
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
 }
 
 describe('skeleton (card remote-ssh-00 table)', () => {
-  it('manifest fields: exactly the values of the skeleton card', () => {
+  it('manifest fields: the values of the skeleton card, and the dependencies of the programs', () => {
     const manifest = JSON.parse(
       readFileSync(path.join(PACKAGE, 'package.json'), 'utf8'),
     ) as Manifest;
@@ -56,6 +58,9 @@ describe('skeleton (card remote-ssh-00 table)', () => {
         'remote-oss.remote-ssh-edit',
         'remote-oss.remote-explorer',
       ],
+      // Added by the first code that imports them: the two programs that run outside the editor.
+      dependencies: {'lib-helper': 'workspace:*', 'lib-ssh': 'workspace:*'},
+      devDependencies: {esbuild: '^0.28.2'},
     });
   });
 

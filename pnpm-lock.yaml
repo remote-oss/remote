@@ -276,7 +276,18 @@ importers:
 
   packages/remote-server: {}
 
-  packages/remote-ssh: {}
+  packages/remote-ssh:
+    dependencies:
+      lib-helper:
+        specifier: workspace:*
+        version: link:../lib-helper
+      lib-ssh:
+        specifier: workspace:*
+        version: link:../lib-ssh
+    devDependencies:
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
 
   packages/remote-ssh-edit:
     devDependencies:
