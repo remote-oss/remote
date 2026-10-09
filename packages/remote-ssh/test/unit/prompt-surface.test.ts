@@ -63,6 +63,7 @@ class FakeEditor implements PromptEditor {
   shown: Shown[] = [];
   waiting: string[] = [];
   waitingTakenDown = 0;
+  failsToShow = false;
 
   translate = (template: string): string => `<${template}>`;
 
@@ -104,6 +105,9 @@ class FakeEditor implements PromptEditor {
     request: Shown['request'],
     signal: AbortSignal,
   ): Promise<string | undefined> {
+    if (this.failsToShow) {
+      return Promise.reject(new Error('the editor could not show it'));
+    }
     return new Promise(resolve => {
       this.shown.push({kind, request, finish: resolve, signal});
       signal.addEventListener('abort', () => {
@@ -273,6 +277,22 @@ describe('the prompt surface: a question that goes away', () => {
     context.editor.last().finish('secret');
     await settled();
     deepStrictEqual(context.lease.answers, [[1, 'secret']]);
+  });
+});
+
+describe('the prompt surface: an editor that cannot show a question', () => {
+  it('F-2305: a pick that fails is a dismissed question', async () => {
+    const context = setup();
+    context.editor.failsToShow = true;
+    await question(context, 4, FINGERPRINT_TEXT);
+    deepStrictEqual([context.lease.refused, context.lease.answers], [[4], []]);
+  });
+
+  it('F-2306: a masked input that fails is a dismissed question', async () => {
+    const context = setup();
+    context.editor.failsToShow = true;
+    await question(context, 5, PASSWORD_TEXT);
+    deepStrictEqual([context.lease.refused, context.lease.answers], [[5], []]);
   });
 });
 

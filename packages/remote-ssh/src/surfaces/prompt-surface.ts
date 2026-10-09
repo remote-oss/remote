@@ -124,8 +124,15 @@ export function attachPromptSurface(
     const surface = classifyPrompt(text, options.displayHost);
     const controller = new AbortController();
     open.set(promptId, controller);
-    const answer = await askUser(surface, controller.signal);
-    open.delete(promptId);
+    let answer: string | undefined;
+    try {
+      answer = await askUser(surface, controller.signal);
+    } catch {
+      // An editor that cannot show the question is the same as a user who dismissed it.
+      answer = undefined;
+    } finally {
+      open.delete(promptId);
+    }
     if (!controller.signal.aborted) {
       settle(promptId, answer);
     }
