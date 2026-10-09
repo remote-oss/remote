@@ -1,6 +1,6 @@
 /**
  * @fileoverview What the server acceptance tests share: script parameters for the stand-in server, the stand-in
- * archive on a started host, and the steps of the lifecycle as the extension would stepRun them.
+ * archive on a started host, and the steps of the lifecycle as the extension would run them.
  */
 
 import {mkdtempSync, rmSync} from 'node:fs';
@@ -29,7 +29,7 @@ export function hostArchiveOf(behaviour: StandInBehaviour = 'serving'): string {
 /** Where the archive of the serving stand-in lies on the host. */
 export const HOST_ARCHIVE = hostArchiveOf();
 
-/** The home folder of the host's user. */
+/** The home folder of the host's user: the one the host image gives the user `harness`. */
 export const HOST_HOME = '/home/harness';
 
 /** The commit every test installs unless it says otherwise. */
@@ -102,7 +102,7 @@ export function placeStandInArchive(
   }
 }
 
-/** Runs the install step once and returns the result block's status, or the way the stepRun failed. */
+/** Runs the install step once and returns the result block's status, or the way the run failed. */
 export async function installStatus(
   host: RunningHost,
   parameters: ScriptParameters,
