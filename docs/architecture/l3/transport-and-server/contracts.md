@@ -650,6 +650,8 @@ Rules:
 - `cancel` is called by B on window teardown or "Close Remote Connection". The SSH progress offers no Cancel
   (F-2304 BR-2), and a running host-side download is not stopped (F-2304 BR-8).
 - Connected carries `tunnelFeatures` from W3 next to the tunnel factory (F-8202).
+- `Connected` is data; the pipeline's internal step result carries a `release` handle beside it, which the
+  connector keeps for `cancel` and window teardown (connect-02, accepted 2026-10-08).
 - Every attempt makes a fresh connection when S9 reports the transport lost (F-2505 BR-1).
 - Every recorded hang becomes a bound wait followed by F-2601's dialog (R-79). This covers:
   - F-2103 Q1, F-2104 Q1, F-2304 Q2, F-2308 Q3 and Q4, F-2405 Q3;
