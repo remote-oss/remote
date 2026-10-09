@@ -1,5 +1,11 @@
 # Task card ssh-11: the SSH configuration file picker (rows, placeholder, typed-text filter) (pure)
 
+> Amended 2026-10-10 (#249): the model carries string IDS (`StringRef`, as card remote-ssh-02's picker model does), never
+> English text — the ids are F-2203 §3's: S126/S047 placeholders, S131/S166 the Settings row, S077/S162 the Help row;
+> the surface resolves them from the package's string table. `narrowFileChoice` matches the file rows' paths and the
+> fixed rows by their ids' resolved text is NOT its job: it filters file rows by substring and always keeps the two fixed
+> rows (the editor's own filter does the rest). Rows that quoted English now quote the ids.
+
 Brief: slice 3 (#42). Specs: F-2203 (`remote-oss/remote-ssh#30`, "Open SSH Configuration File..."), F-2204 (`#31`, the
 same picker for "Add New SSH Host..."). Reviewing coder: `remote-coding-worker-1`. Depends on nothing;
 `packages/remote-ssh/src/config/` does not exist on main.
@@ -17,12 +23,13 @@ export interface FileChoiceInput {
   userFile: string;       // the absolute user file, e.g. /home/u/.ssh/config
   systemFile: string;     // e.g. /etc/ssh/ssh_config
 }
+import type {StringRef} from '../connect/picker-model.ts';   // {id, values}; the surface resolves ids (R-29: no English in models)
 export type FileChoiceItem =
-  | { kind: 'file'; label: string; role: 'user' | 'system' | 'configured' }
-  | { kind: 'settings'; label: 'Settings'; description: 'specify a custom configuration file' }
-  | { kind: 'help'; label: 'Help'; description: 'about SSH configuration files' };
+  | { kind: 'file'; label: string; role: 'user' | 'system' | 'configured' }                     // the path as written
+  | { kind: 'settings'; label: StringRef; description: StringRef }   // label {id:'S131'}, description {id:'S166'}
+  | { kind: 'help'; label: StringRef; description: StringRef };      // label {id:'S077'}, description {id:'S162'}
 export interface FileChoice {
-  placeholder: string;
+  placeholder: StringRef;    // {id:'S126'} when remote.SSH.configFile is unset, {id:'S047'} when set (F-2203 §3)
   items: readonly FileChoiceItem[];
 }
 export function buildFileChoice(input: FileChoiceInput): FileChoice;
