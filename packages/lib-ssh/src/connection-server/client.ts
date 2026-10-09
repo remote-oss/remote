@@ -184,7 +184,7 @@ class LoginWait {
       this.end({kind: 'failed', failure: asked.failure});
     } else if (asked.reply.type === 'accepted') {
       this.owner = true;
-    } else if (asked.reply.type === 'refused' && 'reason' in asked.reply) {
+    } else if (asked.reply.type === 'refused') {
       await this.refused(asked.reply.reason);
     } else {
       this.end({
