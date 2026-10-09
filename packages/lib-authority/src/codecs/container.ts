@@ -1,8 +1,9 @@
 /**
- * @fileoverview The container codecs: the payload of one container family, and the outer hop it carries after `@`.
+ * @fileoverview The container codecs: the payload of one container family, and the outer hop it carries after `@`,
+ * the outer always through the codec the caller injects.
  */
-import {outerHop, outerPayload} from './registry.ts';
 import type {Codec, ContainerTarget, DecodedOrMalformed} from './types.ts';
+import {type OuterCodec, outerHop, outerPayload} from './outer-hop.ts';
 
 /** The families whose payload is the container family's own text. */
 export type ContainerFamily =
@@ -12,39 +13,27 @@ export type ContainerFamily =
   | 'apple-container'
   | 'exec';
 
-/** Decodes a container payload `<payload>[@<outer authority>]`; the outer decodes through the registry. */
-function decode(
-  family: ContainerFamily,
-  payload: string,
-): DecodedOrMalformed<ContainerTarget> {
-  const split = outerHop(family, payload);
-  if ('refusal' in split) {
-    return {malformed: split.refusal};
-  }
-  const target: ContainerTarget = {payload: split.name};
-  if (split.outer !== undefined) {
-    target.outer = split.outer;
-  }
-  return {target, rawHostString: payload};
-}
-
-/** Encodes a container target back to `<payload>` or `<payload>@<outer authority>`. */
-function encode(target: ContainerTarget): string {
-  return outerPayload(target.payload, target.outer);
-}
-
-/** The container label: the family's payload text exactly as written. */
-function label(target: ContainerTarget): string {
-  return target.payload;
-}
-
-/** The codec of one container family; its malformed rows name that family. */
+/**
+ * The codec of one container family for the outer codec a caller injects: its payload, and the outer hop it
+ * carries after `@`, decoded and re-encoded through that codec.
+ */
 export function containerCodec(
   family: ContainerFamily,
+  outer: OuterCodec,
 ): Codec<ContainerTarget> {
   return {
-    decode: payload => decode(family, payload),
-    encode,
-    label,
+    decode: (payload: string): DecodedOrMalformed<ContainerTarget> => {
+      const split = outerHop(family, payload, outer);
+      if ('refusal' in split) {
+        return {malformed: split.refusal};
+      }
+      const target: ContainerTarget = {payload: split.name};
+      if (split.outer !== undefined) {
+        target.outer = split.outer;
+      }
+      return {target, rawHostString: payload};
+    },
+    encode: target => outerPayload(target.payload, target.outer, outer),
+    label: target => target.payload,
   };
 }

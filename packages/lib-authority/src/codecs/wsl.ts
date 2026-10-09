@@ -1,14 +1,18 @@
 /**
- * @fileoverview The wsl codec: the distro, and the outer hop a wsl authority carries after `@`.
+ * @fileoverview The wsl codec: the distro, and the outer hop a wsl authority carries after `@`, the outer always
+ * through the codec the caller injects.
  */
-import {outerHop, outerPayload} from './registry.ts';
 import type {Codec, DecodedOrMalformed, WslTarget} from './types.ts';
+import {type OuterCodec, outerHop, outerPayload} from './outer-hop.ts';
 
 const FAMILY = 'wsl';
 
-/** Decodes a wsl payload `<distro>[@<outer authority>]`; the outer decodes through the registry. */
-function decode(payload: string): DecodedOrMalformed<WslTarget> {
-  const split = outerHop(FAMILY, payload);
+/** Decodes a wsl payload `<distro>[@<outer authority>]`; the outer decodes through the injected codec. */
+function decode(
+  outer: OuterCodec,
+  payload: string,
+): DecodedOrMalformed<WslTarget> {
+  const split = outerHop(FAMILY, payload, outer);
   if ('refusal' in split) {
     return {malformed: split.refusal};
   }
@@ -19,15 +23,12 @@ function decode(payload: string): DecodedOrMalformed<WslTarget> {
   return {target, rawHostString: payload};
 }
 
-/** Encodes a wsl target back to `<distro>` or `<distro>@<outer authority>`. */
-function encode(target: WslTarget): string {
-  return outerPayload(target.distro, target.outer);
+/** The codec of the wsl family for the outer codec a caller injects. */
+export function wslCodecOf(outer: OuterCodec): Codec<WslTarget> {
+  return {
+    decode: payload => decode(outer, payload),
+    encode: target => outerPayload(target.distro, target.outer, outer),
+    label: target =>
+      target.distro === '' ? 'wsl.defaultDistro' : target.distro,
+  };
 }
-
-/** The wsl label: the distro, or `default distro` when the payload named none. */
-function label(target: WslTarget): string {
-  return target.distro === '' ? 'default distro' : target.distro;
-}
-
-/** The wsl codec of the contract. */
-export const wslCodec: Codec<WslTarget> = {decode, encode, label};

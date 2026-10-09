@@ -15,10 +15,10 @@ export type {
 } from './codecs/types.ts';
 export type {ContainerFamily} from './codecs/container.ts';
 export {containerCodec} from './codecs/container.ts';
+export type {OuterCodec} from './codecs/outer-hop.ts';
 export {sshRemoteCodec} from './codecs/ssh-remote.ts';
 export {tunnelCodec} from './codecs/tunnel.ts';
-export {wslCodec} from './codecs/wsl.ts';
-export {decodeAuthority, encodeAuthority} from './codecs/registry.ts';
+export {decodeAuthority, encodeAuthority, wslCodec} from './codecs/registry.ts';
 export type {
   Connected,
   Failed,

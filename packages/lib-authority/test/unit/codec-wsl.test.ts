@@ -29,7 +29,7 @@ describe('wsl codec (card authority-01 table)', () => {
       ],
       [
         {family: 'wsl', target: {distro: ''}, rawHostString: ''},
-        'default distro',
+        'wsl.defaultDistro',
         '',
       ],
     );
