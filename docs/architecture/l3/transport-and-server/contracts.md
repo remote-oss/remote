@@ -286,8 +286,12 @@ Rulings of 2026-10-08 for S9 and S10 (the process side):
 - S10 runs a script with input as `sh -c '<quoted>'` and a script without input as `sh -s` on standard input; the
   quoting assumes a POSIX-reading login shell, which slice 1's harness provides; a fish or csh login shell is the
   slice-3 variant of the harness, with the room's two-mode bootstrap answer.
-- The askpass endpoint is a second socket (mode 0600) in the runtime folder, reached by `ssh` through a bundled
-  `SSH_ASKPASS` script and two environment variables; its own PR after S9.
+- The askpass endpoint is a second socket `ra-<16 hex>.sock` (mode 0600) in the runtime folder, reached by `ssh`
+  through a bundled `SSH_ASKPASS` launcher script `rh-askpass-<16 hex>` (mode 0700, in a user-only folder of the
+  runtime folder, the same `rh-` prefix as the helper's endpoints; ruled 2026-10-08) and two environment variables
+  (`REMOTE_OSS_ASKPASS_ENDPOINT`, `REMOTE_OSS_ASKPASS_NONCE`). A connection to the endpoint that sends no first
+  message within a policy deadline (R-79; 5 s default) is closed and logged; a launcher that fails to speak never
+  holds a prompt open.
 
 ### S9 connection-server
 
