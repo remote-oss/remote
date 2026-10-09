@@ -9,9 +9,15 @@ import {
   planCreation,
   starterTemplate,
   type CreationStep,
+  type FolderState,
   type NewFileInput,
   type TabStop,
 } from '../../src/config/new-file.ts';
+
+/** The folders missing on the file's path, outermost first, from the folders the caller reported. */
+function missingFoldersOf(states: readonly FolderState[]): readonly string[] {
+  return states.filter(state => !state.exists).map(state => state.path);
+}
 
 /** The input a row sets, over a missing user file with nothing missing on its path. */
 function input(changes: Partial<NewFileInput>): NewFileInput {
@@ -32,17 +38,28 @@ describe('planCreation (what to create for a picked file)', () => {
     ];
     deepStrictEqual(
       planCreation(
-        input({file: '/h/.ssh/config', missingFolders: ['/h/.ssh']}),
+        input({
+          file: '/h/.ssh/config',
+          missingFolders: missingFoldersOf([{path: '/h/.ssh', exists: false}]),
+        }),
       ),
       {steps, insertTemplate: true},
     );
   });
 
   it('F-2203.AC-31: a missing user file with an existing folder, only the file step', () => {
-    deepStrictEqual(planCreation(input({role: 'user'})), {
-      steps: [{path: '/h/.ssh/config', kind: 'file', mode: 0o600}],
-      insertTemplate: true,
-    });
+    deepStrictEqual(
+      planCreation(
+        input({
+          role: 'user',
+          missingFolders: missingFoldersOf([{path: '/h/.ssh', exists: true}]),
+        }),
+      ),
+      {
+        steps: [{path: '/h/.ssh/config', kind: 'file', mode: 0o600}],
+        insertTemplate: true,
+      },
+    );
   });
 
   it('F-2203.AC-9: an existing file, no steps and no template', () => {
@@ -51,7 +68,7 @@ describe('planCreation (what to create for a picked file)', () => {
         input({
           role: 'configured',
           exists: true,
-          missingFolders: ['/a'],
+          missingFolders: missingFoldersOf([{path: '/a', exists: false}]),
         }),
       ),
       {steps: [], insertTemplate: false},
@@ -64,7 +81,10 @@ describe('planCreation (what to create for a picked file)', () => {
         input({
           role: 'configured',
           file: '/a/b/config',
-          missingFolders: ['/a', '/a/b'],
+          missingFolders: missingFoldersOf([
+            {path: '/a', exists: false},
+            {path: '/a/b', exists: false},
+          ]),
         }),
       ),
       {

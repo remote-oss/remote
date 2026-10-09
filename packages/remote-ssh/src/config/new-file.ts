@@ -67,7 +67,8 @@ export function planCreation(input: NewFileInput): CreationPlan {
   }
   const folderMode =
     input.role === 'user' ? USER_FOLDER_MODE : CONFIGURED_FOLDER_MODE;
-  const fileMode = input.role === 'user' ? USER_FILE_MODE : CONFIGURED_FILE_MODE;
+  const fileMode =
+    input.role === 'user' ? USER_FILE_MODE : CONFIGURED_FILE_MODE;
   const steps: CreationStep[] = input.missingFolders.map(path => ({
     path,
     kind: 'folder',
