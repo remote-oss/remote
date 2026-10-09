@@ -72,3 +72,12 @@ export type {OpenCommand, OpenTarget, PathKind} from './opener/arguments.ts';
 export {openLocalCommand, openRemoteCommand} from './opener/arguments.ts';
 export type {FailedLike, ResolverOutcome} from './resolver/failure-mapping.ts';
 export {mapFailure} from './resolver/failure-mapping.ts';
+export {
+  closeRemote,
+  openLocal,
+  type OpenOutcome,
+  type OpenerHost,
+  type OpenRequest,
+  openRemote,
+  reload,
+} from './opener/opener.ts';

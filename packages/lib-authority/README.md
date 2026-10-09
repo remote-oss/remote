@@ -33,6 +33,11 @@ family's own form, and gives the label the resource label formatter uses.
 - `registerAuthorityLabel(host, decoded, suffix)` registers the resource label formatter of a window's authority: the
   remote scheme, the authority exactly as the window carries it, paths written with `/` and `~` for the home folder,
   and `suffix` after workspace names. The family composes the suffix from its own host label and string table.
+- `openRemote(host, authority, request)`, `openLocal(host, request)`, `reload(host)` and `closeRemote(host)` open a
+  folder, a workspace or an empty window on a remote authority or on this machine, in the current window or a new one,
+  reload the window, and leave the remote side. They hand the editor's own commands what the pure argument builders
+  decided, convert the plain address into the editor's own through the host, show nothing, and return a refusal as a
+  value.
 - `decode(encode(target))` returns `target` and `encode(decode(authority))` returns `authority` for every form the
   codec defines.
 
