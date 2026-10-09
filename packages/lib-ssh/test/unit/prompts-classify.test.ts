@@ -112,21 +112,36 @@ describe('classifyPrompt (the surface a question is shown on)', () => {
     );
   });
 
-  it('F-2305.AC-43: a fingerprint without its full stop is a masked input', () => {
-    const text = `${AUTHENTICITY}ED25519 key fingerprint is SHA256:abc\n${CONTINUE}`;
-    deepStrictEqual(classifyPrompt(text, DISPLAY_HOST), masked(` ${text}`));
-  });
-
-  const COLON_FORMS: Array<[string, string]> = [
-    ['the full stop', 'ED25519 key fingerprint is: SHA256:abc.'],
-    ['no full stop', 'ED25519 key fingerprint is: SHA256:abc'],
+  const NEWER_FORMS: Array<[string, string]> = [
+    ['no full stop', 'ED25519 key fingerprint is SHA256:abc'],
+    ['the colon and the full stop', 'ED25519 key fingerprint is: SHA256:abc.'],
+    ['the colon and no full stop', 'ED25519 key fingerprint is: SHA256:abc'],
   ];
-  for (const [label, line] of COLON_FORMS) {
-    it(`F-2305.BR-2: the colon form with ${label} is a masked input`, () => {
+  for (const [label, line] of NEWER_FORMS) {
+    it(`F-2305.AC-43, BR-2: a fingerprint line with ${label} is a pick`, () => {
       const text = `${AUTHENTICITY}${line}\n${CONTINUE}`;
-      deepStrictEqual(classifyPrompt(text, DISPLAY_HOST), masked(` ${text}`));
+      deepStrictEqual(
+        classifyPrompt(text, DISPLAY_HOST),
+        pick(DISPLAY_HOST, 'SHA256:abc'),
+      );
     });
   }
+
+  it('F-2305.BR-2: the question OpenSSH 10.3 writes, verbatim, is a pick of its fingerprint', () => {
+    const text = `The authenticity of host '[127.0.0.1]:42455 ([127.0.0.1]:42455)' can't be established.
+ED25519 key fingerprint is: SHA256:228bbRdDH1k3dCptOWPoMMTsL/eCbdUeT5wekJmgEpY
+This key is not known by any other names.
+${CONTINUE}`;
+    deepStrictEqual(
+      classifyPrompt(text, '127.0.0.1'),
+      pick('127.0.0.1', 'SHA256:228bbRdDH1k3dCptOWPoMMTsL/eCbdUeT5wekJmgEpY'),
+    );
+  });
+
+  it('F-2305.BR-2: a fingerprint line without a key type is still no pick', () => {
+    const text = `${AUTHENTICITY}key fingerprint is: SHA256:abc\n${CONTINUE}`;
+    deepStrictEqual(classifyPrompt(text, DISPLAY_HOST), masked(` ${text}`));
+  });
 
   it('F-2305.BR-2: the fingerprint line alone is a masked input', () => {
     deepStrictEqual(
@@ -134,6 +149,24 @@ describe('classifyPrompt (the surface a question is shown on)', () => {
       masked(` ${CLASSIC_LINE}`),
     );
   });
+
+  const LINES_WITHOUT_QUESTION: Array<[string, string]> = [
+    ['the classic form', 'ED25519 key fingerprint is SHA256:abc.'],
+    [
+      'the form with a colon and no full stop',
+      'ED25519 key fingerprint is: SHA256:abc',
+    ],
+    [
+      'the form with a colon and a full stop',
+      'ED25519 key fingerprint is: SHA256:abc.',
+    ],
+  ];
+  for (const [label, line] of LINES_WITHOUT_QUESTION) {
+    it(`F-2305.BR-2: ${label} without the continue-connecting question stays a masked input`, () => {
+      const text = `${AUTHENTICITY}${line}\n`;
+      deepStrictEqual(classifyPrompt(text, DISPLAY_HOST), masked(` ${text}`));
+    });
+  }
 
   it('F-2305.BR-2: the question alone is a masked input', () => {
     deepStrictEqual(
