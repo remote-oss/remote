@@ -42,7 +42,14 @@ As card tooling-04; no `paths` mapping, no `skipLibCheck` changes.
 
 PR title `tooling: libraries consumed by declarations (card tooling-06)`.
 
-## 6. Open rows
+## 6. Scheduling (ruled 2026-10-09)
+
+This card rewrites every package's build configuration, so it starts only when no other PR touching `packages/*` is
+open, ahead of every slice-2 card, and merges before any new package PR opens. Until it lands, the lint script runs
+with a 4 GB heap (`node --max-old-space-size=4096`, accepted as a stopgap in #186) because typed lint loads every
+library's sources.
+
+## 7. Open rows
 
 If `exports` conditions and `tsc --build` cannot be made to agree without `paths`, stop and report the smallest
 working alternative.
