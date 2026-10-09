@@ -7,6 +7,9 @@
   "include": ["${configDir}/suite"],
   "references": [
     {
+      "path": "../../packages/lib-forwarding"
+    },
+    {
       "path": "../../packages/lib-helper"
     },
     {
@@ -20,6 +23,9 @@
     },
     {
       "path": "../../packages/lib-ssh"
+    },
+    {
+      "path": "../../packages/lib-forwarding/tsconfig.test.json"
     },
     {
       "path": "../../packages/lib-helper/tsconfig.test.json"

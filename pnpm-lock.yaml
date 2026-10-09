@@ -317,6 +317,9 @@ importers:
 
   tests/acceptance:
     dependencies:
+      lib-forwarding:
+        specifier: workspace:*
+        version: link:../../packages/lib-forwarding
       lib-helper:
         specifier: workspace:*
         version: link:../../packages/lib-helper

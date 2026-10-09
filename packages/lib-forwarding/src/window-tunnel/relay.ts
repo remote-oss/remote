@@ -53,8 +53,8 @@ function bridge(
   client.onData(chunk => {
     if (host === undefined) {
       held.push(chunk);
-    } else {
-      host.send(chunk);
+    } else if (!host.send(chunk)) {
+      client.pause();
     }
   });
   client.onClose(() => {
@@ -70,10 +70,20 @@ function bridge(
       track(opened);
       host = opened;
       for (const chunk of held.splice(0)) {
-        opened.send(chunk);
+        if (!opened.send(chunk)) {
+          client.pause();
+        }
       }
+      opened.onDrain(() => {
+        client.resume();
+      });
+      client.onDrain(() => {
+        opened.resume();
+      });
       opened.onData(chunk => {
-        client.send(chunk);
+        if (!client.send(chunk)) {
+          opened.pause();
+        }
       });
       opened.onClose(() => {
         client.close();
