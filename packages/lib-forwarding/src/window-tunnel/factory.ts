@@ -50,7 +50,7 @@ export interface TunnelFactory {
   forward(request: ForwardRequest): Promise<ForwardOutcome>;
   /** The ports forwarded now, in the order they were forwarded. */
   forwarded(): readonly ForwardedPort[];
-  /** The connection was replaced: every forward uses `dialer` from now on, and each is probed through it. */
+  /** The connection was replaced: every forward uses `dialer` from now on, and all are probed through it together, under one bound. */
   reconnect(dialer: Dialer): Promise<ReviveReport>;
   /** Ends every forward. */
   closeAll(): void;
@@ -103,20 +103,26 @@ export function factoryFor(init: FactoryInit): TunnelFactory {
     forwarded: () => entries.map(entry => entry.port),
     async reconnect(replacement) {
       dialer = replacement;
-      const revived: ForwardedPort[] = [];
-      const failed: ForwardedPort[] = [];
-      for (const entry of entries) {
-        const worked = await succeedsWithin(
-          async () => {
-            (
-              await dialer.dial({kind: 'port', port: entry.port.remotePort})
-            ).close();
-          },
-          init.limits,
-          init.scheduler,
-        );
-        (worked ? revived : failed).push(entry.port);
-      }
+      const probed = await Promise.all(
+        entries.map(async entry => ({
+          port: entry.port,
+          worked: await succeedsWithin(
+            async () => {
+              (
+                await dialer.dial({kind: 'port', port: entry.port.remotePort})
+              ).close();
+            },
+            init.limits,
+            init.scheduler,
+          ),
+        })),
+      );
+      const revived = probed
+        .filter(probe => probe.worked)
+        .map(probe => probe.port);
+      const failed = probed
+        .filter(probe => !probe.worked)
+        .map(probe => probe.port);
       return {revived, failed};
     },
     closeAll() {

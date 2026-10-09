@@ -37,20 +37,52 @@ export interface RelayTunnelRequest {
   limits: WaitLimits;
 }
 
-/** Passes the bytes of two connections to each other, and ends each when the other ends. */
-export function pipeConnections(first: Duplex, second: Duplex): void {
-  first.onData(chunk => {
-    second.send(chunk);
+/**
+ * Joins a client of the window's port to a connection to the host, which is still being opened. The bytes the client
+ * sends before the host side exists are held and sent first, in order. Each side ends the other, and a client that
+ * leaves before the host side opens closes it as soon as it does.
+ */
+function bridge(
+  client: Duplex,
+  opening: Promise<Duplex>,
+  track: (connection: Duplex) => void,
+): void {
+  const held: Uint8Array[] = [];
+  let host: Duplex | undefined;
+  let clientGone = false;
+  client.onData(chunk => {
+    if (host === undefined) {
+      held.push(chunk);
+    } else {
+      host.send(chunk);
+    }
   });
-  second.onData(chunk => {
-    first.send(chunk);
+  client.onClose(() => {
+    clientGone = true;
+    host?.close();
   });
-  first.onClose(() => {
-    second.close();
-  });
-  second.onClose(() => {
-    first.close();
-  });
+  opening.then(
+    opened => {
+      if (clientGone) {
+        opened.close();
+        return;
+      }
+      track(opened);
+      host = opened;
+      for (const chunk of held.splice(0)) {
+        opened.send(chunk);
+      }
+      opened.onData(chunk => {
+        client.send(chunk);
+      });
+      opened.onClose(() => {
+        client.close();
+      });
+    },
+    () => {
+      client.close();
+    },
+  );
 }
 
 /**
@@ -72,15 +104,7 @@ export async function openRelayTunnel(
   try {
     listening = await request.local.listen(request.localPort, accepted => {
       track(accepted);
-      dialer.dial(target).then(
-        remote => {
-          track(remote);
-          pipeConnections(accepted, remote);
-        },
-        () => {
-          accepted.close();
-        },
-      );
+      bridge(accepted, dialer.dial(target), track);
     });
   } catch (caught) {
     return {

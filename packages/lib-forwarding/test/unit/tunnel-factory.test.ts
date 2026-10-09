@@ -163,4 +163,16 @@ describe('the tunnel factory', () => {
       [[3001, 4001], []],
     );
   });
+
+  it('probes all the forwards together: many that hang end at one bound, not one bound each', async () => {
+    const {factory, clock} = fixture();
+    await factory.forward({remotePort: 1, localPort: 11});
+    await factory.forward({remotePort: 2, localPort: 12});
+    await factory.forward({remotePort: 3, localPort: 13});
+    const pending = factory.reconnect(new FakeDialer(['hang']));
+    await settled();
+    clock.advance(10_000);
+    await settled();
+    deepStrictEqual((await pending).failed.length, 3);
+  });
 });

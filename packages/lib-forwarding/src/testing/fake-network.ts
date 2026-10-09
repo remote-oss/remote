@@ -57,9 +57,16 @@ export class FakeConnection implements Duplex {
   }
 }
 
+/** How a scripted dial ends: like any operation, or later, when the test lets it open. */
+export type DialAnswer = Answer | 'later';
+
 /** The answer for the `count`-th call: the script's entry, and its last entry for every call after it. */
-function answerAt(script: readonly Answer[], count: number): Answer {
-  return script[Math.min(count, script.length - 1)] ?? 'work';
+function answerAt<Scripted extends string>(
+  script: readonly Scripted[],
+  count: number,
+  fallback: Scripted,
+): Scripted {
+  return script[Math.min(count, script.length - 1)] ?? fallback;
 }
 
 /** A dialer whose calls end as the script says, one entry per call. */
@@ -68,17 +75,34 @@ export class FakeDialer implements Dialer {
   readonly dialed: TunnelTarget[] = [];
   /** The connections given, in order. */
   readonly connections: FakeConnection[] = [];
-  private readonly script: readonly Answer[];
+  private readonly script: readonly DialAnswer[];
+  private readonly waiting: Array<() => void> = [];
 
   /** A dialer that answers by `script`. */
-  constructor(script: readonly Answer[] = ['work']) {
+  constructor(script: readonly DialAnswer[] = ['work']) {
     this.script = script;
+  }
+
+  /** Opens the oldest dial that was left for later; false when none waits. */
+  openNext(): boolean {
+    const open = this.waiting.shift();
+    open?.();
+    return open !== undefined;
   }
 
   /** Records the target and ends as the script says. */
   dial(target: TunnelTarget): Promise<Duplex> {
-    const answer = answerAt(this.script, this.dialed.length);
+    const answer = answerAt(this.script, this.dialed.length, 'work');
     this.dialed.push(target);
+    if (answer === 'later') {
+      return new Promise<Duplex>(resolve => {
+        this.waiting.push(() => {
+          const connection = new FakeConnection();
+          this.connections.push(connection);
+          resolve(connection);
+        });
+      });
+    }
     if (answer === 'hang') {
       return new Promise<Duplex>(() => undefined);
     }
@@ -134,7 +158,7 @@ export class FakeLocalPort implements LocalPort {
 
   /** Records the port and ends as the connect script says. */
   connect(port: number): Promise<Duplex> {
-    const answer = answerAt(this.connectScript, this.connected.length);
+    const answer = answerAt(this.connectScript, this.connected.length, 'work');
     this.connected.push(port);
     if (answer === 'hang') {
       return new Promise<Duplex>(() => undefined);

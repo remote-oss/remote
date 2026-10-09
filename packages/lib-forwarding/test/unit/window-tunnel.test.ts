@@ -8,6 +8,7 @@ import {
 } from '../../src/index.ts';
 import {
   type Answer,
+  type DialAnswer,
   FakeDialer,
   FakeLocalPort,
 } from '../../src/testing/fake-network.ts';
@@ -21,7 +22,7 @@ interface RelayFixture {
 }
 
 function relay(
-  dialScript: readonly Answer[] = ['work'],
+  dialScript: readonly DialAnswer[] = ['work'],
   listenAnswer: Answer = 'work',
 ): RelayFixture {
   const clock = new FakeClock();
@@ -270,5 +271,56 @@ describe('the fakes', () => {
     const dialer = new FakeDialer([]);
     await dialer.dial({kind: 'port', port: 1});
     deepStrictEqual(dialer.connections.length, 1);
+  });
+});
+
+describe('a client that does not wait for the host side', () => {
+  it('has the bytes it sends before the host side opens delivered first, in order', async () => {
+    const {open, local, dialer} = relay(['work', 'later']);
+    await open();
+    const client = local.accept(50000);
+    client?.receive(Uint8Array.of(1));
+    client?.receive(Uint8Array.of(2));
+    dialer.openNext();
+    await settled();
+    client?.receive(Uint8Array.of(3));
+    deepStrictEqual(dialer.connections[1]?.sent, [
+      Uint8Array.of(1),
+      Uint8Array.of(2),
+      Uint8Array.of(3),
+    ]);
+  });
+
+  it('closes the host side when it opens after the client has left', async () => {
+    const {open, local, dialer} = relay(['work', 'later']);
+    await open();
+    const client = local.accept(50000);
+    client?.close();
+    dialer.openNext();
+    await settled();
+    deepStrictEqual(dialer.connections[1]?.closed, true);
+  });
+
+  it('sends nothing to a host side that opens after the client has left', async () => {
+    const {open, local, dialer} = relay(['work', 'later']);
+    await open();
+    const client = local.accept(50000);
+    client?.receive(Uint8Array.of(9));
+    client?.close();
+    dialer.openNext();
+    await settled();
+    deepStrictEqual(dialer.connections[1]?.sent, []);
+  });
+
+  it('closes the host side that opens after the tunnel was closed', async () => {
+    const {open, local, dialer} = relay(['work', 'later']);
+    const outcome = await open();
+    local.accept(50000);
+    if (outcome.kind === 'open') {
+      outcome.close();
+    }
+    dialer.openNext();
+    await settled();
+    deepStrictEqual(dialer.connections[1]?.closed, true);
   });
 });

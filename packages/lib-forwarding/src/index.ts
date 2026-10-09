@@ -21,7 +21,6 @@ export type {
 export {succeedsWithin, type WaitLimits} from './window-tunnel/wait.ts';
 export {
   openRelayTunnel,
-  pipeConnections,
   type RelayTunnelRequest,
   type WindowAddress,
   type WindowTunnelOutcome,

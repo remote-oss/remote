@@ -4,7 +4,10 @@
  * opens no socket itself; the adapters implement these over `net` and over the SSH connection.
  */
 
-/** A connection that carries bytes in both directions and tells when it ends. */
+/**
+ * A connection that carries bytes in both directions and tells when it ends. It delivers bytes only to listeners
+ * already attached: an adapter holds earlier bytes until the first data listener is attached, so none is lost.
+ */
 export interface Duplex {
   send(chunk: Uint8Array): void;
   onData(listener: (chunk: Uint8Array) => void): void;
