@@ -41,9 +41,7 @@ interface CallNode {
 
 /** The root name of a callee: `it` for `it(...)` and for `it.only(...)`. */
 function rootName(callee: CallNode['callee']): string | undefined {
-  return callee.type === 'MemberExpression'
-    ? callee.object?.name
-    : callee.name;
+  return callee.type === 'MemberExpression' ? callee.object?.name : callee.name;
 }
 
 /** Whether a call defines a test: `it` or `test`, with a modifier or not, and a function as its last argument. */
@@ -83,21 +81,24 @@ const oneAssertion: Rule.RuleModule = {
     },
   },
   create(context) {
-    const counts: number[] = [];
+    const frames: Array<{count: number}> = [];
     return {
       CallExpression(node) {
         const call = node as unknown as CallNode;
         if (isTestCall(call)) {
-          counts.push(0);
-        } else if (isAssertion(call) && counts.length > 0) {
-          counts[counts.length - 1] += 1;
+          frames.push({count: 0});
+        } else if (isAssertion(call)) {
+          const frame = frames.at(-1);
+          if (frame !== undefined) {
+            frame.count += 1;
+          }
         }
       },
       'CallExpression:exit'(node) {
         if (!isTestCall(node as unknown as CallNode)) {
           return;
         }
-        const count = counts.pop() ?? 0;
+        const count = frames.pop()?.count ?? 0;
         if (count > MAXIMUM_ASSERTIONS) {
           context.report({
             node,
