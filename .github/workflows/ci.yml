@@ -89,5 +89,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:acceptance:server
 
+  # The real VSCodium server for musl, installed and started on the same host: once by the host's own download, once
+  # with the host's network cut so that the client downloads and copies, and once from the archive the client kept.
+  # The archive (about 125 MB) is fetched once per run, into a folder the run removes. It runs on a manual dispatch of
+  # the workflow and on the release branch, never on a pull request's own run.
+  acceptance-real-server:
+    name: acceptance (real server)
+    if: github.event_name == 'workflow_dispatch' || github.ref_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:acceptance:real-server
+
   # integration:  pnpm test:integration under xvfb, after the testing ADR
   # per-package checks by profile: added in a later change

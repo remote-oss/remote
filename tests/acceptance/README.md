@@ -41,3 +41,13 @@ The extension host sees these variables:
 | `HARNESS_CONTAINER` | The host container's id. |
 | `HARNESS_RUN_FOLDER` | The run's folder: keys, known hosts, user data, extensions. |
 | `HARNESS_VSIX_FILES` | The VSIX files installed, separated by the platform's path delimiter. |
+
+## The server lifecycle without the editor
+
+`pnpm test:acceptance:server` runs `server/*.test.ts` in plain Node.js against the same host: the probe, install,
+start, lock, kill, uninstall and clean-up of lib-server through the SSH host channel, with a stand-in server built by
+the test and copied in with `docker cp`, so it needs no download. `pnpm test:acceptance:real-server` runs the one
+file that installs and starts the real VSCodium server for musl (about 125 MB, fetched through the product fixture's
+template into a folder of the temporary directory that the run removes): once downloaded by the host, once with the
+host's download hosts made unreachable so that the client downloads and copies, and once from the archive the client
+kept. It is skipped unless `REMOTE_OSS_REAL_SERVER=1`, which that script sets.

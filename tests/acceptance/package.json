@@ -5,6 +5,7 @@
   "dependencies": {
     "lib-helper": "workspace:*",
     "lib-log": "workspace:*",
+    "lib-product": "workspace:*",
     "lib-server": "workspace:*",
     "lib-ssh": "workspace:*"
   }
