@@ -406,7 +406,7 @@ Rules inside the scripts:
   reference's recorded failure is drift (R-86, F-3908). The PowerShell script's details are provisional (lab) until
   F-2701's capture runs (D-60).
 - In `stepwise` mode each action is its own `runScript` with one log line: remove per the cleanup policy, create
-  `bin/<commit>-<epoch ms>`, unpack from the streamed archive stripping the top folder, rename to `bin/<commit>`
+  `bin/<commit>-<epoch ms>`, unpack from the streamed archive stripping the top folder (ruled 2026-10-08: a leading `./` is not a folder and is dropped first; the top folder is stripped only when every entry shares one, else entries keep their paths, so a REH archive packed without a wrapper keeps `bin/`, `extensions/`, `out/`; the Windows script follows the same rule), rename to `bin/<commit>`
   atomically. The installed case is one inline script that sources the environment setup, reports process id,
   kernel and node path, and starts the server (F-6304 6.1, 6.2, BR-8).
 - Unpack percentage lines become progress events for the caller to render. Their format is the family's own (no
