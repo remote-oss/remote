@@ -16,6 +16,8 @@ const REPLIES: PlainData[] = [
   {type: 'sharedRecord', record: null},
   {type: 'sharedRecord', record: RECORD},
   {type: 'answered', accepted: true},
+  {type: 'scriptEnded', status: 3},
+  {type: 'scriptFailed', reason: 'timeout', detail: 'no end in time'},
 ];
 
 const EVENTS: PlainData[] = [
@@ -25,6 +27,7 @@ const EVENTS: PlainData[] = [
   {type: 'waitingForOtherWindow'},
   {type: 'connected', socksPort: 41000},
   {type: 'transportLost'},
+  {type: 'scriptLine', runId: 4, line: 'hello'},
   {type: 'spawnFailed', cause: 'clientVanished', detail: 'spawn ssh ENOENT'},
   {type: 'loginFailed', kind: 'unknown', hints: []},
   {
@@ -53,16 +56,11 @@ describe('connection replies and events (contracts §4 S9)', () => {
         {type: 'refused'},
         {type: 'sharedRecord', record: {remotePort: 'x'}},
         {type: 'answered', accepted: 'yes'},
+        {type: 'scriptEnded', status: 'ok'},
+        {type: 'scriptFailed', reason: 'because', detail: 'x'},
+        {type: 'scriptFailed', reason: 'timeout'},
       ].map(body => readConnectionReply(body)),
-      [
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      ],
+      Array.from({length: 10}, () => undefined),
     );
   });
 
@@ -87,8 +85,10 @@ describe('connection replies and events (contracts §4 S9)', () => {
         {type: 'loginFailed', hints: []},
         {type: 'spawnFailed', cause: 'other', detail: 'x'},
         {type: 'spawnFailed', cause: 'spawnFailed'},
+        {type: 'scriptLine', runId: 'x', line: 'y'},
+        {type: 'scriptLine', runId: 1},
       ].map(body => readConnectionEvent(body)),
-      Array.from({length: 11}, () => undefined),
+      Array.from({length: 13}, () => undefined),
     );
   });
 });

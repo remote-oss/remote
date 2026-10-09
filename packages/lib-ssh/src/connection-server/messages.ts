@@ -24,7 +24,19 @@ export type ConnectionRequest =
   | {type: 'sharedRecord'}
   | {type: 'setSharedRecord'; record: SharedRecord}
   | {type: 'answer'; promptId: number; text: string}
+  | {
+      type: 'runScript';
+      runId: number;
+      script: string;
+      /** What the script reads on its standard input, as base64; null for none. */
+      inputBase64: string | null;
+      /** How long the run may take once it has started, in milliseconds. */
+      deadlineMilliseconds: number;
+    }
   | {type: 'kill'};
+
+/** Why a script did not run to its end. */
+export type ScriptFailureReason = 'notConnected' | 'channelClosed' | 'timeout';
 
 /** Why the helper refused a request. */
 export type Refusal = 'notOwner' | 'alreadyConnecting' | 'alreadyConnected';
@@ -34,7 +46,9 @@ export type ConnectionReply =
   | {type: 'accepted'}
   | {type: 'refused'; reason: Refusal}
   | {type: 'sharedRecord'; record: SharedRecord | null}
-  | {type: 'answered'; accepted: boolean};
+  | {type: 'answered'; accepted: boolean}
+  | {type: 'scriptEnded'; status: number}
+  | {type: 'scriptFailed'; reason: ScriptFailureReason; detail: string};
 
 /** The kind of question `ssh` asked. */
 export type PromptSurface =
@@ -59,6 +73,7 @@ export type ConnectionEvent =
       hints: FailureHint[];
     }
   | {type: 'spawnFailed'; cause: SpawnFailure; detail: string}
+  | {type: 'scriptLine'; runId: number; line: string}
   | {type: 'transportLost'};
 
 type Fields = Record<string, unknown>;
@@ -115,6 +130,20 @@ export function readConnectionRequest(
       return typeof body.promptId === 'number' && typeof body.text === 'string'
         ? {type: 'answer', promptId: body.promptId, text: body.text}
         : undefined;
+    case 'runScript':
+      return typeof body.runId === 'number' &&
+        typeof body.script === 'string' &&
+        (body.inputBase64 === null || typeof body.inputBase64 === 'string') &&
+        typeof body.deadlineMilliseconds === 'number' &&
+        body.deadlineMilliseconds > 0
+        ? {
+            type: 'runScript',
+            runId: body.runId,
+            script: body.script,
+            inputBase64: body.inputBase64,
+            deadlineMilliseconds: body.deadlineMilliseconds,
+          }
+        : undefined;
     default:
       return undefined;
   }
@@ -124,6 +153,12 @@ const REFUSALS: readonly string[] = [
   'notOwner',
   'alreadyConnecting',
   'alreadyConnected',
+];
+
+const SCRIPT_FAILURES: readonly string[] = [
+  'notConnected',
+  'channelClosed',
+  'timeout',
 ];
 
 const SURFACES: readonly string[] = [
@@ -156,6 +191,20 @@ export function readConnectionReply(
     case 'answered':
       return typeof body.accepted === 'boolean'
         ? {type: 'answered', accepted: body.accepted}
+        : undefined;
+    case 'scriptEnded':
+      return typeof body.status === 'number'
+        ? {type: 'scriptEnded', status: body.status}
+        : undefined;
+    case 'scriptFailed':
+      return typeof body.reason === 'string' &&
+        SCRIPT_FAILURES.includes(body.reason) &&
+        typeof body.detail === 'string'
+        ? {
+            type: 'scriptFailed',
+            reason: body.reason as ScriptFailureReason,
+            detail: body.detail,
+          }
         : undefined;
     default:
       return undefined;
@@ -201,6 +250,10 @@ export function readConnectionEvent(
         body.cause === 'spawnFailed') &&
         typeof body.detail === 'string'
         ? {type: 'spawnFailed', cause: body.cause, detail: body.detail}
+        : undefined;
+    case 'scriptLine':
+      return typeof body.runId === 'number' && typeof body.line === 'string'
+        ? {type: 'scriptLine', runId: body.runId, line: body.line}
         : undefined;
     case 'waitingForOtherWindow':
     case 'transportLost':

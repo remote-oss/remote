@@ -14,39 +14,18 @@ import {
   killConnection,
   runConnectionHelper,
   type SharedConnection,
-  type SshRequest,
 } from '../../src/index.ts';
+import {AUTHENTICATED, SSH_REQUEST} from './connection-fixture.ts';
 import {ScriptedSpawner, startError} from './fake-client-process.ts';
 
 const PARAMETERS = 'REMOTE_OSS_HELPER_PARAMETERS';
 const SOCKS_PORT = 41000;
-const AUTHENTICATED =
-  'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n';
 const RECORD = {
   remotePort: 41001,
   operatingSystem: 'linux',
   architecture: 'x64',
   temporaryFolder: '/tmp',
   connectionToken: 'token-value',
-};
-const SSH_REQUEST: SshRequest = {
-  purpose: 'connection',
-  target: {host: 'harness'},
-  settings: {
-    configFile: '',
-    connectTimeout: 15,
-    permitPtyAllocation: false,
-    remoteCommandInEffect: false,
-  },
-  effective: {
-    hostName: 'harness',
-    user: 'dev',
-    port: '22',
-    localForwards: [],
-  },
-  programs: {sshProgram: 'ssh', scpProgram: 'scp'},
-  homeFolder: '/home/dev',
-  platform: 'linux',
 };
 
 async function settled(rounds = 40): Promise<void> {
@@ -385,6 +364,77 @@ describe('the window side of the shared connection (S9)', () => {
       kind: 'failed',
       failure: {kind: 'timeout'},
     });
+  });
+
+  it('runs a script on the session of the helper, with its lines and its exit status', async () => {
+    const {connection, outcome} = await connectFirst();
+    sshRuns.started[0]?.error(AUTHENTICATED);
+    await outcome;
+    const lines: string[] = [];
+    const running = connection.runOnSession(
+      {
+        runId: 1,
+        script: 'echo hello',
+        inputBase64: null,
+        deadlineMilliseconds: 1000,
+      },
+      line => lines.push(line),
+      5000,
+    );
+    await drive();
+    sshRuns.started[0]?.output(
+      'noise\naskpass-nonce:start\nhello\naskpass-nonce:end 2\n',
+    );
+    deepStrictEqual(
+      [await driven(running), lines],
+      [{kind: 'ended', status: 2}, ['hello']],
+    );
+  });
+
+  it('fails a script that was not answered in the time it was given', async () => {
+    const {connection, outcome} = await connectFirst();
+    sshRuns.started[0]?.error(AUTHENTICATED);
+    await outcome;
+    const running = connection.runOnSession(
+      {
+        runId: 1,
+        script: 'sleep 100',
+        inputBase64: null,
+        deadlineMilliseconds: 100000,
+      },
+      () => undefined,
+      500,
+    );
+    await drive();
+    clock.advance(500);
+    deepStrictEqual(await driven(running), {
+      kind: 'failed',
+      reason: 'timeout',
+      detail: 'no end in time',
+    });
+  });
+
+  it('fails a script as a closed channel when the helper is gone', async () => {
+    const {connection, outcome} = await connectFirst();
+    sshRuns.started[0]?.error(AUTHENTICATED);
+    await outcome;
+    await killConnection(environment, '/registry', 'harness');
+    await drive();
+    deepStrictEqual(
+      await driven(
+        connection.runOnSession(
+          {
+            runId: 1,
+            script: 'x',
+            inputBase64: null,
+            deadlineMilliseconds: 1000,
+          },
+          () => undefined,
+          500,
+        ),
+      ),
+      {kind: 'failed', reason: 'channelClosed', detail: 'the helper is gone'},
+    );
   });
 
   it('ends the wait when the caller cancels, and keeps the lease', async () => {

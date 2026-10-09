@@ -247,6 +247,36 @@ describe('serve', () => {
     );
   });
 
+  describe('a notice to the lease that asked', () => {
+    beforeEach(() => {
+      handler.onRequest = (body, context) => {
+        context.notify(`for lease ${String(context.lease)}`);
+        return Promise.resolve({echo: body});
+      };
+    });
+
+    it('reaches that lease before the reply, and no other', async () => {
+      start();
+      const first = await connect();
+      const second = await connect();
+      first.connection.send({type: 'request', requestId: 1, body: 'x'});
+      await settled();
+      deepStrictEqual(
+        [
+          first.received.slice(-2),
+          second.received.map(message => (message as {type: string}).type),
+        ],
+        [
+          [
+            {type: 'message', body: 'for lease 1'},
+            {type: 'reply', requestId: 1, body: {echo: 'x'}},
+          ],
+          ['welcome'],
+        ],
+      );
+    });
+  });
+
   describe('a handler that watches the helper', () => {
     let controls: HelperControl[];
     let listeningWhenAttached: boolean[];

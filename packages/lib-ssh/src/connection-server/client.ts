@@ -26,6 +26,7 @@ import {
   readConnectionEvent,
   readConnectionReply,
   type Refusal,
+  type ScriptFailureReason,
   type SharedRecord,
 } from './messages.ts';
 
@@ -257,6 +258,21 @@ class LoginWait {
   }
 }
 
+/** A script to run on the shared session. */
+export interface SessionRun {
+  runId: number;
+  script: string;
+  /** What the script reads, as base64; null for none. */
+  inputBase64: string | null;
+  /** How long the script may take once it has started, in milliseconds. */
+  deadlineMilliseconds: number;
+}
+
+/** How a script run on the shared session ended. */
+export type SessionRunEnd =
+  | {kind: 'ended'; status: number}
+  | {kind: 'failed'; reason: ScriptFailureReason; detail: string};
+
 /** The helper's answer to one request, or why there is none. */
 type Asked =
   | {kind: 'answered'; reply: ConnectionReply}
@@ -269,6 +285,7 @@ export class SharedConnection {
   private readonly timer: Timer;
   private readonly listeners = new Set<(notice: ConnectionNotice) => void>();
   private readonly openPrompts = new Set<number>();
+  private readonly lineListeners = new Map<number, (line: string) => void>();
   private watcher:
     ((event: ConnectionEvent | 'helperGone') => void) | undefined;
 
@@ -348,6 +365,42 @@ export class SharedConnection {
     return asked.kind === 'answered' && asked.reply.type === 'accepted';
   }
 
+  /**
+   * Runs a script on the shared `ssh` session, after the runs that came before it. `onLine` receives each line the
+   * script writes before the end is known; `waitMilliseconds` bounds the whole wait, the wait for earlier runs
+   * included.
+   */
+  async runOnSession(
+    script: SessionRun,
+    onLine: (line: string) => void,
+    waitMilliseconds: number,
+  ): Promise<SessionRunEnd> {
+    this.lineListeners.set(script.runId, onLine);
+    const outcome = await this.lease.request(
+      {type: 'runScript', ...script},
+      waitMilliseconds,
+    );
+    this.lineListeners.delete(script.runId);
+    if (outcome.kind === 'timeout') {
+      return {kind: 'failed', reason: 'timeout', detail: 'no end in time'};
+    }
+    if (outcome.kind !== 'reply') {
+      return {
+        kind: 'failed',
+        reason: 'channelClosed',
+        detail:
+          outcome.kind === 'rejected' ? outcome.reason : 'the helper is gone',
+      };
+    }
+    const reply = readConnectionReply(outcome.body);
+    if (reply?.type === 'scriptEnded') {
+      return {kind: 'ended', status: reply.status};
+    }
+    return reply?.type === 'scriptFailed'
+      ? {kind: 'failed', reason: reply.reason, detail: reply.detail}
+      : {kind: 'failed', reason: 'channelClosed', detail: 'unreadable reply'};
+  }
+
   /** Ends this window's lease; the helper ends a short grace after the last one. */
   release(): void {
     this.lease.release();
@@ -414,6 +467,10 @@ export class SharedConnection {
     }
     const parsed = readConnectionEvent(event.body);
     if (parsed === undefined) {
+      return;
+    }
+    if (parsed.type === 'scriptLine') {
+      this.lineListeners.get(parsed.runId)?.(parsed.line);
       return;
     }
     this.noticeOf(parsed);

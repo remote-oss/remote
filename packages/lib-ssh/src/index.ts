@@ -101,6 +101,7 @@ export {
   type ConnectionRequest,
   type PromptSurface as ConnectionPromptSurface,
   type Refusal,
+  type ScriptFailureReason,
   readConnectionRequest,
   type SharedRecord,
 } from './connection-server/messages.ts';
@@ -162,8 +163,15 @@ export {
   CONNECTION_NAMESPACE,
   type ConnectOutcome,
   killConnection,
+  type SessionRun,
+  type SessionRunEnd,
   SharedConnection,
 } from './connection-server/client.ts';
+export {
+  type SessionRunner,
+  SharedSessionChannel,
+  type SharedSessionChannelOptions,
+} from './connection-server/shared-channel.ts';
 export {
   readConnectionEvent,
   readConnectionReply,

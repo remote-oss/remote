@@ -18,11 +18,13 @@ import {
 } from './end-policy.ts';
 import {LeaseTable} from './leases.ts';
 
-/** What a request handler can do beyond answering: tell every lease something. */
+/** What a request handler can do beyond answering: tell every lease something, or only the one that asked. */
 export interface RequestContext {
   /** The lease that sent the request. */
   lease: number;
   broadcast(body: PlainData): void;
+  /** Tells the lease that sent the request, and no other, something before the reply. */
+  notify(body: PlainData): void;
 }
 
 /** What a handler can do at any time, not only while it answers a request. */
@@ -170,6 +172,9 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
           lease,
           broadcast: body => {
             broadcast({type: 'message', body});
+          },
+          notify: body => {
+            connection.send({type: 'message', body});
           },
         })
         .then(
