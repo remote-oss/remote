@@ -13,7 +13,10 @@ import {
 } from '../../src/index.ts';
 import {nodeEndpointPort} from '../../src/endpoint/node-endpoint.ts';
 import {nodeFilePort} from '../../src/registry/node-file-port.ts';
-import {helperParameters} from '../../src/runtime/helper-main.ts';
+import {
+  helperParameters,
+  inheritedEnvironment,
+} from '../../src/runtime/helper-main.ts';
 
 const SCRIPT = path.join(
   import.meta.dirname,
@@ -92,6 +95,28 @@ describe('helper parameters', () => {
     throws(() => helperParameters({}), {
       message: 'REMOTE_OSS_HELPER_PARAMETERS is not set',
     });
+  });
+});
+
+describe('the environment a helper passes on', () => {
+  it("leaves out the variable that carries the helper's parameters", () => {
+    deepStrictEqual(
+      inheritedEnvironment({
+        REMOTE_OSS_HELPER_PARAMETERS: '{"nonce":"n"}',
+        PATH: '/bin',
+      }),
+      {PATH: '/bin'},
+    );
+  });
+
+  it('keeps every other variable, including one without a value', () => {
+    deepStrictEqual(
+      inheritedEnvironment({HOME: '/home/user', EMPTY: undefined}),
+      {
+        HOME: '/home/user',
+        EMPTY: undefined,
+      },
+    );
   });
 });
 

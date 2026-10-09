@@ -2,3 +2,5 @@
 !package.json
 !package.nls*.json
 !dist/extension.js
+!dist/connection-helper.js
+!dist/askpass.js

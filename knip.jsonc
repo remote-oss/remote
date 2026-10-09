@@ -37,7 +37,7 @@
     },
     // Each package's entry point is the one tools/build.ts bundles; its tests are entries of their own.
     "packages/*": {
-      "entry": ["src/extension.ts", "test/**/*.test.ts"],
+      "entry": ["src/extension.ts", "src/programs/*.ts", "test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"],
     },
   },

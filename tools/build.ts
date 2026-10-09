@@ -4,9 +4,9 @@
  *     node tools/build.ts                  every package in packages/
  *     node tools/build.ts remote-ssh ...   the named package folders
  *
- * A package without an entry point is skipped. Each `src/helpers/<name>.ts` of a package is bundled on its own into
- * `dist/helpers/<name>.js`: a helper script that runs outside the editor, so nothing in it may import `vscode`. Types
- * are checked by `pnpm typecheck`, not here.
+ * A package without an entry point is skipped. Each `src/programs/<name>.ts` of a package is bundled on its own into
+ * `dist/<name>.js`: a program that runs outside the editor, so nothing in it may import `vscode`. Types are checked
+ * by `pnpm typecheck`, not here.
  */
 
 import {existsSync, readdirSync} from 'node:fs';
@@ -27,14 +27,14 @@ const ENTRY_PATH = 'src/extension.ts';
 /** Where a package's bundle goes. */
 const BUNDLE_PATH = 'dist/extension.js';
 
-/** Where a package keeps its helper scripts' entry points, and where their bundles go. */
-const HELPERS_PATH = 'src/helpers';
+/** Where a package keeps the entry points of its programs, and where their bundles go. */
+const PROGRAMS_PATH = 'src/programs';
 
-const HELPER_BUNDLES_PATH = 'dist/helpers';
+const PROGRAM_BUNDLES_PATH = 'dist';
 
-/** The helper entry points of a package, sorted. */
-function helperEntries(directory: string): string[] {
-  const folder = path.join(directory, HELPERS_PATH);
+/** The program entry points of a package, sorted. */
+function programEntries(directory: string): string[] {
+  const folder = path.join(directory, PROGRAMS_PATH);
   return existsSync(folder)
     ? readdirSync(folder)
         .filter(name => name.endsWith('.ts'))
@@ -79,11 +79,11 @@ export async function buildPackages(
       logLevel: 'warning',
     });
     outcomes.push(`${folder}: ${BUNDLE_PATH}`);
-    const helpers = helperEntries(directory);
-    if (helpers.length > 0) {
+    const programs = programEntries(directory);
+    if (programs.length > 0) {
       await build({
-        entryPoints: helpers,
-        outdir: path.join(directory, HELPER_BUNDLES_PATH),
+        entryPoints: programs,
+        outdir: path.join(directory, PROGRAM_BUNDLES_PATH),
         bundle: true,
         platform: 'node',
         format: 'cjs',
@@ -92,7 +92,7 @@ export async function buildPackages(
         logLevel: 'warning',
       });
       outcomes.push(
-        `${folder}: ${helpers.map(entry => `${HELPER_BUNDLES_PATH}/${path.basename(entry, '.ts')}.js`).join(', ')}`,
+        `${folder}: ${programs.map(entry => `${PROGRAM_BUNDLES_PATH}/${path.basename(entry, '.ts')}.js`).join(', ')}`,
       );
     }
   }

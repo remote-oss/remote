@@ -23,6 +23,20 @@ export function helperParameters(
   return JSON.parse(text) as HelperParameters;
 }
 
+/**
+ * The environment this helper passes on to the programs it starts: the one it was started with, without the
+ * variable that carries its own parameters, which hold the nonce and the whole request.
+ */
+export function inheritedEnvironment(
+  environment: Readonly<Record<string, string | undefined>>,
+): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(environment).filter(
+      ([name]) => name !== PARAMETERS_VARIABLE,
+    ),
+  );
+}
+
 /** Serves this helper until its policy or a stop ends it. */
 export function runHelper(
   handler: MessageHandler,

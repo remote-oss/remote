@@ -13,6 +13,7 @@ export {
   serializeRecord,
 } from './types.ts';
 export {type RegistryFilePort, recordPath} from './registry/file-port.ts';
+export {nodeFilePort} from './registry/node-file-port.ts';
 export {claim} from './registry/claim.ts';
 export {isStale, replaceStale} from './registry/stale.ts';
 export {type Lease, type LeaseEvent, LeaseTable} from './runtime/leases.ts';
@@ -56,11 +57,15 @@ export {
   type RequestOutcome,
   type Timer,
 } from './client/lease.ts';
-export {nodeClientEnvironment} from './client/node-environment.ts';
+export {nodeClientEnvironment, nodeTimer} from './client/node-environment.ts';
 export {
   type HelperParameters,
   type SpawnSpecification,
   type Spawner,
   spawnSpecification,
 } from './client/spawn.ts';
-export {runHelper} from './runtime/helper-main.ts';
+export {
+  helperParameters,
+  inheritedEnvironment,
+  runHelper,
+} from './runtime/helper-main.ts';
