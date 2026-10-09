@@ -23,6 +23,7 @@ export function channelBase(): SshHostChannelOptions {
         user: 'user',
         port: '22',
         localForwards: [],
+        clearAllForwardings: false,
       },
       programs: {sshProgram: '/usr/bin/ssh', scpProgram: '/usr/bin/scp'},
       homeFolder: '/home/user',

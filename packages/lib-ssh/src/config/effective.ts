@@ -14,6 +14,8 @@ export interface EffectiveOptions {
   remoteCommand?: string;
   /** Each `LocalForward` in the order printed, as `<listen> <target>`. */
   localForwards: string[];
+  /** Whether `ssh -G` printed `clearallforwardings yes`; `false` when it printed `no` or said nothing. */
+  clearAllForwardings: boolean;
 }
 
 /** The outcome of reading `ssh -G` output: the options, or the reason they could not be read. */
@@ -49,6 +51,8 @@ export function parseEffectiveOptions(text: string): EffectiveOptionsResult {
     user,
     port,
     localForwards: values.get('localforward') ?? [],
+    clearAllForwardings:
+      values.get('clearallforwardings')?.[0]?.toLowerCase() === 'yes',
   };
   const connectTimeout = values.get('connecttimeout')?.[0];
   if (connectTimeout !== undefined && !UNSET_VALUES.has(connectTimeout)) {

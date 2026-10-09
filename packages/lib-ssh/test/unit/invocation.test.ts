@@ -37,6 +37,7 @@ function baseOptions(changes: Partial<EffectiveOptions>): EffectiveOptions {
     user: 'dev',
     port: '22',
     localForwards: [],
+    clearAllForwardings: false,
   };
   if (changes.port !== undefined) {
     options.port = changes.port;
