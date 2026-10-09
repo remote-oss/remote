@@ -1,0 +1,252 @@
+import {deepStrictEqual} from 'node:assert';
+import {FakeClock} from 'lib-helper/testing/fake-clock';
+import {
+  commandsFor,
+  type RunEnd,
+  type ShellRun,
+  ShellRuns,
+} from '../../src/connection-server/shell-runs.ts';
+
+const SCRIPT: ShellRun = {
+  script: 'echo hello',
+  inputBase64: null,
+  deadlineMilliseconds: 1000,
+};
+
+describe('the scripts on the shared session (contracts §4 S10)', () => {
+  let clock: FakeClock;
+  let written: string[];
+  let wedged: number;
+  let markers: number;
+  let runs: ShellRuns;
+
+  /** Starts a run and collects its lines and its end. */
+  function start(request: ShellRun = SCRIPT): {
+    lines: string[];
+    ended: Promise<RunEnd>;
+  } {
+    const lines: string[] = [];
+    return {lines, ended: runs.execute(request, line => lines.push(line))};
+  }
+
+  beforeEach(() => {
+    clock = new FakeClock();
+    written = [];
+    wedged = 0;
+    markers = 0;
+    runs = new ShellRuns({
+      write: text => written.push(text),
+      scheduler: clock.scheduler(),
+      newMarker: () => {
+        markers += 1;
+        return `m${String(markers)}`;
+      },
+      onWedged: () => {
+        wedged += 1;
+      },
+    });
+  });
+
+  describe('the commands of a run', () => {
+    it('print the start marker, run the script with no input, and print the end marker with the status', () => {
+      deepStrictEqual(
+        commandsFor('m1', SCRIPT),
+        [
+          "printf '%s\\n' 'm1:start'",
+          "sh -c 'echo hello' </dev/null",
+          "printf '%s %s\\n' 'm1:end' \"$?\"",
+          '',
+        ].join('\n'),
+      );
+    });
+
+    it('quote a script with quotes in it as one word', () => {
+      deepStrictEqual(
+        commandsFor('m1', {...SCRIPT, script: "echo 'x'"}).split('\n')[1],
+        "sh -c 'echo '\\''x'\\''' </dev/null",
+      );
+    });
+
+    it('give an input to the script as a base64 here-document in lines of 76 characters', () => {
+      deepStrictEqual(
+        commandsFor('m1', {...SCRIPT, inputBase64: 'A'.repeat(100)}).split(
+          '\n',
+        ),
+        [
+          "printf '%s\\n' 'm1:start'",
+          "base64 -d <<'m1_input' | sh -c 'echo hello'",
+          'A'.repeat(76),
+          'A'.repeat(24),
+          'm1_input',
+          "printf '%s %s\\n' 'm1:end' \"$?\"",
+          '',
+        ],
+      );
+    });
+
+    it('give an empty input as an empty here-document', () => {
+      deepStrictEqual(
+        commandsFor('m1', {...SCRIPT, inputBase64: ''})
+          .split('\n')
+          .slice(1, 3),
+        ["base64 -d <<'m1_input' | sh -c 'echo hello'", 'm1_input'],
+      );
+    });
+  });
+
+  describe('a run', () => {
+    it('is written to the session at once when nothing else is on it', () => {
+      start();
+      deepStrictEqual(written, [commandsFor('m1', SCRIPT)]);
+    });
+
+    it('gives the lines after the start marker, not the noise of the login before it', async () => {
+      const {lines, ended} = start();
+      runs.hear('Welcome to the host');
+      runs.hear('m1:start');
+      runs.hear('hello');
+      runs.hear('m1:end 0');
+      await ended;
+      deepStrictEqual(lines, ['hello']);
+    });
+
+    it('ends with the exit status of the script', async () => {
+      const {ended} = start();
+      runs.hear('m1:start');
+      runs.hear('m1:end 3');
+      deepStrictEqual(await ended, {kind: 'ended', status: 3});
+    });
+
+    it('gives the last words of a script that wrote no line end', async () => {
+      const {lines, ended} = start();
+      runs.hear('m1:start');
+      runs.hear('partial m1:end 0');
+      await ended;
+      deepStrictEqual(lines, ['partial ']);
+    });
+
+    it('gives no empty line for a marker at the start of a line', async () => {
+      const {lines, ended} = start();
+      runs.hear('m1:start');
+      runs.hear('m1:end 0');
+      await ended;
+      deepStrictEqual(lines, []);
+    });
+
+    it('ignores what the session writes when no run is on it', () => {
+      runs.hear('motd');
+      deepStrictEqual(written, []);
+    });
+
+    it('does not take the marker of another run for its own', async () => {
+      const {lines, ended} = start();
+      runs.hear('m1:start');
+      runs.hear('m2:end 0');
+      runs.hear('m1:end 0');
+      await ended;
+      deepStrictEqual(lines, ['m2:end 0']);
+    });
+  });
+
+  describe('runs one behind the other', () => {
+    it('start only when the one before has ended, in the order they came', async () => {
+      const first = start();
+      start({...SCRIPT, script: 'echo two'});
+      const before = [...written];
+      runs.hear('m1:start');
+      runs.hear('m1:end 0');
+      await first.ended;
+      deepStrictEqual(
+        [before, written],
+        [
+          [commandsFor('m1', SCRIPT)],
+          [
+            commandsFor('m1', SCRIPT),
+            commandsFor('m2', {...SCRIPT, script: 'echo two'}),
+          ],
+        ],
+      );
+    });
+
+    it('give each run its own lines', async () => {
+      const first = start();
+      const second = start();
+      runs.hear('m1:start');
+      runs.hear('one');
+      runs.hear('m1:end 0');
+      runs.hear('m2:start');
+      runs.hear('two');
+      runs.hear('m2:end 0');
+      await Promise.all([first.ended, second.ended]);
+      deepStrictEqual([first.lines, second.lines], [['one'], ['two']]);
+    });
+  });
+
+  describe('a run past its deadline', () => {
+    it('fails as a timeout, and asks the session to end', async () => {
+      const {ended} = start();
+      runs.hear('m1:start');
+      clock.advance(1000);
+      deepStrictEqual(
+        [await ended, wedged],
+        [
+          {kind: 'failed', reason: 'timeout', detail: 'no end within 1000 ms'},
+          1,
+        ],
+      );
+    });
+
+    it('does not start the run behind it on the session that cannot be trusted', () => {
+      start();
+      start();
+      clock.advance(1000);
+      deepStrictEqual(written.length, 1);
+    });
+
+    it('is not a timeout when the script ends in time', async () => {
+      const {ended} = start();
+      runs.hear('m1:start');
+      runs.hear('m1:end 0');
+      clock.advance(5000);
+      deepStrictEqual([await ended, wedged], [{kind: 'ended', status: 0}, 0]);
+    });
+
+    it('is counted from the start of the run, not from its wait', async () => {
+      start();
+      const second = start();
+      clock.advance(900);
+      runs.hear('m1:start');
+      runs.hear('m1:end 0');
+      clock.advance(900);
+      runs.hear('m2:start');
+      runs.hear('m2:end 0');
+      deepStrictEqual(await second.ended, {kind: 'ended', status: 0});
+    });
+  });
+
+  describe('the end of the session', () => {
+    it('fails the run on it and the runs behind it as a closed channel', async () => {
+      const first = start();
+      const second = start();
+      runs.end();
+      deepStrictEqual(await Promise.all([first.ended, second.ended]), [
+        {kind: 'failed', reason: 'channelClosed', detail: 'the session ended'},
+        {kind: 'failed', reason: 'channelClosed', detail: 'the session ended'},
+      ]);
+    });
+
+    it('fails a run that comes after it', async () => {
+      runs.end();
+      deepStrictEqual(await start().ended, {
+        kind: 'failed',
+        reason: 'channelClosed',
+        detail: 'the session ended',
+      });
+    });
+
+    it('is harmless when nothing runs', () => {
+      runs.end();
+      deepStrictEqual(written, []);
+    });
+  });
+});

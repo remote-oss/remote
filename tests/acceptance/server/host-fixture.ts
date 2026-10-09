@@ -10,6 +10,7 @@ import {
   nodeLocalFiles,
   nodeProcessSpawner,
   parseEffectiveOptions,
+  type RunBase,
   SshHostChannel,
 } from 'lib-ssh';
 import {
@@ -29,6 +30,10 @@ const READY_INTERVAL_MILLISECONDS = 500;
 export interface RunningHost {
   /** The channel the library under test uses. */
   channel: SshHostChannel;
+  /** What every `ssh` run to the host shares: the target, the settings and the options `ssh -G` computes. */
+  base: RunBase;
+  /** How many logins the host's `sshd` has accepted since it started. */
+  logins(): number;
   /** The output of a command run in the container as the user harness, outside SSH. */
   onHost(...command: string[]): string;
   /** The output of a command run in the container as root, to change the host before a test. */
@@ -64,30 +69,35 @@ async function waitForHost(configFile: string): Promise<void> {
   }
 }
 
-/** The channel to `Host harness` of an ssh_config, with the options `ssh -G` computes for it. */
-function channelTo(configFile: string): SshHostChannel {
+/** What every run to `Host harness` of an ssh_config shares, with the options `ssh -G` computes for it. */
+function baseFor(configFile: string): RunBase {
   const parsed = parseEffectiveOptions(
     checked('ssh', ['-F', configFile, '-G', 'harness']),
   );
   if ('parseError' in parsed) {
     throw new Error(`ssh -G harness: ${parsed.parseError}`);
   }
+  return {
+    target: {host: 'harness'},
+    settings: {
+      configFile,
+      connectTimeout: 10,
+      permitPtyAllocation: false,
+      remoteCommandInEffect: false,
+    },
+    effective: parsed.options,
+    programs: {sshProgram: 'ssh', scpProgram: 'scp'},
+    homeFolder: tmpdir(),
+    platform: process.platform === 'win32' ? 'windows' : 'linux',
+  };
+}
+
+/** The channel to `Host harness` over the `ssh` and `scp` clients. */
+function channelTo(base: RunBase): SshHostChannel {
   return new SshHostChannel({
     hostString: 'harness',
     platform: 'linux',
-    base: {
-      target: {host: 'harness'},
-      settings: {
-        configFile,
-        connectTimeout: 10,
-        permitPtyAllocation: false,
-        remoteCommandInEffect: false,
-      },
-      effective: parsed.options,
-      programs: {sshProgram: 'ssh', scpProgram: 'scp'},
-      homeFolder: tmpdir(),
-      platform: process.platform === 'win32' ? 'windows' : 'linux',
-    },
+    base,
     spawner: nodeProcessSpawner,
     editorEnvironment: process.env,
     askpassEnvironment: {},
@@ -144,13 +154,22 @@ export async function startHost(): Promise<RunningHost> {
     const configFile = path.join(runFolder, 'ssh_config');
     writeFileSync(configFile, harnessSshConfig(port, runFolder));
     await waitForHost(configFile);
-    const channel = channelTo(configFile);
+    const base = baseFor(configFile);
+    const channel = channelTo(base);
     function stop(): void {
       runCommand('docker', ['rm', '--force', container]);
       rmSync(runFolder, {recursive: true, force: true});
     }
     return {
       channel,
+      base,
+      logins: () => {
+        const output = runCommand('docker', ['logs', container]);
+        return (
+          `${output.stdout}${output.stderr}`.split('Accepted publickey')
+            .length - 1
+        );
+      },
       onHost: (...command) =>
         checked('docker', ['exec', '--user', 'harness', container, ...command]),
       asRoot: (...command) =>

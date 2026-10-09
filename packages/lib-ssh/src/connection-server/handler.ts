@@ -27,10 +27,12 @@ import {spawnSession, type SshSession} from '../process/session.ts';
 import {
   type ConnectionEvent,
   type ConnectionReply,
+  type ConnectionRequest,
   readConnectionRequest,
   type SharedRecord,
 } from './messages.ts';
 import {LoginOwnership} from './ownership.ts';
+import {ShellRuns} from './shell-runs.ts';
 
 /** What the handler needs to run the connection. */
 export interface ConnectionHandlerOptions {
@@ -50,6 +52,8 @@ export interface ConnectionHandlerOptions {
     displayHost: string;
     firstMessageMilliseconds: number;
   };
+  /** A marker for the commands of one script run on the session; unguessable and new on every call. */
+  newMarker: () => string;
   logLine: (line: string) => void;
 }
 
@@ -62,6 +66,7 @@ export class ConnectionHandler implements MessageHandler {
   private readonly askpass: AskpassEndpoint;
   private control!: HelperControl;
   private wait: ConnectWait | undefined;
+  private runs: ShellRuns | undefined;
   private leaseCount = 0;
   private state: ConnectionState = 'idle';
   private session: SshSession | undefined;
@@ -114,6 +119,7 @@ export class ConnectionHandler implements MessageHandler {
   /** The helper ends: `ssh` ends with it and the open questions close, whichever way the helper came to its end. */
   close(): void {
     this.killed = true;
+    this.runs?.end();
     this.session?.kill();
     this.askpass.closeAll();
   }
@@ -145,6 +151,8 @@ export class ConnectionHandler implements MessageHandler {
         return {type: 'accepted'};
       case 'answer':
         return this.answer(request.promptId, request.text);
+      case 'runScript':
+        return this.runScript(request, context);
       case 'kill':
         this.close();
         this.control.stop();
@@ -152,6 +160,26 @@ export class ConnectionHandler implements MessageHandler {
       default:
         throw new Error('not a connection request');
     }
+  }
+
+  private async runScript(
+    request: Extract<ConnectionRequest, {type: 'runScript'}>,
+    context: RequestContext,
+  ): Promise<PlainData> {
+    const {runs} = this;
+    if (this.state !== 'connected' || runs === undefined) {
+      return {
+        type: 'scriptFailed',
+        reason: 'notConnected',
+        detail: 'the connection is not set up',
+      };
+    }
+    const end = await runs.execute(request, line => {
+      context.notify({type: 'scriptLine', runId: request.runId, line});
+    });
+    return end.kind === 'ended'
+      ? {type: 'scriptEnded', status: end.status}
+      : {type: 'scriptFailed', reason: end.reason, detail: end.detail};
   }
 
   private answer(promptId: number, text: string): PlainData {
@@ -213,6 +241,23 @@ export class ConnectionHandler implements MessageHandler {
       },
     );
     this.wait = wait;
+    const runs = new ShellRuns({
+      write: text => {
+        void session.write(text);
+      },
+      scheduler: this.options.scheduler,
+      newMarker: this.options.newMarker,
+      onWedged: () => {
+        session.kill();
+      },
+    });
+    this.runs = runs;
+    const output = new LineSplitter(line => {
+      runs.hear(line);
+    });
+    session.onOutput(piece => {
+      output.push(piece);
+    });
     const lines = new LineSplitter(line => {
       if (this.state !== 'connecting') {
         return;
@@ -231,6 +276,7 @@ export class ConnectionHandler implements MessageHandler {
     });
     wait.start();
     void session.exit().then(status => {
+      runs.end();
       wait.stop();
       this.askpass.closeAll();
       lines.flush();

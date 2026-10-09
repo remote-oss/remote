@@ -38,6 +38,8 @@ describe('connection handler (contracts §4 S9)', () => {
   let events: PlainData[];
   let stops: number;
   let logged: string[];
+  let markers: number;
+  let notices: PlainData[];
 
   function create(changes: Partial<ConnectionHandlerOptions> = {}): void {
     handler = new ConnectionHandler({
@@ -53,6 +55,10 @@ describe('connection handler (contracts §4 S9)', () => {
         displayHost: 'h.invalid',
         firstMessageMilliseconds: 5000,
       },
+      newMarker: () => {
+        markers += 1;
+        return `m${String(markers)}`;
+      },
       logLine: line => logged.push(line),
       ...changes,
     });
@@ -66,7 +72,11 @@ describe('connection handler (contracts §4 S9)', () => {
   }
 
   function send(lease: number, body: PlainData): Promise<PlainData> {
-    return handler.onRequest(body, {lease, broadcast: () => undefined});
+    return handler.onRequest(body, {
+      lease,
+      broadcast: () => undefined,
+      notify: notice => notices.push(notice),
+    });
   }
 
   function wasKilled(): boolean {
@@ -83,6 +93,8 @@ describe('connection handler (contracts §4 S9)', () => {
     events = [];
     stops = 0;
     logged = [];
+    markers = 0;
+    notices = [];
     create();
   });
 
@@ -466,6 +478,105 @@ describe('connection handler (contracts §4 S9)', () => {
       stranger.send({type: 'ask', nonce: 'other', text: QUESTION});
       await settled();
       deepStrictEqual(events, []);
+    });
+  });
+
+  describe('scripts on the session', () => {
+    const RUN_REQUEST = {
+      type: 'runScript',
+      runId: 7,
+      script: 'echo hello',
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    } as const;
+
+    async function connected(): Promise<void> {
+      handler.onLeasesChanged([1, 2]);
+      await send(1, {type: 'connect'});
+      spawner.started[0]?.error(AUTHENTICATED);
+      events.length = 0;
+    }
+
+    it('are refused before the connection is set up', async () => {
+      handler.onLeasesChanged([1]);
+      deepStrictEqual(await send(1, RUN_REQUEST), {
+        type: 'scriptFailed',
+        reason: 'notConnected',
+        detail: 'the connection is not set up',
+      });
+    });
+
+    it('are written to the standard input of the ssh session', async () => {
+      await connected();
+      void send(1, RUN_REQUEST);
+      await settled();
+      deepStrictEqual(
+        spawner.started[0]?.inputText(),
+        "printf '%s\\n' 'm1:start'\nsh -c 'echo hello' </dev/null\nprintf '%s %s\\n' 'm1:end' \"$?\"\n",
+      );
+    });
+
+    it('send their lines to the asking lease alone, and end with the exit status', async () => {
+      await connected();
+      const reply = send(1, RUN_REQUEST);
+      await settled();
+      spawner.started[0]?.output('motd\nm1:start\nhello\nm1:end 4\n');
+      deepStrictEqual(
+        [await reply, notices, events],
+        [
+          {type: 'scriptEnded', status: 4},
+          [{type: 'scriptLine', runId: 7, line: 'hello'}],
+          [],
+        ],
+      );
+    });
+
+    it('fail as a closed channel, and the windows hear of the lost connection, when ssh ends during a run', async () => {
+      await connected();
+      const reply = send(1, RUN_REQUEST);
+      await settled();
+      spawner.started[0]?.exit(255);
+      deepStrictEqual(
+        [await reply, eventTypes()],
+        [
+          {
+            type: 'scriptFailed',
+            reason: 'channelClosed',
+            detail: 'the session ended',
+          },
+          ['transportLost'],
+        ],
+      );
+    });
+
+    it('fail as a timeout, and end the session, when the script does not end in time', async () => {
+      await connected();
+      const reply = send(1, RUN_REQUEST);
+      await settled();
+      clock.advance(1000);
+      deepStrictEqual(
+        [await reply, wasKilled()],
+        [
+          {
+            type: 'scriptFailed',
+            reason: 'timeout',
+            detail: 'no end within 1000 ms',
+          },
+          true,
+        ],
+      );
+    });
+
+    it('wait for the one before them', async () => {
+      await connected();
+      void send(1, RUN_REQUEST);
+      void send(2, {...RUN_REQUEST, runId: 8});
+      await settled();
+      const text = spawner.started[0]?.inputText() ?? '';
+      deepStrictEqual(
+        [text.includes('m1:start'), text.includes('m2:start')],
+        [true, false],
+      );
     });
   });
 

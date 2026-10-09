@@ -105,6 +105,7 @@ export async function runConnectionHelper(
         displayHost: options.displayHost,
         firstMessageMilliseconds: options.askpassFirstMessageMilliseconds,
       },
+      newMarker: environment.newNonce,
       logLine: environment.logLine,
     });
     const askpassServer = await environment.port.listen(

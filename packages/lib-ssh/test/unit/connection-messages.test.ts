@@ -79,4 +79,61 @@ describe('connection requests (contracts §4 S9)', () => {
       {type: 'setSharedRecord', record: RECORD},
     );
   });
+
+  it('reads a script to run on the session', () => {
+    deepStrictEqual(
+      [
+        {
+          type: 'runScript',
+          runId: 1,
+          script: 'echo x',
+          inputBase64: null,
+          deadlineMilliseconds: 1000,
+        },
+        {
+          type: 'runScript',
+          runId: 2,
+          script: 'cat',
+          inputBase64: 'AQID',
+          deadlineMilliseconds: 5,
+        },
+      ].map(body => readConnectionRequest(body)),
+      [
+        {
+          type: 'runScript',
+          runId: 1,
+          script: 'echo x',
+          inputBase64: null,
+          deadlineMilliseconds: 1000,
+        },
+        {
+          type: 'runScript',
+          runId: 2,
+          script: 'cat',
+          inputBase64: 'AQID',
+          deadlineMilliseconds: 5,
+        },
+      ],
+    );
+  });
+
+  it('reads nothing from a script request that is incomplete or has no time to run', () => {
+    const complete = {
+      type: 'runScript',
+      runId: 1,
+      script: 'x',
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    };
+    deepStrictEqual(
+      [
+        {...complete, runId: '1'},
+        {...complete, script: 1},
+        {...complete, inputBase64: 5},
+        {...complete, deadlineMilliseconds: '1'},
+        {...complete, deadlineMilliseconds: 0},
+      ].map(body => readConnectionRequest(body)),
+      [undefined, undefined, undefined, undefined, undefined],
+    );
+  });
 });

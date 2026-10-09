@@ -39,13 +39,10 @@ function environmentLines(
   return lines;
 }
 
-/** Plans the run of a script: the remote command and the standard input it needs. */
-export function planScript(
-  request: Pick<
-    ScriptRequest,
-    'script' | 'interpreter' | 'environment' | 'input'
-  >,
-): ScriptPlan {
+/** The text of a script with the added environment variables set in front of it, or why it cannot be run. */
+export function scriptText(
+  request: Pick<ScriptRequest, 'script' | 'interpreter' | 'environment'>,
+): {kind: 'text'; text: string} | {kind: 'refused'; reason: string} {
   if (request.interpreter !== 'posixShell') {
     return {
       kind: 'refused',
@@ -59,17 +56,30 @@ export function planScript(
       reason: `'${lines.badName}' is not a name an environment variable can have`,
     };
   }
-  const scriptText = [...lines, request.script].join('\n');
+  return {kind: 'text', text: [...lines, request.script].join('\n')};
+}
+
+/** Plans the run of a script: the remote command and the standard input it needs. */
+export function planScript(
+  request: Pick<
+    ScriptRequest,
+    'script' | 'interpreter' | 'environment' | 'input'
+  >,
+): ScriptPlan {
+  const script = scriptText(request);
+  if (script.kind === 'refused') {
+    return script;
+  }
   const hasInput = request.input.kind === 'file' || request.input.text !== '';
   return hasInput
     ? {
         kind: 'planned',
-        remoteProgram: `sh -c ${posixQuote(scriptText)}`,
+        remoteProgram: `sh -c ${posixQuote(script.text)}`,
         input: request.input,
       }
     : {
         kind: 'planned',
         remoteProgram: 'sh -s',
-        input: {kind: 'text', text: scriptText},
+        input: {kind: 'text', text: script.text},
       };
 }
