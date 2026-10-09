@@ -2,7 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {askpassEnvironment} from '../../src/index.ts';
 
 const REQUEST = {
-  launcher: '/run/askpass-0123.sh',
+  launcher: '/run/rh-askpass/rh-askpass-0123456789abcdef',
   endpoint: '/run/ra-0123456789abcdef.sock',
   nonce: 'askpass-nonce',
 };
@@ -10,7 +10,7 @@ const REQUEST = {
 describe('askpass environment', () => {
   it('points ssh at our launcher and forces its use, with the endpoint and the nonce', () => {
     deepStrictEqual(askpassEnvironment({...REQUEST, external: false}), {
-      SSH_ASKPASS: '/run/askpass-0123.sh',
+      SSH_ASKPASS: '/run/rh-askpass/rh-askpass-0123456789abcdef',
       SSH_ASKPASS_REQUIRE: 'force',
       REMOTE_OSS_ASKPASS_ENDPOINT: '/run/ra-0123456789abcdef.sock',
       REMOTE_OSS_ASKPASS_NONCE: 'askpass-nonce',

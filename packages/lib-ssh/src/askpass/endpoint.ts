@@ -4,7 +4,7 @@
  * answer is stored or logged: it passes from the window's request to the program's connection and is gone.
  */
 
-import type {EndpointConnection} from 'lib-helper';
+import type {EndpointConnection, Scheduler} from 'lib-helper';
 import {PromptBook, type OpenPrompt} from '../connection-server/ownership.ts';
 import {classifyPrompt} from '../prompts/classify.ts';
 import {readAskRequest} from './messages.ts';
@@ -15,11 +15,18 @@ export interface AskpassHooks {
   nonce: string;
   /** The host as the user named it, for the texts of the surfaces. */
   displayHost: string;
+  scheduler: Scheduler;
+  /** How long a connection may take to send its question before it is closed (R-79). */
+  firstMessageMilliseconds: number;
+  logLine: (line: string) => void;
   /** A question opened. */
   onPrompt(prompt: OpenPrompt): void;
   /** A question closed without an answer from a window. */
   onPromptClosed(promptId: number): void;
 }
+
+/** The default for `AskpassHooks.firstMessageMilliseconds`: a launcher that speaks does so at once. */
+export const DEFAULT_FIRST_MESSAGE_MILLISECONDS = 5000;
 
 /** A question whose program waits for the answer. */
 interface Waiting {
@@ -43,7 +50,15 @@ export class AskpassEndpoint {
   accept(connection: EndpointConnection): void {
     this.connections.add(connection);
     let promptId: number | undefined;
+    const cancelDeadline = this.hooks.scheduler.setTimer(
+      this.hooks.firstMessageMilliseconds,
+      () => {
+        this.hooks.logLine('an askpass connection sent no question in time');
+        connection.close();
+      },
+    );
     connection.onClose(() => {
+      cancelDeadline();
       this.connections.delete(connection);
       if (promptId !== undefined && this.waiting.delete(promptId)) {
         this.book.close(promptId);
@@ -51,6 +66,7 @@ export class AskpassEndpoint {
       }
     });
     connection.onMessage(value => {
+      cancelDeadline();
       const request = readAskRequest(value);
       if (promptId !== undefined || request?.nonce !== this.hooks.nonce) {
         connection.close();

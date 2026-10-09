@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {execFileSync} from 'node:child_process';
 import {
   chmodSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -60,7 +61,7 @@ describe('askpass launcher', () => {
       [
         written.map(([, text]) => text),
         first === second,
-        /^\/run\/askpass-[0-9a-f]{16}\.sh$/.test(first),
+        /^\/run\/rh-askpass\/rh-askpass-[0-9a-f]{16}$/.test(first),
       ],
       [
         [
@@ -89,6 +90,20 @@ describe('askpass launcher', () => {
     chmodSync(file, 0o644);
     await nodeLauncherFiles.writeExecutable(file, 'two');
     deepStrictEqual(statSync(file).mode & 0o777, 0o700);
+  });
+
+  it('creates the folder so that only the user can enter it', async () => {
+    const file = path.join(folder, 'new', 'askpass.sh');
+    await nodeLauncherFiles.writeExecutable(file, 'one');
+    deepStrictEqual(statSync(path.dirname(file)).mode & 0o777, 0o700);
+  });
+
+  it('sets the mode of a folder that exists and is open to others', async () => {
+    const open = path.join(folder, 'open');
+    mkdirSync(open, {mode: 0o755});
+    chmodSync(open, 0o755);
+    await nodeLauncherFiles.writeExecutable(path.join(open, 'askpass.sh'), 'x');
+    deepStrictEqual(statSync(open).mode & 0o777, 0o700);
   });
 
   it('starts the program from a path with a space and hands it the question', async () => {

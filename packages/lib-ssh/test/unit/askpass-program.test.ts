@@ -6,7 +6,9 @@ import {nodeEndpointPort, type EndpointConnection} from 'lib-helper';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {
   AskpassEndpoint,
+  askpassEndpointPath,
   askpassEnvironment,
+  DEFAULT_FIRST_MESSAGE_MILLISECONDS,
   ENDPOINT_VARIABLE,
   NONCE_VARIABLE,
   runAskpassProgram,
@@ -108,11 +110,14 @@ describe('askpass over a socket', () => {
   });
 
   it('carries a question to a window and its answer back, on a socket only the user can open', async () => {
-    const socket = path.join(folder, 'a.sock');
+    const socket = askpassEndpointPath(folder, 'helper', NONCE);
     const port = nodeEndpointPort();
     const endpoint = new AskpassEndpoint({
       nonce: NONCE,
       displayHost: 'h.invalid',
+      scheduler: {setTimer: () => () => undefined},
+      firstMessageMilliseconds: DEFAULT_FIRST_MESSAGE_MILLISECONDS,
+      logLine: () => undefined,
       onPrompt: prompt => {
         endpoint.answer(prompt.promptId, `answer to ${prompt.text}`);
       },

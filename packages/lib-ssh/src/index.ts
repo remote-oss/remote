@@ -124,7 +124,16 @@ export {
   readAskReply,
   readAskRequest,
 } from './askpass/messages.ts';
-export {AskpassEndpoint, type AskpassHooks} from './askpass/endpoint.ts';
+export {
+  AskpassEndpoint,
+  type AskpassHooks,
+  DEFAULT_FIRST_MESSAGE_MILLISECONDS,
+} from './askpass/endpoint.ts';
+export {
+  askpassEndpointPath,
+  LAUNCHER_FOLDER,
+  launcherPath,
+} from './askpass/paths.ts';
 export {
   type AskpassProgramEnvironment,
   ENDPOINT_VARIABLE,

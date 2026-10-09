@@ -1,9 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import type {EndpointConnection} from 'lib-helper';
+import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {AskpassEndpoint, type OpenPrompt} from '../../src/index.ts';
 
 const ENDPOINT = '/run/ra-0123456789abcdef.sock';
+const DEADLINE = 5000;
 const NONCE = 'askpass-nonce';
 const PASSWORD_QUESTION = "dev@h.invalid's password: ";
 const FINGERPRINT_QUESTION = [
@@ -27,6 +29,8 @@ interface Program {
 
 describe('askpass endpoint', () => {
   let port: FakeEndpointPort;
+  let clock: FakeClock;
+  let logged: string[];
   let endpoint: AskpassEndpoint;
   let opened: OpenPrompt[];
   let closedPrompts: number[];
@@ -53,11 +57,16 @@ describe('askpass endpoint', () => {
 
   beforeEach(async () => {
     port = new FakeEndpointPort();
+    clock = new FakeClock();
+    logged = [];
     opened = [];
     closedPrompts = [];
     endpoint = new AskpassEndpoint({
       nonce: NONCE,
       displayHost: 'h.invalid',
+      scheduler: clock.scheduler(),
+      firstMessageMilliseconds: 5000,
+      logLine: line => logged.push(line),
       onPrompt: prompt => opened.push(prompt),
       onPromptClosed: promptId => closedPrompts.push(promptId),
     });
@@ -160,5 +169,39 @@ describe('askpass endpoint', () => {
     await settled();
     endpoint.closeAll();
     deepStrictEqual(closedPrompts, []);
+  });
+
+  describe('the first-message deadline (R-79)', () => {
+    it('keeps a connection that has not spoken yet until the deadline', async () => {
+      const idle = await connect();
+      clock.advance(DEADLINE - 1);
+      await settled();
+      deepStrictEqual([idle.closed, logged], [false, []]);
+    });
+
+    it('closes a connection that sends nothing by the deadline, and logs it', async () => {
+      const idle = await connect();
+      clock.advance(DEADLINE);
+      await settled();
+      deepStrictEqual(
+        [idle.closed, logged],
+        [true, ['an askpass connection sent no question in time']],
+      );
+    });
+
+    it('stops the deadline at the first message', async () => {
+      const asking = await askQuestion();
+      clock.advance(10 * DEADLINE);
+      await settled();
+      deepStrictEqual([asking.closed, logged], [false, []]);
+    });
+
+    it('stops the deadline when the connection closes', async () => {
+      const idle = await connect();
+      idle.connection.close();
+      await settled();
+      clock.advance(DEADLINE);
+      deepStrictEqual(logged, []);
+    });
   });
 });

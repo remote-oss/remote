@@ -3,12 +3,10 @@
  * bundled askpass program on the editor's own runtime. It is written for the user alone, mode 0700.
  */
 
-import {createHash} from 'node:crypto';
 import {chmod, mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {posixQuote} from '../process/remote-program.ts';
-
-const NAME_DIGEST_LENGTH = 16;
+import {launcherPath} from './paths.ts';
 
 /** The script text: the editor's executable runs the askpass program as Node.js and passes `ssh`'s arguments on. */
 export function launcherText(runtime: string, program: string): string {
@@ -21,33 +19,35 @@ export function launcherText(runtime: string, program: string): string {
 
 /** The file access the launcher needs. */
 export interface LauncherFiles {
-  /** Writes an executable file that only the user can read, write or run, creating the folder as needed. */
+  /**
+   * Writes an executable file that only the user can read, write or run, in a folder that only the user can enter;
+   * the folder is created as needed and its mode is set again when it exists. A folder that is not the user's cannot
+   * be set and is refused with the system's error.
+   */
   writeExecutable(file: string, text: string): Promise<void>;
 }
 
 /** The launcher files of this machine. */
 export const nodeLauncherFiles: LauncherFiles = {
   writeExecutable: async (file, text) => {
-    await mkdir(path.dirname(file), {recursive: true, mode: 0o700});
+    const folder = path.dirname(file);
+    await mkdir(folder, {recursive: true, mode: 0o700});
+    await chmod(folder, 0o700);
     await writeFile(file, text, {mode: 0o700});
     // The mode of a file that already existed is not changed by writing it.
     await chmod(file, 0o700);
   },
 };
 
-/** Writes the launcher into `folder`, named by a digest of its text, and returns its path. */
+/** Writes the launcher into the runtime folder and returns its path. */
 export async function installLauncher(
   files: LauncherFiles,
-  folder: string,
+  runtimeFolder: string,
   runtime: string,
   program: string,
 ): Promise<string> {
   const text = launcherText(runtime, program);
-  const digest = createHash('sha256').update(text).digest('hex');
-  const file = path.join(
-    folder,
-    `askpass-${digest.slice(0, NAME_DIGEST_LENGTH)}.sh`,
-  );
+  const file = launcherPath(runtimeFolder, text);
   await files.writeExecutable(file, text);
   return file;
 }
