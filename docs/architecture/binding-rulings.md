@@ -173,6 +173,6 @@ remote-development for anything not here.
 
 ## R-101
 
-**Releases are tags on main, no release branch.** A release is a tag `<package>-v<semver>` on a main commit. The gate: full CI including `acceptance (real server)` dispatched on the candidate main commit and green, then the tag on that exact commit; the real-server job also triggers on `*-v*` tag pushes so every tag carries its own record run. (Supersedes the `release` branch condition #191 first carried.)
+**Releases are tags on main, no release branch.** A release is a tag `<package>-v<semver>` on a main commit. The gate: full CI including `acceptance (real server)` dispatched on the candidate main commit and green, then the tag on that exact commit; the real-server job runs on a `*-v*` tag push or on a dispatch whose `real-server` input is true (the release-gate dispatch sets it; a plain dispatch, which every PR's CI is, skips it: remote-pm, 2026-10-09). (Supersedes the `release` branch condition #191 first carried.)
 
 — remote-development, 2026-10-09; relayed through remote-pm.
