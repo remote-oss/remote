@@ -365,6 +365,12 @@ setting at run time are filled in by the extension's adapter before the call.
 | `prefetch` | `none`; `onProductUpdate` with setting key, feed check interval, platform window, licence handling | `none` | `none` | `onProductUpdate`: `remote.WSL.downloadInBackground`, hourly, platforms used in the last 14 days, `skipUnaccepted` (F-6301 6.6, BR-13) |
 
 
+Rulings of 2026-10-08 for the script parameters: a profile without `serverDataFolderName` gets the derived
+`.<applicationName>-server` from lib-product's `serverDataFolderNameOrDefault(profile)` (product-scoped, never
+`~/.vscode-server`; an adaptation); the host lock file is `remote-lock.<user>.<commit>` in the lock folder, `<user>`
+from the effective ssh config (interop with the reference's name is not a goal); the proxy variable text of F-2404
+BR-5 (empty path → "/", host lower-cased, `$` encoded) is built by lib-server's pure `proxyVariableText`.
+
 ### V1 bootstrap-scripts
 
 | Operation | Inputs | Output | Failures |
