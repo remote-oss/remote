@@ -25,6 +25,13 @@ export {
   RESULT_END,
 } from './scripts/result-block.ts';
 export {
+  type ProgressLine,
+  type ProgressStep,
+  parseProgressLine,
+  progressLines,
+  PROGRESS_PREFIX,
+} from './scripts/progress-line.ts';
+export {
   type BootstrapRequest,
   type ProxyVariables,
   type ScriptParameters,
