@@ -458,6 +458,11 @@ Never: accept for the user.
 | `serverPort` | the connection | the TCP port the running server listens on at the host's loopback, or `none` in socket mode or when no server runs; it never contacts the host (F-2509 option (a), ruled by the lead 2026-10-06, for B's Open Web UI) | none |
 | `installExtensions` | H1, server, ids filtered by F-2506 BR-2 | done; failures are logged per id (F-2506 Q1 (b)) | none raised |
 
+`startOrReuse` reports `reused: boolean`; the pipeline calls `installExtensions` only when `reused` is true, since a
+freshly started server receives the default ids on its command line (ruled 2026-10-08). Whether the launcher accepts
+`--install-extension` without `--start-server` is confirmed by server-08's acceptance run; otherwise the fallback is
+the server's own CLI entry.
+
 Start options:
 - `--start-server`, `--host`, and `--port` or `--socket-path`;
 - `--connection-token-file`;
