@@ -650,6 +650,13 @@ Rule: ports forwarded before a reconnection are revived over the new dialer (F-2
 
 ## 7. remote-ssh, area A part
 
+Rulings from connect-02's build (2026-10-09, #186): R4 (`decideTerms`: the platform and `remoteCommandInEffect`
+from the settings and the host string) runs before any `ssh` process and its result feeds the channel, the request
+and, after card connect-06, the probe's and install-extensions' parameters; the connection step has no pipeline
+bound of its own, since S9's login bound (which pauses while a question is open) is its bound; the picker and the
+licence modal are user waits and unbounded; the archive format follows the address's extension (`.zip` → `zip`,
+else `tar.gz`); the gate's cancellation is card server-11.
+
 ### R1 connection-pipeline
 
 `connect` and `cancel` as agreed with area B. The inputs are the decoded target, the raw host string, the attempt,
