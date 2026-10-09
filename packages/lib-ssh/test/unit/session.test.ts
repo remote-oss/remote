@@ -82,14 +82,13 @@ describe('S3 session spawner', () => {
       );
     });
 
-    it('never sets SSH_ASKPASS_REQUIRE from the askpass environment', () => {
+    it("takes SSH_ASKPASS_REQUIRE from the askpass's environment", () => {
       strictEqual(
-        'SSH_ASKPASS_REQUIRE' in
-          sessionEnvironment({}, INVOCATION, {
-            SSH_ASKPASS: '/ext/askpass.sh',
-            SSH_ASKPASS_REQUIRE: 'force',
-          }),
-        false,
+        sessionEnvironment({}, INVOCATION, {
+          SSH_ASKPASS: '/ext/askpass.sh',
+          SSH_ASKPASS_REQUIRE: 'force',
+        }).SSH_ASKPASS_REQUIRE,
+        'force',
       );
     });
 

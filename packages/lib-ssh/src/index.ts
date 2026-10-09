@@ -118,3 +118,26 @@ export {
   type ConnectionHelperOptions,
   runConnectionHelper,
 } from './connection-server/helper.ts';
+export {
+  type AskRequest,
+  type AskReply,
+  readAskReply,
+  readAskRequest,
+} from './askpass/messages.ts';
+export {AskpassEndpoint, type AskpassHooks} from './askpass/endpoint.ts';
+export {
+  type AskpassProgramEnvironment,
+  ENDPOINT_VARIABLE,
+  NONCE_VARIABLE,
+  runAskpassProgram,
+} from './askpass/program.ts';
+export {
+  askpassEnvironment,
+  type AskpassEnvironmentRequest,
+} from './askpass/environment.ts';
+export {
+  installLauncher,
+  launcherText,
+  type LauncherFiles,
+  nodeLauncherFiles,
+} from './askpass/launcher.ts';
