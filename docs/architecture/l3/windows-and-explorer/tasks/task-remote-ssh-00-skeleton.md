@@ -22,6 +22,7 @@ beyond an empty list, no settings, no commands.
 | `activationEvents` | `[]` (F-2001's list comes with card remote-ssh-01) |
 | `extensionPack` | `["remote-oss.remote-ssh-edit", "remote-oss.remote-explorer"]` (R-22 / F-3904); no `extensionDependencies` |
 | `license` | `MIT` (unchanged) |
+| workspace dependencies | `lib-identifiers`, `lib-standdown`, `lib-log`, `lib-ssh` (`workspace:*`), so the connect-flow and diagnostics cards can import them |
 | `identifiers.json` | `source` citing remote-oss/remote-ssh#78, `standsDownFor` `ms-vscode-remote.remote-ssh`, `standingDownKey` `""` (pending; the check reports it as pending), `locales` the 14 of F-2002 (cs, de, es, fr, it, ja, ko, pl, pt-br, qps-ploc, ru, tr, zh-cn, zh-tw), empty ledgers |
 | `src/extension.ts` | `export function activate(): void {}` and `export function deactivate(): void {}`; excluded from coverage with the reason "loads the editor", listed in the README |
 | `package.nls.json` + 14 locale files | only the `description` key with the English sentence (as the other packages) |
