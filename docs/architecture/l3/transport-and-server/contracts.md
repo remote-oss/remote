@@ -459,9 +459,9 @@ Never: accept for the user.
 | `installExtensions` | H1, server, ids filtered by F-2506 BR-2 | done; failures are logged per id (F-2506 Q1 (b)) | none raised |
 
 `startOrReuse` reports `reused: boolean`; the pipeline calls `installExtensions` only when `reused` is true, since a
-freshly started server receives the default ids on its command line (ruled 2026-10-08). Whether the launcher accepts
-`--install-extension` without `--start-server` is confirmed by server-08's acceptance run; otherwise the fallback is
-the server's own CLI entry.
+freshly started server receives the default ids on its command line (ruled 2026-10-08). The launcher accepts `--install-extension` without `--start-server`: confirmed at the floor tag ([oss]
+`src/server-main.ts` at 1.139.1, line 44: `shouldSpawnCli` is true for an install argument without `start-server`,
+and the CLI path runs the install); no fallback needed.
 
 Start options:
 - `--start-server`, `--host`, and `--port` or `--socket-path`;
