@@ -213,6 +213,13 @@ function linkDraw(): number {
   return linkDrawCalls === 1 ? 41 : 42;
 }
 
+let boundedDrawCalls = 0;
+
+function boundedDraw(): number {
+  boundedDrawCalls += 1;
+  return 41;
+}
+
 describe('linkPathFor (the link path of one draw)', () => {
   it('linkPathFor names the first draw when it is free', () => {
     strictEqual(
@@ -225,6 +232,17 @@ describe('linkPathFor (the link path of one draw)', () => {
     strictEqual(
       linkPathFor(linkDraw, new Set(['/tmp/vscode-ssh-auth-sock-41'])),
       '/tmp/vscode-ssh-auth-sock-42',
+    );
+  });
+
+  it('a draw that always returns a taken number is called 17 times', () => {
+    const path = linkPathFor(
+      boundedDraw,
+      new Set(['/tmp/vscode-ssh-auth-sock-41']),
+    );
+    deepStrictEqual(
+      {calls: boundedDrawCalls, path},
+      {calls: 17, path: '/tmp/vscode-ssh-auth-sock-41'},
     );
   });
 });

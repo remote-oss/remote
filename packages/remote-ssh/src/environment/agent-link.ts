@@ -28,16 +28,19 @@ export type AgentLinkPlan =
   | {kind: 'link'; linkPath: string; target: string};
 
 /**
- * The link path for one draw: `/tmp/vscode-ssh-auth-sock-<draw>`. Draws again while the path is in `takenNames`,
- * so a window never takes a name another window holds.
+ * The link path for one draw: `/tmp/vscode-ssh-auth-sock-<draw>`. Redraws at most 16 times while the path is in
+ * `takenNames`, then returns the last drawn path: a collision that survives is caught when the host creates the
+ * link.
  */
 export function linkPathFor(
   draw: () => number,
   takenNames: ReadonlySet<string>,
 ): string {
   let linkPath = `/tmp/vscode-ssh-auth-sock-${String(draw())}`;
-  while (takenNames.has(linkPath)) {
+  let redraws = 0;
+  while (takenNames.has(linkPath) && redraws < 16) {
     linkPath = `/tmp/vscode-ssh-auth-sock-${String(draw())}`;
+    redraws += 1;
   }
   return linkPath;
 }
