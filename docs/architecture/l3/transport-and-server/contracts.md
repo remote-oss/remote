@@ -309,6 +309,7 @@ wait for the run of F-2102 Q1 (D-60).
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `acquire` | host string, target, cancellation (the lease number is the window's identity; ruled 2026-10-08, #175) | a lease: SOCKS port, the shared record (remote port, OS, architecture, temp folder, connection token) when one exists, and S10 over this connection | S2 and S3 failures (`spawnFailed` with its cause when `ssh` could not start); `cancelled`; login failed (kind and reason from S5); `timeout` by the policy's login bound, which pauses while a prompt is open |
+| `answer` / `refuse` | lease, prompt id, the text (answer only) | whether the question was still open; a refusal closes it unanswered (the program exits 1, `ssh` cancels the prompt) and the helper refuses the run's later questions itself (card ssh-10, 2026-10-09) | none |
 | `release` | lease | none | none |
 | `kill` | host string | done, silently, also when nothing runs (F-2102 BR-7) | none |
 | `events` | lease | `waitingForOtherWindow`, `ownerChanged`, `loginFailed`, `transportLost` | none |
