@@ -41,7 +41,7 @@ leaks. The repository is private while this is built; it becomes public with the
    forbidden framing words and on internal ids in prose, with one allow-list for code and data that must name
    products (`lib-product`'s table, licence hosts) and for third-party licence texts (`ThirdPartyNotices`). The
    grep of the first review (reference, Microsoft, ms-vscode, clean-room, reimplement, spec, F-/R-/D- ids,
-   session, worker, lab, dirty, orchestrat) is its starting list.
+   session, worker, lab, dirty, orchestrat) is its starting list; "session" does not apply to UI string values (`package.nls*.json`, `l10n`), where the reused strings say "previous session" (ruled 2026-10-09), and "conformance" is not on the list.
 6. **Trademark and third-party notices** live in `NOTICE` or `ThirdPartyNotices.txt`, never in a README; whether a
    trademark notice is wanted at all is the user's (open, 2026-10-06).
 
