@@ -426,8 +426,15 @@ Rules:
 - With `cache` `none` the client copy is a temporary file, deleted afterwards (F-3902 rule 6). With `kept` the
   download goes to a temporary name, is verified, then renamed atomically into V9's folder. The rename is the only
   step shared across windows and editor instances.
-- Verification follows the record: the download port reports the redirect chain's response facts (a hash header,
-  the content length), and V4 applies the first rule whose facts are present.
+- Verification follows the record: the download port reports the facts of the final response of the redirect chain
+  (the final URL, the HTTP status, `content-length` when present, a digest header only when the policy table names
+  one and the server sends it), and V4 applies the first rule whose facts are present (card server-09). A redirect
+  to another host than the template's is a `serverDownload` failure with a reason (the source-based licence rule
+  depends on the host). (Ruled 2026-10-08.)
+- Bounds are the library's (R-79): `DownloadRequest` carries `deadlineMilliseconds` (the whole transfer),
+  `stallMilliseconds` (no bytes for that long ends it) and `maximumBytes` (the content length when known, else the
+  policy table's ceiling), plus cancellation; the port implements them and the library proves them with a fake port
+  that stalls, overruns and never answers. A connect never hangs on a download.
 - Manual bootstrap reads the fixed file and shows STR:S088 on every attempt (F-2406).
 - The commit is rewritten by editing the unpacked `product.json` only (F-3902 rule 9, pending the room's
   confirmation).
