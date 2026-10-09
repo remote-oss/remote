@@ -16,7 +16,7 @@ NOT a cancel: `ssh` retries on it. Reviewing coder: `remote-coding-worker-2`.
 ```ts
 // endpoint.ts
 refuse(promptId: number): boolean;   // closes that one open question unanswered (its program exits 1); false when not open
-// messages.ts: request {type: 'refuse', promptId}; reply {type: 'refused', accepted: boolean}
+// messages.ts: request {type: 'refuse', promptId}; reply {type: 'refused', accepted: boolean} — superseded by card ssh-13: the reply is {type: 'questionRefused', accepted} (the name 'refused' already belonged to the connect request's refusal; the card's mistake, found in #234's review)
 // client.ts: SharedConnection.refuse(promptId: number): Promise<boolean>
 // handler.ts: on 'refuse' from the login's owner: endpoint.refuse(promptId); the attempt is marked cancelled by its
 // owner, and every later question of the same ssh run is refused on arrival without a `prompt` event; the mark
