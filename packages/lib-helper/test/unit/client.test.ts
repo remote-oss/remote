@@ -16,6 +16,8 @@ import {
   spawnSpecification,
   stop,
 } from '../../src/index.ts';
+import {clientEnvironment} from '../../src/testing/client-environment.ts';
+import {drive as driveClock} from '../../src/testing/drive.ts';
 import {FakeClock} from '../../src/testing/fake-clock.ts';
 import {FakeEndpointPort} from '../../src/testing/fake-endpoint.ts';
 import type {EndpointConnection} from '../../src/endpoint/protocol.ts';
@@ -37,7 +39,6 @@ describe('helper client', () => {
   let spawned: SpawnSpecification[];
   let spawnFails: boolean;
   let helperListens: boolean;
-  let nonces: number;
   let environment: ClientEnvironment;
   const handler: MessageHandler = {
     onRequest: (body, context) => {
@@ -69,17 +70,8 @@ describe('helper client', () => {
     };
   }
 
-  /** Runs `promise` to its end, advancing the fake clock while it waits on timers. */
-  async function drive<T>(promise: Promise<T>): Promise<T> {
-    const state = {done: false};
-    void promise.then(() => {
-      state.done = true;
-    });
-    for (let step = 0; step < 400 && !state.done; step++) {
-      await settled();
-      clock.advance(100);
-    }
-    return promise;
+  function drive<T>(promise: Promise<T>): Promise<T> {
+    return driveClock(promise, clock);
   }
 
   const RECORD_PATH = recordPath('/registry', 'ssh.connection', 'user@host:22');
@@ -133,47 +125,35 @@ describe('helper client', () => {
     spawned = [];
     spawnFails = false;
     helperListens = true;
-    nonces = 0;
-    environment = {
-      files,
-      endpoints,
-      spawn: specification => {
-        spawned.push(specification);
-        if (spawnFails) {
-          return Promise.reject(new Error('no such file'));
-        }
-        if (helperListens) {
-          // The fake helper reads its parameters as a real one does.
-          const parameters = JSON.parse(
-            specification.environment[PARAMETERS] ?? '',
-          ) as HelperParameters;
-          void serve({
-            ...parameters,
-            handler,
-            port: endpoints,
-            clock: () => clock.now(),
-            scheduler: clock.scheduler(),
-            helloLimitMilliseconds: 500,
-            logLine: () => undefined,
-          });
-        }
-        return Promise.resolve();
+    environment = clientEnvironment(
+      {
+        files,
+        endpoints,
+        spawn: specification => {
+          spawned.push(specification);
+          if (spawnFails) {
+            return Promise.reject(new Error('no such file'));
+          }
+          if (helperListens) {
+            // The fake helper reads its parameters as a real one does.
+            const parameters = JSON.parse(
+              specification.environment[PARAMETERS] ?? '',
+            ) as HelperParameters;
+            void serve({
+              ...parameters,
+              handler,
+              port: endpoints,
+              clock: () => clock.now(),
+              scheduler: clock.scheduler(),
+              helloLimitMilliseconds: 500,
+              logLine: () => undefined,
+            });
+          }
+          return Promise.resolve();
+        },
       },
-      timer: (milliseconds, callback) =>
-        clock.scheduler().setTimer(milliseconds, callback),
-      clock: () => clock.now(),
-      newNonce: () => {
-        nonces += 1;
-        return `nonce-${String(nonces)}`;
-      },
-      runtime: '/editor/code',
-      endpointFolder: '/run',
-      processId: 777,
-      parentEnvironment: {HOME: '/home/user', UNSET: undefined},
-      helloLimitMilliseconds: 500,
-      startLimitMilliseconds: 2000,
-      retryMilliseconds: 100,
-    };
+      clock,
+    );
   });
 
   describe('spawn specification', () => {
