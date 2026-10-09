@@ -112,6 +112,11 @@ export class PromptBook {
     return true;
   }
 
+  /** Closes one open question that nobody answered, for example because `ssh` dropped it; false when none is open. */
+  close(promptId: number): boolean {
+    return this.prompts.delete(promptId);
+  }
+
   /** Closes every open question, for a login that ended; returns their numbers. */
   closeAll(): number[] {
     const closed = [...this.prompts.keys()];

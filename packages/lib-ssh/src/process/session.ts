@@ -1,7 +1,6 @@
 /**
  * @fileoverview S3, the session spawner: starts an `ssh` or `scp` run from an invocation and hands back a session
- * with its output, error and input streams and its exit status. The editor's environment is passed on unchanged;
- * `SSH_ASKPASS_REQUIRE` is never set by this library.
+ * with its output, error and input streams and its exit status. The editor's environment is passed on unchanged.
  */
 
 import type {Invocation} from '../arguments/invocation.ts';
@@ -12,9 +11,6 @@ export type SpawnFailure = 'clientVanished' | 'spawnFailed';
 
 /** The system error codes that mean the client program is no longer there to run. */
 const VANISHED_CODES = new Set(['ENOENT', 'EACCES']);
-
-/** The variable that would make `ssh` call the askpass without a terminal; the library never sets it. */
-const FORCE_ASKPASS_VARIABLE = 'SSH_ASKPASS_REQUIRE';
 
 /** A running client process, with its exit status as a promise. */
 export class SshSession {
@@ -65,10 +61,7 @@ export type SpawnOutcome =
   | {kind: 'spawned'; session: SshSession}
   | {kind: 'failed'; failure: SpawnFailure; detail: string};
 
-/**
- * The environment of a run: the editor's own, then the variables the invocation adds, then those of the askpass.
- * The askpass environment cannot force the askpass; that variable is dropped from it.
- */
+/** The environment of a run: the editor's own, then the variables the invocation adds, then those of the askpass. */
 export function sessionEnvironment(
   editorEnvironment: Readonly<Record<string, string | undefined>>,
   invocation: Invocation,
@@ -81,11 +74,7 @@ export function sessionEnvironment(
     }
   }
   Object.assign(environment, invocation.environment);
-  for (const [name, value] of Object.entries(askpassEnvironment)) {
-    if (name !== FORCE_ASKPASS_VARIABLE) {
-      environment[name] = value;
-    }
-  }
+  Object.assign(environment, askpassEnvironment);
   return environment;
 }
 

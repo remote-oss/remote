@@ -82,11 +82,33 @@ describe('S3 session spawner', () => {
       );
     });
 
-    it('never sets SSH_ASKPASS_REQUIRE from the askpass environment', () => {
+    it("takes SSH_ASKPASS_REQUIRE from the askpass's environment", () => {
       strictEqual(
-        'SSH_ASKPASS_REQUIRE' in
+        sessionEnvironment({}, INVOCATION, {
+          SSH_ASKPASS: '/ext/askpass.sh',
+          SSH_ASKPASS_REQUIRE: 'force',
+        }).SSH_ASKPASS_REQUIRE,
+        'force',
+      );
+    });
+
+    it("passes the window's DISPLAY and WAYLAND_DISPLAY on as they are", () => {
+      const environment = sessionEnvironment(
+        {DISPLAY: ':1', WAYLAND_DISPLAY: 'wayland-0'},
+        INVOCATION,
+        {SSH_ASKPASS: '/run/askpass.sh', SSH_ASKPASS_REQUIRE: 'force'},
+      );
+      deepStrictEqual(
+        [environment.DISPLAY, environment.WAYLAND_DISPLAY],
+        [':1', 'wayland-0'],
+      );
+    });
+
+    it('adds no DISPLAY of its own', () => {
+      strictEqual(
+        'DISPLAY' in
           sessionEnvironment({}, INVOCATION, {
-            SSH_ASKPASS: '/ext/askpass.sh',
+            SSH_ASKPASS: '/run/askpass.sh',
             SSH_ASKPASS_REQUIRE: 'force',
           }),
         false,
