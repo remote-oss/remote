@@ -18,7 +18,12 @@ export {
   OVERRIDE_POLICIES,
   type SettingsLayer,
 } from './policies.ts';
-export {ACTIVE_LICENCE_RULES, type LicenceRuleName} from './product-table.ts';
+export {
+  ACTIVE_LICENCE_RULES,
+  type LicenceRuleName,
+  REFERENCE_LAYOUT_APPLICATION_NAMES,
+  keepsReferenceLayout,
+} from './product-table.ts';
 export {
   type ProductProfile,
   type ProfileReading,
