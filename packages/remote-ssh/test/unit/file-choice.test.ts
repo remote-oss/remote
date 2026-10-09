@@ -1,6 +1,7 @@
 /**
- * @fileoverview The rows of the SSH configuration file picker (card ssh-11): the configured file as written, or
- * the user and system files, with the settings and help rows; narrowing keeps the matching rows first.
+ * @fileoverview The rows of the SSH configuration file picker (card ssh-11, amended to string ids): the
+ * configured file as written, or the user and system files, with the settings and help rows by their ids;
+ * narrowing keeps a file row while its path contains the typed text, and the fixed rows always.
  */
 
 import {deepStrictEqual} from 'node:assert';
@@ -24,18 +25,18 @@ const SYSTEM_FILE: FileChoiceItem = {
   role: 'system',
 };
 
-/** The settings row, with its description of the contract. */
+/** The settings row, by the ids of the contract. */
 const SETTINGS_ROW: FileChoiceItem = {
   kind: 'settings',
-  label: 'Settings',
-  description: 'specify a custom configuration file',
+  label: {id: 'S131', values: []},
+  description: {id: 'S166', values: []},
 };
 
-/** The help row, with its description of the contract. */
+/** The help row, by the ids of the contract. */
 const HELP_ROW: FileChoiceItem = {
   kind: 'help',
-  label: 'Help',
-  description: 'about SSH configuration files',
+  label: {id: 'S077', values: []},
+  description: {id: 'S162', values: []},
 };
 
 /** The four rows of the default picker, in order. */
@@ -44,7 +45,7 @@ function defaultItems(): readonly FileChoiceItem[] {
 }
 
 describe('buildFileChoice (the rows of the configuration file picker)', () => {
-  it('F-2203.AC-2: no configured file, the user and system files with the settings and help rows', () => {
+  it('F-2203.AC-2: no configured file, the select placeholder and the four rows', () => {
     deepStrictEqual(
       buildFileChoice({
         configFile: '',
@@ -52,7 +53,7 @@ describe('buildFileChoice (the rows of the configuration file picker)', () => {
         systemFile: '/etc/ssh/ssh_config',
       }),
       {
-        placeholder: 'Select SSH configuration file to update',
+        placeholder: {id: 'S126', values: []},
         items: [USER_FILE, SYSTEM_FILE, SETTINGS_ROW, HELP_ROW],
       },
     );
@@ -77,7 +78,7 @@ describe('buildFileChoice (the rows of the configuration file picker)', () => {
     deepStrictEqual(defaultItems()[0], USER_FILE);
   });
 
-  it('F-2203.BR-3: the last two rows are the settings and help rows', () => {
+  it('F-2203.BR-3: the last two rows are the settings and help rows, by their ids', () => {
     deepStrictEqual(
       buildFileChoice({
         configFile: '~/ssh/mine',
@@ -88,7 +89,7 @@ describe('buildFileChoice (the rows of the configuration file picker)', () => {
     );
   });
 
-  it('F-2203.AC-11: a home-relative file is the row, as written, alone', () => {
+  it('F-2203.AC-11: a home-relative file is the edit placeholder and its row alone', () => {
     deepStrictEqual(
       buildFileChoice({
         configFile: '~/ssh/mine',
@@ -96,7 +97,7 @@ describe('buildFileChoice (the rows of the configuration file picker)', () => {
         systemFile: '/etc/ssh/ssh_config',
       }),
       {
-        placeholder: 'Edit custom SSH configuration file',
+        placeholder: {id: 'S047', values: []},
         items: [
           {kind: 'file', label: '~/ssh/mine', role: 'configured'},
           SETTINGS_ROW,
@@ -114,7 +115,7 @@ describe('buildFileChoice (the rows of the configuration file picker)', () => {
         systemFile: '/etc/ssh/ssh_config',
       }),
       {
-        placeholder: 'Edit custom SSH configuration file',
+        placeholder: {id: 'S047', values: []},
         items: [
           {kind: 'file', label: 'relative/cfg', role: 'configured'},
           SETTINGS_ROW,
@@ -132,7 +133,7 @@ describe('buildFileChoice (the rows of the configuration file picker)', () => {
         systemFile: '/etc/ssh/ssh_config',
       }),
       {
-        placeholder: 'Edit custom SSH configuration file',
+        placeholder: {id: 'S047', values: []},
         items: [
           {kind: 'file', label: '/etc/x/config', role: 'configured'},
           SETTINGS_ROW,
@@ -145,22 +146,17 @@ describe('buildFileChoice (the rows of the configuration file picker)', () => {
 
 describe('narrowFileChoice (the typed text of the picker)', () => {
   it('F-2203.AC-2: no typed text, the rows are unchanged', () => {
-    deepStrictEqual(narrowFileChoice(defaultItems(), ''), [
-      USER_FILE,
-      SYSTEM_FILE,
-      SETTINGS_ROW,
-      HELP_ROW,
-    ]);
+    deepStrictEqual(narrowFileChoice(defaultItems(), ''), defaultItems());
   });
 
-  it('F-2203.AC-29: a word in no row leaves the settings and help rows', () => {
+  it('F-2203.AC-29: a word in no path keeps the fixed rows, and only them', () => {
     deepStrictEqual(narrowFileChoice(defaultItems(), 'zzz'), [
       SETTINGS_ROW,
       HELP_ROW,
     ]);
   });
 
-  it('F-2203.AC-29: a word in the system file keeps that file first', () => {
+  it('F-2203.AC-29: a word in the system file keeps that file before the fixed rows', () => {
     deepStrictEqual(narrowFileChoice(defaultItems(), 'ssh_config'), [
       SYSTEM_FILE,
       SETTINGS_ROW,
@@ -168,7 +164,7 @@ describe('narrowFileChoice (the typed text of the picker)', () => {
     ]);
   });
 
-  it('F-2203.AC-29: a folder of the system file keeps that file first', () => {
+  it('F-2203.AC-29: a folder of the system file keeps that file before the fixed rows', () => {
     deepStrictEqual(narrowFileChoice(defaultItems(), '/etc'), [
       SYSTEM_FILE,
       SETTINGS_ROW,
@@ -176,10 +172,10 @@ describe('narrowFileChoice (the typed text of the picker)', () => {
     ]);
   });
 
-  it('F-2203.AC-29: a word only in the help row moves it before the settings row', () => {
+  it('F-2203.AC-29: a word in no file path leaves the fixed rows in place', () => {
     deepStrictEqual(narrowFileChoice(defaultItems(), 'elp'), [
-      HELP_ROW,
       SETTINGS_ROW,
+      HELP_ROW,
     ]);
   });
 

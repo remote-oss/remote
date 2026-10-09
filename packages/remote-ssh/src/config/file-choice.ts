@@ -1,7 +1,10 @@
 /**
  * @fileoverview The rows of the SSH configuration file picker: the configured file as written, or the user and
- * system files, with the settings and help rows; narrowing keeps the matching rows first.
+ * system files, with the settings and help rows; narrowing keeps a file row while its path contains the typed
+ * text, and the fixed rows always. The fixed rows carry string ids, never text; the surface resolves them.
  */
+
+import type {StringRef} from '../connect/picker-model.ts';
 
 /** The input the picker model reads. */
 export interface FileChoiceInput {
@@ -13,44 +16,46 @@ export interface FileChoiceInput {
   systemFile: string;
 }
 
-/** One row of the picker. */
+/** One row of the picker: a file path, or one of the two fixed rows by their string-table ids. */
 export type FileChoiceItem =
   | {kind: 'file'; label: string; role: 'user' | 'system' | 'configured'}
-  | {
-      kind: 'settings';
-      label: 'Settings';
-      description: 'specify a custom configuration file';
-    }
-  | {kind: 'help'; label: 'Help'; description: 'about SSH configuration files'};
+  | {kind: 'settings'; label: StringRef; description: StringRef}
+  | {kind: 'help'; label: StringRef; description: StringRef};
 
 /** The picker: its placeholder and its rows, the first of which is the focused row. */
 export interface FileChoice {
-  placeholder: string;
+  placeholder: StringRef;
   items: readonly FileChoiceItem[];
 }
+
+/** The placeholder when no file is configured. */
+const SELECT_PLACEHOLDER: StringRef = {id: 'S126', values: []};
+
+/** The placeholder when a file is configured. */
+const EDIT_PLACEHOLDER: StringRef = {id: 'S047', values: []};
 
 /** The settings row, in the default and the custom-file picker alike. */
 const SETTINGS_ITEM: FileChoiceItem = {
   kind: 'settings',
-  label: 'Settings',
-  description: 'specify a custom configuration file',
+  label: {id: 'S131', values: []},
+  description: {id: 'S166', values: []},
 };
 
 /** The help row, in the default and the custom-file picker alike. */
 const HELP_ITEM: FileChoiceItem = {
   kind: 'help',
-  label: 'Help',
-  description: 'about SSH configuration files',
+  label: {id: 'S077', values: []},
+  description: {id: 'S162', values: []},
 };
 
 /**
- * The rows of the picker. Without a configured file: the user and system files, then the settings and help rows.
- * With one: the value exactly as written, untrimmed and unexpanded, then the settings and help rows.
+ * The rows of the picker. Without a configured file: the user and system files, then the settings and help
+ * rows. With one: the value exactly as written, untrimmed and unexpanded, then the settings and help rows.
  */
 export function buildFileChoice(input: FileChoiceInput): FileChoice {
   if (input.configFile.trim() !== '') {
     return {
-      placeholder: 'Edit custom SSH configuration file',
+      placeholder: EDIT_PLACEHOLDER,
       items: [
         {kind: 'file', label: input.configFile, role: 'configured'},
         SETTINGS_ITEM,
@@ -59,7 +64,7 @@ export function buildFileChoice(input: FileChoiceInput): FileChoice {
     };
   }
   return {
-    placeholder: 'Select SSH configuration file to update',
+    placeholder: SELECT_PLACEHOLDER,
     items: [
       {kind: 'file', label: input.userFile, role: 'user'},
       {kind: 'file', label: input.systemFile, role: 'system'},
@@ -70,25 +75,24 @@ export function buildFileChoice(input: FileChoiceInput): FileChoice {
 }
 
 /**
- * The rows after the typed text: the rows whose label contains it, ignoring case, in their order, then the
- * non-matching settings and help rows in their order; the non-matching file rows are dropped.
+ * The rows after the typed text: the file rows whose path contains it, ignoring case, in their order, then the
+ * settings and help rows, always kept. The fixed rows carry ids, not text, so their labels are not matched.
  */
 export function narrowFileChoice(
   items: readonly FileChoiceItem[],
   typed: string,
 ): readonly FileChoiceItem[] {
   const needle = typed.toLowerCase();
-  if (needle === '') {
-    return items;
-  }
-  const matching: FileChoiceItem[] = [];
-  const trailing: FileChoiceItem[] = [];
+  const kept: FileChoiceItem[] = [];
   for (const item of items) {
-    if (item.label.toLowerCase().includes(needle)) {
-      matching.push(item);
-    } else if (item.kind !== 'file') {
-      trailing.push(item);
+    if (
+      item.kind === 'file' &&
+      needle !== '' &&
+      !item.label.toLowerCase().includes(needle)
+    ) {
+      continue;
     }
+    kept.push(item);
   }
-  return [...matching, ...trailing];
+  return kept;
 }
