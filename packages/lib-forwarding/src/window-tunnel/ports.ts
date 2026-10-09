@@ -9,7 +9,14 @@
  * already attached: an adapter holds earlier bytes until the first data listener is attached, so none is lost.
  */
 export interface Duplex {
-  send(chunk: Uint8Array): void;
+  /** Sends the bytes. False means the connection holds as much as it wants to: stop feeding it until `onDrain`. */
+  send(chunk: Uint8Array): boolean;
+  /** Registers a listener for the moment a connection that said false can take bytes again. */
+  onDrain(listener: () => void): void;
+  /** Stops delivering bytes until `resume`; the bytes wait in the connection. */
+  pause(): void;
+  /** Delivers bytes again. */
+  resume(): void;
   onData(listener: (chunk: Uint8Array) => void): void;
   onClose(listener: () => void): void;
   close(): void;

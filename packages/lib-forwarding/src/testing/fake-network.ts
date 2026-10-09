@@ -24,8 +24,39 @@ export class FakeConnection implements Duplex {
   private readonly closeListeners: Array<() => void> = [];
 
   /** Keeps the chunk. */
-  send(chunk: Uint8Array): void {
+  /** Whether the connection says its buffer is full, which a test sets with `fill`. */
+  full = false;
+  /** Whether delivery is paused. */
+  paused = false;
+  private readonly drainListeners: Array<() => void> = [];
+
+  /** Keeps the chunk, and says false while the buffer is `full`. */
+  send(chunk: Uint8Array): boolean {
     this.sent.push(chunk);
+    return !this.full;
+  }
+
+  /** Registers a drain listener. */
+  onDrain(listener: () => void): void {
+    this.drainListeners.push(listener);
+  }
+
+  /** Stops delivery. */
+  pause(): void {
+    this.paused = true;
+  }
+
+  /** Starts delivery again. */
+  resume(): void {
+    this.paused = false;
+  }
+
+  /** The buffer empties: it takes bytes again, and the drain listeners hear it. */
+  drain(): void {
+    this.full = false;
+    for (const listener of this.drainListeners) {
+      listener();
+    }
   }
 
   /** Registers a listener for the bytes that arrive. */
@@ -75,6 +106,8 @@ export class FakeDialer implements Dialer {
   readonly dialed: TunnelTarget[] = [];
   /** The connections given, in order. */
   readonly connections: FakeConnection[] = [];
+  /** Whether the connections it opens from now on say their buffer is full. */
+  slow = false;
   private readonly script: readonly DialAnswer[];
   private readonly waiting: Array<() => void> = [];
 
@@ -98,6 +131,7 @@ export class FakeDialer implements Dialer {
       return new Promise<Duplex>(resolve => {
         this.waiting.push(() => {
           const connection = new FakeConnection();
+          connection.full = this.slow;
           this.connections.push(connection);
           resolve(connection);
         });

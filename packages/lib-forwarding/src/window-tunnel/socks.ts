@@ -104,8 +104,15 @@ function openThroughRelay(
       }
     }
     const stream: Duplex = {
-      send: chunk => {
-        relay.send(chunk);
+      send: chunk => relay.send(chunk),
+      onDrain: listener => {
+        relay.onDrain(listener);
+      },
+      pause: () => {
+        relay.pause();
+      },
+      resume: () => {
+        relay.resume();
       },
       onData: listener => {
         dataListeners.push(listener);

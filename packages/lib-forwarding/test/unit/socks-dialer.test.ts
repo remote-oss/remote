@@ -288,4 +288,27 @@ describe('the dialer of the SOCKS relay', () => {
     outcome.stream?.close();
     deepStrictEqual([told, relay()?.closed], [1, true]);
   });
+
+  it('passes the slow-side signals of the relay on: a full relay, its drain, a pause and a resume', async () => {
+    const {dial, relay} = fixture();
+    const outcome = outcomeOf(dial());
+    await established(relay);
+    const raised = relay();
+    if (raised !== undefined) {
+      raised.full = true;
+    }
+    const accepted = outcome.stream?.send(Uint8Array.of(1));
+    let drained = 0;
+    outcome.stream?.onDrain(() => {
+      drained += 1;
+    });
+    raised?.drain();
+    outcome.stream?.pause();
+    const pausedHere = raised?.paused;
+    outcome.stream?.resume();
+    deepStrictEqual(
+      [accepted, drained, pausedHere, raised?.paused],
+      [false, 1, true, false],
+    );
+  });
 });

@@ -10,6 +10,7 @@ import {
   type Answer,
   type DialAnswer,
   FakeDialer,
+  type FakeConnection,
   FakeLocalPort,
 } from '../../src/testing/fake-network.ts';
 import {LIMITS, settled, advanced} from './timing.fixture.ts';
@@ -274,17 +275,36 @@ describe('the fakes', () => {
   });
 });
 
+/** A tunnel that is open, with a client connected to it, and the connection to the host that the client got. */
+async function connected(
+  dialScript: readonly DialAnswer[] = ['work'],
+): Promise<{
+  fixture: RelayFixture;
+  tunnel: WindowTunnelOutcome;
+  client: FakeConnection | undefined;
+  host: () => FakeConnection | undefined;
+}> {
+  const fixture = relay(dialScript);
+  const tunnel = await fixture.open();
+  const client = fixture.local.accept(50000);
+  await settled();
+  return {
+    fixture,
+    tunnel,
+    client,
+    host: () => fixture.dialer.connections[1],
+  };
+}
+
 describe('a client that does not wait for the host side', () => {
   it('has the bytes it sends before the host side opens delivered first, in order', async () => {
-    const {open, local, dialer} = relay(['work', 'later']);
-    await open();
-    const client = local.accept(50000);
+    const {fixture, client, host} = await connected(['work', 'later']);
     client?.receive(Uint8Array.of(1));
     client?.receive(Uint8Array.of(2));
-    dialer.openNext();
+    fixture.dialer.openNext();
     await settled();
     client?.receive(Uint8Array.of(3));
-    deepStrictEqual(dialer.connections[1]?.sent, [
+    deepStrictEqual(host()?.sent, [
       Uint8Array.of(1),
       Uint8Array.of(2),
       Uint8Array.of(3),
@@ -292,35 +312,71 @@ describe('a client that does not wait for the host side', () => {
   });
 
   it('closes the host side when it opens after the client has left', async () => {
-    const {open, local, dialer} = relay(['work', 'later']);
-    await open();
-    const client = local.accept(50000);
+    const {fixture, client, host} = await connected(['work', 'later']);
     client?.close();
-    dialer.openNext();
+    fixture.dialer.openNext();
     await settled();
-    deepStrictEqual(dialer.connections[1]?.closed, true);
+    deepStrictEqual(host()?.closed, true);
   });
 
   it('sends nothing to a host side that opens after the client has left', async () => {
-    const {open, local, dialer} = relay(['work', 'later']);
-    await open();
-    const client = local.accept(50000);
+    const {fixture, client, host} = await connected(['work', 'later']);
     client?.receive(Uint8Array.of(9));
     client?.close();
-    dialer.openNext();
+    fixture.dialer.openNext();
     await settled();
-    deepStrictEqual(dialer.connections[1]?.sent, []);
+    deepStrictEqual(host()?.sent, []);
   });
 
   it('closes the host side that opens after the tunnel was closed', async () => {
-    const {open, local, dialer} = relay(['work', 'later']);
-    const outcome = await open();
-    local.accept(50000);
-    if (outcome.kind === 'open') {
-      outcome.close();
+    const {fixture, tunnel, host} = await connected(['work', 'later']);
+    if (tunnel.kind === 'open') {
+      tunnel.close();
     }
-    dialer.openNext();
+    fixture.dialer.openNext();
     await settled();
-    deepStrictEqual(dialer.connections[1]?.closed, true);
+    deepStrictEqual(host()?.closed, true);
+  });
+});
+
+describe('a slow side of a tunnel', () => {
+  it('pauses the client while the host side holds all it wants, and resumes it when that side drains', async () => {
+    const {client, host} = await connected();
+    const slow = host();
+    if (slow !== undefined) {
+      slow.full = true;
+    }
+    client?.receive(Uint8Array.of(1));
+    const pausedWhileFull = client?.paused;
+    slow?.drain();
+    deepStrictEqual([pausedWhileFull, client?.paused], [true, false]);
+  });
+
+  it('pauses the host side while the client holds all it wants, and resumes it when the client drains', async () => {
+    const {client, host} = await connected();
+    if (client !== undefined) {
+      client.full = true;
+    }
+    host()?.receive(Uint8Array.of(1));
+    const pausedWhileFull = host()?.paused;
+    client?.drain();
+    deepStrictEqual([pausedWhileFull, host()?.paused], [true, false]);
+  });
+
+  it('pauses the client when the bytes it sent early fill the host side that opens', async () => {
+    const {fixture, client} = await connected(['work', 'later']);
+    client?.receive(Uint8Array.of(1));
+    fixture.dialer.slow = true;
+    fixture.dialer.openNext();
+    await settled();
+    deepStrictEqual(client?.paused, true);
+  });
+});
+
+describe('the fakes', () => {
+  it('a dialer with an empty script works', async () => {
+    const dialer = new FakeDialer([]);
+    await dialer.dial({kind: 'port', port: 1});
+    deepStrictEqual(dialer.connections.length, 1);
   });
 });
