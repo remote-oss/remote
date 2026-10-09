@@ -68,6 +68,11 @@ const IMPOSED_PROPERTY_KEYS = [
   'url',
   // VS Code: the `uri` of the openFolder command core executes.
   'uri',
+  // The identifier inventory of the Remote - SSH package (ADR-0008): a setting's `key`, and the context keys the
+  // package sets itself (`own`) and reads (`read`).
+  'key',
+  'own',
+  'read',
 ];
 
 // Phrases that address a reader of a conversation rather than of the code (ADR-0003, comments). An entry with an

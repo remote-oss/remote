@@ -85,7 +85,27 @@ describe('public-surface', () => {
   it('leaves files that do not ship alone', () => {
     workspace.write('packages/remote-x/identifiers.json', {source: 'the card'});
     workspace.write('packages/remote-x/coverage.json', {note: 'the card'});
+    workspace.write(
+      'packages/remote-x/test/fixtures/other.json',
+      '{"note": "the card"}',
+    );
     deepStrictEqual(checkPublicSurface(workspace.root), []);
+  });
+
+  it('reports process wording in the shipped identifier inventory of a fidelity test', () => {
+    workspace.write(
+      'packages/remote-x/test/fixtures/identity-inventory.json',
+      '{"commands": [{"id": "acme.open", "title": "the card of the worker"}]}',
+    );
+    deepStrictEqual(
+      checkPublicSurface(workspace.root).map(problem =>
+        problem.slice(0, problem.indexOf(' is wording')),
+      ),
+      [
+        "packages/remote-x/test/fixtures/identity-inventory.json:1: 'card'",
+        "packages/remote-x/test/fixtures/identity-inventory.json:1: 'worker'",
+      ],
+    );
   });
 
   it('checks the user documentation of an extension', () => {

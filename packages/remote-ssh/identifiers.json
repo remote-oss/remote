@@ -1,7 +1,74 @@
 {
-  "source": "remote-oss/remote-ssh#78 (F-2002)",
+  "source": "remote-oss/remote-ssh#78 (F-3901)",
   "standsDownFor": "ms-vscode-remote.remote-ssh",
-  "standingDownKey": "",
+  "standingDownKey": "opensshremotes.standingDown",
+  "namespaces": {
+    "commands": ["opensshremotes."],
+    "settings": ["remote.SSH."],
+    "contextKeys": ["opensshremotes."],
+    "internalCommands": ["remote-internal."]
+  },
+  "contextKeys": [
+    {
+      "id": "opensshremotes.standingDown",
+      "setter": "extension"
+    }
+  ],
+  "infoLineCommands": [],
+  "internal": [
+    {
+      "id": "remote-internal.getSshFoldersHistory",
+      "role": "served",
+      "kind": "query"
+    },
+    {
+      "id": "remote-internal.deleteSshFolderFromHistory",
+      "role": "served",
+      "kind": "change"
+    },
+    {
+      "id": "remote-internal.getActiveSshRemote",
+      "role": "served",
+      "kind": "query"
+    },
+    {
+      "id": "remote-internal.getConfiguredHostnames",
+      "role": "served",
+      "kind": "query"
+    },
+    {
+      "id": "remote-internal.openRemoteSshTarget",
+      "role": "served",
+      "kind": "change"
+    },
+    {
+      "id": "remote-internal.sshHostsChanged",
+      "role": "called",
+      "kind": "change"
+    }
+  ],
+  "invented": [
+    {
+      "id": "remote.SSH.serverDownloadUrlTemplate",
+      "kind": "settings",
+      "spec": "F-2403",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "opensshremotes.standingDown",
+      "kind": "contextKeys",
+      "spec": "F-2001",
+      "date": "2026-10-09"
+    },
+    {
+      "id": "remote-internal.sshHostsChanged",
+      "kind": "internalCommands",
+      "spec": "F-2203",
+      "date": "2026-10-09"
+    }
+  ],
+  "settingPairs": [],
+  "ungated": [],
   "locales": [
     "cs",
     "de",

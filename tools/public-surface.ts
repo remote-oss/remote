@@ -24,6 +24,15 @@ const PACKAGE_FILES =
 /** The folders of a package whose files all ship. */
 const PACKAGE_FOLDERS = ['l10n', 'syntaxes'];
 
+/** The fixtures of a package that ship with it (ADR-0008: the stripped identifier inventories of the fidelity tests). */
+const FIXTURE_FOLDER = path.join('test', 'fixtures');
+
+/** The identifier inventory of a package, when the package ships one. */
+function inventoryFixture(fixtureFolder: string): string[] {
+  const file = path.join(fixtureFolder, 'identity-inventory.json');
+  return existsSync(file) ? [file] : [];
+}
+
 /** Third-party texts keep their own words (ADR-0008, decision 5). */
 const THIRD_PARTY_FILE = /^(LICENSE|ThirdPartyNotices)/;
 
@@ -56,6 +65,8 @@ function surfaceFiles(root: string): string[] {
       ...PACKAGE_FOLDERS.flatMap(name =>
         filesBelow(path.join(directory, name)),
       ),
+      // The stripped identifier inventory a fidelity test compares against (ADR-0008, ruled 2026-10-09).
+      ...inventoryFixture(path.join(directory, FIXTURE_FOLDER)),
     );
   }
   const docs = path.join(root, 'docs');

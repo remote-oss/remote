@@ -1,8 +1,10 @@
 {
   "name": "remote-ssh",
-  "version": "0.0.0",
-  "private": true,
+  "displayName": "Remote - SSH",
+  "publisher": "remote-oss",
   "description": "%description%",
+  "version": "0.1.0",
+  "private": true,
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -17,7 +19,6 @@
     "remote",
     "ssh"
   ],
-  "main": "./dist/extension.js",
   "engines": {
     "vscode": "^1.139.0"
   },
@@ -29,11 +30,474 @@
       "supported": true
     }
   },
-  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "enabledApiProposals": [
+    "resolvers",
+    "tunnels",
+    "terminalDataWriteEvent",
+    "contribRemoteHelp"
+  ],
+  "activationEvents": [
+    "onCommand:remote-internal.getSshFoldersHistory",
+    "onCommand:remote-internal.deleteSshFolderFromHistory",
+    "onCommand:remote-internal.getActiveSshRemote",
+    "onCommand:remote-internal.getConfiguredHostnames",
+    "onCommand:remote-internal.openRemoteSshTarget",
+    "onResolveRemoteAuthority:ssh-remote",
+    "onUri"
+  ],
   "extensionPack": [
     "remote-oss.remote-ssh-edit",
     "remote-oss.remote-explorer"
   ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "opensshremotes.addNewSshHost",
+        "title": "%commands.Addnewsshhost.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.cleanCurrentRemoteServer",
+        "title": "%commands.Cleancurrentremoteserver.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.cleanDevBox",
+        "title": "%commands.Cleandevbox.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.cleanLocalServer",
+        "title": "%commands.Cleanlocalserver.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.cleanRemoteServer",
+        "title": "%commands.Cleanremoteserver.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.clearAllSessionHints",
+        "title": "%commands.Clearallsessionhints.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.getHelp",
+        "title": "%commands.Gethelp.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.getStarted",
+        "title": "%commands.Getstarted.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.openConfigFile",
+        "title": "%commands.Openconfigfile.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.openEmptyWindow",
+        "title": "%commands.Openemptywindow.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.openEmptyWindowInCurrentWindow",
+        "title": "%commands.Openemptywindowincurrentwindow.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.openEmptyWindowOnCurrentHost",
+        "title": "%commands.Openemptywindowoncurrenthost.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.openWebUI",
+        "title": "%commands.Openwebui.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.provideFeedback",
+        "title": "%commands.Providefeedback.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.reportIssue",
+        "title": "%commands.Reportissue.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.settings",
+        "title": "%commands.Settings.title%",
+        "category": "Remote-SSH"
+      },
+      {
+        "command": "opensshremotes.showLog",
+        "title": "%commands.Showlog.title%",
+        "category": "Remote-SSH"
+      }
+    ],
+    "configuration": {
+      "title": "Remote - SSH",
+      "properties": {
+        "remote.SSH.allowLocalServerDownload": {
+          "description": "%setting.Allowlocalserverdownload.description%",
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "markdownDeprecationMessage": "Deprecated, please use `#remote.SSH.localServerDownload#`"
+        },
+        "remote.SSH.bindHost": {
+          "markdownDescription": "%setting.Bindhost.description%",
+          "type": "object",
+          "default": null,
+          "scope": "application",
+          "additionalProperties": {
+            "type": "string",
+            "default": "127.0.0.1"
+          }
+        },
+        "remote.SSH.configFile": {
+          "description": "%setting.Configfile.description%",
+          "type": "string",
+          "default": "",
+          "scope": "application"
+        },
+        "remote.SSH.connectTimeout": {
+          "description": "%setting.Connecttimeout.description%",
+          "type": "number",
+          "default": 15,
+          "scope": "application",
+          "minimum": 1
+        },
+        "remote.SSH.defaultExtensions": {
+          "description": "%setting.Defaultextensions.description%",
+          "type": "array",
+          "scope": "application",
+          "items": {
+            "type": "string"
+          }
+        },
+        "remote.SSH.defaultForwardedPorts": {
+          "description": "%setting.Defaultforwardedports.description%",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": [
+              "remotePort"
+            ],
+            "properties": {
+              "remotePort": {
+                "type": "number"
+              },
+              "name": {
+                "type": "string"
+              },
+              "localPort": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "remote.SSH.enableAgentForwarding": {
+          "markdownDescription": "%setting.Enableagentforwarding.description%",
+          "type": "boolean",
+          "default": true,
+          "scope": "application"
+        },
+        "remote.SSH.enableDynamicForwarding": {
+          "description": "%setting.Enabledynamicforwarding.description%",
+          "type": "boolean",
+          "default": true,
+          "scope": "application"
+        },
+        "remote.SSH.enableRemoteCommand": {
+          "markdownDescription": "%setting.Enableremotecommand.description%",
+          "type": "boolean",
+          "default": false,
+          "scope": "application"
+        },
+        "remote.SSH.enableX11Forwarding": {
+          "markdownDescription": "%setting.Enablex11forwarding.description%",
+          "type": "boolean",
+          "default": true,
+          "scope": "application"
+        },
+        "remote.SSH.experimental.enhancedSessionLogs": {
+          "markdownDescription": "%setting.Enhancedsessionlogs.description%",
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "tags": [
+            "experimental"
+          ]
+        },
+        "remote.SSH.externalSSH_ASKPASS": {
+          "markdownDescription": "%setting.ExternalsshAskpass.description%",
+          "type": "boolean",
+          "default": false,
+          "scope": "application"
+        },
+        "remote.SSH.httpProxy": {
+          "markdownDescription": "%setting.Httpproxy.description%",
+          "type": [
+            "string",
+            "object"
+          ],
+          "default": "",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "remote.SSH.httpsProxy": {
+          "markdownDescription": "%setting.Httpsproxy.description%",
+          "type": [
+            "string",
+            "object"
+          ],
+          "default": "",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "remote.SSH.localServerDownload": {
+          "description": "%setting.Localserverdownload.description%",
+          "type": "string",
+          "default": "auto",
+          "scope": "application",
+          "enum": [
+            "auto",
+            "always",
+            "off"
+          ],
+          "enumDescriptions": [
+            "The server will first be downloaded on the host, and if that fails, will fall back to downloading locally",
+            "The server will only be downloaded locally and transferred to the host",
+            "The server will only be downloaded on the host"
+          ]
+        },
+        "remote.SSH.lockfilesInTmp": {
+          "markdownDescription": "%setting.Lockfilesintmp.description%",
+          "type": "boolean",
+          "default": false,
+          "scope": "application"
+        },
+        "remote.SSH.logLevel": {
+          "description": "%setting.Loglevel.description%",
+          "type": "string",
+          "default": "debug",
+          "scope": "application",
+          "enum": [
+            "debug",
+            "trace"
+          ]
+        },
+        "remote.SSH.maxReconnectionAttempts": {
+          "markdownDescription": "%setting.Maxreconnectionattempts.description%",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "scope": "application",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "remote.SSH.path": {
+          "description": "%setting.Path.description%",
+          "type": "string",
+          "default": "",
+          "scope": "application"
+        },
+        "remote.SSH.permitPtyAllocation": {
+          "markdownDescription": "%setting.Permitptyallocation.description%",
+          "type": "boolean",
+          "default": false,
+          "scope": "application"
+        },
+        "remote.SSH.preconnect": {
+          "markdownDescription": "%setting.Preconnect.description%",
+          "type": [
+            "string",
+            "object"
+          ],
+          "default": "",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "tags": [
+            "experimental"
+          ]
+        },
+        "remote.SSH.preferredLocalPortRange": {
+          "markdownDescription": "%setting.Preferredlocalportrange.description%",
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "pattern": "^\\d+-\\d+$|^$"
+        },
+        "remote.SSH.reconnectionGraceTime": {
+          "markdownDescription": "%setting.Reconnectiongracetime.description%",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "scope": "application",
+          "minimum": 1
+        },
+        "remote.SSH.remotePlatform": {
+          "markdownDescription": "%setting.Remoteplatform.description%",
+          "type": "object",
+          "scope": "application",
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "macOS",
+              "windows",
+              "linux"
+            ]
+          }
+        },
+        "remote.SSH.remoteServerListenOnSocket": {
+          "markdownDescription": "%setting.Remoteserverlistenonsocket.description%",
+          "type": "boolean",
+          "default": false
+        },
+        "remote.SSH.serverDownloadUrlTemplate": {
+          "markdownDescription": "%setting.Serverdownloadurltemplate.description%",
+          "type": "string",
+          "scope": "application"
+        },
+        "remote.SSH.serverInstallPath": {
+          "description": "%setting.Serverinstallpath.description%",
+          "type": "object",
+          "scope": "application",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "remote.SSH.serverPickPortsFromRange": {
+          "markdownDescription": "%setting.Serverpickportsfromrange.description%",
+          "type": "object",
+          "default": null,
+          "scope": "application",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "remote.SSH.showLoginTerminal": {
+          "description": "%setting.Showloginterminal.description%",
+          "type": "boolean",
+          "default": false,
+          "scope": "application"
+        },
+        "remote.SSH.suppressWindowsSshWarning": {
+          "description": "%setting.Suppresswindowssshwarning.description%",
+          "type": "boolean",
+          "default": false,
+          "scope": "application"
+        },
+        "remote.SSH.useCurlAndWgetConfigurationFiles": {
+          "markdownDescription": "%setting.Usecurlandwgetconfigurationfiles.description%",
+          "type": "boolean",
+          "default": false,
+          "scope": "application"
+        },
+        "remote.SSH.useExecServer": {
+          "markdownDescription": "%setting.Useexecserver.description%",
+          "type": "boolean",
+          "default": true,
+          "scope": "application"
+        },
+        "remote.SSH.useFlock": {
+          "markdownDescription": "%setting.Useflock.description%",
+          "type": "boolean",
+          "default": true,
+          "scope": "application"
+        },
+        "remote.SSH.useLocalServer": {
+          "markdownDescription": "%setting.Uselocalserver.description%",
+          "type": "boolean",
+          "default": true,
+          "scope": "application"
+        },
+        "remote.SSH.windowsRemotes": {
+          "markdownDescription": "%setting.Windowsremotes.description%",
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "items": {
+            "type": "string"
+          },
+          "deprecationMessage": "Deprecated: Please use `#remote.SSH.remotePlatorm#` instead"
+        }
+      }
+    },
+    "menus": {
+      "statusBar/remoteIndicator": [
+        {
+          "command": "opensshremotes.openEmptyWindow",
+          "group": "remote_20_ssh-remote_1general@1",
+          "when": "!opensshremotes.standingDown"
+        },
+        {
+          "command": "opensshremotes.openEmptyWindowInCurrentWindow",
+          "group": "remote_20_ssh-remote_1general@2",
+          "when": "!opensshremotes.standingDown"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "opensshremotes.getStarted",
+          "when": "!remoteName && !virtualWorkspace && !opensshremotes.standingDown || remoteName =~ /^ssh-remote$/ && remoteConnectionState == disconnected && !opensshremotes.standingDown"
+        },
+        {
+          "command": "opensshremotes.openEmptyWindowOnCurrentHost",
+          "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && !opensshremotes.standingDown"
+        },
+        {
+          "command": "opensshremotes.provideFeedback",
+          "when": "remoteName =~ /^ssh-remote$/ && !opensshremotes.standingDown"
+        },
+        {
+          "command": "opensshremotes.cleanCurrentRemoteServer",
+          "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && !opensshremotes.standingDown"
+        },
+        {
+          "command": "opensshremotes.cleanLocalServer",
+          "when": "config.remote.SSH.useLocalServer && !opensshremotes.standingDown"
+        },
+        {
+          "command": "opensshremotes.openWebUI",
+          "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && config.remote.SSH.enableWebAccess && !opensshremotes.standingDown"
+        }
+      ]
+    },
+    "resourceLabelFormatters": [
+      {
+        "scheme": "vscode-remote",
+        "authority": "ssh-remote+*",
+        "formatting": {
+          "label": "${path}",
+          "separator": "/",
+          "tildify": true,
+          "workspaceSuffix": "SSH"
+        }
+      }
+    ],
+    "remoteHelp": {
+      "remoteName": [
+        "ssh-remote"
+      ],
+      "getStarted": "https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md",
+      "documentation": "https://github.com/remote-oss/remote/tree/main/docs/remote-ssh",
+      "feedback": "https://github.com/remote-oss/remote/issues/new/choose",
+      "issues": "https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh"
+    }
+  },
   "dependencies": {
     "lib-authority": "workspace:*",
     "lib-helper": "workspace:*",
