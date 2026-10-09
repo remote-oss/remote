@@ -32,6 +32,11 @@ export type {
 } from './config/effective.ts';
 export {parseEffectiveOptions} from './config/effective.ts';
 export type {
+  ForwardingBlock,
+  ForwardingPath,
+} from './config/forwarding-block.ts';
+export {forwardingBlock} from './config/forwarding-block.ts';
+export type {
   AddHostProblem,
   AddHostResult,
   BlockLine,

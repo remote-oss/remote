@@ -22,6 +22,7 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
         connectTimeout: '21',
         remoteCommand: 'echo "hi there"',
         localForwards: ['8080 [127.0.0.1]:80', '8081 [127.0.0.1]:81'],
+        clearAllForwardings: false,
       },
     });
   });
@@ -33,6 +34,7 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
         user: 'dev',
         port: '22',
         localForwards: [],
+        clearAllForwardings: false,
       },
     });
   });
@@ -47,6 +49,7 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
           port: '22',
           connectTimeout: '0',
           localForwards: [],
+          clearAllForwardings: false,
         },
       },
     );
@@ -55,20 +58,42 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
   it('F-2107.BR-1: remotecommand none leaves the option out', () => {
     deepStrictEqual(
       parseEffectiveOptions('hostname h\nuser u\nport 22\nremotecommand none'),
-      {options: {hostName: 'h', user: 'u', port: '22', localForwards: []}},
+      {
+        options: {
+          hostName: 'h',
+          user: 'u',
+          port: '22',
+          localForwards: [],
+          clearAllForwardings: false,
+        },
+      },
     );
   });
 
   it('F-2107.BR-1 (provisional): a remotecommand without a value leaves the option out', () => {
     deepStrictEqual(
       parseEffectiveOptions('hostname h\nuser u\nport 22\nremotecommand'),
-      {options: {hostName: 'h', user: 'u', port: '22', localForwards: []}},
+      {
+        options: {
+          hostName: 'h',
+          user: 'u',
+          port: '22',
+          localForwards: [],
+          clearAllForwardings: false,
+        },
+      },
     );
   });
 
   it('F-2105.6.2 (provisional): keywords in any case fold to lower case', () => {
     deepStrictEqual(parseEffectiveOptions('HostName h\nUSER dev\nPort 22'), {
-      options: {hostName: 'h', user: 'dev', port: '22', localForwards: []},
+      options: {
+        hostName: 'h',
+        user: 'dev',
+        port: '22',
+        localForwards: [],
+        clearAllForwardings: false,
+      },
     });
   });
 
@@ -84,6 +109,7 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
           port: '22',
           remoteCommand: "sh -c 'a  b'",
           localForwards: [],
+          clearAllForwardings: false,
         },
       },
     );
@@ -107,6 +133,7 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
             '1 [127.0.0.1]:2',
             '3 [127.0.0.1]:4',
           ],
+          clearAllForwardings: false,
         },
       },
     );
@@ -121,6 +148,7 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
           user: 'u',
           port: '22',
           localForwards: [],
+          clearAllForwardings: false,
         },
       },
     );
@@ -131,20 +159,42 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
       parseEffectiveOptions(
         'hostname h\nuser u\nport 22\nidentityfile ~/x\ncompression no',
       ),
-      {options: {hostName: 'h', user: 'u', port: '22', localForwards: []}},
+      {
+        options: {
+          hostName: 'h',
+          user: 'u',
+          port: '22',
+          localForwards: [],
+          clearAllForwardings: false,
+        },
+      },
     );
   });
 
   it('S4 contract: CRLF line ends', () => {
     deepStrictEqual(
       parseEffectiveOptions('hostname h\r\nuser u\r\nport 22\r\n'),
-      {options: {hostName: 'h', user: 'u', port: '22', localForwards: []}},
+      {
+        options: {
+          hostName: 'h',
+          user: 'u',
+          port: '22',
+          localForwards: [],
+          clearAllForwardings: false,
+        },
+      },
     );
   });
 
   it('S4 contract: blank lines between the basic lines', () => {
     deepStrictEqual(parseEffectiveOptions('hostname h\n\nuser u\n\nport 22'), {
-      options: {hostName: 'h', user: 'u', port: '22', localForwards: []},
+      options: {
+        hostName: 'h',
+        user: 'u',
+        port: '22',
+        localForwards: [],
+        clearAllForwardings: false,
+      },
     });
   });
 
@@ -161,4 +211,69 @@ describe('parseEffectiveOptions (the options of the ssh -G output)', () => {
       );
     });
   }
+});
+
+describe('clearAllForwardings (F-2104.BR-11)', () => {
+  it('F-2104.BR-11: ssh -G printing clearallforwardings yes is true', () => {
+    deepStrictEqual(
+      parseEffectiveOptions(
+        'hostname h\nuser u\nport 22\nclearallforwardings yes',
+      ),
+      {
+        options: {
+          hostName: 'h',
+          user: 'u',
+          port: '22',
+          localForwards: [],
+          clearAllForwardings: true,
+        },
+      },
+    );
+  });
+
+  it('F-2104.BR-11: clearallforwardings no is false', () => {
+    deepStrictEqual(
+      parseEffectiveOptions(
+        'hostname h\nuser u\nport 22\nclearallforwardings no',
+      ),
+      {
+        options: {
+          hostName: 'h',
+          user: 'u',
+          port: '22',
+          localForwards: [],
+          clearAllForwardings: false,
+        },
+      },
+    );
+  });
+
+  it('F-2104.BR-11: an absent clearallforwardings is false', () => {
+    deepStrictEqual(parseEffectiveOptions('hostname h\nuser u\nport 22'), {
+      options: {
+        hostName: 'h',
+        user: 'u',
+        port: '22',
+        localForwards: [],
+        clearAllForwardings: false,
+      },
+    });
+  });
+
+  it('F-2104.BR-11: a mixed-case keyword and value are true', () => {
+    deepStrictEqual(
+      parseEffectiveOptions(
+        'hostname h\nuser u\nport 22\nClearAllForwardings YES',
+      ),
+      {
+        options: {
+          hostName: 'h',
+          user: 'u',
+          port: '22',
+          localForwards: [],
+          clearAllForwardings: true,
+        },
+      },
+    );
+  });
 });

@@ -28,6 +28,7 @@ const REQUEST: SshRequest = {
     user: 'dev',
     port: '22',
     localForwards: [],
+    clearAllForwardings: false,
   },
   programs: {sshProgram: 'ssh', scpProgram: 'scp'},
   homeFolder: '/home/dev',
