@@ -246,6 +246,8 @@ export interface RunOptions {
   environment?: Record<string, string>;
   /** When set, the script is passed as an argument and this is its standard input. */
   input?: Buffer;
+  /** Changes the script text before it runs, for a test that points an absolute path into the fake host. */
+  rewriteScript?: (script: string) => string;
 }
 
 /** Runs a script for a request on the fake host and returns its output lines. */
@@ -255,7 +257,9 @@ export function runScript(
   parameters: ScriptParameters,
   options: RunOptions = {},
 ): string[] {
-  const script = scriptFor(request, 'posixShell', parameters);
+  const script = (options.rewriteScript ?? (text => text))(
+    scriptFor(request, 'posixShell', parameters),
+  );
   const shell = options.shell ?? '/bin/sh';
   const environment = {...host.environment, ...options.environment};
   const result =
