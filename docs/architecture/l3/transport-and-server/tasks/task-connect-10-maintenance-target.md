@@ -16,8 +16,10 @@ export function hostPartOf(target: string): string;
 // the text after the LAST `@` (the whole text when there is none), then a trailing `:` followed only by digits removed
 export function isOwnHost(target: string, windowHost: string | undefined): boolean;
 // windowHost undefined: false; otherwise exact, case-sensitive equality of target and windowHost
-export function killedNotice(host: string): string;     // `Killed VS Code Server on ${host}.`
-export function killFailedNotice(host: string): string; // `Failed to kill VS Code Server on ${host}.`
+import type {StringRef} from '../connect/picker-model.ts';   // {id, values}; the surface resolves ids (R-29: no English in models)
+export function killedNotice(host: string): StringRef;     // {id: 'S085', values: [host]} (F-2411: "Killed VS Code Server on {0}.")
+export function killFailedNotice(host: string): StringRef; // {id: 'S076', values: [host]} (F-2411's failure notice)
+// Amended 2026-10-10: ids, never English text, in a pure model; the rows that quoted the sentences now expect the StringRef.
 ```
 
 `isOwnHost` compares the target text exactly as the user gave it with the window's authority host: it returns
