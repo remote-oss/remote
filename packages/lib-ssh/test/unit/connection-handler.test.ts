@@ -465,6 +465,22 @@ describe('connection handler (contracts §4 S9)', () => {
     });
   });
 
+  describe('close', () => {
+    it('ends ssh without an event when the helper ends', async () => {
+      handler.onLeasesChanged([1]);
+      await send(1, {type: 'connect'});
+      events.length = 0;
+      handler.close();
+      await settled();
+      deepStrictEqual([wasKilled(), events], [true, []]);
+    });
+
+    it('is harmless when nothing runs', () => {
+      handler.close();
+      deepStrictEqual(events, []);
+    });
+  });
+
   describe('the shared record', () => {
     it('is empty before one is set', async () => {
       deepStrictEqual(await send(1, {type: 'sharedRecord'}), {
