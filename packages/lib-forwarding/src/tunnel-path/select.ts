@@ -49,12 +49,12 @@ export function loginsPerConnect(
   return 2;
 }
 
-/** What keeps the user's forwards running for a path that forwards. */
+/** What keeps the user's forwards running for a path: the socket's second login, the second SSH, or the SOCKS holder. */
 export function userForwardingHolder(
-  path: 'socks' | 'secondSsh',
+  path: TunnelPath,
   useLocalServer: boolean,
 ): ForwardingHolder {
-  if (path === 'secondSsh') {
+  if (path !== 'socks') {
     return 'tunnelSsh';
   }
   return useLocalServer ? 'localConnectionServer' : 'installConnection';

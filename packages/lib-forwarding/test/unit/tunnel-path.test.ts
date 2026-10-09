@@ -100,6 +100,16 @@ describe('userForwardingHolder (card forwarding-04)', () => {
       ['localConnectionServer', 'installConnection'],
     );
   });
+
+  it('F-2104.BR-11 (ruled 2026-10-10): a socket tunnel rides its own second login, like the second-ssh path', () => {
+    deepStrictEqual(
+      [
+        userForwardingHolder('socket', true),
+        userForwardingHolder('socket', false),
+      ],
+      ['tunnelSsh', 'tunnelSsh'],
+    );
+  });
 });
 
 describe('tunnelDestination (card forwarding-04)', () => {
