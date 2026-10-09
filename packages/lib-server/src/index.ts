@@ -80,3 +80,11 @@ export {
   type LicenceTerms,
   type ModalAnswer,
 } from './gate/licence-gate.ts';
+export {
+  type Clock,
+  type ClientLockOptions,
+  type LockFilePort,
+  lockIdFor,
+  withClientLock,
+} from './locks/client-lock.ts';
+export {type HostLockStep, hostLockLoop} from './locks/host-lock-loop.ts';
