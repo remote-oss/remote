@@ -10,6 +10,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -100,6 +101,19 @@ function smallestStep(percents: readonly number[]): number {
     .slice(0, -1)
     .map((percent, index) => (percents[index + 1] ?? percent) - percent);
   return Math.min(...steps.slice(0, -1));
+}
+
+/**
+ * Puts the lock file of the parameters in the temporary folder, under a name no other fake host shares, so that test
+ * runs on one machine cannot meet at one path. Returns the lock file's path.
+ */
+function lockInTemporaryFolder(
+  host: FakeHost,
+  parameters: ScriptParameters,
+): string {
+  parameters.lock.inTemporaryFolder = true;
+  parameters.lock.filePrefix = `boot-lock.${path.basename(path.dirname(host.home))}`;
+  return `/tmp/${parameters.lock.filePrefix}.abc123`;
 }
 
 /** Another window's link lock on the baseline install: both names exist. Returns the lock file's path. */
@@ -402,13 +416,11 @@ describe('the POSIX bootstrap script', () => {
 
     it('F-2408.BR-2: the lock file can be placed in the temporary folder', () => {
       const parameters = parametersFor();
-      parameters.lock.inTemporaryFolder = true;
-      parameters.lock.filePrefix = `boot-lock.${path.basename(host.home)}`;
+      const lock = lockInTemporaryFolder(host, parameters);
       runScript(host, single('install'), parameters);
-      deepStrictEqual(
-        existsSync(`/tmp/${parameters.lock.filePrefix}.abc123.target`),
-        false,
-      );
+      const targetLeft = existsSync(`${lock}.target`);
+      rmSync(lock, {force: true});
+      deepStrictEqual(targetLeft, false);
     });
 
     it('V4: an archive already on the host is used without a download', () => {
@@ -1022,9 +1034,7 @@ describe('the POSIX bootstrap script', () => {
       const victim = path.join(path.dirname(host.callsFile), 'victim.txt');
       writeFileSync(victim, 'keep me');
       const parameters = parametersFor();
-      parameters.lock.inTemporaryFolder = true;
-      parameters.lock.filePrefix = `boot-lock.${path.basename(host.home)}`;
-      const link = `/tmp/${parameters.lock.filePrefix}.abc123`;
+      const link = lockInTemporaryFolder(host, parameters);
       symlinkSync(victim, link);
       const status = statusOf(host, single('install'), parameters);
       unlinkSync(link);
