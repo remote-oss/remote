@@ -36,8 +36,9 @@ export class MemorySink implements Sink { readonly lines: LogLine[]; write(line:
 ```
 
 Rules the code must follow: a logger with `sink === undefined` accepts every call and writes nothing; `minimumLevel`
-is read on every call; `child` appends one scope name; `redact` runs on every message before the sink; a message that
-still matches the token shape `/\b[A-Za-z0-9_-]{32,}\b/` after redaction is replaced whole by `[redacted]`; `logOncePerSession`
+is read on every call; `child` appends one scope name; `redact` runs on every message before the sink; a run matching
+`/\b[A-Za-z0-9_-]{32,}\b/` after redaction is replaced by `[redacted]` (the run only; 40-hex and 64-hex runs are
+exempt as commit and digest ids; ruled 2026-10-08, card log-03); `logOncePerSession`
 returns true when it wrote and false when the key was already seen in this process; the registry of seen keys is a
 module-level `Set` cleared only by `resetOncePerSession`.
 
