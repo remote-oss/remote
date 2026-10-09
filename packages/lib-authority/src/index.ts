@@ -81,3 +81,21 @@ export {
   openRemote,
   reload,
 } from './opener/opener.ts';
+export {
+  type ConnectInput,
+  type ConnectPhase,
+  type Connector,
+  type EditorResolver,
+  type FailurePresenter,
+  type PhaseName,
+  type PresenterOutcome,
+  type ProgressPort,
+  type ProgressRequest,
+  type Readiness,
+  type Registration,
+  registerResolver,
+  type ResolvedConnection,
+  type ResolverEditor,
+  type ResolverHandle,
+  type ResolverOptions,
+} from './resolver/host.ts';
