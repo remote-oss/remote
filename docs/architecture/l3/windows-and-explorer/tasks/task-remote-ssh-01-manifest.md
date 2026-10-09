@@ -1,10 +1,16 @@
-> Status (2026-10-08, `remote-architect`): DRAFT, not assignable yet. F-3901 gives counts (17 commands, 35 + 1
-> settings, 8 menus, 1 authority, 7 activation events, 14 locales) but not the full tables; the data lives across the
-> remote-ssh specs. The remote-ssh room publishes its identifier inventory (R-81) as
-> `tests/conformance/identity-inventory.json` in remote-oss/remote-ssh: commands (id, title key, category, palette
-> flag), settings (key, type, default, scope, description key), menus (id, group, when), context keys, authorities and
-> formatters, activation events, remoteHelp URLs, the standing-down key's final name (F-2001). The card then copies
-> from that file; the ten open rows below close with it.
+> Status (2026-10-08, evening, `remote-architect`): ASSIGNABLE. The remote-ssh room published the identifier
+> inventory: `tests/conformance/identity-inventory.json` on main of remote-oss/remote-ssh (its PR #86, sha256
+> 88439220…). The worker copies every identifier from that file (read it with `gh api
+> repos/remote-oss/remote-ssh/contents/tests/conformance/identity-inventory.json --jq .content | base64 -d`), never
+> from memory: 17 commands, 35 declared settings (`remote.SSH.experimental.chat` pruned per F-3907;
+> `serverDownloadUrlTemplate` invented), 8 menus with base and gated `when`, context keys, the `ssh-remote` authority
+> and its label formatter, 7 activation events, the internal commands, the help URLs; the standing-down key is
+> `opensshremotes.standingDown`. Two rules from the room: (a) a `when` clause with `||` carries `&& !opensshremotes.standingDown`
+> in EVERY alternative (the inventory's clauses already do; `&&` binds tighter than `||`); the card's test checks
+> each alternative, and the identifier rule in tools must accept that shape (card tooling-02); (b)
+> `opensshremotes.showDetails` is registered at run time only and must NOT appear in `contributes.commands`.
+> Depends on card remote-ssh-00 (the skeleton) merged and card tooling-02 merged.
+
 
 # Task card remote-ssh-01: package skeleton and manifest of remote-oss.remote-ssh
 
