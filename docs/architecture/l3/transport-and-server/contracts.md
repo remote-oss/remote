@@ -223,8 +223,11 @@ Rules:
 | `spawn` | an S2 invocation, the askpass environment from S7 | a session: output and error streams, input stream, exit status | `spawnFailed`, `clientVanished` |
 
 Rules:
-- The editor's environment is passed unchanged (F-2101 BR-7). Standard input is a pipe; `SSH_ASKPASS_REQUIRE` is
-  never set.
+- The editor's environment is passed unchanged (F-2101 BR-7). Standard input is a pipe. `SSH_ASKPASS_REQUIRE` and
+  `DISPLAY` are never added for the user's external askpass (F-2309); for OUR askpass endpoint the askpass environment
+  sets `SSH_ASKPASS=<our launcher>` and `SSH_ASKPASS_REQUIRE=force`, because OpenSSH 8.4 and later runs an askpass
+  from a process without a tty only when `DISPLAY` is set or the variable says so, and we never inject `DISPLAY`
+  (narrowed 2026-10-08; the room is asked to confirm F-2305/F-2309's wording).
 - The connect wait is the timeout plus 2 seconds. It starts at the spawn in shared mode and at the platform choice in
   terminal mode. It pauses while a prompt is open, restarts after each answer, counts time spent in an external
   askpass, and stops at the first setup report (F-2105, F-2308 BR-5). The maximum for `ConnectTimeout 0` is an R-79
