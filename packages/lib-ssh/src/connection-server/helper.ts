@@ -11,6 +11,9 @@ import {
   serve,
   type ServeEnd,
 } from 'lib-helper';
+import {askpassEnvironment} from '../askpass/environment.ts';
+import {installLauncher, type LauncherFiles} from '../askpass/launcher.ts';
+import {askpassEndpointPath} from '../askpass/paths.ts';
 import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {ConnectionHandler} from './handler.ts';
@@ -25,6 +28,18 @@ export interface ConnectionHelperOptions {
   unboundedWaitSeconds: number;
   /** The registry record to remove when the helper ends. */
   recordFile: string;
+  /** The user's runtime folder, which holds the askpass socket and the folder of the launcher. */
+  runtimeFolder: string;
+  /** The editor's executable, which runs the askpass program. */
+  runtime: string;
+  /** The bundled askpass program. */
+  askpassProgram: string;
+  /** The host as the user named it, for the texts of the questions. */
+  displayHost: string;
+  /** Whether the user's own askpass applies: then ours sets nothing. */
+  externalAskpass: boolean;
+  /** How long an askpass connection may take to send its question, in milliseconds. */
+  askpassFirstMessageMilliseconds: number;
 }
 
 /** The ports a helper runs on: the real ones in the helper process, fakes in tests. */
@@ -34,6 +49,9 @@ export interface ConnectionHelperEnvironment {
   clock: () => number;
   scheduler: Scheduler;
   files: RegistryFilePort;
+  launcherFiles: LauncherFiles;
+  /** A new secret for the askpass endpoint, unguessable and different on every call. */
+  newNonce: () => string;
   spawner: ProcessSpawner;
   editorEnvironment: Readonly<Record<string, string | undefined>>;
   helloLimitMilliseconds: number;
@@ -49,6 +67,18 @@ export async function runConnectionHelper(
   const options = parameters.options as unknown as ConnectionHelperOptions;
   try {
     const request = JSON.parse(options.request) as SshRequest;
+    const askpassNonce = environment.newNonce();
+    const askpassSocket = askpassEndpointPath(
+      options.runtimeFolder,
+      parameters.endpoint,
+      askpassNonce,
+    );
+    const launcher = await installLauncher(
+      environment.launcherFiles,
+      options.runtimeFolder,
+      options.runtime,
+      options.askpassProgram,
+    );
     const handler = new ConnectionHandler({
       invocation: buildInvocation({
         ...request,
@@ -56,7 +86,12 @@ export async function runConnectionHelper(
       }),
       socksPort: options.socksPort,
       spawner: environment.spawner,
-      askpassEnvironment: {},
+      askpassEnvironment: askpassEnvironment({
+        launcher,
+        endpoint: askpassSocket,
+        nonce: askpassNonce,
+        external: options.externalAskpass,
+      }),
       editorEnvironment: environment.editorEnvironment,
       waitSettings: {
         connectTimeoutSeconds: Number(
@@ -65,20 +100,35 @@ export async function runConnectionHelper(
         unboundedWaitSeconds: options.unboundedWaitSeconds,
       },
       scheduler: environment.scheduler,
+      askpass: {
+        nonce: askpassNonce,
+        displayHost: options.displayHost,
+        firstMessageMilliseconds: options.askpassFirstMessageMilliseconds,
+      },
       logLine: environment.logLine,
     });
-    return await serve({
-      endpoint: parameters.endpoint,
-      nonce: parameters.nonce,
-      payload: parameters.payload,
-      policy: parameters.policy,
-      handler,
-      port: environment.port,
-      clock: environment.clock,
-      scheduler: environment.scheduler,
-      helloLimitMilliseconds: environment.helloLimitMilliseconds,
-      logLine: environment.logLine,
-    });
+    const askpassServer = await environment.port.listen(
+      askpassSocket,
+      connection => {
+        handler.acceptAskpass(connection);
+      },
+    );
+    try {
+      return await serve({
+        endpoint: parameters.endpoint,
+        nonce: parameters.nonce,
+        payload: parameters.payload,
+        policy: parameters.policy,
+        handler,
+        port: environment.port,
+        clock: environment.clock,
+        scheduler: environment.scheduler,
+        helloLimitMilliseconds: environment.helloLimitMilliseconds,
+        logLine: environment.logLine,
+      });
+    } finally {
+      await askpassServer.close();
+    }
   } finally {
     await environment.files.remove(options.recordFile);
   }

@@ -13,6 +13,7 @@ import {ScriptedSpawner} from './fake-client-process.ts';
 const ENDPOINT = '/run/rh-0123456789abcdef.sock';
 const NONCE = 'nonce-1';
 const RECORD_FILE = '/registry/record.json';
+const ASKPASS_NONCE = 'askpass-nonce';
 const REQUEST: SshRequest = {
   purpose: 'connection',
   target: {host: 'h.invalid'},
@@ -45,17 +46,31 @@ describe('connection helper', () => {
   let files: MemoryFilePort;
   let spawner: ScriptedSpawner;
   let received: unknown[];
+  let launchers: Map<string, string>;
 
-  function start(request: SshRequest = REQUEST): Promise<unknown> {
-    return runWithRequest(JSON.stringify(request));
+  function start(
+    request: SshRequest = REQUEST,
+    changes: Partial<ConnectionHelperOptions> = {},
+  ): Promise<unknown> {
+    return runWithRequest(JSON.stringify(request), changes);
   }
 
-  function runWithRequest(requestText: string): Promise<unknown> {
+  function runWithRequest(
+    requestText: string,
+    changes: Partial<ConnectionHelperOptions> = {},
+  ): Promise<unknown> {
     const options: ConnectionHelperOptions = {
       request: requestText,
       socksPort: 41000,
       unboundedWaitSeconds: 120,
       recordFile: RECORD_FILE,
+      runtimeFolder: '/run/user',
+      runtime: '/Apps/Editor',
+      askpassProgram: '/Apps/askpass.js',
+      displayHost: 'h.invalid',
+      externalAskpass: false,
+      askpassFirstMessageMilliseconds: 5000,
+      ...changes,
     };
     return runConnectionHelper({
       parameters: {
@@ -69,6 +84,13 @@ describe('connection helper', () => {
       clock: () => clock.now(),
       scheduler: clock.scheduler(),
       files,
+      launcherFiles: {
+        writeExecutable: (file, text) => {
+          launchers.set(file, text);
+          return Promise.resolve();
+        },
+      },
+      newNonce: () => ASKPASS_NONCE,
       spawner: spawner.spawn,
       editorEnvironment: {},
       helloLimitMilliseconds: 500,
@@ -96,6 +118,7 @@ describe('connection helper', () => {
     files.files.set(RECORD_FILE, '{}');
     spawner = new ScriptedSpawner(() => undefined);
     received = [];
+    launchers = new Map();
   });
 
   it('runs ssh with the SOCKS forward and tells the window when it is set up', async () => {
@@ -173,5 +196,149 @@ describe('connection helper', () => {
     port.listen = () => Promise.reject(new Error('no endpoint'));
     await start().catch(() => undefined);
     strictEqual(files.files.has(RECORD_FILE), false);
+  });
+
+  describe('the askpass', () => {
+    /** A window that has joined and asked to connect. */
+    async function connecting(): Promise<EndpointConnection> {
+      const connection = await join();
+      connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
+      await settled();
+      return connection;
+    }
+
+    /** Starts the helper, lets a window connect, and returns the environment `ssh` was started with. */
+    async function sshEnvironment(
+      changes: Partial<ConnectionHelperOptions> = {},
+    ): Promise<Record<string, string> | undefined> {
+      const ended = start(REQUEST, changes);
+      const connection = await connecting();
+      connection.send({type: 'stop'});
+      await ended;
+      return spawner.started[0]?.specification.environment;
+    }
+
+    it('puts a launcher in the folder of the runtime folder that is only the user', async () => {
+      await sshEnvironment();
+      deepStrictEqual(
+        [...launchers.keys()].map(file =>
+          /^\/run\/user\/rh-askpass\/rh-askpass-[0-9a-f]{16}$/.test(file),
+        ),
+        [true],
+      );
+    });
+
+    it('runs the editor as Node.js on the bundled program in that launcher', async () => {
+      await sshEnvironment();
+      deepStrictEqual(
+        [...launchers.values()],
+        [
+          "#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec '/Apps/Editor' '/Apps/askpass.js' \"$@\"\n",
+        ],
+      );
+    });
+
+    it('starts ssh with our launcher forced and the endpoint and nonce of the askpass', async () => {
+      const environment = await sshEnvironment();
+      deepStrictEqual(
+        [
+          environment?.SSH_ASKPASS === [...launchers.keys()][0],
+          environment?.SSH_ASKPASS_REQUIRE,
+          /^\/run\/user\/ra-[0-9a-f]{16}\.sock$/.test(
+            environment?.REMOTE_OSS_ASKPASS_ENDPOINT ?? '',
+          ),
+          environment?.REMOTE_OSS_ASKPASS_NONCE,
+        ],
+        [true, 'force', true, ASKPASS_NONCE],
+      );
+    });
+
+    it("adds nothing to ssh's environment when the user's own askpass applies", async () => {
+      const environment = await sshEnvironment({externalAskpass: true});
+      deepStrictEqual(
+        Object.keys(environment ?? {}).filter(name => name.includes('ASKPASS')),
+        [],
+      );
+    });
+
+    it('listens for the program while it serves and stops when it ends', async () => {
+      const ended = start();
+      const connection = await connecting();
+      const socket =
+        spawner.started[0]?.specification.environment
+          .REMOTE_OSS_ASKPASS_ENDPOINT ?? '';
+      const whileServing = port.isListening(socket);
+      connection.send({type: 'stop'});
+      await ended;
+      deepStrictEqual([whileServing, port.isListening(socket)], [true, false]);
+    });
+
+    it('brings a question of ssh to the window', async () => {
+      const ended = start();
+      const connection = await connecting();
+      const program = await port.connect(
+        spawner.started[0]?.specification.environment
+          .REMOTE_OSS_ASKPASS_ENDPOINT ?? '',
+      );
+      program.send({type: 'ask', nonce: ASKPASS_NONCE, text: 'password: '});
+      await settled();
+      connection.send({type: 'stop'});
+      await ended;
+      deepStrictEqual(
+        received.filter(
+          message =>
+            (message as {body?: {type: string}}).body?.type === 'prompt',
+        ),
+        [
+          {
+            type: 'message',
+            body: {
+              type: 'prompt',
+              promptId: 1,
+              surface: 'maskedInput',
+              text: 'password: ',
+            },
+          },
+        ],
+      );
+    });
+
+    it('removes the registry record when the launcher cannot be written', async () => {
+      const failing = runConnectionHelper({
+        parameters: {
+          endpoint: ENDPOINT,
+          nonce: NONCE,
+          policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
+          payload: {},
+          options: {
+            request: JSON.stringify(REQUEST),
+            socksPort: 41000,
+            unboundedWaitSeconds: 120,
+            recordFile: RECORD_FILE,
+            runtimeFolder: '/run/user',
+            runtime: '/Apps/Editor',
+            askpassProgram: '/Apps/askpass.js',
+            displayHost: 'h.invalid',
+            externalAskpass: false,
+            askpassFirstMessageMilliseconds: 5000,
+          },
+        },
+        port,
+        clock: () => clock.now(),
+        scheduler: clock.scheduler(),
+        files,
+        launcherFiles: {
+          writeExecutable: () =>
+            Promise.reject(new Error('folder is not yours')),
+        },
+        newNonce: () => ASKPASS_NONCE,
+        spawner: spawner.spawn,
+        editorEnvironment: {},
+        helloLimitMilliseconds: 500,
+        logLine: () => undefined,
+      });
+      await failing.catch(() => undefined);
+      strictEqual(files.files.has(RECORD_FILE), false);
+    });
   });
 });
