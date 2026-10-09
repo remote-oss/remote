@@ -73,7 +73,7 @@ describe('authority registry (card authority-01 table)', () => {
         tunnelCodec.decode('mytunnel'),
       ],
       [
-        {target: {kind: 'host', hostName: 'myhost'}, rawHostString: 'myhost'},
+        {target: {kind: 'plain', text: 'myhost'}, rawHostString: 'myhost'},
         {target: {distro: 'Ubuntu'}, rawHostString: 'Ubuntu'},
         {target: {payload: 'abcd'}, rawHostString: 'abcd'},
         {target: {tunnelName: 'mytunnel'}, rawHostString: 'mytunnel'},

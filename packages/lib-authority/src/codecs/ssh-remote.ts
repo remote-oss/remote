@@ -1,6 +1,7 @@
 /**
- * @fileoverview The ssh-remote codec: the three forms of F-2008 BR-5 — a config alias, a bare host name, and the
- * lower-case hex of a compact JSON {hostName, user?, port?}.
+ * @fileoverview The ssh-remote codec: a JSON host, as the lower-case hex of a compact
+ * {hostName, user?, port?}, and every other payload as a plain host string taken as written
+ * (F-2301 BR-4; F-2008 BR-5).
  */
 import {TextDecoder, TextEncoder} from 'node:util';
 import type {
@@ -12,21 +13,31 @@ import type {
 
 const FAMILY = 'ssh-remote';
 
-/** A bare host name: letters, digits, dot, colon and hyphen only, no user, no port. */
-const BARE_HOST = /^[a-z0-9.:-]+$/i;
-
 /** Lower-case hexadecimal with even length. */
 const LOWER_HEX = /^[0-9a-f]+$/;
 
 /** A blank that makes a payload malformed with reason whitespace. */
 const WHITESPACE = /[\t\n\r ]/;
 
+/**
+ * A character that keeps an encoded text plain out, per F-2301 BR-4: an upper-case letter in any
+ * script, or one of the three separators the reference never leaves plain.
+ */
+const PLAIN_REFUSERS = /\p{Uppercase_Letter}|[/+\\]/u;
+
+/** A refusal, carrying the payload and the reason the contract names. */
+function refuse(payload: string, reason: string): MalformedAuthority {
+  return {family: FAMILY, payload, reason};
+}
+
 /** Whether the text holds a control character, including DEL. */
 function hasControl(text: string): boolean {
   for (const character of text) {
-    const code = character.codePointAt(0) ?? 0;
-    if (code < 0x20 || code === 0x7f) {
-      return true;
+    for (let index = 0; index < character.length; index += 1) {
+      const code = character.charCodeAt(index);
+      if (code < 0x20 || code === 0x7f) {
+        return true;
+      }
     }
   }
   return false;
@@ -39,67 +50,6 @@ interface HostJson {
   port?: unknown;
 }
 
-/** A refusal, carrying the payload and the reason the contract names. */
-function refuse(payload: string, reason: string): MalformedAuthority {
-  return {family: FAMILY, payload, reason};
-}
-
-/** Decodes a lower-case hex payload to a host target, or the reason that refused it. */
-function decodeHex(
-  payload: string,
-): {target: SshTarget} | {malformed: MalformedAuthority} {
-  let text: string;
-  try {
-    text = new TextDecoder('utf-8', {fatal: true, ignoreBOM: false}).decode(
-      hexBytes(payload),
-    );
-  } catch {
-    return {malformed: refuse(payload, 'badHex')};
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return {malformed: refuse(payload, 'badHex')};
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return {malformed: refuse(payload, 'badJson')};
-  }
-  const host = parsed as HostJson;
-  if (typeof host.hostName !== 'string') {
-    return {malformed: refuse(payload, 'badJson')};
-  }
-  const userValue = host.user;
-  let user: string | undefined;
-  if (userValue !== undefined) {
-    if (typeof userValue !== 'string') {
-      return {malformed: refuse(payload, 'badJson')};
-    }
-    user = userValue;
-  }
-  const portValue = host.port;
-  let port: number | undefined;
-  if (portValue !== undefined) {
-    if (
-      typeof portValue !== 'number' ||
-      !Number.isInteger(portValue) ||
-      portValue < 1 ||
-      portValue > 65535
-    ) {
-      return {malformed: refuse(payload, 'badPort')};
-    }
-    port = portValue;
-  }
-  const target: SshTarget = {kind: 'host', hostName: host.hostName};
-  if (user !== undefined) {
-    target.user = user;
-  }
-  if (port !== undefined) {
-    target.port = port;
-  }
-  return {target};
-}
-
 /** The even-length lower-case hexadecimal string as its bytes. */
 function hexBytes(payload: string): Uint8Array {
   const bytes = new Uint8Array(payload.length / 2);
@@ -109,7 +59,85 @@ function hexBytes(payload: string): Uint8Array {
   return bytes;
 }
 
-/** Decodes an ssh-remote payload: empty, or whitespace or control, or one of the three forms. */
+/**
+ * The port of a JSON payload: an integer 1-65535, or a string of digits in that range (F-2501 AC-6). The reason
+ * when the value is present but not one of those; absent stays absent.
+ */
+function decodePort(
+  portValue: unknown,
+  payload: string,
+): {port?: number} | {malformed: MalformedAuthority} {
+  if (portValue === undefined) {
+    return {};
+  }
+  let value: number;
+  if (typeof portValue === 'number') {
+    if (!Number.isInteger(portValue)) {
+      return {malformed: refuse(payload, 'badPort')};
+    }
+    value = portValue;
+  } else if (typeof portValue === 'string' && /^\d+$/.test(portValue)) {
+    value = Number(portValue);
+  } else {
+    return {malformed: refuse(payload, 'badPort')};
+  }
+  if (value < 1 || value > 65535) {
+    return {malformed: refuse(payload, 'badPort')};
+  }
+  return {port: value};
+}
+
+/**
+ * The JSON form, when the payload is even-length lower-case hex whose bytes are valid UTF-8 that
+ * JSON.parse yields as an object. Anything else is not the JSON form: it has no refusal of its own
+ * (there is no badHex) and the caller reads it as plain.
+ */
+function decodeJson(
+  payload: string,
+): DecodedOrMalformed<SshTarget> | undefined {
+  if (payload.length % 2 !== 0 || !LOWER_HEX.test(payload)) {
+    return undefined;
+  }
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', {fatal: true, ignoreBOM: false}).decode(
+      hexBytes(payload),
+    );
+  } catch {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const host = parsed as HostJson;
+  if (typeof host.hostName !== 'string' || host.hostName === '') {
+    return {malformed: refuse(payload, 'badJson')};
+  }
+  const userValue = host.user;
+  if (userValue !== undefined && typeof userValue !== 'string') {
+    return {malformed: refuse(payload, 'badJson')};
+  }
+  const portOutcome = decodePort(host.port, payload);
+  if ('malformed' in portOutcome) {
+    return {malformed: portOutcome.malformed};
+  }
+  const target: SshTarget = {kind: 'host', hostName: host.hostName};
+  if (userValue !== undefined) {
+    target.user = userValue;
+  }
+  if (portOutcome.port !== undefined) {
+    target.port = portOutcome.port;
+  }
+  return {target, rawHostString: payload};
+}
+
+/** Decodes an ssh-remote payload: empty, or whitespace or control, or one of the two forms. */
 function decode(payload: string): DecodedOrMalformed<SshTarget> {
   if (payload === '') {
     return {malformed: refuse(payload, 'empty')};
@@ -120,49 +148,36 @@ function decode(payload: string): DecodedOrMalformed<SshTarget> {
   if (hasControl(payload)) {
     return {malformed: refuse(payload, 'control')};
   }
-  if (payload.length % 2 === 0 && LOWER_HEX.test(payload)) {
-    const decoded = decodeHex(payload);
-    if ('malformed' in decoded) {
-      return {malformed: decoded.malformed};
-    }
-    return {target: decoded.target, rawHostString: payload};
+  const json = decodeJson(payload);
+  if (json !== undefined) {
+    return json;
   }
-  if (payload.startsWith('[') && payload.endsWith(']')) {
-    return {
-      target: {kind: 'host', hostName: payload.slice(1, -1)},
-      rawHostString: payload,
-    };
-  }
-  if (BARE_HOST.test(payload)) {
-    return {target: {kind: 'host', hostName: payload}, rawHostString: payload};
-  }
-  return {target: {kind: 'alias', alias: payload}, rawHostString: payload};
+  return {target: {kind: 'plain', text: payload}, rawHostString: payload};
 }
 
-/** Encodes an ssh-remote target: the alias, a bare host name, or the hex of the compact JSON. */
+/**
+ * Encodes an ssh-remote target, per F-2301 BR-4: plain, exactly as written, when there is no user and
+ * no port and the text carries no upper-case letter and none of the three separators; the hex of the
+ * compact JSON otherwise. Brackets are never added or stripped.
+ */
 function encode(target: SshTarget): string {
-  if (target.kind === 'alias') {
-    return target.alias;
+  if (target.kind === 'host') {
+    const json: HostJson = {hostName: target.hostName};
+    if (target.user !== undefined) {
+      json.user = target.user;
+    }
+    if (target.port !== undefined) {
+      json.port = target.port;
+    }
+    const plain =
+      target.user === undefined &&
+      target.port === undefined &&
+      !PLAIN_REFUSERS.test(target.hostName);
+    return plain ? target.hostName : toHex(JSON.stringify(json));
   }
-  if (target.user === undefined && target.port === undefined) {
-    return bareForm(target.hostName);
-  }
-  const json: HostJson = {hostName: target.hostName};
-  if (target.user !== undefined) {
-    json.user = target.user;
-  }
-  if (target.port !== undefined) {
-    json.port = target.port;
-  }
-  return toHex(JSON.stringify(json));
-}
-
-/** A bare host name, bracketed again when it is an address with an IPv6 colon of its own. */
-function bareForm(hostName: string): string {
-  return hostName.includes(':') &&
-    hostName.indexOf(':') !== hostName.lastIndexOf(':')
-    ? `[${hostName}]`
-    : hostName;
+  return PLAIN_REFUSERS.test(target.text)
+    ? toHex(JSON.stringify({hostName: target.text}))
+    : target.text;
 }
 
 /** The compact JSON text as its lower-case hexadecimal form. */
@@ -175,10 +190,10 @@ function toHex(text: string): string {
   return outText;
 }
 
-/** The label the formatter shows: the present parts of `user@hostName:port`. */
+/** The label the formatter shows: the plain text, or the present parts of `user@hostName:port`. */
 function label(target: SshTarget): string {
-  if (target.kind === 'alias') {
-    return target.alias;
+  if (target.kind === 'plain') {
+    return target.text;
   }
   const head =
     target.user === undefined

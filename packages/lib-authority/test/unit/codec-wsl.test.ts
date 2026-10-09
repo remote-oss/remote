@@ -48,7 +48,7 @@ describe('wsl codec (card authority-01 table)', () => {
             distro: 'Ubuntu',
             outer: {
               family: 'ssh-remote',
-              target: {kind: 'host', hostName: 'h'},
+              target: {kind: 'plain', text: 'h'},
               rawHostString: 'h',
             },
           },

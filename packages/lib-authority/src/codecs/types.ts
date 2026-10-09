@@ -9,9 +9,9 @@ export type Family =
   | 'exec'
   | 'tunnel';
 
-/** A decoded ssh-remote target: a config alias, or a host with an optional user and port. */
+/** A decoded ssh-remote target: a plain host string as written, or a host with an optional user and port. */
 export type SshTarget =
-  | {kind: 'alias'; alias: string}
+  | {kind: 'plain'; text: string}
   | {kind: 'host'; hostName: string; user?: string; port?: number};
 
 /** A decoded wsl target: the distro (empty is the default distro) and an optional outer hop. */

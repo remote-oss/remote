@@ -31,7 +31,7 @@ describe('container codecs (card authority-01 table)', () => {
         payload: 'abcd',
         outer: {
           family: 'ssh-remote',
-          target: {kind: 'host', hostName: 'h'},
+          target: {kind: 'plain', text: 'h'},
           rawHostString: 'h',
         },
       },
@@ -81,7 +81,7 @@ describe('container codecs (card authority-01 table)', () => {
       payload: 'abcd',
       outer: {
         family: 'ssh-remote',
-        target: {kind: 'host', hostName: 'h'},
+        target: {kind: 'plain', text: 'h'},
         rawHostString: 'h',
       },
     };

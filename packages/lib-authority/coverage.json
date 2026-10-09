@@ -1,7 +1,7 @@
 {
   "ratchet": {
-    "lines": 99.17,
-    "branches": 97.76,
+    "lines": 100,
+    "branches": 100,
     "functions": 100
   },
   "exclude": {

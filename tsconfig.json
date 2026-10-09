@@ -99,6 +99,8 @@
     },
     {
       "path": "packages/lib-forwarding/tsconfig.test.json"
+    },
+    {
       "path": "packages/lib-authority"
     },
     {
