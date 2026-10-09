@@ -66,7 +66,9 @@ leaks. The repository is private while this is built; it becomes public with the
 ## Check
 
 CI: the public-surface lint over `packages/*/README.md`, `package.json` descriptions and keywords, `package.nls*.json`,
-`l10n/*.json`, `CHANGELOG*`, `syntaxes/*`, `language-configuration.json` and all non-test source comments; a VSIX
+`l10n/*.json`, `CHANGELOG*`, `syntaxes/*`, `language-configuration.json`, all non-test source comments, `docs/<extension>/`,
+`.github/` (the pull request template) and the root `CONTRIBUTING.md` (the six review questions in plain words, the
+public home of the review rule since `docs/adr` leaves before publication; ruled 2026-10-09, #194); a VSIX
 content check that no `identifiers.json`, test, fixture or coverage file ships. Release: the move of
 `docs/architecture`, `docs/adr` passages and the catalogue to the private repository, verified by the same lint run
 over the whole public tree.
