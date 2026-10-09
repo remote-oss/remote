@@ -61,12 +61,25 @@ export function openConnectionStep(
       end();
       return {kind: 'failed', failure: ofConnection(outcome.failure)};
     }
+    let channel: HostChannel;
+    try {
+      channel = dependencies.channelFor(connection, terms);
+    } catch (caught) {
+      end();
+      return {
+        kind: 'failed',
+        failure: {kind: 'unknown', reason: {text: String(caught)}},
+      };
+    }
     return {
       kind: 'done',
       value: {
-        channel: dependencies.channelFor(connection, terms),
+        channel,
         socksPort: outcome.socksPort,
         storeSharedRecord: record => connection.storeSharedRecord(record),
+        onNotice: listener => connection.onNotice(listener),
+        answer: (promptId, text) => connection.answer(promptId, text),
+        refuse: promptId => connection.refuse(promptId),
         release: end,
       },
     };

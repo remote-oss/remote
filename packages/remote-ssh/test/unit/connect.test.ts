@@ -124,6 +124,9 @@ function leaseOf(recording: Recording): ConnectionLease {
       recording.records.push(record);
       return Promise.resolve(true);
     },
+    onNotice: () => () => undefined,
+    answer: () => Promise.resolve(false),
+    refuse: () => Promise.resolve(false),
     release: () => {
       recording.releases += 1;
     },

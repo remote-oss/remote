@@ -76,6 +76,7 @@ interface Fixture {
 
 function fixture(
   acquired: 'acquired' | 'spawnFailed' | 'endpointUnreachable' = 'acquired',
+  channelFailureMessage?: string,
 ): Fixture {
   const lease = new FakeLease();
   const requests: ConnectionAcquireRequest[] = [];
@@ -117,6 +118,9 @@ function fixture(
       };
     },
     channelFor: (connection, terms) => {
+      if (channelFailureMessage !== undefined) {
+        throw new Error(channelFailureMessage);
+      }
       channelsFor.push([connection instanceof SharedConnection, terms]);
       return CHANNEL;
     },
@@ -293,5 +297,74 @@ describe('the connection step', () => {
       kind: 'failed',
       failure: {kind: 'channelClosed'},
     });
+  });
+
+  it('gives the lease back when the channel for the connection cannot be opened', async () => {
+    const {lease, connecting} = fixture('acquired', 'the channel is gone');
+    const pending = connecting();
+    await settled();
+    lease.emit({type: 'connected', socksPort: 41000});
+    deepStrictEqual(
+      [await pending, lease.released],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'unknown',
+            reason: {text: 'Error: the channel is gone'},
+          },
+        },
+        1,
+      ],
+    );
+  });
+
+  it('lets the window hear the notices of the login through the lease, and stop with its unsubscribe', async () => {
+    const {lease, outcome} = await loggedIn();
+    if (outcome.kind !== 'done') {
+      throw new Error('the connect should be done');
+    }
+    const heard: ConnectionNotice[] = [];
+    const stop = outcome.value.onNotice(notice => heard.push(notice));
+    lease.emit({
+      type: 'prompt',
+      promptId: 3,
+      surface: 'maskedInput',
+      text: "alex@harness's password: ",
+    });
+    stop();
+    lease.emit({type: 'ownerChanged', owner: 1});
+    deepStrictEqual(heard, [
+      {
+        type: 'prompt',
+        promptId: 3,
+        surface: 'maskedInput',
+        text: "alex@harness's password: ",
+      },
+    ]);
+  });
+
+  it('passes the answer of the window to the connection, with its result', async () => {
+    const {lease, outcome} = await loggedIn();
+    if (outcome.kind !== 'done') {
+      throw new Error('the connect should be done');
+    }
+    const answered = await outcome.value.answer(3, 'yes');
+    deepStrictEqual(
+      [answered, lease.asked.at(-1)],
+      [false, {type: 'answer', promptId: 3, text: 'yes'}],
+    );
+  });
+
+  it('passes the refusal of the window to the connection, with its result', async () => {
+    const {lease, outcome} = await loggedIn();
+    if (outcome.kind !== 'done') {
+      throw new Error('the connect should be done');
+    }
+    const refused = await outcome.value.refuse(3);
+    deepStrictEqual(
+      [refused, lease.asked.at(-1)],
+      [false, {type: 'refuse', promptId: 3}],
+    );
   });
 });
