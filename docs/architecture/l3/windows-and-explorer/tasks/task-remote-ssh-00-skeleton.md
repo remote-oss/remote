@@ -22,9 +22,10 @@ beyond an empty list, no settings, no commands.
 | `activationEvents` | `[]` (F-2001's list comes with card remote-ssh-01) |
 | `extensionPack` | `["remote-oss.remote-ssh-edit", "remote-oss.remote-explorer"]` (R-22 / F-3904); no `extensionDependencies` |
 | `license` | `MIT` (unchanged) |
-| workspace dependencies | `lib-identifiers`, `lib-standdown`, `lib-log`, `lib-ssh` (`workspace:*`), so the connect-flow and diagnostics cards can import them |
+| workspace dependencies | none in this card (knip rejects unused ones); each library is added by the first PR that imports it (remote-ssh-01: lib-identifiers; remote-ssh-02: lib-ssh, lib-authority; connect-04: lib-ssh, lib-log) |
 | `identifiers.json` | `source` citing remote-oss/remote-ssh#78, `standsDownFor` `ms-vscode-remote.remote-ssh`, `standingDownKey` `""` (pending; the check reports it as pending), `locales` the 14 of F-2002 (cs, de, es, fr, it, ja, ko, pl, pt-br, qps-ploc, ru, tr, zh-cn, zh-tw), empty ledgers |
-| `src/extension.ts` | `export function activate(): void {}` and `export function deactivate(): void {}`; excluded from coverage with the reason "loads the editor", listed in the README |
+| `src/extension.ts` | `export function activate(): void {}` and `export function deactivate(): void {}`; excluded from coverage with the reason "loads the editor", listed in the README; two `no-empty-function` disables are accepted for the skeleton only and removed by connect-01 |
+| `src/identifiers.generated.ts` | excluded from coverage by name with a README line until connect-01 imports it (a global rule for generated files is card tooling-03) |
 | `package.nls.json` + 14 locale files | only the `description` key with the English sentence (as the other packages) |
 
 ## 3. Test table

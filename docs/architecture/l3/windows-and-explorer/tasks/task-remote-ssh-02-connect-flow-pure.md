@@ -10,6 +10,8 @@ S2 (`validateTarget`). Reviewing coder: `remote-coding-worker-1`. Depends on car
 and tsconfig pair of `packages/remote-ssh`) being merged, and on `lib-ssh` being an allowed import of `remote-ssh`
 there; if it is not, stop (section 6, row 1). No `vscode` import anywhere in this card.
 
+## 1. Dependencies added by this card: `lib-ssh` and `lib-authority` as `workspace:*` in packages/remote-ssh/package.json (the first import adds the dependency; knip).
+
 ## 1. Package and file boundary
 
 | File | Role |

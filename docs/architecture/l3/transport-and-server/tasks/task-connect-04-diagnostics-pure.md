@@ -9,6 +9,8 @@
 
 Base: main, after card remote-ssh-00 (the `packages/remote-ssh` skeleton) has merged. Brief: `../brief-remote-ssh-connect.md`, task connect-04. Neither module exists yet; this card writes both, tests first.
 
+## 1. Dependencies added by this card: `lib-ssh` and `lib-log` as `workspace:*` in packages/remote-ssh/package.json (the first import adds the dependency; knip).
+
 ## 1. Package and file boundary
 
 | File | Role |

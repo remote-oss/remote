@@ -19,6 +19,8 @@ and Windows notes F-3908 (#85, adds nothing). Contract: `../contracts.md` §1. R
 ADR-0007 (engines from the root constant) and ADR-0008 (product voice in every shipped word) apply.
 Pattern: `packages/remote-ssh-edit` (manifest, nls, identifiers.json, coverage.json).
 
+## 1. Dependencies added by this card: `lib-identifiers` as `workspace:*` in packages/remote-ssh/package.json (the first import adds the dependency; knip).
+
 ## 1. Package and file boundary
 
 Under `packages/remote-ssh`: `package.json` (replace the placeholder), `package.nls.json` and the 14
