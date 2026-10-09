@@ -12,7 +12,8 @@ import {
   type PromptSurface,
   type PromptText,
 } from 'lib-ssh';
-import {textOf, type Translate, WAITING_TEMPLATE} from './prompt-strings.ts';
+import {textOf, WAITING_TEMPLATE} from './prompt-strings.ts';
+import type {Translate} from './strings.ts';
 
 /** What the surface needs of the lease: its notices, and giving an answer. */
 export interface PromptLease {
