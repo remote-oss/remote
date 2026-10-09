@@ -520,6 +520,59 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
+    /** An archive of the given entries, each a file named by its path, packed from the folder they are made in. */
+    function archiveOf(
+      files: readonly string[],
+      links: Readonly<Record<string, string>> = {},
+    ): string {
+      const source = path.join(host.home, 'custom-source');
+      rmSync(source, {recursive: true, force: true});
+      mkdirSync(source, {recursive: true});
+      for (const file of files) {
+        mkdirSync(path.dirname(path.join(source, file)), {recursive: true});
+        writeFileSync(path.join(source, file), '');
+      }
+      for (const [name, target] of Object.entries(links)) {
+        symlinkSync(target, path.join(source, name));
+      }
+      const archive = path.join(host.home, 'custom.tar.gz');
+      spawnSync('tar', ['-czf', archive, '-C', source, '.']);
+      return archive;
+    }
+
+    function installedPaths(): string[] {
+      return readdirSync(installFolder(host)).filter(
+        name => !name.startsWith('boot-lock'),
+      );
+    }
+
+    it('F-2407: one top folder and a file beside it are not a wrapper, so the entries keep their paths', () => {
+      const parameters = parametersFor();
+      parameters.archivePath = archiveOf(['top/inside', 'beside']);
+      runScript(host, single('install'), parameters);
+      deepStrictEqual(installedPaths().sort(), ['beside', 'top']);
+    });
+
+    it('F-2407: one top folder that holds everything is a wrapper, and is stripped', () => {
+      const parameters = parametersFor();
+      parameters.archivePath = archiveOf(['top/inside', 'top/deeper/file']);
+      runScript(host, single('install'), parameters);
+      deepStrictEqual(installedPaths().sort(), ['deeper', 'inside']);
+    });
+
+    it('F-2407: a link to a folder as the only entry is not a wrapper, and the folder it names is left alone', () => {
+      const outside = path.join(host.home, 'outside');
+      mkdirSync(outside);
+      writeFileSync(path.join(outside, 'secret'), '');
+      const parameters = parametersFor();
+      parameters.archivePath = archiveOf([], {'only-link': outside});
+      runScript(host, single('install'), parameters);
+      deepStrictEqual(
+        [installedPaths(), existsSync(path.join(outside, 'secret'))],
+        [['only-link'], true],
+      );
+    });
+
     it('F-2407: an archive with its entries at the root has its launcher run as the install, so a second install finds it', () => {
       const parameters = parametersFor();
       parameters.archivePath = rootedArchive();

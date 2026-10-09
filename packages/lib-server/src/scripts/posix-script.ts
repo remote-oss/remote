@@ -197,7 +197,7 @@ export const UNPACK_FUNCTIONS: readonly string[] = [
   '    WRAPPER=$ENTRY',
   '  done',
   '  SOURCE=$1',
-  '  if [ "$ENTRIES" = 1 ] && [ -d "$WRAPPER" ]; then',
+  '  if [ "$ENTRIES" = 1 ] && [ -d "$WRAPPER" ] && [ ! -L "$WRAPPER" ]; then',
   '    SOURCE=$WRAPPER',
   '  fi',
   '  MOVED=0',
