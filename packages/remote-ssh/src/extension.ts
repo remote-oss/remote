@@ -1,12 +1,12 @@
 /**
  * @fileoverview The Remote - SSH extension's entry point: it loads the editor, which exists only in the
- * extension host, so the conformance cases cover it, not the unit tests.
+ * extension host, so the unit tests do not load it.
  */
 
-/** The extension's activation: nothing yet; the connect flow lands with card remote-ssh-01. */
-// eslint-disable-next-line @typescript-eslint/no-empty-function -- the card fixes both entry points as empty
+/** The extension's activation: empty until the extension registers its commands. */
+// eslint-disable-next-line @typescript-eslint/no-empty-function -- activation is empty until commands register
 export function activate(): void {}
 
-/** The extension's deactivation: nothing yet. */
-// eslint-disable-next-line @typescript-eslint/no-empty-function -- the card fixes both entry points as empty
+/** The extension's deactivation: nothing to tear down while activation is empty. */
+// eslint-disable-next-line @typescript-eslint/no-empty-function -- deactivation is empty until commands register
 export function deactivate(): void {}
