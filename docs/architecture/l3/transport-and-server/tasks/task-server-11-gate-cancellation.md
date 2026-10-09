@@ -7,7 +7,9 @@ round, 2026-10-09). Reviewing coder: `remote-coding-worker-2`.
 ## 1. File boundary
 
 `packages/lib-server/src/gate/licence-gate.ts`, its tests; `packages/remote-ssh/src/pipeline/server-steps.ts`
-(the `gate` step passes its cancellation, one line) with one test. Nothing else. (Amended 2026-10-09 to main's names;
+(the `gate` step passes its cancellation, one line) and `src/pipeline/connect.ts` (the `cancelled` gate outcome mapped
+to `Failed {kind: 'cancelled'}`, three lines; added 2026-10-09 on #236 — §2 required it and §1 had left it out)
+with one test each. Nothing else. (Amended 2026-10-09 to main's names;
 the first wording used invented ones.)
 
 ## 2. Contract
