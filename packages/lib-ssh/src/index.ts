@@ -109,3 +109,12 @@ export {
   type OpenPrompt,
   PromptBook,
 } from './connection-server/ownership.ts';
+export {
+  ConnectionHandler,
+  type ConnectionHandlerOptions,
+} from './connection-server/handler.ts';
+export {
+  type ConnectionHelperEnvironment,
+  type ConnectionHelperOptions,
+  runConnectionHelper,
+} from './connection-server/helper.ts';

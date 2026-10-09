@@ -5,6 +5,8 @@
  */
 
 import type {PlainData} from 'lib-helper';
+import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
+import type {FailureKind} from '../diagnostics/rules.ts';
 
 /** What a later window needs to reuse the server of a connection; held by the helper, never written to a file. */
 export interface SharedRecord {
@@ -49,6 +51,12 @@ export type ConnectionEvent =
   | {type: 'ownerChanged'; owner: number}
   | {type: 'waitingForOtherWindow'}
   | {type: 'connected'; socksPort: number}
+  | {
+      type: 'loginFailed';
+      kind: FailureKind;
+      reason?: FailureReason;
+      hints: FailureHint[];
+    }
   | {type: 'transportLost'};
 
 type Fields = Record<string, unknown>;
