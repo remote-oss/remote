@@ -35,3 +35,8 @@ export {
   probeProposals,
 } from './gate/probe.ts';
 export {probeApiOf} from './gate/vscode-api.ts';
+export {
+  type LabelFormatterHost,
+  registerAuthorityLabel,
+  type ResourceLabelFormatter,
+} from './labels/formatter.ts';
