@@ -52,5 +52,7 @@ PR title `lib-ssh: ClearAllForwardings detected before the shared connection (ca
 
 ## 6. Open rows
 
-None. (The dialog's reason string is connect-03's: a product string of its own, "`ClearAllForwardings` is set for
+None. (`ForwardingPath` repeats lib-forwarding's `TunnelPath` literals on purpose: lib-ssh does not import
+lib-forwarding, the import graph stays acyclic, and a three-literal type is not code duplication; ruled 2026-10-10 on
+#246's review.) (The dialog's reason string is connect-03's: a product string of its own, "`ClearAllForwardings` is set for
 this host, so the shared connection cannot forward the server's port"; the kind is `invalidSetting`.)
