@@ -1,5 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
-import {readConnectionRequest, type SharedRecord} from '../../src/index.ts';
+import {
+  readConnectionRequest,
+  readConnectionReply,
+  type SharedRecord,
+} from '../../src/index.ts';
 
 const RECORD: SharedRecord = {
   remotePort: 41000,
@@ -37,6 +41,34 @@ describe('connection requests (contracts §4 S9)', () => {
         promptId: 3,
         text: 'yes',
       },
+    );
+  });
+
+  it('reads the refuse of a question', () => {
+    deepStrictEqual(
+      [
+        readConnectionRequest({type: 'refuse', promptId: 3}),
+        readConnectionRequest({type: 'refuse', promptId: '3'}),
+        readConnectionRequest({type: 'refuse'}),
+      ],
+      [{type: 'refuse', promptId: 3}, undefined, undefined],
+    );
+  });
+
+  it('reads the answer to a refuse, and still reads the refusals with their reasons', () => {
+    deepStrictEqual(
+      [
+        readConnectionReply({type: 'refused', accepted: false}),
+        readConnectionReply({type: 'refused', accepted: 'no'}),
+        readConnectionReply({type: 'refused', reason: 'notOwner'}),
+        readConnectionReply({type: 'refused', reason: 7}),
+      ],
+      [
+        {type: 'refused', accepted: false},
+        undefined,
+        {type: 'refused', reason: 'notOwner'},
+        undefined,
+      ],
     );
   });
 

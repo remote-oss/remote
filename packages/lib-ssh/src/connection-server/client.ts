@@ -184,7 +184,7 @@ class LoginWait {
       this.end({kind: 'failed', failure: asked.failure});
     } else if (asked.reply.type === 'accepted') {
       this.owner = true;
-    } else if (asked.reply.type === 'refused') {
+    } else if (asked.reply.type === 'refused' && 'reason' in asked.reply) {
       await this.refused(asked.reply.reason);
     } else {
       this.end({
@@ -354,6 +354,18 @@ export class SharedConnection {
       asked.reply.type === 'answered' &&
       asked.reply.accepted
     );
+  }
+
+  /**
+   * Cancels one of the run's questions: the question closes and the run's questions after it are never shown. True
+   * when the question was open and closed; false when it was not, or when the helper is gone.
+   */
+  async refuse(promptId: number): Promise<boolean> {
+    const asked = await this.askHelper({type: 'refuse', promptId});
+    if (asked.kind !== 'answered' || asked.reply.type !== 'refused') {
+      return false;
+    }
+    return 'accepted' in asked.reply && asked.reply.accepted;
   }
 
   /** Leaves what a later window needs to reuse the server; true when the helper took it. */

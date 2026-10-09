@@ -327,6 +327,36 @@ describe('the window side of the shared connection (S9)', () => {
     deepStrictEqual(await connection.answer(1, 'late'), false);
   });
 
+  it('refuses false after the helper is gone', async () => {
+    const {connection} = await connectFirst();
+    await killConnection(environment, '/registry', 'harness');
+    await drive();
+    deepStrictEqual(await connection.refuse(1), false);
+  });
+
+  it('refuses false when the question was not open', async () => {
+    const {connection} = await connectFirst();
+    deepStrictEqual(await connection.refuse(1), false);
+  });
+
+  it('refuses a question: the connection closes it, and the rest of the run is refused at the door', async () => {
+    const {connection} = await connectFirst();
+    const heard = notices(connection);
+    await askAtEndpoint("dev@harness's password: ");
+    const refused = await connection.refuse(1);
+    await drive();
+    await askAtEndpoint("dev@harness's password: ");
+    await drive();
+    deepStrictEqual(
+      [
+        refused,
+        heard.map(notice => notice.type),
+        heard.some(notice => 'promptId' in notice && notice.promptId === 2),
+      ],
+      [true, ['prompt', 'promptClosed'], false],
+    );
+  });
+
   it('reports an ssh that cannot be started as a failed start, not as a timeout', async () => {
     sshRuns = new ScriptedSpawner(startError('ENOENT', 'spawn ssh ENOENT'));
     const connection = await acquired();

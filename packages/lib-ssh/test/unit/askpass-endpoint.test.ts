@@ -131,6 +131,59 @@ describe('askpass endpoint', () => {
     deepStrictEqual(endpoint.answer(7, 'text'), false);
   });
 
+  it('refuses an open question: true, the program gets the close, and a promptClosed', async () => {
+    const program = await askQuestion();
+    endpoint.refuse(1);
+    await settled();
+    deepStrictEqual([true, program.closed, closedPrompts], [true, true, [1]]);
+  });
+
+  it('refuses nothing when the question is not open, whether it was ever open', async () => {
+    const program = await askQuestion();
+    program.connection.close();
+    await settled();
+    deepStrictEqual([endpoint.refuse(1), endpoint.refuse(9)], [false, false]);
+  });
+
+  it('refuses a second refuse and a late answer to a refused question', async () => {
+    await askQuestion();
+    endpoint.refuse(1);
+    await settled();
+    deepStrictEqual(
+      [endpoint.refuse(1), endpoint.answer(1, 'late')],
+      [false, false],
+    );
+  });
+
+  it('closes a question that comes in once the run is marked cancelled', async () => {
+    await askQuestion();
+    endpoint.refuse(1);
+    endpoint.refuseRun();
+    const later = await askQuestion();
+    deepStrictEqual(
+      [later.closed, opened.map(prompt => prompt.promptId), closedPrompts],
+      [true, [1], [1]],
+    );
+  });
+
+  it('asks again once the run the cancellation belonged to has ended', async () => {
+    const asking = await askQuestion();
+    endpoint.refuse(1);
+    endpoint.refuseRun();
+    endpoint.closeAll();
+    await settled();
+    const later = await askQuestion();
+    deepStrictEqual(
+      [
+        asking.closed,
+        later.closed,
+        opened.map(prompt => prompt.promptId),
+        closedPrompts,
+      ],
+      [true, false, [1, 2], [1]],
+    );
+  });
+
   it('lists the open questions, oldest first, and not the answered one', async () => {
     await askQuestion('first question');
     await askQuestion('second question');
