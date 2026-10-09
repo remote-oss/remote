@@ -235,7 +235,10 @@ the section 6 rows hit and the tail of each gate's output.
 Ruled 2026-10-09 on #233, as built: (1) `lib-ssh` and `lib-authority` are dependencies of `remote-ssh` on main; (2) a
 suffix that leaves an empty host gives host `''` with the port, which the validator (F-2205) refuses; (3) a zone is an
 IPv6 address; (4) brackets followed by anything but `:digits` stay in the host as written; (5) non-ASCII digits are
-no port; (6) a non-string or missing `host` argument means the picker; (7) no modifier parameter; (8) the handler of
+no port, and a port outside 1–65535 (or of absurd length, parsing to a huge number) is NOT refused by the flow: F-2301
+says "digits, no range check", F-2205 validates host and user only, and `ssh` itself refuses such a port ("Bad port"),
+which reaches the F-2601 dialog as the reason through S5's generic classification — the observed behaviour, kept
+(ruled 2026-10-09 on #233's review; no card); (6) a non-string or missing `host` argument means the picker; (7) no modifier parameter; (8) the handler of
 an unavailable active host is connect-03's; (9) the authority text is `sshRemoteCodec.encode(target)` of lib-authority,
 which already follows F-2301 BR-4; (10) no recent-folder rows. The questions below are kept for the record.
 
