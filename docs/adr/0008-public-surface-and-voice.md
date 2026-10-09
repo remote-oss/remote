@@ -61,6 +61,12 @@ leaks. The repository is private while this is built; it becomes public with the
   grep as soon as a coding worker builds it (next tooling PR).
 - `identifiers.json` keeps its `source` field (a spec pointer) because `.vscodeignore` excludes it; the lint checks
   that it never reaches a VSIX.
+- A manifest's fidelity test compares the manifest with the identifier inventory, which lives in the spec repository.
+  The copy under `packages/<x>/test/fixtures/identity-inventory.json` is GENERATED and STRIPPED (ruled 2026-10-09):
+  it holds only the fields the test compares (ids, schemas, strings, forms, menus, activation events, remoteHelp,
+  context keys, internal ids with role and kind, counts) and none of `spec`, `note`, `basis`, `standsDownFor` or any
+  provenance field; the generator under `tools/` takes the source path as an argument and writes no path into the
+  file; `check-public-surface` scans the fixture's values like any shipped string table.
 - The design documents keep their vocabulary; they are private and move out before release (decision 4).
 
 ## Check
