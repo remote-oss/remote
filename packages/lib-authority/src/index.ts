@@ -55,3 +55,15 @@ export {
   ConnectionTracker,
   type CurrentConnection,
 } from './resolver/connection-state.ts';
+export {
+  type InteractionOutcome,
+  type RestartAnswer,
+  runSetup,
+  type SetupAnswer,
+  type SetupFlags,
+  type SetupNotice,
+  type SetupPorts,
+  type SetupRun,
+  type WindowClaim,
+} from './gate/setup.ts';
+export {CLAIM_COMMAND, type ClaimHost, windowClaimOf} from './gate/claim.ts';
