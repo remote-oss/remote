@@ -447,7 +447,11 @@ Rules:
   licence classification (R-80) is tied to the TEMPLATE's host, never the final one; the final host must be the
   template's host or one of the allowed redirect hosts the product table lists per source host (for example
   `github.com` → `objects.githubusercontent.com`, `release-assets.githubusercontent.com`, the GitHub release-asset
-  hosts); any other final host is a `serverDownload` failure with a reason; the final URL is logged. (Ruled
+  hosts); any other final host is a `serverDownload` failure with a reason; the final URL is logged (origin and
+  path only). A response that gives the facts of no rule and whose record lists no `none` rule counts as verified:
+  there is nothing to check against, and the record's order already says what to prefer (ruled 2026-10-08, #158). A
+  kept entry the host cannot unpack is deleted and downloaded once more, so one bad entry does not fail every later
+  connect; the transfer deletes a kept entry in no other case (ruled 2026-10-08, #158). (Ruled
   2026-10-08, corrected the same day: a plain same-host rule would fail every GitHub release download.)
 - Bounds are the library's (R-79): `DownloadRequest` carries `deadlineMilliseconds` (the whole transfer),
   `stallMilliseconds` (no bytes for that long ends it) and `maximumBytes` (the content length when known, else the
