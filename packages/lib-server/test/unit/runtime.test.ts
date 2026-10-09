@@ -209,7 +209,26 @@ describe('startOrReuse (V7), answers mapped', () => {
         port: 4321,
         processId: 77,
         connectionToken: 'abcdefghijklmnopqrstuvwxyz012345',
+        reused: false,
       },
+    );
+  });
+
+  it('V7: a server the host says it found running is reused', async () => {
+    const outcome = await start(
+      recording(
+        lines(
+          'Ok',
+          'server.port=4321',
+          'server.pid=77',
+          'server.token=t',
+          'server.reused=yes',
+        ),
+      ),
+    );
+    deepStrictEqual(
+      outcome.kind === 'started' ? outcome.server.reused : outcome.kind,
+      true,
     );
   });
 
@@ -548,7 +567,12 @@ describe('startOrReuse (V7), what is asked of the host', () => {
 describe('serverPort (V7)', () => {
   it('F-2509: the port of a started server', () => {
     deepStrictEqual(
-      serverPort({port: 4321, processId: 1, connectionToken: 't'}),
+      serverPort({
+        port: 4321,
+        processId: 1,
+        connectionToken: 't',
+        reused: false,
+      }),
       4321,
     );
   });
@@ -585,8 +609,8 @@ describe('startOrReuse (V7) over a real shell', () => {
     );
   });
 
-  it('F-2409.BR-8: a second start reuses the server: the same process id', async () => {
-    const processIds = [];
+  it('F-2409.BR-8: a second start reuses the server: the same process id, and only the second says so', async () => {
+    const started = [];
     for (let attempt = 0; attempt < 2; attempt++) {
       const outcome = await startOrReuse(
         shellChannel(host),
@@ -596,10 +620,15 @@ describe('startOrReuse (V7) over a real shell', () => {
         dependencies(),
         NEVER_CANCELLED,
       );
-      processIds.push(
-        outcome.kind === 'started' ? outcome.server.processId : outcome.kind,
+      started.push(
+        outcome.kind === 'started'
+          ? [outcome.server.processId, outcome.server.reused]
+          : outcome.kind,
       );
     }
-    deepStrictEqual(processIds[0], processIds[1]);
+    deepStrictEqual(
+      [started[0]?.[0] === started[1]?.[0], started[0]?.[1], started[1]?.[1]],
+      [true, false, true],
+    );
   });
 });

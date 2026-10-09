@@ -63,9 +63,16 @@ export {
   type PlanNote,
 } from './install/plan.ts';
 export {
+  type ExtensionResult,
+  type ExtensionsNotRun,
+  type ExtensionsOutcome,
+  installExtensions,
+  isExtensionIdentifier,
+  keptExtensions,
+} from './lifecycle/extensions.ts';
+export {
   type HostLockLoop,
   isAcceptedBindHost,
-  isExtensionIdentifier,
   isReversedRange,
   type RuntimeDependencies,
   type RuntimeOptions,
