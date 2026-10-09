@@ -6,28 +6,45 @@ round, 2026-10-09). Reviewing coder: `remote-coding-worker-2`.
 
 ## 1. File boundary
 
-`packages/lib-server/src/licence/licence-gate.ts` (or the gate module as named on main), the UI port's type, its
-tests; `packages/remote-ssh/src/pipeline/server-steps.ts` passes the signal through (one line) with one test.
+`packages/lib-server/src/gate/licence-gate.ts`, its tests; `packages/remote-ssh/src/pipeline/server-steps.ts`
+(the `gate` step passes its cancellation, one line) with one test. Nothing else. (Amended 2026-10-09 to main's names;
+the first wording used invented ones.)
 
 ## 2. Contract
 
 ```ts
-export function ensureAccepted(input: GateInput, cancellation: AbortSignal): Promise<GateOutcome>;
-// the UI port's `confirm` receives the signal; an abort while the modal is open resolves the gate as
-// {kind: 'declined', reason: 'cancelled'} and the modal is closed by the adapter; an already-aborted signal returns
-// that outcome without showing anything; an accepted or stored acceptance is unaffected.
+// licence-gate.ts, main's signature plus one trailing parameter
+export async function ensureAccepted(
+  classification: LicenceClassification,
+  store: AcceptanceStore,
+  modal: LicenceModal,
+  logger: Logger,
+  cancellation: AbortSignal,
+): Promise<GateOutcome>;
+export interface LicenceModal { askUser(termsUrl: string, cancellation: AbortSignal): Promise<ModalAnswer>; }
+export type GateOutcome =
+  | {kind: 'cleared'; acceptanceFlag: boolean; remembered: boolean}
+  | {kind: 'licenceDeclined'}
+  | {kind: 'cancelled'};   // new: the signal aborted while the question was open, or was aborted before it
+// Rules: `free` and a stored acceptance never read the signal; an already-aborted signal returns `cancelled` without
+// calling `askUser`; while `askUser` is pending and the signal aborts, the outcome is `cancelled` whatever the modal
+// answers afterwards (the adapter closes the modal on the signal); `accept` and `cancel` answers before any abort
+// keep today's outcomes. server-steps.ts: `gate: (cancellation) => ensureAccepted(..., cancellation)`; the pipeline
+// maps `cancelled` to its `Failed {kind: 'cancelled'}` as it does for every cancelled step.
 ```
 
 ## 3. Test table
 
 | Given | Expected |
 |---|---|
-| acceptance stored | `accepted` without calling the port; the signal unused |
-| modal open, signal aborts | `declined` with reason `cancelled`; the port saw the signal |
-| signal already aborted | `declined` `cancelled`; the port not called |
-| modal answered Accept before any abort | `accepted`, stored |
-| modal answered Cancel | `declined` with its existing reason |
-| the pipeline's gate step | passes its cancellation to `ensureAccepted` |
+| classification `free`, any signal | `cleared` without `askUser`; the signal unread |
+| acceptance stored | `cleared`, `remembered: true`, `askUser` not called |
+| signal already aborted, nothing stored | `cancelled`; `askUser` not called |
+| `askUser` pending, signal aborts, then the modal answers `accept` | `cancelled`; nothing stored |
+| `askUser` answers `accept` before any abort | `cleared`, stored (as today) |
+| `askUser` answers `cancel` | `licenceDeclined` (as today) |
+| the pipeline's `gate` step with an aborted signal | the connect ends `Failed {kind: 'cancelled'}`; the lease released |
+| the existing gate rows | unchanged outcomes |
 
 ## 4. Rule for the worker
 
