@@ -2,9 +2,8 @@
  * @fileoverview The wsl codec: the distro, and the outer hop a wsl authority carries after `@`, the outer always
  * through the codec the caller injects.
  */
-import {outerHop, outerPayload} from './outer-hop.ts';
 import type {Codec, DecodedOrMalformed, WslTarget} from './types.ts';
-import type {OuterCodec} from './outer-hop.ts';
+import {type OuterCodec, outerHop, outerPayload} from './outer-hop.ts';
 
 const FAMILY = 'wsl';
 

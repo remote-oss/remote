@@ -118,7 +118,12 @@ function decodeJson(
     return undefined;
   }
   if (text.codePointAt(0) === 0xfeff) {
-    return {malformed: refuse(payload, 'badJson')};
+    // A byte-order mark before the opening brace of the object is a refusal of its own; before
+    // anything else the payload is the plain host as written.
+    if (text.slice(1).startsWith('{')) {
+      return {malformed: refuse(payload, 'badJson')};
+    }
+    return undefined;
   }
   let parsed: unknown;
   try {
@@ -211,10 +216,11 @@ function label(target: SshTarget): string {
   if (target.kind === 'plain') {
     return target.text;
   }
+  const user = target.user;
   const head =
-    target.user === undefined
-      ? target.hostName
-      : `${target.user}@${target.hostName}`;
+    user !== undefined && user !== ''
+      ? `${user}@${target.hostName}`
+      : target.hostName;
   return target.port === undefined ? head : `${head}:${String(target.port)}`;
 }
 

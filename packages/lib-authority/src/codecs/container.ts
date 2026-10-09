@@ -2,9 +2,8 @@
  * @fileoverview The container codecs: the payload of one container family, and the outer hop it carries after `@`,
  * the outer always through the codec the caller injects.
  */
-import {outerHop, outerPayload} from './outer-hop.ts';
 import type {Codec, ContainerTarget, DecodedOrMalformed} from './types.ts';
-import type {OuterCodec} from './outer-hop.ts';
+import {type OuterCodec, outerHop, outerPayload} from './outer-hop.ts';
 
 /** The families whose payload is the container family's own text. */
 export type ContainerFamily =

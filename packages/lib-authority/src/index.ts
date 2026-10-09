@@ -16,7 +16,6 @@ export type {
 export type {ContainerFamily} from './codecs/container.ts';
 export {containerCodec} from './codecs/container.ts';
 export type {OuterCodec} from './codecs/outer-hop.ts';
-export {wslCodecOf} from './codecs/wsl.ts';
 export {sshRemoteCodec} from './codecs/ssh-remote.ts';
 export {tunnelCodec} from './codecs/tunnel.ts';
 export {decodeAuthority, encodeAuthority, wslCodec} from './codecs/registry.ts';

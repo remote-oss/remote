@@ -7,9 +7,9 @@ import {
   encodeAuthority,
   sshRemoteCodec,
   wslCodec,
-  wslCodecOf,
 } from '../../src/index.ts';
 import type {DecodedTarget} from '../../src/index.ts';
+import {wslCodecOf} from '../../src/codecs/wsl.ts';
 
 /** The lower-case hex of a text, as the JSON form of a host is written. */
 function hexOf(text: string): string {
@@ -26,13 +26,27 @@ function reasonOf(
 /** The target an authority decodes to; the test table's rows all decode. */
 function targetOf(authority: string): DecodedTarget {
   const outcome = decodeAuthority(authority);
-  return 'malformed' in outcome ? (undefined as never) : outcome;
+  if ('malformed' in outcome) {
+    throw new Error(
+      `expected ${authority} to decode, got ${outcome.malformed.reason}`,
+    );
+  }
+  return outcome;
 }
 
 describe('codec rulings (card authority-01b table)', () => {
   it('F-5901 rule 1: a BOM before the JSON is a refusal of its own', () => {
     const payload = hexOf('\uFEFF{"hostName":"h"}');
     strictEqual(reasonOf(decodeAuthority(`ssh-remote+${payload}`)), 'badJson');
+  });
+
+  it('F-5901 rule 1: a BOM before a non-object is the plain host as written', () => {
+    const payload = hexOf('\uFEFFa');
+    const outcome = decodeAuthority(`ssh-remote+${payload}`);
+    deepStrictEqual('target' in outcome ? outcome.target : undefined, {
+      kind: 'plain',
+      text: payload,
+    });
   });
 
   it('F-5901 rule 2: a non-break or ideographic space in a host name is whitespace', () => {
@@ -120,11 +134,17 @@ describe('codec rulings (card authority-01b table)', () => {
   });
 
   it('F-5901 rule 5: the container codec decodes and re-encodes the outer through the injected codec', () => {
-    const outer = {decode: decodeAuthority, encode: encodeAuthority};
+    const fixed = {
+      family: 'ssh-remote',
+      target: {kind: 'plain', text: 'h'},
+      rawHostString: 'h',
+    } satisfies DecodedTarget;
+    const outer = {decode: () => fixed, encode: () => 'ssh-remote+h'};
     const codec = containerCodec('dev-container', outer);
+    const decoded = codec.decode('abcd@ssh-remote+h');
     deepStrictEqual(
       [
-        targetOf('dev-container+abcd@ssh-remote+h').target,
+        'target' in decoded ? decoded.target : undefined,
         codec.encode({
           payload: 'abcd',
           outer: {
@@ -165,10 +185,16 @@ describe('codec rulings (card authority-01b table)', () => {
     );
   });
 
-  it('the existing authority-01 tests: a BOM-free hex JSON and a user round-trip are unchanged', () => {
+  it('the existing authority-01 tests: a host that carries a user is unchanged through the registry round-trip', () => {
     deepStrictEqual(
-      targetOf(`ssh-remote+${hexOf('{"hostName":"h","user":"u"}')}`).target,
-      {kind: 'host', hostName: 'h', user: 'u'},
+      [targetOf(`ssh-remote+${hexOf('{"hostName":"h","user":"u"}')}`)],
+      [
+        {
+          family: 'ssh-remote',
+          target: {kind: 'host', hostName: 'h', user: 'u'},
+          rawHostString: hexOf('{"hostName":"h","user":"u"}'),
+        },
+      ],
     );
   });
 });

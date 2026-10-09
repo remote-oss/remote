@@ -42,8 +42,17 @@ const REGISTRY_OUTER: OuterCodec = {
   encode: encodeAuthority,
 };
 
-/** The wsl codec built on the registry's outer, so the exported name stays. */
-const wslCodec = wslCodecOf(REGISTRY_OUTER);
+/** The container codec of each container family, built once on the registry's outer. */
+const CONTAINER_CODECS = {
+  'dev-container': containerCodec('dev-container', REGISTRY_OUTER),
+  'attached-container': containerCodec('attached-container', REGISTRY_OUTER),
+  'k8s-container': containerCodec('k8s-container', REGISTRY_OUTER),
+  'apple-container': containerCodec('apple-container', REGISTRY_OUTER),
+  exec: containerCodec('exec', REGISTRY_OUTER),
+};
+
+/** The wsl codec of the contract, built on the registry's outer. */
+export const wslCodec = wslCodecOf(REGISTRY_OUTER);
 
 /** Encodes the target with the family's codec. */
 function encodePayload(decoded: DecodedTarget): string {
@@ -57,9 +66,7 @@ function encodePayload(decoded: DecodedTarget): string {
   if (family === 'tunnel') {
     return tunnelCodec.encode(target as TunnelTarget);
   }
-  return containerCodec(family, REGISTRY_OUTER).encode(
-    target as ContainerTarget,
-  );
+  return CONTAINER_CODECS[family].encode(target as ContainerTarget);
 }
 
 /**
@@ -92,7 +99,7 @@ export function decodeAuthority(
         ? wslCodec.decode(payload)
         : family === 'tunnel'
           ? tunnelCodec.decode(payload)
-          : containerCodec(family, REGISTRY_OUTER).decode(payload);
+          : CONTAINER_CODECS[family].decode(payload);
   if ('malformed' in outcome) {
     return {malformed: outcome.malformed};
   }
@@ -103,6 +110,3 @@ export function decodeAuthority(
 export function encodeAuthority(decoded: DecodedTarget): string {
   return `${decoded.family}+${encodePayload(decoded)}`;
 }
-
-/** The wsl codec of the contract, built on the registry's outer. */
-export {wslCodec};
