@@ -34,7 +34,8 @@ after a window reload [oss] (`contextKeyService.ts`, F-5901 step 2).
 
 1. **The gating key means "standing down" and defaults to visible.** Each extension declares one invented key under
    its reference's namespace (R-27), for example `remote-explorer.standingDown`, recorded in its identity decision's
-   ledger. Every gated entry carries the reference's own `when` clause verbatim, followed by `&& !<key>`. An unset key
+   ledger. Every gated entry carries the reference's own `when` clause verbatim, with `&& !<key>` appended to every top-level `||`
+   alternative (`&&` binds tighter than `||`; room rule of 2026-10-08). An unset key
    evaluates as false, so a lone install shows every entry before and after activation.
 2. **The key is set to true only by `lib-standdown`, at an activation that finds the reference present** (R-54 step
    1, before any registration). It is set to false at an activation that finds the reference absent. That clears a
@@ -83,7 +84,7 @@ constraint 26, K9). Decision 3 does not remove it. It forbids only adding one wh
 - `lib-standdown` offers one operation: `standDownIfReferencePresent(referenceId, standingDownKey)` returns `standing`
   or `serving`. It sets the key both ways and shows the warning when standing. Every extension calls it first.
 - The identifier tables (ADR draft "Identifier tables") list the key and the gated entries. A manifest check verifies
-  that every gated entry's `when` equals the reference clause followed by `&& !<key>`, and that no other entry
+  that every gated entry's `when` equals the reference clause with `&& !<key>` in every top-level `||` alternative, and that no other entry
   carries the key.
 - The explorer's title action "Refresh" becomes visible before activation, as the reference's is. F-5001 AC-24's
   allowance for the difference is no longer needed.
