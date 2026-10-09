@@ -325,6 +325,16 @@ exception and runs `scp` as its own login (F-2405). No ControlMaster or ControlP
 stands, POSIX and Windows alike). The lease exposes the session through the helper's request channel (a
 `runScript` request whose reply streams lines and ends with the result block) beside the SOCKS port and the shared
 record; after `start` the session stays as the forward's carrier and later runs (kill, cleanup) use it when idle.
+Rulings from the build (2026-10-08, #183): a run's script goes to the session's stdin as `sh -c '<quoted>'` between
+two marker lines carrying an unguessable per-run nonce, its input as a base64 here-document (bounded by the policy's
+`maximumInputBytes`; a larger input fails as `spawnFailed` and the caller uses `copyToHost`); lines before the start
+marker are login noise and dropped; the script's lines go to the asking lease only; the end marker carries `$?`.
+One run at a time, queued in arrival order; a run's deadline counts from its start, and a run past it ends the
+session (a wedged shell is indistinguishable), which every window hears as `transportLost`; when `ssh` ends, the run
+on it and the queued runs fail `channelClosed`. A cancelled run is abandoned, never killed (nothing on a plain stdin
+stops one script without ending the session); the pipeline cancels only before the tunnel is up. Only standard
+output is read: the lifecycle scripts print their result block there; the session's stderr is `ssh -v`'s log. The
+streamed placement of V4 is not served by the session; `scp` is. Non-POSIX login shells are the slice-3 variant.
 
 H1 implemented over S9 or S3:
 - `runScript` runs `sh` or `powershell` per V1's interpreter (the login-shell mode is dossier question 10).
@@ -756,6 +766,8 @@ Fixed regardless of the choice:
 ---
 
 ## 9. lib-helper (draft for area C's review; lead's ruling 2026-10-06)
+
+- `RequestContext.notify(body)` (added 2026-10-08, #183): a message to the lease that sent the request only, before its reply; `broadcast` stays for all leases.
 
 Names (ADR-0003, ruled 2026-10-08): the record's `recordKey` (not `key`), `startedByProcessId` (not `pid`; it is the
 acquirer's process id, since the claim precedes the spawn; stopping always goes through the endpoint, never a kill
