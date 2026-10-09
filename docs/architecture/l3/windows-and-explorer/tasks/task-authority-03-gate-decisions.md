@@ -21,7 +21,7 @@ export interface GateInput {
   argvEnabled: readonly string[];                   // ids already in argv.json's enable-proposed-api, as read by the caller
   dismissed: boolean;                               // F-1403 §6 flag for this extension
   activationTime: boolean;                          // true at activation, false after a gated use failed
-  windowClaimedBy: string | undefined;              // the context key's current holder, if any
+  windowClaimedBy: string | undefined;              // the window's current holder from the WindowClaim port (§3.4), if any
 }
 export type GateDecision =
   | { kind: 'proceed'; granted: readonly string[]; missing: readonly string[] }                 // nothing missing, or missing but silenced
@@ -32,6 +32,7 @@ export function decide(input: GateInput): GateDecision;
 // if dismissed && activationTime → proceed (silenced); after a gated use failed, the dismissal does not silence
 // if windowClaimedBy is set and not this extensionId → silent
 // else → notify: argvEntries = installedFamilyIds not already in argvEnabled, own id first, then the others in the given order, no duplicates; never the bare switch
+// notify with argvEntries [] (every installed id already enabled, a proposal still missing): the editor has not restarted since the arguments changed; the runner shows the notification with the restart offer only, no runtime-arguments action; the dismissal flag applies as usual (ruled 2026-10-08, #177)
 export function argvEntryList(ownId: string, installed: readonly string[], enabled: readonly string[]): string[];
 ```
 
@@ -51,6 +52,7 @@ export function argvEntryList(ownId: string, installed: readonly string[], enabl
 | installed with a duplicate id | no duplicate in the result |
 | `argvEntryList` never contains `'*'` or an empty string | assert on inputs including `'*'` in installed (filtered out) |
 | `notify.argvEntries` equals `argvEntryList(extensionId, installedFamilyIds, argvEnabled)` | property check over three inputs |
+| one missing, `installedFamilyIds: [own]`, `argvEnabled: [own]`, nothing claimed | `notify` with `argvEntries: []` (the runner's restart-only case) |
 
 ## 4. Rule for the worker
 

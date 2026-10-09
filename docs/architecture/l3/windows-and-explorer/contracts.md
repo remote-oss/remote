@@ -171,7 +171,7 @@ means this extension holds the window (`{holder: extensionId}`), and the registr
 subscriptions so deactivation releases it; (2) when the registration throws, `executeCommand(CLAIM_COMMAND)` gives the
 holder's id (`{holder}`); (3) when that call fails too (the holder deactivated between the two steps), step 1 once
 more; a second failure is `{holder: undefined}` and the caller decides as if claimed by another (silent). The result
-feeds card authority-03's `windowClaimedBy`. Properties: activation in one extension host is single-threaded and the
+feeds card authority-03's `windowClaimedBy`. A `notify` decision whose `argvEntries` is empty (every installed family id already enabled, a proposal still missing) means the editor has not restarted since the arguments changed: the runner shows the notification with the restart offer only, no runtime-arguments action (ruled 2026-10-08, #177). Properties: activation in one extension host is single-threaded and the
 registration synchronous, so two extensions activating together cannot both hold the window; an extension host
 restart (the only way a family extension deactivates while the window lives) clears every claim, and the next
 activations claim anew, which is the wanted behaviour (the notification may show once more after a restart, as after
