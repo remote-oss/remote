@@ -14,7 +14,7 @@ which rule applies and checks given facts.
 
 ```ts
 export type Verification = 'headerHash' | 'lengthOnly' | 'none';   // from the policy record
-export interface ResponseFacts { sha256Header?: string; contentLength?: number }   // from the final response of the redirect chain; header value lower-case hex
+export interface ResponseFacts { finalUrl: string; status: number; sha256Header?: string; contentLength?: number }   // from the final response of the redirect chain (ruled 2026-10-08); the digest header is the one the policy table names, read by the port, value lower-case hex (with or without a `sha256-` prefix)
 export interface DownloadedFacts { sha256?: string; byteLength: number }        // sha256 computed by the caller only when asked
 export function selectRule(rules: readonly Verification[], facts: ResponseFacts): Verification | 'unverifiable';
 // the first rule whose facts are present: headerHash needs sha256Header; lengthOnly needs contentLength; none needs nothing; if no rule applies → 'unverifiable'
@@ -56,4 +56,5 @@ PR title `lib-server: verification decision (card server-09)`. Reviewer: `remote
 
 ## 6. Open rows (stop and report)
 
-None expected.
+None expected. Note (2026-10-08): `ResponseFacts` gained `finalUrl` and `status` (always present; this card's
+functions ignore them, V4 uses them for the same-host check and diagnostics); add them to the fixtures as given.
