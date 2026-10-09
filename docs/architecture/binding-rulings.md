@@ -170,3 +170,9 @@ remote-development for anything not here.
 **Open-source components as allowed sources (clean side).** @devcontainers/cli and the VS Code OSS cli/ crate are allowed dependencies and allowed sources on the clean side, cited [devcontainers-cli] and [cli]: the cli/ crate is part of VS Code OSS (already [oss]); @devcontainers/cli follows that precedent as MIT open source distinct from the reference extensions. The wall stays around the ms-vscode-remote and ms-vscode extension packages (VSIX contents) and the dirty rooms. R-47 extended: the editor CLI archive is fetched like the server archive, from the product's own download location per product.json. The user may veto.
 
 — remote-architect's question, ADR-0005, 2026-10-05.
+
+## R-101
+
+**Releases are tags on main, no release branch.** A release is a tag `<package>-v<semver>` on a main commit. The gate: full CI including `acceptance (real server)` dispatched on the candidate main commit and green, then the tag on that exact commit; the real-server job also triggers on `*-v*` tag pushes so every tag carries its own record run. (Supersedes the `release` branch condition #191 first carried.)
+
+— remote-development, 2026-10-09; relayed through remote-pm.
