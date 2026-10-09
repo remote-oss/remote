@@ -66,6 +66,8 @@ const IMPOSED_PROPERTY_KEYS = [
   't',
   // VS Code extension manifest: the `url` of the `repository` and `bugs` objects.
   'url',
+  // VS Code: the `uri` of the openFolder command core executes.
+  'uri',
 ];
 
 // Phrases that address a reader of a conversation rather than of the code (ADR-0003, comments). An entry with an
