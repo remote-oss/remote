@@ -184,7 +184,7 @@ class LoginWait {
       this.end({kind: 'failed', failure: asked.failure});
     } else if (asked.reply.type === 'accepted') {
       this.owner = true;
-    } else if (asked.reply.type === 'refused' && 'reason' in asked.reply) {
+    } else if (asked.reply.type === 'refused') {
       await this.refused(asked.reply.reason);
     } else {
       this.end({
@@ -362,10 +362,10 @@ export class SharedConnection {
    */
   async refuse(promptId: number): Promise<boolean> {
     const asked = await this.askHelper({type: 'refuse', promptId});
-    if (asked.kind !== 'answered' || asked.reply.type !== 'refused') {
+    if (asked.kind !== 'answered' || asked.reply.type !== 'questionRefused') {
       return false;
     }
-    return 'accepted' in asked.reply && asked.reply.accepted;
+    return asked.reply.accepted;
   }
 
   /** Leaves what a later window needs to reuse the server; true when the helper took it. */

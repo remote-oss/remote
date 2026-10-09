@@ -46,7 +46,7 @@ export type Refusal = 'notOwner' | 'alreadyConnecting' | 'alreadyConnected';
 export type ConnectionReply =
   | {type: 'accepted'}
   | {type: 'refused'; reason: Refusal}
-  | {type: 'refused'; accepted: boolean}
+  | {type: 'questionRefused'; accepted: boolean}
   | {type: 'sharedRecord'; record: SharedRecord | null}
   | {type: 'answered'; accepted: boolean}
   | {type: 'scriptEnded'; status: number}
@@ -184,11 +184,12 @@ export function readConnectionReply(
     case 'accepted':
       return {type: 'accepted'};
     case 'refused':
-      if (typeof body.accepted === 'boolean') {
-        return {type: 'refused', accepted: body.accepted};
-      }
       return typeof body.reason === 'string' && REFUSALS.includes(body.reason)
         ? {type: 'refused', reason: body.reason as Refusal}
+        : undefined;
+    case 'questionRefused':
+      return typeof body.accepted === 'boolean'
+        ? {type: 'questionRefused', accepted: body.accepted}
         : undefined;
     case 'sharedRecord': {
       if (body.record === null) {

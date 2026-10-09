@@ -199,13 +199,13 @@ export class ConnectionHandler implements MessageHandler {
    */
   private refuse(promptId: number, lease: number): PlainData {
     if (lease !== this.ownership.current()) {
-      return {type: 'refused', accepted: false};
+      return {type: 'questionRefused', accepted: false};
     }
     const accepted = this.askpass.refuse(promptId);
     if (accepted) {
       this.askpass.refuseRun();
     }
-    return {type: 'refused', accepted};
+    return {type: 'questionRefused', accepted};
   }
 
   private async connect(

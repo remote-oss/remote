@@ -493,7 +493,11 @@ describe('connection handler (contracts §4 S9)', () => {
       const reply = await send(1, {type: 'refuse', promptId: 1});
       deepStrictEqual(
         [reply, asked.closed, eventTypes()],
-        [{type: 'refused', accepted: true}, true, ['prompt', 'promptClosed']],
+        [
+          {type: 'questionRefused', accepted: true},
+          true,
+          ['prompt', 'promptClosed'],
+        ],
       );
     });
 
@@ -504,8 +508,8 @@ describe('connection handler (contracts §4 S9)', () => {
       deepStrictEqual(
         [first, second, asked.closed, eventTypes()],
         [
-          {type: 'refused', accepted: true},
-          {type: 'refused', accepted: false},
+          {type: 'questionRefused', accepted: true},
+          {type: 'questionRefused', accepted: false},
           true,
           ['prompt', 'promptClosed'],
         ],
@@ -549,7 +553,7 @@ describe('connection handler (contracts §4 S9)', () => {
       const reply = await send(2, {type: 'refuse', promptId: 1});
       deepStrictEqual(
         [reply, asked.closed, eventTypes()],
-        [{type: 'refused', accepted: false}, false, ['prompt']],
+        [{type: 'questionRefused', accepted: false}, false, ['prompt']],
       );
     });
 

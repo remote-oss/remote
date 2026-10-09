@@ -55,16 +55,20 @@ describe('connection requests (contracts §4 S9)', () => {
     );
   });
 
-  it('reads the answer to a refuse, and still reads the refusals with their reasons', () => {
+  it('reads the refusal of a question, and still reads the refusals with their reasons', () => {
     deepStrictEqual(
       [
-        readConnectionReply({type: 'refused', accepted: false}),
+        readConnectionReply({type: 'questionRefused', accepted: true}),
+        readConnectionReply({type: 'questionRefused', accepted: false}),
+        readConnectionReply({type: 'questionRefused'}),
         readConnectionReply({type: 'refused', accepted: 'no'}),
         readConnectionReply({type: 'refused', reason: 'notOwner'}),
         readConnectionReply({type: 'refused', reason: 7}),
       ],
       [
-        {type: 'refused', accepted: false},
+        {type: 'questionRefused', accepted: true},
+        {type: 'questionRefused', accepted: false},
+        undefined,
         undefined,
         {type: 'refused', reason: 'notOwner'},
         undefined,

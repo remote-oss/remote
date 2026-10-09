@@ -1,5 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
-import {type ClientEnvironment, type HelperParameters} from 'lib-helper';
+import {
+  type ClientEnvironment,
+  type HelperLease,
+  type HelperParameters,
+  type PlainData,
+} from 'lib-helper';
 import {clientEnvironment} from 'lib-helper/testing/client-environment';
 import {drive as driveClock} from 'lib-helper/testing/drive';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
@@ -13,7 +18,7 @@ import {
   type ConnectOutcome,
   killConnection,
   runConnectionHelper,
-  type SharedConnection,
+  SharedConnection,
 } from '../../src/index.ts';
 import {AUTHENTICATED, SSH_REQUEST} from './connection-fixture.ts';
 import {ScriptedSpawner, startError} from './fake-client-process.ts';
@@ -337,6 +342,36 @@ describe('the window side of the shared connection (S9)', () => {
   it('refuses false when the question was not open', async () => {
     const {connection} = await connectFirst();
     deepStrictEqual(await connection.refuse(1), false);
+  });
+
+  /** A connection whose helper answers the refuse with the given reply. */
+  function refusingWith(reply: PlainData): SharedConnection {
+    const lease = {
+      leaseId: 1,
+      payload: {},
+      onEvent: () => undefined,
+      release: () => undefined,
+      request: () => Promise.resolve({kind: 'reply', body: reply}),
+    } as unknown as HelperLease;
+    return new SharedConnection(
+      lease,
+      {requestMilliseconds: 1000, loginMilliseconds: 60000},
+      () => () => undefined,
+    );
+  }
+
+  it('refuses true when the helper says the question was closed', async () => {
+    deepStrictEqual(
+      await refusingWith({type: 'questionRefused', accepted: true}).refuse(1),
+      true,
+    );
+  });
+
+  it('refuses false when the helper answered a connect refusal, not a question', async () => {
+    deepStrictEqual(
+      await refusingWith({type: 'refused', reason: 'notOwner'}).refuse(1),
+      false,
+    );
   });
 
   it('refuses a question: the connection closes it, and the rest of the run is refused at the door', async () => {
