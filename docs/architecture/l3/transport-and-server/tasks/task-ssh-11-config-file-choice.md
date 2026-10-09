@@ -37,7 +37,7 @@ export function narrowFileChoice(items: readonly FileChoiceItem[], typed: string
 // the first element is the focused row
 ```
 
-`buildFileChoice`: configFile unset: placeholder `Select SSH configuration file to update`, items user file, system
+`buildFileChoice`: configFile unset: placeholder `{id: 'S126'}`, items user file, system
 file, settings, help. Set: placeholder `{id: 'S047'}`, items the value exactly as written
 (role `configured`, no trimming, no `~` expansion), settings, help.
 
@@ -50,11 +50,11 @@ are not matched here; the editor's own filter applies to them.)
 
 | Citation | Given | Expected |
 |---|---|---|
-| F-2203.AC-2 | configFile `''`, user `/home/u/.ssh/config`, system `/etc/ssh/ssh_config` | placeholder `Select SSH configuration file to update`; items in order: user file, system file, settings, help |
+| F-2203.AC-2 | configFile `''`, user `/home/u/.ssh/config`, system `/etc/ssh/ssh_config` | placeholder `{id: 'S126'}`; items in order: user file, system file, settings, help |
 | F-2203.BR-1 | configFile `'   '` | same as unset |
 | F-2203.BR-2 | the user row | label is `userFile` exactly (absolute) |
 | F-2203.BR-3 | any input | the last two items are `settings` then `help`, with the descriptions of the contract |
-| F-2203.AC-11 | configFile `~/ssh/mine` | placeholder `Edit custom SSH configuration file`; items `~/ssh/mine` (role `configured`), settings, help |
+| F-2203.AC-11 | configFile `~/ssh/mine` | placeholder `{id: 'S047'}`; items `~/ssh/mine` (role `configured`), settings, help |
 | F-2203.AC-11 | configFile `relative/cfg` | the label `relative/cfg` (not normalised); no user or system row |
 | F-2204.AC-32 | configFile `/etc/x/config` | same placeholder and rows as the previous custom rows (the add flow uses this function too) |
 | F-2203.AC-2 | default items, typed `''` | the four items unchanged |
