@@ -39,7 +39,7 @@ import {
 const EDITOR_VERSION = '1.139.1';
 
 /** The image tag of the SSH host. */
-const HOST_IMAGE = 'remote-oss-acceptance-host';
+export const HOST_IMAGE = 'remote-oss-acceptance-host';
 
 /** The packages whose VSIX files are installed into the editor under test, by their extension id. */
 const EXTENSIONS_UNDER_TEST = new Map([

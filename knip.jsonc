@@ -23,7 +23,7 @@
     // Tests only: no coverage unit; the code is exercised by the acceptance job.
     "tests/acceptance": {
       // The test-cli configuration reads the default export; the suite files are the entries.
-      "entry": ["vscode-test.mjs", "suite/*.test.ts"],
+      "entry": ["vscode-test.mjs", "suite/*.test.ts", "server/*.test.ts"],
       "project": ["**/*.ts", "vscode-test.mjs"],
       "includeEntryExports": false,
     },

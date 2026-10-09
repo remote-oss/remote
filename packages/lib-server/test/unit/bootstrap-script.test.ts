@@ -203,6 +203,49 @@ describe('the POSIX bootstrap script', () => {
       });
     }
 
+    /** Runs the probe with the loader folders `/lib` and `/usr/lib` pointed into a root that holds `loaders`. */
+    function libcWithLoaders(loaders: readonly string[]): unknown {
+      const root = path.join(host.home, 'loader-root');
+      for (const loader of loaders) {
+        mkdirSync(path.join(root, path.dirname(loader)), {recursive: true});
+        writeFileSync(path.join(root, loader), '');
+      }
+      return statusAndFacts(
+        host,
+        single('probe'),
+        parametersFor(),
+        ['host.libc'],
+        {
+          rewriteScript: script =>
+            script
+              .replaceAll('/usr/lib/ld-musl-', `${root}/usr/lib/ld-musl-`)
+              .replaceAll(' /lib/ld-musl-', ` ${root}/lib/ld-musl-`),
+        },
+      );
+    }
+
+    it('F-2401: a musl loader in /lib alone makes the host musl', () => {
+      deepStrictEqual(libcWithLoaders(['lib/ld-musl-x86_64.so.1']), {
+        status: 'Ok',
+        'host.libc': 'musl',
+      });
+    });
+
+    it('F-2401: a musl loader in /usr/lib alone makes the host musl', () => {
+      deepStrictEqual(libcWithLoaders(['usr/lib/ld-musl-aarch64.so.1']), {
+        status: 'Ok',
+        'host.libc': 'musl',
+      });
+    });
+
+    it('F-2401: a musl loader beats getconf on a host that has both', () => {
+      useHost(['wget', 'getconf']);
+      deepStrictEqual(libcWithLoaders(['lib/ld-musl-x86_64.so.1']), {
+        status: 'Ok',
+        'host.libc': 'musl',
+      });
+    });
+
     it('F-2703.7.E2: a host with getconf and no musl loader is glibc', () => {
       useHost(['wget', 'getconf']);
       deepStrictEqual(

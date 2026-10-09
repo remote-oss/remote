@@ -1,0 +1,11 @@
+// The server acceptance tests run in plain Node.js, outside the editor: Node.js and Mocha's globals.
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "mocha"],
+    "tsBuildInfoFile": "${configDir}/.tsc/server.tsbuildinfo"
+  },
+  "include": ["${configDir}"],
+  "references": [{"path": "../../../tools"}],
+  "exclude": ["${configDir}/.tsc"]
+}
