@@ -100,7 +100,7 @@ jobs:
   # with the host's network cut so that the client downloads and copies, and once from the archive the client kept.
   # The archive (about 125 MB) is fetched twice in a run, into a folder the run removes. Every pull request's CI is a
   # manual dispatch, so the job is opt-in there (the `real-server` input, default false); the tag of a release runs it
-  # always (R-101).
+  # always.
   acceptance-real-server:
     name: acceptance (real server)
     if: inputs.real-server || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
