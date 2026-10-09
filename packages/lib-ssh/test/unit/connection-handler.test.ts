@@ -240,7 +240,7 @@ describe('connection handler (contracts §4 S9)', () => {
   });
 
   describe('ssh that cannot start', () => {
-    it('is a failed login of an unknown kind and is logged', async () => {
+    it('is told to the windows as a failed start, and logged', async () => {
       spawner = new ScriptedSpawner(startError('ENOENT', 'spawn ssh ENOENT'));
       create();
       handler.onLeasesChanged([1, 2]);
@@ -251,7 +251,11 @@ describe('connection handler (contracts §4 S9)', () => {
         [
           {type: 'accepted'},
           [
-            {type: 'loginFailed', kind: 'unknown', hints: []},
+            {
+              type: 'spawnFailed',
+              cause: 'clientVanished',
+              detail: 'spawn ssh ENOENT',
+            },
             {type: 'ownerChanged', owner: 2},
           ],
           ['ssh did not start: clientVanished'],

@@ -16,7 +16,7 @@ import {
   type SharedConnection,
   type SshRequest,
 } from '../../src/index.ts';
-import {ScriptedSpawner} from './fake-client-process.ts';
+import {ScriptedSpawner, startError} from './fake-client-process.ts';
 
 const PARAMETERS = 'REMOTE_OSS_HELPER_PARAMETERS';
 const SOCKS_PORT = 41000;
@@ -346,6 +346,45 @@ describe('the window side of the shared connection (S9)', () => {
     await killConnection(environment, '/registry', 'harness');
     await drive();
     deepStrictEqual(await connection.answer(1, 'late'), false);
+  });
+
+  it('reports an ssh that cannot be started as a failed start, not as a timeout', async () => {
+    sshRuns = new ScriptedSpawner(startError('ENOENT', 'spawn ssh ENOENT'));
+    const connection = await acquired();
+    const outcome = connection.connect(new AbortController().signal);
+    await drive();
+    deepStrictEqual(await outcome, {
+      kind: 'failed',
+      failure: {
+        kind: 'spawnFailed',
+        cause: 'clientVanished',
+        detail: 'spawn ssh ENOENT',
+      },
+    });
+  });
+
+  it('does not run the login limit down while a question waits for the user', async () => {
+    const {connection, outcome} = await connectFirst();
+    await askAtEndpoint('password: ');
+    clock.advance(3 * LIMITS.loginMilliseconds);
+    await connection.answer(1, 'secret');
+    sshRuns.started[0]?.error(AUTHENTICATED);
+    await drive();
+    deepStrictEqual((await outcome).kind, 'connected');
+  });
+
+  it('starts the login limit over when the question is closed', async () => {
+    const {connection, outcome} = await connectFirst();
+    await askAtEndpoint('password: ');
+    clock.advance(3 * LIMITS.loginMilliseconds);
+    await connection.answer(1, 'secret');
+    await drive();
+    clock.advance(LIMITS.loginMilliseconds);
+    await drive();
+    deepStrictEqual(await outcome, {
+      kind: 'failed',
+      failure: {kind: 'timeout'},
+    });
   });
 
   it('ends the wait when the caller cancels, and keeps the lease', async () => {

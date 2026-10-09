@@ -18,6 +18,7 @@ import {
 } from 'lib-helper';
 import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
+import type {SpawnFailure} from '../process/session.ts';
 import type {ConnectionHelperOptions} from './helper.ts';
 import {
   type ConnectionEvent,
@@ -83,6 +84,7 @@ export type ConnectionFailure =
       reason?: FailureReason;
       hints: FailureHint[];
     }
+  | {kind: 'spawnFailed'; cause: SpawnFailure; detail: string}
   | {kind: 'transportLost'}
   | {kind: 'helperGone'}
   | {kind: 'helperRefused'; reason: string}
@@ -100,6 +102,160 @@ export interface ConnectedState {
 export type ConnectOutcome =
   | ({kind: 'connected'} & ConnectedState)
   | {kind: 'failed'; failure: ConnectionFailure};
+
+/** What one wait for the login needs from the connection that holds it. */
+interface LoginSteps {
+  limitMilliseconds: number;
+  timer: Timer;
+  leaseId: number;
+  askConnect(): Promise<Asked>;
+  /** The state of a connection that is set up: the SOCKS port the helper announced, if it did. */
+  setUp(announced: number | undefined): Promise<ConnectOutcome>;
+  /** Another window owns the login. */
+  waiting(): void;
+}
+
+/**
+ * One wait for the login. The helper's answer to the request to connect says whether this window owns the login, and
+ * what follows is told by events, so an event that comes before the answer waits for it. The time limit stops while a
+ * question is open, because only the user can answer it, and starts over when the last question closes.
+ */
+class LoginWait {
+  private readonly steps: LoginSteps;
+  private readonly finish: (outcome: ConnectOutcome) => void;
+  private readonly early: ConnectionEvent[] = [];
+  private readonly openPrompts = new Set<number>();
+  private cancelTimer: (() => void) | undefined;
+  private owner = false;
+  private asking = false;
+  private finished = false;
+
+  /** A wait that has not started; `finish` receives how it ended, once. */
+  constructor(steps: LoginSteps, finish: (outcome: ConnectOutcome) => void) {
+    this.steps = steps;
+    this.finish = finish;
+  }
+
+  /** Starts the time limit and asks to connect. */
+  start(): void {
+    this.armTimer();
+    void this.request();
+  }
+
+  /** The caller cancelled. */
+  abort(): void {
+    this.end({kind: 'failed', failure: {kind: 'cancelled'}});
+  }
+
+  /** An event of the helper, or the loss of the helper itself. */
+  hear(event: ConnectionEvent | 'helperGone'): void {
+    if (event === 'helperGone') {
+      this.end({kind: 'failed', failure: {kind: 'helperGone'}});
+    } else if (event.type === 'transportLost') {
+      this.end({kind: 'failed', failure: {kind: 'transportLost'}});
+    } else if (this.asking) {
+      this.early.push(event);
+    } else {
+      this.handle(event);
+    }
+  }
+
+  private end(outcome: ConnectOutcome): void {
+    if (!this.finished) {
+      this.finished = true;
+      this.cancelTimer?.();
+      this.finish(outcome);
+    }
+  }
+
+  private armTimer(): void {
+    this.cancelTimer?.();
+    this.cancelTimer = this.steps.timer(this.steps.limitMilliseconds, () => {
+      this.end({kind: 'failed', failure: {kind: 'timeout'}});
+    });
+  }
+
+  private async request(): Promise<void> {
+    this.asking = true;
+    const asked = await this.steps.askConnect();
+    this.asking = false;
+    if (asked.kind === 'failed') {
+      this.end({kind: 'failed', failure: asked.failure});
+    } else if (asked.reply.type === 'accepted') {
+      this.owner = true;
+    } else if (asked.reply.type === 'refused') {
+      await this.refused(asked.reply.reason);
+    } else {
+      this.end({
+        kind: 'failed',
+        failure: {kind: 'helperRefused', reason: 'unexpected reply'},
+      });
+    }
+    for (const event of this.early.splice(0)) {
+      this.handle(event);
+    }
+  }
+
+  private async refused(reason: Refusal): Promise<void> {
+    if (reason === 'alreadyConnected') {
+      this.end(await this.steps.setUp(undefined));
+    } else {
+      this.steps.waiting();
+    }
+  }
+
+  private handle(event: ConnectionEvent): void {
+    switch (event.type) {
+      case 'prompt':
+        this.openPrompts.add(event.promptId);
+        this.cancelTimer?.();
+        break;
+      case 'promptClosed':
+        this.openPrompts.delete(event.promptId);
+        if (this.openPrompts.size === 0) {
+          this.armTimer();
+        }
+        break;
+      case 'connected':
+        void this.steps.setUp(event.socksPort).then(outcome => {
+          this.end(outcome);
+        });
+        break;
+      case 'loginFailed':
+        if (this.owner) {
+          this.end({
+            kind: 'failed',
+            failure: {
+              kind: 'loginFailed',
+              failure: event.kind,
+              ...(event.reason === undefined ? {} : {reason: event.reason}),
+              hints: event.hints,
+            },
+          });
+        }
+        break;
+      case 'spawnFailed':
+        if (this.owner) {
+          this.end({
+            kind: 'failed',
+            failure: {
+              kind: 'spawnFailed',
+              cause: event.cause,
+              detail: event.detail,
+            },
+          });
+        }
+        break;
+      case 'ownerChanged':
+        if (event.owner === this.steps.leaseId && !this.owner) {
+          void this.request();
+        }
+        break;
+      default:
+        break;
+    }
+  }
+}
 
 /** The helper's answer to one request, or why there is none. */
 type Asked =
@@ -141,70 +297,34 @@ export class SharedConnection {
    */
   connect(cancellation: AbortSignal): Promise<ConnectOutcome> {
     return new Promise(resolve => {
-      const login = {
-        mine: false,
-        finished: false,
-        cancelTimer: this.timer(this.limits.loginMilliseconds, () => {
-          login.finish({kind: 'failed', failure: {kind: 'timeout'}});
-        }),
-        finish: (outcome: ConnectOutcome): void => {
-          if (!login.finished) {
-            login.finished = true;
-            this.watcher = undefined;
-            login.cancelTimer();
-            cancellation.removeEventListener('abort', login.abort);
-            resolve(outcome);
-          }
+      function onAbort(): void {
+        wait.abort();
+      }
+      const wait = new LoginWait(
+        {
+          limitMilliseconds: this.limits.loginMilliseconds,
+          timer: this.timer,
+          leaseId: this.lease.leaseId,
+          askConnect: () => this.askHelper({type: 'connect'}),
+          setUp: announced => this.connected(announced),
+          waiting: () => {
+            this.notify({type: 'waitingForOtherWindow'});
+          },
         },
-        abort: (): void => {
-          login.finish({kind: 'failed', failure: {kind: 'cancelled'}});
+        outcome => {
+          this.watcher = undefined;
+          cancellation.removeEventListener('abort', onAbort);
+          resolve(outcome);
         },
-        request: async (): Promise<void> => {
-          const asked = await this.askHelper({type: 'connect'});
-          if (asked.kind === 'failed') {
-            login.finish({kind: 'failed', failure: asked.failure});
-          } else if (asked.reply.type === 'accepted') {
-            login.mine = true;
-          } else if (asked.reply.type === 'refused') {
-            this.refused(asked.reply.reason, login.finish);
-          } else {
-            login.finish({
-              kind: 'failed',
-              failure: {kind: 'helperRefused', reason: 'unexpected reply'},
-            });
-          }
-        },
-      };
+      );
       this.watcher = event => {
-        if (event === 'helperGone') {
-          login.finish({kind: 'failed', failure: {kind: 'helperGone'}});
-        } else if (event.type === 'connected') {
-          void this.connected(event.socksPort).then(login.finish);
-        } else if (event.type === 'loginFailed' && login.mine) {
-          login.finish({
-            kind: 'failed',
-            failure: {
-              kind: 'loginFailed',
-              failure: event.kind,
-              ...(event.reason === undefined ? {} : {reason: event.reason}),
-              hints: event.hints,
-            },
-          });
-        } else if (event.type === 'transportLost') {
-          login.finish({kind: 'failed', failure: {kind: 'transportLost'}});
-        } else if (
-          event.type === 'ownerChanged' &&
-          event.owner === this.lease.leaseId &&
-          !login.mine
-        ) {
-          void login.request();
-        }
+        wait.hear(event);
       };
       if (cancellation.aborted) {
-        login.abort();
+        wait.abort();
       } else {
-        cancellation.addEventListener('abort', login.abort, {once: true});
-        void login.request();
+        cancellation.addEventListener('abort', onAbort, {once: true});
+        wait.start();
       }
     });
   }
@@ -231,17 +351,6 @@ export class SharedConnection {
   /** Ends this window's lease; the helper ends a short grace after the last one. */
   release(): void {
     this.lease.release();
-  }
-
-  private refused(
-    reason: Refusal,
-    finish: (outcome: ConnectOutcome) => void,
-  ): void {
-    if (reason === 'alreadyConnected') {
-      void this.connected(undefined).then(finish);
-    } else {
-      this.notify({type: 'waitingForOtherWindow'});
-    }
   }
 
   /** The state of a connection that is set up: the SOCKS port (given, or the helper's) and the shared record. */

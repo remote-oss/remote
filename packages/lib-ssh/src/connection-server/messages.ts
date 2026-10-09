@@ -7,6 +7,7 @@
 import type {PlainData} from 'lib-helper';
 import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
+import type {SpawnFailure} from '../process/session.ts';
 
 /** What a later window needs to reuse the server of a connection; held by the helper, never written to a file. */
 export interface SharedRecord {
@@ -57,6 +58,7 @@ export type ConnectionEvent =
       reason?: FailureReason;
       hints: FailureHint[];
     }
+  | {type: 'spawnFailed'; cause: SpawnFailure; detail: string}
   | {type: 'transportLost'};
 
 type Fields = Record<string, unknown>;
@@ -194,6 +196,12 @@ export function readConnectionEvent(
         : undefined;
     case 'loginFailed':
       return readLoginFailed(body);
+    case 'spawnFailed':
+      return (body.cause === 'clientVanished' ||
+        body.cause === 'spawnFailed') &&
+        typeof body.detail === 'string'
+        ? {type: 'spawnFailed', cause: body.cause, detail: body.detail}
+        : undefined;
     case 'waitingForOtherWindow':
     case 'transportLost':
       return {type: body.type};

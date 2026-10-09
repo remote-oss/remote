@@ -185,7 +185,13 @@ export class ConnectionHandler implements MessageHandler {
     );
     if (outcome.kind === 'failed') {
       this.options.logLine(`ssh did not start: ${outcome.failure}`);
-      this.loginFailed([outcome.detail], undefined, false);
+      this.state = 'idle';
+      this.tell({
+        type: 'spawnFailed',
+        cause: outcome.failure,
+        detail: outcome.detail,
+      });
+      this.ownership.ownerGaveUp();
     } else if (this.killed) {
       outcome.session.kill();
     } else {

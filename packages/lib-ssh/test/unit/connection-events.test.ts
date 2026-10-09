@@ -25,6 +25,7 @@ const EVENTS: PlainData[] = [
   {type: 'waitingForOtherWindow'},
   {type: 'connected', socksPort: 41000},
   {type: 'transportLost'},
+  {type: 'spawnFailed', cause: 'clientVanished', detail: 'spawn ssh ENOENT'},
   {type: 'loginFailed', kind: 'unknown', hints: []},
   {
     type: 'loginFailed',
@@ -84,8 +85,10 @@ describe('connection replies and events (contracts §4 S9)', () => {
         {type: 'connected', socksPort: '1'},
         {type: 'loginFailed', kind: 'unknown'},
         {type: 'loginFailed', hints: []},
+        {type: 'spawnFailed', cause: 'other', detail: 'x'},
+        {type: 'spawnFailed', cause: 'spawnFailed'},
       ].map(body => readConnectionEvent(body)),
-      Array.from({length: 9}, () => undefined),
+      Array.from({length: 11}, () => undefined),
     );
   });
 });

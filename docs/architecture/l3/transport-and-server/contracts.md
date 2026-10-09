@@ -273,8 +273,9 @@ Rulings of 2026-10-08 for S9 and S10 (the process side):
   request after its hello. This satisfies "written only after the connection completes".
 - Helper messages are plain data over lib-helper's channel: requests `connect` (owner only), `sharedRecord`,
   `setSharedRecord`, `answer {promptId, text}`, `kill`; events `prompt {promptId, surface, text}`, `promptClosed`,
-  `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints}`, `transportLost`,
-  `waitingForOtherWindow`. The reply to `connect` only acknowledges it; a login that fails ends in the `loginFailed`
+  `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints}`,
+  `spawnFailed {cause, detail}` (the `ssh` program could not be started: `clientVanished` or `spawnFailed`),
+  `transportLost`, `waitingForOtherWindow`. The reply to `connect` only acknowledges it; a login that fails ends in the `loginFailed`
   event (S5's kind, reason and hints) and the oldest waiting window takes over the login. S6 classifies prompts inside
   the helper; no answer is stored or logged.
 - The SOCKS port: prefer `-D 0` with the allocated port read from `ssh -v` ("Allocated port N for ...") when the
