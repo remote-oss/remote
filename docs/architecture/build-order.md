@@ -68,6 +68,13 @@ The harness, `tests/acceptance/`:
 - **CI environment:** GitHub Actions `ubuntu-latest` has Docker and `xvfb`; one job per slice; the recorded-case
   runner of the kit is separate and is not part of this harness (its registry and daemon needs are the kit's).
 
+Server fixtures (ruled 2026-10-08): the coding gate runs the server cases (install, start, lock, kill) against a
+stand-in server archive built by the test and placed in the container with `docker cp`, so CI needs no internet;
+before slice 1's release gate (D-65) one CI job installs and starts a real server, a VSCodium musl REH downloaded
+through the VSCodium product fixture's template (MIT, no licence gate), cached by version, run on `workflow_dispatch`
+and on the release branch; it covers F-2403 including the client fallback with the container's network cut. The
+acceptance suite is a private workspace package (`tests/acceptance`, card tooling-04).
+
 Each component brief lists its ACs in two columns: acceptance (harness) and unit. Writing the harness cases from
 that table is local-worker work once the harness exists.
 
