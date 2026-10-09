@@ -308,6 +308,7 @@ wait for the run of F-2102 Q1 (D-60).
 
 Rules:
 - One helper per host string, exactly as written (F-2102 BR-6).
+- The environment the helper hands to `ssh` is the editor's environment it was started with minus the helper's own parameter variable (`REMOTE_OSS_HELPER_PARAMETERS`: the nonce and the request); the askpass variables S3 sets are added on top (ruled 2026-10-09, #187 review).
 - The record is written only after the connection completes.
 - `acquire` is not used when `remote.SSH.useLocalServer` is off or socket mode is on (F-2102 BR-10, F-2410).
 
