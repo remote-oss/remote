@@ -43,8 +43,10 @@ There is no `badHex`: a hex-looking string that is not JSON falls through to (2)
 user and port whose name matches the lower-case bare pattern → the bare host name; every other host (user or port
 present, or an upper-case or otherwise non-bare name, F-2008 §6.2) → the hex of the compact JSON
 `{"hostName":…,"user":…,"port":…}` (keys in that order, absent ones omitted, port as a number). `label`: alias → alias; host → `user@hostName:port` with the present parts
-(`hostName`, `user@hostName`, `hostName:port`). IPv6 host names: kept whole; `[::1]` with brackets in the bare form →
-hostName `::1` (brackets removed), re-encoded with brackets (F-2501 Q1).
+(`hostName`, `user@hostName`, `hostName:port`). IPv6 literals (F-2501 Q1, kept whole): a bare `::1` matches the bare pattern (colons allowed) and decodes to host
+`::1`; it encodes bare again (option (b), ruled 2026-10-08); brackets are never added or stripped: a bare `[::1]`
+is an alias (`[` is not in the pattern); an IPv6 host with a user or a port travels in the JSON form with hostName
+`::1` unbracketed.
 `wsl` payload: `<distro>` or `<distro>@<outer authority>`; distro may be empty; `outer` decoded with `decodeAuthority`
 (a malformed outer → malformed reason `badOuter`); `encode` the reverse; `label` is the distro or `default distro`
 when empty. Container families: payload split at the first `@` into `payload` and `outer` the same way; `label` =
@@ -68,7 +70,9 @@ the payload. `tunnel`: `<tunnelName>` or `<tunnelName>/<distro>`; empty name →
 | `'ssh-remote+'` | malformed `empty` |
 | `'ssh-remote+a b'` | malformed `whitespace` |
 | `'ssh-remote+a\u0001'` | malformed `control` |
-| `'ssh-remote+[::1]'` | malformed `control`? no: `[` is not bare and not hex → alias `[::1]`; IPv6 literals travel in the JSON form (F-2501 Q1: kept whole as hostName `::1`); add: hex JSON with hostName `::1` → host `::1`, `encode` → the hex form |
+| `'ssh-remote+::1'` | host `::1`; `encode` gives `::1` (bare) |
+| `'ssh-remote+[::1]'` | alias `[::1]` |
+| hex JSON `{"hostName":"::1","port":22}` | host `::1` port 22; `encode` → the hex form |
 | `encode({kind:'host', hostName:'h'})` | `'h'` |
 | `encode({kind:'host', hostName:'h', user:'u'})` | hex of `{"hostName":"h","user":"u"}` |
 | `encode({kind:'host', hostName:'h', port: 22})` | hex of `{"hostName":"h","port":22}` |
