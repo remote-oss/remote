@@ -27,7 +27,6 @@ interface Manifest {
   capabilities?: {untrustedWorkspaces?: {supported?: boolean}};
   activationEvents?: unknown[];
   extensionPack?: string[];
-  dependencies?: Record<string, string>;
 }
 
 describe('skeleton (card remote-ssh-00 table)', () => {
@@ -57,12 +56,6 @@ describe('skeleton (card remote-ssh-00 table)', () => {
         'remote-oss.remote-ssh-edit',
         'remote-oss.remote-explorer',
       ],
-      dependencies: {
-        'lib-identifiers': 'workspace:*',
-        'lib-standdown': 'workspace:*',
-        'lib-log': 'workspace:*',
-        'lib-ssh': 'workspace:*',
-      },
     });
   });
 

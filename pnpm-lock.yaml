@@ -270,20 +270,7 @@ importers:
 
   packages/remote-server: {}
 
-  packages/remote-ssh:
-    dependencies:
-      lib-identifiers:
-        specifier: workspace:*
-        version: link:../lib-identifiers
-      lib-log:
-        specifier: workspace:*
-        version: link:../lib-log
-      lib-ssh:
-        specifier: workspace:*
-        version: link:../lib-ssh
-      lib-standdown:
-        specifier: workspace:*
-        version: link:../lib-standdown
+  packages/remote-ssh: {}
 
   packages/remote-ssh-edit:
     devDependencies:
