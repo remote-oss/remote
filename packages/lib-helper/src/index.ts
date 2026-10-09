@@ -35,6 +35,7 @@ export type {
   PlainData,
 } from './endpoint/protocol.ts';
 export {
+  type HelperControl,
   type MessageHandler,
   type RequestContext,
   serve,

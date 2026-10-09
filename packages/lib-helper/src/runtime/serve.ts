@@ -25,12 +25,27 @@ export interface RequestContext {
   broadcast(body: PlainData): void;
 }
 
+/** What a handler can do at any time, not only while it answers a request. */
+export interface HelperControl {
+  /** Tells every lease something. */
+  broadcast(body: PlainData): void;
+  /** Ends the helper, as a `stop` from a client does. */
+  stop(): void;
+}
+
 /** The consumer's part of a helper. */
 export interface MessageHandler {
   /** Answers one request; a rejection reaches the client as a failed reply. */
   onRequest(body: PlainData, context: RequestContext): Promise<PlainData>;
   /** Runs the action a delayed-check policy names, before the helper ends. */
   runAction(action: string): Promise<void>;
+  /** Called once, before the endpoint listens, with the helper's control. */
+  attach?(control: HelperControl): void;
+  /**
+   * Called after a lease has been granted, once its welcome is sent, and after a lease has closed, with the numbers
+   * of the live leases, oldest first.
+   */
+  onLeasesChanged?(leaseIds: readonly number[]): void;
 }
 
 /** Everything a helper needs to serve. */
@@ -88,6 +103,17 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
       leases: event.leases.map(lease => lease.leaseId),
     });
   });
+  function leasesChanged(): void {
+    handler.onLeasesChanged?.(table.live().map(live => live.leaseId));
+  }
+  handler.attach?.({
+    broadcast: body => {
+      broadcast({type: 'message', body});
+    },
+    stop: () => {
+      finish('stopped');
+    },
+  });
   function accept(connection: EndpointConnection): void {
     let lease: number | undefined;
     const cancelHello = options.scheduler.setTimer(
@@ -102,6 +128,7 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
       if (lease !== undefined) {
         connections.delete(lease);
         table.close(lease);
+        leasesChanged();
       }
     });
     connection.onMessage(value => {
@@ -122,6 +149,7 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
           leases: table.live().map(live => live.leaseId),
           payload: options.payload,
         } satisfies HelperMessage);
+        leasesChanged();
         return;
       }
       if (message?.type === 'stop') {

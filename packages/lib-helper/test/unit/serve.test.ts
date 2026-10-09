@@ -2,6 +2,7 @@ import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import type {EndpointConnection} from '../../src/endpoint/protocol.ts';
 import type {EndPolicy} from '../../src/index.ts';
 import {
+  type HelperControl,
   type MessageHandler,
   serve,
   type ServeEnd,
@@ -244,6 +245,87 @@ describe('serve', () => {
       [await ending, port.isListening(ENDPOINT)],
       ['policy', false],
     );
+  });
+
+  describe('a handler that watches the helper', () => {
+    let controls: HelperControl[];
+    let listeningWhenAttached: boolean[];
+    let leaseLists: Array<readonly number[]>;
+
+    beforeEach(() => {
+      controls = [];
+      listeningWhenAttached = [];
+      leaseLists = [];
+      handler.attach = control => {
+        controls.push(control);
+        listeningWhenAttached.push(port.isListening(ENDPOINT));
+      };
+      handler.onLeasesChanged = leaseIds => {
+        leaseLists.push(leaseIds);
+      };
+    });
+
+    it('is attached once, before the endpoint listens', async () => {
+      start();
+      await settled();
+      deepStrictEqual(
+        [controls.length, listeningWhenAttached, port.isListening(ENDPOINT)],
+        [1, [false], true],
+      );
+    });
+
+    it('hears of a granted lease after its welcome, and of a lease that closed', async () => {
+      start();
+      const first = await connect();
+      const second = await connect();
+      first.connection.close();
+      await settled();
+      deepStrictEqual(leaseLists, [[1], [1, 2], [2]]);
+      second.connection.close();
+    });
+
+    it('hears nothing for a connection that was refused', async () => {
+      start();
+      await connect('wrong');
+      deepStrictEqual(leaseLists, []);
+    });
+
+    it('can tell the new lease something from the call, because the welcome came first', async () => {
+      handler.onLeasesChanged = leaseIds => {
+        controls[0]?.broadcast({owner: leaseIds[0] ?? 0});
+      };
+      start();
+      const client = await connect();
+      deepStrictEqual(client.received, [
+        {type: 'welcome', lease: 1, leases: [1], payload: {port: 49152}},
+        {type: 'message', body: {owner: 1}},
+      ]);
+    });
+
+    it('can tell every lease something at any time', async () => {
+      start();
+      const first = await connect();
+      const second = await connect();
+      controls[0]?.broadcast('hello from the handler');
+      await settled();
+      deepStrictEqual(
+        [first.received.at(-1), second.received.at(-1)],
+        [
+          {type: 'message', body: 'hello from the handler'},
+          {type: 'message', body: 'hello from the handler'},
+        ],
+      );
+    });
+
+    it('can end the helper, as a stop from a client does', async () => {
+      start();
+      const client = await connect();
+      controls[0]?.stop();
+      deepStrictEqual(
+        [await ending, client.closed, port.isListening(ENDPOINT)],
+        ['stopped', true, false],
+      );
+    });
   });
 
   async function endByDelayedCheck(): Promise<ServeEnd> {
