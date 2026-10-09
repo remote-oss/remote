@@ -7,8 +7,8 @@ harmless in slice 1, wrong for slice 3). Reviewing coder: `remote-coding-worker-
 
 ## 1. File boundary
 
-`packages/remote-ssh/src/pipeline/server-steps.ts`, `src/pipeline/parameters.ts` (the signature below), their tests.
-Nothing else.
+`packages/remote-ssh/src/pipeline/server-steps.ts`, `src/pipeline/parameters.ts` (the signature below),
+`src/pipeline/connection-step.ts` (rows 7–8 only), their tests. Nothing else.
 
 ## 2. Contract
 
@@ -30,6 +30,8 @@ export function parametersFor(input: ParameterInput, hostOperatingSystem: HostOp
 | terms `linux`, installExtensions on a reused server | the step's parameters carry `'linux'` |
 | terms `windows`, transfer after a probe that found `linux` | transfer uses the probed `linux` (the probe wins over the setting) |
 | the existing server-steps rows | unchanged |
+| `channelFor` throws inside `openConnectionStep` after the lease was taken | the lease is released before the step fails (today it leaks; #186 review) |
+| the connection step's lease | exposes `onNotice(listener)` and `answer(promptId, text)` of the `SharedConnection` unchanged (pass-through, no logic), so the window's prompt surface can subscribe and answer; one test each |
 
 ## 4. Rule for the worker
 
