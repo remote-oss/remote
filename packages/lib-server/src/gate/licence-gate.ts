@@ -129,19 +129,22 @@ async function askUserOrCancelled(
   termsUrl: string,
   cancellation: AbortSignal,
 ): Promise<ModalAnswer | 'cancelled'> {
+  let cancelledResolve: (value: 'cancelled') => void;
   const cancelled = new Promise<'cancelled'>(resolve => {
-    cancellation.addEventListener(
-      'abort',
-      () => {
-        resolve('cancelled');
-      },
-      {once: true},
-    );
+    cancelledResolve = resolve;
   });
-  return await Promise.race([
-    answerOf(modal, termsUrl, cancellation),
-    cancelled,
-  ]);
+  function onAbort(): void {
+    cancelledResolve('cancelled');
+  }
+  cancellation.addEventListener('abort', onAbort, {once: true});
+  try {
+    return await Promise.race([
+      answerOf(modal, termsUrl, cancellation),
+      cancelled,
+    ]);
+  } finally {
+    cancellation.removeEventListener('abort', onAbort);
+  }
 }
 
 /** The user's answer; a modal that throws, rejects or is dismissed without an answer is a "Cancel". */

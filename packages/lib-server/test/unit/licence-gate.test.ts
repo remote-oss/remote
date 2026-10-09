@@ -108,6 +108,51 @@ function gate(
   );
 }
 
+/** A counting AbortSignal: it records how often the gate adds and removes its abort listener. */
+function countingSignal(startedAborted = false): {
+  signal: AbortSignal;
+  adds: number;
+  removes: number;
+  abort: () => void;
+} {
+  let adds = 0;
+  let removes = 0;
+  let aborted = startedAborted;
+  const listeners = new Set<() => void>();
+  const signal = {
+    get aborted() {
+      return aborted;
+    },
+    addEventListener(type: string, listener: () => void) {
+      if (type === 'abort') {
+        adds += 1;
+        listeners.add(listener);
+      }
+    },
+    removeEventListener(type: string, listener: () => void) {
+      if (type === 'abort') {
+        removes += 1;
+        listeners.delete(listener);
+      }
+    },
+  } as unknown as AbortSignal;
+  return {
+    signal,
+    get adds() {
+      return adds;
+    },
+    get removes() {
+      return removes;
+    },
+    abort() {
+      aborted = true;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+  };
+}
+
 describe('classifyServerLicence (V6)', () => {
   it('F-3902.AC-14: a download from the update service is licensed, with the editor’s own terms link', () => {
     deepStrictEqual(classifyServerLicence(FROM_UPDATE_SERVICE, VSCODE_TERMS), {
@@ -318,6 +363,60 @@ describe('ensureAccepted (V6)', () => {
     const asking = gate(LICENSED, store, modal, controller.signal);
     controller.abort();
     deepStrictEqual([await asking, store.writes], [{kind: 'cancelled'}, []]);
+  });
+
+  it('the modal answers accept; then the signal aborts: the gate cleared and left no listener', async () => {
+    const counting = countingSignal();
+    const asking = gate(
+      LICENSED,
+      new MemoryStore(),
+      new ScriptedModal('accept'),
+      counting.signal,
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    counting.abort();
+    deepStrictEqual(
+      [await asking, counting.adds, counting.removes],
+      [{kind: 'cleared', acceptanceFlag: true, remembered: true}, 1, 1],
+    );
+  });
+
+  it('the modal answers cancel; then the signal aborts: licenceDeclined, no listener left', async () => {
+    const counting = countingSignal();
+    const asking = gate(
+      LICENSED,
+      new MemoryStore(),
+      new ScriptedModal('cancel'),
+      counting.signal,
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    counting.abort();
+    deepStrictEqual(
+      [await asking, counting.adds, counting.removes],
+      [{kind: 'licenceDeclined'}, 1, 1],
+    );
+  });
+
+  it('the signal aborts while the question is open: cancelled, the listener is removed', async () => {
+    const counting = countingSignal();
+    const store = new MemoryStore();
+    const modal = new ScriptedModal('accept');
+    const asking = gate(LICENSED, store, modal, counting.signal);
+    counting.abort();
+    deepStrictEqual(
+      [await asking, store.writes, counting.adds, counting.removes],
+      [{kind: 'cancelled'}, [], 1, 1],
+    );
+  });
+
+  it('the signal is already aborted: cancelled, no listener is added', async () => {
+    const counting = countingSignal(true);
+    const store = new MemoryStore();
+    const modal = new ScriptedModal('accept');
+    deepStrictEqual(
+      [await gate(LICENSED, store, modal, counting.signal), counting.adds],
+      [{kind: 'cancelled'}, 0],
+    );
   });
 
   it('a free server and a stored acceptance never read the signal', async () => {
