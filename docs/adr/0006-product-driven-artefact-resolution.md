@@ -112,5 +112,6 @@ commit <sha>`); the upstream `StatusError`/`WrappedError` text is a Debug dump, 
 Lint: the strings `codium`, `vscodium`, `code.visualstudio.com`, `vscode-server`, `.vscode-server` and
 `update.code.visualstudio.com` may appear only in `lib-product`'s table file and its tests (a `no-restricted-syntax`
 literal check or a grep in `tools/check-layout`). That table therefore also holds the licence-host list of F-3902
-rule 11, the VSCodium release prefixes and the dev tunnels service domain (constraint A7). Conformance: the
+rule 11, the VSCodium release prefixes, the dev tunnels service domain (constraint A7) and the allowed redirect
+hosts per source host (github.com → its release-asset hosts; 2026-10-08). Conformance: the
 synthetic-product profile passes.
