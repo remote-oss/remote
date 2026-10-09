@@ -40,3 +40,4 @@ export {
   type TunnelFactory,
   type TunnelFeatures,
 } from './window-tunnel/factory.ts';
+export {socksDialer, type SocksDialerInit} from './window-tunnel/socks.ts';
