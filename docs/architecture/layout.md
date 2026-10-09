@@ -51,6 +51,11 @@ remote/
 imports, coverage exclusions) moves out of shipped READMEs before any publication (#108), into the package's
 `MAINTAINERS.md` which `.vscodeignore` excludes.
 
+## The acceptance package
+
+`tests/acceptance` is a private workspace package that may import any extension or library; nothing imports it;
+it never ships (ruled 2026-10-08, card tooling-04).
+
 ## Libraries
 
 Confirmed by the container view (`c4-l2-containers.md` §1, 2026-10-06): `lib-log`, `lib-identifiers`,
