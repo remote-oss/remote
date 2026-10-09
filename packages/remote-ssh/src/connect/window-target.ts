@@ -31,7 +31,12 @@ export type ArgumentChoice = {picker: true} | {host: string};
  * other argument opens the picker.
  */
 export function argumentChoice(argument: unknown): ArgumentChoice {
-  if (!(argument instanceof Object)) {
+  if (
+    typeof argument !== 'object' ||
+    argument === null ||
+    Array.isArray(argument) ||
+    !Object.hasOwn(argument, 'host')
+  ) {
     return {picker: true};
   }
   const host = (argument as Record<string, unknown>).host;

@@ -73,6 +73,36 @@ describe('argumentChoice (card remote-ssh-02)', () => {
   it('F-2302.AC-27: a host with a user and a port is not split', () => {
     deepStrictEqual(argumentChoice({host: 'lab@h:22'}), {host: 'lab@h:22'});
   });
+
+  it('F-2301.AC-20 (C115): an inherited host opens the picker', () => {
+    deepStrictEqual(argumentChoice(Object.create({host: 'inherited'})), {
+      picker: true,
+    });
+  });
+
+  it('F-2301.AC-20 (C115): an array or function with a host opens the picker', () => {
+    deepStrictEqual(
+      {
+        array: argumentChoice(['ignored', 'alpha']),
+        functionWithHost: argumentChoice(
+          Object.assign(() => undefined, {host: 'fn'}),
+        ),
+      },
+      {
+        array: {picker: true},
+        functionWithHost: {picker: true},
+      },
+    );
+  });
+
+  it('F-2301.AC-20 (C115): a null-prototype object with an own host is the host', () => {
+    deepStrictEqual(
+      argumentChoice(Object.create(null, {host: {value: 'alpha'}})),
+      {
+        host: 'alpha',
+      },
+    );
+  });
 });
 
 describe('activeHostTarget (card remote-ssh-02)', () => {
