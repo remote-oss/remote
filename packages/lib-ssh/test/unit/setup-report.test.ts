@@ -1,0 +1,69 @@
+import {deepStrictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
+import {firstSetupMarker, setupMarkerOf} from '../../src/index.ts';
+
+const RECORDED = readFileSync(
+  path.join(
+    import.meta.dirname,
+    '..',
+    'fixtures',
+    'ssh-verbose-dynamic-forward.txt',
+  ),
+  'utf8',
+).split('\n');
+
+describe('the setup report of ssh -v (F-2105, F-2308 BR-5)', () => {
+  it('marks the line that says the login succeeded as authenticated', () => {
+    deepStrictEqual(
+      setupMarkerOf(
+        'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".',
+      ),
+      'authenticated',
+    );
+  });
+
+  it('marks it for a password login and for a host with a user name too', () => {
+    deepStrictEqual(
+      setupMarkerOf(
+        'Authenticated to example.invalid ([192.0.2.10]:2222) using "password".',
+      ),
+      'authenticated',
+    );
+  });
+
+  it('marks no debug line, not even one that says authentication', () => {
+    deepStrictEqual(
+      [
+        setupMarkerOf('debug1: Authentications that can continue: publickey'),
+        setupMarkerOf('debug1: Authenticated to 192.0.2.10 using "publickey".'),
+        setupMarkerOf('Authenticated to nobody'),
+        setupMarkerOf(''),
+      ],
+      [undefined, undefined, undefined, undefined],
+    );
+  });
+
+  it('finds the first marker in the lines of a recorded run, which is the line before forwarding is set up', () => {
+    const position = RECORDED.findIndex(
+      line => setupMarkerOf(line) !== undefined,
+    );
+    deepStrictEqual(
+      [firstSetupMarker(RECORDED), RECORDED[position + 1]],
+      [
+        'authenticated',
+        'debug1: Local connections to LOCALHOST:51530 forwarded to remote address socks:0',
+      ],
+    );
+  });
+
+  it('finds no marker in the lines of a run that did not log in', () => {
+    deepStrictEqual(
+      firstSetupMarker([
+        'debug1: Authentications that can continue: publickey',
+        'user@host: Permission denied (publickey).',
+      ]),
+      undefined,
+    );
+  });
+});

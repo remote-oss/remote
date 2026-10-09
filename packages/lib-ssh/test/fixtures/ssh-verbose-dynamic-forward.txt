@@ -1,0 +1,11 @@
+debug1: SSH2_MSG_SERVICE_ACCEPT received
+debug1: SSH2_MSG_EXT_INFO received
+debug1: Authentications that can continue: publickey
+debug1: Next authentication method: publickey
+debug1: Will attempt key: /home/user/.ssh/id_ed25519 ED25519 explicit
+debug1: Offering public key: /home/user/.ssh/id_ed25519 ED25519 explicit
+debug1: Server accepts key: /home/user/.ssh/id_ed25519 ED25519 explicit
+Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".
+debug1: Local connections to LOCALHOST:51530 forwarded to remote address socks:0
+debug1: Local forwarding listening on 127.0.0.1 port 51530.
+debug1: Entering interactive session.
