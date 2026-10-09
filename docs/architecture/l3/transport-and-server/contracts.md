@@ -328,7 +328,7 @@ record; after `start` the session stays as the forward's carrier and later runs 
 Rulings from the build (2026-10-08, #183): a run's script goes to the session's stdin as `sh -c '<quoted>'` between
 two marker lines carrying an unguessable per-run nonce, its input as a base64 here-document (bounded by the policy's
 `maximumInputBytes`; a larger input fails as `spawnFailed` and the caller uses `copyToHost`); lines before the start
-marker are login noise and dropped; the script's lines go to the asking lease only; the end marker carries `$?`.
+marker are login noise and dropped; the script's lines go to the asking lease only; the end marker carries `$?`. The run number is allocated by the connection (one counter per lease, so two channels over one connection never collide), never by a channel; a script of 128 KiB or more is refused before the run as `spawnFailed` (it travels as one `sh -c` argument and the system's E2BIG would not reach the output the session carries; the constant is a system fact, not a policy value; amended 2026-10-08, #183 delta).
 One run at a time, queued in arrival order; a run's deadline counts from its start, and a run past it ends the
 session (a wedged shell is indistinguishable), which every window hears as `transportLost`; when `ssh` ends, the run
 on it and the queued runs fail `channelClosed`. A cancelled run is abandoned, never killed (nothing on a plain stdin
