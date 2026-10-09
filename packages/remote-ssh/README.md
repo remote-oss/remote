@@ -1,9 +1,8 @@
-# remote-ssh
+# Remote - SSH
 
-Extension `remote-oss.remote-ssh` (Remote - SSH). The design notes and the test suite live in the
-`remote-oss/remote-ssh` repository.
+Work on any machine you can reach over SSH as if the code were on your own disk.
 
-Status: placeholder. Owner, feature ids and allowed imports will be added with the first feature.
+This extension is under development; its features arrive in coming releases.
 
 ## For maintainers
 

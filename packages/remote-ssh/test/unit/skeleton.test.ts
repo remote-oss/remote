@@ -89,6 +89,7 @@ describe('skeleton (card remote-ssh-00 table)', () => {
       'specification',
       'card',
       'conformance',
+      'feature id',
       'session',
       'worker',
       'lab',
