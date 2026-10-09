@@ -30,7 +30,10 @@ leaks. The repository is private while this is built; it becomes public with the
    the reference's listing copy runs below the wall before any copy ships.
 3. **Code names what things are, not where they came from.** A field that names the extension a package stands
    down for is `standsDownFor`, never `reference`; a comment explains an invariant, never a provenance.
-4. **The repository stays private through development.** Before publication, the architecture documents, the
+4. **The repository stays private through development.** The `docs/` tree splits (R-98, 2026-10-08): `docs/<extension>/`
+   (for example `docs/remote-ssh/`) is user documentation in the product's voice, covered by the public-surface lint,
+   and stays in the public repository; `docs/architecture/` and `docs/adr/` are the private working documents that
+   leave before publication. Before publication, the architecture documents, the
    catalogue, the binding rulings, the traceability matrices and every ADR passage that discusses the reference move
    to a private repository (`remote-oss/remote-architecture`) or are stripped; the published history starts clean
    (a fresh initial commit or a rewritten history, decided at that time by the user).
