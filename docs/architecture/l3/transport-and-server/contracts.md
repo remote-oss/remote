@@ -395,6 +395,10 @@ Rules inside the scripts:
 |---|---|---|---|
 | `probe` | H1, platform hint, requirements-check policy | host facts: OS, architecture token, libc family, release id, temp folder, login shell, tools, `SSH_AUTH_SOCK`, `DISPLAY` | `unsupportedPlatform`, `unsupportedArch`, `prerequisiteMissing` (F-2401, F-2402, F-2703), channel failures |
 
+Rule (from server-08's acceptance run, 2026-10-08): the probe script never depends on a command that fails when a
+glob has no match (`ls a b` under BusyBox); libc detection must report `musl` on Alpine, and the acceptance suite
+keeps a case for it.
+
 ### V3 install-planner
 
 | Operation | Inputs | Output | Failures |
