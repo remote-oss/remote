@@ -13,6 +13,10 @@
       "type": "object",
       "default": null,
       "scope": "application",
+      "additionalProperties": {
+        "type": "string",
+        "default": "127.0.0.1"
+      },
       "description": "Configures the host the VS Code server will bind to on the remote server. It defaults to IPv4 localhost and should only need modification in advanced cases.",
       "descriptionForm": "markdownDescription"
     },
@@ -35,12 +39,30 @@
       "key": "remote.SSH.defaultExtensions",
       "type": "array",
       "scope": "application",
+      "items": {
+        "type": "string"
+      },
       "description": "List of extensions that should be installed automatically on all SSH hosts."
     },
     {
       "key": "remote.SSH.defaultForwardedPorts",
       "type": "array",
       "default": [],
+      "items": {
+        "type": "object",
+        "required": ["remotePort"],
+        "properties": {
+          "remotePort": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "localPort": {
+            "type": "number"
+          }
+        }
+      },
       "description": "A list of ports to forward when the connection is established."
     },
     {
@@ -105,6 +127,9 @@
       "key": "remote.SSH.httpProxy",
       "type": ["string", "object"],
       "default": "",
+      "additionalProperties": {
+        "type": "string"
+      },
       "description": "Set the 'http_proxy' environment variable.  This will be set for install and launch of the remote VS Code Server. Provide a string to set for all hosts, or an object with per-host configuration. Kill existing server on the remote for this setting to take effect.",
       "descriptionForm": "markdownDescription"
     },
@@ -112,6 +137,9 @@
       "key": "remote.SSH.httpsProxy",
       "type": ["string", "object"],
       "default": "",
+      "additionalProperties": {
+        "type": "string"
+      },
       "description": "Set the 'https_proxy' environment variable.  This will be set for install and launch of the remote VS Code Server. Provide a string to set for all hosts, or an object with per-host configuration. Kill existing server on the remote for this setting to take effect.",
       "descriptionForm": "markdownDescription"
     },
@@ -174,6 +202,9 @@
       "type": ["string", "object"],
       "default": "",
       "tags": ["experimental"],
+      "additionalProperties": {
+        "type": "string"
+      },
       "description": "Execute the script at the provided path on **your local machine** before attempting an SSH connection. Provide a single string value to configure for all hosts, or provide an object with per-host configuration.  On Windows provide a **.ps1** script and on macOS/linux provide an executable **.sh** script.",
       "descriptionForm": "markdownDescription"
     },
@@ -199,6 +230,10 @@
       "key": "remote.SSH.remotePlatform",
       "type": "object",
       "scope": "application",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["macOS", "windows", "linux"]
+      },
       "description": "A map of the remote hostname to the platform for that remote. The hostname may include a star '*' to wildcard match. Valid values: `linux`, `macOS`, `windows`. Note - this setting will soon be required when `#remote.SSH.useLocalServer#` is disabled, so it is currently being autopopulated for successful connections, but is not currently used.",
       "descriptionForm": "markdownDescription"
     },
@@ -221,6 +256,9 @@
       "key": "remote.SSH.serverInstallPath",
       "type": "object",
       "scope": "application",
+      "additionalProperties": {
+        "type": "string"
+      },
       "description": "A map of remote host to absolute path where the VS Code server will be installed. By default the server is installed in the home directory of every remote. **Note**: By changing this setting you may need to clean up other installations of `.vscode-server` on your remote that isn't in the path you've configured.",
       "descriptionForm": "description"
     },
@@ -229,6 +267,9 @@
       "type": "object",
       "default": null,
       "scope": "application",
+      "additionalProperties": {
+        "type": "string"
+      },
       "description": "A map of the remote hostname to a range of ports you'd prefer the server to connect to on launch on the **remote** machine. If no free port is found in range, an error will be thrown. Valid ranges of the form `number-number` such as `4000-5000`; it's expected the first number will be lower than the next.",
       "descriptionForm": "markdownDescription"
     },
@@ -283,6 +324,9 @@
       "type": "array",
       "default": [],
       "scope": "application",
+      "items": {
+        "type": "string"
+      },
       "description": "**Deprecated**: Enables experimental support for connecting to Windows remotes. Add the names of windows remotes to this list.",
       "descriptionForm": "markdownDescription",
       "deprecationMessage": "Deprecated: Please use `#remote.SSH.remotePlatorm#` instead"
@@ -524,17 +568,10 @@
   ],
   "remoteHelp": {
     "remoteName": ["ssh-remote"],
-    "urls": {
-      "getStarted": "https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md",
-      "documentation": "https://github.com/remote-oss/remote/tree/main/docs/remote-ssh",
-      "issues": "https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh",
-      "feedback": "https://github.com/remote-oss/remote/issues/new/choose"
-    },
-    "commands": {
-      "opensshremotes.getHelp": "documentation",
-      "opensshremotes.getStarted": "getStarted",
-      "opensshremotes.provideFeedback": "feedback"
-    }
+    "getStarted": "https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md",
+    "documentation": "https://github.com/remote-oss/remote/tree/main/docs/remote-ssh",
+    "issues": "https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh",
+    "feedback": "https://github.com/remote-oss/remote/issues/new/choose"
   },
   "counts": {
     "commands": 17,

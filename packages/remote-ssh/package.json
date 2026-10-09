@@ -492,17 +492,10 @@
       "remoteName": [
         "ssh-remote"
       ],
-      "urls": {
-        "getStarted": "https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md",
-        "documentation": "https://github.com/remote-oss/remote/tree/main/docs/remote-ssh",
-        "issues": "https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh",
-        "feedback": "https://github.com/remote-oss/remote/issues/new/choose"
-      },
-      "commands": {
-        "opensshremotes.getHelp": "documentation",
-        "opensshremotes.getStarted": "getStarted",
-        "opensshremotes.provideFeedback": "feedback"
-      }
+      "getStarted": "https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md",
+      "documentation": "https://github.com/remote-oss/remote/tree/main/docs/remote-ssh",
+      "feedback": "https://github.com/remote-oss/remote/issues/new/choose",
+      "issues": "https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh"
     }
   },
   "dependencies": {

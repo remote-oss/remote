@@ -23,6 +23,8 @@ const SETTING_FIELDS = [
   'maximum',
   'pattern',
   'tags',
+  'items',
+  'additionalProperties',
   'description',
   'descriptionForm',
   'deprecationMessage',
@@ -95,8 +97,7 @@ export function stripInventory(source: unknown): JsonObject {
     internalCommands,
     remoteHelp: {
       remoteName: inventory.remoteHelp.remoteName,
-      urls: inventory.remoteHelp.urls,
-      commands: inventory.remoteHelp.commands,
+      ...(inventory.remoteHelp.urls as JsonObject),
     },
     counts: inventory.counts,
   };

@@ -68,10 +68,7 @@ interface Manifest {
     };
     menus?: Record<string, Array<Record<string, unknown>>>;
     resourceLabelFormatters?: Array<Record<string, unknown>>;
-    remoteHelp?: Record<
-      string,
-      {urls?: Record<string, string>; commands?: Record<string, string>}
-    >;
+    remoteHelp?: Record<string, unknown>;
   };
 }
 
@@ -81,6 +78,16 @@ type TableEntry = {id: string} & Record<string, unknown>;
 /** Reads a JSON file of the package. */
 function read(file: string): unknown {
   return JSON.parse(readFileSync(path.join(PACKAGE, file), 'utf8'));
+}
+
+/** The English string table. */
+function englishTable(): Record<string, unknown> {
+  return read('package.nls.json') as Record<string, unknown>;
+}
+
+/** The name inside a `%name%` reference, or null when the value is not a key. */
+function nlsKey(value: unknown): string | null {
+  return /^%[\w.]+%$/.test(String(value)) ? String(value).slice(1, -1) : null;
 }
 
 function manifest(): Manifest {
@@ -130,6 +137,8 @@ interface InventorySetting {
   maximum?: number;
   pattern?: string;
   tags?: string[];
+  items?: Record<string, unknown>;
+  additionalProperties?: Record<string, unknown>;
   deprecationMessage?: string;
   markdownDeprecationMessage?: string;
   description: string;
@@ -179,6 +188,8 @@ function settingFields(
     maximum: value.maximum,
     pattern: value.pattern,
     tags: value.tags,
+    items: value.items,
+    additionalProperties: value.additionalProperties,
     deprecationMessage: value.deprecationMessage,
     markdownDeprecationMessage: value.markdownDeprecationMessage,
   };
@@ -452,23 +463,16 @@ describe('manifest (card remote-ssh-01 table)', () => {
     ]);
   });
 
-  it('remoteHelp: the flat object with remoteName, the four urls, the help commands', () => {
+  it('remoteHelp: the flat object with remoteName and the four urls', () => {
     deepStrictEqual(manifest().contributes?.remoteHelp, {
       remoteName: ['ssh-remote'],
-      urls: {
-        documentation:
-          'https://github.com/remote-oss/remote/tree/main/docs/remote-ssh',
-        feedback: 'https://github.com/remote-oss/remote/issues/new/choose',
-        getStarted:
-          'https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md',
-        issues:
-          'https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh',
-      },
-      commands: {
-        'opensshremotes.getHelp': 'documentation',
-        'opensshremotes.getStarted': 'getStarted',
-        'opensshremotes.provideFeedback': 'feedback',
-      },
+      getStarted:
+        'https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md',
+      documentation:
+        'https://github.com/remote-oss/remote/tree/main/docs/remote-ssh',
+      feedback: 'https://github.com/remote-oss/remote/issues/new/choose',
+      issues:
+        'https://github.com/remote-oss/remote/issues?q=is%3Aissue%20label%3Aext%3Aremote-ssh',
     });
   });
 
@@ -648,13 +652,14 @@ describe('manifest (card remote-ssh-01 table)', () => {
           .filter(settingRow => settingRow.declared !== false)
           .map(settingRow => {
             const schema = properties[settingRow.key] ?? {};
+            const descriptionKey = nlsKey(schema[descriptionForm(schema)]);
             return {
               key: settingRow.key,
               fields: settingFields(schema, settingRow.type as string[]),
               form: descriptionForm(schema),
-              formIsKey: /^%[\w.]+%$/.test(
-                String(schema[descriptionForm(schema)]),
-              ),
+              formIsKey: descriptionKey !== null,
+              nlsValue:
+                descriptionKey === null ? null : englishTable()[descriptionKey],
             };
           }),
         commands: commands.map(commandRow => {
@@ -694,6 +699,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
                 ? 'markdownDescription'
                 : 'description',
             formIsKey: true,
+            nlsValue: settingRow.description,
           })),
         commands: commands.map(commandRow => ({
           id: commandRow.id,

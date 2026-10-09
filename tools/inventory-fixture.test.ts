@@ -65,7 +65,10 @@ const INVENTORY = {
   authority: {prefix: 'acme', spec: 'F-0007'},
   remoteHelp: {
     remoteName: ['acme'],
-    urls: {documentation: 'https://example.invalid/docs'},
+    urls: {
+      getStarted: 'https://example.invalid/start',
+      documentation: 'https://example.invalid/docs',
+    },
     commands: {'acme.open': 'documentation'},
     spec: 'F-0008',
   },
@@ -119,11 +122,35 @@ describe('inventory-fixture', () => {
       ],
       remoteHelp: {
         remoteName: ['acme'],
-        urls: {documentation: 'https://example.invalid/docs'},
-        commands: {'acme.open': 'documentation'},
+        getStarted: 'https://example.invalid/start',
+        documentation: 'https://example.invalid/docs',
       },
       counts: {commands: 2, settingsListed: 2},
     });
+  });
+
+  it('keeps the items and additionalProperties of a setting schema', () => {
+    const fixture = stripInventory({
+      ...INVENTORY,
+      settings: [
+        {
+          ...INVENTORY.settings[0],
+          items: {type: 'string'},
+          additionalProperties: {type: 'string', default: '127.0.0.1'},
+        },
+      ],
+    });
+    deepStrictEqual(fixture.settings, [
+      {
+        key: 'acme.timeout',
+        type: 'number',
+        default: 15,
+        scope: 'application',
+        items: {type: 'string'},
+        additionalProperties: {type: 'string', default: '127.0.0.1'},
+        description: 'The wait.',
+      },
+    ]);
   });
 
   it('keeps the activation events as strings', () => {
