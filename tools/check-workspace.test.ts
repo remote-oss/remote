@@ -69,7 +69,10 @@ describe('check-workspace', () => {
     workspace.remove();
   });
 
-  it('accepts declared workspace dependencies on libraries, with their links and references', () => {
+  it('accepts declared workspace dependencies on libraries, with their links and references', function () {
+    // Each test spawns tsc --listFilesOnly, which the CI runner runs more than five times slower
+    // than locally.
+    this.timeout(10_000);
     manifest('remote-a', {
       dependencies: {'lib-x': 'workspace:*'},
       devDependencies: {mocha: 'catalog:'},
@@ -492,7 +495,8 @@ describe('check-workspace', () => {
       ]);
     });
 
-    it('reports installed links that reach a workspace package another way', () => {
+    it('reports installed links that reach a workspace package another way', function () {
+      this.timeout(10_000);
       link('node_modules/root-b', 'packages/remote-b');
       link('packages/remote-a/node_modules/wsl', 'packages/remote-b');
       link('packages/remote-a/node_modules/@s/x', 'packages/lib-x');
