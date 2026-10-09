@@ -84,7 +84,7 @@ into both, so only `${os}` and `${arch}` remain; `${release}` resolves from `ver
 honours `VSCODE_CLI_SERVER_DOWNLOAD_URL_TEMPLATE`, `VSCODE_CLI_COMMIT` and `VSCODE_CLI_QUALITY` at run time (set
 together whenever the CLI might not match the client; templates pre-expanded except os/arch), never falls back to a
 feed, and installs under `--cli-data-dir ~/<serverDataFolderName>/cli` → `cli/servers/<Quality>-<commit>/server/`;
-the CLI archive contains one file named `<applicationName>`; alpine x64/arm64 and linux armhf builds exist; errors come
+the CLI archive contains one file named `<applicationName>`; alpine x64/arm64, linux armhf, and (2026-10-09) linux ppc64le and s390x builds exist, so `${arch}` of the CLI template also takes `ppc64le` and `s390x` with os `linux`; the only server platforms without a CLI are riscv64 and loong64 (the family's first-slice policy then says: no CLI path for those two, the script path serves them); errors come
 back in the serve reply (`StatusError` with url and status; `WrappedError` for templates), no separate stderr line;
 no licence prompt, no device flow, no telemetry during an install. Only the patch's two messages are stable (`cannot expand ${name} for commit <sha> …`, `the download is not
 commit <sha>`); the upstream `StatusError`/`WrappedError` text is a Debug dump, so the extension matches `url:`,
