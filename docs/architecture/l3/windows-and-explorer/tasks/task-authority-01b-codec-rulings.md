@@ -9,7 +9,7 @@ exports beyond `decodeOuter`'s injection type. Nothing else.
 
 ## 2. Contract
 
-1. A JSON payload whose decoded text starts with U+FEFF is malformed `badJson`.
+1. A JSON payload whose decoded text starts with U+FEFF is malformed `badJson`: that is, the hex decodes and the text after the BOM begins with `{`; a hex payload whose text is not JSON stays the plain host as written (`efbbbf61` is a host name; clarified 2026-10-09, #193).
 2. Host names (plain text and JSON `hostName`) containing a character of Unicode category Zs other than U+0020, or
    U+2028, U+2029, or a C1 control U+0080–U+009F, are malformed: `whitespace` for the separators, `control` for the C1
    range (the ASCII rules are unchanged; U+0020 stays `whitespace`).
@@ -41,6 +41,7 @@ exports beyond `decodeOuter`'s injection type. Nothing else.
 | Given | Expected |
 |---|---|
 | hex of `'﻿{"hostName":"h"}'` | malformed `badJson` |
+| plain `'efbbbf61'` (hex of a BOM and `a`, not JSON) | the plain host `efbbbf61` |
 | plain `'a b'` (no-break space), `'a　b'` (ideographic space) | malformed `whitespace` |
 | plain `'a b'`, `'a b'` | malformed `whitespace` |
 | plain `'a\u0085b'`, `'a\u009Fb'` | malformed `control` |
