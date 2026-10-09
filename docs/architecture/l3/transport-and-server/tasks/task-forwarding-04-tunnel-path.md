@@ -62,7 +62,7 @@ PR title `lib-forwarding: tunnel path selection (card forwarding-04)`. Reviewer:
 ## 6. Open rows (stop and report)
 
 1. Ruled 2026-10-10 (#244): `userForwardingHolder('socket', …)` is `tunnelSsh`; the signature takes every `TunnelPath`
-   and one row covers it; a spec question on F-2104 confirms the holder.
+   and one row covers it; the spec question remote-oss/remote-ssh#22 (issuecomment-6086394267, filed 2026-10-10) confirms the holder.
 2. Ruled 2026-10-10 (#244): stays unimplemented. F-2104 BR-11 states the removal for `installConnection` only; OpenSSH's
    `ClearAllForwardings` clears command-line forwardings too, so the local connection server's own `-D` would go as
    well, and the family adds no option to prevent it (S2). What the reference does there is a spec question on F-2104
