@@ -103,5 +103,11 @@ PR title `lib-authority: package and codecs (card authority-01)`. Reviewer: `rem
 
 ## 6. Open rows (stop and report)
 
+Rulings of 2026-10-08 (follow-up card authority-01b applies them to #153): a BOM-prefixed JSON payload is `badJson`;
+non-ASCII whitespace (Zs, line and paragraph separators) and C1 controls U+0080–U+009F are rejected like ASCII ones;
+an empty JSON `user` is treated as absent; `label` returns ids or raw text only (the WSL default-distro label is the
+id `wsl.defaultDistro`, resolved by the package's l10n); no import cycle: the container codec takes a `decodeOuter`
+function from the registry instead of importing it.
+
 Windows client user-name forms are provisional (lab) and not in this card. If `[::1]` handling conflicts with the
 hex JSON form (a JSON hostName `::1` encodes without brackets), keep JSON as written and report.

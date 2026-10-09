@@ -44,6 +44,12 @@ behaviour over a table, because a library never imports an extension (layout rul
 
 ## 2. lib-standdown
 
+The warning helper takes the message text and the target extension id from the package (remote-ssh: F-2001 3.4 and
+AC-29: non-modal, source "Remote - SSH", one button "Show Other Extension" opening the Extensions view filtered by
+the other extension's `@id`, once per activation that stands down, no placeholders; the text mentions reloading the
+window because of R-78). The mechanism is shared; the strings are each package's (recorded 2026-10-08).
+
+
 | Operation | Input | Output | Failure |
 |---|---|---|---|
 | `standDownIfReferencePresent` | the reference id (from the package's identity decision), the standing-down key (optional: a package that gates nothing passes none, and no context key is set; ssh-edit, pending its F-4901 revision), the warning text and button label (the package's own strings: F-0101, F-3901, F-5001, F-8901) | `standing` or `serving` | none. The lookup is the stable `extensions.getExtension(id)` in the extension's own host. It sees the reference only while core runs it, and a disabled reference is invisible [oss], as R-54 requires (F-5901 step 1) |
