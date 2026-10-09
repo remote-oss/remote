@@ -14,6 +14,15 @@
 
 # Task card remote-ssh-01: package skeleton and manifest of remote-oss.remote-ssh
 
+> **Scope as of 2026-10-09 (the package exists on main with the pipeline, the programs, the shipped README and seven
+> workspace dependencies; the skeleton rows below are superseded):** this card owns ONLY the manifest's `contributes`,
+> `activationEvents`, `publisher`, `displayName`, `description`, `keywords`, `engines`, `extensionKind`, `capabilities`
+> and `extensionPack` (§2.1 and §2.2 as written), the 15 `package.nls*.json` files, `identifiers.json` and the generated
+> table, and it rewrites `test/unit/skeleton.test.ts` to the §3 rows. It does NOT touch `README.md`, `src/extension.ts`
+> (#139's), `coverage.json` (except one exclusion for the generated table, already present), the existing dependencies
+> or any existing source or test. The lines of §1, §2.3's README/extension/coverage rows and §3's README/extension rows
+> no longer apply; §3's forbidden-words row runs over the nls values only.
+
 Brief: identity decision F-3901 (remote-oss/remote-ssh#78), activation F-2001 (#11), localization F-2002 (#12), settings
 and Windows notes F-3908 (#85, adds nothing). Contract: `../contracts.md` §1. Reviewing coder: `remote-coding-worker-1`.
 ADR-0007 (engines from the root constant) and ADR-0008 (product voice in every shipped word) apply.

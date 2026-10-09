@@ -44,8 +44,8 @@ As card log-01; names of four characters or more; no comment beyond what the gui
 
 ## 5. Gates and review
 
-PR title `remote-ssh: host label (card remote-ssh-03)`; depends on the remote-ssh skeleton (card remote-ssh-00) on
-main.
+PR title `remote-ssh: host label (card remote-ssh-03)`; the package exists on main (pipeline merged 2026-10-09); `src/window/` is new; nothing else
+changes.
 
 ## 6. Open rows
 
