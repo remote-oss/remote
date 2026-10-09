@@ -104,7 +104,11 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
     });
   });
   function leasesChanged(): void {
-    handler.onLeasesChanged?.(table.live().map(live => live.leaseId));
+    try {
+      handler.onLeasesChanged?.(table.live().map(live => live.leaseId));
+    } catch (caught) {
+      logLine(`the handler failed on a lease change: ${failureText(caught)}`);
+    }
   }
   handler.attach?.({
     broadcast: body => {

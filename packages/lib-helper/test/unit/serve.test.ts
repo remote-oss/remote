@@ -284,6 +284,18 @@ describe('serve', () => {
       second.connection.close();
     });
 
+    it('logs a handler that throws on a lease change and keeps serving', async () => {
+      handler.onLeasesChanged = () => {
+        throw new Error('consumer bug');
+      };
+      start();
+      const client = await connect();
+      deepStrictEqual(
+        [logged, client.received.length],
+        [['the handler failed on a lease change: consumer bug'], 1],
+      );
+    });
+
     it('hears nothing for a connection that was refused', async () => {
       start();
       await connect('wrong');
