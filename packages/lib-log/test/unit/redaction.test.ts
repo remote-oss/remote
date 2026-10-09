@@ -87,3 +87,42 @@ describe('redaction (card log-01 table, the secret rows)', () => {
     strictEqual(redact('x', ['']), 'x');
   });
 });
+
+describe('redaction (card log-03 rows, the id carve-out)', () => {
+  it('log-03: server-<commit>-<epoch> stays readable', () => {
+    strictEqual(
+      redact(`server-${COMMIT_ID}-1728000000000`, []),
+      `server-${COMMIT_ID}-1728000000000`,
+    );
+  });
+
+  it('log-03: a 40-hex id and a 32-letter run across a hyphen -> the id kept, the run marked', () => {
+    strictEqual(
+      redact(`${COMMIT_ID}-${'a'.repeat(32)}`, []),
+      `${COMMIT_ID}-[redacted]`,
+    );
+  });
+
+  it('log-03: a UUID (36 characters with its hyphens) is redacted as one run', () => {
+    strictEqual(
+      redact('lease 123e4567-e89b-12d3-a456-426614174000 ended', []),
+      'lease [redacted] ended',
+    );
+  });
+
+  it('log-03: a 64-hex digest and a 40-hex id across a hyphen -> unchanged', () => {
+    strictEqual(redact(`${DIGEST}-${COMMIT_ID}`, []), `${DIGEST}-${COMMIT_ID}`);
+  });
+});
+
+describe('redaction (the outer-hyphen trim of a run)', () => {
+  it('a run of 32 letters between two hyphens -> the hyphens kept, the letters marked', () => {
+    strictEqual(redact(`-${'a'.repeat(32)}-`, []), '-[redacted]-');
+  });
+});
+
+describe('redaction (a candidate whose trimmed run is short)', () => {
+  it('a 32-character candidate that trims below 32 stays untouched', () => {
+    strictEqual(redact(`-${'a'.repeat(30)}-`, []), `-${'a'.repeat(30)}-`);
+  });
+});
