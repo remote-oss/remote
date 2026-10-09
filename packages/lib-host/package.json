@@ -3,8 +3,17 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts",
-    "./testing/recording-channel": "./src/testing/recording-channel.ts",
-    "./testing/channel-contract": "./src/testing/channel-contract.ts"
+    ".": {
+      "types": "./.tsc/src/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./testing/recording-channel": {
+      "types": "./.tsc/src/testing/recording-channel.d.ts",
+      "default": "./src/testing/recording-channel.ts"
+    },
+    "./testing/channel-contract": {
+      "types": "./.tsc/src/testing/channel-contract.d.ts",
+      "default": "./src/testing/channel-contract.ts"
+    }
   }
 }

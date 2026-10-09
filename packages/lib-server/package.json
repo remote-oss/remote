@@ -3,9 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts",
-    "./testing/fake-clock": "./src/testing/fake-clock.ts",
-    "./testing/memory-lock-port": "./src/testing/memory-lock-port.ts"
+    ".": {
+      "types": "./.tsc/src/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./testing/fake-clock": {
+      "types": "./.tsc/src/testing/fake-clock.d.ts",
+      "default": "./src/testing/fake-clock.ts"
+    },
+    "./testing/memory-lock-port": {
+      "types": "./.tsc/src/testing/memory-lock-port.d.ts",
+      "default": "./src/testing/memory-lock-port.ts"
+    }
   },
   "dependencies": {
     "lib-host": "workspace:*",

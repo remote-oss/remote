@@ -1,3 +1,14 @@
 {
-  "extends": "../../tsconfig.base.json"
+  "extends": "../../tsconfig.base.json",
+  "references": [
+    {
+      "path": "../lib-host"
+    },
+    {
+      "path": "../lib-log"
+    },
+    {
+      "path": "../lib-product"
+    }
+  ]
 }

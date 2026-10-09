@@ -1,5 +1,27 @@
 {
   "extends": "../../tsconfig.base.json",
-  // The declaration files of the editor's proposed API, which the package's code compiles against.
-  "include": ["${configDir}/src", "${configDir}/vscode-dts"]
+  "include": ["${configDir}/src", "${configDir}/vscode-dts"],
+  "references": [
+    {
+      "path": "../lib-authority"
+    },
+    {
+      "path": "../lib-helper"
+    },
+    {
+      "path": "../lib-host"
+    },
+    {
+      "path": "../lib-log"
+    },
+    {
+      "path": "../lib-product"
+    },
+    {
+      "path": "../lib-server"
+    },
+    {
+      "path": "../lib-ssh"
+    }
+  ]
 }

@@ -3,7 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts",
-    "./testing/*": "./src/testing/*.ts"
+    ".": {
+      "types": "./.tsc/src/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./testing/*": {
+      "types": "./.tsc/src/testing/*.d.ts",
+      "default": "./src/testing/*.ts"
+    }
   }
 }
