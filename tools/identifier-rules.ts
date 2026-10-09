@@ -132,10 +132,44 @@ function exempts(exemption: UngatedEntry, entry: MenuEntry): boolean {
 
 /** Whether a when clause gates its entry: the clause that tests for the other extension followed by the negated key, or that alone. */
 function isGated(when: string, standingDownKey: string): boolean {
+  return alternatives(when).every(alternative =>
+    gatedAlternative(alternative, standingDownKey),
+  );
+}
+
+/**
+ * The top-level `||` alternatives of a when clause. A `||` inside parentheses is not a top-level separator, so a
+ * clause without any top-level `||` has a single alternative (the whole clause).
+ */
+function alternatives(when: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < when.length; index += 1) {
+    const character = when[index] ?? '';
+    if (character === '(') {
+      depth += 1;
+    } else if (character === ')') {
+      depth -= 1;
+    } else if (character === '|' && depth === 0 && when[index + 1] === '|') {
+      parts.push(when.slice(start, index));
+      index += 1;
+      start = index + 1;
+    }
+  }
+  parts.push(when.slice(start));
+  return parts.map(part => part.trim());
+}
+
+/** Whether one alternative gates: the negated key alone, or the key once, ending the alternative. */
+function gatedAlternative(
+  alternative: string,
+  standingDownKey: string,
+): boolean {
   return (
-    when === `!${standingDownKey}` ||
-    (when.endsWith(` && !${standingDownKey}`) &&
-      occurrences(when, standingDownKey) === 1)
+    alternative === `!${standingDownKey}` ||
+    (alternative.endsWith(` && !${standingDownKey}`) &&
+      occurrences(alternative, standingDownKey) === 1)
   );
 }
 
@@ -157,6 +191,20 @@ function gatingProblems(
         );
       }
     } else if (!isGated(when, standingDownKey)) {
+      const alts = alternatives(when);
+      let missingAlternative: string | undefined;
+      for (const alternative of alts) {
+        if (!gatedAlternative(alternative, standingDownKey)) {
+          missingAlternative = alternative;
+          break;
+        }
+      }
+      if (missingAlternative !== undefined && alts.length > 1) {
+        problems.push(
+          `${describeEntry(entry)}: alternative '${missingAlternative}' must end in ' && !${standingDownKey}', or be '!${standingDownKey}', naming the key once (stand-down gating)`,
+        );
+        continue;
+      }
       problems.push(
         `${describeEntry(entry)} must end its when clause in ' && !${standingDownKey}', or be '!${standingDownKey}', naming the key once (stand-down gating)`,
       );
