@@ -224,6 +224,7 @@ describe('installExtensions when the host does not answer as expected', () => {
   async function answered(
     lines: readonly string[],
     ending: ScriptEnding = {kind: 'exit', status: 0},
+    limits: {cancellation?: AbortSignal; deadlineMilliseconds?: number} = {},
   ): Promise<[ExtensionsOutcome, string[]]> {
     const sink = new MemorySink();
     const channel = new RecordingChannel({
@@ -238,7 +239,8 @@ describe('installExtensions when the host does not answer as expected', () => {
       parametersFor(),
       ['one.alpha'],
       createLogger(sink, {minimumLevel: () => 'info'}),
-      NEVER_CANCELLED,
+      limits.cancellation ?? NEVER_CANCELLED,
+      limits.deadlineMilliseconds,
     );
     return [
       outcome,
@@ -289,5 +291,34 @@ describe('installExtensions when the host does not answer as expected', () => {
       failure: {kind: 'channelClosed', detail: 'ended'},
     });
     deepStrictEqual(outcome, {kind: 'notRun', reason: 'channelFailed'});
+  });
+
+  it('gives up a stalled step at its deadline, and logs the extension as not installed', async () => {
+    deepStrictEqual(
+      await answered(
+        [],
+        {kind: 'holdUntilCancelled'},
+        {deadlineMilliseconds: 20},
+      ),
+      [
+        {kind: 'notRun', reason: 'deadline'},
+        ['warn default extension not installed: one.alpha: deadline'],
+      ],
+    );
+  });
+
+  it('is cancelled by the caller without a log line for each extension', async () => {
+    const controller = new AbortController();
+    setTimeout(() => {
+      controller.abort();
+    }, 20);
+    deepStrictEqual(
+      await answered(
+        [],
+        {kind: 'holdUntilCancelled'},
+        {cancellation: controller.signal},
+      ),
+      [{kind: 'notRun', reason: 'cancelled'}, []],
+    );
   });
 });

@@ -7,7 +7,7 @@
 import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {ScriptParameters} from '../scripts/bootstrap.ts';
-import {runStep} from './run-step.ts';
+import {runStep, type StepRun} from './run-step.ts';
 
 /** Whether an extension entry has the shape `<publisher>.<name>` of an extension identifier. */
 export function isExtensionIdentifier(entry: string): boolean {
@@ -44,9 +44,12 @@ export interface ExtensionResult {
   message: string;
 }
 
-/** Why the host was not asked, or did not answer. */
+/** Why the host was not asked, or did not answer: `cancelled` by the caller, `deadline` for the step's time limit. */
 export type ExtensionsNotRun =
-  'channelFailed' | 'noResultBlock' | 'scriptFailed';
+  'cancelled' | 'deadline' | 'channelFailed' | 'noResultBlock' | 'scriptFailed';
+
+/** How long the whole install may take before the step is given up and the connection goes on. */
+const EXTENSIONS_DEADLINE_MILLISECONDS = 120_000;
 
 /** How the install of the default extensions ended; it is never an error. */
 export type ExtensionsOutcome =
@@ -65,10 +68,29 @@ function logResult(logger: Logger, result: ExtensionResult): void {
   }
 }
 
+/** Why a step run that did not end in an `Ok` result did not install anything. */
+function notRunReason(
+  stepRun: StepRun,
+  cancellation: AbortSignal,
+): ExtensionsNotRun {
+  if (stepRun.kind === 'result') {
+    return 'scriptFailed';
+  }
+  if (stepRun.kind === 'noResultBlock') {
+    return stepRun.kind;
+  }
+  if (stepRun.failure.kind !== 'cancelled') {
+    return 'channelFailed';
+  }
+  return cancellation.aborted ? 'cancelled' : 'deadline';
+}
+
 /**
  * Installs the default extensions on the host of a server that already runs, one after the other. Entries that are
- * not extension identifiers are dropped, and with none left the host is not contacted. Every failure, of one
- * extension or of the whole step, is logged per extension and returned as a value.
+ * not extension identifiers are dropped, and with none left the host is not contacted. The step has a deadline, after
+ * which it is given up and the extensions are logged as not installed. Every failure, of one extension or of the
+ * whole step, is logged per extension and returned as a value; a cancellation by the caller is returned without
+ * a log line per extension.
  */
 export async function installExtensions(
   channel: HostChannel,
@@ -76,6 +98,7 @@ export async function installExtensions(
   entries: readonly string[],
   logger: Logger,
   cancellation: AbortSignal,
+  deadlineMilliseconds: number = EXTENSIONS_DEADLINE_MILLISECONDS,
 ): Promise<ExtensionsOutcome> {
   const extensions = keptExtensions(entries, logger);
   if (extensions.length === 0) {
@@ -85,11 +108,18 @@ export async function installExtensions(
     channel,
     {installMode: 'singleScript', step: 'installExtensions'},
     {...base, start: {...base.start, extensions}},
-    {cancellation},
+    {
+      cancellation: AbortSignal.any([
+        cancellation,
+        AbortSignal.timeout(deadlineMilliseconds),
+      ]),
+    },
   );
   if (stepRun.kind !== 'result' || stepRun.block.status !== 'Ok') {
-    const reason: ExtensionsNotRun =
-      stepRun.kind === 'result' ? 'scriptFailed' : stepRun.kind;
+    const reason = notRunReason(stepRun, cancellation);
+    if (reason === 'cancelled') {
+      return {kind: 'notRun', reason};
+    }
     for (const extension of extensions) {
       logger.warn(`default extension not installed: ${extension}: ${reason}`);
     }
