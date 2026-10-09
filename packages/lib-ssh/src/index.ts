@@ -168,6 +168,7 @@ export {
   SharedConnection,
 } from './connection-server/client.ts';
 export {
+  EXEC_ARGUMENT_LIMIT_BYTES,
   type SessionRunner,
   SharedSessionChannel,
   type SharedSessionChannelOptions,

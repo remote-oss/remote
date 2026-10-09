@@ -373,7 +373,6 @@ describe('the window side of the shared connection (S9)', () => {
     const lines: string[] = [];
     const running = connection.runOnSession(
       {
-        runId: 1,
         script: 'echo hello',
         inputBase64: null,
         deadlineMilliseconds: 1000,
@@ -391,13 +390,39 @@ describe('the window side of the shared connection (S9)', () => {
     );
   });
 
+  it('gives each script its own lines when two run through one connection', async () => {
+    const {connection, outcome} = await connectFirst();
+    sshRuns.started[0]?.error(AUTHENTICATED);
+    await outcome;
+    const request = {
+      script: 'echo',
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    };
+    const first: string[] = [];
+    const second: string[] = [];
+    const runs = Promise.all([
+      connection.runOnSession(request, line => first.push(line), 5000),
+      connection.runOnSession(request, line => second.push(line), 5000),
+    ]);
+    await drive();
+    sshRuns.started[0]?.output(
+      'askpass-nonce:start\none\naskpass-nonce:end 0\n',
+    );
+    await drive();
+    sshRuns.started[0]?.output(
+      'askpass-nonce:start\ntwo\naskpass-nonce:end 0\n',
+    );
+    await driven(runs);
+    deepStrictEqual([first, second], [['one'], ['two']]);
+  });
+
   it('fails a script that was not answered in the time it was given', async () => {
     const {connection, outcome} = await connectFirst();
     sshRuns.started[0]?.error(AUTHENTICATED);
     await outcome;
     const running = connection.runOnSession(
       {
-        runId: 1,
         script: 'sleep 100',
         inputBase64: null,
         deadlineMilliseconds: 100000,
@@ -424,7 +449,6 @@ describe('the window side of the shared connection (S9)', () => {
       await driven(
         connection.runOnSession(
           {
-            runId: 1,
             script: 'x',
             inputBase64: null,
             deadlineMilliseconds: 1000,

@@ -260,7 +260,6 @@ class LoginWait {
 
 /** A script to run on the shared session. */
 export interface SessionRun {
-  runId: number;
   script: string;
   /** What the script reads, as base64; null for none. */
   inputBase64: string | null;
@@ -286,6 +285,7 @@ export class SharedConnection {
   private readonly listeners = new Set<(notice: ConnectionNotice) => void>();
   private readonly openPrompts = new Set<number>();
   private readonly lineListeners = new Map<number, (line: string) => void>();
+  private lastRunId = 0;
   private watcher:
     ((event: ConnectionEvent | 'helperGone') => void) | undefined;
 
@@ -375,12 +375,14 @@ export class SharedConnection {
     onLine: (line: string) => void,
     waitMilliseconds: number,
   ): Promise<SessionRunEnd> {
-    this.lineListeners.set(script.runId, onLine);
+    this.lastRunId += 1;
+    const runId = this.lastRunId;
+    this.lineListeners.set(runId, onLine);
     const outcome = await this.lease.request(
-      {type: 'runScript', ...script},
+      {type: 'runScript', runId, ...script},
       waitMilliseconds,
     );
-    this.lineListeners.delete(script.runId);
+    this.lineListeners.delete(runId);
     if (outcome.kind === 'timeout') {
       return {kind: 'failed', reason: 'timeout', detail: 'no end in time'};
     }

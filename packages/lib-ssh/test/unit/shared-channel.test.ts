@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type {CopyRequest, ScriptRequest} from 'lib-host';
 import {
+  EXEC_ARGUMENT_LIMIT_BYTES,
   type LocalFiles,
   type SessionRun,
   type SessionRunEnd,
@@ -83,14 +84,39 @@ describe('the host channel over the shared session', () => {
     );
   });
 
-  it('numbers its runs one after the other', async () => {
-    const shared = channel();
-    await shared.runScript(REQUEST, () => undefined);
-    await shared.runScript(REQUEST, () => undefined);
-    deepStrictEqual(
-      runs.map(started => started.runId),
-      [1, 2],
+  it('runs a script one byte under the limit of an exec argument', async () => {
+    await channel().runScript(
+      {...REQUEST, script: 'x'.repeat(EXEC_ARGUMENT_LIMIT_BYTES - 1)},
+      () => undefined,
     );
+    deepStrictEqual(runs.length, 1);
+  });
+
+  it('refuses a script at the limit of an exec argument, saying why, before it runs anything', async () => {
+    const outcome = await channel().runScript(
+      {...REQUEST, script: 'x'.repeat(EXEC_ARGUMENT_LIMIT_BYTES)},
+      () => undefined,
+    );
+    deepStrictEqual(
+      [
+        outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind,
+        outcome.kind === 'failed' && outcome.failure.detail.includes('131072'),
+        runs.length,
+      ],
+      ['spawnFailed', true, 0],
+    );
+  });
+
+  it('counts the limit in bytes of the text that is sent, the added environment included', async () => {
+    const outcome = await channel().runScript(
+      {
+        ...REQUEST,
+        script: 'é'.repeat(EXEC_ARGUMENT_LIMIT_BYTES / 2 - 8),
+        environment: {NAME: 'x'.repeat(40)},
+      },
+      () => undefined,
+    );
+    deepStrictEqual(outcome.kind, 'failed');
   });
 
   it('puts the added environment variables in front of the script', async () => {

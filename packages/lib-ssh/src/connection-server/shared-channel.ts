@@ -45,6 +45,12 @@ export interface SharedSessionChannelOptions {
   maximumInputBytes: number;
 }
 
+/**
+ * The most bytes one script can have: it travels as one argument of `sh -c`, and the system refuses an argument of
+ * 128 KiB or more (E2BIG), which the session would not report on the output it carries.
+ */
+export const EXEC_ARGUMENT_LIMIT_BYTES = 128 * 1024;
+
 /** The failure kind of a script that did not end on the session. */
 function failureKind(reason: string): ChannelFailureKind {
   return reason === 'timeout' ? 'timeout' : 'channelClosed';
@@ -53,7 +59,6 @@ function failureKind(reason: string): ChannelFailureKind {
 /** The host channel over the shared `ssh` session. */
 export class SharedSessionChannel implements HostChannel {
   private readonly options: SharedSessionChannelOptions;
-  private lastRunId = 0;
 
   /** A channel over a session. */
   constructor(options: SharedSessionChannelOptions) {
@@ -87,6 +92,13 @@ export class SharedSessionChannel implements HostChannel {
     if (request.cancellation.aborted) {
       return failFrom('cancelled', 'cancelled before the run');
     }
+    const scriptBytes = Buffer.byteLength(script.text, 'utf8');
+    if (scriptBytes >= EXEC_ARGUMENT_LIMIT_BYTES) {
+      return failFrom(
+        'spawnFailed',
+        `the script is ${String(scriptBytes)} bytes, and the shared session runs a script of fewer than ${String(EXEC_ARGUMENT_LIMIT_BYTES)}`,
+      );
+    }
     const input = await this.inputOf(request.input);
     if ('failed' in input) {
       return input.failed;
@@ -95,7 +107,6 @@ export class SharedSessionChannel implements HostChannel {
     const ending = await this.untilCancelled(
       this.options.session.runOnSession(
         {
-          runId: this.nextRunId(),
           script: script.text,
           inputBase64: input.base64,
           deadlineMilliseconds: this.options.runDeadlineMilliseconds,
@@ -116,11 +127,6 @@ export class SharedSessionChannel implements HostChannel {
     return ending.kind === 'ended'
       ? {kind: 'exited', status: ending.status}
       : failFrom(failureKind(ending.reason), ending.detail);
-  }
-
-  private nextRunId(): number {
-    this.lastRunId += 1;
-    return this.lastRunId;
   }
 
   /** The input as base64 (null for none), or the failure that stops the run before it starts. */
