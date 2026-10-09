@@ -27,8 +27,6 @@ interface Manifest {
   };
 }
 
-let serving: {dispose(): void} | undefined;
-
 /** Called by the editor when it resolves an `ssh-remote` authority, runs one of the commands, or opens a URI. */
 export async function activate(
   context: vscode.ExtensionContext,
@@ -43,7 +41,7 @@ export async function activate(
       name: manifest.name,
       version: manifest.version,
     },
-    links: helpLinksOf(manifest),
+    links: () => helpLinksOf(manifest),
     environment: {
       editorVersion: vscode.version,
       platform: process.platform,
@@ -70,17 +68,10 @@ export async function activate(
     clock: Date.now,
   });
   if (result.kind === 'serving') {
-    serving = result;
     context.subscriptions.push({
       dispose: () => {
         result.dispose();
       },
     });
   }
-}
-
-/** Called by the editor when the extension host ends. */
-export function deactivate(): void {
-  serving?.dispose();
-  serving = undefined;
 }

@@ -1,5 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import type {CommandEntry, SettingInspection} from 'lib-identifiers';
+import {
+  commands,
+  settings,
+  standDown,
+} from '../../src/identifiers.generated.ts';
 import type {StandDownHost} from 'lib-standdown';
 import {
   type ActivationInputs,
@@ -80,10 +85,13 @@ function surroundings(options: {otherRuns: boolean; logLevel?: unknown}): {
       version: '0.1.0',
       pack: ['remote-oss.remote-ssh-edit'],
     },
-    links: {
-      documentation: 'https://example.invalid/docs',
-      getStarted: 'https://example.invalid/start',
-      feedback: 'https://example.invalid/feedback',
+    links: () => {
+      seen.events.push('links read');
+      return {
+        documentation: 'https://example.invalid/docs',
+        getStarted: 'https://example.invalid/start',
+        feedback: 'https://example.invalid/feedback',
+      };
     },
     environment: {
       editorVersion: '1.139.1',
@@ -139,7 +147,7 @@ describe('the activation', () => {
     );
   });
 
-  it('serves when it does not run: the key is cleared first, then the six commands are registered', async () => {
+  it('serves when it does not run: the key is cleared first, the help addresses are read, then the six commands are registered', async () => {
     const {inputs, seen} = surroundings({otherRuns: false});
     const result = await activateRemoteSsh(inputs);
     deepStrictEqual(
@@ -148,6 +156,7 @@ describe('the activation', () => {
         'serving',
         [
           'context opensshremotes.standingDown=false',
+          'links read',
           'register opensshremotes.showLog',
           'register opensshremotes.getHelp',
           'register opensshremotes.getStarted',
@@ -209,5 +218,55 @@ describe('the activation', () => {
       'unregister opensshremotes.reportIssue',
       'channel disposed',
     ]);
+  });
+
+  it('reads the help addresses only when it serves', async () => {
+    const stands = surroundings({otherRuns: true});
+    await activateRemoteSsh(stands.inputs);
+    const serves = surroundings({otherRuns: false});
+    await activateRemoteSsh(serves.inputs);
+    deepStrictEqual(
+      [
+        stands.seen.events.includes('links read'),
+        serves.seen.events.includes('links read'),
+      ],
+      [false, true],
+    );
+  });
+
+  it('serves the generated table of the manifest, which holds more commands than it serves, and registers six', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    await activateRemoteSsh({
+      ...inputs,
+      table: {commands, settings, standDown},
+    });
+    deepStrictEqual([...seen.registered.keys()].sort(), [
+      'opensshremotes.getHelp',
+      'opensshremotes.getStarted',
+      'opensshremotes.provideFeedback',
+      'opensshremotes.reportIssue',
+      'opensshremotes.settings',
+      'opensshremotes.showLog',
+    ]);
+  });
+
+  it('closes the log channel and registers nothing more when a registration throws', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    let registrations = 0;
+    const failing: ActivationInputs = {
+      ...inputs,
+      commands: {
+        ...inputs.commands,
+        registerCommand: (commandId, callback) => {
+          registrations += 1;
+          if (registrations === 3) {
+            throw new Error('the editor refused');
+          }
+          return inputs.commands.registerCommand(commandId, callback);
+        },
+      },
+    };
+    await activateRemoteSsh(failing).catch(() => undefined);
+    deepStrictEqual(seen.events.includes('channel disposed'), true);
   });
 });

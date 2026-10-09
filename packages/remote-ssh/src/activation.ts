@@ -48,7 +48,8 @@ export interface ActivationTable {
 export interface ActivationInputs {
   table: ActivationTable;
   extension: HelpExtension & {name: string; version: string};
-  links: HelpLinks;
+  /** The help addresses; read only once the guard has decided to serve. */
+  links: () => HelpLinks;
   environment: Omit<LogEnvironment, 'extensionName' | 'extensionVersion'>;
   /** The warning and its button for a window where the other extension runs, in the user's language. */
   standDownTexts: {warning: string; button: string};
@@ -91,19 +92,29 @@ export async function activateRemoteSsh(
     () => levelOfSetting(readSetting(inputs.settings, table.settings.logLevel)),
     inputs.clock,
   );
-  const registration = registerCommands(
-    inputs.commands,
-    outcome,
-    table.commands,
-    {
+  // Only the commands this module serves: the table may hold every command of the manifest.
+  const served = {
+    showLog: table.commands.showLog,
+    getHelp: table.commands.getHelp,
+    getStarted: table.commands.getStarted,
+    provideFeedback: table.commands.provideFeedback,
+    settings: table.commands.settings,
+    reportIssue: table.commands.reportIssue,
+  };
+  let registration: ReturnType<typeof registerCommands>;
+  try {
+    registration = registerCommands(inputs.commands, outcome, served, {
       showLog: {
         execute: () => {
           logChannel.reveal();
         },
       },
-      ...helpHandlers(inputs.help, inputs.links, extension),
-    },
-  );
+      ...helpHandlers(inputs.help, inputs.links(), extension),
+    });
+  } catch (caught) {
+    logChannel.dispose();
+    throw caught;
+  }
   return {
     kind: 'serving',
     logger: logChannel.logger,
