@@ -9,6 +9,8 @@ import type {Scheduler} from 'lib-helper';
 export interface WaitLimits {
   readyMilliseconds: number;
   retryMilliseconds: number;
+  /** The most bytes a bridge holds for a client before the host side opens; a policy value. */
+  heldBytesMaximum: number;
 }
 
 /** Whether `attempt` worked before the bound ran out. An attempt that throws counts as one that failed. */

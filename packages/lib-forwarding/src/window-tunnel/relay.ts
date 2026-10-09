@@ -39,19 +39,35 @@ export interface RelayTunnelRequest {
 
 /**
  * Joins a client of the window's port to a connection to the host, which is still being opened. The bytes the client
- * sends before the host side exists are held and sent first, in order. Each side ends the other, and a client that
- * leaves before the host side opens closes it as soon as it does.
+ * sends before the host side exists are held and sent first, in order. The held bytes count toward
+ * `heldBytesMaximum`: a chunk that would take the total past it is not held, the client is closed at once, and
+ * nothing more the client sends is held or sent; the host side, when its dial completes, is closed without sending
+ * anything. Each side ends the other, and a client that leaves before the host side opens closes it as soon as it
+ * does.
  */
 function bridge(
   client: Duplex,
   opening: Promise<Duplex>,
   track: (connection: Duplex) => void,
+  heldBytesMaximum: number,
 ): void {
   const held: Uint8Array[] = [];
   let host: Duplex | undefined;
+  let heldBytes = 0;
+  let overflowed = false;
   let clientGone = false;
   client.onData(chunk => {
     if (host === undefined) {
+      if (overflowed) {
+        return;
+      }
+      if (!(heldBytes + chunk.byteLength <= heldBytesMaximum)) {
+        overflowed = true;
+        held.length = 0;
+        client.close();
+        return;
+      }
+      heldBytes += chunk.byteLength;
       held.push(chunk);
     } else if (!host.send(chunk)) {
       client.pause();
@@ -114,7 +130,12 @@ export async function openRelayTunnel(
   try {
     listening = await request.local.listen(request.localPort, accepted => {
       track(accepted);
-      bridge(accepted, dialer.dial(target), track);
+      bridge(
+        accepted,
+        dialer.dial(target),
+        track,
+        request.limits.heldBytesMaximum,
+      );
     });
   } catch (caught) {
     return {
