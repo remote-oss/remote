@@ -11,6 +11,7 @@ import tseslint from 'typescript-eslint';
 import {commentsPlugin} from './tools/eslint-plugins/comments.ts';
 import {layoutPlugin} from './tools/eslint-plugins/layout.ts';
 import {namesPlugin} from './tools/eslint-plugins/names.ts';
+import {testsPlugin} from './tools/eslint-plugins/tests.ts';
 
 const ABBREVIATIONS = [
   'cfg',
@@ -270,7 +271,9 @@ export default defineConfig(
   },
   {
     files: ['**/*.test.ts'],
+    plugins: {tests: testsPlugin},
     rules: {
+      'tests/one-assertion': 'error',
       '@typescript-eslint/ban-ts-comment': [
         'error',
         {'ts-expect-error': 'allow-with-description'},
