@@ -439,7 +439,10 @@ describe('check-workspace', () => {
       link('node_modules/mocha', 'node_modules/.pnpm/mocha');
     }
 
-    it('accepts a package that references its library dependency', () => {
+    it('accepts a package that references its library dependency', function () {
+      // Each test spawns tsc --listFilesOnly, which the CI runner runs more than five times slower
+      // than locally.
+      this.timeout(10_000);
       declarationProjects();
       write('packages/remote-a/tsconfig.json', {
         extends: '../../tsconfig.base.json',
@@ -448,7 +451,8 @@ describe('check-workspace', () => {
       deepStrictEqual(problems(), []);
     });
 
-    it('names a package that compiles its library dependency sources', () => {
+    it('names a package that compiles its library dependency sources', function () {
+      this.timeout(10_000);
       declarationProjects();
       write('packages/remote-a/tsconfig.json', {
         extends: '../../tsconfig.base.json',
