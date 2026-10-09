@@ -6,4 +6,4 @@ The keyword must be in the description itself: `Closes #123` or `Part of #45`.
 ## Tests
 
 ## Gates
-Answer the coding standard's six questions in your own words.
+Answer the six review questions in CONTRIBUTING.md in your own words.

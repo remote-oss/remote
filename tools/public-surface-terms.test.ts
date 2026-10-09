@@ -8,7 +8,6 @@ function termsIn(text: string): string[] {
 describe('public-surface terms: words of the process, wherever they appear', () => {
   const FORBIDDEN = [
     'See the card for details.',
-    'The conformance suite passes.',
     'An open spec question.',
     'Agreed in the room.',
     'The worker builds it.',
@@ -41,6 +40,8 @@ describe('public-surface terms: words of the process, wherever they appear', () 
     'A session over a started process.',
     'Starts a process by its specification.',
     'Holds a reference to the editor.',
+    'The conformance suite passes.',
+    'Specifications and conformance suite',
   ];
   for (const text of ALLOWED) {
     it(`accepts: ${text}`, () => {
@@ -61,7 +62,6 @@ describe('public-surface terms: ordinary words, forbidden in the senses of the p
     ['A reference implementation.', 'reference implementation'],
     ['See the specification issue.', 'specification issue'],
     ['The published specification says so.', 'published specification'],
-    ['Specifications and conformance suite', 'Specifications and conformance'],
     ['In a coding session.', 'coding session'],
     ['An agent sessions log.', 'agent sessions'],
   ] as const;

@@ -90,4 +90,4 @@ jobs:
       - run: pnpm test:acceptance:server
 
   # integration:  pnpm test:integration under xvfb, after the testing ADR
-  # conformance:  per package and profile, runner in tests/conformance/runner, after the testing ADR
+  # per-package checks by profile: added in a later change
