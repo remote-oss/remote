@@ -181,7 +181,7 @@ export function createServerSteps(
       }
       return result;
     },
-    gate: () => {
+    gate: (input, cancellation) => {
       const classification = classifyServerLicence(licenceFacts, {
         serverLicenseEmpty: profile.serverLicense.length === 0,
         serverLicenseUrl: profile.serverLicenseUrl,
@@ -191,6 +191,7 @@ export function createServerSteps(
         dependencies.store,
         dependencies.modal,
         dependencies.logger,
+        cancellation,
       );
     },
     transfer: (input, lease, host, downloadPlan, onPhase, cancellation) =>

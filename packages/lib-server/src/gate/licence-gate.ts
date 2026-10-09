@@ -29,7 +29,7 @@ export type ModalAnswer = 'accept' | 'cancel';
 
 /** The editor's modal: the extension's own wording around the terms link, with "Accept and Continue" and "Cancel". */
 export interface LicenceModal {
-  askUser(termsUrl: string): Promise<ModalAnswer>;
+  askUser(termsUrl: string, cancellation: AbortSignal): Promise<ModalAnswer>;
 }
 
 /** The record of acceptances: per profile, never synced, one entry per terms page. */
@@ -46,7 +46,9 @@ export type GateOutcome =
    */
   | {kind: 'cleared'; acceptanceFlag: boolean; remembered: boolean}
   /** The user cancelled: nothing is downloaded, copied, started or remembered (reason STR:S027). */
-  | {kind: 'licenceDeclined'};
+  | {kind: 'licenceDeclined'}
+  /** The caller cancelled while the question was open, or had already cancelled: nothing is stored or started. */
+  | {kind: 'cancelled'};
 
 /** The key under which the acceptance of a terms page is stored. */
 export function acceptanceKey(termsUrl: string): string {
@@ -80,6 +82,7 @@ export async function ensureAccepted(
   store: AcceptanceStore,
   modal: LicenceModal,
   logger: Logger,
+  cancellation: AbortSignal,
 ): Promise<GateOutcome> {
   if (classification.kind === 'free') {
     return {kind: 'cleared', acceptanceFlag: false, remembered: false};
@@ -88,7 +91,18 @@ export async function ensureAccepted(
   if (store.isAccepted(storeKey)) {
     return {kind: 'cleared', acceptanceFlag: true, remembered: true};
   }
-  if ((await answerOf(modal, classification.termsUrl)) !== 'accept') {
+  if (cancellation.aborted) {
+    return {kind: 'cancelled'};
+  }
+  const answer = await askUserOrCancelled(
+    modal,
+    classification.termsUrl,
+    cancellation,
+  );
+  if (answer === 'cancelled') {
+    return {kind: 'cancelled'};
+  }
+  if (answer !== 'accept') {
     return {kind: 'licenceDeclined'};
   }
   try {
@@ -106,13 +120,38 @@ export async function ensureAccepted(
   return {kind: 'cleared', acceptanceFlag: true, remembered: true};
 }
 
+/**
+ * The user's answer, or the caller's cancellation winning the race. A modal that throws, rejects or is dismissed
+ * without an answer is a "Cancel".
+ */
+async function askUserOrCancelled(
+  modal: LicenceModal,
+  termsUrl: string,
+  cancellation: AbortSignal,
+): Promise<ModalAnswer | 'cancelled'> {
+  const cancelled = new Promise<'cancelled'>(resolve => {
+    cancellation.addEventListener(
+      'abort',
+      () => {
+        resolve('cancelled');
+      },
+      {once: true},
+    );
+  });
+  return await Promise.race([
+    answerOf(modal, termsUrl, cancellation),
+    cancelled,
+  ]);
+}
+
 /** The user's answer; a modal that throws, rejects or is dismissed without an answer is a "Cancel". */
 async function answerOf(
   modal: LicenceModal,
   termsUrl: string,
+  cancellation: AbortSignal,
 ): Promise<ModalAnswer> {
   try {
-    const answer: ModalAnswer | undefined = await modal.askUser(termsUrl);
+    const answer = await modal.askUser(termsUrl, cancellation);
     return answer === 'accept' ? 'accept' : 'cancel';
   } catch {
     // A modal that fails never counts as an acceptance.
