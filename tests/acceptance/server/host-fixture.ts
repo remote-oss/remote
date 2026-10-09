@@ -199,7 +199,7 @@ export async function startHost(): Promise<RunningHost> {
         ]);
       },
       authorize: publicKeyFile => {
-        const key = readFileSync(publicKeyFile, 'utf8').trim();
+        const publicKey = readFileSync(publicKeyFile, 'utf8').trim();
         checked('docker', [
           'exec',
           '--user',
@@ -207,7 +207,7 @@ export async function startHost(): Promise<RunningHost> {
           container,
           'sh',
           '-c',
-          `printf '%s\\n' '${key}' >> /home/harness/.ssh/authorized_keys`,
+          `printf '%s\\n' '${publicKey}' >> /home/harness/.ssh/authorized_keys`,
         ]);
       },
       logins: () => {

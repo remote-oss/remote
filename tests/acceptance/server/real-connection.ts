@@ -37,10 +37,10 @@ const HELPER_BUNDLE = path.join(BUNDLES, 'connection-helper.js');
 const ASKPASS_BUNDLE = path.join(BUNDLES, 'askpass.js');
 
 /** How long a helper stays after its last window leaves, in milliseconds: long enough to carry a reload. */
-export const GRACE_MILLISECONDS = 3000;
+const GRACE_MILLISECONDS = 3000;
 
 /** The limits a window puts on the waits of one connection, in milliseconds. */
-export const LIMITS: ConnectionLimits = {
+const LIMITS: ConnectionLimits = {
   requestMilliseconds: 10000,
   loginMilliseconds: 30000,
 };
