@@ -16,6 +16,9 @@ function encoded(authority: string): string {
     : encodeAuthority(outcome);
 }
 
+/** The outer codec the container codec is built on here: the registry's own decode and encode. */
+const REGISTRY_OUTER = {decode: decodeAuthority, encode: encodeAuthority};
+
 describe('authority registry (card authority-01 table)', () => {
   it("decodeAuthority('nope+x') -> malformed unknownFamily", () => {
     deepStrictEqual(decodeAuthority('nope+x'), {
@@ -83,7 +86,7 @@ describe('authority registry (card authority-01 table)', () => {
       [
         sshRemoteCodec.decode('myhost'),
         wslCodec.decode('Ubuntu'),
-        containerCodec('dev-container').decode('abcd'),
+        containerCodec('dev-container', REGISTRY_OUTER).decode('abcd'),
         tunnelCodec.decode('mytunnel'),
       ],
       [

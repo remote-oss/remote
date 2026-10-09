@@ -1,10 +1,11 @@
 /**
- * @fileoverview The authority registry: the core split at the first `+`, and the family's codec for each payload.
+ * @fileoverview The authority registry: the core split at the first `+`, and the family's codec for each payload,
+ * the outer hop of the container and wsl families always going through the registry's own codec.
  */
 import {containerCodec} from './container.ts';
 import {sshRemoteCodec} from './ssh-remote.ts';
 import {tunnelCodec} from './tunnel.ts';
-import {wslCodec} from './wsl.ts';
+import {wslCodecOf} from './wsl.ts';
 import type {
   ContainerTarget,
   DecodedOrMalformed,
@@ -15,6 +16,7 @@ import type {
   TunnelTarget,
   WslTarget,
 } from './types.ts';
+import type {OuterCodec} from './outer-hop.ts';
 
 /** The target shape a codec decodes, across the families. */
 type UnionTarget = SshTarget | WslTarget | ContainerTarget | TunnelTarget;
@@ -31,37 +33,17 @@ const FAMILIES = [
   'tunnel',
 ] as const;
 
-/** The outcome of splitting a payload at its `@`: the name, or the refusal the outer hop earned. */
-type OuterHop =
-  | {name: string; outer: DecodedTarget | undefined}
-  | {name: string; refusal: MalformedAuthority};
-
 /**
- * Splits a `<name>@<outer authority>` payload: the name, and the outer hop decoded through the registry. A
- * payload without `@` gives the whole payload as the name and no outer; an outer that refuses is a `badOuter`.
+ * The outer codec the registry hands the container and wsl codecs: the registry's own decode and encode, so an
+ * outer hop stays on the registry's round-trip.
  */
-export function outerHop(family: Family, payload: string): OuterHop {
-  const atIndex = payload.indexOf('@');
-  if (atIndex === -1) {
-    return {name: payload, outer: undefined};
-  }
-  const outer = decodeAuthority(payload.slice(atIndex + 1));
-  if ('malformed' in outer) {
-    return {
-      name: payload.slice(0, atIndex),
-      refusal: {family, payload, reason: 'badOuter'},
-    };
-  }
-  return {name: payload.slice(0, atIndex), outer};
-}
+const REGISTRY_OUTER: OuterCodec = {
+  decode: decodeAuthority,
+  encode: encodeAuthority,
+};
 
-/** The payload of a name with an optional outer hop: the name, or the name and the outer's authority. */
-export function outerPayload(
-  name: string,
-  outer: DecodedTarget | undefined,
-): string {
-  return outer === undefined ? name : `${name}@${encodeAuthority(outer)}`;
-}
+/** The wsl codec built on the registry's outer, so the exported name stays. */
+const wslCodec = wslCodecOf(REGISTRY_OUTER);
 
 /** Encodes the target with the family's codec. */
 function encodePayload(decoded: DecodedTarget): string {
@@ -75,7 +57,9 @@ function encodePayload(decoded: DecodedTarget): string {
   if (family === 'tunnel') {
     return tunnelCodec.encode(target as TunnelTarget);
   }
-  return containerCodec(family).encode(target as ContainerTarget);
+  return containerCodec(family, REGISTRY_OUTER).encode(
+    target as ContainerTarget,
+  );
 }
 
 /**
@@ -108,7 +92,7 @@ export function decodeAuthority(
         ? wslCodec.decode(payload)
         : family === 'tunnel'
           ? tunnelCodec.decode(payload)
-          : containerCodec(family).decode(payload);
+          : containerCodec(family, REGISTRY_OUTER).decode(payload);
   if ('malformed' in outcome) {
     return {malformed: outcome.malformed};
   }
@@ -119,3 +103,6 @@ export function decodeAuthority(
 export function encodeAuthority(decoded: DecodedTarget): string {
   return `${decoded.family}+${encodePayload(decoded)}`;
 }
+
+/** The wsl codec of the contract, built on the registry's outer. */
+export {wslCodec};
