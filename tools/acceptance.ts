@@ -358,9 +358,7 @@ export function runCommand(
 }
 
 /** The lines in the editor's output that report a hung window; the run is retried once on them. */
-export const HANG_MARKERS: readonly string[] = [
-  'CodeWindow: detected unresponsive',
-];
+const HANG_MARKERS: readonly string[] = ['CodeWindow: detected unresponsive'];
 
 /** The result of one attempt of the acceptance run: the process's exit code and its output. */
 export interface AttemptResult {

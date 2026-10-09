@@ -5,7 +5,6 @@
 
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import {
-  HANG_MARKERS,
   runAndCollect,
   runWithRetry,
   shouldRetry,
@@ -120,10 +119,6 @@ describe('runWithRetry', () => {
     const status = await runWithRetry(attempt, line => lines.push(line));
     deepStrictEqual([status, called(), lines], [1, 1, []]);
   });
-});
-
-it('HANG_MARKERS contains exactly the one marker', () => {
-  deepStrictEqual(HANG_MARKERS, ['CodeWindow: detected unresponsive']);
 });
 
 it('runAndCollect with a child that writes in two parts and exits 4: both parts echoed in order, output kept whole, the code returned', async () => {
