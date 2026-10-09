@@ -130,6 +130,9 @@ pre-connection script's own dialog (F-2108). (Area A's review, accepted by the l
 Not in this contract: `resolveExecServer` for nested authorities (F-1302). It waits for the containers room's answer
 (lead, 2026-10-06).
 
+lib-authority declares the connector contract types `Connected` and `Failed` (ruled 2026-10-08; `Failed.kind` is a
+string at this level, narrowed by each extension's pipeline); the extensions import them, never define their own.
+
 Connect input passed to A (and to area D's WSL connect): `{target, rawHostString, attempt, isReconnection, windowId,
 windowWorkspace}`. `windowWorkspace` is the window's folder or workspace URI, or none, read in the local extension host
 at resolve time. Area D uses it for the `code .` environment rendezvous (F-6303 6.1). The `Connected` and `Failed`

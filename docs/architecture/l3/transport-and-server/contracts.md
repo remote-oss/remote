@@ -617,8 +617,16 @@ Rules:
   true only after the pre-connection script's own dialog (F-2108). The licence modal itself (V6) and the
   authentication prompts (S7, S8) are interactions inside the connect, not failure dialogs (review of lib-authority,
   points 1 and 2, accepted 2026-10-06).
-- `retryable` is set by A from the kind and `isReconnection`. B never interprets kinds, and shows no failure dialog
-  during reconnection.
+- `retryable` is set by A from the kind and `isReconnection` (ruled 2026-10-08): `isReconnection` AND the attempt
+  limit not reached AND the kind not in the permanent set {authentication, cancelled, hostKeyChanged,
+  hostKeyRejected, licenceDeclined, noServerSource, invalidServerTemplate, invalidSetting, unsupportedPlatform,
+  prerequisiteMissing, preconnectFailed, lockTimeout, retriesExhausted}; every other kind is temporary during
+  reconnection (F-2505 BR-2); a data table in R1. `hostKeyChanged` reaches R1 from S5 at login and `hostKeyRejected`
+  from a declined host-key prompt through S9's `loginFailed`; both are mapped in slice 1. B never interprets kinds,
+  and shows no failure dialog during reconnection.
+- The `Connected` and `Failed` types are declared by lib-authority (the connector contract; `kind` is a string there
+  because the host never interprets it) and produced by remote-ssh's pipeline narrowed with lib-ssh's `FailureKind`;
+  no copy in remote-ssh (ruled 2026-10-08).
 - `cancel` is called by B on window teardown or "Close Remote Connection". The SSH progress offers no Cancel
   (F-2304 BR-2), and a running host-side download is not stopped (F-2304 BR-8).
 - Connected carries `tunnelFeatures` from W3 next to the tunnel factory (F-8202).
