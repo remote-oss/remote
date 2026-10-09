@@ -15,6 +15,10 @@ Reviewing coder: `remote-coding-worker-1`.
 - Exempt: a run of exactly 40 lower-case or upper-case hex characters (a commit id), and a run of exactly 64 hex
   characters (a sha256), as whole words.
 - Explicit secrets (the `secrets` getter) are still replaced wherever they appear, before the run rule.
+- Exempt ids are carved out before the run rule (amended 2026-10-08, #170): split the message on whole-word 40- or
+  64-hex ids (`\b[0-9a-fA-F]{40}\b|\b[0-9a-fA-F]{64}\b`), apply the run rule to the pieces between them, join. So a
+  hyphen does not break a run, a name like `server-<commit>-<epoch>` stays readable, and a UUID (36 characters with
+  its hyphens) is still redacted. Underscores stay word characters: `<commit>_x` is one run of 42 and is redacted.
 - The marker is never applied twice to the same span.
 
 ## 3. Test table
@@ -31,6 +35,10 @@ Reviewing coder: `remote-coding-worker-1`.
 | secrets `['hunter2']` and `'pw hunter2 and ' + 40 hex` | `'pw [redacted] and ' + the 40 hex` |
 | a message with no run | unchanged |
 | `'[redacted]'` already present | unchanged (not doubled) |
+| `'server-' + 40 hex + '-1728000000000'` | unchanged |
+| 40 hex + `'-'` + 32 letters | 40 hex + `'-[redacted]'` |
+| `'lease 123e4567-e89b-12d3-a456-426614174000 ended'` | `'lease [redacted] ended'` |
+| 64 hex + `'-'` + 40 hex | unchanged |
 
 ## 4. Rule for the worker
 
