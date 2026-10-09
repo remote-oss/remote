@@ -345,17 +345,26 @@ describe('connection handler (contracts §4 S9)', () => {
   describe('the questions of ssh', () => {
     const QUESTION = "dev@h.invalid's password: ";
     let port: FakeEndpointPort;
-    let program: {connection: EndpointConnection; received: unknown[]};
+    let program: {
+      connection: EndpointConnection;
+      received: unknown[];
+      closed: boolean;
+    };
 
     /** The askpass program asks `text` over the askpass endpoint. */
-    async function askQuestion(text = QUESTION): Promise<void> {
+    async function askQuestion(text = QUESTION): Promise<typeof program> {
       program = {
         connection: await port.connect(ASKPASS_ENDPOINT),
         received: [],
+        closed: false,
       };
       program.connection.onMessage(message => program.received.push(message));
+      program.connection.onClose(() => {
+        program.closed = true;
+      });
       program.connection.send({type: 'ask', nonce: ASKPASS_NONCE, text});
       await settled();
+      return program;
     }
 
     beforeEach(async () => {
@@ -478,6 +487,80 @@ describe('connection handler (contracts §4 S9)', () => {
       stranger.send({type: 'ask', nonce: 'other', text: QUESTION});
       await settled();
       deepStrictEqual(events, []);
+    });
+    it("closes the owner's question on its refuse, with the promptClosed", async () => {
+      const asked = await askQuestion();
+      const reply = await send(1, {type: 'refuse', promptId: 1});
+      deepStrictEqual(
+        [reply, asked.closed, eventTypes()],
+        [{type: 'refused', accepted: true}, true, ['prompt', 'promptClosed']],
+      );
+    });
+
+    it('refuses a question that is not open', async () => {
+      const asked = await askQuestion();
+      const first = await send(1, {type: 'refuse', promptId: 1});
+      const second = await send(1, {type: 'refuse', promptId: 2});
+      deepStrictEqual(
+        [first, second, asked.closed, eventTypes()],
+        [
+          {type: 'refused', accepted: true},
+          {type: 'refused', accepted: false},
+          true,
+          ['prompt', 'promptClosed'],
+        ],
+      );
+    });
+
+    it('keeps the rest of the refused run silent: no prompt, the program closes at once', async () => {
+      const first = await askQuestion();
+      await send(1, {type: 'refuse', promptId: 1});
+      const second = await askQuestion();
+      deepStrictEqual(
+        [first.closed, second.closed, eventTypes()],
+        [true, true, ['prompt', 'promptClosed']],
+      );
+    });
+
+    it('asks a new run after the run the refusal belonged to has failed', async () => {
+      const first = await askQuestion();
+      await send(1, {type: 'refuse', promptId: 1});
+      spawner.started[0]?.exit(255);
+      await settled();
+      await send(2, {type: 'connect'});
+      const second = await askQuestion('a second question');
+      deepStrictEqual(
+        [first.closed, second.closed, events.at(-1)],
+        [
+          true,
+          false,
+          {
+            type: 'prompt',
+            promptId: 2,
+            surface: 'maskedInput',
+            text: 'a second question',
+          },
+        ],
+      );
+    });
+
+    it('answers the refuse of a window that is not the owner, and keeps the question open', async () => {
+      const asked = await askQuestion();
+      const reply = await send(2, {type: 'refuse', promptId: 1});
+      deepStrictEqual(
+        [reply, asked.closed, eventTypes()],
+        [{type: 'refused', accepted: false}, false, ['prompt']],
+      );
+    });
+
+    it('refuses an answer that comes after the refuse of its question', async () => {
+      const asked = await askQuestion();
+      await send(1, {type: 'refuse', promptId: 1});
+      const reply = await send(1, {type: 'answer', promptId: 1, text: 'late'});
+      deepStrictEqual(
+        [reply, asked.closed, eventTypes()],
+        [{type: 'answered', accepted: false}, true, ['prompt', 'promptClosed']],
+      );
     });
   });
 

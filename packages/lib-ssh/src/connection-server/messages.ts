@@ -24,6 +24,7 @@ export type ConnectionRequest =
   | {type: 'sharedRecord'}
   | {type: 'setSharedRecord'; record: SharedRecord}
   | {type: 'answer'; promptId: number; text: string}
+  | {type: 'refuse'; promptId: number}
   | {
       type: 'runScript';
       runId: number;
@@ -45,6 +46,7 @@ export type Refusal = 'notOwner' | 'alreadyConnecting' | 'alreadyConnected';
 export type ConnectionReply =
   | {type: 'accepted'}
   | {type: 'refused'; reason: Refusal}
+  | {type: 'refused'; accepted: boolean}
   | {type: 'sharedRecord'; record: SharedRecord | null}
   | {type: 'answered'; accepted: boolean}
   | {type: 'scriptEnded'; status: number}
@@ -130,6 +132,10 @@ export function readConnectionRequest(
       return typeof body.promptId === 'number' && typeof body.text === 'string'
         ? {type: 'answer', promptId: body.promptId, text: body.text}
         : undefined;
+    case 'refuse':
+      return typeof body.promptId === 'number'
+        ? {type: 'refuse', promptId: body.promptId}
+        : undefined;
     case 'runScript':
       return typeof body.runId === 'number' &&
         typeof body.script === 'string' &&
@@ -178,6 +184,9 @@ export function readConnectionReply(
     case 'accepted':
       return {type: 'accepted'};
     case 'refused':
+      if (typeof body.accepted === 'boolean') {
+        return {type: 'refused', accepted: body.accepted};
+      }
       return typeof body.reason === 'string' && REFUSALS.includes(body.reason)
         ? {type: 'refused', reason: body.reason as Refusal}
         : undefined;

@@ -151,6 +151,8 @@ export class ConnectionHandler implements MessageHandler {
         return {type: 'accepted'};
       case 'answer':
         return this.answer(request.promptId, request.text);
+      case 'refuse':
+        return this.refuse(request.promptId, context.lease);
       case 'runScript':
         return this.runScript(request, context);
       case 'kill':
@@ -189,6 +191,21 @@ export class ConnectionHandler implements MessageHandler {
       this.wait?.promptAnswered();
     }
     return {type: 'answered', accepted};
+  }
+
+  /**
+   * The owner's window cancels one of the run's questions: the question closes and the attempt is marked cancelled,
+   * so the questions the run asks after it are closed on arrival. A window that is not the owner closes nothing.
+   */
+  private refuse(promptId: number, lease: number): PlainData {
+    if (lease !== this.ownership.current()) {
+      return {type: 'refused', accepted: false};
+    }
+    const accepted = this.askpass.refuse(promptId);
+    if (accepted) {
+      this.askpass.refuseRun();
+    }
+    return {type: 'refused', accepted};
   }
 
   private async connect(

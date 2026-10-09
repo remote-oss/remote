@@ -40,6 +40,7 @@ export class AskpassEndpoint {
   private readonly book = new PromptBook();
   private readonly waiting = new Map<number, Waiting>();
   private readonly connections = new Set<EndpointConnection>();
+  private runRefused = false;
 
   /** An endpoint with no question open. */
   constructor(hooks: AskpassHooks) {
@@ -69,6 +70,10 @@ export class AskpassEndpoint {
       cancelDeadline();
       const request = readAskRequest(value);
       if (promptId !== undefined || request?.nonce !== this.hooks.nonce) {
+        connection.close();
+        return;
+      }
+      if (this.runRefused) {
         connection.close();
         return;
       }
@@ -103,6 +108,31 @@ export class AskpassEndpoint {
     return this.book.answer(promptId, text, entry.deliver);
   }
 
+  /**
+   * Closes one open question unanswered: its program gets the close and exits 1, which `ssh` takes as a cancelled
+   * prompt. False when the question is not open; the close, the answer and the `promptClosed` the windows hear are
+   * the same as for a question that `ssh` dropped.
+   */
+  refuse(promptId: number): boolean {
+    const entry = this.waiting.get(promptId);
+    if (entry === undefined) {
+      return false;
+    }
+    this.waiting.delete(promptId);
+    this.book.close(promptId);
+    entry.connection.close();
+    this.hooks.onPromptClosed(promptId);
+    return true;
+  }
+
+  /**
+   * Marks the run the owner refused its question: every question the run asks from now on is closed on arrival,
+   * before the windows hear of it. The mark clears when the run ends and `closeAll` runs.
+   */
+  refuseRun(): void {
+    this.runRefused = true;
+  }
+
   /** The login ended: every question closes unanswered and every connection is closed. */
   closeAll(): void {
     for (const promptId of this.book.closeAll()) {
@@ -112,5 +142,6 @@ export class AskpassEndpoint {
     for (const connection of [...this.connections]) {
       connection.close();
     }
+    this.runRefused = false;
   }
 }
