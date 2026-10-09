@@ -278,9 +278,24 @@ importers:
 
   packages/remote-ssh:
     dependencies:
+      lib-authority:
+        specifier: workspace:*
+        version: link:../lib-authority
       lib-helper:
         specifier: workspace:*
         version: link:../lib-helper
+      lib-host:
+        specifier: workspace:*
+        version: link:../lib-host
+      lib-log:
+        specifier: workspace:*
+        version: link:../lib-log
+      lib-product:
+        specifier: workspace:*
+        version: link:../lib-product
+      lib-server:
+        specifier: workspace:*
+        version: link:../lib-server
       lib-ssh:
         specifier: workspace:*
         version: link:../lib-ssh

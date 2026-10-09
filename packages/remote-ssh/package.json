@@ -35,7 +35,12 @@
     "remote-oss.remote-explorer"
   ],
   "dependencies": {
+    "lib-authority": "workspace:*",
     "lib-helper": "workspace:*",
+    "lib-host": "workspace:*",
+    "lib-log": "workspace:*",
+    "lib-product": "workspace:*",
+    "lib-server": "workspace:*",
     "lib-ssh": "workspace:*"
   },
   "devDependencies": {

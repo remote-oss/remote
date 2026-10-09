@@ -59,7 +59,16 @@ describe('skeleton (card remote-ssh-00 table)', () => {
         'remote-oss.remote-explorer',
       ],
       // Added by the first code that imports them: the two programs that run outside the editor.
-      dependencies: {'lib-helper': 'workspace:*', 'lib-ssh': 'workspace:*'},
+      // Added by the code that imports them: the pipeline's libraries, and the bundler of the programs.
+      dependencies: {
+        'lib-authority': 'workspace:*',
+        'lib-helper': 'workspace:*',
+        'lib-host': 'workspace:*',
+        'lib-log': 'workspace:*',
+        'lib-product': 'workspace:*',
+        'lib-server': 'workspace:*',
+        'lib-ssh': 'workspace:*',
+      },
       devDependencies: {esbuild: '^0.28.2'},
     });
   });
