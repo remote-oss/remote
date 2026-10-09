@@ -291,6 +291,9 @@ importers:
 
   tests/acceptance:
     dependencies:
+      lib-helper:
+        specifier: workspace:*
+        version: link:../../packages/lib-helper
       lib-log:
         specifier: workspace:*
         version: link:../../packages/lib-log
