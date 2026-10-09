@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {startHost, type RunningHost} from './host-fixture.ts';
 import {
   HOST_ARCHIVE,
+  hostArchiveOf,
   installFolderOf,
   installStatus,
   parametersFor,
@@ -15,6 +16,7 @@ describe('F-2407 the install of the server', function () {
   before(async () => {
     host = await startHost();
     placeStandInArchive(host);
+    placeStandInArchive(host, 'serving', 'rooted');
   });
 
   after(() => {
@@ -27,6 +29,17 @@ describe('F-2407 the install of the server', function () {
 
   it('F-2407: unpacks it into the commit folder without its top folder', async () => {
     const parameters = parametersFor();
+    await installStatus(host, parameters);
+    deepStrictEqual(
+      host.onHost('ls', installFolderOf(parameters)).split('\n'),
+      ['bin', 'product.json', ''],
+    );
+  });
+
+  it('F-2407: unpacks an archive packed without a wrapper folder, its entries starting with ./, keeping its folders', async () => {
+    const parameters = parametersFor({
+      archivePath: hostArchiveOf('serving', 'rooted'),
+    });
     await installStatus(host, parameters);
     deepStrictEqual(
       host.onHost('ls', installFolderOf(parameters)).split('\n'),

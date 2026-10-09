@@ -18,12 +18,16 @@ import {
   STAND_IN_LAUNCHER,
   standInArchivePath,
   type StandInBehaviour,
+  type StandInLayout,
   writeStandInArchive,
 } from './stand-in-server.ts';
 
 /** Where the archive of a stand-in behaviour lies on the host. */
-export function hostArchiveOf(behaviour: StandInBehaviour = 'serving'): string {
-  return `/tmp/stand-in-${behaviour}.tar.gz`;
+export function hostArchiveOf(
+  behaviour: StandInBehaviour = 'serving',
+  layout: StandInLayout = 'wrapped',
+): string {
+  return `/tmp/stand-in-${behaviour}-${layout}.tar.gz`;
 }
 
 /** Where the archive of the serving stand-in lies on the host. */
@@ -91,12 +95,13 @@ export function installFolderOf(parameters: ScriptParameters): string {
 export function placeStandInArchive(
   host: RunningHost,
   behaviour: StandInBehaviour = 'serving',
+  layout: StandInLayout = 'wrapped',
 ): void {
   const folder = mkdtempSync(path.join(tmpdir(), 'stand-in-'));
   try {
     const archive = standInArchivePath(folder);
-    writeStandInArchive(archive, behaviour);
-    host.copyIn(archive, hostArchiveOf(behaviour));
+    writeStandInArchive(archive, behaviour, layout);
+    host.copyIn(archive, hostArchiveOf(behaviour, layout));
   } finally {
     rmSync(folder, {recursive: true, force: true});
   }

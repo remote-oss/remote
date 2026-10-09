@@ -73,12 +73,23 @@ function standInFiles(behaviour: StandInBehaviour): ArchiveFile[] {
   ];
 }
 
+/** How the entries of the archive are named: inside a wrapper folder, or from `./` with no folder around them. */
+export type StandInLayout = 'wrapped' | 'rooted';
+
 /** Writes the stand-in server archive of a behaviour to `file`. */
 export function writeStandInArchive(
   file: string,
   behaviour: StandInBehaviour = 'serving',
+  layout: StandInLayout = 'wrapped',
 ): void {
-  writeFileSync(file, tarGzip(standInFiles(behaviour)));
+  const files = standInFiles(behaviour).map(entry => ({
+    ...entry,
+    path:
+      layout === 'wrapped'
+        ? entry.path
+        : `./${entry.path.slice(TOP_FOLDER.length + 1)}`,
+  }));
+  writeFileSync(file, tarGzip(files));
 }
 
 /** The archive's path inside `folder`, named like the archives the editor downloads. */
