@@ -3,7 +3,7 @@
  * attempt bound.
  */
 
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual} from 'node:assert';
 import {hostLockLoop} from '../../src/index.ts';
 import {FakeClock} from '../../src/testing/fake-clock.ts';
 import {settle} from './clock-driver.fixture.ts';
@@ -28,6 +28,15 @@ function busyLoop(
   return {promise, retries};
 }
 
+/** The retry notices of the first `count` busy attempts: 1, 2, ... count. */
+function firstRetries(count: number): number[] {
+  const expected: number[] = [];
+  for (let attempt = 1; attempt <= count; attempt += 1) {
+    expected.push(attempt);
+  }
+  return expected;
+}
+
 describe('host lock loop (card server-05 table)', () => {
   it('step returns result at once: done, onRetry never called, the clock unchanged', async () => {
     const clock = new FakeClock();
@@ -38,9 +47,10 @@ describe('host lock loop (card server-05 table)', () => {
       attempt => retries.push(attempt),
     );
     const result = await settle(promise, clock, 1000, 0);
-    deepStrictEqual(result, {kind: 'done', value: 7});
-    deepStrictEqual(retries, []);
-    strictEqual(clock.now(), 0);
+    deepStrictEqual(
+      {result, retries, clock: clock.now()},
+      {result: {kind: 'done', value: 7}, retries: [], clock: 0},
+    );
   });
 
   it('busy twice then result: done; onRetry(1), onRetry(2); the clock advanced 2000 ms', async () => {
@@ -56,22 +66,24 @@ describe('host lock loop (card server-05 table)', () => {
     }
     const promise = hostLockLoop(step, clock, attempt => retries.push(attempt));
     const result = await settle(promise, clock, 1000, 2000);
-    deepStrictEqual(result, {kind: 'done', value: 8});
-    deepStrictEqual(retries, [1, 2]);
-    strictEqual(clock.now(), 2000);
+    deepStrictEqual(
+      {result, retries, clock: clock.now()},
+      {result: {kind: 'done', value: 8}, retries: [1, 2], clock: 2000},
+    );
   });
 
   it('busy 30 times: retriesExhausted; onRetry called 1..29 (no wait after the last attempt)', async () => {
     const clock = new FakeClock();
     const {promise, retries} = busyLoop(clock);
     const result = await settle(promise, clock, 1000, 29000);
-    deepStrictEqual(result, {kind: 'retriesExhausted'});
-    const expected = new Array<number>(29);
-    for (let index = 0; index < 29; index += 1) {
-      expected[index] = index + 1;
-    }
-    deepStrictEqual(retries, expected);
-    strictEqual(clock.now(), 29000);
+    deepStrictEqual(
+      {result, retries, clock: clock.now()},
+      {
+        result: {kind: 'retriesExhausted'},
+        retries: firstRetries(29),
+        clock: 29000,
+      },
+    );
   });
 
   it('busy 29 times then result: done on attempt 30', async () => {
@@ -87,17 +99,23 @@ describe('host lock loop (card server-05 table)', () => {
     }
     const promise = hostLockLoop(step, clock, attempt => retries.push(attempt));
     const result = await settle(promise, clock, 1000, 29000);
-    deepStrictEqual(result, {kind: 'done', value: 9});
-    strictEqual(retries.length, 29);
-    strictEqual(clock.now(), 29000);
+    deepStrictEqual(
+      {result, retries, clock: clock.now()},
+      {
+        result: {kind: 'done', value: 9},
+        retries: firstRetries(29),
+        clock: 29000,
+      },
+    );
   });
 
   it('attempts = 1, busy once: retriesExhausted, onRetry not called', async () => {
     const clock = new FakeClock();
     const {promise, retries} = busyLoop(clock, 1, 1000);
     const result = await settle(promise, clock, 1000, 0);
-    deepStrictEqual(result, {kind: 'retriesExhausted'});
-    deepStrictEqual(retries, []);
-    strictEqual(clock.now(), 0);
+    deepStrictEqual(
+      {result, retries, clock: clock.now()},
+      {result: {kind: 'retriesExhausted'}, retries: [], clock: 0},
+    );
   });
 });

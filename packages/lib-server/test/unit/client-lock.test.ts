@@ -1,4 +1,4 @@
-import {deepStrictEqual, ok, rejects, strictEqual} from 'node:assert';
+import {deepStrictEqual} from 'node:assert';
 import {lockIdFor, withClientLock} from '../../src/index.ts';
 import {FakeClock} from '../../src/testing/fake-clock.ts';
 import {MemoryLockPort} from '../../src/testing/memory-lock-port.ts';
@@ -26,12 +26,29 @@ function startLocked(
   );
 }
 
+/**
+ * The settled value of a promise, or the message of the error it rejected with: one value the
+ * folded tests assert over.
+ */
+async function outcomeOf(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    return await promise;
+  } catch (error) {
+    return {rejected: error instanceof Error ? error.message : String(error)};
+  }
+}
+
 describe('client lock (card server-05 table)', () => {
   it("lockIdFor('u@h:22') -> 8 lower-case hex chars; same twice; differs for 'u@h:23'", () => {
     const lockId = lockIdFor(IDENTITY);
-    ok(/^[0-9a-f]{8}$/.test(lockId));
-    strictEqual(lockId, lockIdFor(IDENTITY));
-    ok(lockId !== lockIdFor('u@h:23'));
+    deepStrictEqual(
+      {
+        shape: /^[0-9a-f]{8}$/.test(lockId),
+        same: lockId === lockIdFor(IDENTITY),
+        differs: lockId !== lockIdFor('u@h:23'),
+      },
+      {shape: true, same: true, differs: true},
+    );
   });
 
   it('no file: withClientLock -> done with the work value; the file is created before work runs and removed after', async () => {
@@ -51,11 +68,22 @@ describe('client lock (card server-05 table)', () => {
       () => undefined,
     );
     await drain();
-    deepStrictEqual(await promise, {kind: 'done', value: 'value'});
-    ok(fileSeenDuringWork);
-    deepStrictEqual(port.files(), []);
-    strictEqual(port.calls.at(0), `createExclusive ${PATH} ${IDENTITY}`);
-    strictEqual(port.calls.filter(call => call === `remove ${PATH}`).length, 1);
+    deepStrictEqual(
+      {
+        result: await promise,
+        seenDuringWork: fileSeenDuringWork,
+        left: port.files(),
+        first: port.calls.at(0),
+        removes: port.calls.filter(call => call === `remove ${PATH}`).length,
+      },
+      {
+        result: {kind: 'done', value: 'value'},
+        seenDuringWork: true,
+        left: [],
+        first: `createExclusive ${PATH} ${IDENTITY}`,
+        removes: 1,
+      },
+    );
   });
 
   it('work throws: the error propagates and the file is removed', async () => {
@@ -73,9 +101,14 @@ describe('client lock (card server-05 table)', () => {
       () => undefined,
     );
     await drain();
-    await rejects(promise, {message: 'the work failed'});
-    deepStrictEqual(port.files(), []);
-    strictEqual(port.calls.filter(call => call === `remove ${PATH}`).length, 1);
+    deepStrictEqual(
+      {
+        result: await outcomeOf(promise),
+        left: port.files(),
+        removes: port.calls.filter(call => call === `remove ${PATH}`).length,
+      },
+      {result: {rejected: 'the work failed'}, left: [], removes: 1},
+    );
   });
 
   it('file exists, age 1000; the holder removes it on the 3rd ageMilliseconds call: onWaiting once, done, the clock advanced 1500 ms in 500 steps', async () => {
@@ -98,12 +131,24 @@ describe('client lock (card server-05 table)', () => {
       waited += 1;
     });
     const result = await settle(promise, clock, 500, 1500);
-    deepStrictEqual(result, {kind: 'done', value: 'value'});
-    strictEqual(clock.now(), 1500);
-    strictEqual(ageReads, 3);
-    strictEqual(waited, 1);
-    deepStrictEqual(clock.waitSteps(), [500, 500, 500]);
-    deepStrictEqual(port.files(), []);
+    deepStrictEqual(
+      {
+        result,
+        clock: clock.now(),
+        ageReads,
+        waited,
+        waitSteps: clock.waitSteps(),
+        left: port.files(),
+      },
+      {
+        result: {kind: 'done', value: 'value'},
+        clock: 1500,
+        ageReads: 3,
+        waited: 1,
+        waitSteps: [500, 500, 500],
+        left: [],
+      },
+    );
   });
 
   it('file exists forever, age 1000: after 120000 ms of polling -> lockTimeout; onWaiting once; no remove call', async () => {
@@ -116,10 +161,20 @@ describe('client lock (card server-05 table)', () => {
       waited += 1;
     });
     const result = await settle(promise, clock, 500, 120000);
-    deepStrictEqual(result, {kind: 'lockTimeout'});
-    strictEqual(waited, 1);
-    strictEqual(port.calls.filter(call => call === `remove ${PATH}`).length, 0);
-    strictEqual(clock.now(), 120000);
+    deepStrictEqual(
+      {
+        result,
+        waited,
+        removes: port.calls.filter(call => call === `remove ${PATH}`).length,
+        clock: clock.now(),
+      },
+      {
+        result: {kind: 'lockTimeout'},
+        waited: 1,
+        removes: 0,
+        clock: 120000,
+      },
+    );
   });
 
   it('file exists, age 240000: removed, created, done (takeover); onWaiting not called', async () => {
@@ -132,9 +187,10 @@ describe('client lock (card server-05 table)', () => {
       waited += 1;
     });
     const result = await settle(promise, clock, 500, 500);
-    deepStrictEqual(result, {kind: 'done', value: 'value'});
-    strictEqual(waited, 0);
-    deepStrictEqual(port.files(), []);
+    deepStrictEqual(
+      {result, waited, left: port.files()},
+      {result: {kind: 'done', value: 'value'}, waited: 0, left: []},
+    );
   });
 
   it('file exists, age 239999: polls (no takeover); the age grows per poll -> takeover when it reaches 240000 -> done', async () => {
@@ -144,9 +200,10 @@ describe('client lock (card server-05 table)', () => {
     port.setAge(PATH, 239999);
     const promise = startLocked(port, clock, () => undefined);
     const result = await settle(promise, clock, 500, 2000);
-    deepStrictEqual(result, {kind: 'done', value: 'value'});
-    strictEqual(clock.now(), 500);
-    deepStrictEqual(port.files(), []);
+    deepStrictEqual(
+      {result, clock: clock.now(), left: port.files()},
+      {result: {kind: 'done', value: 'value'}, clock: 500, left: []},
+    );
   });
 
   it('takeover race: after the remove, createExclusive returns exists (another waiter won); keep polling; when the file is later removed -> done; the takeover remove happens once (row counts the takeover remove only)', async () => {
@@ -169,9 +226,6 @@ describe('client lock (card server-05 table)', () => {
       waited += 1;
     });
     const result = await settle(promise, clock, 500, 5000);
-    deepStrictEqual(result, {kind: 'done', value: 'value'});
-    strictEqual(waited, 1);
-    strictEqual(createCalls, 3);
     // The row's "exactly one remove call" counts the takeover remove only: no remove while losing the
     // race and none before the file disappears; the finally-remove after the work is a second.
     const lastCreate = port.calls.lastIndexOf(
@@ -179,15 +233,25 @@ describe('client lock (card server-05 table)', () => {
     );
     deepStrictEqual(
       {
+        result,
+        waited,
+        createCalls,
         takeoverRemovesBeforeLastCreate: port.calls
           .slice(0, lastCreate)
           .filter(call => call === `remove ${PATH}`).length,
         totalRemoves: port.calls.filter(call => call === `remove ${PATH}`)
           .length,
+        left: port.files(),
       },
-      {takeoverRemovesBeforeLastCreate: 1, totalRemoves: 2},
+      {
+        result: {kind: 'done', value: 'value'},
+        waited: 1,
+        createCalls: 3,
+        takeoverRemovesBeforeLastCreate: 1,
+        totalRemoves: 2,
+        left: [],
+      },
     );
-    deepStrictEqual(port.files(), []);
   });
 
   it('custom options {poll 100, giveUp 300, takeover 1000} with a file aged 10: three polls then lockTimeout at 300 ms', async () => {
@@ -212,17 +276,28 @@ describe('client lock (card server-05 table)', () => {
       },
     );
     const result = await settle(promise, clock, 100, 300);
-    deepStrictEqual(result, {kind: 'lockTimeout'});
-    strictEqual(clock.now(), 300);
-    strictEqual(waited, 1);
-    strictEqual(port.calls.filter(call => call === `remove ${PATH}`).length, 0);
+    deepStrictEqual(
+      {
+        result,
+        clock: clock.now(),
+        waited,
+        removes: port.calls.filter(call => call === `remove ${PATH}`).length,
+      },
+      {
+        result: {kind: 'lockTimeout'},
+        clock: 300,
+        waited: 1,
+        removes: 0,
+      },
+    );
   });
 
   it('MemoryLockPort: ageMilliseconds of an absent path -> undefined', async () => {
     const clock = new FakeClock();
     const port = new MemoryLockPort(clock);
-    deepStrictEqual(await port.ageMilliseconds('/absent.lock'), undefined);
+    const absent = await port.ageMilliseconds('/absent.lock');
     await port.createExclusive('/fresh.lock', IDENTITY);
-    deepStrictEqual(await port.ageMilliseconds('/fresh.lock'), 0);
+    const fresh = await port.ageMilliseconds('/fresh.lock');
+    deepStrictEqual([absent, fresh], [undefined, 0]);
   });
 });
