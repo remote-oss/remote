@@ -43,6 +43,8 @@ export interface StartedServer {
   processId: number;
   /** The connection token. A secret: it must not reach a log. */
   connectionToken: string;
+  /** Whether the server already ran, so that its start options did not apply to it. */
+  reused: boolean;
 }
 
 /** What the start tells the caller without failing. */
@@ -132,7 +134,16 @@ function outcomeOf(
       processId > 1 &&
       connectionToken !== '';
     return usable
-      ? {kind: 'started', server: {port, processId, connectionToken}, notices}
+      ? {
+          kind: 'started',
+          server: {
+            port,
+            processId,
+            connectionToken,
+            reused: block.serverFacts.reused === 'yes',
+          },
+          notices,
+        }
       : failed({kind: 'unreadableServerFacts'});
   }
   if (block.status === 'ServerFailedToStart') {
