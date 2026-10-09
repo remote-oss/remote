@@ -9,7 +9,7 @@ round, 2026-10-09). Reviewing coder: `remote-coding-worker-2`.
 `packages/lib-server/src/gate/licence-gate.ts`, its tests; `packages/remote-ssh/src/pipeline/server-steps.ts`
 (the `gate` step passes its cancellation, one line) and `src/pipeline/connect.ts` (the `cancelled` gate outcome mapped
 to `Failed {kind: 'cancelled'}`, three lines; added 2026-10-09 on #236 — §2 required it and §1 had left it out)
-with one test each. Nothing else. (Amended 2026-10-09 to main's names;
+with one test each. Nothing else. (Note from #236's review: in production the pipeline's existing `cancelled()` check after the gate already catches an aborted signal, so the `connect.ts` branch fires only when the gate reports `cancelled` for another reason; it stays, since the step's outcome must never leak upward unmapped.) (Amended 2026-10-09 to main's names;
 the first wording used invented ones.)
 
 ## 2. Contract
