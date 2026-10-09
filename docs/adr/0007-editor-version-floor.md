@@ -23,7 +23,7 @@ promise behaviour nobody has observed; a floor above it would exclude the editor
    was published), so code can use nothing newer than the floor; if a stable API introduced in 1.139 itself is
    needed, the floor's own `vscode.d.ts` from the VS Code OSS tag replaces the package, by a note to this ADR. The
    proposed-API declaration files are taken from the VS Code OSS tag of the floor (`vscode-dts`) and committed per
-   package next to the manifest that declares the proposal, or in the library whose code compiles against the proposal when the extensions only import that library's adapters (lib-authority today; an extension that calls a proposed member itself gets its own copy; ruled 2026-10-08, #168). (Wording corrected 2026-10-06.)
+   package next to the manifest that declares the proposal, or in the library whose code compiles against the proposal when the extensions only import that library's adapters (lib-authority today; an extension that calls a proposed member itself gets its own copy; ruled 2026-10-08, #168). Until consumers compile libraries by their declarations (tooling-06), an extension whose program compiles a library that uses a proposal also carries the same declaration files, byte for byte, under its own `vscode-dts` (ruled 2026-10-08: remote-ssh first; the duplicate is vendored data, not code). (Wording corrected 2026-10-06.)
 3. The floor is raised only by a new ADR, together with the suite's profiles, the pinned declarations and a run of
    every package's cases against the new version.
 4. A package that needs an API newer than the floor does not raise the floor on its own: it waits for the ADR or
