@@ -28,7 +28,8 @@
     "check-string-tables": "node tools/string-tables.ts",
     "package": "pnpm build && node tools/package-extensions.ts",
     "test:acceptance": "pnpm package && node tools/acceptance.ts",
-    "test:acceptance:server": "mocha --no-config --extension ts --spec 'tests/acceptance/server/*.test.ts'"
+    "test:acceptance:server": "mocha --no-config --extension ts --spec 'tests/acceptance/server/*.test.ts'",
+    "test:acceptance:real-server": "REMOTE_OSS_REAL_SERVER=1 mocha --no-config --extension ts --spec 'tests/acceptance/server/real-server.test.ts'"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

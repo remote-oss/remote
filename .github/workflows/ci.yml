@@ -1,10 +1,17 @@
 # Layout, typecheck, lint, format and unit tests (ADR-0002); duplicated code, dead code and coverage (ADR-0003).
-# Manual trigger until the testing ADR states the CI cost, so the private repository uses no Actions minutes by
-# default.
+# Manual trigger, and the tags of a release (`<package>-v<semver>`), until the testing ADR states the CI cost, so the
+# private repository uses no Actions minutes by default.
 name: ci
 
 on:
   workflow_dispatch:
+    inputs:
+      real-server:
+        description: Also install and start the real VSCodium server (about 125 MB, up to 20 minutes)
+        type: boolean
+        default: false
+  push:
+    tags: ['*-v*']
 
 permissions:
   contents: read
@@ -88,6 +95,26 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:acceptance:server
+
+  # The real VSCodium server for musl, installed and started on the same host: once by the host's own download, once
+  # with the host's network cut so that the client downloads and copies, and once from the archive the client kept.
+  # The archive (about 125 MB) is fetched twice in a run, into a folder the run removes. Every pull request's CI is a
+  # manual dispatch, so the job is opt-in there (the `real-server` input, default false); the tag of a release runs it
+  # always.
+  acceptance-real-server:
+    name: acceptance (real server)
+    if: inputs.real-server || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:acceptance:real-server
 
   # integration:  pnpm test:integration under xvfb, after the testing ADR
   # per-package checks by profile: added in a later change

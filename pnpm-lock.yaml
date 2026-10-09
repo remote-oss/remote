@@ -323,6 +323,9 @@ importers:
       lib-log:
         specifier: workspace:*
         version: link:../../packages/lib-log
+      lib-product:
+        specifier: workspace:*
+        version: link:../../packages/lib-product
       lib-server:
         specifier: workspace:*
         version: link:../../packages/lib-server
