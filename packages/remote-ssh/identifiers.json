@@ -1,0 +1,21 @@
+{
+  "source": "remote-oss/remote-ssh#78 (F-2002)",
+  "standsDownFor": "ms-vscode-remote.remote-ssh",
+  "standingDownKey": "",
+  "locales": [
+    "cs",
+    "de",
+    "es",
+    "fr",
+    "it",
+    "ja",
+    "ko",
+    "pl",
+    "pt-br",
+    "qps-ploc",
+    "ru",
+    "tr",
+    "zh-cn",
+    "zh-tw"
+  ]
+}

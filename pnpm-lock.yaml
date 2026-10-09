@@ -227,6 +227,8 @@ importers:
         specifier: ^2.9.1
         version: 2.9.1
 
+  packages/lib-forwarding: {}
+
   packages/lib-helper: {}
 
   packages/lib-host: {}
@@ -268,7 +270,20 @@ importers:
 
   packages/remote-server: {}
 
-  packages/remote-ssh: {}
+  packages/remote-ssh:
+    dependencies:
+      lib-identifiers:
+        specifier: workspace:*
+        version: link:../lib-identifiers
+      lib-log:
+        specifier: workspace:*
+        version: link:../lib-log
+      lib-ssh:
+        specifier: workspace:*
+        version: link:../lib-ssh
+      lib-standdown:
+        specifier: workspace:*
+        version: link:../lib-standdown
 
   packages/remote-ssh-edit:
     devDependencies:
