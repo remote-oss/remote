@@ -80,17 +80,15 @@ describe('argumentChoice (card remote-ssh-02)', () => {
     });
   });
 
-  it('F-2301.AC-20 (C115): an array or function with a host opens the picker', () => {
+  it('F-2301.AC-20 (C115): an array with a host opens the picker', () => {
+    deepStrictEqual(argumentChoice(['ignored', 'alpha']), {picker: true});
+  });
+
+  it('F-2301.AC-20 (C115): a function with a host opens the picker', () => {
     deepStrictEqual(
+      argumentChoice(Object.assign(() => undefined, {host: 'fn'})),
       {
-        array: argumentChoice(['ignored', 'alpha']),
-        functionWithHost: argumentChoice(
-          Object.assign(() => undefined, {host: 'fn'}),
-        ),
-      },
-      {
-        array: {picker: true},
-        functionWithHost: {picker: true},
+        picker: true,
       },
     );
   });
@@ -102,6 +100,10 @@ describe('argumentChoice (card remote-ssh-02)', () => {
         host: 'alpha',
       },
     );
+  });
+
+  it('F-2301.AC-20 (C115): an own host that is not a string means the picker', () => {
+    deepStrictEqual(argumentChoice({host: 22}), {picker: true});
   });
 });
 
