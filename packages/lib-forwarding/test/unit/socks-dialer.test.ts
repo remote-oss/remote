@@ -289,6 +289,37 @@ describe('the dialer of the SOCKS relay', () => {
     deepStrictEqual([told, relay()?.closed], [1, true]);
   });
 
+  it('tells a listener that comes after the relay closed', async () => {
+    const {dial, relay} = fixture();
+    const outcome = outcomeOf(dial());
+    await established(relay);
+    relay()?.close();
+    let told = 0;
+    outcome.stream?.onClose(() => {
+      told += 1;
+    });
+    await settled();
+    deepStrictEqual(told, 1);
+  });
+
+  for (const port of [0, -1, 65536, 1.5, Number.NaN]) {
+    it(`refuses the port ${String(port)} before it connects to the relay`, async () => {
+      const {local, clock} = fixture();
+      const dialer = socksDialer({
+        local,
+        socksPort: 41000,
+        scheduler: clock.scheduler(),
+        handshakeMilliseconds: 5000,
+      });
+      const outcome = outcomeOf(dialer.dial({kind: 'port', port}));
+      await settled();
+      deepStrictEqual(
+        [outcome.reason, local.probes.length],
+        [`the port ${String(port)} is not 1 to 65535`, 0],
+      );
+    });
+  }
+
   it('passes the slow-side signals of the relay on: a full relay, its drain, a pause and a resume', async () => {
     const {dial, relay} = fixture();
     const outcome = outcomeOf(dial());

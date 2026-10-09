@@ -30,6 +30,7 @@ const IPV4_BYTES = 4;
 const IPV6_BYTES = 16;
 const REPLY_HEAD_BYTES = 4;
 const BYTE_RANGE = 256;
+const PORT_MAXIMUM = 65535;
 
 function concatenated(first: Uint8Array, second: Uint8Array): Uint8Array {
   const joined = new Uint8Array(first.length + second.length);
@@ -82,6 +83,7 @@ function openThroughRelay(
     const dataListeners: Array<(chunk: Uint8Array) => void> = [];
     const closeListeners: Array<() => void> = [];
     const held: Uint8Array[] = [];
+    let relayClosed = false;
     const cancelTimer = init.scheduler.setTimer(
       init.handshakeMilliseconds,
       () => {
@@ -121,7 +123,11 @@ function openThroughRelay(
         }
       },
       onClose: listener => {
-        closeListeners.push(listener);
+        if (relayClosed) {
+          queueMicrotask(listener);
+        } else {
+          closeListeners.push(listener);
+        }
       },
       close: () => {
         relay.close();
@@ -159,6 +165,7 @@ function openThroughRelay(
     }
     relay.onClose(() => {
       if (stage === 'open') {
+        relayClosed = true;
         for (const listener of closeListeners) {
           listener();
         }
@@ -184,6 +191,13 @@ export function socksDialer(init: SocksDialerInit): Dialer {
     dial: async (target: TunnelTarget) => {
       if (target.kind !== 'port') {
         throw new Error('the SOCKS relay reaches a port, not a socket path');
+      }
+      if (
+        !Number.isInteger(target.port) ||
+        target.port < 1 ||
+        target.port > PORT_MAXIMUM
+      ) {
+        throw new Error(`the port ${String(target.port)} is not 1 to 65535`);
       }
       return openThroughRelay(
         await init.local.connect(init.socksPort),

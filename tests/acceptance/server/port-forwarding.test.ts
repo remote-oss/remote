@@ -17,6 +17,9 @@ const ECHO_PORT = 7777;
 /** A port on the host where nothing listens. */
 const SILENT_PORT = 7778;
 
+/** The longest a test waits for bytes to come back. */
+const RECEIVE_BOUND_MILLISECONDS = 30000;
+
 const LIMITS: WaitLimits = {readyMilliseconds: 10000, retryMilliseconds: 100};
 
 const scheduler = {
@@ -44,15 +47,23 @@ function freePort(): Promise<number> {
   });
 }
 
-/** Everything the connection delivers until it closes. */
-function untilClosed(connection: Duplex): Promise<Buffer> {
+/** The first `length` bytes the connection delivers; rejects when they have not arrived within the bound. */
+function receivedBytes(connection: Duplex, length: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
-  return new Promise(resolve => {
+  let total = 0;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new Error(`only ${String(total)} of ${String(length)} bytes came`),
+      );
+    }, RECEIVE_BOUND_MILLISECONDS);
     connection.onData(chunk => {
       chunks.push(Buffer.from(chunk));
-    });
-    connection.onClose(() => {
-      resolve(Buffer.concat(chunks));
+      total += chunk.length;
+      if (total >= length) {
+        clearTimeout(timer);
+        resolve(Buffer.concat(chunks));
+      }
     });
   });
 }
@@ -107,12 +118,13 @@ describe('F-2105 the port forward over the shared connection to a host', functio
       throw new Error(`the tunnel did not open: ${tunnel.kind}`);
     }
     const client = await nodeLocalPort().connect(tunnel.address.port);
-    const echoed = untilClosed(client);
-    client.send(Buffer.from('hello through the host'));
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const text = 'hello through the host';
+    const echoed = receivedBytes(client, text.length);
+    client.send(Buffer.from(text));
+    const received = await echoed;
     client.close();
     tunnel.close();
-    deepStrictEqual((await echoed).toString(), 'hello through the host');
+    deepStrictEqual(received.toString(), text);
   });
 
   it('F-2105: a payload larger than the buffers comes back whole and in order', async () => {
@@ -122,24 +134,14 @@ describe('F-2105 the port forward over the shared connection to a host', functio
     }
     const client = await nodeLocalPort().connect(tunnel.address.port);
     const payload = pattern(4 * 1024 * 1024);
-    const received: Buffer[] = [];
-    let total = 0;
-    const complete = new Promise<void>(resolve => {
-      client.onData(chunk => {
-        received.push(Buffer.from(chunk));
-        total += chunk.length;
-        if (total >= payload.length) {
-          resolve();
-        }
-      });
-    });
+    const complete = receivedBytes(client, payload.length);
     for (let offset = 0; offset < payload.length; offset += 65536) {
       client.send(payload.subarray(offset, offset + 65536));
     }
-    await complete;
+    const received = await complete;
     client.close();
     tunnel.close();
-    deepStrictEqual(Buffer.concat(received).equals(payload), true);
+    deepStrictEqual(received.equals(payload), true);
   });
 
   it('F-2105: a port on the host where nothing listens leaves the tunnel not ready', async () => {
