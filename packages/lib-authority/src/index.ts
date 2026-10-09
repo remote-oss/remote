@@ -48,3 +48,10 @@ export {
   type ProbeReport,
   type ProbeResult,
 } from './gate/decisions.ts';
+export {
+  type Applied,
+  type ConnectionEvent,
+  type ConnectionState,
+  ConnectionTracker,
+  type CurrentConnection,
+} from './resolver/connection-state.ts';
