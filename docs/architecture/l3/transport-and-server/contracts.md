@@ -300,7 +300,7 @@ wait for the run of F-2102 Q1 (D-60).
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `acquire` | host string, target, window identity, cancellation | a lease: SOCKS port, the shared record (remote port, OS, architecture, temp folder, connection token) when one exists, and S10 over this connection | S2 and S3 failures; `cancelled`; login failed (kind and reason from S5) |
+| `acquire` | host string, target, cancellation (the lease number is the window's identity; ruled 2026-10-08, #175) | a lease: SOCKS port, the shared record (remote port, OS, architecture, temp folder, connection token) when one exists, and S10 over this connection | S2 and S3 failures (`spawnFailed` with its cause when `ssh` could not start); `cancelled`; login failed (kind and reason from S5); `timeout` by the policy's login bound, which pauses while a prompt is open |
 | `release` | lease | none | none |
 | `kill` | host string | done, silently, also when nothing runs (F-2102 BR-7) | none |
 | `events` | lease | `waitingForOtherWindow`, `ownerChanged`, `loginFailed`, `transportLost` | none |
