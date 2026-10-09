@@ -1,45 +1,41 @@
-# Task card connect-06: the decided platform reaches the probe's and the install-extensions step's parameters
+# Task card connect-06: the connection step's lease leak, and the notice/answer pass-through
 
-Why: R4's decision (`ConnectionTerms.platform`, decided before any `ssh` runs) feeds the channel today but not the
-script parameters of the probe and of `installExtensions`, which leave `hostOperatingSystem` undefined, so their
-lock method and interpreter are the POSIX defaults even when the user chose Windows (#186 second round, 2026-10-09;
-harmless in slice 1, wrong for slice 3). Reviewing coder: `remote-coding-worker-1`.
+Why: two findings of #186's review (2026-10-09). Rewritten 2026-10-09 to main's names; the platform threading that
+was here is card connect-07 (slice 3). Reviewing coder: `remote-coding-worker-1`.
 
 ## 1. File boundary
 
-`packages/remote-ssh/src/pipeline/server-steps.ts`, `src/pipeline/parameters.ts` (the signature below),
-`src/pipeline/connection-step.ts` (rows 7–8 only), their tests. Nothing else.
+`packages/remote-ssh/src/pipeline/connection-step.ts`, `src/pipeline/steps.ts` (the `ConnectionLease` type only),
+their tests. Nothing else.
 
 ## 2. Contract
 
 ```ts
-// parameters.ts
-export function parametersFor(input: ParameterInput, hostOperatingSystem: HostOperatingSystem | undefined): ScriptParameters;
-// server-steps.ts: `createServerSteps` receives the terms (`ConnectionTerms`) and maps `terms.platform` to the
-// probe's and installExtensions' `hostOperatingSystem` (`linux` → 'linux', `macOS` → 'darwin', `windows` → 'windows');
-// transfer and start keep taking it from the probed host, as today.
+// steps.ts: ConnectionLease gains two members, passed through from the SharedConnection unchanged (no logic):
+onNotice(listener: (notice: ConnectionNotice) => void): () => void;
+answer(promptId: number, text: string): Promise<boolean>;
+// (`refuse(promptId)` joins them when card ssh-10 lands; not this card.)
+// connection-step.ts: in `openConnectionStep`, when `channelFor` (or anything after the lease was taken) throws,
+// the lease is released before the step returns its failure.
 ```
 
 ## 3. Test table
 
 | Given | Expected |
 |---|---|
-| terms `windows`, probe | the probe's parameters carry `hostOperatingSystem: 'windows'` and `lock.method: 'link'` |
-| terms `linux`, probe | `'linux'` and `lock.method: 'flock'` |
-| terms `macOS`, probe | `'darwin'` |
-| terms `linux`, installExtensions on a reused server | the step's parameters carry `'linux'` |
-| terms `windows`, transfer after a probe that found `linux` | transfer uses the probed `linux` (the probe wins over the setting) |
-| the existing server-steps rows | unchanged |
-| `channelFor` throws inside `openConnectionStep` after the lease was taken | the lease is released before the step fails (today it leaks; #186 review) |
-| the connection step's lease | exposes `onNotice(listener)` and `answer(promptId, text)` of the `SharedConnection` unchanged (pass-through, no logic), so the window's prompt surface can subscribe and answer; one test each |
+| `channelFor` throws after the lease was taken | the lease is released exactly once; the step fails (kind `unknown`, the message as reason) |
+| `channelFor` throws before any lease | nothing to release; the step fails the same way |
+| `lease.onNotice(listener)`; the SharedConnection emits a `prompt` | the listener receives it unchanged; the returned function unsubscribes |
+| `lease.answer(3, 'yes')` | forwarded to the SharedConnection's `answer(3, 'yes')`; its result returned |
+| the existing connection-step rows | unchanged |
 
 ## 4. Rule for the worker
 
-As card log-01; no signature beyond §2 changes.
+As card log-01.
 
 ## 5. Gates and review
 
-PR title `remote-ssh: the decided platform in the probe's parameters (card connect-06)`. Depends on #186 merged.
+PR title `remote-ssh: lease release on a throwing channel, notices and answers on the lease (card connect-06)`.
 
 ## 6. Open rows
 
