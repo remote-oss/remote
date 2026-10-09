@@ -316,6 +316,15 @@ lease list that S9 uses for login ownership. Lifetime, ownership and how it dies
 
 ### S10 ssh-host-channel
 
+"Over this connection" (ruled 2026-10-08): the helper's shared `ssh` runs with `-T` and no command, so the remote
+login shell reads standard input; S10's `runScript` writes the script to that session's stdin (the two-mode
+bootstrap) and reads its result block from stdout, one run at a time (the helper serialises; probe, install, start
+sequentially), while the `-D` SOCKS forward rides the same session: one login, prompts once. `copyToHost` is the one
+exception and runs `scp` as its own login (F-2405). No ControlMaster or ControlPath is ever added (the S2 rule
+stands, POSIX and Windows alike). The lease exposes the session through the helper's request channel (a
+`runScript` request whose reply streams lines and ends with the result block) beside the SOCKS port and the shared
+record; after `start` the session stays as the forward's carrier and later runs (kill, cleanup) use it when idle.
+
 H1 implemented over S9 or S3:
 - `runScript` runs `sh` or `powershell` per V1's interpreter (the login-shell mode is dossier question 10).
 - `copyToHost` uses `scp` through S2 and S3, run as a hidden task so that core's trust gate applies (F-2405).
