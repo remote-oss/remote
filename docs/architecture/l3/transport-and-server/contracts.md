@@ -273,7 +273,9 @@ Rulings of 2026-10-08 for S9 and S10 (the process side):
   request after its hello. This satisfies "written only after the connection completes".
 - Helper messages are plain data over lib-helper's channel: requests `connect` (owner only), `sharedRecord`,
   `setSharedRecord`, `answer {promptId, text}`, `kill`; events `prompt {promptId, surface, text}`, `promptClosed`,
-  `ownerChanged`, `connected {socksPort}`, `transportLost`, `waitingForOtherWindow`. S6 classifies prompts inside
+  `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints}`, `transportLost`,
+  `waitingForOtherWindow`. The reply to `connect` only acknowledges it; a login that fails ends in the `loginFailed`
+  event (S5's kind, reason and hints) and the oldest waiting window takes over the login. S6 classifies prompts inside
   the helper; no answer is stored or logged.
 - The SOCKS port: prefer `-D 0` with the allocated port read from `ssh -v` ("Allocated port N for ...") when the
   local OpenSSH supports it (verified once against the local client and recorded as a fixture); otherwise pick a
@@ -297,7 +299,7 @@ wait for the run of F-2102 Q1 (D-60).
 | `acquire` | host string, target, window identity, cancellation | a lease: SOCKS port, the shared record (remote port, OS, architecture, temp folder, connection token) when one exists, and S10 over this connection | S2 and S3 failures; `cancelled`; login failed (kind and reason from S5) |
 | `release` | lease | none | none |
 | `kill` | host string | done, silently, also when nothing runs (F-2102 BR-7) | none |
-| `events` | lease | `waitingForOtherWindow`, `ownerChanged`, `transportLost` | none |
+| `events` | lease | `waitingForOtherWindow`, `ownerChanged`, `loginFailed`, `transportLost` | none |
 
 Rules:
 - One helper per host string, exactly as written (F-2102 BR-6).
