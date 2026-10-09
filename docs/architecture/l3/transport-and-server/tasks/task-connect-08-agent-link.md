@@ -25,7 +25,7 @@ export type AgentLinkPlan =
   | { kind: 'link'; linkPath: string; target: string };
 export function planAgentLink(input: AgentLinkInput): AgentLinkPlan;
 export function linkPathFor(draw: () => number, takenNames: ReadonlySet<string>): string;
-// `/tmp/vscode-ssh-auth-sock-${draw()}`; draws again while the path is in takenNames
+// `/tmp/vscode-ssh-auth-sock-${draw()}`; draws again while the path is in takenNames, at most 16 times, then returns the last drawn path (ruled 2026-10-10, #247: no unbounded loop; a collision that survives 16 draws is caught by the link creation on the host, F-2311 5.0 step 6)
 export function terminalEnvironment(plan: AgentLinkPlan): Record<string, string>;
 // link: { SSH_AUTH_SOCK: linkPath }; none: {}
 ```
@@ -63,8 +63,8 @@ PR title `remote-ssh: agent link plan (card connect-08)`. Reviewer: `remote-codi
 
 ## 6. Open rows (stop and report)
 
-1. `linkPathFor` has no bound on redraws; F-2311 BR-3 says only that another name is picked. A `draw` that never
-   leaves `takenNames` is not tested.
-2. A `draw` result of 0 or above 999999999: the spec says the draw is uniform below 10^9 and the name a positive
-   number; the function does not check its argument.
+1. Ruled 2026-10-10 (#247): at most 16 redraws, then the last drawn path is returned; one row: a `draw` that always
+   returns a taken number is called 17 times and the function returns that path.
+2. Ruled 2026-10-10 (#247): the function trusts its argument; the pipeline's `draw` is the family's own generator,
+   specified as an integer in 1..999999999, so no check and no row.
 3. The command text that creates the link on the host (F-2311 5.0 step 6) is not in this card.
