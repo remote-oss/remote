@@ -32,7 +32,10 @@ describe('check-layout', () => {
       private: true,
       devDependencies: {'@vscode/vsce': '2.26.0'},
     });
-    workspace.write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    workspace.write(
+      'pnpm-workspace.yaml',
+      'packages:\n  - packages/*\n  - tests/acceptance\n',
+    );
     for (const file of [
       'AGENTS.md',
       'LICENSE',

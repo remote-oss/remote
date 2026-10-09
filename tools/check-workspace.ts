@@ -86,8 +86,10 @@ interface WorkspaceFile {
 interface WorkspacePackage {
   folder: string;
   directory: string;
+  manifestDir: string;
   name: string;
   isLibrary: boolean;
+  acceptance: boolean;
   manifest: Manifest;
 }
 
@@ -221,11 +223,31 @@ class WorkspaceChecker {
           found.push({
             folder,
             directory: path.join(this.packagesDirectory, folder),
+            manifestDir: `packages/${folder}`,
             name: manifest.name ?? folder,
             isLibrary: isLibraryFolder(folder),
+            acceptance: false,
             manifest,
           });
         }
+      }
+    }
+    // The acceptance package sits outside packages/: the one package that may import any extension or
+    // library, and the one nothing may import (layout.md, the acceptance package).
+    const acceptanceFile = path.join('tests', 'acceptance', 'package.json');
+    if (existsSync(path.join(this.root, acceptanceFile))) {
+      const manifest = this.readFile(acceptanceFile, JSON.parse) as
+        Manifest | undefined;
+      if (manifest !== undefined) {
+        found.push({
+          folder: 'acceptance',
+          directory: path.join(this.root, 'tests', 'acceptance'),
+          manifestDir: 'tests/acceptance',
+          name: manifest.name ?? 'acceptance',
+          isLibrary: false,
+          acceptance: true,
+          manifest,
+        });
       }
     }
     return found;
@@ -237,9 +259,10 @@ class WorkspaceChecker {
 
   private checkWorkspaceFile(): void {
     const {packages: globs, linkWorkspacePackages} = this.workspaceFile;
-    if (JSON.stringify(globs) !== JSON.stringify(['packages/*'])) {
+    const expected = ['packages/*', 'tests/acceptance'];
+    if (JSON.stringify(globs) !== JSON.stringify(expected)) {
       this.problems.push(
-        `pnpm-workspace.yaml: packages is ${JSON.stringify(globs)}, expected ["packages/*"]`,
+        `pnpm-workspace.yaml: packages is ${JSON.stringify(globs)}, expected ${JSON.stringify(expected)}`,
       );
     }
     if (linkWorkspacePackages !== undefined) {
@@ -364,7 +387,19 @@ class WorkspaceChecker {
     target: WorkspacePackage | undefined,
     where: string,
   ): void {
-    if (target === undefined || target === owner || target.isLibrary) {
+    if (target === undefined || target === owner) {
+      return;
+    }
+    if (owner.acceptance) {
+      return;
+    }
+    if (target.acceptance) {
+      this.problems.push(
+        `${where}: nothing may depend on the acceptance package`,
+      );
+      return;
+    }
+    if (target.isLibrary) {
       return;
     }
     this.problems.push(
@@ -376,7 +411,7 @@ class WorkspaceChecker {
 
   private checkPackageManifests(): void {
     for (const owner of this.packages) {
-      const where = `packages/${owner.folder}/package.json`;
+      const where = `${owner.manifestDir}/package.json`;
       const {manifest} = owner;
       if (manifest.private !== true) {
         this.problems.push(`${where}: "private" is not true`);
@@ -653,7 +688,7 @@ class WorkspaceChecker {
     }
     for (const owner of this.packages) {
       for (const [name, resolved] of installedLinks(owner.directory)) {
-        const where = `packages/${owner.folder}/node_modules/${name}`;
+        const where = `${owner.manifestDir}/node_modules/${name}`;
         const target = this.linkedPackage(where, resolved);
         if (target === undefined || target === owner) {
           continue;
@@ -716,7 +751,7 @@ class WorkspaceChecker {
       if (chain !== undefined && !reported.has(members)) {
         reported.add(members);
         this.problems.push(
-          `packages/${owner.folder}/package.json: dependency cycle ${chain.join(' -> ')} (layout.md rule 4)`,
+          `${owner.manifestDir}/package.json: dependency cycle ${chain.join(' -> ')} (layout.md rule 4)`,
         );
       }
     }

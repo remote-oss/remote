@@ -44,10 +44,18 @@ describe('check-workspace', () => {
       private: true,
       devDependencies: {mocha: '^11.8.0'},
     });
-    write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    write(
+      'pnpm-workspace.yaml',
+      'packages:\n  - packages/*\n  - tests/acceptance\n',
+    );
     manifest('remote-a');
     manifest('remote-b');
     manifest('lib-x');
+    write('tests/acceptance/package.json', {
+      name: 'acceptance',
+      version: '0.0.0',
+      private: true,
+    });
     write(
       'tsconfig.base.json',
       '{\n  // comments are allowed\n  "compilerOptions": { "strict": true }, "files": []\n}',
@@ -69,7 +77,7 @@ describe('check-workspace', () => {
     manifest('lib-x', {imports: {'#internal': './src/internal.ts'}});
     write(
       'pnpm-workspace.yaml',
-      'packages:\n  - packages/*\ncatalog:\n  mocha: ^11.8.0\nnodeLinker: isolated\n',
+      'packages:\n  - packages/*\n  - tests/acceptance\ncatalog:\n  mocha: ^11.8.0\nnodeLinker: isolated\n',
     );
     write('packages/lib-x/tsconfig.json', {
       extends: '../../tsconfig.base.json',
@@ -137,7 +145,7 @@ describe('check-workspace', () => {
     it('follows catalog: entries', () => {
       write(
         'pnpm-workspace.yaml',
-        'packages:\n  - packages/*\ncatalogs:\n  tools:\n    bridge: link:packages/remote-b\n',
+        'packages:\n  - packages/*\n  - tests/acceptance\ncatalogs:\n  tools:\n    bridge: link:packages/remote-b\n',
       );
       manifest('remote-a', {dependencies: {bridge: 'catalog:tools'}});
       deepStrictEqual(problems(), [
@@ -219,6 +227,7 @@ describe('check-workspace', () => {
         [
           'packages:',
           '  - packages/*',
+          '  - tests/acceptance',
           'overrides:',
           "  'foo>bar': workspace:remote-b@*",
           'packageExtensions:',
@@ -242,8 +251,15 @@ describe('check-workspace', () => {
         'packages:\n  - packages/*\n  - extras/*\nlinkWorkspacePackages: true\n',
       );
       deepStrictEqual(problems(), [
-        'pnpm-workspace.yaml: packages is ["packages/*","extras/*"], expected ["packages/*"]',
+        'pnpm-workspace.yaml: packages is ["packages/*","extras/*"], expected ["packages/*","tests/acceptance"]',
         'pnpm-workspace.yaml: sets linkWorkspacePackages',
+      ]);
+    });
+
+    it('reports a packages list without tests/acceptance', () => {
+      write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+      deepStrictEqual(problems(), [
+        'pnpm-workspace.yaml: packages is ["packages/*"], expected ["packages/*","tests/acceptance"]',
       ]);
     });
 
@@ -255,7 +271,7 @@ describe('check-workspace', () => {
         ),
         [
           'pnpm-workspace.yaml: cannot be read',
-          'pnpm-workspace.yaml: packages is undefined, expected ["packages/*"]',
+          'pnpm-workspace.yaml: packages is undefined, expected ["packages/*","tests/acceptance"]',
         ],
       );
     });
@@ -265,7 +281,7 @@ describe('check-workspace', () => {
       write('packages/remote-a/pnpmfile.mjs', 'export default {};');
       write(
         'pnpm-workspace.yaml',
-        'packages:\n  - packages/*\npnpmfile: hooks.cjs\n',
+        'packages:\n  - packages/*\n  - tests/acceptance\npnpmfile: hooks.cjs\n',
       );
       write('.npmrc', 'global-pnpmfile=/tmp/hooks.cjs\n');
       deepStrictEqual(problems(), [
@@ -279,7 +295,7 @@ describe('check-workspace', () => {
     it('reports hoisting into the root', () => {
       write(
         'pnpm-workspace.yaml',
-        'packages:\n  - packages/*\nnodeLinker: hoisted\nshamefullyHoist: true\npublicHoistPattern: ["*"]\n',
+        'packages:\n  - packages/*\n  - tests/acceptance\nnodeLinker: hoisted\nshamefullyHoist: true\npublicHoistPattern: ["*"]\n',
       );
       write('.npmrc', 'shamefully-hoist=true\npublic-hoist-pattern[]=*\n');
       deepStrictEqual(problems(), [
@@ -288,6 +304,38 @@ describe('check-workspace', () => {
         'pnpm-workspace.yaml: publicHoistPattern hoists into the root',
         '.npmrc: sets shamefully-hoist',
         '.npmrc: sets public-hoist-pattern',
+      ]);
+    });
+  });
+
+  describe('the acceptance package', () => {
+    it('acceptance depending on an extension and a library with workspace:* passes', () => {
+      write('tests/acceptance/package.json', {
+        name: 'acceptance',
+        version: '0.0.0',
+        private: true,
+        devDependencies: {
+          'remote-a': 'workspace:*',
+          'lib-x': 'workspace:*',
+        },
+      });
+      deepStrictEqual(problems(), []);
+    });
+
+    it('a package depending on acceptance fails: nothing may depend on the acceptance package', () => {
+      manifest('remote-b', {devDependencies: {acceptance: 'workspace:*'}});
+      deepStrictEqual(problems(), [
+        'packages/remote-b/package.json: devDependencies.acceptance: nothing may depend on the acceptance package',
+      ]);
+    });
+
+    it('acceptance missing private: true fails', () => {
+      write('tests/acceptance/package.json', {
+        name: 'acceptance',
+        version: '0.0.0',
+      });
+      deepStrictEqual(problems(), [
+        'tests/acceptance/package.json: "private" is not true',
       ]);
     });
   });
