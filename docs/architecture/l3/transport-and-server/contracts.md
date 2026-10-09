@@ -171,13 +171,12 @@ Never: log or return prompt answers.
 |---|---|---|---|
 | `classifyPrompt` | the prompt text ssh passes to askpass, the display host | a surface (`fingerprintPick`, `continuationPick`, `maskedInput`) with title or placeholder and the answer mapping | none |
 
-Adaptation (ruled 2026-10-09, from connect-05's run with OpenSSH 10.3): the host-key question of OpenSSH 10 reads
-`<TYPE> key fingerprint is: <fingerprint>` with no final full stop (older clients: `is <fingerprint>.`). F-2305
-AC-43 and BR-2 pin the colon form and the missing full stop as a masked input, which is the reference's behaviour
-with an older client, not a rule worth keeping: the family's `fingerprintPick` also matches
-`^\S+ key fingerprint is:? (\S+?)\.?$`, the three pinned cases flip to the pick, and the change is recorded as an
-`[adaptation]` of AC-43/BR-2 with the spec question remote-oss/remote-ssh#38 (issuecomment-6074980367, filed 2026-10-09; a spec pull a slice needs, D-62). The
-answer mapping is unchanged (`yes` continues, `no` is `hostKeyRejected`).
+Host-key prompt forms (ruled 2026-10-09 as an adaptation, now the spec: F-2305 #38 revised the same day): OpenSSH 10
+prints `<TYPE> key fingerprint is: <fingerprint>` with no final full stop, older clients `is <fingerprint>.`. The
+rule is the revised AC-43/BR-2: `fingerprintPick` when the fingerprint line (either form, with or without the full
+stop) is followed by the continue-connecting question; `maskedInput` only when that question is missing. The answer
+mapping is unchanged (`yes` continues, `no` is `hostKeyRejected`). The recorded gate's F-2305 row gains a 10.x run
+(VS-3); VS-1's masked case needs the relay.
 
 The rules, first match wins:
 1. The fingerprint pattern of F-2305 BR-2, with the placeholder rules of F-2305 BR-3.
