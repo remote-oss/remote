@@ -53,6 +53,14 @@ const DOWNLOADED: DownloadResult = {
   finalAddress: ADDRESS,
 };
 
+/** An answer that never ends, as a stalled channel gives. */
+const STALLED: ScriptAnswer = {
+  interpreter: 'posixShell',
+  matches: () => true,
+  lines: [],
+  ending: {kind: 'holdUntilCancelled'},
+};
+
 const BOUNDS = {
   deadlineMilliseconds: 30_000,
   stallMilliseconds: 5000,
@@ -134,6 +142,8 @@ interface Setup {
   removeRejects?: boolean;
   cache?: ArchiveCache;
   token?: string;
+  /** Replaces the commit of the script parameters. */
+  commit?: string;
   bounds?: DownloadBounds;
   /** Makes the download port take the request and never answer. */
   downloadNever?: boolean;
@@ -172,7 +182,10 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
   const outcome = await transfer(
     {
       plan: plan(setup.plan),
-      parameters: parametersFor(),
+      parameters: {
+        ...parametersFor(),
+        ...(setup.commit === undefined ? {} : {commit: setup.commit}),
+      },
       clientFolder: CLIENT_FOLDER,
       downloadBounds: setup.bounds ?? BOUNDS,
       temporaryToken: setup.token ?? TOKEN,
@@ -805,18 +818,13 @@ describe('the copy left on the host is deleted (V4)', () => {
     deepStrictEqual(discardsOf(channel), []);
   });
 
-  it('R-79: a stalled channel does not hold the result back, and the leftover is logged', async () => {
+  it('R-79: a stalled channel does not hold the result back, and the leftover is logged with its full name', async () => {
+    const commit = '0123456789abcdef0123456789abcdef01234567';
     const {outcome, logLines} = await runTransfer({
       plan: CLIENT,
+      commit,
       copies: copiesFailing({kind: 'cancelled', detail: 'stopped'}),
-      answers: [
-        {
-          interpreter: 'posixShell',
-          matches: () => true,
-          lines: [],
-          ending: {kind: 'holdUntilCancelled'},
-        },
-      ],
+      answers: [STALLED],
     });
     deepStrictEqual(
       [failureOf(outcome), logLines],
@@ -824,7 +832,7 @@ describe('the copy left on the host is deleted (V4)', () => {
         {kind: 'cancelled'},
         [
           `info downloaded from ${ADDRESS}`,
-          `warn copied archive left in ${HOST_FOLDER}`,
+          `warn copied archive left at ${HOST_FOLDER}/server-${commit}-1700000000000-${TOKEN}.tar.gz`,
         ],
       ],
     );

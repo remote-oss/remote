@@ -208,8 +208,7 @@ async function discardCopy(
     },
   );
   if (stepRun.kind !== 'result' || stepRun.block.status !== 'Ok') {
-    // The file name holds the commit, a long run the log would take for a secret and redact whole.
-    dependencies.logger.warn(`copied archive left in ${input.hostFolder}`);
+    dependencies.logger.warn(`copied archive left at ${remotePath}`);
   }
 }
 
