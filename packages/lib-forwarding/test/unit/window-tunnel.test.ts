@@ -25,6 +25,7 @@ interface RelayFixture {
 function relay(
   dialScript: readonly DialAnswer[] = ['work'],
   listenAnswer: Answer = 'work',
+  heldBytesMaximum: number = LIMITS.heldBytesMaximum,
 ): RelayFixture {
   const clock = new FakeClock();
   const dialer = new FakeDialer(dialScript);
@@ -35,7 +36,7 @@ function relay(
     scheduler: clock.scheduler(),
     target: {kind: 'port', port: 4321},
     localPort: 50000,
-    limits: LIMITS,
+    limits: {...LIMITS, heldBytesMaximum},
   };
   return {clock, dialer, local, open: () => openRelayTunnel(request)};
 }
@@ -278,13 +279,14 @@ describe('the fakes', () => {
 /** A tunnel that is open, with a client connected to it, and the connection to the host that the client got. */
 async function connected(
   dialScript: readonly DialAnswer[] = ['work'],
+  heldBytesMaximum: number = LIMITS.heldBytesMaximum,
 ): Promise<{
   fixture: RelayFixture;
   tunnel: WindowTunnelOutcome;
   client: FakeConnection | undefined;
   host: () => FakeConnection | undefined;
 }> {
-  const fixture = relay(dialScript);
+  const fixture = relay(dialScript, 'work', heldBytesMaximum);
   const tunnel = await fixture.open();
   const client = fixture.local.accept(50000);
   await settled();
@@ -370,5 +372,74 @@ describe('a slow side of a tunnel', () => {
     fixture.dialer.openNext();
     await settled();
     deepStrictEqual(client?.paused, true);
+  });
+});
+
+describe('the cap on the bytes a bridge holds before the host side opens', () => {
+  it('holds a few bytes across chunks and delivers them in order once the host side opens', async () => {
+    const {fixture, client, host} = await connected(['work', 'later']);
+    client?.receive(Uint8Array.of(1, 2, 3));
+    client?.receive(Uint8Array.of(4, 5, 6, 7, 8));
+    fixture.dialer.openNext();
+    await settled();
+    deepStrictEqual(
+      [host()?.sent.map(bytes => bytes.byteLength), client?.closed],
+      [[3, 5], false],
+    );
+  });
+
+  it('holds a chunk exactly at the cap and delivers it', async () => {
+    const {fixture, client, host} = await connected(['work', 'later']);
+    client?.receive(Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8));
+    fixture.dialer.openNext();
+    await settled();
+    deepStrictEqual(
+      [client?.closed, host()?.sent.map(bytes => bytes.byteLength)],
+      [false, [8]],
+    );
+  });
+
+  it('closes a client that would go past the cap in one chunk, and nothing is sent', async () => {
+    const {fixture, client, host} = await connected(['work', 'later']);
+    client?.receive(Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8, 9));
+    fixture.dialer.openNext();
+    await settled();
+    deepStrictEqual(
+      [client?.closed, host()?.sent, host()?.paused, host()?.closed],
+      [true, [], false, true],
+    );
+  });
+
+  it('closes the client when a second chunk takes the held bytes past the cap, and the first is never sent', async () => {
+    const {fixture, client, host} = await connected(['work', 'later']);
+    client?.receive(Uint8Array.of(1, 2, 3, 4, 5));
+    client?.receive(Uint8Array.of(6, 7, 8, 9));
+    fixture.dialer.openNext();
+    await settled();
+    deepStrictEqual(
+      [host()?.closed, host()?.sent, host()?.paused, client?.closed],
+      [true, [], false, true],
+    );
+  });
+
+  it('forwards more than the cap once the host side is open', async () => {
+    const {client, host} = await connected();
+    client?.receive(new Uint8Array(100));
+    await settled();
+    deepStrictEqual(
+      [client?.closed, host()?.sent.map(bytes => bytes.byteLength)],
+      [false, [100]],
+    );
+  });
+
+  it('closes a client that sends one byte before the dial when the cap is zero', async () => {
+    const {fixture, client} = await connected(['work', 'later'], 0);
+    client?.receive(Uint8Array.of(1));
+    fixture.dialer.openNext();
+    await settled();
+    deepStrictEqual(
+      [client?.closed, fixture.dialer.connections[1]?.closed],
+      [true, true],
+    );
   });
 });

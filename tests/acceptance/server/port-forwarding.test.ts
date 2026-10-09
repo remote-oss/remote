@@ -20,7 +20,11 @@ const SILENT_PORT = 7778;
 /** The longest a test waits for bytes to come back. */
 const RECEIVE_BOUND_MILLISECONDS = 30000;
 
-const LIMITS: WaitLimits = {readyMilliseconds: 10000, retryMilliseconds: 100};
+const LIMITS: WaitLimits = {
+  readyMilliseconds: 10000,
+  retryMilliseconds: 100,
+  heldBytesMaximum: 10_000_000,
+};
 
 const scheduler = {
   setTimer: (milliseconds: number, callback: () => void) => {
@@ -148,6 +152,7 @@ describe('F-2105 the port forward over the shared connection to a host', functio
     const tunnel = await tunnelTo(SILENT_PORT, {
       readyMilliseconds: 2000,
       retryMilliseconds: 100,
+      heldBytesMaximum: 10_000_000,
     });
     deepStrictEqual(tunnel.kind, 'tunnelNotReady');
   });
