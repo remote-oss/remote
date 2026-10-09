@@ -229,7 +229,11 @@ importers:
 
   packages/lib-authority: {}
 
-  packages/lib-forwarding: {}
+  packages/lib-forwarding:
+    dependencies:
+      lib-helper:
+        specifier: workspace:*
+        version: link:../lib-helper
 
   packages/lib-helper: {}
 

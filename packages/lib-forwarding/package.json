@@ -4,6 +4,9 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./testing/fake-prober": "./src/testing/fake-prober.ts"
+    "./testing/*": "./src/testing/*.ts"
+  },
+  "dependencies": {
+    "lib-helper": "workspace:*"
   }
 }
