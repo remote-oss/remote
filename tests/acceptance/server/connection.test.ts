@@ -290,15 +290,8 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       strictEqual(result.outcome.kind, 'connected');
     });
 
-    it('F-2307: the question is a pick of the fingerprint', async function () {
+    it('F-2307: the question is a pick of the fingerprint', async () => {
       const result = await asked('yes');
-      if (
-        result.prompt?.type === 'prompt' &&
-        !/key fingerprint is \S+\.$/mu.test(result.prompt.text)
-      ) {
-        // F-2305 AC-43 reads only the line OpenSSH before 10 writes; a newer client writes a colon and no full stop.
-        this.skip();
-      }
       strictEqual(
         result.prompt?.type === 'prompt' && result.prompt.surface,
         'fingerprintPick',
