@@ -7,7 +7,7 @@ ruled 2026-10-08). Which variables are exported and the per-host selection are n
 
 ## 1. File boundary
 
-`packages/lib-server/src/proxy-variable-text.ts` (new), `src/proxy-variable-text.test.ts` (new), `src/index.ts`
+`packages/lib-server/src/proxy-variable-text.ts` (new), `test/unit/proxy-variable-text.test.ts` (new), `src/index.ts`
 (export only). Nothing else; no import of `vscode`, no `URL`/`url` module (its host rules differ from the table).
 
 ## 2. Contract
