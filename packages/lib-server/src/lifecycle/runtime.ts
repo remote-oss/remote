@@ -9,6 +9,7 @@ import type {Logger} from 'lib-log';
 import type {ExtraStartOption} from '../policy/record.ts';
 import type {ScriptParameters} from '../scripts/bootstrap.ts';
 import type {ScriptStatus} from '../scripts/result-block.ts';
+import {keptExtensions} from './extensions.ts';
 import {runStep, type StepRun} from './run-step.ts';
 
 /** The highest TCP port. */
@@ -100,11 +101,6 @@ export function isReversedRange(range: string): boolean {
   return match !== null && Number(match[1]) > Number(match[2]);
 }
 
-/** Whether an extension entry has the shape `<publisher>.<name>` of an extension identifier. */
-export function isExtensionIdentifier(entry: string): boolean {
-  return /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9-]*$/.test(entry);
-}
-
 function failed(failure: StartFailure): StartOutcome {
   return {kind: 'failed', failure};
 }
@@ -170,17 +166,10 @@ export async function startOrReuse(
     notices.push({kind: 'bindHostRejected', configured: bindHost});
     bindHost = FALLBACK_BIND_HOST;
   }
-  const extensions: string[] = [];
-  for (const entry of options.defaultExtensions) {
-    if (isExtensionIdentifier(entry)) {
-      extensions.push(entry);
-      dependencies.logger.info(`default extension: ${entry}`);
-    } else {
-      dependencies.logger.warn(
-        `default extension dropped, not <publisher>.<name>: ${entry}`,
-      );
-    }
-  }
+  const extensions = keptExtensions(
+    options.defaultExtensions,
+    dependencies.logger,
+  );
   const windows = channel.platformHint() === 'windows';
   const parameters: ScriptParameters = {
     ...base,

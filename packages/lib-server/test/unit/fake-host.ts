@@ -105,6 +105,14 @@ const FLOCK = [
 /** The stand-in server launcher: it records its arguments and the ready line, then stays up a while. */
 const LAUNCHER = [
   '#!/bin/sh',
+  'if [ "$1" = --install-extension ]; then',
+  '  echo "$2" >>"$EXTENSION_CALLS"',
+  '  case " ${EXTENSION_FAILS:-} " in',
+  '    *" $2 "*) echo "Extension \'$2\' not found."; exit 1 ;;',
+  '  esac',
+  '  echo "Extension \'$2\' was successfully installed."',
+  '  exit 0',
+  'fi',
   'echo "$*" >"$SERVER_ARGUMENTS"',
   'echo started >>"$SERVER_STARTS"',
   '[ -z "$SERVER_EXIT" ] || exit "$SERVER_EXIT"',
@@ -196,6 +204,7 @@ export function fakeHost(stubs: readonly Stub[] = ['wget']): FakeHost {
       STUB_ARCHIVE: path.join(root, 'server.tar.gz'),
       SERVER_ARGUMENTS: path.join(root, 'arguments.txt'),
       SERVER_STARTS: path.join(root, 'starts.txt'),
+      EXTENSION_CALLS: path.join(root, 'extensions.txt'),
     },
   };
 }
@@ -297,4 +306,27 @@ export function single(
 /** The install folder of the baseline parameters on a host. */
 export function installFolder(host: FakeHost): string {
   return path.join(host.home, '.server-data', 'bin', 'abc123');
+}
+
+/**
+ * Registers the hooks that give each test of the enclosing suite a fake host with the baseline server installed, and
+ * stop that host's servers after it. Returns the reader of the current test's host.
+ */
+export function installedHostPerTest(): () => FakeHost {
+  let current: FakeHost | undefined;
+  beforeEach(() => {
+    current = fakeHost();
+    runScript(current, single('install'), parametersFor());
+  });
+  afterEach(() => {
+    if (current !== undefined) {
+      runScript(current, single('kill'), parametersFor());
+    }
+  });
+  return () => {
+    if (current === undefined) {
+      throw new Error('no fake host outside a test');
+    }
+    return current;
+  };
 }

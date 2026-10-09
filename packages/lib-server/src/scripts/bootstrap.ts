@@ -23,7 +23,14 @@ import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
 
 /** The steps of a single-script install. */
 export type ScriptStep =
-  'probe' | 'install' | 'discard' | 'start' | 'kill' | 'uninstall' | 'cleanup';
+  | 'probe'
+  | 'install'
+  | 'discard'
+  | 'start'
+  | 'installExtensions'
+  | 'kill'
+  | 'uninstall'
+  | 'cleanup';
 
 /** The extra actions of a stepwise install, in the order they run. */
 export type StepwiseAction = 'prepare' | 'unpack' | 'activate';
@@ -51,7 +58,7 @@ export interface StartParameters {
   licenceAccepted: boolean;
   /** Seconds of reconnection grace; 0 passes no option. */
   graceSeconds: number;
-  /** Extensions the server installs when it starts. */
+  /** Extensions the server installs when it starts, and the ones the `installExtensions` step installs. */
   extensions: readonly string[];
   /** The polling interval of the file watcher in milliseconds, when the policy allows it; 0 for none. */
   fileWatcherPollingMilliseconds: number;
@@ -373,6 +380,34 @@ function startBody(start: StartParameters): string[] {
   ];
 }
 
+/**
+ * Installs each extension with the installed server's own command line, one after the other, and reports one answer
+ * per extension: `server.extension.<position>.status` is `installed` or `failed`, and `message` is the last line the
+ * command printed. A failure of one extension never stops the others, and the step itself ends `Ok`.
+ */
+function installExtensionsBody(start: StartParameters): string[] {
+  const words = start.extensions.map(extension => shellQuote(extension));
+  return [
+    '[ -x "$INSTALL_DIR/$LAUNCHER" ] || finish ServerFailedToStart',
+    'prepare_environment',
+    `set -- ${words.join(' ')}`,
+    'POSITION=0',
+    'EXTENSION_LOG=$BOOT_PREFIX.extension.$$',
+    'for EXTENSION in "$@"; do',
+    '  if "$INSTALL_DIR/$LAUNCHER" --install-extension "$EXTENSION" </dev/null >"$EXTENSION_LOG" 2>&1; then',
+    '    EXTENSION_STATUS=installed',
+    '  else',
+    '    EXTENSION_STATUS=failed',
+    '  fi',
+    '  fact "server.extension.$POSITION.status" "$EXTENSION_STATUS"',
+    '  fact "server.extension.$POSITION.message" "$(tail -n 1 "$EXTENSION_LOG" 2>/dev/null | cut -c1-300)"',
+    '  POSITION=$((POSITION + 1))',
+    'done',
+    'rm -f "$EXTENSION_LOG"',
+    'finish Ok',
+  ];
+}
+
 const KILL_BODY: readonly string[] = [
   '[ -n "$DATA_ROOT" ] && [ -n "$DATA_FOLDER" ] || finish Ok',
   'stop_servers',
@@ -413,7 +448,10 @@ const CLEANUP_BODY: readonly string[] = [
   'finish Ok',
 ];
 
-type BodyStep = Exclude<BootstrapRequest['step'], 'start'>;
+type BodyStep = Exclude<
+  BootstrapRequest['step'],
+  'start' | 'installExtensions'
+>;
 
 function bodyOf(step: BodyStep): readonly string[] {
   switch (step) {
@@ -459,19 +497,31 @@ const FUNCTION_GROUPS: Readonly<
     PROCESS_FUNCTIONS,
     LEAVE,
   ],
+  installExtensions: [COMMON_FUNCTIONS, ENVIRONMENT_FUNCTIONS],
   kill: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
   uninstall: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
   cleanup: [COMMON_FUNCTIONS, LOCK_FUNCTIONS, FOLDER_KIND_FUNCTIONS],
 };
 
+function stepBody(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): readonly string[] {
+  switch (request.step) {
+    case 'start':
+      return startBody(parameters.start);
+    case 'installExtensions':
+      return installExtensionsBody(parameters.start);
+    default:
+      return bodyOf(request.step);
+  }
+}
+
 function posixScript(
   request: BootstrapRequest,
   parameters: ScriptParameters,
 ): string {
-  const body =
-    request.step === 'start'
-      ? startBody(parameters.start)
-      : bodyOf(request.step);
+  const body = stepBody(request, parameters);
   return [
     ...GUARD,
     ...parameterBlock(parameters),
