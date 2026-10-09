@@ -152,7 +152,7 @@ needed (F-1403).
 
 Semantics fixed by the specs: "current" reloads the calling window, even on the same target. "new" opens exactly
 one new window and never reuses one (F-5103, F-8201 BR-12). A target with no path opens no folder. Built on core's
-stable `vscode.openFolder` (`forceNewWindow`, `forceReuseWindow`) and `vscode.newWindow` (`remoteAuthority`) [oss].
+stable `vscode.openFolder` (`forceNewWindow`, `forceReuseWindow`, `forceLocalWindow` for a local window) and `vscode.newWindow` (`remoteAuthority`; `null` for a local window, since an absent value means the current window's authority) [oss] (ruled 2026-10-08, #96).
 
 ### 3.4 Proposed-API gate (family-wide; lead's decision 2026-10-06)
 

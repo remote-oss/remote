@@ -16,12 +16,13 @@ export type PathKind = 'folder' | 'workspace';
 export type OpenTarget = 'current' | 'new';
 export type OpenCommand =
   | { command: 'vscode.openFolder'; uri: { scheme: 'vscode-remote'; authority: string; path: string }; options: { forceNewWindow: boolean; forceReuseWindow: boolean } }
-  | { command: 'vscode.newWindow'; options: { remoteAuthority?: string; reuseWindow: boolean } }
-  | { command: 'vscode.openFolder'; uri: { scheme: 'file'; path: string }; options: { forceNewWindow: boolean; forceReuseWindow: boolean } };
+  | { command: 'vscode.newWindow'; options: { remoteAuthority: string | null; reuseWindow: boolean } }
+  | { command: 'vscode.openFolder'; uri: { scheme: 'file'; path: string }; options: { forceNewWindow: boolean; forceReuseWindow: boolean; forceLocalWindow: true } };
 export function openRemoteCommand(authority: string, path: string | undefined, pathKind: PathKind, target: OpenTarget): OpenCommand;
 // path given → vscode.openFolder with the vscode-remote uri (pathKind 'workspace' uses the same command; the uri path is the .code-workspace file); target 'current' → forceReuseWindow true, forceNewWindow false; 'new' → forceNewWindow true, forceReuseWindow false
 // no path → vscode.newWindow with remoteAuthority; reuseWindow = (target === 'current')
-export function openLocalCommand(path: string | undefined, pathKind: PathKind, target: OpenTarget): OpenCommand;   // file scheme; no path → { command: 'vscode.newWindow', options: { reuseWindow: target === 'current' } } with no remoteAuthority (a local empty window; ruled 2026-10-08)
+export function openLocalCommand(path: string | undefined, pathKind: PathKind, target: OpenTarget): OpenCommand;   // file scheme with forceLocalWindow true; no path → { command: 'vscode.newWindow', options: { remoteAuthority: null, reuseWindow: target === 'current' } }
+// Amended 2026-10-08 (#96; [oss] src/vs/workbench/browser/actions/workspaceCommands.ts at 1.139.1): `vscode.newWindow` without `remoteAuthority` opens a window on the CURRENT window's authority, so a local empty window needs `remoteAuthority: null`; `vscode.openFolder` reaches a local window by `forceLocalWindow: true`, never by the uri scheme alone.
 export type FailedLike = { kind: string; retryable: boolean; isReconnection: boolean; silent: boolean; userAlreadyNotified: boolean };
 export type ResolverOutcome = { kind: 'temporarilyNotAvailable' } | { kind: 'notAvailable'; handled: boolean } | { kind: 'presenter' };
 export function mapFailure(failed: FailedLike): ResolverOutcome;
@@ -37,9 +38,11 @@ export function mapFailure(failed: FailedLike): ResolverOutcome;
 | `pathKind 'workspace'`, path `/p/a.code-workspace` | openFolder with that uri path (same command) |
 | no path, `current` | `vscode.newWindow`, `{remoteAuthority:'ssh-remote+h', reuseWindow:true}` |
 | no path, `new` | `{remoteAuthority, reuseWindow:false}` |
-| `openLocalCommand('/p', 'folder', 'new')` | openFolder, uri `{file, '/p'}`, `{forceNewWindow:true, forceReuseWindow:false}` |
-| `openLocalCommand(undefined, 'folder', 'new')` | `vscode.newWindow`, `{reuseWindow:false}`, no remoteAuthority |
-| `openLocalCommand(undefined, 'folder', 'current')` | `vscode.newWindow`, `{reuseWindow:true}` |
+| `openLocalCommand('/p', 'folder', 'new')` | openFolder, uri `{file, '/p'}`, `{forceNewWindow:true, forceReuseWindow:false, forceLocalWindow:true}` |
+| `openLocalCommand('/p/a.code-workspace', 'workspace', 'current')` | openFolder, uri `{file, '/p/a.code-workspace'}`, `{forceNewWindow:false, forceReuseWindow:true, forceLocalWindow:true}` |
+| `openLocalCommand(undefined, 'folder', 'new')` | `vscode.newWindow`, `{remoteAuthority:null, reuseWindow:false}` (`null`, not absent: absent means the current window's authority) |
+| `openLocalCommand(undefined, 'folder', 'current')` | `vscode.newWindow`, `{remoteAuthority:null, reuseWindow:true}` |
+| `openRemoteCommand(...)` with a path | the options carry no `forceLocalWindow` key |
 | `mapFailure({retryable:true, isReconnection:true, silent:true, userAlreadyNotified:true})` | `temporarilyNotAvailable` (retryable first) |
 | `{retryable:false, isReconnection:true, silent:true, userAlreadyNotified:true}` | `notAvailable handled false` |
 | `{…, isReconnection:false, silent:true, userAlreadyNotified:true}` | `notAvailable handled false` |
