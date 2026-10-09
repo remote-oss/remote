@@ -3,5 +3,8 @@
     "lines": 100,
     "branches": 100,
     "functions": 100
+  },
+  "exclude": {
+    "src/window-tunnel/ports.ts": "types only; no executable code"
   }
 }

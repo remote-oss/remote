@@ -11,27 +11,13 @@ import {
   FakeDialer,
   FakeLocalPort,
 } from '../../src/testing/fake-network.ts';
-
-const LIMITS = {readyMilliseconds: 10_000, retryMilliseconds: 500};
-
-/** Lets the promises that are ready run, so that timers and attempts interleave as they would in time. */
-async function settled(): Promise<void> {
-  for (let round = 0; round < 10; round++) {
-    await Promise.resolve();
-  }
-}
-
-async function advanced(clock: FakeClock, milliseconds: number): Promise<void> {
-  await settled();
-  clock.advance(milliseconds);
-  await settled();
-}
+import {LIMITS, settled, advanced} from './timing.fixture.ts';
 
 interface RelayFixture {
   clock: FakeClock;
   dialer: FakeDialer;
   local: FakeLocalPort;
-  open(): Promise<WindowTunnelOutcome>;
+  open: () => Promise<WindowTunnelOutcome>;
 }
 
 function relay(
@@ -179,7 +165,7 @@ describe('the window tunnel of a second ssh session', () => {
     clock: FakeClock;
     local: FakeLocalPort;
     stops: number[];
-    open(): Promise<WindowTunnelOutcome>;
+    open: () => Promise<WindowTunnelOutcome>;
   } {
     const clock = new FakeClock();
     const local = new FakeLocalPort('work', connectScript);
@@ -245,5 +231,44 @@ describe('the window tunnel of a second ssh session', () => {
       outcome.close();
     }
     deepStrictEqual(stops, [1]);
+  });
+});
+
+describe('the window tunnel after it is closed, and when listening fails oddly', () => {
+  it('nothing listens on the window port any more', async () => {
+    const {open, local} = relay();
+    const outcome = await open();
+    if (outcome.kind === 'open') {
+      outcome.close();
+    }
+    deepStrictEqual(local.accept(50000), undefined);
+  });
+
+  it('reports a listen failure that is no error object by its text', async () => {
+    const clock = new FakeClock();
+    const outcome = await openRelayTunnel({
+      dialer: new FakeDialer(),
+      local: {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a port that breaks its contract, on purpose
+        listen: () => Promise.reject('refused by policy'),
+        connect: () => Promise.reject(new Error('unused')),
+      },
+      scheduler: clock.scheduler(),
+      target: {kind: 'port', port: 4321},
+      localPort: 50000,
+      limits: LIMITS,
+    });
+    deepStrictEqual(outcome, {
+      kind: 'listenFailed',
+      detail: 'refused by policy',
+    });
+  });
+});
+
+describe('the fakes', () => {
+  it('a dialer with an empty script works', async () => {
+    const dialer = new FakeDialer([]);
+    await dialer.dial({kind: 'port', port: 1});
+    deepStrictEqual(dialer.connections.length, 1);
   });
 });

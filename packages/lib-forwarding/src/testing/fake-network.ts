@@ -16,23 +16,29 @@ export type Answer = 'work' | 'fail' | 'hang';
 
 /** A connection that keeps what it was sent and lets a test play the other end. */
 export class FakeConnection implements Duplex {
+  /** The chunks this end was asked to send. */
   readonly sent: Uint8Array[] = [];
+  /** Whether this end has been closed. */
   closed = false;
   private readonly dataListeners: Array<(chunk: Uint8Array) => void> = [];
   private readonly closeListeners: Array<() => void> = [];
 
+  /** Keeps the chunk. */
   send(chunk: Uint8Array): void {
     this.sent.push(chunk);
   }
 
+  /** Registers a listener for the bytes that arrive. */
   onData(listener: (chunk: Uint8Array) => void): void {
     this.dataListeners.push(listener);
   }
 
+  /** Registers a listener for the end of the connection. */
   onClose(listener: () => void): void {
     this.closeListeners.push(listener);
   }
 
+  /** Ends the connection once. */
   close(): void {
     if (this.closed) {
       return;
@@ -58,14 +64,18 @@ function answerAt(script: readonly Answer[], count: number): Answer {
 
 /** A dialer whose calls end as the script says, one entry per call. */
 export class FakeDialer implements Dialer {
+  /** The targets asked for, in order. */
   readonly dialed: TunnelTarget[] = [];
+  /** The connections given, in order. */
   readonly connections: FakeConnection[] = [];
   private readonly script: readonly Answer[];
 
+  /** A dialer that answers by `script`. */
   constructor(script: readonly Answer[] = ['work']) {
     this.script = script;
   }
 
+  /** Records the target and ends as the script says. */
   dial(target: TunnelTarget): Promise<Duplex> {
     const answer = answerAt(this.script, this.dialed.length);
     this.dialed.push(target);
@@ -83,14 +93,19 @@ export class FakeDialer implements Dialer {
 
 /** This machine's loopback: listening ends as the first script says, connecting as the second. */
 export class FakeLocalPort implements LocalPort {
+  /** The ports listened on, in order. */
   readonly listened: number[] = [];
+  /** The ports connected to, in order. */
   readonly connected: number[] = [];
+  /** The connections given to the callers of `connect`. */
   readonly probes: FakeConnection[] = [];
+  /** The ports whose listening was closed, in order. */
   readonly closedPorts: number[] = [];
   private readonly listeners = new Map<number, (connection: Duplex) => void>();
   private readonly listenAnswer: Answer;
   private readonly connectScript: readonly Answer[];
 
+  /** A loopback whose listening and connecting end as the scripts say. */
   constructor(
     listenAnswer: Answer = 'work',
     connectScript: readonly Answer[] = ['work'],
@@ -99,6 +114,7 @@ export class FakeLocalPort implements LocalPort {
     this.connectScript = connectScript;
   }
 
+  /** Records the port and ends as the listen answer says. */
   listen(
     port: number,
     onConnection: (connection: Duplex) => void,
@@ -116,6 +132,7 @@ export class FakeLocalPort implements LocalPort {
     });
   }
 
+  /** Records the port and ends as the connect script says. */
   connect(port: number): Promise<Duplex> {
     const answer = answerAt(this.connectScript, this.connected.length);
     this.connected.push(port);

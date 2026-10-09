@@ -22,7 +22,7 @@ export interface WindowAddress {
 
 /** How a tunnel ended up: open, or why not. */
 export type WindowTunnelOutcome =
-  | {kind: 'open'; address: WindowAddress; close(): void}
+  | {kind: 'open'; address: WindowAddress; close: () => void}
   | {kind: 'tunnelNotReady'}
   | {kind: 'listenFailed'; detail: string};
 

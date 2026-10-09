@@ -40,7 +40,7 @@ export interface ReviveReport {
 /** What the window's port forwarding offers: SSH forwards are private to this machine, with no elevation. */
 export interface TunnelFeatures {
   elevation: boolean;
-  privacy: readonly 'private'[];
+  privacy: ReadonlyArray<'private'>;
 }
 
 /** The forwards of one connection. */
