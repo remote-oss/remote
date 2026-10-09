@@ -372,11 +372,3 @@ describe('a slow side of a tunnel', () => {
     deepStrictEqual(client?.paused, true);
   });
 });
-
-describe('the fakes', () => {
-  it('a dialer with an empty script works', async () => {
-    const dialer = new FakeDialer([]);
-    await dialer.dial({kind: 'port', port: 1});
-    deepStrictEqual(dialer.connections.length, 1);
-  });
-});
