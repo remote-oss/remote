@@ -11,3 +11,32 @@ export type {
   ProbeAnswer,
 } from './port-search/find.ts';
 export {findFreePort} from './port-search/find.ts';
+export type {
+  Dialer,
+  Duplex,
+  Listening,
+  LocalPort,
+  TunnelTarget,
+} from './window-tunnel/ports.ts';
+export {succeedsWithin, type WaitLimits} from './window-tunnel/wait.ts';
+export {
+  openRelayTunnel,
+  type RelayTunnelRequest,
+  type WindowAddress,
+  type WindowTunnelOutcome,
+} from './window-tunnel/relay.ts';
+export {
+  type ForwardedTunnelRequest,
+  openForwardedTunnel,
+} from './window-tunnel/forwarded.ts';
+export {
+  factoryFor,
+  type FactoryInit,
+  type ForwardedPort,
+  type ForwardFailure,
+  type ForwardOutcome,
+  type ForwardRequest,
+  type ReviveReport,
+  type TunnelFactory,
+  type TunnelFeatures,
+} from './window-tunnel/factory.ts';
