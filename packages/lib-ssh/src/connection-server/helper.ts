@@ -47,26 +47,26 @@ export async function runConnectionHelper(
   const {parameters} = environment;
   // The client wrote these start values from a ConnectionHelperOptions.
   const options = parameters.options as unknown as ConnectionHelperOptions;
-  const request = JSON.parse(options.request) as SshRequest;
-  const handler = new ConnectionHandler({
-    invocation: buildInvocation({
-      ...request,
-      forwards: [{kind: 'dynamic', localPort: options.socksPort}],
-    }),
-    socksPort: options.socksPort,
-    spawner: environment.spawner,
-    askpassEnvironment: {},
-    editorEnvironment: environment.editorEnvironment,
-    waitSettings: {
-      connectTimeoutSeconds: Number(
-        request.effective.connectTimeout ?? request.settings.connectTimeout,
-      ),
-      unboundedWaitSeconds: options.unboundedWaitSeconds,
-    },
-    scheduler: environment.scheduler,
-    logLine: environment.logLine,
-  });
   try {
+    const request = JSON.parse(options.request) as SshRequest;
+    const handler = new ConnectionHandler({
+      invocation: buildInvocation({
+        ...request,
+        forwards: [{kind: 'dynamic', localPort: options.socksPort}],
+      }),
+      socksPort: options.socksPort,
+      spawner: environment.spawner,
+      askpassEnvironment: {},
+      editorEnvironment: environment.editorEnvironment,
+      waitSettings: {
+        connectTimeoutSeconds: Number(
+          request.effective.connectTimeout ?? request.settings.connectTimeout,
+        ),
+        unboundedWaitSeconds: options.unboundedWaitSeconds,
+      },
+      scheduler: environment.scheduler,
+      logLine: environment.logLine,
+    });
     return await serve({
       endpoint: parameters.endpoint,
       nonce: parameters.nonce,

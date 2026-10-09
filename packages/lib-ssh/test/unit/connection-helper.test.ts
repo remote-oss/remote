@@ -47,8 +47,12 @@ describe('connection helper', () => {
   let received: unknown[];
 
   function start(request: SshRequest = REQUEST): Promise<unknown> {
+    return runWithRequest(JSON.stringify(request));
+  }
+
+  function runWithRequest(requestText: string): Promise<unknown> {
     const options: ConnectionHelperOptions = {
-      request: JSON.stringify(request),
+      request: requestText,
       socksPort: 41000,
       unboundedWaitSeconds: 120,
       recordFile: RECORD_FILE,
@@ -152,6 +156,16 @@ describe('connection helper', () => {
     deepStrictEqual(
       [await ended, files.files.has(RECORD_FILE)],
       ['stopped', false],
+    );
+  });
+
+  it('removes its registry record when its start values cannot be read', async () => {
+    const outcome = await runWithRequest('{not json').catch(
+      (caught: unknown) => caught,
+    );
+    deepStrictEqual(
+      [outcome instanceof SyntaxError, files.files.has(RECORD_FILE)],
+      [true, false],
     );
   });
 
