@@ -32,7 +32,7 @@ export function decide(input: GateInput): GateDecision;
 // if dismissed && activationTime → proceed (silenced); after a gated use failed, the dismissal does not silence
 // if windowClaimedBy is set and not this extensionId → silent
 // else → notify: argvEntries = installedFamilyIds not already in argvEnabled, own id first, then the others in the given order, no duplicates; never the bare switch
-// notify with argvEntries [] (every installed id already enabled, a proposal still missing): the editor has not restarted since the arguments changed; the runner shows the notification with the restart offer only, no runtime-arguments action; the dismissal flag applies as usual (ruled 2026-10-08, #177)
+// the restart-only case is the runner's, not decide's: F-1403 §6 rules that an extension whose OWN id argv.json already lists (a sibling's notification edited it; restart pending) shows only the restart notification; the runner tests `argvEnabled.includes(extensionId)` on a notify decision (corrected 2026-10-08, #177: the condition is the own id, not an empty list)
 export function argvEntryList(ownId: string, installed: readonly string[], enabled: readonly string[]): string[];
 ```
 
@@ -52,7 +52,7 @@ export function argvEntryList(ownId: string, installed: readonly string[], enabl
 | installed with a duplicate id | no duplicate in the result |
 | `argvEntryList` never contains `'*'` or an empty string | assert on inputs including `'*'` in installed (filtered out) |
 | `notify.argvEntries` equals `argvEntryList(extensionId, installedFamilyIds, argvEnabled)` | property check over three inputs |
-| one missing, `installedFamilyIds: [own]`, `argvEnabled: [own]`, nothing claimed | `notify` with `argvEntries: []` (the runner's restart-only case) |
+| one missing, `installedFamilyIds: [own]`, `argvEnabled: [own]`, nothing claimed | `notify` with `argvEntries: []` (the runner then applies F-1403 §6's restart-only rule from `argvEnabled`) |
 
 ## 4. Rule for the worker
 
