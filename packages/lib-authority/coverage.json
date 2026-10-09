@@ -5,6 +5,7 @@
     "functions": 100
   },
   "exclude": {
-    "src/codecs/types.ts": "types only; no executable code"
+    "src/codecs/types.ts": "types only; no executable code",
+    "src/connector/results.ts": "types only; no executable code"
   }
 }
