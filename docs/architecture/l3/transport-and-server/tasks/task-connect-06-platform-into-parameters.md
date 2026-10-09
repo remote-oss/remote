@@ -6,7 +6,7 @@ was here is card connect-07 (slice 3). Reviewing coder: `remote-coding-worker-1`
 ## 1. File boundary
 
 `packages/remote-ssh/src/pipeline/connection-step.ts`, `src/pipeline/steps.ts` (the `ConnectionLease` type only),
-their tests. Nothing else.
+their tests; plus real no-op `onNotice`/`answer` members on the `ConnectionLease` fixtures in `test/unit/connect.test.ts` and `test/unit/server-steps.test.ts`, which the widened type forces (added 2026-10-09). Nothing else.
 
 ## 2. Contract
 
@@ -24,7 +24,7 @@ answer(promptId: number, text: string): Promise<boolean>;
 | Given | Expected |
 |---|---|
 | `channelFor` throws after the lease was taken | the lease is released exactly once; the step fails (kind `unknown`, the message as reason) |
-| `channelFor` throws before any lease | nothing to release; the step fails the same way |
+| ~~`channelFor` throws before any lease~~ | removed 2026-10-09 (#196): `channelFor` runs only after the lease is taken (acquire → onNotice → connect → channelFor), so the case is unreachable; row 1 is the throw test; no restructuring |
 | `lease.onNotice(listener)`; the SharedConnection emits a `prompt` | the listener receives it unchanged; the returned function unsubscribes |
 | `lease.answer(3, 'yes')` | forwarded to the SharedConnection's `answer(3, 'yes')`; its result returned |
 | the existing connection-step rows | unchanged |
