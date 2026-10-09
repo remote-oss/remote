@@ -42,3 +42,13 @@ export {
 } from './window-tunnel/factory.ts';
 export {socksDialer, type SocksDialerInit} from './window-tunnel/socks.ts';
 export {nodeLocalPort} from './window-tunnel/node-network.ts';
+export {
+  effectiveUseLocalServer,
+  loginsPerConnect,
+  selectTunnelPath,
+  type ForwardingHolder,
+  type TunnelPath,
+  type TunnelSettings,
+  tunnelDestination,
+  userForwardingHolder,
+} from './tunnel-path/select.ts';
