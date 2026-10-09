@@ -300,6 +300,105 @@ describe('identifier-rules', () => {
       );
     });
 
+    it('passes a clause whose every top-level || alternative ends in the gating clause (stand-down gating, F-3901 5)', () => {
+      deepStrictEqual(
+        gated([
+          {
+            menu: 'commandPalette',
+            item: 'remote-x.open',
+            when: `a && !${STANDING_DOWN_KEY} || b && !${STANDING_DOWN_KEY}`,
+          },
+        ]),
+        [],
+      );
+    });
+
+    it('passes a clause whose first alternative is the bare negated key (stand-down gating, F-3901 5)', () => {
+      deepStrictEqual(
+        gated([
+          {
+            menu: 'commandPalette',
+            item: 'remote-x.open',
+            when: `!${STANDING_DOWN_KEY} || c && !${STANDING_DOWN_KEY}`,
+          },
+        ]),
+        [],
+      );
+    });
+
+    it('passes a clause whose || sits inside parentheses (stand-down gating, F-3901 5)', () => {
+      deepStrictEqual(
+        gated([
+          {
+            menu: 'commandPalette',
+            item: 'remote-x.open',
+            when: `(a || b) && !${STANDING_DOWN_KEY}`,
+          },
+        ]),
+        [],
+      );
+    });
+
+    it('reports the alternative that lacks the key (stand-down gating, F-3901 5)', () => {
+      deepStrictEqual(
+        gated([
+          {
+            menu: 'commandPalette',
+            item: 'remote-x.open',
+            when: `a && !${STANDING_DOWN_KEY} || b`,
+          },
+        ]),
+        [
+          `commandPalette entry 'remote-x.open': alternative 'b' must end in ' && !remote-x.standingDown', or be '!remote-x.standingDown', naming the key once (stand-down gating)`,
+        ],
+      );
+    });
+
+    it('reports the first alternative that lacks the key (stand-down gating, F-3901 5)', () => {
+      deepStrictEqual(
+        gated([
+          {
+            menu: 'commandPalette',
+            item: 'remote-x.open',
+            when: `a || b && !${STANDING_DOWN_KEY}`,
+          },
+        ]),
+        [
+          `commandPalette entry 'remote-x.open': alternative 'a' must end in ' && !remote-x.standingDown', or be '!remote-x.standingDown', naming the key once (stand-down gating)`,
+        ],
+      );
+    });
+
+    it('reports a key named twice in one alternative (stand-down gating, F-3901 5)', () => {
+      deepStrictEqual(
+        gated([
+          {
+            menu: 'commandPalette',
+            item: 'remote-x.open',
+            when: `a && !${STANDING_DOWN_KEY} && !${STANDING_DOWN_KEY}`,
+          },
+        ]),
+        [
+          "commandPalette entry 'remote-x.open' must end its when clause in ' && !remote-x.standingDown', or be '!remote-x.standingDown', naming the key once (stand-down gating)",
+        ],
+      );
+    });
+
+    it('reports a false alternative inside a clause (stand-down gating, F-3901 5)', () => {
+      deepStrictEqual(
+        gated([
+          {
+            menu: 'commandPalette',
+            item: 'remote-x.open',
+            when: `a && !${STANDING_DOWN_KEY} || false`,
+          },
+        ]),
+        [
+          `commandPalette entry 'remote-x.open': alternative 'false' must end in ' && !remote-x.standingDown', or be '!remote-x.standingDown', naming the key once (stand-down gating)`,
+        ],
+      );
+    });
+
     it('exempts an entry hidden with when false, which cannot duplicate', () => {
       deepStrictEqual(
         gated([
