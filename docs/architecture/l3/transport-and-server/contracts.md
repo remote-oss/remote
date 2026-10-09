@@ -428,9 +428,12 @@ Rules:
   step shared across windows and editor instances.
 - Verification follows the record: the download port reports the facts of the final response of the redirect chain
   (the final URL, the HTTP status, `content-length` when present, a digest header only when the policy table names
-  one and the server sends it), and V4 applies the first rule whose facts are present (card server-09). A redirect
-  to another host than the template's is a `serverDownload` failure with a reason (the source-based licence rule
-  depends on the host). (Ruled 2026-10-08.)
+  one and the server sends it), and V4 applies the first rule whose facts are present (card server-09). Redirects: the
+  licence classification (R-80) is tied to the TEMPLATE's host, never the final one; the final host must be the
+  template's host or one of the allowed redirect hosts the product table lists per source host (for example
+  `github.com` → `objects.githubusercontent.com`, `release-assets.githubusercontent.com`, the GitHub release-asset
+  hosts); any other final host is a `serverDownload` failure with a reason; the final URL is logged. (Ruled
+  2026-10-08, corrected the same day: a plain same-host rule would fail every GitHub release download.)
 - Bounds are the library's (R-79): `DownloadRequest` carries `deadlineMilliseconds` (the whole transfer),
   `stallMilliseconds` (no bytes for that long ends it) and `maximumBytes` (the content length when known, else the
   policy table's ceiling), plus cancellation; the port implements them and the library proves them with a fake port
