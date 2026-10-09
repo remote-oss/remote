@@ -3,7 +3,7 @@
  * README's sections.
  */
 
-import {deepStrictEqual, ok} from 'node:assert';
+import {deepStrictEqual} from 'node:assert';
 import {readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 
@@ -103,20 +103,22 @@ describe('identity card (card identity-01 table)', () => {
   it('every package.nls.*.json: the description is the English text and the keys match across locales', () => {
     const tables = nlsTables();
     const base = tables.get('package.nls.json');
-    ok(base !== undefined);
-    const baseKeys = Object.keys(base).sort();
+    const baseKeys = base ? Object.keys(base).sort() : [];
     const observed = [...tables.entries()].map(([file, table]) => ({
       file,
       keys: Object.keys(table).sort(),
       description: table.description,
     }));
     deepStrictEqual(
-      observed,
-      observed.map(entry => ({
-        file: entry.file,
-        keys: baseKeys,
-        description: DESCRIPTION,
-      })),
+      [base !== undefined, observed],
+      [
+        true,
+        observed.map(entry => ({
+          file: entry.file,
+          keys: baseKeys,
+          description: DESCRIPTION,
+        })),
+      ],
     );
   });
 

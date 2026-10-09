@@ -8,14 +8,13 @@ describe('leases (card helper-02 table)', () => {
     const table = new LeaseTable(clock.now.bind(clock));
     const leases = [table.open(), table.open(), table.open()];
     deepStrictEqual(
-      leases.map(lease => lease.leaseId),
-      [1, 2, 3],
+      [
+        leases.map(lease => lease.leaseId),
+        table.live().map(lease => lease.leaseId),
+        table.oldest()?.leaseId,
+      ],
+      [[1, 2, 3], [1, 2, 3], 1],
     );
-    deepStrictEqual(
-      table.live().map(lease => lease.leaseId),
-      [1, 2, 3],
-    );
-    strictEqual(table.oldest()?.leaseId, 1);
   });
 
   it('close(1) -> live() is [2, 3]; oldest().leaseId === 2; returns true', () => {
@@ -26,33 +25,40 @@ describe('leases (card helper-02 table)', () => {
     table.open();
     const closed = table.close(1);
     deepStrictEqual(
-      [closed, table.live().map(lease => lease.leaseId)],
-      [true, [2, 3]],
+      [
+        closed,
+        table.live().map(lease => lease.leaseId),
+        table.oldest()?.leaseId,
+      ],
+      [true, [2, 3], 2],
     );
-    strictEqual(table.oldest()?.leaseId, 2);
   });
 
   it('close(1) again; close(99) -> both false; no change event', () => {
     const clock = new FakeClock();
     const table = new LeaseTable(clock.now.bind(clock));
     table.open();
-    strictEqual(table.close(1), true);
+    const first = table.close(1);
     const events: LeaseEvent[] = [];
     table.onChange(event => events.push(event));
     const again = table.close(1);
     const unknown = table.close(99);
-    deepStrictEqual([again, unknown, events.length], [false, false, 0]);
+    deepStrictEqual(
+      [first, again, unknown, events.length],
+      [true, false, false, 0],
+    );
   });
 
   it('after closing all, open() -> leaseId 4 (never reused); oldest().leaseId === 4', () => {
     const clock = new FakeClock();
     const table = new LeaseTable(clock.now.bind(clock));
     const leases = [table.open(), table.open(), table.open()];
-    for (const lease of leases) {
-      strictEqual(table.close(lease.leaseId), true);
-    }
+    const closed = leases.map(lease => table.close(lease.leaseId));
     const next = table.open();
-    deepStrictEqual([next.leaseId, table.oldest()?.leaseId], [4, 4]);
+    deepStrictEqual(
+      [closed, next.leaseId, table.oldest()?.leaseId],
+      [[true, true, true], 4, 4],
+    );
   });
 
   it('onChange listener; open, close -> two events, leases arrays equal live() at each moment; the unsubscribe stops further events', () => {
@@ -61,18 +67,21 @@ describe('leases (card helper-02 table)', () => {
     const events: LeaseEvent[] = [];
     const unsubscribe = table.onChange(event => events.push(event));
     const lease: Lease = table.open();
-    deepStrictEqual(
-      events.map(event => event.leases.map(entry => entry.leaseId)),
-      [[1]],
+    const afterOpen = events.map(event =>
+      event.leases.map(entry => entry.leaseId),
     );
-    strictEqual(table.close(lease.leaseId), true);
-    deepStrictEqual(
-      events.map(event => event.leases.map(entry => entry.leaseId)),
-      [[1], []],
-    );
+    const closed = table.close(lease.leaseId);
     unsubscribe();
     table.open();
-    strictEqual(events.length, 2);
+    deepStrictEqual(
+      [
+        afterOpen,
+        closed,
+        events.map(event => event.leases.map(entry => entry.leaseId)),
+        events.length,
+      ],
+      [[[1]], true, [[1], []], 2],
+    );
   });
 
   it('openedAt -> equals the clock value at open()', () => {
