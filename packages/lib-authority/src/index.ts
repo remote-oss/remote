@@ -19,3 +19,10 @@ export {sshRemoteCodec} from './codecs/ssh-remote.ts';
 export {tunnelCodec} from './codecs/tunnel.ts';
 export {wslCodec} from './codecs/wsl.ts';
 export {decodeAuthority, encodeAuthority} from './codecs/registry.ts';
+export type {
+  Connected,
+  Failed,
+  FailureHint,
+  FailureReason,
+  FilledString,
+} from './connector/results.ts';
