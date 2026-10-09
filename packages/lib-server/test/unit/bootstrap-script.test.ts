@@ -489,6 +489,47 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(existsSync(parameters.archivePath), true);
     });
 
+    /** An archive whose entries start with `./`, as the VSCodium server archives are packed: no folder around them. */
+    function rootedArchive(): string {
+      const source = path.join(host.home, 'rooted-source');
+      mkdirSync(path.join(source, 'bin'), {recursive: true});
+      mkdirSync(path.join(source, 'extensions', 'one'), {recursive: true});
+      mkdirSync(path.join(source, 'out'));
+      writeFileSync(path.join(source, 'bin', 'launcher'), '#!/bin/sh\n');
+      chmodSync(path.join(source, 'bin', 'launcher'), 0o755);
+      writeFileSync(path.join(source, 'extensions', 'one', 'index.js'), '');
+      writeFileSync(path.join(source, 'out', 'main.js'), '');
+      writeFileSync(path.join(source, 'product.json'), '{}\n');
+      const archive = path.join(host.home, 'rooted.tar.gz');
+      spawnSync('tar', ['-czf', archive, '-C', source, '.']);
+      return archive;
+    }
+
+    it('F-2407: an archive with its entries at the root is unpacked as it is, not flattened', () => {
+      const parameters = parametersFor();
+      parameters.archivePath = rootedArchive();
+      runScript(host, single('install'), parameters);
+      deepStrictEqual(
+        [
+          'bin/launcher',
+          'extensions/one/index.js',
+          'out/main.js',
+          'product.json',
+        ].map(file => existsSync(path.join(installFolder(host), file))),
+        [true, true, true, true],
+      );
+    });
+
+    it('F-2407: an archive with its entries at the root has its launcher run as the install, so a second install finds it', () => {
+      const parameters = parametersFor();
+      parameters.archivePath = rootedArchive();
+      runScript(host, single('install'), parameters);
+      deepStrictEqual(
+        statusAndFacts(host, single('probe'), parameters, ['server.installed']),
+        {status: 'Ok', 'server.installed': 'yes'},
+      );
+    });
+
     it('V4: an archive already on the host is removed when the parameters say so', () => {
       const parameters = copiedParameters(true);
       runScript(host, single('install'), parameters);
