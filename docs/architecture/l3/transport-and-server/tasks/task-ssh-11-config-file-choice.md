@@ -38,12 +38,13 @@ export function narrowFileChoice(items: readonly FileChoiceItem[], typed: string
 ```
 
 `buildFileChoice`: configFile unset: placeholder `Select SSH configuration file to update`, items user file, system
-file, settings, help. Set: placeholder `Edit custom SSH configuration file`, items the value exactly as written
+file, settings, help. Set: placeholder `{id: 'S047'}`, items the value exactly as written
 (role `configured`, no trimming, no `~` expansion), settings, help.
 
-`narrowFileChoice`: `typed` empty: the items unchanged. Otherwise a row matches when its label contains `typed`,
-ignoring case. Result: the matching rows in their original order, then the non-matching `settings` and `help` rows in
-their original order; non-matching file rows are dropped.
+`narrowFileChoice` (as amended): `typed` empty: the items unchanged. Otherwise a FILE row is kept when its path
+contains `typed`, ignoring case; the `settings` and `help` rows are always kept, in place. Result: the kept file rows
+in their original order, then `settings`, then `help`. (The fixed rows carry ids, not text, so their resolved labels
+are not matched here; the editor's own filter applies to them.)
 
 ## 3. Test table
 
@@ -60,7 +61,7 @@ their original order; non-matching file rows are dropped.
 | F-2203.AC-29 | default items, typed `zzz` | `settings`, `help` |
 | F-2203.AC-29 | default items, typed `ssh_config` | system file, `settings`, `help` |
 | F-2203.AC-29 | default items, typed `/etc` | system file, `settings`, `help` |
-| F-2203.AC-29 | default items, typed `elp` | `help`, `settings` |
+| F-2203.AC-29 | default items, typed `elp` | `settings`, `help` (no file row contains `elp`; the fixed rows stay in place; corrected 2026-10-10) |
 | F-2203.AC-29 | default items, typed `SSH_CONFIG` | system file, `settings`, `help` (case ignored) |
 
 ## 4. Rule for the worker
