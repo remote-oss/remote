@@ -115,3 +115,4 @@ export {
   type TransferOutcome,
   type TransferPhase,
 } from './transfer/transfer.ts';
+export {proxyVariableText} from './proxy-variable-text.ts';
