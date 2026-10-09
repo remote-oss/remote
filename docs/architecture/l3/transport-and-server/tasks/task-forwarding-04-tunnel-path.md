@@ -26,8 +26,8 @@ export function selectTunnelPath(settings: TunnelSettings): TunnelPath;
 // 'socket' when listenOnSocket; else 'secondSsh' only when useLocalServer is false AND enableDynamicForwarding is false; else 'socks'
 export function loginsPerConnect(path: TunnelPath, reusesRunningServer: boolean): number;
 // socks: 1, or 0 when reusesRunningServer; secondSsh: 2; socket: 2 (reuse does not change either)
-export function userForwardingHolder(path: 'socks' | 'secondSsh', useLocalServer: boolean): ForwardingHolder;
-// secondSsh: tunnelSsh; socks with useLocalServer: localConnectionServer; socks without: installConnection
+export function userForwardingHolder(path: TunnelPath, useLocalServer: boolean): ForwardingHolder;
+// secondSsh: tunnelSsh; socket: tunnelSsh (ruled 2026-10-10: the socket path's tunnel ssh is its second login, like the second-ssh path; F-2104 BR-11 names no holder, so this is the family's rule pending the room's answer); socks with useLocalServer: localConnectionServer; socks without: installConnection
 export function tunnelDestination(path: TunnelPath, endpoint: { port: number; socketPath: string }): string;
 // socket: endpoint.socketPath; otherwise `127.0.0.1:${port}`
 ```
@@ -61,7 +61,9 @@ PR title `lib-forwarding: tunnel path selection (card forwarding-04)`. Reviewer:
 
 ## 6. Open rows (stop and report)
 
-1. `userForwardingHolder` for the `socket` path: F-2104 BR-11 names no holder for it. The function takes only
-   `'socks' | 'secondSsh'`; the caller's choice for `socket` is a question for the lead.
-2. Whether `ClearAllForwardings yes` also removes the SOCKS forward on the `localConnectionServer` holder: F-2104 BR-11
-   states it only for `installConnection`. Not implemented here.
+1. Ruled 2026-10-10 (#244): `userForwardingHolder('socket', …)` is `tunnelSsh`; the signature takes every `TunnelPath`
+   and one row covers it; a spec question on F-2104 confirms the holder.
+2. Ruled 2026-10-10 (#244): stays unimplemented. F-2104 BR-11 states the removal for `installConnection` only; OpenSSH's
+   `ClearAllForwardings` clears command-line forwardings too, so the local connection server's own `-D` would go as
+   well, and the family adds no option to prevent it (S2). What the reference does there is a spec question on F-2104
+   (the PM files it); the answer decides whether a rule is needed at all.
