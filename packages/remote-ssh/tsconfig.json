@@ -12,6 +12,9 @@
       "path": "../lib-host"
     },
     {
+      "path": "../lib-identifiers"
+    },
+    {
       "path": "../lib-log"
     },
     {
@@ -22,6 +25,9 @@
     },
     {
       "path": "../lib-ssh"
+    },
+    {
+      "path": "../lib-standdown"
     }
   ]
 }
