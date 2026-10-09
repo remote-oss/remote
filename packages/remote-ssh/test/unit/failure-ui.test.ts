@@ -130,6 +130,13 @@ describe('the failure dialog: its message (F-2601)', () => {
     );
   });
 
+  it('F-2601: a host name ssh refuses is told with its reason', async () => {
+    deepStrictEqual(
+      await messageOf({...BASE, reason: {id: 'S079'}}),
+      'Could not establish connection to "box": Hostname contains invalid characters.',
+    );
+  });
+
   it('F-2601: a reason id the table does not know counts as no reason', async () => {
     deepStrictEqual(
       await messageOf({...BASE, reason: {id: 'S999'}}),
@@ -264,7 +271,7 @@ describe('the dialog for a download place that is missing (F-3902 rule 8)', () =
   it('F-3902: it names the editor, the setting and the extension', async () => {
     deepStrictEqual(
       await messageOf(NO_SOURCE),
-      "Remote - SSH has no built-in VS Code Server download location for codium. Set remote.SSH.serverDownloadUrlTemplate to a URL template for this editor's own server builds.",
+      "Remote - SSH knows no download location for the server of codium. Set remote.SSH.serverDownloadUrlTemplate to a URL template for this editor's server builds.",
     );
   });
 
@@ -275,7 +282,7 @@ describe('the dialog for a download place that is missing (F-3902 rule 8)', () =
         kind: 'invalidServerTemplate',
         reason: {text: 'unknown placeholder ${platform}'},
       }),
-      'The value of remote.SSH.serverDownloadUrlTemplate is not a usable VS Code Server download URL template: unknown placeholder ${platform}.',
+      'The value of remote.SSH.serverDownloadUrlTemplate is not a usable server download URL template: unknown placeholder ${platform}.',
     );
   });
 

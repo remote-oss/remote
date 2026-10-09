@@ -20,9 +20,9 @@ export const FAILURE_TEMPLATES = {
   openSetting: 'Open Setting',
   cancel: 'Cancel',
   noServerSource:
-    "{2} has no built-in VS Code Server download location for {0}. Set {1} to a URL template for this editor's own server builds.",
+    "{2} knows no download location for the server of {0}. Set {1} to a URL template for this editor's server builds.",
   invalidTemplate:
-    'The value of {1} is not a usable VS Code Server download URL template: {3}.',
+    'The value of {1} is not a usable server download URL template: {3}.',
 } as const;
 
 /** The reason a declined licence is told as. */
@@ -33,6 +33,7 @@ export const REASON_TEMPLATES: Readonly<Record<string, string>> = {
   S027: CANCELLED_REASON,
   S032: 'Could not resolve hostname',
   S075: 'Failed to install the VS Code Server',
+  S079: 'Hostname contains invalid characters',
   S097: 'No route to host',
   S111: 'Remote host key has changed, port forwarding is disabled',
   S137: 'The connection timed out',
