@@ -7,8 +7,8 @@
  *
  * An extension package with a src/ folder must have identifiers.json and gets a table; one whose kinds are all
  * empty gets none. Libraries have neither. The check applies the rules of tools/identifier-rules.ts to every package
- * with identifiers.json. The comparison with the rooms' reference inventories is reported as skipped until the rooms
- * publish them.
+ * with identifiers.json. The comparison with the published identifier inventories is reported as skipped until they
+ * exist.
  */
 
 import {rmSync, writeFileSync} from 'node:fs';

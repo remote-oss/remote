@@ -16,7 +16,7 @@ export interface AskpassHooks {
   /** The host as the user named it, for the texts of the surfaces. */
   displayHost: string;
   scheduler: Scheduler;
-  /** How long a connection may take to send its question before it is closed (R-79). */
+  /** How long a connection may take to send its question before it is closed; no wait is unbounded. */
   firstMessageMilliseconds: number;
   logLine: (line: string) => void;
   /** A question opened. */

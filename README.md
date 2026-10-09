@@ -21,7 +21,7 @@ Node.js (the version in `.node-version`) and pnpm (the version in `package.json`
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm check-layout && pnpm check-identifiers && pnpm check-licences && pnpm lint:shell   # shellcheck
+pnpm check-layout && pnpm check-identifiers && pnpm check-public-surface && pnpm check-licences && pnpm lint:shell   # shellcheck
 pnpm typecheck && pnpm lint && pnpm format:check
 pnpm test:unit && pnpm dupes && pnpm dead && pnpm coverage
 pnpm package

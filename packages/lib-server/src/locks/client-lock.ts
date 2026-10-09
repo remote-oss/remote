@@ -38,8 +38,8 @@ const DEFAULT_OPTIONS: ClientLockOptions = {
 
 /**
  * The lock's file name from the host identity: the first eight lower-case hex characters of the
- * identity's sha256, stable for the same identity. Interop with the reference's name is not a
- * goal, only stability is (BR-6).
+ * identity's sha256, stable for the same identity. The name is shared with no other tool; only its
+ * stability matters (BR-6).
  */
 export function lockIdFor(hostIdentity: string): string {
   return createHash('sha256').update(hostIdentity).digest('hex').slice(0, 8);

@@ -109,3 +109,37 @@ ruleTester.run('todo-issue', rules['todo-issue'], {
     },
   ],
 });
+
+ruleTester.run('public-surface', rules['public-surface'], {
+  valid: [
+    {code: '// Starts a process by its specification.\nrun();'},
+    {code: '/** A session over a started process. */\nexport const done = 1;'},
+    {code: '// Holds a reference to the editor.\nrun();'},
+    {code: 'const worker = 1;\nrun(worker);'},
+  ],
+  invalid: [
+    {
+      code: '// Interop with the reference is not a goal.\nrun();',
+      errors: [{messageId: 'processWording', data: {term: 'the reference'}}],
+    },
+    {
+      code: '/** Decided in F-2105. */\nexport const done = 1;',
+      errors: [{messageId: 'processWording', data: {term: 'F-2105'}}],
+    },
+    {
+      code: '// eslint-disable-next-line no-empty-function -- the card fixes this\nrun();',
+      errors: [{messageId: 'processWording', data: {term: 'card'}}],
+    },
+    {
+      code: '// The worker and\n// the card agree.\nrun();',
+      errors: [
+        {messageId: 'processWording', data: {term: 'worker'}},
+        {messageId: 'processWording', data: {term: 'card'}},
+      ],
+    },
+    {
+      code: '// as the\n// reference does\nrun();',
+      errors: [{messageId: 'processWording', data: {term: 'the reference'}}],
+    },
+  ],
+});

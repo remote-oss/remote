@@ -297,6 +297,19 @@ export default defineConfig(
     },
   },
   {
+    // Comments of the code that ships or that the public repository shows describe the product (ADR-0008). Tests,
+    // test helpers and the generated tables are not shipped, and lib-product's table names products by design.
+    files: ['packages/*/src/**/*.ts', 'tools/**/*.ts', '*.config.ts'],
+    ignores: [
+      '**/*.test.ts',
+      '**/*.fixture.ts',
+      'packages/*/src/testing/**',
+      'packages/*/src/*.generated.ts',
+      'packages/lib-product/src/product-table.ts',
+    ],
+    rules: {'comments/public-surface': 'error'},
+  },
+  {
     files: ['**/*.{js,mjs,cjs}'],
     extends: [tseslint.configs.disableTypeChecked],
   },

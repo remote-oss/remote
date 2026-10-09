@@ -1,6 +1,6 @@
 /**
  * @fileoverview The line of an `ssh -v` run that says the connection is set up: the first setup report that ends
- * the connect wait (F-2105, F-2308 BR-5).
+ * the connect wait.
  */
 
 /** A report in the client's output that the connection has reached a stage. */

@@ -20,4 +20,4 @@ It is bundled into the extensions that install a server and never published on i
 | Entry points | `lib-server` (`src/index.ts`) |
 | Allowed imports | `lib-host`, `lib-product`, `lib-log` |
 | Coverage exclusions | `src/policy/record.ts` and `src/transfer/ports.ts`: types only, no executable code |
-| Notes | `CONTAINERS_POLICY`'s `verification` and `cleanup` are provisional (F-1402 Q4, area C) |
+| Notes | `CONTAINERS_POLICY`'s `verification` and `cleanup` are provisional until the containers design settles them |

@@ -1,5 +1,15 @@
-# remote-explorer
+# Remote Explorer
 
-Extension `remote-oss.remote-explorer` (Remote Explorer). Specifications and conformance suite: `remote-oss/remote-explorer`.
+Every remote target in one view: SSH hosts, containers and WSL distros, one click away.
 
-Status: placeholder. Owner, feature ids and allowed imports are filled in by the component view.
+This extension is under development; its features arrive in coming releases.
+
+## For maintainers
+
+| | |
+|---|---|
+| Maintainers | remote-oss |
+| Features | none yet (they arrive in a later release) |
+| Components | none yet |
+| Allowed imports | none yet |
+| Coverage exclusions | none |

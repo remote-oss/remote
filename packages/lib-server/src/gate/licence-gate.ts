@@ -73,7 +73,7 @@ export function classifyServerLicence(
 /**
  * Clears a server for use. A free server needs no acceptance and gets no flag. A licensed one is cleared by a stored
  * acceptance of its terms page, or by the user's answer to the modal; "Cancel" and a modal that fails both decline,
- * and the gate never accepts for the user (R-68).
+ * and the gate never accepts for the user.
  */
 export async function ensureAccepted(
   classification: LicenceClassification,
