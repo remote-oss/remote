@@ -29,6 +29,7 @@ export {
   type ProductProfile,
   type ProfileReading,
   readProfile,
+  serverDataFolderNameOrDefault,
 } from './profile.ts';
 export {
   type ArchiveResolution,

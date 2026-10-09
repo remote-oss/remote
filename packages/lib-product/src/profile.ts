@@ -131,3 +131,17 @@ export function readProfile(productJsonText: string): ProfileReading {
     },
   };
 }
+
+/**
+ * The name of the folder the server keeps its data in: the one product.json declares, or the product-scoped
+ * fallback derived from the application name, so a product that names none never falls back to another
+ * product's folder.
+ */
+export function serverDataFolderNameOrDefault(
+  profile: Pick<ProductProfile, 'serverDataFolderName' | 'applicationName'>,
+): string {
+  const declared = profile.serverDataFolderName;
+  return declared !== undefined && declared !== ''
+    ? declared
+    : `.${profile.applicationName}-server`;
+}
