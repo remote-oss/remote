@@ -162,9 +162,25 @@ stable `vscode.openFolder` (`forceNewWindow`, `forceReuseWindow`, `forceLocalWin
 | `requestSetup` | the missing proposals, the calling extension id | at most one setup notification per window for the whole family, unless the dismissal flag of F-1403 §6 is set. The primary action opens core's runtime-arguments editor (`workbench.action.configureRuntimeArguments`) and offers the `enable-proposed-api` entry with every installed family id that has a missing proposal. Then a restart offer | `Declined`: sets F-1403 §6's dismissal flag; when the prompt comes back follows F-1403 §6 |
 | (no success cache) | | Every activation probes again; nothing is cached on success (F-1403 §6, lead 2026-10-06) | |
 
-Family-wide coordination: each extension runs its own gate, but only one notification may show. The gate claims the
-window through a context key that an R-27 ledger entry names. The first extension to claim it shows the notification
-for all, and the others stay silent. F-1403 allows this one family-wide flow (containers room, through the lead).
+Family-wide coordination: each extension runs its own gate, but only one notification may show. F-1403 allows this
+one family-wide flow (containers room, through the lead). The claim (ruled 2026-10-08, replacing the context key,
+which an extension can set but never read): the family's UI extensions share one local extension host per window,
+where `vscode.commands.registerCommand` is synchronous and throws for an id that is already registered. The port
+`WindowClaim.claim(extensionId)` does, in order: (1) `registerCommand(CLAIM_COMMAND, () => extensionId)`; success
+means this extension holds the window (`{holder: extensionId}`), and the registration is kept in the extension's
+subscriptions so deactivation releases it; (2) when the registration throws, `executeCommand(CLAIM_COMMAND)` gives the
+holder's id (`{holder}`); (3) when that call fails too (the holder deactivated between the two steps), step 1 once
+more; a second failure is `{holder: undefined}` and the caller decides as if claimed by another (silent). The result
+feeds card authority-03's `windowClaimedBy`. Properties: activation in one extension host is single-threaded and the
+registration synchronous, so two extensions activating together cannot both hold the window; an extension host
+restart (the only way a family extension deactivates while the window lives) clears every claim, and the next
+activations claim anew, which is the wanted behaviour (the notification may show once more after a restart, as after
+a reload). `CLAIM_COMMAND` is `remote-oss.gate.claim`: a family-internal id outside every reference namespace, so it is not an
+R-27 invented id but an `internal` entry `{id, role: 'called', kind: 'query'}` in the `identifiers.json` of every
+package that runs the gate (registered at runtime by each at activation, never contributed, never in a menu, no
+`onCommand:` event: the call is only made when a holder is already active), and harmless to any caller (it returns an
+extension id). Nothing else of the gate is shared between extensions; the dismissal flag stays per extension in its
+global state.
 
 ## 4. lib-companion
 
