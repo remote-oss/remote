@@ -1,7 +1,8 @@
 /**
  * @fileoverview The client's download of a server archive on Node.js, for the tests that install a real server: the
  * download port of lib-server over `fetch`, with the bounds and the allowed hosts of its request, and the client's
- * files for the transfer.
+ * files for the transfer. It is for these tests only: it knows nothing of the editor's proxy settings, which the
+ * extension's own port follows.
  */
 
 import {createHash} from 'node:crypto';
@@ -36,6 +37,8 @@ async function finalResponse(
     if (response.status < 300 || response.status >= 400 || next === null) {
       return response;
     }
+    await response.body?.cancel();
+    // A redirect from https to http is not refused here; the library checks the final address.
     address = new URL(next, address).toString();
   }
   return {refused: 'too many redirects'};

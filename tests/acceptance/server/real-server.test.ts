@@ -5,6 +5,7 @@ import path from 'node:path';
 import {createLogger} from 'lib-log';
 import {
   OVERRIDE_POLICIES,
+  type OverridePolicy,
   type ProductProfile,
   readProfile,
   resolveServerArchive,
@@ -52,6 +53,24 @@ const DOWNLOAD_HOSTS = [
 ];
 
 const MINUTE = 60_000;
+
+/** Points the names a download meets at the host's own loopback, so that the host cannot download. */
+function cutNetwork(host: RunningHost): void {
+  host.asRoot(
+    'sh',
+    '-c',
+    `printf '127.0.0.1 %s\\n' ${DOWNLOAD_HOSTS.join(' ')} >> /etc/hosts`,
+  );
+}
+
+/** The download override policy of Remote - SSH. */
+function overridePolicy(): OverridePolicy {
+  const policy = OVERRIDE_POLICIES['remote-ssh'];
+  if (policy === undefined) {
+    throw new Error('no download override policy for remote-ssh');
+  }
+  return policy;
+}
 
 interface Installation {
   phases: TransferPhase[];
@@ -115,10 +134,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
     const resolution = resolveServerArchive(
       profile,
       platform,
-      OVERRIDE_POLICIES['remote-ssh'] ??
-        (() => {
-          throw new Error('no policy for remote-ssh');
-        })(),
+      overridePolicy(),
     );
     if (resolution.kind !== 'resolved') {
       throw new Error(`no archive: ${resolution.kind}`);
@@ -246,9 +262,10 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       deepStrictEqual(
         [
           installation.transferred.kind,
+          phaseKinds(installation).includes('downloading'),
           phaseKinds(installation).includes('downloadingLocally'),
         ],
-        ['transferred', false],
+        ['transferred', true, false],
       );
     });
 
@@ -303,11 +320,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
 
     before(async () => {
       host = await startHost();
-      host.asRoot(
-        'sh',
-        '-c',
-        `printf '127.0.0.1 %s\\n' ${DOWNLOAD_HOSTS.join(' ')} >> /etc/hosts`,
-      );
+      cutNetwork(host);
       installation = await install(host);
       started = await start(host, installation.parameters);
     });
@@ -330,7 +343,9 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
     });
 
     it('F-2403: the archive the client kept is the one the product published', async () => {
-      const published = await fetch(`${installation.plan.address}.sha256`);
+      const published = await fetch(`${installation.plan.address}.sha256`, {
+        signal: AbortSignal.timeout(30_000),
+      });
       const expected = (await published.text()).trim().split(/\s+/)[0];
       strictEqual(await sha256Of(cachedArchive(installation.host)), expected);
     });
@@ -357,12 +372,16 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
     let installation: Installation;
 
     before(async () => {
+      // A first host leaves the archive in the cache, whatever ran before this suite.
+      const first = await startHost();
+      try {
+        cutNetwork(first);
+        await install(first);
+      } finally {
+        first.stop();
+      }
       host = await startHost();
-      host.asRoot(
-        'sh',
-        '-c',
-        `printf '127.0.0.1 %s\\n' ${DOWNLOAD_HOSTS.join(' ')} >> /etc/hosts`,
-      );
+      cutNetwork(host);
       installation = await install(host);
     });
 

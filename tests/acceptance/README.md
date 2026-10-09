@@ -50,4 +50,4 @@ the test and copied in with `docker cp`, so it needs no download. `pnpm test:acc
 file that installs and starts the real VSCodium server for musl (about 125 MB, fetched through the product fixture's
 template into a folder of the temporary directory that the run removes): once downloaded by the host, once with the
 host's download hosts made unreachable so that the client downloads and copies, and once from the archive the client
-kept. It is skipped unless `REMOTE_OSS_REAL_SERVER=1`, which that script sets.
+kept. It is skipped unless `REMOTE_OSS_REAL_SERVER=1`, which that script sets. In CI it runs when the workflow is dispatched with the `real-server` input set to true, and on the tag of a release.
