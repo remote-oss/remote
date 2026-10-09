@@ -57,6 +57,7 @@ PR title `remote-ssh: forwarded display plan (card connect-09)`. Reviewer: `remo
 
 ## 6. Open rows (stop and report)
 
-1. Which events count as a "new connection" (F-2312 BR-10): the caller decides; this card takes the boolean.
-2. A display value that is not a string of printable characters: F-2312 BR-3 passes whatever sshd sets; the function
-   does not check it.
+1. Ruled 2026-10-10 (#248): the caller decides — the connect pipeline passes `newConnection: true` exactly when its
+   login was a fresh one (S9's `acquire` started the helper's `ssh`, not `alreadyConnected`/a reused server), the
+   same fact that drives the agent link (card connect-08).
+2. Ruled 2026-10-10 (#248): passed through unchanged, as F-2312 BR-3 says; no check, no row.
