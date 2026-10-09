@@ -227,7 +227,9 @@ Rules:
   `DISPLAY` are never added for the user's external askpass (F-2309); for OUR askpass endpoint the askpass environment
   sets `SSH_ASKPASS=<our launcher>` and `SSH_ASKPASS_REQUIRE=force`, because OpenSSH 8.4 and later runs an askpass
   from a process without a tty only when `DISPLAY` is set or the variable says so, and we never inject `DISPLAY`
-  (narrowed 2026-10-08; the room is asked to confirm F-2305/F-2309's wording).
+  (narrowed 2026-10-08; confirmed by the room the same day: F-2309 BR-3/BR-4 and AC-29, F-2305 PRE-3, recorded as an
+  adaptation). The window's own `DISPLAY` or `WAYLAND_DISPLAY` passes through unchanged, never added or removed, which
+  is what reaches our askpass on clients older than 8.4.
 - The connect wait is the timeout plus 2 seconds. It starts at the spawn in shared mode and at the platform choice in
   terminal mode. It pauses while a prompt is open, restarts after each answer, counts time spent in an external
   askpass, and stops at the first setup report (F-2105, F-2308 BR-5). The maximum for `ConnectTimeout 0` is an R-79
