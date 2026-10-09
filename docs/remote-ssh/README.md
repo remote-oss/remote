@@ -23,8 +23,8 @@ run next to the code run on the host. Start with [Getting started](getting-start
 
 **On the host**
 
-- Linux with glibc 2.28 or newer, or Alpine Linux.
-- A 64-bit Intel/AMD or ARM processor (32-bit ARM for Linux too).
+- Linux with glibc 2.28 or newer on a 64-bit Intel/AMD, 64-bit ARM or 32-bit ARM processor, or Alpine Linux on a
+  64-bit Intel/AMD or 64-bit ARM processor.
 - `sh` and `tar`, and `wget` or `curl` to download the server. If the host cannot reach the internet, the extension
   downloads the server on your machine and copies it over (see `remote.SSH.localServerDownload`).
 - Enough disk space in your home folder for the server and the extensions you install there, unless you move it with
@@ -122,7 +122,14 @@ reason, with three buttons:
   documentation, open your SSH configuration file, and open the extension's settings.
 - **Close Remote** turns the window into an ordinary local one.
 
-During an automatic reconnection after a dropped connection, no dialog appears; the editor keeps retrying.
+During an automatic reconnection after a dropped connection, no dialog appears. The editor keeps trying for failures
+that can pass by themselves (an unreachable host, a timeout, a closed connection, a failed download or start), up to
+`remote.SSH.maxReconnectionAttempts`. A failure that needs you (a refused login, a changed host key, an unsupported
+host, an invalid setting) stops the reconnection at once, and the editor shows its own message that the remote is not
+available.
+
+Two failures use their own dialog instead: when the editor names no source for the server, or the download template
+is invalid, the dialog offers **Open Setting**, which opens the Settings editor on the setting involved, and **Cancel**.
 
 | What the dialog says, in short | What it usually means | What to do |
 |---|---|---|
@@ -130,14 +137,17 @@ During an automatic reconnection after a dropped connection, no dialog appears; 
 | Permission denied | The host refused your key or password. | Run `ssh <host>` in a terminal and fix the login there; check `IdentityFile` and your agent. The log lists key problems `ssh` reports. |
 | The connection timed out | The host is unreachable or slow. | Check the address, your network or VPN, and raise `remote.SSH.connectTimeout`. |
 | The host key has changed | The host's key differs from the one on record. | Confirm with the host's administrator, then remove the old line from your known-hosts file. |
-| The host does not meet the prerequisites | The host's C library is too old. | Use a host with glibc 2.28 or newer, or Alpine. |
+| The host does not meet the prerequisites | The host's C library is too old. | Use a host with glibc 2.28 or newer, or Alpine on 64-bit Intel/AMD or ARM. |
 | The host's architecture is not supported | No server build exists for the processor. | Use a supported host. |
-| No download source for the server | Your editor names no server source. | Set `remote.SSH.serverDownloadUrlTemplate`. |
-| The server template is invalid | An unknown placeholder or not an `http:`/`https:` address. | Correct the setting the message names. |
+| No download source for the server | Your editor names no server source. | Choose **Open Setting** and set `remote.SSH.serverDownloadUrlTemplate`. |
+| The server template is invalid | An unknown placeholder or not an `http:`/`https:` address. | Choose **Open Setting** and correct the setting the message names. |
 | Downloading the server failed | The host and, depending on `remote.SSH.localServerDownload`, your machine could not fetch it. | Check the template and the host's network; set a proxy; or choose `always`. |
 | The server could not be installed or started | Disk full, a corrupt download, or an address or port the server cannot use. | Free space, check `remote.SSH.bindHost` and `remote.SSH.serverPickPortsFromRange`. |
 | An invalid setting | A value this extension cannot use, such as an install folder with disallowed characters. | Correct the setting the message names. |
+| The host's install lock stayed busy | Another window or connection kept installing or starting the server on the host. | Wait for it to finish and retry; if it stays busy, check the host for a stuck install. |
+| Connection closed | The connection to the host ended while the window was setting up. | Check the network and the host, then retry. |
 | Connecting was cancelled | You dismissed a question the connection was waiting for. | Connect again and answer it. |
+| Anything else, or no reason at all | A failure with no message of its own. | Open **Remote-SSH: Show Log**; the attempt's record names what failed. |
 
 ## The log
 

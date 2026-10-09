@@ -11,8 +11,8 @@ You need three things:
   `OpenSSH`, you are set. On Windows, install OpenSSH (Git for Windows ships one).
 - **A host you can reach with `ssh`.** If `ssh <host>` works from your terminal, it works from the editor. Key-based
   login is the smoothest; passwords and one-time codes work too, and the editor asks for them when they are needed.
-- **A supported host.** A Linux machine with a reasonably recent C library (glibc 2.28 or newer, or Alpine), on a
-  64-bit Intel/AMD or ARM processor. The host needs `sh` and `tar`, and either `wget` or `curl` to fetch the
+- **A supported host.** A Linux machine with a reasonably recent C library (glibc 2.28 or newer; Alpine on 64-bit Intel/AMD or ARM
+  is supported too), on an Intel/AMD or ARM processor. The host needs `sh` and `tar`, and either `wget` or `curl` to fetch the
   server the first time. It needs no editor, no admin rights, and no software installed by hand.
 
 ## 1. Install the extension
