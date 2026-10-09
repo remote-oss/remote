@@ -17,7 +17,7 @@ for remote authorities; allowed imports `lib-identifiers`, `lib-standdown`, `lib
 
 ```ts
 export type Family = 'ssh-remote' | 'wsl' | 'dev-container' | 'attached-container' | 'k8s-container' | 'apple-container' | 'exec' | 'tunnel';
-export interface SshTarget { kind: 'alias'; alias: string } | { kind: 'host'; hostName: string; user?: string; port?: number }
+export type SshTarget = { kind: 'plain'; text: string } | { kind: 'host'; hostName: string; user?: string; port?: number }
 export interface WslTarget { distro: string; outer?: DecodedTarget }          // distro '' = default distro, passed through, no case folding
 export interface ContainerTarget { payload: string; outer?: DecodedTarget }   // payload: the family's own payload text exactly as written (F-0501's shape is decoded by area C later); outer: the hop after '@'
 export interface TunnelTarget { tunnelName: string; distro?: string }
@@ -32,21 +32,25 @@ export function decodeAuthority(authority: string): DecodedTarget | { malformed:
 export function encodeAuthority(decoded: DecodedTarget): string;   // `${family}+${codec.encode(target)}`
 ```
 
-Rules (ruled 2026-10-08; order matters). `ssh-remote` payload forms (F-2008 BR-5, F-2301 BR-4, F-2501 BR-1, AC-6):
-first the empty/whitespace/control checks (malformed `empty`, `whitespace`, `control`); then (1) the JSON form: if the
-payload is even-length lower-case hex AND its bytes are valid UTF-8 AND `JSON.parse` yields an object, it IS the JSON
-form: `hostName` must be a non-empty string (else malformed `badJson`); `port`, when present, is an integer 1–65535
-or a string of digits in that range (F-2501 AC-6; `"22"` → 22), anything else malformed `badPort`; `user` a string
-if present; (2) otherwise the bare form: `/^[a-z0-9.:-]+$/` (lower-case only) → `{kind:'host', hostName}` (so `abcd`
-and `ff` are hosts, not errors; a hex-looking bare string is a plain host); (3) otherwise `{kind:'alias', alias}`.
-There is no `badHex`: a hex-looking string that is not JSON falls through to (2) or (3). `encode`: alias → the alias; host without
-user and port whose name matches the lower-case bare pattern → the bare host name; every other host (user or port
-present, or an upper-case or otherwise non-bare name, F-2008 §6.2) → the hex of the compact JSON
-`{"hostName":…,"user":…,"port":…}` (keys in that order, absent ones omitted, port as a number). `label`: alias → alias; host → `user@hostName:port` with the present parts
-(`hostName`, `user@hostName`, `hostName:port`). IPv6 literals (F-2501 Q1, kept whole): a bare `::1` matches the bare pattern (colons allowed) and decodes to host
-`::1`; it encodes bare again (option (b), ruled 2026-10-08); brackets are never added or stripped: a bare `[::1]`
-is an alias (`[` is not in the pattern); an IPv6 host with a user or a port travels in the JSON form with hostName
-`::1` unbracketed.
+Rules (ruled 2026-10-08, revised the same day against F-2301 BR-4 and F-2008 §6.2; order matters). `ssh-remote`
+payload forms: first the empty/whitespace/control checks (malformed `empty`, `whitespace`, `control`); then (1) the
+JSON form: if the payload is even-length lower-case hex AND its bytes are valid UTF-8 AND `JSON.parse` yields an
+object, it IS the JSON form: `hostName` a non-empty string (else malformed `badJson`); `port`, when present, an
+integer 1–65535 or a string of digits in that range (F-2501 AC-6; `"22"` → 22), anything else malformed `badPort`;
+`user` a string if present; (2) otherwise the payload is a PLAIN host string taken as written:
+`{kind:'plain', text}` (whether it is a configured alias or a host name is decided later by the config model, not by
+the codec). There is no `alias` kind and no `badHex`.
+`encode` follows the extension's own rule, F-2301 BR-4 (byte-for-byte with the reference, F-2301 Q3 option A):
+a target with no user and no port whose text contains no upper-case letter in any script and none of `/`, `+`, `\`
+encodes plain, exactly as written (so `a_b.invalid`, `a%b.invalid`, `::1`, `fe80::1` stay plain); every other target
+(a user, a port, an upper-case letter, `/`, `+`, `\`) encodes as the hex of the compact JSON
+`{"hostName":…,"user":…,"port":…}` (keys in that order, absent ones omitted, port as a number; `h:22` is hex, the
+port stays). Core's stricter plain set for its own "Open in Editor" links (F-2008 §6.2, `[a-z0-9.:-]`) is core's;
+we decode what it produces but never encode by it. `label`: plain → the text; JSON host → `user@hostName:port` with
+the present parts.
+IPv6 literals: `::1` plain both ways; brackets never added or stripped (`[::1]` is a plain text `[::1]`); with a
+user or port the JSON form carries hostName `::1` unbracketed.
+
 `wsl` payload: `<distro>` or `<distro>@<outer authority>`; distro may be empty; `outer` decoded with `decodeAuthority`
 (a malformed outer → malformed reason `badOuter`); `encode` the reverse; `label` is the distro or `default distro`
 when empty. Container families: payload split at the first `@` into `payload` and `outer` the same way; `label` =
@@ -56,29 +60,25 @@ the payload. `tunnel`: `<tunnelName>` or `<tunnelName>/<distro>`; empty name →
 
 | Given | Expected |
 |---|---|
-| `decodeAuthority('ssh-remote+myhost')` | family ssh-remote, `{kind:'host', hostName:'myhost'}`, rawHostString `'myhost'` |
-| `'ssh-remote+my_host'` (underscore) | `{kind:'alias', alias:'my_host'}` |
+| `decodeAuthority('ssh-remote+myhost')` | family ssh-remote, `{kind:'plain', text:'myhost'}`, rawHostString `'myhost'` |
+| `'ssh-remote+a_b.invalid'`, `'ssh-remote+a%b.invalid'`, `'ssh-remote+abcd'`, `'ssh-remote+ff'`, `'ssh-remote+::1'`, `'ssh-remote+[::1]'`, `'ssh-remote+lab@'` | plain with the text as written (a hex-looking string whose bytes are not JSON is plain) |
 | `'ssh-remote+' + hex('{"hostName":"h","user":"u","port":2222}')` | host h, user u, port 2222; rawHostString = the hex |
-| hex JSON with `"port":"22"` (digit string) | host with port 22 (F-2501 AC-6) |
-| hex JSON with `"port":"2x"` | malformed `badPort` |
-| hex JSON with port 70000 | malformed `badPort` |
-| hex JSON without hostName | malformed `badJson` |
-| `'abc'` | host `abc` (bare pattern) |
-| `'abcd'` (valid hex, bytes not JSON) | host `abcd` |
-| `'ff'` | host `ff` |
-| `'ssh-remote+' + hex('{"hostName":"H"}')` then `encode` of host `H` | decode gives host `H`; `encode({kind:'host', hostName:'H'})` gives the hex form (upper case is not bare) |
+| hex JSON with `"port":"22"` | host with port 22 |
+| hex JSON with `"port":"2x"`, `"port":70000`, `"port":0` | malformed `badPort` |
+| hex JSON without hostName, or hostName `""` | malformed `badJson` |
+| hex JSON `{"hostName":"::1","port":22}` | host `::1` port 22; `encode` → the same hex |
 | `'ssh-remote+'` | malformed `empty` |
 | `'ssh-remote+a b'` | malformed `whitespace` |
 | `'ssh-remote+a\u0001'` | malformed `control` |
-| `'ssh-remote+::1'` | host `::1`; `encode` gives `::1` (bare) |
-| `'ssh-remote+[::1]'` | alias `[::1]` |
-| hex JSON `{"hostName":"::1","port":22}` | host `::1` port 22; `encode` → the hex form |
-| `encode({kind:'host', hostName:'h'})` | `'h'` |
+| `encode({kind:'plain', text:'a_b.invalid'})` | `'a_b.invalid'` |
+| `encode({kind:'host', hostName:'h'})` | `'h'` (plain) |
+| `encode({kind:'host', hostName:'Mixed.invalid'})`, `('Ü.invalid')`, `('a/b')`, `('a+b')`, `('a\\b')` | the hex JSON form each |
 | `encode({kind:'host', hostName:'h', user:'u'})` | hex of `{"hostName":"h","user":"u"}` |
 | `encode({kind:'host', hostName:'h', port: 22})` | hex of `{"hostName":"h","port":22}` |
-| `label` of alias `a`, host `h`, host `u@h`, host `h` port 22, host `u@h` port 22 | `a`, `h`, `u@h`, `h:22`, `u@h:22` |
-| property: for 200 generated targets (alias strings, hosts with optional user/port) `decode(encode(t))` | deep-equals `t` (use a seeded generator in the test; no library) |
-| property: for the three fixed forms, `encode(decode(a))` | equals `a` |
+| `encode({kind:'plain', text:'UPPER-Alias'})` | hex of `{"hostName":"UPPER-Alias"}` (plain text with an upper-case letter cannot stay plain; BR-4) |
+| `label` of plain `a`, host `h`, `u@h`, `h` port 22, `u@h` port 22 | `a`, `h`, `u@h`, `h:22`, `u@h:22` |
+| property: 200 generated targets (plain texts without whitespace/control, hosts with optional user/port, mixed case) → `decode(encode(t))` | a target equal to `t` up to the plain/host collapse: a `host` without user/port that encoded plain decodes as `plain` with the same text; everything else deep-equal |
+| property: for each fixed form, `encode(decode(a)) === a` | holds for plain and hex authorities |
 | `'wsl+Ubuntu'` | `{distro:'Ubuntu'}`; label `Ubuntu` |
 | `'wsl+'` | `{distro:''}`; label `default distro`; `encode` gives `''` |
 | `'wsl+Ubuntu@ssh-remote+h'` | distro Ubuntu, outer = decoded `ssh-remote+h`; `encode` round-trips |

@@ -1,3 +1,7 @@
+> Note (2026-10-08): open row 9 is closed: `lib-authority`'s `ssh-remote` codec encodes by F-2301 BR-4 (plain unless a
+> user, a port, an upper-case letter or `/`, `+`, `\`; the decoded plain text is `{kind:'plain', text}`); the connect
+> flow builds targets and calls the codec, never a form of its own.
+
 # Task card remote-ssh-02: the pure decisions of the connect flows
 
 Brief: area B, component `ssh.connect-flows` (components.md). Contracts: `../contracts.md` §3.1 and §3.3 for the
