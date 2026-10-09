@@ -300,10 +300,7 @@ describe('the connection step', () => {
   });
 
   it('gives the lease back when the channel for the connection cannot be opened', async () => {
-    const {lease, connecting} = fixture(
-      'acquired',
-      'the channel is gone',
-    );
+    const {lease, connecting} = fixture('acquired', 'the channel is gone');
     const pending = connecting();
     await settled();
     lease.emit({type: 'connected', socksPort: 41000});
