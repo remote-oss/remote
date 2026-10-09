@@ -1,8 +1,12 @@
 import {deepStrictEqual} from 'node:assert';
+import {existsSync, readFileSync} from 'node:fs';
+import path from 'node:path';
 import {
   type HelpEditor,
   type HelpHandlers,
   helpHandlers,
+  helpLinksOf,
+  type HelpManifest,
 } from '../../src/help-commands.ts';
 
 const LINKS = {
@@ -83,5 +87,62 @@ describe('the help commands', () => {
     void handlers.getHelp.execute();
     void handlers.getHelp.execute();
     deepStrictEqual(asked, [LINKS.documentation, LINKS.documentation]);
+  });
+});
+
+const PACKAGE = path.join(import.meta.dirname, '..', '..');
+const REPOSITORY = path.join(PACKAGE, '..', '..');
+
+function manifestOfPackage(): HelpManifest {
+  return JSON.parse(
+    readFileSync(path.join(PACKAGE, 'package.json'), 'utf8'),
+  ) as HelpManifest;
+}
+
+/** The file or folder of this repository that a help address on its web host names. */
+function pageOf(address: string): string {
+  const [, page] = /\/(?:blob|tree)\/main\/(.+)$/.exec(address) ?? [];
+  return path.join(REPOSITORY, page ?? '');
+}
+
+/** The message of the error the manifest earns, or the empty text when it earns none. */
+function failureOf(manifest: HelpManifest): string {
+  try {
+    helpLinksOf(manifest);
+    return '';
+  } catch (caught) {
+    return caught instanceof Error ? caught.message : String(caught);
+  }
+}
+
+describe('the help addresses of the manifest', () => {
+  it('are the three the commands open', () => {
+    const links = helpLinksOf(manifestOfPackage());
+    deepStrictEqual(Object.keys(links).sort(), [
+      'documentation',
+      'feedback',
+      'getStarted',
+    ]);
+  });
+
+  it('name pages that exist in this repository: the guide folder and the getting-started page', () => {
+    const links = helpLinksOf(manifestOfPackage());
+    deepStrictEqual(
+      [
+        existsSync(path.join(pageOf(links.documentation), 'README.md')),
+        existsSync(pageOf(links.getStarted)),
+      ],
+      [true, true],
+    );
+  });
+
+  it('fail, naming the address, when the manifest names none or an empty one', () => {
+    const empty = {
+      contributes: {remoteHelp: {'ssh-remote': {urls: {documentation: ''}}}},
+    };
+    deepStrictEqual([{}, empty].map(failureOf), [
+      'the manifest names no documentation address for ssh-remote',
+      'the manifest names no documentation address for ssh-remote',
+    ]);
   });
 });

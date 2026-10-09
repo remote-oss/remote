@@ -13,6 +13,32 @@ export interface HelpLinks {
   feedback: string;
 }
 
+/** The part of the manifest that holds the help addresses. */
+export interface HelpManifest {
+  readonly contributes?: {
+    readonly remoteHelp?: Readonly<
+      Record<string, {readonly urls?: Readonly<Record<string, string>>}>
+    >;
+  };
+}
+
+/** The help addresses the manifest names for the `ssh-remote` authority; an address it lacks is an error. */
+export function helpLinksOf(manifest: HelpManifest): HelpLinks {
+  const urls = manifest.contributes?.remoteHelp?.['ssh-remote']?.urls ?? {};
+  function address(name: keyof HelpLinks): string {
+    const found = urls[name];
+    if (found === undefined || found === '') {
+      throw new Error(`the manifest names no ${name} address for ssh-remote`);
+    }
+    return found;
+  }
+  return {
+    documentation: address('documentation'),
+    getStarted: address('getStarted'),
+    feedback: address('feedback'),
+  };
+}
+
 /** The extension the commands speak for. */
 export interface HelpExtension {
   id: string;
