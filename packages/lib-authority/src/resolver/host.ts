@@ -148,6 +148,22 @@ export interface ResolverHandle {
   dispose(): void;
 }
 
+/**
+ * The failure a connector that threw becomes, so that a fault of the extension shows as every other failure does: of
+ * the kind `unknown`, with the exception's message as its reason, to be told once and not tried again.
+ */
+function failureOfThrown(caught: unknown): Failed {
+  return {
+    kind: 'unknown',
+    reason: {text: caught instanceof Error ? caught.message : String(caught)},
+    retryable: false,
+    silent: false,
+    userAlreadyNotified: false,
+    hints: [],
+    diagnostics: [],
+  };
+}
+
 function isConnected(result: Connected | Failed): result is Connected {
   return 'address' in result;
 }
@@ -216,6 +232,7 @@ export async function registerResolver(
     listeners: [],
   };
   const {connector} = options;
+  const state = {disposed: false, queue: Promise.resolve()};
 
   function applyAndAnnounce(
     event: Parameters<ConnectionTracker['apply']>[0],
@@ -235,6 +252,9 @@ export async function registerResolver(
     isReconnection: boolean,
   ): Promise<Error> {
     const message = messageOf(failed);
+    if (state.disposed) {
+      return editor.notAvailable(message, true);
+    }
     const outcome = mapFailure({
       kind: failed.kind,
       retryable: failed.retryable,
@@ -285,45 +305,60 @@ export async function registerResolver(
     );
   }
 
-  const resolver: EditorResolver = {
-    resolve: async (authority, context) => {
-      const decoded = decodeAuthority(authority);
-      if ('malformed' in decoded || decoded.family !== options.family) {
-        throw editor.notAvailable(undefined, false);
-      }
-      const isReconnection = memory.connectedBefore;
-      applyAndAnnounce({
-        kind: 'resolveStarted',
-        target: decoded,
+  async function resolveOne(
+    authority: string,
+    context: {resolveAttempt: number},
+  ): Promise<ResolvedConnection> {
+    const decoded = decodeAuthority(authority);
+    if ('malformed' in decoded || decoded.family !== options.family) {
+      throw editor.notAvailable(undefined, false);
+    }
+    const isReconnection = memory.connectedBefore;
+    applyAndAnnounce({
+      kind: 'resolveStarted',
+      target: decoded,
+      attempt: context.resolveAttempt,
+    });
+    let result: Connected | Failed;
+    try {
+      result = await connect(decoded, {
+        target: decoded.target,
+        rawHostString: decoded.rawHostString,
         attempt: context.resolveAttempt,
+        isReconnection,
+        windowId: editor.windowId(),
+        windowWorkspace: editor.windowWorkspace(),
       });
-      let result: Connected | Failed;
-      try {
-        result = await connect(decoded, {
-          target: decoded.target,
-          rawHostString: decoded.rawHostString,
-          attempt: context.resolveAttempt,
-          isReconnection,
-          windowId: editor.windowId(),
-          windowWorkspace: editor.windowWorkspace(),
-        });
-      } catch (caught) {
-        applyAndAnnounce({kind: 'resolveFailed'});
-        throw caught;
-      }
-      if (isConnected(result)) {
-        memory.connectedBefore = true;
-        memory.tunnelFactory = result.tunnelFactory;
-        applyAndAnnounce({kind: 'resolveSucceeded'});
-        return connectionOf(result, options.allowsTrust);
-      }
-      applyAndAnnounce({kind: 'resolveFailed'});
-      throw await errorFor(result, isReconnection);
+    } catch (caught) {
+      result = failureOfThrown(caught);
+    }
+    if (isConnected(result)) {
+      memory.connectedBefore = true;
+      memory.tunnelFactory = result.tunnelFactory;
+      applyAndAnnounce({kind: 'resolveSucceeded'});
+      return connectionOf(result, options.allowsTrust);
+    }
+    applyAndAnnounce({kind: 'resolveFailed'});
+    throw await errorFor(result, isReconnection);
+  }
+
+  const resolver: EditorResolver = {
+    resolve: (authority, context) => {
+      const turn = state.queue.then(() => resolveOne(authority, context));
+      state.queue = turn.then(
+        () => undefined,
+        () => undefined,
+      );
+      return turn;
     },
     get tunnelFactory() {
       return memory.tunnelFactory;
     },
   };
+  const registration = editor.registerRemoteAuthorityResolver(
+    options.family,
+    resolver,
+  );
   const stops = [
     connector.onTransportLost(() => {
       applyAndAnnounce({kind: 'transportLost'});
@@ -332,10 +367,6 @@ export async function registerResolver(
       applyAndAnnounce({kind: 'transportClosed'});
     }),
   ];
-  const registration = editor.registerRemoteAuthorityResolver(
-    options.family,
-    resolver,
-  );
   return {
     kind: 'registered',
     resolver: {
@@ -353,6 +384,7 @@ export async function registerResolver(
         }
       },
       dispose: () => {
+        state.disposed = true;
         for (const stop of stops) {
           stop();
         }

@@ -53,16 +53,19 @@ class EditorError extends Error {
 class FakeConnector implements Connector {
   answer: Connected | Failed = CONNECTED;
   failure: Error | undefined;
+  /** A text thrown as it is, as a connector that throws a non-Error does. */
+  thrownText: string | undefined;
   phases: ConnectPhase[] = [];
   inputs: ConnectInput[] = [];
   cancels = 0;
   reveals = 0;
   during: (() => void) | undefined;
+  hold: Promise<void> = Promise.resolve();
   private readonly phaseListeners = new Set<(phase: ConnectPhase) => void>();
   private readonly lostListeners = new Set<() => void>();
   private readonly closedListeners = new Set<() => void>();
 
-  connect(input: ConnectInput): Promise<Connected | Failed> {
+  async connect(input: ConnectInput): Promise<Connected | Failed> {
     this.inputs.push(input);
     for (const phase of this.phases) {
       for (const listener of this.phaseListeners) {
@@ -70,9 +73,15 @@ class FakeConnector implements Connector {
       }
     }
     this.during?.();
-    return this.failure === undefined
-      ? Promise.resolve(this.answer)
-      : Promise.reject(this.failure);
+    await this.hold;
+    if (this.failure !== undefined) {
+      throw this.failure;
+    }
+    if (this.thrownText !== undefined) {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- a connector that breaks its contract, on purpose
+      throw this.thrownText;
+    }
+    return this.answer;
   }
 
   cancel(): void {
@@ -128,6 +137,7 @@ class FakeConnector implements Connector {
 /** An editor that records what the host asked of it. */
 class FakeEditor implements ResolverEditor {
   registered: Array<{prefix: string; resolver: EditorResolver}> = [];
+  refuses = false;
   disposed = 0;
   progressRuns: Array<ProgressRequest & {updates: string[]}> = [];
   actions: string[] = [];
@@ -148,6 +158,9 @@ class FakeEditor implements ResolverEditor {
     prefix: string,
     resolver: EditorResolver,
   ): {dispose(): void} {
+    if (this.refuses) {
+      throw new Error('the editor refused the resolver');
+    }
     this.registered.push({prefix, resolver});
     return {
       dispose: () => {
@@ -606,10 +619,32 @@ describe('the resolver host: a failure (contracts section 3.2)', () => {
     deepStrictEqual(await failureOf(context), 'notAvailable(handled=true): ');
   });
 
-  it('F-2601: a connector that throws is a failed resolve and the error goes on', async () => {
+  it('F-2601: a connector that throws is told to the user like any failure, with its message', async () => {
     const context = await setup();
     context.connector.failure = new Error('the connector broke');
-    await rejects(resolve(context), {message: 'the connector broke'});
+    deepStrictEqual(
+      await failureOf(context),
+      'notAvailable(handled=true): the connector broke',
+    );
+  });
+
+  it('F-2601: a connector that throws is presented as an unknown failure that is not retried', async () => {
+    const context = await setup();
+    context.connector.failure = new Error('the connector broke');
+    await failureOf(context);
+    deepStrictEqual(
+      context.presenter.seen.map(seen => [seen.kind, seen.retryable]),
+      [['unknown', false]],
+    );
+  });
+
+  it('F-2601: a connector that throws a text has that text as the reason', async () => {
+    const context = await setup();
+    context.connector.thrownText = 'plain refusal';
+    deepStrictEqual(
+      await failureOf(context),
+      'notAvailable(handled=true): plain refusal',
+    );
   });
 
   it('F-2601: a connector that throws leaves the connection failed', async () => {
@@ -743,5 +778,88 @@ describe('the resolver host: teardown (F-2304.BR-8)', () => {
       handleOf(context.registration).currentConnection()?.state,
       'connected',
     );
+  });
+
+  /** A window torn down while its connector works, which then ends the resolve as cancelled. */
+  async function disposedDuringResolve(): Promise<Setup> {
+    const context = await setup();
+    context.connector.answer = {...FAILURE, kind: 'cancelled'};
+    context.connector.during = () => {
+      handleOf(context.registration).dispose();
+    };
+    return context;
+  }
+
+  it('F-2304.BR-8: a resolve that ends in a failure after disposing is answered as handled', async () => {
+    deepStrictEqual(
+      await failureOf(await disposedDuringResolve()),
+      'notAvailable(handled=true): Could not reach the host.',
+    );
+  });
+
+  it('F-2304.BR-8: a resolve that ends in a failure after disposing asks the presenter nothing', async () => {
+    const context = await disposedDuringResolve();
+    await failureOf(context);
+    deepStrictEqual(context.presenter.seen, []);
+  });
+});
+
+describe('the resolver host: resolves that overlap', () => {
+  it('F-2501: a second resolve waits until the first has ended', async () => {
+    const context = await setup();
+    const gate = {open: (): void => undefined};
+    context.connector.hold = new Promise<void>(resolveGate => {
+      gate.open = resolveGate;
+    });
+    const first = resolve(context, AUTHORITY, 1);
+    const second = resolve(context, AUTHORITY, 2);
+    await new Promise(resolveTimer => setTimeout(resolveTimer, 10));
+    const startedBefore = context.connector.inputs.length;
+    gate.open();
+    await Promise.all([first, second]);
+    deepStrictEqual(
+      [startedBefore, context.connector.inputs.map(input => input.attempt)],
+      [1, [1, 2]],
+    );
+  });
+
+  it('F-2501: a second resolve still runs after the first failed', async () => {
+    const context = await setup();
+    context.connector.answer = FAILURE;
+    await failureOf(context, 1);
+    context.connector.answer = CONNECTED;
+    await resolve(context, AUTHORITY, 2);
+    deepStrictEqual(
+      context.connector.inputs.map(input => input.attempt),
+      [1, 2],
+    );
+  });
+});
+
+describe('the resolver host: a registration the editor refuses', () => {
+  it('F-2501: the connector keeps no listener of the host', async () => {
+    const editor = new FakeEditor();
+    editor.refuses = true;
+    const connector = new FakeConnector();
+    const outcome = await registerResolver(
+      editor,
+      {
+        family: 'ssh-remote',
+        connector,
+        presenter: new FakePresenter(),
+        cancellable: false,
+        allowsTrust: false,
+        titleOf: () => '',
+        startTitle: () => '',
+      },
+      {
+        guard: () => Promise.resolve('serving'),
+        resolversGranted: () => Promise.resolve(true),
+      },
+    ).then(
+      () => 'registered',
+      () => 'refused',
+    );
+    deepStrictEqual([outcome, connector.listenerCount()], ['refused', 0]);
   });
 });
