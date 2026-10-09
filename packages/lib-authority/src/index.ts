@@ -40,3 +40,11 @@ export {
   registerAuthorityLabel,
   type ResourceLabelFormatter,
 } from './labels/formatter.ts';
+export {
+  argvEntryList,
+  decide,
+  type GateDecision,
+  type GateInput,
+  type ProbeReport,
+  type ProbeResult,
+} from './gate/decisions.ts';
