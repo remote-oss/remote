@@ -73,5 +73,21 @@ jobs:
       # The run retries once inside the tool when the editor window is reported unresponsive; both attempts land in this log.
       - run: xvfb-run --auto-servernum pnpm test:acceptance
 
+  # The server lifecycle (probe, install, start, lock, kill, uninstall, clean-up) against a stand-in server on the same
+  # SSH host container, with no editor and no download.
+  acceptance-server:
+    name: acceptance (server lifecycle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:acceptance:server
+
   # integration:  pnpm test:integration under xvfb, after the testing ADR
   # conformance:  per package and profile, runner in tests/conformance/runner, after the testing ADR

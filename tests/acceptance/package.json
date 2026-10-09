@@ -1,5 +1,10 @@
 {
   "name": "acceptance",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "lib-log": "workspace:*",
+    "lib-server": "workspace:*",
+    "lib-ssh": "workspace:*"
+  }
 }

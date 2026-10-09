@@ -227,6 +227,8 @@ importers:
         specifier: ^2.9.1
         version: 2.9.1
 
+  packages/lib-authority: {}
+
   packages/lib-forwarding: {}
 
   packages/lib-helper: {}
@@ -282,6 +284,18 @@ importers:
         version: 9.3.2
 
   packages/remote-wsl: {}
+
+  tests/acceptance:
+    dependencies:
+      lib-log:
+        specifier: workspace:*
+        version: link:../../packages/lib-log
+      lib-server:
+        specifier: workspace:*
+        version: link:../../packages/lib-server
+      lib-ssh:
+        specifier: workspace:*
+        version: link:../../packages/lib-ssh
 
 packages:
 
