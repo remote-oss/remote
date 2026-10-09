@@ -11,11 +11,10 @@ Files: `src/cache/folders.ts`, `src/index.ts` (exports only), test `test/unit/ca
 
 ```ts
 export interface ProductKeys { applicationName: string; quality: 'stable' | 'insider' | string }
-export const VSCODE_APPLICATION_NAMES: readonly string[];   // ['code', 'code-insiders']: the reference layout
 export function cacheFolders(product: ProductKeys, commit: string, platform: string, volumeMounted: boolean):
   { serverTree: string | undefined; extensionsCache: string };
 // serverTree: `/vscode/vscode-server/bin/${platform}/${commit}` when volumeMounted, else undefined;
-// extensionsCache: `/vscode/extensionsCache` for code/code-insiders, `/vscode/extensionsCache-${applicationName}` otherwise (unchanged by volumeMounted)
+// extensionsCache: `/vscode/extensionsCache` when lib-product's keepsReferenceLayout(applicationName), `/vscode/extensionsCache-${applicationName}` otherwise (unchanged by volumeMounted)
 export function clientArchiveFolder(cacheRoot: string, product: ProductKeys, commit: string): string;
 // code/code-insiders: `${cacheRoot}/${quality}/${commit}`; every other product: `${cacheRoot}/${applicationName}/${quality}/${commit}`
 export function isFromSameGallery(entryGallery: string, productGallery: string): boolean;   // exact string equality after trimming a trailing '/'
@@ -34,15 +33,12 @@ export function isFromSameGallery(entryGallery: string, productGallery: string):
 | `clientArchiveFolder('/c', {code, stable}, 'abc')` | `/c/stable/abc` |
 | `clientArchiveFolder('/c', {code-insiders, insider}, 'abc')` | `/c/insider/abc` |
 | `clientArchiveFolder('/c', {codium, stable}, 'abc')` | `/c/codium/stable/abc` |
-| two products, same commit and quality | different folders unless both are in `VSCODE_APPLICATION_NAMES` |
+| two products, same commit and quality | different folders unless both keep the reference layout |
 | `isFromSameGallery('https://open-vsx.org/vscode/gallery/', 'https://open-vsx.org/vscode/gallery')` | `true` |
 | `isFromSameGallery('https://marketplace.visualstudio.com/_apis/public/gallery', 'https://open-vsx.org/vscode/gallery')` | `false` |
-| `VSCODE_APPLICATION_NAMES` | `['code','code-insiders']`, frozen |
 
-Literal strings in this file: the ADR-0006 literal check allows product names only in `lib-product`'s table; so
-`'code'` and `'code-insiders'` must come from `lib-product`'s exported constant if one exists (check
-`packages/lib-product/src/index.ts` for a `VSCODE_APPLICATION_NAMES` or similar export); if none exists, stop and
-report (the card then adds the export to lib-product's table in a separate card).
+Product names never appear in this file: use `keepsReferenceLayout` from `lib-product` (card product-01, merged
+first); the ADR-0006 literal check stays green.
 
 ## 4. Rule for the worker
 
@@ -54,4 +50,4 @@ PR title `lib-server: cache folders (card server-06)`. Reviewer: `remote-coding-
 
 ## 6. Open rows (stop and report)
 
-The product-name constant as described above.
+None expected (card product-01 provides the names).

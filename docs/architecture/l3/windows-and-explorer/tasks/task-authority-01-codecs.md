@@ -32,14 +32,17 @@ export function decodeAuthority(authority: string): DecodedTarget | { malformed:
 export function encodeAuthority(decoded: DecodedTarget): string;   // `${family}+${codec.encode(target)}`
 ```
 
-Rules. `ssh-remote` payload forms (F-2008 BR-5, F-2301 BR-4, F-2501): (a) a bare host name matching
-`/^[a-z0-9.:-]+$/i` → `{kind:'host', hostName}` with no user or port; (b) lower-case hex (even length, `/^[0-9a-f]+$/`)
-decoding to UTF-8 JSON `{"hostName": string, "user"?: string, "port"?: number}` (port an integer 1–65535) → `{kind:'host', …}`;
-(c) anything else that is non-empty and contains no whitespace or control character → `{kind:'alias', alias}`;
-empty, whitespace, a control character, hex that is not valid JSON, JSON without `hostName`, or a bad port → malformed
-(reasons `empty`, `whitespace`, `control`, `badHex`, `badJson`, `badPort`). `encode`: alias → the alias; host without
-user and port → the bare host name; host with user or port → the hex of the compact JSON `{"hostName":…,"user":…,"port":…}`
-(keys in that order, absent ones omitted). `label`: alias → alias; host → `user@hostName:port` with the present parts
+Rules (ruled 2026-10-08; order matters). `ssh-remote` payload forms (F-2008 BR-5, F-2301 BR-4, F-2501 BR-1, AC-6):
+first the empty/whitespace/control checks (malformed `empty`, `whitespace`, `control`); then (1) the JSON form: if the
+payload is even-length lower-case hex AND its bytes are valid UTF-8 AND `JSON.parse` yields an object, it IS the JSON
+form: `hostName` must be a non-empty string (else malformed `badJson`); `port`, when present, is an integer 1–65535
+or a string of digits in that range (F-2501 AC-6; `"22"` → 22), anything else malformed `badPort`; `user` a string
+if present; (2) otherwise the bare form: `/^[a-z0-9.:-]+$/` (lower-case only) → `{kind:'host', hostName}` (so `abcd`
+and `ff` are hosts, not errors; a hex-looking bare string is a plain host); (3) otherwise `{kind:'alias', alias}`.
+There is no `badHex`: a hex-looking string that is not JSON falls through to (2) or (3). `encode`: alias → the alias; host without
+user and port whose name matches the lower-case bare pattern → the bare host name; every other host (user or port
+present, or an upper-case or otherwise non-bare name, F-2008 §6.2) → the hex of the compact JSON
+`{"hostName":…,"user":…,"port":…}` (keys in that order, absent ones omitted, port as a number). `label`: alias → alias; host → `user@hostName:port` with the present parts
 (`hostName`, `user@hostName`, `hostName:port`). IPv6 host names: kept whole; `[::1]` with brackets in the bare form →
 hostName `::1` (brackets removed), re-encoded with brackets (F-2501 Q1).
 `wsl` payload: `<distro>` or `<distro>@<outer authority>`; distro may be empty; `outer` decoded with `decodeAuthority`
@@ -54,14 +57,18 @@ the payload. `tunnel`: `<tunnelName>` or `<tunnelName>/<distro>`; empty name →
 | `decodeAuthority('ssh-remote+myhost')` | family ssh-remote, `{kind:'host', hostName:'myhost'}`, rawHostString `'myhost'` |
 | `'ssh-remote+my_host'` (underscore) | `{kind:'alias', alias:'my_host'}` |
 | `'ssh-remote+' + hex('{"hostName":"h","user":"u","port":2222}')` | host h, user u, port 2222; rawHostString = the hex |
-| hex JSON with `"port":"22"` (string) | malformed `badPort` |
+| hex JSON with `"port":"22"` (digit string) | host with port 22 (F-2501 AC-6) |
+| hex JSON with `"port":"2x"` | malformed `badPort` |
 | hex JSON with port 70000 | malformed `badPort` |
 | hex JSON without hostName | malformed `badJson` |
-| odd-length or non-hex `'abc'` that is otherwise alias-shaped | alias `abc` (alias wins: hex needs even length and only hex digits) — note: `'abcd'` IS valid hex; decoding it as JSON fails → malformed `badJson`; add both rows |
+| `'abc'` | host `abc` (bare pattern) |
+| `'abcd'` (valid hex, bytes not JSON) | host `abcd` |
+| `'ff'` | host `ff` |
+| `'ssh-remote+' + hex('{"hostName":"H"}')` then `encode` of host `H` | decode gives host `H`; `encode({kind:'host', hostName:'H'})` gives the hex form (upper case is not bare) |
 | `'ssh-remote+'` | malformed `empty` |
 | `'ssh-remote+a b'` | malformed `whitespace` |
 | `'ssh-remote+a\u0001'` | malformed `control` |
-| `'ssh-remote+[::1]'` | host `::1`; `encode` gives `[::1]` |
+| `'ssh-remote+[::1]'` | malformed `control`? no: `[` is not bare and not hex → alias `[::1]`; IPv6 literals travel in the JSON form (F-2501 Q1: kept whole as hostName `::1`); add: hex JSON with hostName `::1` → host `::1`, `encode` → the hex form |
 | `encode({kind:'host', hostName:'h'})` | `'h'` |
 | `encode({kind:'host', hostName:'h', user:'u'})` | hex of `{"hostName":"h","user":"u"}` |
 | `encode({kind:'host', hostName:'h', port: 22})` | hex of `{"hostName":"h","port":22}` |

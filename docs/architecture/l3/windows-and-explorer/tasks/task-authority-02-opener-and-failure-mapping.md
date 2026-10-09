@@ -16,12 +16,12 @@ export type PathKind = 'folder' | 'workspace';
 export type OpenTarget = 'current' | 'new';
 export type OpenCommand =
   | { command: 'vscode.openFolder'; uri: { scheme: 'vscode-remote'; authority: string; path: string }; options: { forceNewWindow: boolean; forceReuseWindow: boolean } }
-  | { command: 'vscode.newWindow'; options: { remoteAuthority: string; reuseWindow: boolean } }
+  | { command: 'vscode.newWindow'; options: { remoteAuthority?: string; reuseWindow: boolean } }
   | { command: 'vscode.openFolder'; uri: { scheme: 'file'; path: string }; options: { forceNewWindow: boolean; forceReuseWindow: boolean } };
 export function openRemoteCommand(authority: string, path: string | undefined, pathKind: PathKind, target: OpenTarget): OpenCommand;
 // path given → vscode.openFolder with the vscode-remote uri (pathKind 'workspace' uses the same command; the uri path is the .code-workspace file); target 'current' → forceReuseWindow true, forceNewWindow false; 'new' → forceNewWindow true, forceReuseWindow false
 // no path → vscode.newWindow with remoteAuthority; reuseWindow = (target === 'current')
-export function openLocalCommand(path: string | undefined, pathKind: PathKind, target: OpenTarget): OpenCommand;   // file scheme; no path → vscode.newWindow without remoteAuthority is NOT in this card (stop and report if needed): with no path return openFolder of '' ? no — see row below
+export function openLocalCommand(path: string | undefined, pathKind: PathKind, target: OpenTarget): OpenCommand;   // file scheme; no path → { command: 'vscode.newWindow', options: { reuseWindow: target === 'current' } } with no remoteAuthority (a local empty window; ruled 2026-10-08)
 export type FailedLike = { kind: string; retryable: boolean; isReconnection: boolean; silent: boolean; userAlreadyNotified: boolean };
 export type ResolverOutcome = { kind: 'temporarilyNotAvailable' } | { kind: 'notAvailable'; handled: boolean } | { kind: 'presenter' };
 export function mapFailure(failed: FailedLike): ResolverOutcome;
@@ -38,7 +38,8 @@ export function mapFailure(failed: FailedLike): ResolverOutcome;
 | no path, `current` | `vscode.newWindow`, `{remoteAuthority:'ssh-remote+h', reuseWindow:true}` |
 | no path, `new` | `{remoteAuthority, reuseWindow:false}` |
 | `openLocalCommand('/p', 'folder', 'new')` | openFolder, uri `{file, '/p'}`, `{forceNewWindow:true, forceReuseWindow:false}` |
-| `openLocalCommand(undefined, 'folder', 'new')` | stop and report (not decided; see §6) |
+| `openLocalCommand(undefined, 'folder', 'new')` | `vscode.newWindow`, `{reuseWindow:false}`, no remoteAuthority |
+| `openLocalCommand(undefined, 'folder', 'current')` | `vscode.newWindow`, `{reuseWindow:true}` |
 | `mapFailure({retryable:true, isReconnection:true, silent:true, userAlreadyNotified:true})` | `temporarilyNotAvailable` (retryable first) |
 | `{retryable:false, isReconnection:true, silent:true, userAlreadyNotified:true}` | `notAvailable handled false` |
 | `{…, isReconnection:false, silent:true, userAlreadyNotified:true}` | `notAvailable handled false` |
@@ -56,5 +57,4 @@ PR title `lib-authority: opener arguments and failure mapping (card authority-02
 
 ## 6. Open rows (stop and report)
 
-`openLocalCommand` with no path: the contract does not say what a local "new empty window" maps to; leave it out
-(throw a programming error) and report.
+None expected.
