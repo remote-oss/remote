@@ -92,6 +92,29 @@ describe('S3 session spawner', () => {
       );
     });
 
+    it("passes the window's DISPLAY and WAYLAND_DISPLAY on as they are", () => {
+      const environment = sessionEnvironment(
+        {DISPLAY: ':1', WAYLAND_DISPLAY: 'wayland-0'},
+        INVOCATION,
+        {SSH_ASKPASS: '/run/askpass.sh', SSH_ASKPASS_REQUIRE: 'force'},
+      );
+      deepStrictEqual(
+        [environment.DISPLAY, environment.WAYLAND_DISPLAY],
+        [':1', 'wayland-0'],
+      );
+    });
+
+    it('adds no DISPLAY of its own', () => {
+      strictEqual(
+        'DISPLAY' in
+          sessionEnvironment({}, INVOCATION, {
+            SSH_ASKPASS: '/run/askpass.sh',
+            SSH_ASKPASS_REQUIRE: 'force',
+          }),
+        false,
+      );
+    });
+
     it("keeps the editor's own SSH_ASKPASS_REQUIRE as it is", () => {
       strictEqual(
         sessionEnvironment({SSH_ASKPASS_REQUIRE: 'never'}, INVOCATION, {})
