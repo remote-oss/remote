@@ -38,9 +38,9 @@ export function killFailedNotice(host: string): StringRef; // {id: 'S076', value
 | F-2411.BR-7 | `isOwnHost('devbox', 'devbox')` | true |
 | F-2411.BR-7 | `isOwnHost('DEVBOX', 'devbox')`, `isOwnHost('lab@devbox', 'devbox')`, `isOwnHost('10.0.0.5', 'devbox')` | false each |
 | F-2411.BR-7 | `isOwnHost('devbox', undefined)` | false |
-| F-2411.AC-5 | `killedNotice('myhost')` | `Killed VS Code Server on myhost.` |
-| F-2411.AC-13 | `killFailedNotice('myhost')` | `Failed to kill VS Code Server on myhost.` |
-| F-2411.AC-11 | `killedNotice(hostPartOf('lab@myhost:2222'))` | `Killed VS Code Server on myhost.` |
+| F-2411.AC-5 | `killedNotice('myhost')` | `{id: 'S085', values: ['myhost']}` |
+| F-2411.AC-13 | `killFailedNotice('myhost')` | `{id: 'S076', values: ['myhost']}` |
+| F-2411.AC-11 | `killedNotice(hostPartOf('lab@myhost:2222'))` | `{id: 'S085', values: ['myhost']}` |
 
 ## 4. Rule for the worker
 
@@ -56,5 +56,5 @@ PR title `remote-ssh: maintenance target host and notices (card connect-10)`. Re
    on them.
 2. A target ending in `:` with no digits (`host:`): F-2204 BR-4 treats an empty port as no port, F-2411 is silent;
    not tested.
-3. The strings above are the English text of STR:S085 and STR:S076; their localisation keys belong to the manifest
+3. (Amended 2026-10-10.) The model returns the ids S085 and S076; the English text and its localisation keys belong to the package's string table and the manifest
    card, not here.
