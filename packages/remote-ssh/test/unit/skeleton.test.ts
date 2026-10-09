@@ -144,18 +144,26 @@ interface InventoryCommand {
   icon?: string;
 }
 
-/** The inventory fixture, read once. */
-function inventory(): {
+interface InventoryFixture {
   settings: InventorySetting[];
   commands: InventoryCommand[];
   menus: Array<{menu: string; command: string; group?: string; when: string}>;
   remoteHelp: Record<string, unknown>;
-} {
-  return JSON.parse(readFileSync(INVENTORY_FIXTURE, 'utf8'));
+}
+
+/** The inventory fixture, read once. */
+function inventory(): InventoryFixture {
+  const fixture = JSON.parse(
+    readFileSync(INVENTORY_FIXTURE, 'utf8'),
+  ) as InventoryFixture;
+  return fixture;
 }
 
 /** The fields of a setting schema the fidelity row compares, with a single-element type array unwrapped. */
-function settingFields(value: Record<string, unknown>, typeArray?: string[]): Record<string, unknown> {
+function settingFields(
+  value: Record<string, unknown>,
+  typeArray?: string[],
+): Record<string, unknown> {
   return {
     type:
       typeArray !== undefined
@@ -623,70 +631,82 @@ describe('manifest (card remote-ssh-01 table)', () => {
 
   it('inventory fidelity: every setting, command, menu and remoteHelp matches the inventory', () => {
     const {settings, commands, menus, remoteHelp} = inventory();
-    const nls = nlsTables().get('package.nls.json') as Record<string, string>;
+    const nlsTable = nlsTables().get('package.nls.json') ?? {};
     const properties = manifest().contributes?.configuration?.properties ?? {};
-    const menuEntries = (
-      Object.entries(manifest().contributes?.menus ?? {}) as Array<
-        [string, Array<Record<string, unknown>>]
-      >
+    const menuEntries = Object.entries(
+      manifest().contributes?.menus ?? {},
     ).flatMap(([menu, entries]) =>
-      entries.map(entry => ({menu, command: String(entry.command), entry})),
+      entries.map(entry => ({
+        menu,
+        command: String(entry.command),
+        entry,
+      })),
     );
     deepStrictEqual(
       {
         settings: settings
-          .filter(row => row.declared !== false)
-          .map(row => {
-            const schema = properties[row.key] ?? {};
+          .filter(settingRow => settingRow.declared !== false)
+          .map(settingRow => {
+            const schema = properties[settingRow.key] ?? {};
             return {
-              key: row.key,
-              fields: settingFields(schema, row.type as string[]),
+              key: settingRow.key,
+              fields: settingFields(schema, settingRow.type as string[]),
               form: descriptionForm(schema),
-              formIsKey: /^%[\w.]+%$/.test(String(schema[descriptionForm(schema)])),
+              formIsKey: /^%[\w.]+%$/.test(
+                String(schema[descriptionForm(schema)]),
+              ),
             };
           }),
-        commands: commands.map(row => {
+        commands: commands.map(commandRow => {
           const entry = (manifest().contributes?.commands ?? []).find(
-            command => String(command.command) === row.id,
+            command => String(command.command) === commandRow.id,
           );
-          const title = nls[String(entry?.title).replace(/^%|%/g, '')] ?? '';
+          const titleKey = String(entry?.title).replace(/^%|%/g, '');
+          const title =
+            typeof nlsTable[titleKey] === 'string' ? nlsTable[titleKey] : '';
           return {
-            id: row.id,
+            id: commandRow.id,
             title,
             category: String(entry?.category),
             enablement: entry?.enablement ?? null,
             icon: entry?.icon ?? null,
           };
         }),
-        menus: menuEntries.map(row => ({
-          menu: row.menu,
-          command: row.command,
-          group: row.entry.group,
-          when: row.entry.when,
+        menus: menuEntries.map(menuRow => ({
+          menu: menuRow.menu,
+          command: menuRow.command,
+          group: menuRow.entry.group,
+          when: menuRow.entry.when,
         })),
         remoteHelp: manifest().contributes?.remoteHelp,
       },
       {
         settings: settings
-          .filter(row => row.declared !== false)
-          .map(row => ({
-            key: row.key,
-            fields: settingFields(row as unknown as Record<string, unknown>, row.type as string[]),
-            form: row.descriptionForm === 'markdownDescription' ? 'markdownDescription' : 'description',
+          .filter(settingRow => settingRow.declared !== false)
+          .map(settingRow => ({
+            key: settingRow.key,
+            fields: settingFields(
+              settingRow as unknown as Record<string, unknown>,
+              settingRow.type as string[],
+            ),
+            form:
+              settingRow.descriptionForm === 'markdownDescription'
+                ? 'markdownDescription'
+                : 'description',
             formIsKey: true,
           })),
-        commands: commands.map(row => ({
-          id: row.id,
-          title: row.title,
-          category: row.category,
-          enablement: row.enablement ?? null,
-          icon: row.icon ?? null,
+        commands: commands.map(commandRow => ({
+          id: commandRow.id,
+          title: commandRow.title,
+          category: commandRow.category,
+          enablement: commandRow.enablement ?? null,
+          icon: commandRow.icon ?? null,
         })),
-        menus: menus.map(row => ({
-          menu: row.menu,
-          command: row.command,
-          group: row.group,
-          when: row.when,
+        menus: menus.map(menuRow => ({
+          menu: menuRow.menu,
+          command: menuRow.command,
+          group: menuRow.group,
+          when: menuRow.when,
         })),
         remoteHelp,
       },

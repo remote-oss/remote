@@ -3,18 +3,10 @@
   "standsDownFor": "ms-vscode-remote.remote-ssh",
   "standingDownKey": "opensshremotes.standingDown",
   "namespaces": {
-    "commands": [
-      "opensshremotes."
-    ],
-    "settings": [
-      "remote.SSH."
-    ],
-    "contextKeys": [
-      "opensshremotes."
-    ],
-    "internalCommands": [
-      "remote-internal."
-    ]
+    "commands": ["opensshremotes."],
+    "settings": ["remote.SSH."],
+    "contextKeys": ["opensshremotes."],
+    "internalCommands": ["remote-internal."]
   },
   "contextKeys": [
     {

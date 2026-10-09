@@ -1,42 +1,304 @@
 {
-  "inventory": "identifiers of remote-oss.remote-ssh: what its manifest declares, the shared identifiers it leaves out, and the ones only it declares",
-  "version": 1,
-  "date": "2026-10-08",
-  "specs": "remote-oss/remote-ssh issues; F-3901 is the identity record",
-  "conventions": [
-    "Values are the manifest's, as the owning spec (field `spec`) quotes them.",
-    "`declared: false` marks an identifier this extension does not declare; `invented: true` marks one only this extension declares.",
-    "A setting without `scope` declares none (the editor then applies `window`); one without `default` declares none.",
-    "`descriptionForm` is the manifest property that carries the text; absent where the owning spec does not say.",
-    "Setting examples are not listed; the owning specs give them.",
-    "`baseWhen` is the shared base clause; `when` is this extension's, with the standing-down key added to every alternative."
-  ],
-  "extension": {
-    "id": "remote-oss.remote-ssh",
-    "displayName": "Remote - SSH",
-    "extensionKind": [
-      "ui"
-    ],
-    "capabilities": {
-      "untrustedWorkspaces": {
-        "supported": true
-      }
+  "settings": [
+    {
+      "key": "remote.SSH.allowLocalServerDownload",
+      "type": "boolean",
+      "default": true,
+      "scope": "application",
+      "description": "If downloading the VS Code server fails on the host, this allows the extension to fall back to downloading on the client and transferring it to the host with scp.",
+      "markdownDeprecationMessage": "Deprecated, please use `#remote.SSH.localServerDownload#`"
+    },
+    {
+      "key": "remote.SSH.bindHost",
+      "type": "object",
+      "default": null,
+      "scope": "application",
+      "description": "Configures the host the VS Code server will bind to on the remote server. It defaults to IPv4 localhost and should only need modification in advanced cases.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.configFile",
+      "type": "string",
+      "default": "",
+      "scope": "application",
+      "description": "The absolute file path to a custom SSH config file."
+    },
+    {
+      "key": "remote.SSH.connectTimeout",
+      "type": "number",
+      "default": 15,
+      "scope": "application",
+      "minimum": 1,
+      "description": "Specifies the timeout in seconds used for the SSH command that connects to the remote."
+    },
+    {
+      "key": "remote.SSH.defaultExtensions",
+      "type": "array",
+      "scope": "application",
+      "description": "List of extensions that should be installed automatically on all SSH hosts."
+    },
+    {
+      "key": "remote.SSH.defaultForwardedPorts",
+      "type": "array",
+      "default": [],
+      "description": "A list of ports to forward when the connection is established."
+    },
+    {
+      "key": "remote.SSH.enableAgentForwarding",
+      "type": "boolean",
+      "default": true,
+      "scope": "application",
+      "description": "Enable fixing the remote environment so that the SSH config option `ForwardAgent` will take effect as expected from VS Code's remote extension host.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.enableDynamicForwarding",
+      "type": "boolean",
+      "default": true,
+      "scope": "application",
+      "description": "Whether to use SSH dynamic forwarding to allow setting up new port tunnels over an existing SSH connection. When this is used, a password only needs to be entered once for each remote window."
+    },
+    {
+      "key": "remote.SSH.enableRemoteCommand",
+      "type": "boolean",
+      "default": false,
+      "scope": "application",
+      "description": "**Experimental:** Enable using RemoteCommands from ssh config entries. This is only enabled if `#remote.SSH.useLocalServer#` is enabled as well and the remote you are trying to connect to is not listed under the `#remote.SSH.remotePlatform#` setting.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.enableX11Forwarding",
+      "type": "boolean",
+      "default": true,
+      "scope": "application",
+      "description": "Enable fixing the remote environment so that the SSH config option `ForwardX11` will take effect as expected from VS Code's remote extension host.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.experimental.chat",
+      "type": "boolean",
+      "default": true,
+      "scope": "application",
+      "tags": ["experimental"],
+      "description": "Enables an experimental Copilot Chat Participant.  Use natural language to learn about Remote - SSH and diagnose connection issues.  For the best experience, use VS Code Insiders and ensure you have the latest Copilot Chat extension installed.",
+      "descriptionForm": "markdownDescription",
+      "declared": false
+    },
+    {
+      "key": "remote.SSH.experimental.enhancedSessionLogs",
+      "type": "boolean",
+      "default": true,
+      "scope": "application",
+      "tags": ["experimental"],
+      "description": "Generates a summarized table of issues detected from the previous session.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.externalSSH_ASKPASS",
+      "type": "boolean",
+      "default": false,
+      "scope": "application",
+      "description": "**Experimental:** In local server mode (enabled with `#remote.SSH.useLocalServer#`) Remote - SSH uses SSH_ASKPASS to set VS Code as the application to handle authentication requests; this makes prompts for input show up inside VS Code. However, if you have an external application to handle authentication, such as an YubiKey, you may want to set SSH_ASKPASS to your application instead. If you enable this setting then Remote - SSH won't override your existing SSH_ASKPASS value if one exists.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.httpProxy",
+      "type": ["string", "object"],
+      "default": "",
+      "description": "Set the 'http_proxy' environment variable.  This will be set for install and launch of the remote VS Code Server. Provide a string to set for all hosts, or an object with per-host configuration. Kill existing server on the remote for this setting to take effect.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.httpsProxy",
+      "type": ["string", "object"],
+      "default": "",
+      "description": "Set the 'https_proxy' environment variable.  This will be set for install and launch of the remote VS Code Server. Provide a string to set for all hosts, or an object with per-host configuration. Kill existing server on the remote for this setting to take effect.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.localServerDownload",
+      "type": "string",
+      "default": "auto",
+      "scope": "application",
+      "enum": ["auto", "always", "off"],
+      "enumDescriptions": [
+        "The server will first be downloaded on the host, and if that fails, will fall back to downloading locally",
+        "The server will only be downloaded locally and transferred to the host",
+        "The server will only be downloaded on the host"
+      ],
+      "description": "Whether the extension can download the VS Code Server on the client and transfer it to the host with scp, instead of downloading it on the host."
+    },
+    {
+      "key": "remote.SSH.lockfilesInTmp",
+      "type": "boolean",
+      "default": false,
+      "scope": "application",
+      "description": "Whether to keep lockfiles in `/tmp` instead of in the server's install folder. Useful for connecting to hosts which have issues with locking, such as hosts with a home directory using NFS or another distributed filesystem.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.logLevel",
+      "type": "string",
+      "default": "debug",
+      "scope": "application",
+      "enum": ["debug", "trace"],
+      "description": "The log level for the extension."
+    },
+    {
+      "key": "remote.SSH.maxReconnectionAttempts",
+      "type": ["number", "null"],
+      "default": null,
+      "scope": "application",
+      "minimum": 0,
+      "maximum": 8,
+      "description": "The maximum number of times to attempt reconnection. Use 0 to disallow reconnection, and `null` to use the maximum of 8.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.path",
+      "type": "string",
+      "default": "",
+      "scope": "application",
+      "description": "An absolute path to the SSH executable. When empty, it will use \"ssh\" on the path or in common install locations."
+    },
+    {
+      "key": "remote.SSH.permitPtyAllocation",
+      "type": "boolean",
+      "default": false,
+      "scope": "application",
+      "description": "Permits the system to allocate a pseudo-terminal for the SSH connection (by omitting the '-T' SSH connection flag). This setting is disabled by default and may be enabled to support specific use-cases.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.preconnect",
+      "type": ["string", "object"],
+      "default": "",
+      "tags": ["experimental"],
+      "description": "Execute the script at the provided path on **your local machine** before attempting an SSH connection. Provide a single string value to configure for all hosts, or provide an object with per-host configuration.  On Windows provide a **.ps1** script and on macOS/linux provide an executable **.sh** script.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.preferredLocalPortRange",
+      "type": "string",
+      "default": "",
+      "scope": "application",
+      "pattern": "^\\d+-\\d+$|^$",
+      "description": "A range of **local** ports preferred to utilize for the SSH tunnel connection. If no free port is found in range, an error will be thrown. Valid ranges of the form `number-number` such as `4000-5000`; it's expected the first number will be lower than the next.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.reconnectionGraceTime",
+      "type": ["number", "null"],
+      "default": null,
+      "scope": "application",
+      "minimum": 1,
+      "description": "The grace time in **seconds** to wait before terminating the remote server when the client disconnects. Leave empty to use VS Code defaults. The remote VS Code server must be restarted for this setting to take effect.  _Currently supports only linux remotes._",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.remotePlatform",
+      "type": "object",
+      "scope": "application",
+      "description": "A map of the remote hostname to the platform for that remote. The hostname may include a star '*' to wildcard match. Valid values: `linux`, `macOS`, `windows`. Note - this setting will soon be required when `#remote.SSH.useLocalServer#` is disabled, so it is currently being autopopulated for successful connections, but is not currently used.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.remoteServerListenOnSocket",
+      "type": "boolean",
+      "default": false,
+      "description": "When true, the remote VS Code server will listen on a socket path instead of opening a port. Only valid for Linux and macOS remotes. After toggling this setting, run the command \"Kill VS Code Server on Host...\" for it to take effect. Requires OpenSSH 6.7+. Disables the \"local server\" connection multiplexing mode. Requires `AllowStreamLocalForwarding` to be enabled for the SSH server.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.serverDownloadUrlTemplate",
+      "type": "string",
+      "scope": "application",
+      "description": "URL template from which the VS Code Server is downloaded for SSH hosts when the editor does not name its own server builds. Leave empty to use the editor's own template or built-in source. Placeholders: `${os}`, `${arch}` (from the host), `${version}`, `${commit}`, `${quality}`, `${release}` (from the editor).",
+      "descriptionForm": "markdownDescription",
+      "invented": true
+    },
+    {
+      "key": "remote.SSH.serverInstallPath",
+      "type": "object",
+      "scope": "application",
+      "description": "A map of remote host to absolute path where the VS Code server will be installed. By default the server is installed in the home directory of every remote. **Note**: By changing this setting you may need to clean up other installations of `.vscode-server` on your remote that isn't in the path you've configured.",
+      "descriptionForm": "description"
+    },
+    {
+      "key": "remote.SSH.serverPickPortsFromRange",
+      "type": "object",
+      "default": null,
+      "scope": "application",
+      "description": "A map of the remote hostname to a range of ports you'd prefer the server to connect to on launch on the **remote** machine. If no free port is found in range, an error will be thrown. Valid ranges of the form `number-number` such as `4000-5000`; it's expected the first number will be lower than the next.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.showLoginTerminal",
+      "type": "boolean",
+      "default": false,
+      "scope": "application",
+      "description": "Always reveal the SSH login terminal."
+    },
+    {
+      "key": "remote.SSH.suppressWindowsSshWarning",
+      "type": "boolean",
+      "default": false,
+      "scope": "application",
+      "description": "Due to a bug with password handling in some versions of the SSH client bundled with Windows, the extension prefers a non-Windows SSH client, such as the one bundled with Git, and will show a warning when another one can't be found. This setting disables that warning."
+    },
+    {
+      "key": "remote.SSH.useCurlAndWgetConfigurationFiles",
+      "type": "boolean",
+      "default": false,
+      "scope": "application",
+      "description": "Respect configuration from remote environment's 'curlrc' and 'wgetrc' files (placed in their respective default locations).  Enabling this setting may be useful in certain cases (i.e: proxy configuration) but can interfere with this extension's operation. Setting may be ignored on platforms that do not support the necessary flags (i.e: busybox).",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.useExecServer",
+      "type": "boolean",
+      "default": true,
+      "scope": "application",
+      "description": "Uses the a new bootstrapping mode when connecting to a server. Can be toggled off in the event of connection issues.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.useFlock",
+      "type": "boolean",
+      "default": true,
+      "scope": "application",
+      "description": "Whether to use `flock` for creating lockfiles on Linux remotes instead of `ln`. By default, we use `flock` on Linux remotes and `ln` on macOS.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.useLocalServer",
+      "type": "boolean",
+      "default": true,
+      "scope": "application",
+      "description": "Enables a mode for connecting using a single connection shared between windows and across window reloads. This makes it faster to open new windows and reduces the number of times a password needs to be entered.",
+      "descriptionForm": "markdownDescription"
+    },
+    {
+      "key": "remote.SSH.windowsRemotes",
+      "type": "array",
+      "default": [],
+      "scope": "application",
+      "description": "**Deprecated**: Enables experimental support for connecting to Windows remotes. Add the names of windows remotes to this list.",
+      "descriptionForm": "markdownDescription",
+      "deprecationMessage": "Deprecated: Please use `#remote.SSH.remotePlatorm#` instead"
     }
-  },
-  "standingDownKey": "opensshremotes.standingDown",
+  ],
   "commands": [
     {
       "id": "opensshremotes.addNewSshHost",
       "title": "Add New SSH Host...",
       "category": "Remote-SSH",
-      "spec": "F-2204",
       "palette": "always"
     },
     {
       "id": "opensshremotes.cleanCurrentRemoteServer",
       "title": "Kill Current VS Code Server",
       "category": "Remote-SSH",
-      "spec": "F-2411",
       "palette": {
         "menu": "commandPalette#3",
         "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected"
@@ -46,14 +308,12 @@
       "id": "opensshremotes.cleanDevBox",
       "title": "Uninstall VS Code Server from Host...",
       "category": "Remote-SSH",
-      "spec": "F-2412",
       "palette": "always"
     },
     {
       "id": "opensshremotes.cleanLocalServer",
       "title": "Kill Local Connection Server For Host...",
       "category": "Remote-SSH",
-      "spec": "F-2102",
       "palette": {
         "menu": "commandPalette#4",
         "when": "config.remote.SSH.useLocalServer"
@@ -63,31 +323,25 @@
       "id": "opensshremotes.cleanRemoteServer",
       "title": "Kill VS Code Server on Host...",
       "category": "Remote-SSH",
-      "spec": "F-2411",
       "palette": "always"
     },
     {
       "id": "opensshremotes.clearAllSessionHints",
       "title": "Clear previous session metadata (used for enhanced error reporting)",
       "category": "Remote-SSH",
-      "spec": "F-2605",
-      "palette": "always",
-      "baseEnablement": "config.remote.SSH.experimental.chat",
       "enablement": null,
-      "note": "declared without enablement, so the palette always lists it (F-3907 rule 4)"
+      "palette": "always"
     },
     {
       "id": "opensshremotes.getHelp",
       "title": "Help",
       "category": "Remote-SSH",
-      "spec": "F-2004",
       "palette": "always"
     },
     {
       "id": "opensshremotes.getStarted",
       "title": "Get Started with SSH",
       "category": "Remote-SSH",
-      "spec": "F-2004",
       "palette": {
         "menu": "commandPalette#0",
         "when": "!remoteName && !virtualWorkspace || remoteName =~ /^ssh-remote$/ && remoteConnectionState == disconnected"
@@ -97,28 +351,24 @@
       "id": "opensshremotes.openConfigFile",
       "title": "Open SSH Configuration File...",
       "category": "Remote-SSH",
-      "spec": "F-2203",
       "palette": "always"
     },
     {
       "id": "opensshremotes.openEmptyWindow",
       "title": "Connect to Host...",
       "category": "Remote-SSH",
-      "spec": "F-2301",
       "palette": "always"
     },
     {
       "id": "opensshremotes.openEmptyWindowInCurrentWindow",
       "title": "Connect Current Window to Host...",
       "category": "Remote-SSH",
-      "spec": "F-2302",
       "palette": "always"
     },
     {
       "id": "opensshremotes.openEmptyWindowOnCurrentHost",
       "title": "New Window on Active Host",
       "category": "Remote-SSH",
-      "spec": "F-2303",
       "palette": {
         "menu": "commandPalette#1",
         "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected"
@@ -128,7 +378,6 @@
       "id": "opensshremotes.openWebUI",
       "title": "Open Web UI",
       "category": "Remote-SSH",
-      "spec": "F-2509",
       "palette": {
         "menu": "commandPalette#5",
         "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && config.remote.SSH.enableWebAccess"
@@ -138,7 +387,6 @@
       "id": "opensshremotes.provideFeedback",
       "title": "Provide Feedback",
       "category": "Remote-SSH",
-      "spec": "F-2004",
       "palette": {
         "menu": "commandPalette#2",
         "when": "remoteName =~ /^ssh-remote$/"
@@ -148,496 +396,63 @@
       "id": "opensshremotes.reportIssue",
       "title": "Report Issue...",
       "category": "Remote-SSH",
-      "spec": "F-2005",
       "palette": "always"
     },
     {
       "id": "opensshremotes.settings",
       "title": "Settings",
       "category": "Remote-SSH",
-      "spec": "F-2004",
       "palette": "always"
     },
     {
       "id": "opensshremotes.showLog",
       "title": "Show Log",
       "category": "Remote-SSH",
-      "spec": "F-2003",
       "palette": "always"
-    }
-  ],
-  "settings": [
-    {
-      "key": "remote.SSH.allowLocalServerDownload",
-      "spec": "F-2405",
-      "type": "boolean",
-      "default": true,
-      "scope": "application",
-      "description": "If downloading the VS Code server fails on the host, this allows the extension to fall back to downloading on the client and transferring it to the host with scp.",
-      "markdownDeprecationMessage": "Deprecated, please use `#remote.SSH.localServerDownload#`"
-    },
-    {
-      "key": "remote.SSH.bindHost",
-      "spec": "F-2409",
-      "type": "object",
-      "default": null,
-      "scope": "application",
-      "description": "Configures the host the VS Code server will bind to on the remote server. It defaults to IPv4 localhost and should only need modification in advanced cases.",
-      "descriptionForm": "markdownDescription",
-      "additionalProperties": {
-        "type": "string",
-        "default": "127.0.0.1"
-      }
-    },
-    {
-      "key": "remote.SSH.configFile",
-      "spec": "F-2201",
-      "type": "string",
-      "default": "",
-      "scope": "application",
-      "description": "The absolute file path to a custom SSH config file."
-    },
-    {
-      "key": "remote.SSH.connectTimeout",
-      "spec": "F-2105",
-      "type": "number",
-      "default": 15,
-      "scope": "application",
-      "description": "Specifies the timeout in seconds used for the SSH command that connects to the remote.",
-      "minimum": 1
-    },
-    {
-      "key": "remote.SSH.defaultExtensions",
-      "spec": "F-2506",
-      "type": "array",
-      "scope": "application",
-      "description": "List of extensions that should be installed automatically on all SSH hosts.",
-      "items": {
-        "type": "string"
-      }
-    },
-    {
-      "key": "remote.SSH.defaultForwardedPorts",
-      "spec": "F-2507",
-      "type": "array",
-      "default": [],
-      "description": "A list of ports to forward when the connection is established.",
-      "items": {
-        "type": "object",
-        "required": [
-          "remotePort"
-        ],
-        "properties": {
-          "remotePort": {
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          },
-          "localPort": {
-            "type": "number"
-          }
-        }
-      }
-    },
-    {
-      "key": "remote.SSH.enableAgentForwarding",
-      "spec": "F-2311",
-      "type": "boolean",
-      "default": true,
-      "scope": "application",
-      "description": "Enable fixing the remote environment so that the SSH config option `ForwardAgent` will take effect as expected from VS Code's remote extension host.",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.enableDynamicForwarding",
-      "spec": "F-2104",
-      "type": "boolean",
-      "default": true,
-      "scope": "application",
-      "description": "Whether to use SSH dynamic forwarding to allow setting up new port tunnels over an existing SSH connection. When this is used, a password only needs to be entered once for each remote window."
-    },
-    {
-      "key": "remote.SSH.enableRemoteCommand",
-      "spec": "F-2107",
-      "type": "boolean",
-      "default": false,
-      "scope": "application",
-      "description": "**Experimental:** Enable using RemoteCommands from ssh config entries. This is only enabled if `#remote.SSH.useLocalServer#` is enabled as well and the remote you are trying to connect to is not listed under the `#remote.SSH.remotePlatform#` setting.",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.enableX11Forwarding",
-      "spec": "F-2312",
-      "type": "boolean",
-      "default": true,
-      "scope": "application",
-      "description": "Enable fixing the remote environment so that the SSH config option `ForwardX11` will take effect as expected from VS Code's remote extension host.",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.experimental.chat",
-      "spec": "F-2606",
-      "type": "boolean",
-      "default": true,
-      "scope": "application",
-      "description": "Enables an experimental Copilot Chat Participant.  Use natural language to learn about Remote - SSH and diagnose connection issues.  For the best experience, use VS Code Insiders and ensure you have the latest Copilot Chat extension installed.",
-      "descriptionForm": "markdownDescription",
-      "tags": [
-        "experimental"
-      ],
-      "declared": false,
-      "note": "not declared: no chat surface (F-3907 rules 1 and 2); a user value is ignored"
-    },
-    {
-      "key": "remote.SSH.experimental.enhancedSessionLogs",
-      "spec": "F-2605",
-      "type": "boolean",
-      "default": true,
-      "scope": "application",
-      "description": "Generates a summarized table of issues detected from the previous session.",
-      "descriptionForm": "markdownDescription",
-      "tags": [
-        "experimental"
-      ]
-    },
-    {
-      "key": "remote.SSH.externalSSH_ASKPASS",
-      "spec": "F-2309",
-      "type": "boolean",
-      "default": false,
-      "scope": "application",
-      "description": "**Experimental:** In local server mode (enabled with `#remote.SSH.useLocalServer#`) Remote - SSH uses SSH_ASKPASS to set VS Code as the application to handle authentication requests; this makes prompts for input show up inside VS Code. However, if you have an external application to handle authentication, such as an YubiKey, you may want to set SSH_ASKPASS to your application instead. If you enable this setting then Remote - SSH won't override your existing SSH_ASKPASS value if one exists.",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.httpProxy",
-      "spec": "F-2404",
-      "type": [
-        "string",
-        "object"
-      ],
-      "default": "",
-      "description": "Set the 'http_proxy' environment variable.  This will be set for install and launch of the remote VS Code Server. Provide a string to set for all hosts, or an object with per-host configuration. Kill existing server on the remote for this setting to take effect.",
-      "descriptionForm": "markdownDescription",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    {
-      "key": "remote.SSH.httpsProxy",
-      "spec": "F-2404",
-      "type": [
-        "string",
-        "object"
-      ],
-      "default": "",
-      "description": "Set the 'https_proxy' environment variable.  This will be set for install and launch of the remote VS Code Server. Provide a string to set for all hosts, or an object with per-host configuration. Kill existing server on the remote for this setting to take effect.",
-      "descriptionForm": "markdownDescription",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    {
-      "key": "remote.SSH.localServerDownload",
-      "spec": "F-2405",
-      "type": "string",
-      "default": "auto",
-      "scope": "application",
-      "description": "Whether the extension can download the VS Code Server on the client and transfer it to the host with scp, instead of downloading it on the host.",
-      "enum": [
-        "auto",
-        "always",
-        "off"
-      ],
-      "enumDescriptions": [
-        "The server will first be downloaded on the host, and if that fails, will fall back to downloading locally",
-        "The server will only be downloaded locally and transferred to the host",
-        "The server will only be downloaded on the host"
-      ]
-    },
-    {
-      "key": "remote.SSH.lockfilesInTmp",
-      "spec": "F-2408",
-      "type": "boolean",
-      "default": false,
-      "scope": "application",
-      "description": "Whether to keep lockfiles in `/tmp` instead of in the server's install folder. Useful for connecting to hosts which have issues with locking, such as hosts with a home directory using NFS or another distributed filesystem.",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.logLevel",
-      "spec": "F-2003",
-      "type": "string",
-      "default": "debug",
-      "scope": "application",
-      "description": "The log level for the extension.",
-      "enum": [
-        "debug",
-        "trace"
-      ]
-    },
-    {
-      "key": "remote.SSH.maxReconnectionAttempts",
-      "spec": "F-2505",
-      "type": [
-        "number",
-        "null"
-      ],
-      "default": null,
-      "scope": "application",
-      "description": "The maximum number of times to attempt reconnection. Use 0 to disallow reconnection, and `null` to use the maximum of 8.",
-      "descriptionForm": "markdownDescription",
-      "minimum": 0,
-      "maximum": 8
-    },
-    {
-      "key": "remote.SSH.path",
-      "spec": "F-2101",
-      "type": "string",
-      "default": "",
-      "scope": "application",
-      "description": "An absolute path to the SSH executable. When empty, it will use \"ssh\" on the path or in common install locations."
-    },
-    {
-      "key": "remote.SSH.permitPtyAllocation",
-      "spec": "F-2106",
-      "type": "boolean",
-      "default": false,
-      "scope": "application",
-      "description": "Permits the system to allocate a pseudo-terminal for the SSH connection (by omitting the '-T' SSH connection flag). This setting is disabled by default and may be enabled to support specific use-cases.",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.preconnect",
-      "spec": "F-2108",
-      "type": [
-        "string",
-        "object"
-      ],
-      "default": "",
-      "description": "Execute the script at the provided path on **your local machine** before attempting an SSH connection. Provide a single string value to configure for all hosts, or provide an object with per-host configuration.  On Windows provide a **.ps1** script and on macOS/linux provide an executable **.sh** script.",
-      "descriptionForm": "markdownDescription",
-      "additionalProperties": {
-        "type": "string"
-      },
-      "tags": [
-        "experimental"
-      ]
-    },
-    {
-      "key": "remote.SSH.preferredLocalPortRange",
-      "spec": "F-2104",
-      "type": "string",
-      "default": "",
-      "scope": "application",
-      "description": "A range of **local** ports preferred to utilize for the SSH tunnel connection. If no free port is found in range, an error will be thrown. Valid ranges of the form `number-number` such as `4000-5000`; it's expected the first number will be lower than the next.",
-      "descriptionForm": "markdownDescription",
-      "pattern": "^\\d+-\\d+$|^$"
-    },
-    {
-      "key": "remote.SSH.reconnectionGraceTime",
-      "spec": "F-2413",
-      "type": [
-        "number",
-        "null"
-      ],
-      "default": null,
-      "scope": "application",
-      "description": "The grace time in **seconds** to wait before terminating the remote server when the client disconnects. Leave empty to use VS Code defaults. The remote VS Code server must be restarted for this setting to take effect.  _Currently supports only linux remotes._",
-      "descriptionForm": "markdownDescription",
-      "minimum": 1
-    },
-    {
-      "key": "remote.SSH.remotePlatform",
-      "spec": "F-2206",
-      "type": "object",
-      "scope": "application",
-      "description": "A map of the remote hostname to the platform for that remote. The hostname may include a star '*' to wildcard match. Valid values: `linux`, `macOS`, `windows`. Note - this setting will soon be required when `#remote.SSH.useLocalServer#` is disabled, so it is currently being autopopulated for successful connections, but is not currently used.",
-      "descriptionForm": "markdownDescription",
-      "additionalProperties": {
-        "type": "string",
-        "enum": [
-          "macOS",
-          "windows",
-          "linux"
-        ]
-      }
-    },
-    {
-      "key": "remote.SSH.remoteServerListenOnSocket",
-      "spec": "F-2410",
-      "type": "boolean",
-      "default": false,
-      "description": "When true, the remote VS Code server will listen on a socket path instead of opening a port. Only valid for Linux and macOS remotes. After toggling this setting, run the command \"Kill VS Code Server on Host...\" for it to take effect. Requires OpenSSH 6.7+. Disables the \"local server\" connection multiplexing mode. Requires `AllowStreamLocalForwarding` to be enabled for the SSH server.",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.serverDownloadUrlTemplate",
-      "spec": "F-2403",
-      "type": "string",
-      "scope": "application",
-      "description": "URL template from which the VS Code Server is downloaded for SSH hosts when the editor does not name its own server builds. Leave empty to use the editor's own template or built-in source. Placeholders: `${os}`, `${arch}` (from the host), `${version}`, `${commit}`, `${quality}`, `${release}` (from the editor).",
-      "descriptionForm": "markdownDescription",
-      "invented": true,
-      "note": "ours, declared in F-3902 rule 2; absent from the reference manifest"
-    },
-    {
-      "key": "remote.SSH.serverInstallPath",
-      "spec": "F-2407",
-      "type": "object",
-      "scope": "application",
-      "description": "A map of remote host to absolute path where the VS Code server will be installed. By default the server is installed in the home directory of every remote. **Note**: By changing this setting you may need to clean up other installations of `.vscode-server` on your remote that isn't in the path you've configured.",
-      "descriptionForm": "description",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    {
-      "key": "remote.SSH.serverPickPortsFromRange",
-      "spec": "F-2409",
-      "type": "object",
-      "default": null,
-      "scope": "application",
-      "description": "A map of the remote hostname to a range of ports you'd prefer the server to connect to on launch on the **remote** machine. If no free port is found in range, an error will be thrown. Valid ranges of the form `number-number` such as `4000-5000`; it's expected the first number will be lower than the next.",
-      "descriptionForm": "markdownDescription",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    {
-      "key": "remote.SSH.showLoginTerminal",
-      "spec": "F-2308",
-      "type": "boolean",
-      "default": false,
-      "scope": "application",
-      "description": "Always reveal the SSH login terminal."
-    },
-    {
-      "key": "remote.SSH.suppressWindowsSshWarning",
-      "spec": "F-2101",
-      "type": "boolean",
-      "default": false,
-      "scope": "application",
-      "description": "Due to a bug with password handling in some versions of the SSH client bundled with Windows, the extension prefers a non-Windows SSH client, such as the one bundled with Git, and will show a warning when another one can't be found. This setting disables that warning."
-    },
-    {
-      "key": "remote.SSH.useCurlAndWgetConfigurationFiles",
-      "spec": "F-2403",
-      "type": "boolean",
-      "default": false,
-      "scope": "application",
-      "description": "Respect configuration from remote environment's 'curlrc' and 'wgetrc' files (placed in their respective default locations).  Enabling this setting may be useful in certain cases (i.e: proxy configuration) but can interfere with this extension's operation. Setting may be ignored on platforms that do not support the necessary flags (i.e: busybox).",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.useExecServer",
-      "spec": "F-2103",
-      "type": "boolean",
-      "default": true,
-      "scope": "application",
-      "description": "Uses the a new bootstrapping mode when connecting to a server. Can be toggled off in the event of connection issues.",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.useFlock",
-      "spec": "F-2408",
-      "type": "boolean",
-      "default": true,
-      "scope": "application",
-      "description": "Whether to use `flock` for creating lockfiles on Linux remotes instead of `ln`. By default, we use `flock` on Linux remotes and `ln` on macOS.",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.useLocalServer",
-      "spec": "F-2102",
-      "type": "boolean",
-      "default": true,
-      "scope": "application",
-      "description": "Enables a mode for connecting using a single connection shared between windows and across window reloads. This makes it faster to open new windows and reduces the number of times a password needs to be entered.",
-      "descriptionForm": "markdownDescription"
-    },
-    {
-      "key": "remote.SSH.windowsRemotes",
-      "spec": "F-2206",
-      "type": "array",
-      "default": [],
-      "scope": "application",
-      "description": "**Deprecated**: Enables experimental support for connecting to Windows remotes. Add the names of windows remotes to this list.",
-      "descriptionForm": "markdownDescription",
-      "items": {
-        "type": "string"
-      },
-      "deprecationMessage": "Deprecated: Please use `#remote.SSH.remotePlatorm#` instead",
-      "note": "the deprecation message's misspelled key is verbatim"
     }
   ],
   "menus": [
     {
       "menu": "statusBar/remoteIndicator",
-      "atom": "statusBar/remoteIndicator#0",
       "command": "opensshremotes.openEmptyWindow",
       "group": "remote_20_ssh-remote_1general@1",
-      "baseWhen": null,
-      "when": "!opensshremotes.standingDown",
-      "spec": "F-2301"
+      "when": "!opensshremotes.standingDown"
     },
     {
       "menu": "statusBar/remoteIndicator",
-      "atom": "statusBar/remoteIndicator#1",
       "command": "opensshremotes.openEmptyWindowInCurrentWindow",
       "group": "remote_20_ssh-remote_1general@2",
-      "baseWhen": null,
-      "when": "!opensshremotes.standingDown",
-      "spec": "F-2302"
+      "when": "!opensshremotes.standingDown"
     },
     {
       "menu": "commandPalette",
-      "atom": "commandPalette#0",
       "command": "opensshremotes.getStarted",
-      "baseWhen": "!remoteName && !virtualWorkspace || remoteName =~ /^ssh-remote$/ && remoteConnectionState == disconnected",
-      "when": "!remoteName && !virtualWorkspace && !opensshremotes.standingDown || remoteName =~ /^ssh-remote$/ && remoteConnectionState == disconnected && !opensshremotes.standingDown",
-      "spec": "F-2006"
+      "when": "!remoteName && !virtualWorkspace && !opensshremotes.standingDown || remoteName =~ /^ssh-remote$/ && remoteConnectionState == disconnected && !opensshremotes.standingDown"
     },
     {
       "menu": "commandPalette",
-      "atom": "commandPalette#1",
       "command": "opensshremotes.openEmptyWindowOnCurrentHost",
-      "baseWhen": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected",
-      "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && !opensshremotes.standingDown",
-      "spec": "F-2006"
+      "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && !opensshremotes.standingDown"
     },
     {
       "menu": "commandPalette",
-      "atom": "commandPalette#2",
       "command": "opensshremotes.provideFeedback",
-      "baseWhen": "remoteName =~ /^ssh-remote$/",
-      "when": "remoteName =~ /^ssh-remote$/ && !opensshremotes.standingDown",
-      "spec": "F-2006"
+      "when": "remoteName =~ /^ssh-remote$/ && !opensshremotes.standingDown"
     },
     {
       "menu": "commandPalette",
-      "atom": "commandPalette#3",
       "command": "opensshremotes.cleanCurrentRemoteServer",
-      "baseWhen": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected",
-      "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && !opensshremotes.standingDown",
-      "spec": "F-2006"
+      "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && !opensshremotes.standingDown"
     },
     {
       "menu": "commandPalette",
-      "atom": "commandPalette#4",
       "command": "opensshremotes.cleanLocalServer",
-      "baseWhen": "config.remote.SSH.useLocalServer",
-      "when": "config.remote.SSH.useLocalServer && !opensshremotes.standingDown",
-      "spec": "F-2006"
+      "when": "config.remote.SSH.useLocalServer && !opensshremotes.standingDown"
     },
     {
       "menu": "commandPalette",
-      "atom": "commandPalette#5",
       "command": "opensshremotes.openWebUI",
-      "baseWhen": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && config.remote.SSH.enableWebAccess",
-      "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && config.remote.SSH.enableWebAccess && !opensshremotes.standingDown",
-      "spec": "F-2006"
+      "when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && config.remote.SSH.enableWebAccess && !opensshremotes.standingDown"
     }
   ],
   "contextKeys": {
@@ -645,9 +460,7 @@
       {
         "id": "opensshremotes.standingDown",
         "setBy": "extension",
-        "invented": true,
-        "spec": "F-2001",
-        "meaning": "set only while the extension stands down (F-3901 §5); unset otherwise"
+        "invented": true
       }
     ],
     "read": [
@@ -669,98 +482,48 @@
       },
       {
         "id": "config.remote.SSH.enableWebAccess",
-        "setBy": "setting",
-        "note": "read by a clause but declared by no manifest (F-2006 7.E4)"
+        "setBy": "setting"
       }
     ]
   },
-  "authority": {
-    "prefix": "ssh-remote",
-    "activationEvent": "onResolveRemoteAuthority:ssh-remote",
-    "shape": "ssh-remote+<host>",
-    "spec": "F-2501"
-  },
-  "resourceLabelFormatters": [
-    {
-      "scheme": "vscode-remote",
-      "authority": "ssh-remote+*",
-      "spec": "F-2502",
-      "formatting": {
-        "label": "${path}",
-        "separator": "/",
-        "tildify": true,
-        "workspaceSuffix": "SSH"
-      }
-    }
-  ],
   "activationEvents": [
-    {
-      "event": "onCommand:remote-internal.getSshFoldersHistory",
-      "spec": "F-2503"
-    },
-    {
-      "event": "onCommand:remote-internal.deleteSshFolderFromHistory",
-      "spec": "F-2503"
-    },
-    {
-      "event": "onCommand:remote-internal.getActiveSshRemote",
-      "spec": "F-2503"
-    },
-    {
-      "event": "onCommand:remote-internal.getConfiguredHostnames",
-      "spec": "F-2202"
-    },
-    {
-      "event": "onCommand:remote-internal.openRemoteSshTarget",
-      "spec": "F-2503"
-    },
-    {
-      "event": "onResolveRemoteAuthority:ssh-remote",
-      "spec": "F-2501"
-    },
-    {
-      "event": "onUri",
-      "spec": "F-2504"
-    }
+    "onCommand:remote-internal.getSshFoldersHistory",
+    "onCommand:remote-internal.deleteSshFolderFromHistory",
+    "onCommand:remote-internal.getActiveSshRemote",
+    "onCommand:remote-internal.getConfiguredHostnames",
+    "onCommand:remote-internal.openRemoteSshTarget",
+    "onResolveRemoteAuthority:ssh-remote",
+    "onUri"
   ],
   "internalCommands": [
     {
       "id": "remote-internal.getSshFoldersHistory",
-      "role": "served",
-      "spec": "F-2503"
+      "role": "served"
     },
     {
       "id": "remote-internal.deleteSshFolderFromHistory",
-      "role": "served",
-      "spec": "F-2503"
+      "role": "served"
     },
     {
       "id": "remote-internal.getActiveSshRemote",
-      "role": "served",
-      "spec": "F-2503"
+      "role": "served"
     },
     {
       "id": "remote-internal.getConfiguredHostnames",
-      "role": "served",
-      "spec": "F-2202"
+      "role": "served"
     },
     {
       "id": "remote-internal.openRemoteSshTarget",
-      "role": "served",
-      "spec": "F-2503"
+      "role": "served"
     },
     {
       "id": "remote-internal.sshHostsChanged",
       "role": "called",
-      "servedBy": "remote-oss.remote-explorer",
-      "spec": "F-3906"
+      "servedBy": "remote-oss.remote-explorer"
     }
   ],
   "remoteHelp": {
-    "remoteName": [
-      "ssh-remote"
-    ],
-    "spec": "F-2004",
+    "remoteName": ["ssh-remote"],
     "urls": {
       "getStarted": "https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/getting-started.md",
       "documentation": "https://github.com/remote-oss/remote/tree/main/docs/remote-ssh",
@@ -773,14 +536,6 @@
       "opensshremotes.provideFeedback": "feedback"
     }
   },
-  "chatParticipants": [
-    {
-      "id": "remote-ssh",
-      "declared": false,
-      "spec": "F-3907",
-      "note": "no chat participant (F-3907 rule 1)"
-    }
-  ],
   "counts": {
     "commands": 17,
     "settingsListed": 36,
