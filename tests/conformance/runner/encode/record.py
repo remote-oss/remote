@@ -199,7 +199,7 @@ def new_run_id(host, slot, k):
 def platform_refusal(case, profile, host, allow_platform_change=False, purpose="record"):
     """Why `case` may not be recorded (or confirmed) on `host`, or None. A case is recorded for one platform: the host's
     must be in the profile's `arch`; a case recorded (or flaky) on one platform is not re-recorded on another unless
-    asked (allow_platform_change); in the dirty room, an architecture-sensitive case only on its platforms
+    asked (allow_platform_change); on the recording side, an architecture-sensitive case only on its platforms
     (archlib, tests/arch.yaml) and only on a host that provides what it needs (hosts.yaml)."""
     plat = caselib.host_platform(host)
     if caselib.PROFILE_ARCH.get(plat) not in (profile.get("arch") or []):

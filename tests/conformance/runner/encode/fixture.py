@@ -138,7 +138,7 @@ def mirror_for(platform, cat=None):
 
 
 # The standalone runner (D-27): fixtures are rebuilt from their definitions on the implementer's machine, so their
-# tarball hashes differ from the dirty room's. ENCODE_REFERENCE_CATALOG names the catalogue as published; a pinned
+# tarball hashes differ from the recording side's. ENCODE_REFERENCE_CATALOG names the catalogue as published; a pinned
 # `<name>@<sha12>` then resolves to the local build of the same definition (same kind, name, definition_sha256).
 REFERENCE_CATALOG = os.environ.get("ENCODE_REFERENCE_CATALOG")
 

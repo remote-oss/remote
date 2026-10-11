@@ -29,12 +29,13 @@ WAIT_KINDS = ("quickpick", "dialog", "no_dialog", "no_notification", "notificati
               "volume", "quiet")
 STATUSES = ("recorded", "flaky", "failed", "unconfirmed")
 # identity rule (D-14, R-29, F-1401): nothing the writer writes may name the reference's identity
-REFERENCE_ID = re.compile(r"ms-vscode-remote")
+REFERENCE_ID = redact.ROOM_RULES.get("REFERENCE_ID") or re.compile(redact.NOTHING)
+REFERENCE_PUBLISHER = redact.ROOM_RULES.get("REFERENCE_PUBLISHER") or re.compile(redact.NOTHING)
 IDENTITY_PATTERNS = [
     (REFERENCE_ID, "the reference extension id / publisher"),
     (re.compile(r"\bpublisher\b", re.I), "publisher"),
     (re.compile(r"marketplace", re.I), "marketplace listing"),
-    (re.compile(r"\bMicrosoft\b"), "the reference publisher's name"),
+    (REFERENCE_PUBLISHER, "the reference publisher's name"),
     (re.compile(r"\bdisplayName\b"), "the extension display name"),
     (re.compile(r"\bicon\.png\b|dev-containers\.png", re.I), "the extension icon"),
 ]

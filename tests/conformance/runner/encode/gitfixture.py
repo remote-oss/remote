@@ -9,7 +9,7 @@ Definition fixtures/git/<name>/fixture.yaml:
   absent        repository names the cases rely on NOT existing (an error path)
 Every run: the provisioner finds the case's git://<address>/<repo> URLs (its steps, its fixture and its profile's
 state scripts) and makes sure the server at that address serves exactly the fixture's refs and none of its absent
-repositories. In the dirty room the lab's own Git server serves them and is only checked; the conformance runner starts
+repositories. On the recording side the lab's own Git server serves them and is only checked; the conformance runner starts
 a container from the pinned image (`encode-git`) on a folder with the built repositories.
 """
 import json

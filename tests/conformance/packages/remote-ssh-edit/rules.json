@@ -1,1 +1,10 @@
-{}
+{
+  "REFERENCE_ID": {
+    "re": "ms-vscode-remote",
+    "flags": 32
+  },
+  "REFERENCE_PUBLISHER": {
+    "re": "\\bMicrosoft\\b",
+    "flags": 32
+  }
+}

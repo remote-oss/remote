@@ -7,7 +7,7 @@ usage: record_batch.py --slots 31-36 [--runs 2] <case.yaml | <suite>/F-XXXX>...
 
 Each worker owns one (host, slot) and runs `record.py --host H --slot N --runs R <case>` for one case after the other;
 a case only goes to a worker whose host its profile lists and whose platform the case may be recorded on (the
-profile's `arch`; a case recorded or flaky on one platform stays there; in the dirty room also tests/arch.yaml and the
+profile's `arch`; a case recorded or flaky on one platform stays there; on the recording side also tests/arch.yaml and the
 host's capabilities). Both runs of a case run on one host, so one recording never mixes platforms. One log per case and batch:
 <recordings>/<case-id>/batch-<batch-id>.log. Prints a summary; exit 0 when every case was recorded.
 """
