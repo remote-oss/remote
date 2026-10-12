@@ -153,6 +153,13 @@ describe('the window label of the connected resolve', () => {
     strictEqual(host.disposals, 0);
   });
 
+  it('F-2502 BR-2: a dispose before the first resolve settles disposes the late registration', () => {
+    const {host, handle, settled} = freshRow();
+    handle.dispose();
+    settled({decodedTarget: sshTarget('dev'), state: 'connected'});
+    deepStrictEqual([host.formatters.length, host.disposals], [1, 1]);
+  });
+
   it('R-29: a connected resolve with a translated table registers the translated suffix', () => {
     const {host, settled} = freshRow(german);
     settled({decodedTarget: sshTarget('dev'), state: 'connected'});
