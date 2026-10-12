@@ -25,6 +25,7 @@ export function registerWindowLabel(
   translate: Translate,
 ): {dispose(): void} {
   let registration: {dispose(): void} | undefined;
+  let disposed = false;
   resolver.onFirstResolveSettled(() => {
     const connection = resolver.currentConnection();
     if (
@@ -37,10 +38,18 @@ export function registerWindowLabel(
         connection.decodedTarget,
         ownText(workspaceSuffixOf(connection.decodedTarget.target), translate),
       );
+      if (disposed) {
+        registration.dispose();
+        registration = undefined;
+      }
     }
   });
   return {
     dispose: () => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
       registration?.dispose();
       registration = undefined;
     },
