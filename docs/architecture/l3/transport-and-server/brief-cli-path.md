@@ -29,9 +29,10 @@ would start a server the CLI installed directly, bypassing the CLI, against F-21
 |---|---|---|---|
 | 1 | `remote.SSH.useExecServer` falsy (F-2103 BR-1, BR-2), or `localServerDownload` is `manual-bootstrap` (BR-3, with S088) | direct | none |
 | 2 | the running editor's product names no `cliDownloadUrlTemplate` | direct | the CLI path was not used: the editor names no CLI source |
-| 3 | the host platform has no CLI build (riscv64, loong64; section 3) | direct | …: no CLI build for `<os>-<arch>` |
-| 4 | the CLI source or the server source is not classified `free` by V6 (section 5) | direct | …: the server's terms must be accepted first |
-| 5 | otherwise | **CLI** | none |
+| 3 | the CLI template is unusable for this host: an unknown placeholder, or its expansion isn't an absolute http(s) URL (F-3902 rule 5 (ii)) | direct | …: the CLI template is unusable |
+| 4 | the host platform has no CLI build (riscv64, loong64; section 3) | direct | …: no CLI build for `<os>-<arch>` |
+| 5 | the CLI source or the server source is not classified `free` by V6 (section 5) | direct | …: the server's terms must be accepted first |
+| 6 | otherwise | **CLI** | none |
 
 Within the mode:
 - **Direct:** today's plan: reuse first (F-3902 rule 10: `bin/<commit>/`, then `cli/servers/<Quality>-<commit>/server/`
@@ -41,7 +42,9 @@ Within the mode:
   The CLI itself reuses a server that's installed or running (F-2103 BR-8: about 0.1 s and no S045, measured on #412),
   so the plan does no reuse check of its own in this mode, and it never touches `bin/` (BR-7).
 
-Rows 2–4 log once per connect, the reason named (BR-13 as revised). A CLI attempt that fails **before the server is
+Rows 2–5 log once per connect, the reason named, from metis's fixed list (F-3902 rule 5 (iii), remote-ssh#79). A CLI
+download answering 404 is the only detectable form of "no build": it is the fallback row of section 6, logged with
+that reason. A CLI attempt that fails **before the server is
 running** in one of the ways of section 6's fallback table falls back to direct install **once in that connect**, logged.
 Nothing persists between connects: the next connect decides again (BR-5: no live switch, a change applies at the next
 resolve).
@@ -156,6 +159,10 @@ mode switch makes a new connection (BR-6). Nothing in the window shows the mode 
 
 ## 9. Step 0: the spec
 
+**Done 2026-10-12** (metis, remote-ssh#79 and #21): F-3902 rule 5 and F-2103 are republished as requested; F-3902
+AC-19 to AC-23 and VS-8, F-2103 AC-35, AC-36 and VS-13 are new, and need a client whose product carries the field
+(section 11).
+
 A request to metis on `remote-oss/remote-ssh#79` (F-3902 rule 5) and `#21` (F-2103 BR-13), filed with this brief: revise
 both for D-76. When the editor names a CLI source and the host has a build, `useExecServer` applies and exec mode is
 the default, as in the reference; direct install remains the fallback (section 2's rows). The request asks metis to
@@ -180,8 +187,9 @@ keep F-2103's observable rows (§5, §6, BR-1 to BR-12) as the CLI path's accept
    They follow part F's harness rulings (#253: the remote window for success, a local window for failures).
 
 Card 1 can start at once. Cards 2 and 3 are pure or unwired (no caller passes the CLI mode until cli-04), so they
-merge after cli-01's amendment (#422) without waiting for step 0: they change no behaviour. **Cards 4 and 5, the
-wiring and its acceptance rows, merge only after step 0** (narrowed on #426: the gate is on behaviour, not on code).
+merge after cli-01's amendment (#422) without waiting for step 0: they change no behaviour. Cards 4 and 5, the
+wiring and its acceptance rows, waited for step 0 (narrowed on #426), which is done: **all five may now merge on their
+own checks.**
 
 ## 11. Where the harness gets a CLI (the user's decision)
 

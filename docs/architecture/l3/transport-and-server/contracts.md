@@ -365,21 +365,21 @@ lease list that S9 uses for login ownership. Lifetime, ownership and how it dies
 
 **Login shells that are not POSIX** (ruled 2026-10-12, the user's question via hermes; measured in Alpine 3.22 with
 sh/dash, bash, zsh, mksh, tcsh, csh and fish):
-- **A remote command is safe in every shell when it is one fixed text: `sh`, then single-quoted words only**, with no
-  `$`, backquote, `!`, `~` or glob outside the quotes. ssh runs it as `<login shell> -c '<command>'`, and every shell
-  above parses that text identically. Measured: the ssh-32 command `sh -c 'eval "$(dd bs=1 count=<n> 2>/dev/null)"'`
+- **A remote command is safe in every shell when it is one fixed text on one line: `sh`, then single-quoted words
+  only**, with no newline anywhere (csh and tcsh reject a quoted word that spans lines: `Unmatched '''`; corrected,
+  daedalus on #447), and no `$`, backquote, `!`, `~` or glob outside the quotes. ssh runs it as `<login shell> -c
+  '<command>'`, and every shell above parses such a text identically. Measured: the ssh-32 command `sh -c 'eval "$(dd bs=1 count=<n> 2>/dev/null)"'`
   with its prelude and input on stdin, and `sh -s` with a script on stdin, both give the right result through all seven.
-  Every remote command S2 builds keeps that form; a row per form runs it through tcsh and fish.
-- **A session with no remote command is not safe today** (the shared session, F-2704 BR-1's local-server mode): the
-  login shell itself reads what `commandsFor` writes. Measured: tcsh and csh reject the assignment prefix
-  (`A=v: Command not found.`, every run fails), and fish rejects `"$?"` (no end marker, so every run waits for its
-  deadline). F-2704 BR-1 records the reference timing out with fish. **Required:** the session's first command hands
-  every later command to POSIX `sh`, after the login profile so F-2704 BR-4's first environment layer holds.
-  - A plain `exec sh` first line is **not** enough: dash, csh and tcsh had already read the rest of stdin into their own
-    buffer (the new `sh` read nothing), and fish parses its whole input before running any of it (the `$?` error came
-    first). The mechanism must not depend on how much stdin the login shell reads ahead: one first line, of the fixed
-    form above, that starts `sh` on a stream of its own. The card writes it and proves it with a real `ssh` login per
-    shell: bash, zsh, a dash-like `sh`, tcsh and fish, with the profile's environment reaching a script.
+  **Not** the direct channel's `sh -c '<script>'` for a script with input and no environment: a multi-line script
+  breaks it under csh and tcsh. It goes through the prelude form too (card ssh-35). Every remote command S2 builds
+  keeps the one-line form; a row per form runs it through tcsh and fish.
+- **The shared session gets a remote command** (ruled on #447, daedalus's ssh-34; measured over real ssh on Alpine
+  3.22 with sh, bash, zsh, dash, mksh, tcsh, csh and fish). Without one, the login shell itself reads `commandsFor`'s
+  text: tcsh and csh reject the assignment prefix, and fish rejects `"$?"`. No first line on stdin can fix that,
+  because fish acts on nothing until its input is complete. So the session's remote command is the fixed one-line
+  form `sh -c '<one word>'`. The word sources the login profile in a subshell, takes its exported environment
+  (F-2704 BR-4's layer 1, which bash also lacked without a tty), and execs `sh`, which then reads `commandsFor`'s
+  commands on stdin. A profile that exits, fails or reads stdin loses only its own variables, never the session.
 
 **No secret in any process's command line** (ruled on #412, daedalus's finding for cli-03b; measured with `ps` on
 OpenSSH hosts): a `ScriptRequest`'s `environment` never appears in an argv, on the host or on the client.
@@ -710,10 +710,11 @@ The reply's `message` is the Rust `Debug` form, which `parseCliServeError` reads
 `CodeError(AuthChallengeBadToken)`, `CodeError(AuthChallengeNotIssued)` and `CodeError(ServerAuthRequired)`. Every
 measured error had `code: -1`.
 
-**Lifetime.** Provisional, pending `remote-oss/remote-ssh#21`: what ends the CLI after its connection ends. The
-server outlives it in any case (F-2103 BR-10, AC-33). `command-shell` itself stops only on Ctrl-C or when the process of
-its `--parent-process-id` dies, after open connections finish (`[cli]` `command_shell`), so which process the CLI is
-tied to is the extension's choice and is open until metis answers.
+**Lifetime** (metis on remote-ssh#21: the reference's bootstrap group goes at about three minutes of its own age,
+and nothing visible depends on it, so the choice is ours). The CLI is started with `--parent-process-id` naming
+the connect's own session process on the host (the login shell that runs it), so `command-shell` ends when that
+session ends, after its open connections finish. The server it started outlives it and is found again by the next
+`serve` (F-2103 BR-10, AC-33). A reconnect starts its own CLI beside a lingering one (BR-8).
 
 **Logging.** Every `serverlog` line goes to the connect's log. Only the error line (level 4) may reach a failure's
 detail, as text the presenter shows through S031 (contracts R1: no other library text in a dialog).
