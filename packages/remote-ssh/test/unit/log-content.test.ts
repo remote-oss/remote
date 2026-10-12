@@ -297,6 +297,16 @@ describe('resolveLogLines (card connect-04 table)', () => {
     );
   });
 
+  it('F-2003.7.E6: a token holding a replacement pattern is masked as text', () => {
+    deepStrictEqual(
+      linesOf({
+        connectionToken: 'ab$&cd',
+        remoteOutput: ['x ab$&cd y'],
+      }).filter(line => line.startsWith('[remote] ')),
+      ['[remote] x aa$&aa y'],
+    );
+  });
+
   it('F-2003.7.E6: an empty token leaves every line unchanged', () => {
     deepStrictEqual(
       linesOf({connectionToken: '', remoteOutput: ['keep ab12-cd34']}).filter(

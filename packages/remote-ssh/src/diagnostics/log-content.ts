@@ -62,7 +62,7 @@ function prefixed(
 function masked(text: string, token: string | undefined): string {
   return token === undefined || token === ''
     ? text
-    : text.replaceAll(token, maskOf(token));
+    : text.replaceAll(token, () => maskOf(token));
 }
 
 function windowLines(start: WindowStart): string[] {
