@@ -19,11 +19,15 @@ export type FailureStringId =
   | 'S032'
   | 'S041'
   | 'S044'
+  | 'S067'
+  | 'S073'
   | 'S079'
   | 'S082'
   | 'S084'
+  | 'S089'
   | 'S092'
   | 'S094'
+  | 'S095'
   | 'S097'
   | 'S107'
   | 'S111'
@@ -47,11 +51,15 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S032: 'Could not resolve hostname',
   S041: 'Downloading VS Code Server',
   S044: 'Downloading VS Code Server locally',
+  S067: 'Error establishing tunnel ({0}).',
+  S073: 'Failed to find a free local port: {0}',
   S079: 'Hostname contains invalid characters',
   S082: 'Initializing VS Code Server',
   S084: 'Installing VS Code Server',
+  S089: 'Max wait time exhausted',
   S092: 'More Actions...',
   S094: 'Network is unreachable',
+  S095: "No free ports in specified range '{0}-{1}'.  Remove or update the 'Preferred Local Port Range' setting and try again.",
   S097: 'No route to host',
   S107: 'Port forwarding is disabled',
   S111: 'Remote host key has changed, port forwarding is disabled',
@@ -97,8 +105,9 @@ function isKnownId(stringId: string): stringId is FailureStringId {
 }
 
 /**
- * The text a reason gives: the translated template of a known id, the text as it is, or nothing for an id this table
- * does not hold or a text that is empty.
+ * The text a reason gives: the translated template of a known id with its values put in, a value that is a string of
+ * the table resolving in turn (a literal value as it is), the text as it is, or nothing for an id this table does not
+ * hold, an empty text, or a value whose own id it does not hold.
  */
 export function reasonText(
   reason: FailureReason,
@@ -106,6 +115,21 @@ export function reasonText(
 ): string | undefined {
   if ('text' in reason) {
     return reason.text === '' ? undefined : reason.text;
+  }
+  if ('values' in reason) {
+    if (!isKnownId(reason.id)) {
+      return undefined;
+    }
+    const values: string[] = [];
+    for (const value of reason.values) {
+      const valueText =
+        typeof value === 'string' ? value : reasonText(value, translate);
+      if (valueText === undefined) {
+        return undefined;
+      }
+      values.push(valueText);
+    }
+    return textOfId(reason.id, translate, values);
   }
   return isKnownId(reason.id) ? textOfId(reason.id, translate) : undefined;
 }

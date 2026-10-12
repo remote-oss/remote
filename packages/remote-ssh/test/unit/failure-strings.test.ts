@@ -24,11 +24,15 @@ describe('the texts of the failure dialog and the progress', () => {
       'S032',
       'S041',
       'S044',
+      'S067',
+      'S073',
       'S079',
       'S082',
       'S084',
+      'S089',
       'S092',
       'S094',
+      'S095',
       'S097',
       'S107',
       'S111',
@@ -92,5 +96,54 @@ describe('the texts of the failure dialog and the progress', () => {
 
   it('F-2601: an id named like a member of Object gives nothing', () => {
     deepStrictEqual(reasonText({id: 'constructor'}, marked), undefined);
+  });
+
+  it('F-2104 7.E3 b: a reason string resolves its nested value in turn', () => {
+    deepStrictEqual(
+      reasonText(
+        {id: 'S067', values: [{id: 'S089', values: []}]},
+        template => template,
+      ),
+      'Error establishing tunnel (Max wait time exhausted).',
+    );
+  });
+
+  it('F-2104 7.E1: the tunnel texts nest three deep, the range given as literals', () => {
+    deepStrictEqual(
+      reasonText(
+        {
+          id: 'S067',
+          values: [
+            {id: 'S073', values: [{id: 'S095', values: ['41060', '41061']}]},
+          ],
+        },
+        template => template,
+      ),
+      "Error establishing tunnel (Failed to find a free local port: No free ports in specified range '41060-41061'.  Remove or update the 'Preferred Local Port Range' setting and try again.).",
+    );
+  });
+
+  it('contracts §3.2: a literal value that equals an id is inserted as it is', () => {
+    deepStrictEqual(
+      reasonText({id: 'S073', values: ['S089']}, template => template),
+      'Failed to find a free local port: S089',
+    );
+  });
+
+  it('contracts §3.2: a nested id without a template gives nothing', () => {
+    deepStrictEqual(
+      reasonText(
+        {id: 'S067', values: [{id: 'S999', values: []}]},
+        template => template,
+      ),
+      undefined,
+    );
+  });
+
+  it('contracts §3.2: a reason string whose own id has no template gives nothing', () => {
+    deepStrictEqual(
+      reasonText({id: 'S999', values: []}, template => template),
+      undefined,
+    );
   });
 });

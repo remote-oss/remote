@@ -10,8 +10,17 @@ export interface FilledString {
   values: readonly string[];
 }
 
-/** The reason a failure carries: a string of the table, or a text the failing step wrote. */
-export type FailureReason = {id: string} | {text: string};
+/** A value of a reason's placeholder: a literal shown as it is, or a string of the table resolved in turn. */
+export type ReasonValue = string | ReasonString;
+
+/** A string of the table with values for its placeholders, which may themselves be strings of the table. */
+export interface ReasonString {
+  id: string;
+  values: readonly ReasonValue[];
+}
+
+/** The reason a failure carries: a string of the table, text the failing step wrote, or a string with values. */
+export type FailureReason = {id: string} | {text: string} | ReasonString;
 
 /** A hint kept for the session and shown by the troubleshooting view. */
 export interface FailureHint {

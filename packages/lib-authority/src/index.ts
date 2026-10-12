@@ -25,6 +25,8 @@ export type {
   FailureHint,
   FailureReason,
   FilledString,
+  ReasonString,
+  ReasonValue,
 } from './connector/results.ts';
 export {
   type ProbeApi,
