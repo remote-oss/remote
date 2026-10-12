@@ -670,8 +670,10 @@ The reply's `message` is the Rust `Debug` form, which `parseCliServeError` reads
 `CodeError(AuthChallengeBadToken)`, `CodeError(AuthChallengeNotIssued)` and `CodeError(ServerAuthRequired)`. Every
 measured error had `code: -1`.
 
-**Lifetime.** The CLI ends with the connect's session (the shared connection's, or the install terminal's); the
-server it started outlives it and is found again by the next `serve` (F-2103 BR-10, AC-33).
+**Lifetime.** Provisional, pending `remote-oss/remote-ssh#21`: what ends the CLI after its connection ends. The
+server outlives it in any case (F-2103 BR-10, AC-33). `command-shell` itself stops only on Ctrl-C or when the process of
+its `--parent-process-id` dies, after open connections finish (`[cli]` `command_shell`), so which process the CLI is
+tied to is the extension's choice and is open until metis answers.
 
 **Logging.** Every `serverlog` line goes to the connect's log. Only the error line (level 4) may reach a failure's
 detail, as text the presenter shows through S031 (contracts R1: no other library text in a dialog).
