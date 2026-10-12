@@ -95,6 +95,22 @@ What is removed (ECMA-48, the forms a terminal emits):
 A sequence that a piece ends inside (for example a piece ending in `\x1b[` or `\x1b]0;tit`) is held and joined with
 the next piece; the text before it is returned at once.
 
+**A held string is bounded** (amended 2026-10-12, athena on #341; brief 311a9f5, after the DEC VT500 parser). An OSC,
+DCS, SOS, PM or APC string ends at BEL (OSC only) or ST, and is also **cancelled** by:
+- any other ESC: the string is dropped up to that ESC, and the ESC starts the next sequence;
+- CAN (`\x18`) or SUB (`\x1a`): the string is dropped up to and including that byte.
+
+And a string still open once more than 4096 characters from its ESC have arrived is **dropped through the next line
+end** (the line end included), and the text after that line end flows as plain text (ruled on #341, option (ii);
+brief c213613). When the piece holds no line end after the cap, the filter keeps dropping the following pieces up to
+and including the first line end. The tail of an endless string is junk, and dropping it keeps it out of the line the
+prompt matcher reads; the next line starts clean, so a stray `ESC ]` in a host's banner can never swallow the password
+prompt or a marker that follows. **The scan for a terminator stops at the cap** (athena on #341, at ee58309): a
+terminator or cancelling byte within the first 4096 characters from the ESC ends the string normally; if none lies
+within them, the string is capped and dropped through the next line end, **even when a terminator exists later**. So
+the output never depends on how the editor chunks the stream, and a later ESC, BEL or CAN can't end a capped string
+early and swallow the line after the junk.
+
 ### 2.3 The recording fake (`lib-ssh/src/testing/recording-terminal.ts`)
 
 ```ts
@@ -175,6 +191,19 @@ One assertion per `it`; the cite starts the name.
 | #299 | `'x\x1b'`, then `'[2Ky'` (split right after ESC) | `'x'` then `'y'` |
 | #299 | `'\x07bell\ttab'` (BEL outside an OSC, tab) | `'\x07bell\ttab'` |
 | #299 | `'end\x1b[1'`, then `flush()` | `'end'` then `''` |
+| #341 | `'motd\x1b]0;oops\r\n\x1b[0mpassword: '` (a stray OSC in a banner, cancelled by the next ESC) | `'motdpassword: '` |
+| #341 | `'a\x1b]0;x\x18b'` (CAN) | `'ab'` |
+| #341 | `'a\x1b]0;x\x1ab'` (SUB) | `'ab'` |
+| #341 | `'a\x1b]0;x\x1bPdcs\x1b\\b'` (another string's ESC cancels the first; the DCS then ends at ST) | `'ab'` |
+| #341 | `'a\x1b]0;'` + 5000 × `'z'` + `'\nnext line'` in one piece | `'anext line'` (no `z`; the line end is dropped with the string) |
+| #341 | `'a\x1b]0;'` + 3000 × `'z'`, then 3000 × `'z'` + `'\nafter'` | `'a'` then `'after'` |
+| #341 | `'a\x1b]0;'` + 5000 × `'z'`, then `'zz\nok'` (the cap reached with no line end in the first piece) | `'a'` then `'ok'` |
+| #341 | `'a\x1b]0;'` + 3996 × `'x'` + `'\x07tail'` (the BEL at character 4000 from the ESC) | `'atail'` (a terminator within the cap ends the string normally) |
+| #341 | `'a\x1b]0;'` + 4096 × `'x'` + `'\x07'` + 900 × `'z'` + `'\nnext'` (the BEL at character 4100) | `'anext'` (a terminator past the cap doesn't rescue the string) |
+| #341 | `'a\x1b]0;'` + 3000 × `'x'`, then 896 × `'y'` + `'\x07z'` (the BEL at character 3900, in the second piece) | `'a'` then `'z'` (a terminator within the cap ends the string across pieces too) |
+| #341 | `'a\x1b]0;'` + 5000 × `'z'` + `'\nB\x1b[1mC'` (a later CSI) | `'aBC'` (`B` survives; the CSI is removed) |
+| #341 | `'a\x1b]0;'` + 5000 × `'z'` + `'\nB\x1b]0;t\x07C'` (a later OSC) | `'aBC'` (the second OSC is removed) |
+| #341 | `'a\x1b]0;'` + 5000 × `'z'` + `'\nB\x07C'` (a later BEL outside a string) | `'aB\x07C'` (a BEL outside a string is text) |
 
 ### 3.2 `recording-terminal.test.ts`
 

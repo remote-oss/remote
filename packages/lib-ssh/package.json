@@ -6,6 +6,10 @@
     ".": {
       "types": "./.tsc/src/index.d.ts",
       "default": "./src/index.ts"
+    },
+    "./testing/recording-terminal": {
+      "types": "./.tsc/src/testing/recording-terminal.d.ts",
+      "default": "./src/testing/recording-terminal.ts"
     }
   },
   "dependencies": {

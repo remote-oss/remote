@@ -1,5 +1,5 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
-import {expandHome} from '../../src/arguments/invocation.ts';
+import {deepStrictEqual, strictEqual, throws} from 'node:assert';
+import {expandHome, TUNNEL_COMMAND} from '../../src/arguments/invocation.ts';
 import {buildInvocation, buildOptionsQuery} from '../../src/index.ts';
 import type {
   ClientPlatform,
@@ -28,6 +28,7 @@ interface RequestChanges {
   effective?: Partial<EffectiveOptions>;
   forwards?: Forward[];
   remoteProgram?: string;
+  clearUserForwards?: boolean;
 }
 
 /** The options `ssh -G` prints for the host, as the row sets them. */
@@ -77,6 +78,9 @@ function makeRequest(changes: RequestChanges = {}): SshRequest {
   }
   if (changes.forwards !== undefined) {
     request.forwards = changes.forwards;
+  }
+  if (changes.clearUserForwards !== undefined) {
+    request.clearUserForwards = changes.clearUserForwards;
   }
   return request;
 }
@@ -186,6 +190,7 @@ function forbiddenOf(invocation: Invocation): string[] {
     if (
       value !== undefined &&
       value !== 'RemoteCommand=none' &&
+      value !== 'ClearAllForwardings=yes' &&
       !value.startsWith('ConnectTimeout=')
     ) {
       violations.push(value);
@@ -231,6 +236,13 @@ function forbiddenSweep(): string[] {
         ),
       );
     }
+    violations.push(
+      ...forbiddenOf(
+        buildInvocation(
+          makeRequest({purpose, forwards: [], clearUserForwards: true}),
+        ),
+      ),
+    );
   }
   return violations;
 }
@@ -590,6 +602,123 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
   it('F-2105.BR-2 (provisional): a fractional timeout is written as given', () => {
     const invocation = buildInvocation(makeRequest({connectTimeout: 2.5}));
     strictEqual(hasPair(invocation, '-o', 'ConnectTimeout=2.5'), true);
+  });
+  it('F-2308 BR-10: a tunnel run ends with its own command', () => {
+    const invocation = buildInvocation(makeRequest({purpose: 'tunnel'}));
+    strictEqual(lastOf(invocation), TUNNEL_COMMAND);
+  });
+
+  it('F-2308 BR-10: the tunnel command stands behind -- and the host', () => {
+    const invocation = buildInvocation(makeRequest({purpose: 'tunnel'}));
+    deepStrictEqual(invocation.arguments.slice(-3), [
+      '--',
+      'alias',
+      TUNNEL_COMMAND,
+    ]);
+  });
+
+  it('brief, #299: a tunnel run ignores a remoteProgram', () => {
+    const invocation = buildInvocation(
+      makeRequest({purpose: 'tunnel', remoteProgram: 'uname -s'}),
+    );
+    strictEqual(lastOf(invocation), TUNNEL_COMMAND);
+  });
+
+  it('brief, #299: a tunnel run carries no -N', () => {
+    const invocation = buildInvocation(makeRequest({purpose: 'tunnel'}));
+    strictEqual(invocation.arguments.includes('-N'), false);
+  });
+
+  it('F-2104 BR-12: a tunnel run carries no ExitOnForwardFailure', () => {
+    const invocation = buildInvocation(makeRequest({purpose: 'tunnel'}));
+    strictEqual(
+      invocation.arguments.includes('ExitOnForwardFailure=yes'),
+      false,
+    );
+  });
+
+  it('F-2104 6.2: a tunnel run keeps its local forward before the host', () => {
+    const invocation = buildInvocation(
+      makeRequest({
+        purpose: 'tunnel',
+        forwards: [{kind: 'local', localPort: 51001, remotePort: 8080}],
+      }),
+    );
+    deepStrictEqual(
+      invocation.arguments.slice(invocation.arguments.indexOf('-L')),
+      ['-L', '51001:127.0.0.1:8080', '--', 'alias', TUNNEL_COMMAND],
+    );
+  });
+
+  it('F-2410 5.0: a tunnel run keeps its socket forward before the host', () => {
+    const invocation = buildInvocation(
+      makeRequest({
+        purpose: 'tunnel',
+        forwards: [
+          {kind: 'socket', localPort: 51002, socketPath: '/tmp/code-x.sock'},
+        ],
+      }),
+    );
+    deepStrictEqual(
+      invocation.arguments.slice(invocation.arguments.indexOf('-L')),
+      ['-L', '51002:/tmp/code-x.sock', '--', 'alias', TUNNEL_COMMAND],
+    );
+  });
+
+  it('F-2104 6.2 step 1: an install run with the clearing adds ClearAllForwardings=yes once', () => {
+    const invocation = buildInvocation(
+      makeRequest({
+        purpose: 'connection',
+        remoteProgram: 'sh',
+        clearUserForwards: true,
+      }),
+    );
+    deepStrictEqual(
+      [
+        hasPair(invocation, '-o', 'ClearAllForwardings=yes'),
+        countOf(invocation, 'ClearAllForwardings=yes'),
+      ],
+      [true, 1],
+    );
+  });
+
+  it('F-2104 6.2 step 1: an install run without the clearing adds no ClearAllForwardings', () => {
+    const invocation = buildInvocation(
+      makeRequest({purpose: 'connection', remoteProgram: 'sh'}),
+    );
+    strictEqual(
+      invocation.arguments.includes('ClearAllForwardings=yes'),
+      false,
+    );
+  });
+
+  it('F-2104 6.3: the clearing beside our own forwards is refused', () => {
+    const request = makeRequest({
+      purpose: 'connection',
+      forwards: [{kind: 'dynamic', localPort: 51000}],
+      clearUserForwards: true,
+    });
+    throws(
+      () => buildInvocation(request),
+      /would also clear the run's own forwards/,
+    );
+  });
+
+  it('brief, #299: a tunnel run ignores the clearing', () => {
+    const invocation = buildInvocation(
+      makeRequest({purpose: 'tunnel', forwards: [], clearUserForwards: true}),
+    );
+    strictEqual(
+      invocation.arguments.includes('ClearAllForwardings=yes'),
+      false,
+    );
+  });
+
+  it('F-2104 BR-12: TUNNEL_COMMAND is the up line and the hold', () => {
+    strictEqual(
+      TUNNEL_COMMAND,
+      "echo 'Connected to SSH Host - Please do not close this terminal'; exec sleep 2147483647",
+    );
   });
 });
 

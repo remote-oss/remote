@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {spawnSync} from 'node:child_process';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {
   commandsFor,
@@ -29,6 +30,15 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
     return {lines, ended: runs.execute(request, line => lines.push(line))};
   }
 
+  /** Feeds one run's command lines into the reader, as a terminal echoes them back. */
+  function echoOwnCommands(request: ShellRun = SCRIPT): void {
+    for (const line of commandsFor(`m${String(markers)}`, request).split(
+      '\n',
+    )) {
+      runs.hear(line);
+    }
+  }
+
   beforeEach(() => {
     clock = new FakeClock();
     written = [];
@@ -52,9 +62,9 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
       deepStrictEqual(
         commandsFor('m1', SCRIPT),
         [
-          "printf '%s\\n' 'm1:start'",
+          "printf '%s%s\\n' 'm1:st' 'art'",
           "sh -c 'echo hello' </dev/null",
-          "printf '%s %s\\n' 'm1:end' \"$?\"",
+          "printf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"",
           '',
         ].join('\n'),
       );
@@ -73,12 +83,12 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
           '\n',
         ),
         [
-          "printf '%s\\n' 'm1:start'",
+          "printf '%s%s\\n' 'm1:st' 'art'",
           "base64 -d <<'m1_input' | sh -c 'echo hello'",
           'A'.repeat(76),
           'A'.repeat(24),
           'm1_input',
-          "printf '%s %s\\n' 'm1:end' \"$?\"",
+          "printf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"",
           '',
         ],
       );
@@ -91,6 +101,78 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
           .slice(1, 3),
         ["base64 -d <<'m1_input' | sh -c 'echo hello'", 'm1_input'],
       );
+    });
+
+    it('#299: no command line holds the start marker', () => {
+      deepStrictEqual(
+        commandsFor('m1', SCRIPT)
+          .split('\n')
+          .some(line => line.includes('m1:start')),
+        false,
+      );
+    });
+
+    it('#299: no command line holds the end marker with its space', () => {
+      deepStrictEqual(
+        commandsFor('m1', SCRIPT)
+          .split('\n')
+          .some(line => line.includes('m1:end ')),
+        false,
+      );
+    });
+
+    it('#299: the input commands hold no marker line', () => {
+      deepStrictEqual(
+        commandsFor('m1', {...SCRIPT, inputBase64: 'A'.repeat(100)})
+          .split('\n')
+          .some(line => line.includes('m1:start') || line.includes('m1:end ')),
+        false,
+      );
+    });
+  });
+
+  describe('the terminal echoing the commands of a run', () => {
+    it("F-2308: the commands piped into sh print the markers and the script's lines", () => {
+      const result = spawnSync('/bin/sh', [], {
+        input: commandsFor('m1', SCRIPT),
+      });
+      deepStrictEqual(
+        [result.status, result.stdout.toString().trim().split('\n')],
+        [0, ['m1:start', 'hello', 'm1:end 0']],
+      );
+    });
+
+    it('#299: a run that hears its own commands keeps them out of its lines', async () => {
+      const {lines, ended} = start();
+      echoOwnCommands();
+      runs.hear('m1:start');
+      runs.hear('hi');
+      runs.hear('m1:end 0');
+      await ended;
+      deepStrictEqual(lines, ['hi']);
+    });
+
+    it('#299: such a run ends with the script status', async () => {
+      const {ended} = start();
+      echoOwnCommands();
+      runs.hear('m1:start');
+      runs.hear('m1:end 0');
+      deepStrictEqual(await ended, {kind: 'ended', status: 0});
+    });
+
+    it('#299: the same with an input keeps the payload, not the commands', async () => {
+      const request: ShellRun = {
+        script: 'cat',
+        inputBase64: Buffer.from('payload\n').toString('base64'),
+        deadlineMilliseconds: 1000,
+      };
+      const {lines, ended} = start(request);
+      echoOwnCommands(request);
+      runs.hear('m1:start');
+      runs.hear('payload');
+      runs.hear('m1:end 0');
+      await ended;
+      deepStrictEqual(lines, ['payload']);
     });
   });
 

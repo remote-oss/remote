@@ -38,7 +38,7 @@ connect in validate; this brief replaces that interim.
 | Operation | Contract |
 |---|---|
 | `open(invocation, name, reveal)` | creates the terminal (`window.createTerminal` with `hideFromUser: !reveal`, the local home as cwd, never trust-exempt: F-2308 §16, F-3903 rule 1), starts the invocation, and returns a session: `onOutput(chunk)`, `send(text)`, `reveal()`, `onEnd(status)`, `dispose()` |
-| output | read through the proposed `terminalDataWriteEvent` (`window.onDidWriteTerminalData`), filtered to this terminal, chunked as the editor delivers it. The event delivers raw data including VT escape sequences (the proposal's own doc), so **the adapter strips them and the port promises plain text** (ruled on #299): CSI, OSC and the other ESC sequences are removed, `\r\n` and `\r` are kept for the line splitter. Prompt and marker matching are then pure functions of plain lines, testable without a terminal. A sequence split across two chunks is held until it completes |
+| output | read through the proposed `terminalDataWriteEvent` (`window.onDidWriteTerminalData`), filtered to this terminal, chunked as the editor delivers it. The event delivers raw data including VT escape sequences (the proposal's own doc), so **the adapter strips them and the port promises plain text** (ruled on #299): CSI, OSC and the other ESC sequences are removed, `\r\n` and `\r` are kept for the line splitter. Prompt and marker matching are then pure functions of plain lines, testable without a terminal. A sequence split across two chunks is held until it completes. **A held string sequence is bounded** (ruled on #341, after the DEC VT500 parser, vt100.net): an OSC/DCS/SOS/PM/APC string ends at BEL (OSC) or ST, **and is cancelled by any other ESC, by CAN (0x18) or by SUB (0x1A)**; the cancelling ESC starts the next sequence. A string still open after 4 KiB is dropped **through the next line end** (the line end too), and the text after that flows; with no line end yet, the following pieces are dropped up to the first one (ruled on #341: option ii, so the tail of an endless string never leaks into the line the prompt matcher reads). Otherwise one stray `ESC ]` in a host's banner would swallow the password prompt and every marker after it |
 | `reveal` | `Terminal.show(false)`: reveals and focuses (F-2308 BR-2, 6.1 step 4) |
 | trust | the editor's workspace-trust dialog gates the terminal. Cancel → the attempt fails at once and no `ssh` runs (F-2308 7.E7, AC-24); an answer later than the connect wait → the wait's timeout (F-2306 AC-28) |
 
@@ -51,7 +51,15 @@ connect in validate; this brief replaces that interim.
 ### Prompt recognition over terminal output (S7 terminal list)
 
 - A line splitter over the chunked output (LineSplitter, which already strips a trailing `\r`), plus a **partial-line
-  check**: a prompt has no newline, so the current partial line is also matched once the output pauses.
+  check**: a prompt has no newline, so the current partial line is also matched once the output pauses **for 100 ms**
+  (a named lib-ssh constant; ruled on #299). A prompt is ssh's last write before it blocks on input, so silence always
+  follows it. The pause is an optimisation, not what makes it correct: a fragment matched early fails to match and
+  the next chunk retries.
+- **The candidate text for a question** is the complete lines since the last recognised prompt, the last answer, or
+  the terminal's opening, capped at the **last 20**, joined with `\n`, plus the partial line (ruled on #299).
+  `classifyPrompt` already looks back from the question line for the fingerprint. Measured against a real OpenSSH 10
+  sshd: the first-contact question is 4 lines (with the `fingerprint is: SHA256:…` colon form), and the changed-key
+  warning block is 13.
 - The recognised set in terminal mode, with the setting off:
   - F-2306's three: `<user>@<host>'s password:`, `Password:` and `Verification code:` (F-2308 BR-4).
   - The host-key question by F-2305 BR-2's patterns (ruled below).
@@ -89,7 +97,11 @@ connect in validate; this brief replaces that interim.
   of the `authenticated` marker. A `mode` input to the wait's owner decides which.
 - secondSsh and socket: purpose `tunnel`, **no `-N`** (the tunnel runs the remote command ruled under W2 below, which
   prints F-2308 BR-10's line), `-L 127.0.0.1:<port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (already
-  built), and `ExitOnForwardFailure yes` (it exits 255 on a busy port; checked by daedalus on OpenSSH 10.2p1).
+  built). **No `ExitOnForwardFailure`** (corrected on #340, 2026-10-12): the extension doesn't add it. F-2104 BR-11
+  applies the user's own forwards to this ssh, and BR-12/7.E6/7.E7 make a failing user forward end it **only when the
+  user's host entry sets `ExitOnForwardFailure yes`**. Forcing it would fail the connect for every user whose entry has
+  a forward that can't bind. The tunnel's own `-L` is safe without it: W1 has just found the port free, and the 10 s
+  readiness wait (BR-10) fails a tunnel that never accepts.
 - With dynamic forwarding off, the install `ssh` must not act on the user's own forwards (F-2104 6.2 step 1):
   `ClearAllForwardings yes` on that run only. S2's "never add" list gains this one exception, scoped to that run.
   Checked against a real sshd: a host block's `LocalForward` opens without it and doesn't open with it.
@@ -109,7 +121,24 @@ connect in validate; this brief replaces that interim.
   (POSIX `sh`, the remote login shell), so the line is the host's own output, as the spec says. It's still bounded by
   the 10 s readiness wait. Checked against a real OpenSSH sshd (2026-10-12): the line arrives, the forward carries
   traffic, and it ends with the process.
-- A tunnel login that is cancelled, fails, or exits through `ExitOnForwardFailure` fails the connect with F-2601's
+- **The forward itself is checked, not the run** (themis's note; checked against a real sshd, 2026-10-12). With our
+  port busy, the tunnel `ssh` exits 0, prints the success line, and only warns on stderr: `bind [127.0.0.1]:<port>:
+  Address already in use`, `channel_setup_fwd_listener_tcpip: cannot listen to port: <port>`, `Could not request local
+  forwarding.` (printed at every log level). And the readiness probe would then connect to **whoever holds the port**.
+  So T7 fails the tunnel when the tunnel terminal shows `Could not request local forwarding.` or `cannot listen to
+  port: <our port>` before the probe succeeds, and only then trusts the probe. The success line alone never means up.
+- **The success line is a gate, then the probe** (daedalus, ruled on #299: the rule above raced, since with a foreign
+  process on our port the probe connects to it at once, before ssh prints its failure). ssh sets up local forwards in
+  its session setup before it sends the remote command, so its forward-failure lines always precede the success line:
+  measured on OpenSSH 10.2 through a pty (stdout and stderr merged, as the terminal sees them), 10 of 10 runs, with
+  `-v` showing `Local connections to` → `cannot listen` → `Could not request local forwarding` → `Sending command` →
+  the success line. So T7:
+  1. runs the tunnel login under T2's prompt rules, **with no 10 s bound** (F-2104 6.2 step 4: the tunnel ssh may ask
+     for a password);
+  2. waits for the success line, failing the tunnel if a forward-failure line for our port came first;
+  3. only then starts the **10 s readiness wait** (F-2104 BR-10, "Waiting for port forwarding to be ready", S158, 6.2
+     step 5) and the probe. The 10 s counts from the success line, not from the spawn.
+- A tunnel login that is cancelled, fails, or exits through the user's own `ExitOnForwardFailure` fails the connect with F-2601's
   dialog after the bound, never a hang (F-2104 7.E7/7.E10, F-2308 7.E2/BR-11, R-79).
 - W3 in these two paths: the user's forwarded ports open one `-L` each on the tunnel session. F-2104 Q4 and BR-11's
   socket-mode lab item stay open; until answered, W3 there reports a port it can't forward instead of guessing.
@@ -143,10 +172,20 @@ connect in validate; this brief replaces that interim.
 2. **Passphrase in terminal mode: recognised from the terminal output (option a), keeping F-2307 AC-23.** Asked on
    F-2307 (#40). If the spec answers (b), the recognition is dropped and an askpass set up for it instead.
 3. **An unanswered question after the handshake is bounded when nobody can reach it** (F-2308 7.E3, F-2305 BR-7;
-   R-79). A recognised prompt shown as an input waits without limit (F-2306 BR-7). An unrecognised question in a
-   hidden terminal is reachable only through "details" in a phase that carries the link (F-2308 6.1 step 4). In a
-   phase without the link, or once the output has been silent for the connect timeout with a partial line
-   pending, the attempt fails with F-2601 after the bound. The bound is R-79's family default, not a new number.
+   R-79). Corrected on #299 (daedalus, 2026-10-12): "R-79's family default" was not a defined value; every R-79 bound
+   is a named, ruled one. So:
+   - **A recognised prompt shown as an input has no bound** (F-2306 BR-7): the user sees it and can answer or cancel,
+     so it's not a hidden hang. F-2308 BR-6's held output ends with that input.
+   - **The unreachable-question bound is the effective connect timeout** (the looked-up `ConnectTimeout`, else the
+     setting, as F-2105 BR-1): after the handshake, output silent for that long with a partial line pending and no
+     input open fails the attempt with F-2601. Before the handshake, ssh's own timeout already ends it (F-2308 BR-5).
+     No new number.
+   - **"After the handshake" is the `-v` line `debug1: SSH2_MSG_NEWKEYS received`** (daedalus, ruled on #299), a second
+     marker beside `setupMarkerOf`'s. Measured against a real OpenSSH sshd (password login, first contact): the
+     host-key question, then `NEWKEYS sent`, then `NEWKEYS received`, then `password:`, then `Authenticated to`. So the
+     first-contact question stays under ssh's own timeout, and every later prompt falls under ours. `Authenticated
+     to` would be too late, since the password prompt comes before it. S2 always passes `-v`, which overrides a user's
+     `LogLevel`.
 4. **The connect wait ends at the first output** in terminal mode (F-2105 BR-3), not at `authenticated`. The `-v`
    banner arriving first is what the spec observed (F-2308 5.0 step 4).
 5. **A late trust answer** (after the attempt failed): nothing runs. The terminal isn't created after the attempt's

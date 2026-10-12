@@ -19,6 +19,7 @@ second server and leaves the socket one running; the kill stops both processes. 
 | File | Change |
 |---|---|
 | `packages/lib-server/src/scripts/bootstrap.ts` | `StartParameters.socketMode`; the kind's files; `--socket-path`; the ready reader (section 2.1) |
+| `packages/lib-server/src/scripts/posix-script.ts` | `remove_install` also removes the socket kind's three files (section 2.1, amended) |
 | `packages/lib-server/src/lifecycle/runtime.ts` | `RuntimeOptions.socketMode`; `StartedServer.endpoint`; `serverPort` (section 2.2) |
 | `packages/lib-server/test/unit/fake-host.ts` | the stand-in launcher prints the `--socket-path` value when given one; `parametersFor` has `socketMode: false` |
 | `packages/lib-server/test/unit/bootstrap-script.test.ts` | rows added (section 3.1) |
@@ -42,6 +43,9 @@ this card's connect.
   `PID_FILE`, `LOG_FILE` and `TOKEN_FILE` are `$KIND_PREFIX.pid`, `.log`, `.token`. Port mode's names are unchanged
   (`.<commit>.pid` and so on); socket mode's are `.<commit>.socket.pid` and so on. A running server is therefore found
   and reused only through its own kind's PID file: that is "reuse only on a match".
+- **Cleanup removes both kinds' files** (amended 2026-10-12, iris on #339). `remove_install` in `posix-script.ts`
+  removes `.$1.log`, `.$1.pid` and `.$1.token` of an old commit; it also removes `.$1.socket.log`, `.$1.socket.pid`
+  and `.$1.socket.token` in the same `rm -rf`. Without it each old commit's socket-kind files would stay behind.
 - **The kill needs no change.** `stop_servers` stops every `"$DATA_DIR"/.*.pid`, which matches both kinds' PID files,
   and `KILL_BODY` removes them all.
 - **The endpoint options.** `startOptions` puts `--socket-path "$SOCKET_FILE"` in place of `--host <bindHost> --port
@@ -113,6 +117,7 @@ One assertion per `it`; the cite starts the name.
 | F-2410 BR-7 | a port start, then a socket start | the socket start has `server.reused` `no` (a port server is not reused for it) |
 | F-2411 POST-1 | a port start and a socket start, then `kill` | neither server process is alive afterwards |
 | F-2410 BR-6 | a socket start | the data folder holds `.abc123.socket.pid` and no new `.abc123.pid` |
+| F-2413 BR-9 | a socket start on an old commit, then a cleanup that removes that commit | none of `.<old>.socket.log`, `.socket.pid`, `.socket.token` remain (as the row "cleanup removes the log of an install it removes" does for port mode) |
 | #299 | a socket start whose stand-in prints a port (`SERVER_READY_TEXT` makes it print `4321` even with `--socket-path`) | status `ServerFailedToStart` |
 
 The stand-in launcher in `fake-host.ts` prints its endpoint like this, replacing today's fixed `4321` line:
