@@ -10,6 +10,10 @@ recommendation for a folder under `/mnt/<letter>/` tests the path string only (F
 `packages/lib-wsl/src/share-path.ts` (new), `test/unit/share-path.test.ts` (new), `src/index.ts` (one export line).
 Nothing else. No `node:path`, no `URL`.
 
+`test/unit/skeleton.test.ts`: delete it in this card if it is still on main when the branch starts or rebases. It
+asserts that the package exports nothing, which this card's export line ends, and the module's own tests replace it for
+coverage. If another WSL card has already deleted it, leave it absent. This is the one change outside the files above.
+
 ## 2. Contract
 
 ```ts

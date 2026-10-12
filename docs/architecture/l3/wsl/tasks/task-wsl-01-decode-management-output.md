@@ -9,6 +9,10 @@ The encoding is found from the bytes, never from a flag. Reviewing coder: `remot
 `packages/lib-wsl/src/decode.ts` (new), `test/unit/decode.test.ts` (new), `src/index.ts` (one export line). Nothing
 else. Depends on card wsl-00 (the package). No `vscode`, no `Buffer`-only API in the signature, no file or process.
 
+`test/unit/skeleton.test.ts`: delete it in this card if it is still on main when the branch starts or rebases. It
+asserts that the package exports nothing, which this card's export line ends, and the module's own tests replace it for
+coverage. If another WSL card has already deleted it, leave it absent. This is the one change outside the files above.
+
 ## 2. Contract
 
 ```ts
@@ -38,7 +42,7 @@ Bytes are written as text for the encoding named; the test builds them (UTF-16LE
 | contracts.md §1 D1 | UTF-8 `fixture γ\n` (the `WSL_UTF8=1` form) | `fixture γ\n` |
 | contracts.md §1 D1 | `EF BB BF` + UTF-8 `abc` | `abc` |
 | brief "Decoding" | UTF-16LE `abc` + `00 00`, no mark | `abc` |
-| brief "Decoding" | UTF-8 `abc` + `00` | `abc` |
+| brief "Decoding" | UTF-8 `abcd` + `00` (5 bytes: odd length, so UTF-8 by rule 2) | `abcd` |
 | brief "Decoding" | UTF-8 bytes `61 00 62` (odd length) | `ab` |
 | brief "Decoding" | empty `Uint8Array` | `` |
 | brief "Decoding" | UTF-8 `a\r\nb\r\n` | `a\nb\n` |

@@ -10,6 +10,10 @@ terminal (F-6102.BR-3, BR-4). Reviewing coder: `remote-coding-worker-1`.
 `test/unit/install.test.ts` (new), `src/index.ts` (one export line each). `install.ts` imports the TYPE `OnlineRow`
 from `./online.ts` (card wsl-03; merge 03 first). Nothing else.
 
+`test/unit/skeleton.test.ts`: delete it in this card if it is still on main when the branch starts or rebases. It
+asserts that the package exports nothing, which this card's export line ends, and the module's own tests replace it for
+coverage. If another WSL card has already deleted it, leave it absent. This is the one change outside the files above.
+
 ## 2. Contract
 
 ```ts

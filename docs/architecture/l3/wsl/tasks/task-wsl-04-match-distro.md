@@ -10,6 +10,10 @@ is used everywhere afterwards (F-6201.BR-1); the empty name is the default distr
 `packages/lib-wsl/src/match.ts` (new), `test/unit/match.test.ts` (new), `src/index.ts` (one export line). It
 imports the TYPE `DistroRow` from `./list.ts` (card wsl-02; merge 02 first). Nothing else.
 
+`test/unit/skeleton.test.ts`: delete it in this card if it is still on main when the branch starts or rebases. It
+asserts that the package exports nothing, which this card's export line ends, and the module's own tests replace it for
+coverage. If another WSL card has already deleted it, leave it absent. This is the one change outside the files above.
+
 ## 2. Contract
 
 ```ts
