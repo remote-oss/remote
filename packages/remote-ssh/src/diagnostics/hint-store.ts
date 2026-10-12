@@ -34,9 +34,21 @@ export function emptyHintStore(): HintStore {
   return {records: []};
 }
 
-/** `store` with `record` as its newest record; the oldest ones beyond the two kept are dropped. */
+/**
+ * `store` with `record` as its newest record, the oldest ones beyond the two kept dropped; a record that started at the
+ * same time as one in the store takes its place.
+ */
 export function addHint(store: HintStore, record: SessionRecord): HintStore {
-  return {records: [...store.records, record].slice(-RECORDS_KEPT)};
+  const same = store.records.findIndex(
+    stored => stored.started === record.started,
+  );
+  return same === -1
+    ? {records: [...store.records, record].slice(-RECORDS_KEPT)}
+    : {
+        records: store.records.map((stored, index) =>
+          index === same ? record : stored,
+        ),
+      };
 }
 
 /** A store with no record, whatever `store` held. */

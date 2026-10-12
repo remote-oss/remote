@@ -175,4 +175,44 @@ describe('the hint store (card connect-04 table)', () => {
       [fourth, first],
     );
   });
+
+  describe('a record that started at the same time as a stored one (card connect-12)', () => {
+    const secondAgain = recordAt('2026-10-08T11:00:00Z', [
+      {kind: 'log', text: 'again'},
+    ]);
+    const firstAgain = recordAt('2026-10-08T10:00:00Z', [
+      {kind: 'log', text: 'again'},
+    ]);
+
+    it('F-2605.BR-10 (O1): takes the place of the newest', () => {
+      deepStrictEqual(addHint(storeOf(first, second), secondAgain).records, [
+        first,
+        secondAgain,
+      ]);
+    });
+
+    it('F-2605.BR-10 (O1): takes the place of the oldest', () => {
+      deepStrictEqual(addHint(storeOf(first, second), firstAgain).records, [
+        firstAgain,
+        second,
+      ]);
+    });
+
+    it('F-2605.BR-10 (O1): takes the place of the only record', () => {
+      deepStrictEqual(addHint(storeOf(first), firstAgain).records, [
+        firstAgain,
+      ]);
+    });
+
+    it('F-2605.BR-10 (O1): leaves a frozen store alone', () => {
+      const frozen = frozenStore(first, second);
+      addHint(frozen, secondAgain);
+      deepStrictEqual(frozen.records, [first, second]);
+    });
+
+    it('F-2605.BR-10 (O1): returns a new store for a frozen store', () => {
+      const frozen = frozenStore(first, second);
+      notStrictEqual(addHint(frozen, secondAgain), frozen);
+    });
+  });
 });
