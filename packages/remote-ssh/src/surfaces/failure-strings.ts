@@ -32,6 +32,10 @@ export type FailureStringId =
   | 'S107'
   | 'S111'
   | 'S117'
+  | 'S119'
+  | 'S120'
+  | 'S121'
+  | 'S122'
   | 'S129'
   | 'S130'
   | 'S137'
@@ -64,6 +68,10 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S107: 'Port forwarding is disabled',
   S111: 'Remote host key has changed, port forwarding is disabled',
   S117: 'Retry',
+  S119: 'SSH host name cannot begin with {0}',
+  S120: 'SSH host name cannot include the character {0}',
+  S121: 'SSH user name cannot begin with {0}',
+  S122: 'SSH user name cannot include the character {0}',
   S129: 'Setting up SSH Host {0}',
   S130: 'Setting up SSH tunnel',
   S137: 'The connection timed out',

@@ -394,7 +394,7 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     deepStrictEqual(
       invocation.arguments.slice(
         invocation.arguments.indexOf('-D'),
-        invocation.arguments.indexOf('alias'),
+        invocation.arguments.indexOf('--'),
       ),
       ['-D', '127.0.0.1:51000', '-L', '51001:127.0.0.1:8080'],
     );
@@ -465,7 +465,7 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
   it('F-2405.BR-6: a copy run copies the file to the alias', () => {
     deepStrictEqual(buildInvocation(makeCopyRequest()), {
       program: '/x/scp',
-      arguments: ['/tmp/boot.sh', 'alias:/tmp/x/boot.sh'],
+      arguments: ['--', '/tmp/boot.sh', 'alias:/tmp/x/boot.sh'],
       environment: {},
     });
   });
@@ -477,6 +477,7 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     deepStrictEqual(invocation.arguments, [
       '-F',
       '/etc/custom/config',
+      '--',
       '/tmp/boot.sh',
       'alias:/tmp/x/boot.sh',
     ]);
@@ -546,9 +547,37 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
       makeCopyRequest({target: {host: 'alias', user: 'u', port: 2222}}),
     );
     deepStrictEqual(invocation.arguments, [
+      '--',
       '/tmp/boot.sh',
       'alias:/tmp/x/boot.sh',
     ]);
+  });
+
+  it('#253 Q9: a host that looks like an option stands behind --', () => {
+    const invocation = buildInvocation(
+      makeRequest({target: {host: '-oProxyCommand=x'}}),
+    );
+    const index = invocation.arguments.indexOf('-oProxyCommand=x');
+    strictEqual(invocation.arguments[index - 1], '--');
+  });
+
+  it('#253 Q9: a oneShot run ends with -- the host and its program', () => {
+    const invocation = buildInvocation(
+      makeRequest({purpose: 'oneShot', remoteProgram: 'uname -s'}),
+    );
+    deepStrictEqual(invocation.arguments.slice(-3), [
+      '--',
+      'alias',
+      'uname -s',
+    ]);
+  });
+
+  it('#253 Q9: a copy run breaks the option list once, before the local file', () => {
+    const invocation = buildInvocation(makeCopyRequest());
+    deepStrictEqual(
+      [countOf(invocation, '--'), invocation.arguments],
+      [1, ['--', '/tmp/boot.sh', 'alias:/tmp/x/boot.sh']],
+    );
   });
 
   it('F-2405.BR-6 (provisional): a bracketed host for a copy run', () => {
@@ -608,14 +637,20 @@ describe('buildOptionsQuery (the ssh -G run)', () => {
   it('S4 contract: the query is the ssh program with -G and the host', () => {
     deepStrictEqual(buildOptionsQuery(makeQuery()), {
       program: '/x/ssh',
-      arguments: ['-G', 'alias'],
+      arguments: ['-G', '--', 'alias'],
       environment: {},
     });
   });
 
   it('S4 contract: a ~ configuration file expands before -G', () => {
     const invocation = buildOptionsQuery(makeQuery({configFile: '~/c'}));
-    deepStrictEqual(invocation.arguments, ['-F', '/home/dev/c', '-G', 'alias']);
+    deepStrictEqual(invocation.arguments, [
+      '-F',
+      '/home/dev/c',
+      '-G',
+      '--',
+      'alias',
+    ]);
   });
 
   it('ADR-0004.2: the query carries no run option', () => {
@@ -626,15 +661,15 @@ describe('buildOptionsQuery (the ssh -G run)', () => {
     deepStrictEqual(
       buildOptionsQuery(
         makeQuery({target: {host: 'h1', user: 'alice', port: 2222}}),
-      ).arguments.slice(-6),
-      ['-G', '-l', 'alice', '-p', '2222', 'h1'],
+      ).arguments.slice(-7),
+      ['-G', '-l', 'alice', '-p', '2222', '--', 'h1'],
     );
   });
 
   it('connect-14: a target with no user or port is the host alone after -G', () => {
     deepStrictEqual(
-      buildOptionsQuery(makeQuery({target: {host: 'h1'}})).arguments.slice(-2),
-      ['-G', 'h1'],
+      buildOptionsQuery(makeQuery({target: {host: 'h1'}})).arguments.slice(-3),
+      ['-G', '--', 'h1'],
     );
   });
 });

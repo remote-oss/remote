@@ -190,6 +190,20 @@ function dependencies(
   };
 }
 
+/** The failure the target check gives the validate step, for a row to compare. */
+function targetFailure(
+  stringId: 'S119' | 'S120' | 'S121' | 'S122',
+  character: string,
+) {
+  return {
+    kind: 'failed',
+    failure: {
+      kind: 'invalidSetting',
+      reason: {id: stringId, values: [character]},
+    },
+  };
+}
+
 const PROBE_FACTS = [
   'host.os=linux',
   'host.arch=x64',
@@ -475,6 +489,108 @@ describe('the server steps: validate and the names', () => {
         reason: {text: 'remote.SSH.serverInstallPath'},
       },
     });
+  });
+
+  it('F-2205 7.E1: a host that is an option name fails as an invalid setting', () => {
+    const steps = createServerSteps(dependencies());
+    deepStrictEqual(
+      steps.validate({
+        ...INPUT,
+        target: {kind: 'plain', text: '-oProxyCommand=x'},
+      }),
+      targetFailure('S119', '-'),
+    );
+  });
+
+  it('F-2205 BR-1: a host with a forbidden character names it', () => {
+    const steps = createServerSteps(dependencies());
+    deepStrictEqual(
+      steps.validate({...INPUT, target: {kind: 'plain', text: 'a%b'}}),
+      targetFailure('S120', '%'),
+    );
+  });
+
+  it('F-2205 BR-1: a user that begins with a dash is reported', () => {
+    const steps = createServerSteps(dependencies());
+    deepStrictEqual(
+      steps.validate({...INPUT, target: {kind: 'plain', text: '-u@h.invalid'}}),
+      targetFailure('S121', '-'),
+    );
+  });
+
+  it('F-2205 BR-1: a user with a backslash is reported', () => {
+    const steps = createServerSteps(dependencies());
+    deepStrictEqual(
+      steps.validate({
+        ...INPUT,
+        target: {kind: 'plain', text: 'u\\x@h.invalid'},
+      }),
+      targetFailure('S122', '\\'),
+    );
+  });
+
+  it('F-2205 BR-2: a bad user and a bad host report the host first', () => {
+    const steps = createServerSteps(dependencies());
+    deepStrictEqual(
+      steps.validate({...INPUT, target: {kind: 'plain', text: '-u@-h'}}),
+      targetFailure('S119', '-'),
+    );
+  });
+
+  it('F-2205 BR-3: the first forbidden character in order is reported', () => {
+    const steps = createServerSteps(dependencies());
+    deepStrictEqual(
+      steps.validate({
+        ...INPUT,
+        target: {kind: 'plain', text: "a%b'c"},
+      }),
+      targetFailure('S120', "'"),
+    );
+  });
+
+  it('F-2205 BR-1, R-93: a control character is named by its code point', () => {
+    const steps = createServerSteps(dependencies());
+    deepStrictEqual(
+      steps.validate({...INPUT, target: {kind: 'plain', text: 'a\nb'}}),
+      targetFailure('S120', 'U+000A'),
+    );
+  });
+
+  it('F-2205 BR-1: a structured target with a bad host name fails', () => {
+    const steps = createServerSteps(dependencies());
+    deepStrictEqual(
+      steps.validate({
+        ...INPUT,
+        target: {kind: 'host', hostName: '-h', user: 'u'},
+      }),
+      targetFailure('S119', '-'),
+    );
+  });
+
+  it('F-2205 POST-1: a good user, host and port pass the validate step', () => {
+    const steps = createServerSteps(dependencies());
+    deepStrictEqual(
+      steps.validate({
+        ...INPUT,
+        target: {kind: 'plain', text: 'alex@dev:2222'},
+      }),
+      {kind: 'done', value: undefined},
+    );
+  });
+
+  it('F-2205 BR-2: a bad host is reported before an invalid install folder', () => {
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({serverInstallPath: {devbox: '/data/$HOME'}}),
+      }),
+    );
+    deepStrictEqual(
+      steps.validate({
+        ...INPUT,
+        target: {kind: 'plain', text: '-oProxyCommand=x'},
+      }),
+      targetFailure('S119', '-'),
+    );
   });
 
   it('names the data folder after the application when the product declares none', () => {

@@ -160,7 +160,7 @@ describe('the step that finds the ssh client', () => {
 
   it('F-2101: the client is checked with -V, then the accepted one looks the host up', async () => {
     const {seen} = await located();
-    deepStrictEqual(seen.started, ['ssh -V', 'ssh -G dev']);
+    deepStrictEqual(seen.started, ['ssh -V', 'ssh -G -- dev']);
   });
 
   it('F-2101: a banner on standard output is accepted too', async () => {
@@ -228,12 +228,12 @@ describe("the lookup of the host's configuration", () => {
     const {seen} = await located({
       input: {...INPUT, target: {kind: 'plain', text: 'alice@h1:2222'}},
     });
-    deepStrictEqual(seen.started[1], 'ssh -G -l alice -p 2222 h1');
+    deepStrictEqual(seen.started[1], 'ssh -G -l alice -p 2222 -- h1');
   });
 
   it('F-2202: the configuration file setting is given to the lookup, its ~ expanded', async () => {
     const {seen} = await located({configFile: '~/cfg'});
-    deepStrictEqual(seen.started[1], 'ssh -F /home/a/cfg -G dev');
+    deepStrictEqual(seen.started[1], 'ssh -F /home/a/cfg -G -- dev');
   });
 
   it("F-2105 BR-1: the host's connect timeout decides the probe's and the tunnel's waits", async () => {
