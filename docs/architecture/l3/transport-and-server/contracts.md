@@ -366,8 +366,21 @@ stands, POSIX and Windows alike). The lease exposes the session through the help
 record; after `start` the session stays as the forward's carrier and later runs (kill, cleanup) use it when idle.
 Rulings from the build (2026-10-08, #183): a run's script goes to the session's stdin as `sh -c '<quoted>'` between
 two marker lines carrying an unguessable per-run nonce, its input as a base64 here-document (bounded by the policy's
-`maximumInputBytes`; a larger input fails as `spawnFailed` and the caller uses `copyToHost`); lines before the start
+`maximumInputBytes`; a larger input fails as `spawnFailed`, and a caller with such an input uses `copyToHost`
+instead); lines before the start
 marker are login noise and dropped; the script's lines go to the asking lease only; the end marker carries `$?`. The run number is allocated by the connection (one counter per lease, so two channels over one connection never collide), never by a channel; a script of 128 KiB or more is refused before the run as `spawnFailed` (it travels as one `sh -c` argument and the system's E2BIG would not reach the output the session carries; the constant is a system fact, not a policy value; amended 2026-10-08, #183 delta).
+The shared channel's three policy values (ruled on #253 Q10 part 2, 2026-10-12), named constants in remote-ssh's
+bounds:
+- `runDeadlineMilliseconds` is **derived, not stated**: `SERVER_BOUNDS.downloadSeconds + SERVER_BOUNDS.readySeconds`
+  plus a 5-minute margin for unpacking (35 min with today's Q7 values). The deadline must never be shorter than the
+  longest step a run may legitimately take, and deriving it keeps that true if Q7's bounds change. Every run (probe,
+  install, start, extensions install, kill) gets its own deadline from its start.
+- `runWaitMilliseconds` is the deadline plus 5 minutes (40 min today): one run's deadline plus a margin for the run
+  queued ahead, since the helper serialises and the steps run one after another.
+- `maximumInputBytes` is **1 MiB**. It guards the session against an unexpectedly large input, which would be written
+  through the shell as base64 while every other run waits. It's not a path switch: nothing falls back automatically.
+  Script inputs are small files the extension makes (a token, a script); an archive always goes by `copyToHost`. A
+  caller with a larger input must use `copyToHost` itself.
 One run at a time, queued in arrival order; a run's deadline counts from its start, and a run past it ends the
 session (a wedged shell is indistinguishable), which every window hears as `transportLost`; when `ssh` ends, the run
 on it and the queued runs fail `channelClosed`. A cancelled run is abandoned, never killed (nothing on a plain stdin
