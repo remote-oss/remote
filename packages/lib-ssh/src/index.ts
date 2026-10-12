@@ -16,7 +16,11 @@ export type {
   SshPurpose,
   SshRequest,
 } from './arguments/invocation.ts';
-export {buildInvocation, buildOptionsQuery} from './arguments/invocation.ts';
+export {
+  buildInvocation,
+  buildOptionsQuery,
+  TUNNEL_SUCCESS_LINE,
+} from './arguments/invocation.ts';
 export type {ClientPlatform} from './config/platform.ts';
 export type {
   ClientLocations,
@@ -202,7 +206,6 @@ export {
 } from './terminal/terminal-runs.ts';
 export {
   openTunnelSession,
-  TUNNEL_SUCCESS_LINE,
   type TunnelGate,
   type TunnelSession,
 } from './terminal/tunnel-session.ts';

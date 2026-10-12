@@ -1,5 +1,10 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
-import {expandHome, TUNNEL_COMMAND} from '../../src/arguments/invocation.ts';
+import {
+  expandHome,
+  TUNNEL_COMMAND,
+  TUNNEL_SUCCESS_LINE,
+} from '../../src/arguments/invocation.ts';
+import {posixQuote} from '../../src/process/remote-program.ts';
 import {buildInvocation, buildOptionsQuery} from '../../src/index.ts';
 import type {
   ClientPlatform,
@@ -757,6 +762,13 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     strictEqual(
       invocation.arguments.includes('ClearAllForwardings=yes'),
       false,
+    );
+  });
+
+  it('#353: TUNNEL_COMMAND is built from the success line', () => {
+    strictEqual(
+      TUNNEL_COMMAND,
+      `echo ${posixQuote(TUNNEL_SUCCESS_LINE)}; exec sleep 2147483647`,
     );
   });
 

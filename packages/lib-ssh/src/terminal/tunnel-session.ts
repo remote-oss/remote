@@ -5,13 +5,9 @@
  * does not make `ssh` fail, it warns, prints the success line and keeps running.
  */
 
-import type {Invocation} from '../arguments/invocation.ts';
+import {type Invocation, TUNNEL_SUCCESS_LINE} from '../arguments/invocation.ts';
 import {LineSplitter} from '../process/line-splitter.ts';
 import type {LoginTerminals} from './login-terminal.ts';
-
-/** The tunnel run's own line, the remote command's output. */
-export const TUNNEL_SUCCESS_LINE =
-  'Connected to SSH Host - Please do not close this terminal';
 
 /** The general line `ssh` prints when a forward could not be set up. */
 const FORWARD_REFUSED_LINE = 'Could not request local forwarding.';
