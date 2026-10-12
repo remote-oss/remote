@@ -9,7 +9,6 @@ import {clientEnvironment} from 'lib-helper/testing/client-environment';
 import type {SettingInspection} from 'lib-identifiers';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import type {SharedConnection} from 'lib-ssh';
 import {
   connectAssemblyOf,
@@ -30,8 +29,8 @@ import {
   SSH_PROGRAM,
   spawnerOf,
 } from './locate.fixture.ts';
-import {INPUT, SILENT_PROMPTS, TERMS} from './pipeline.fixture.ts';
-import {modalAnswering, PROFILE, storeOf} from './server-steps.fixture.ts';
+import {INPUT, TERMS} from './pipeline.fixture.ts';
+import {PROFILE, surfacesOf} from './server-steps.fixture.ts';
 
 /** The settings the user wrote, by id, at the user level. */
 type Written = Readonly<Record<string, unknown>>;
@@ -77,20 +76,13 @@ function assemblyInputs(
     sink: new MemorySink(),
   };
   const clock = new FakeClock();
-  const surfaces: ConnectSurfaces = {
-    settings: settingHostOf(written),
-    translate: template => `<${template}>`,
-    prompts: SILENT_PROMPTS,
-    terminals: new RecordingTerminals(),
-    pickPlatform: () => Promise.resolve(undefined),
-    writePlatform: () => Promise.resolve(),
-    licenceModal: modalAnswering('accept', []),
-    acceptances: storeOf(),
-    presenter: {present: () => Promise.resolve('handled')},
-    revealLog: () => {
+  const surfaces = surfacesOf(
+    settingHostOf(written),
+    template => `<${template}>`,
+    () => {
       recorded.revealed += 1;
     },
-  };
+  );
   const machine: ConnectMachine = {
     profile: PROFILE,
     platform: 'linux',

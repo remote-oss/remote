@@ -23,8 +23,11 @@ import {
   type HostServerSettings,
   type RawServerSettings,
 } from '../../src/pipeline/host-settings.ts';
+import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
+import type {ConnectSurfaces} from '../../src/connect-ports.ts';
 import type {ServerStepDependencies} from '../../src/pipeline/server-steps.ts';
 import type {ConnectionLease} from '../../src/pipeline/steps.ts';
+import {SILENT_PROMPTS} from './pipeline.fixture.ts';
 
 /** A product whose server is `fixture-server` at commit `abc123`. */
 export const PROFILE: ProductProfile = {
@@ -192,3 +195,23 @@ export const HOST: ProbedHost = {
   installed: false,
   installFolder: '/home/alex/.fixture-server/bin/abc123',
 };
+
+/** The connect's surfaces over `settings`, showing nothing and answering every question with no; `revealLog` counts. */
+export function surfacesOf(
+  settings: ConnectSurfaces['settings'],
+  translate: ConnectSurfaces['translate'],
+  revealLog: () => void,
+): ConnectSurfaces {
+  return {
+    settings,
+    translate,
+    prompts: SILENT_PROMPTS,
+    terminals: new RecordingTerminals(),
+    pickPlatform: () => Promise.resolve(undefined),
+    writePlatform: () => Promise.resolve(),
+    licenceModal: modalAnswering('accept', []),
+    acceptances: storeOf(),
+    presenter: {present: () => Promise.resolve('handled')},
+    revealLog,
+  };
+}
