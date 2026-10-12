@@ -6,6 +6,7 @@
 
 import {
   type CommandEntry,
+  type CommandHandler,
   type CommandHost,
   registerCommands,
   readSetting,
@@ -43,6 +44,7 @@ export interface ActivationTable {
     readonly provideFeedback: CommandEntry;
     readonly settings: CommandEntry;
     readonly reportIssue: CommandEntry;
+    readonly openConfigFile: CommandEntry;
   };
   readonly settings: {readonly logLevel: SettingEntry};
   readonly standDown: {
@@ -64,6 +66,8 @@ export interface ActivationInputs {
   commands: CommandHost;
   settings: SettingHost;
   help: HelpEditor;
+  /** The Open SSH Configuration File command; it needs no proposed API, so it is served whatever the gate found. */
+  openConfigFile: CommandHandler;
   channels: ChannelPort;
   clock: () => number;
   /** The ports of the proposed-API setup, made once the log channel is open; `logFailure` writes to it. */
@@ -170,6 +174,7 @@ export async function activateRemoteSsh(
     provideFeedback: table.commands.provideFeedback,
     settings: table.commands.settings,
     reportIssue: table.commands.reportIssue,
+    openConfigFile: table.commands.openConfigFile,
   };
   let registration: ReturnType<typeof registerCommands>;
   try {
@@ -180,6 +185,7 @@ export async function activateRemoteSsh(
         },
       },
       ...helpHandlers(inputs.help, inputs.links(), extension),
+      openConfigFile: inputs.openConfigFile,
     });
   } catch (caught) {
     logChannel.dispose();

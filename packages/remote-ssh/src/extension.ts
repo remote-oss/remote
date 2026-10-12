@@ -20,6 +20,11 @@ import type {Logger} from 'lib-log';
 import {type ProductProfile, readProfile} from 'lib-product';
 import {standDownHost} from 'lib-standdown';
 import {activateRemoteSsh} from './activation.ts';
+import {
+  configFileEditorOf,
+  nodeConfigFiles,
+} from './config/config-file-editor.ts';
+import {openConfigFileHandler} from './config/open-config-file.ts';
 import {connectAssemblyOf} from './connect-ports.ts';
 import {editorOperationsOf} from './editor-operations.ts';
 import {editorSurfacesOf} from './editor-surfaces.ts';
@@ -36,6 +41,7 @@ import {
   standDown,
 } from './identifiers.generated.ts';
 import {nodeFacts, nodeMachineOf} from './node-machine.ts';
+import {textOf} from './pipeline/connect-settings.ts';
 import {type ConnectRegistration, registerConnect} from './register-connect.ts';
 import {
   failureDialogOf,
@@ -45,6 +51,13 @@ import {
   promptEditorOf,
 } from './surfaces/editor-adapters.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
+
+/** The page about SSH configuration files that the picker's Help row opens. */
+const CONFIG_HELP_ADDRESS =
+  'https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/ssh-config.md';
+
+/** The file the system-wide SSH configuration lives in. */
+const SYSTEM_CONFIG_FILE = '/etc/ssh/ssh_config';
 
 /** The stand-down warning and its button, as written in the runtime strings. */
 const STAND_DOWN_WARNING =
@@ -140,6 +153,21 @@ export async function activate(
     commands: host,
     settings: host,
     help,
+    openConfigFile: openConfigFileHandler(
+      configFileEditorOf(vscode, translate),
+      nodeConfigFiles,
+      {
+        openSettings: filter => help.openSettings(filter),
+        openHelp: () => help.openExternal(CONFIG_HELP_ADDRESS),
+      },
+      {
+        homeFolder: homedir(),
+        userFile: path.join(homedir(), '.ssh', 'config'),
+        systemFile: SYSTEM_CONFIG_FILE,
+      },
+      () => textOf(host, 'configFile'),
+      extension,
+    ),
     channels: vscode.window,
     clock: Date.now,
     gate: logFailure =>

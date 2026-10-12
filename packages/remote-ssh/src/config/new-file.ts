@@ -13,7 +13,8 @@ export interface FolderState {
 export interface NewFileInput {
   /** The file's absolute path, `~` already expanded by the caller. */
   file: string;
-  role: 'user' | 'configured';
+  /** The system file takes the modes of a configured one. */
+  role: 'user' | 'configured' | 'system';
   exists: boolean;
   /** The missing folders on the file's path, outermost first; empty when the parent exists. */
   missingFolders: readonly string[];

@@ -67,6 +67,15 @@ const CONNECT_TEXTS = [
 ];
 const WAITING_TEXTS = ['Waiting for other windows to connect'];
 
+const CONFIG_FILE_TEXTS = [
+  'Edit custom SSH configuration file',
+  'Help',
+  'Select SSH configuration file to update',
+  'Settings',
+  'about SSH configuration files',
+  'specify a custom configuration file',
+];
+
 const PICKER_TEXTS = ['Select the platform of the remote host "{0}"'];
 
 const MITIGATION_TEXTS = [
@@ -107,6 +116,7 @@ describe('the runtime strings of the extension', () => {
           ...CONNECT_TEXTS,
           ...MITIGATION_TEXTS,
           ...WAITING_TEXTS,
+          ...CONFIG_FILE_TEXTS,
           'SSH: {0}',
         ].map(text => [text, text]),
       ),

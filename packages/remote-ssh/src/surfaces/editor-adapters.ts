@@ -19,10 +19,14 @@ type Editor = Pick<typeof vscode, 'window'>;
 interface Choice<Answer> {
   label: string;
   answer: Answer;
+  /** Text beside the label. */
+  description?: string;
+  /** Whether the choice stays listed whatever the user types. */
+  alwaysShow?: boolean;
 }
 
 /** What a quick pick is made from. */
-interface PickOptions<Answer> {
+export interface PickOptions<Answer> {
   title?: string;
   placeholder: string;
   choices: ReadonlyArray<Choice<Answer>>;
@@ -35,7 +39,7 @@ interface PickOptions<Answer> {
  * nothing when it is hidden without one or `cancellation` ends. A cancellation that has ended already shows nothing.
  * The pick is disposed after.
  */
-function pickOne<Answer>(
+export function pickOne<Answer>(
   editor: Editor,
   options: PickOptions<Answer>,
   cancellation: AbortSignal,
@@ -47,6 +51,12 @@ function pickOne<Answer>(
     const pick = editor.window.createQuickPick();
     const items: vscode.QuickPickItem[] = options.choices.map(choice => ({
       label: choice.label,
+      ...(choice.description === undefined
+        ? {}
+        : {description: choice.description}),
+      ...(choice.alwaysShow === undefined
+        ? {}
+        : {alwaysShow: choice.alwaysShow}),
     }));
     if (options.title !== undefined) {
       pick.title = options.title;
