@@ -1108,6 +1108,44 @@ describe('the POSIX bootstrap script', () => {
         });
       });
 
+      it('#359: an absolute folder that does not exist falls back to /tmp and says why', () => {
+        deepStrictEqual(folderOutcome(path.join(host.home, 'missing')), {
+          status: 'Ok',
+          folder: '/tmp',
+          fallback: 'unusable',
+        });
+      });
+
+      it('#359: an absolute path that is a regular file falls back to /tmp and says why', () => {
+        const file = path.join(host.home, 'a-file');
+        writeFileSync(file, '');
+        deepStrictEqual(folderOutcome(file), {
+          status: 'Ok',
+          folder: '/tmp',
+          fallback: 'unusable',
+        });
+      });
+
+      it('#359: an absolute folder with mode 555 falls back to /tmp and says why (skipped when run as root)', function () {
+        if (process.getuid?.() === 0) {
+          this.skip();
+        }
+        const folder = path.join(host.home, 'read-only');
+        mkdirSync(folder, {mode: 0o555});
+        deepStrictEqual(folderOutcome(folder), {
+          status: 'Ok',
+          folder: '/tmp',
+          fallback: 'unusable',
+        });
+      });
+
+      it('#359: under dash a folder that does not exist falls back to /tmp and says why', () => {
+        deepStrictEqual(
+          folderOutcome(path.join(host.home, 'missing'), '/bin/dash'),
+          {status: 'Ok', folder: '/tmp', fallback: 'unusable'},
+        );
+      });
+
       it('F-2703 BR-9: under dash a folder with a space falls back to /tmp and says why', () => {
         deepStrictEqual(folderOutcome(folderNamed(' '), '/bin/dash'), {
           status: 'Ok',
