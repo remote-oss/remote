@@ -20,13 +20,13 @@ export const OPTION_LINE_PREFIX = 'option: ';
 
 /** How the stand-in server behaves once started. */
 export type StandInBehaviour =
-  'serving' | 'crashing' | 'missingLibraries' | 'silent';
+  'serving' | 'listening' | 'crashing' | 'missingLibraries' | 'silent';
 
 /** The exit status with which a server reports that the host lacks libraries it needs. */
 const MISSING_LIBRARIES_STATUS = 207;
 
-/** The launcher of a server that serves: lists its options, takes a range's lower end as its port or picks one for 0. */
-const SERVING_LAUNCHER = [
+/** The launcher's lines up to and including the ready line; the serving and listening behaviours share them and differ only in the last part. */
+const SERVING_LINES = [
   '#!/bin/sh',
   'PORT=0',
   'for OPTION in "$@"; do',
@@ -43,15 +43,29 @@ const SERVING_LAUNCHER = [
   "  PORT=$(awk 'BEGIN { srand(); print int(20000 + rand() * 20000) }')",
   'fi',
   'echo "Extension host agent listening on $PORT"',
+];
+
+/** The launcher of a server that serves: lists its options, takes a range's lower end as its port or picks one for 0. */
+const SERVING_LAUNCHER = [
+  ...SERVING_LINES,
   'while :; do',
   '  sleep 1',
   'done',
   '',
 ].join('\n');
 
+/** The launcher that listens: the same ready line, then a loopback port that echoes what it is sent, until killed. */
+const LISTENING_LAUNCHER = [
+  ...SERVING_LINES,
+  'nc -lk -p "$PORT" -s 127.0.0.1 -e /bin/cat &',
+  'wait',
+  '',
+].join('\n');
+
 /** The launcher of each behaviour. */
 const LAUNCHERS: Readonly<Record<StandInBehaviour, string>> = {
   serving: SERVING_LAUNCHER,
+  listening: LISTENING_LAUNCHER,
   crashing: '#!/bin/sh\necho "stand-in server crashed" >&2\nexit 1\n',
   missingLibraries: `#!/bin/sh\nexit ${String(MISSING_LIBRARIES_STATUS)}\n`,
   silent: '#!/bin/sh\nwhile :; do\n  sleep 1\ndone\n',
