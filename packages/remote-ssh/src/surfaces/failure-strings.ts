@@ -51,7 +51,8 @@ export type FailureStringId =
   | 'S158'
   | 'installPathProvided'
   | 'templateNotHttp'
-  | 'templateUnknownPlaceholder';
+  | 'templateUnknownPlaceholder'
+  | 'trustRefused';
 
 /** The English template of each string id, with `{0}`, `{1}` for the values. */
 export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
@@ -98,6 +99,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   installPathProvided: 'Provided: "{0}"',
   templateNotHttp: 'it does not give an http or https address',
   templateUnknownPlaceholder: 'the placeholder {0} is not known',
+  trustRefused: 'Got bad result from install script',
 };
 
 /** The two dialogs of a missing or unusable server download location, which have no string id yet. */

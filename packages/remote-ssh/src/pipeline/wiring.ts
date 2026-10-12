@@ -12,15 +12,21 @@ import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
   ConnectionLimits,
+  ConnectWaitSettings,
   RunBase,
-  SharedConnection,
+  SessionRunner,
 } from 'lib-ssh';
-import {connectionLimitsFor} from './bounds.ts';
+import {
+  connectionLimitsFor,
+  effectiveConnectTimeoutSeconds,
+  HOST_ZERO_TIMEOUT_SECONDS,
+} from './bounds.ts';
 import {
   type ConnectionRequestEnvironment,
   type ConnectionRequestSettings,
   connectionRequestOf,
   runBaseOf,
+  installRequestOf,
 } from './connection-request.ts';
 import {type LoginLease, openConnectionStep} from './connection-step.ts';
 import {
@@ -40,6 +46,10 @@ import {
 } from './server-steps.ts';
 import type {ConnectInput, ConnectionTerms, ConnectSteps} from './steps.ts';
 import {createTermsSteps, type TermsStepDependencies} from './terms-steps.ts';
+import {
+  openTerminalConnectionStep,
+  type TerminalConnectionDependencies,
+} from './terminal-connection-step.ts';
 import {openTunnelStep, type TunnelStepDependencies} from './tunnel-step.ts';
 
 /** The settings a connect reads, each when the step that needs it runs. */
@@ -78,12 +88,15 @@ export interface WiringPorts {
     limits: ConnectionLimits,
   ) => Promise<AcquireConnectionOutcome>;
   requestEnvironment: ConnectionRequestEnvironment;
-  channelFor: (
-    connection: SharedConnection,
-    channelRun: ChannelRun,
-  ) => HostChannel;
+  /** The channel of the server steps over a connection's session, in either mode. */
+  channelFor: (session: SessionRunner, channelRun: ChannelRun) => HostChannel;
   /** Shows the login's questions for this connect; the alias names the host in them. */
   attachLogin: (login: LoginLease, alias: string) => {dispose(): void};
+  /** The terminal connection step's ports, apart from what the connect's own state and settings give. */
+  terminal: Omit<
+    TerminalConnectionDependencies,
+    'installRequest' | 'connectWait' | 'channelFor' | 'logger'
+  >;
   /** The server steps' dependencies, apart from what depends on the connect's host. */
   server: Omit<
     ServerStepDependencies,
@@ -122,6 +135,24 @@ function windowEnvironment(
   return {extensionHostEnv: {}, environmentTunnels: tunnels};
 }
 
+/**
+ * The wait of a terminal-mode login, as the shared helper's: a host's own 0 waits the ceiling with no margin;
+ * otherwise the host's timeout, else the setting's, else the default.
+ */
+export function terminalWaitOf(
+  hostValue: string | undefined,
+  settingValue: unknown,
+): ConnectWaitSettings {
+  return {
+    connectTimeoutSeconds:
+      hostValue === '0'
+        ? 0
+        : effectiveConnectTimeoutSeconds(hostValue, settingValue),
+    fromHost: hostValue !== undefined,
+    unboundedWaitSeconds: HOST_ZERO_TIMEOUT_SECONDS,
+  };
+}
+
 /** The steps of one connect, sharing a state that lives for that connect alone. */
 export function stepsOf(ports: WiringPorts): ConnectSteps {
   const state: ConnectState = {};
@@ -153,7 +184,67 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
     return held.server;
   }
 
+  /** The channel over `session` for this connect's input and terms, with the runs' shared part. */
+  function channelOf(
+    session: SessionRunner,
+    connectTerms: ConnectionTerms,
+    input: ConnectInput,
+  ): HostChannel {
+    return ports.channelFor(session, {
+      hostString: input.rawHostString,
+      base: runBaseOf(
+        input,
+        connectTerms,
+        state,
+        connectionSettings(),
+        ports.requestEnvironment,
+      ),
+      terms: connectTerms,
+    });
+  }
+
   const terms = createTermsSteps(ports.terms);
+  const sharedConnection = openConnectionStep({
+    acquire: request =>
+      ports.acquire(
+        request,
+        connectionLimitsFor(
+          lookedUp(state).connectTimeout,
+          connectionSettings().connectTimeout,
+        ),
+      ),
+    requestFor: (input, connectTerms) =>
+      connectionRequestOf(
+        input,
+        connectTerms,
+        state,
+        connectionSettings(),
+        ports.requestEnvironment,
+      ),
+    channelFor: channelOf,
+    attachLogin: (login, input) =>
+      ports.attachLogin(login, hostAlias(input.target)),
+    logger: ports.logger,
+  });
+  const terminalConnection = openTerminalConnectionStep({
+    ...ports.terminal,
+    installRequest: (input, connectTerms, socksPort) =>
+      installRequestOf(
+        input,
+        connectTerms,
+        state,
+        connectionSettings(),
+        ports.requestEnvironment,
+        socksPort,
+      ),
+    channelFor: channelOf,
+    connectWait: () =>
+      terminalWaitOf(
+        lookedUp(state).connectTimeout,
+        connectionSettings().connectTimeout,
+      ),
+    logger: ports.logger,
+  });
   return {
     validate: input => serverSteps(input).validate(input),
     preconnect: preconnectStep({
@@ -167,39 +258,10 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
       connectTimeout: () => connectionSettings().connectTimeout,
       state,
     }),
-    openConnection: openConnectionStep({
-      acquire: request =>
-        ports.acquire(
-          request,
-          connectionLimitsFor(
-            lookedUp(state).connectTimeout,
-            connectionSettings().connectTimeout,
-          ),
-        ),
-      requestFor: (input, connectTerms) =>
-        connectionRequestOf(
-          input,
-          connectTerms,
-          state,
-          connectionSettings(),
-          ports.requestEnvironment,
-        ),
-      channelFor: (connection, connectTerms, input) =>
-        ports.channelFor(connection, {
-          hostString: input.rawHostString,
-          base: runBaseOf(
-            input,
-            connectTerms,
-            state,
-            connectionSettings(),
-            ports.requestEnvironment,
-          ),
-          terms: connectTerms,
-        }),
-      attachLogin: (login, input) =>
-        ports.attachLogin(login, hostAlias(input.target)),
-      logger: ports.logger,
-    }),
+    openConnection: (input, connectTerms, cancellation) =>
+      (ports.locate.mode() === 'shared'
+        ? sharedConnection
+        : terminalConnection)(input, connectTerms, cancellation),
     probe: (input, ...rest) => serverSteps(input).probe(input, ...rest),
     plan: (input, ...rest) => serverSteps(input).plan(input, ...rest),
     gate: (input, ...rest) => serverSteps(input).gate(input, ...rest),

@@ -11,6 +11,7 @@ import type {
 } from 'lib-authority';
 import {
   findFreePort,
+  selectTunnelPath,
   type LocalPort,
   parseRange,
   type PortProber,
@@ -43,6 +44,7 @@ import {
   type ClientPlatform,
   type ConnectionClientEnvironment,
   type LocalFiles,
+  type LoginTerminals,
   type ProcessSpawner,
   SharedSessionChannel,
   SshHostChannel,
@@ -78,12 +80,15 @@ import {
   type PromptEditor,
 } from './surfaces/prompt-surface.ts';
 import type {Translate} from './surfaces/strings.ts';
+import {attachTerminalQuestions} from './surfaces/terminal-questions.ts';
 
 /** The editor's surfaces a connect shows, each over the editor. */
 export interface ConnectSurfaces {
   settings: SettingHost;
   translate: Translate;
   prompts: PromptEditor;
+  /** The editor's login terminals, where terminal mode runs `ssh`. */
+  terminals: LoginTerminals;
   /** Asks the user for the host's platform; nothing when the pick closed without one. */
   pickPlatform: (
     alias: string,
@@ -223,9 +228,9 @@ export function wiringPortsOf(
         limits,
       ),
     requestEnvironment,
-    channelFor: (connection, channelRun) =>
+    channelFor: (session, channelRun) =>
       new SharedSessionChannel({
-        session: connection,
+        session,
         direct: new SshHostChannel({
           hostString: channelRun.hostString,
           platform: channelRun.terms.platform,
@@ -242,10 +247,24 @@ export function wiringPortsOf(
       }),
     attachLogin: (login, alias) =>
       attachPromptSurface(login, surfaces.prompts, {displayHost: alias}),
+    terminal: {
+      terminals: surfaces.terminals,
+      dynamicForwarding: () =>
+        selectTunnelPath(tunnelSettingsOf(settings)) === 'socks',
+      freePort: machine.freeSocksPort,
+      scheduler: machine.scheduler,
+      newMarker: machine.helpers.newNonce,
+      attachQuestions: (login, input) =>
+        attachTerminalQuestions(
+          login,
+          surfaces.prompts,
+          hostAlias(input.target),
+        ),
+      revealLoginTerminals: () => switchOf(settings, 'showLoginTerminal'),
+    },
     server: {
       profile: machine.profile,
       policy: SSH_POLICY,
-      connectionSettings: () => tunnelSettingsOf(settings),
       overridePolicy: sshOverridePolicy(),
       clock: () => machine.clock.now(),
       bounds: SERVER_BOUNDS,

@@ -26,6 +26,7 @@
   "{2} knows no download location for the server of {0}. Set {1} to a URL template for this editor's server builds.": "{2} knows no download location for the server of {0}. Set {1} to a URL template for this editor's server builds.",
   "The value of {1} is not a usable server download URL template: {3}.": "The value of {1} is not a usable server download URL template: {3}.",
   "Open Setting": "Open Setting",
+  "Got bad result from install script": "Got bad result from install script",
   "Can't assign requested address": "Can't assign requested address",
   "Could not resolve hostname": "Could not resolve hostname",
   "Hostname contains invalid characters": "Hostname contains invalid characters",

@@ -1,6 +1,7 @@
 /**
  * @fileoverview A fake host for the bootstrap script tests: a folder of stand-in tools on the script's PATH, a home
  * folder, and a server archive, so a script runs for real under `sh` without touching the network or the machine.
+ * Every folder a host makes is removed after each test.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -10,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -153,6 +155,22 @@ function writeExecutable(file: string, text: string): void {
   chmodSync(file, 0o755);
 }
 
+/** The folders the fake hosts made since the last cleanup. */
+const madeSinceCleanup: string[] = [];
+
+/**
+ * Removes every folder a fake host made since the last cleanup, so no `fake-host-*` folder survives a suite; a folder
+ * that is already gone is not an error.
+ */
+export function removeFakeHosts(): void {
+  for (const folder of madeSinceCleanup) {
+    rmSync(folder, {recursive: true, force: true});
+  }
+  madeSinceCleanup.length = 0;
+}
+
+afterEach(removeFakeHosts);
+
 /** Builds the server archive: one top folder holding the launcher under `bin/`. */
 function buildArchive(folder: string): string {
   const source = path.join(folder, 'source', 'server-1.0');
@@ -177,6 +195,7 @@ function buildArchive(folder: string): string {
 /** A fake host with the given stand-in tools; the real tools it needs are linked in. */
 export function fakeHost(stubs: readonly Stub[] = ['wget']): FakeHost {
   const root = mkdtempSync(path.join(tmpdir(), 'fake-host-'));
+  madeSinceCleanup.push(root);
   const tools = path.join(root, 'tools');
   const home = path.join(root, 'home');
   mkdirSync(tools);

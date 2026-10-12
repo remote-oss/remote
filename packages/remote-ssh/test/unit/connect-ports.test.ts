@@ -9,6 +9,7 @@ import {clientEnvironment} from 'lib-helper/testing/client-environment';
 import type {SettingInspection} from 'lib-identifiers';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
+import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import type {SharedConnection} from 'lib-ssh';
 import {
   connectAssemblyOf,
@@ -29,7 +30,7 @@ import {
   SSH_PROGRAM,
   spawnerOf,
 } from './locate.fixture.ts';
-import {INPUT, TERMS} from './pipeline.fixture.ts';
+import {INPUT, SILENT_PROMPTS, TERMS} from './pipeline.fixture.ts';
 import {modalAnswering, PROFILE, storeOf} from './server-steps.fixture.ts';
 
 /** The settings the user wrote, by id, at the user level. */
@@ -79,12 +80,8 @@ function assemblyInputs(
   const surfaces: ConnectSurfaces = {
     settings: settingHostOf(written),
     translate: template => `<${template}>`,
-    prompts: {
-      pick: () => Promise.resolve(undefined),
-      maskedInput: () => Promise.resolve(undefined),
-      showWaiting: () => ({dispose: () => undefined}),
-      translate: template => template,
-    },
+    prompts: SILENT_PROMPTS,
+    terminals: new RecordingTerminals(),
     pickPlatform: () => Promise.resolve(undefined),
     writePlatform: () => Promise.resolve(),
     licenceModal: modalAnswering('accept', []),
@@ -503,6 +500,79 @@ describe("the assembled ports' other parts", () => {
         .listenOnSocket,
       true,
     );
+  });
+});
+
+describe("the assembled ports' terminal mode", () => {
+  it('F-2104 BR-1: the install ssh holds the -D when the window tunnel takes the SOCKS path', () => {
+    const {surfaces, machine, recorded} = assemblyInputs({
+      'remote.SSH.useLocalServer': false,
+      'remote.SSH.enableDynamicForwarding': true,
+    });
+    deepStrictEqual(
+      wiringPortsOf(
+        surfaces,
+        machine,
+        loggerOf(recorded),
+      ).terminal.dynamicForwarding(),
+      true,
+    );
+  });
+
+  it('F-2104 BR-1: socket mode takes no -D', () => {
+    const {surfaces, machine, recorded} = assemblyInputs({
+      'remote.SSH.remoteServerListenOnSocket': true,
+    });
+    deepStrictEqual(
+      wiringPortsOf(
+        surfaces,
+        machine,
+        loggerOf(recorded),
+      ).terminal.dynamicForwarding(),
+      false,
+    );
+  });
+
+  it('F-2308 BR-3: remote.SSH.showLoginTerminal is read as a switch', () => {
+    const {surfaces, machine, recorded} = assemblyInputs({
+      'remote.SSH.showLoginTerminal': true,
+    });
+    deepStrictEqual(
+      wiringPortsOf(
+        surfaces,
+        machine,
+        loggerOf(recorded),
+      ).terminal.revealLoginTerminals(),
+      true,
+    );
+  });
+
+  it("F-2306 AC-20: the terminal's questions are answered by connect-16's owner, which refuses after a dismissal", () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const sent: string[] = [];
+    const questions = wiringPortsOf(
+      surfaces,
+      machine,
+      loggerOf(recorded),
+    ).terminal.attachQuestions(
+      {
+        terminal: {
+          send: (text: string) => {
+            sent.push(text);
+          },
+        },
+        reader: {inputOpened: () => undefined, inputClosed: () => undefined},
+      },
+      {...INPUT, target: {kind: 'plain', text: 'alex@dev'}},
+    );
+    questions.onQuestion("alex@dev's password: ");
+    return new Promise<void>(resolve => {
+      setImmediate(() => {
+        questions.dispose();
+        deepStrictEqual(sent, ['\r']);
+        resolve();
+      });
+    });
   });
 });
 
