@@ -6,6 +6,7 @@
 
 import path from 'node:path';
 import type {CommandHandler} from 'lib-identifiers';
+import {expandHome, type ClientPlatform} from 'lib-ssh';
 import {
   buildFileChoice,
   type FileChoice,
@@ -20,10 +21,15 @@ export interface ConfigFileEditor {
    * chosen row, or nothing on Escape.
    */
   pickFile(choice: FileChoice): PromiseLike<FileChoiceItem | undefined>;
-  /** Opens the local file as a preview editor in the active group, or reveals it when it is open. */
-  open(file: string): PromiseLike<void>;
-  /** Inserts `template` as a snippet at the start of the file's editor; the editor adjusts its indentation. */
-  insertTemplate(file: string, template: Template): PromiseLike<void>;
+  /** Opens the local file as a preview editor in the active group, or reveals it, and gives that editor. */
+  open(file: string): PromiseLike<OpenedEditor>;
+  /** Inserts `template` as a snippet at the start of `opened`; the editor adjusts its indentation. */
+  insertTemplate(opened: OpenedEditor, template: Template): PromiseLike<void>;
+}
+
+/** The editor `open` opened; only the adapter reads it. */
+export interface OpenedEditor {
+  readonly file: string;
 }
 
 /** What the command needs of the client's files. */
@@ -40,6 +46,8 @@ export interface ConfigFiles {
 /** Where the command looks. */
 export interface ConfigFilePlaces {
   homeFolder: string;
+  /** The platform the file paths are read on. */
+  platform: ClientPlatform;
   /** The user file, `<home>/.ssh/config` with the platform's separators. */
   userFile: string;
   /** The system file, `/etc/ssh/ssh_config`. */
@@ -64,20 +72,21 @@ export interface ConfigFileExtension {
 const STARTER_INDENT = {insertSpaces: true, tabSize: 4} as const;
 
 /**
- * The path a file row stands for. A user or system row is already absolute. A configured one is as the user wrote it:
- * a leading `~/` or `~\` is the home folder, and a relative value is under the home folder too.
+ * The path a file row stands for. A user or system row is already absolute. A configured one is as the user wrote
+ * it, with `~` read as `ssh -F` reads it, and whatever is left relative under the home folder.
  */
 function pathOf(
   fileRow: Extract<FileChoiceItem, {kind: 'file'}>,
   homeFolder: string,
+  platform: ClientPlatform,
 ): string {
   if (fileRow.role !== 'configured') {
     return fileRow.label;
   }
-  const value = /^~[\\/]/.test(fileRow.label)
-    ? path.join(homeFolder, fileRow.label.slice(2))
-    : fileRow.label;
-  return path.resolve(homeFolder, value);
+  return path.resolve(
+    homeFolder,
+    expandHome(fileRow.label, homeFolder, platform),
+  );
 }
 
 /** The command: pick a file, make it when it is missing, open it, and give a new one its template. */
@@ -112,7 +121,7 @@ export function openConfigFileHandler(
         await actions.openHelp();
         return;
       }
-      const file = pathOf(picked, places.homeFolder);
+      const file = pathOf(picked, places.homeFolder, places.platform);
       const exists = await files.exists(file);
       const plan = planCreation({
         file,
@@ -127,9 +136,9 @@ export function openConfigFileHandler(
           await files.createFile(step.path, step.mode);
         }
       }
-      await editor.open(file);
+      const opened = await editor.open(file);
       if (plan.insertTemplate) {
-        await editor.insertTemplate(file, starterTemplate(STARTER_INDENT));
+        await editor.insertTemplate(opened, starterTemplate(STARTER_INDENT));
       }
     },
   };

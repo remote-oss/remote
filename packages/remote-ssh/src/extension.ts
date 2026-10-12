@@ -41,7 +41,7 @@ import {
   settings,
   standDown,
 } from './identifiers.generated.ts';
-import {nodeFacts, nodeMachineOf} from './node-machine.ts';
+import {clientPlatformOf, nodeFacts, nodeMachineOf} from './node-machine.ts';
 import {textOf} from './pipeline/connect-settings.ts';
 import {type ConnectRegistration, registerConnect} from './register-connect.ts';
 import {
@@ -164,6 +164,7 @@ export async function activate(
       },
       {
         homeFolder: homedir(),
+        platform: clientPlatformOf(process.platform),
         userFile: path.join(homedir(), '.ssh', 'config'),
         systemFile: SYSTEM_CONFIG_FILE,
       },

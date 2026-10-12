@@ -7,12 +7,14 @@ import {
   type ConfigFileEditor,
   type ConfigFilePlaces,
   type ConfigFiles,
+  type OpenedEditor,
   openConfigFileHandler,
 } from '../../src/config/open-config-file.ts';
 
 const HOME = '/home/a';
 const PLACES: ConfigFilePlaces = {
   homeFolder: HOME,
+  platform: 'linux',
   userFile: `${HOME}/.ssh/config`,
   systemFile: '/etc/ssh/ssh_config',
 };
@@ -24,8 +26,9 @@ const EXTENSION = {
 /** Everything one run did, in order. */
 type Call =
   | {call: 'pick'; choice: FileChoice}
-  | {call: 'open'; file: string}
-  | {call: 'insert'; file: string; template: Template}
+  | {call: 'open'; file: string; opened: OpenedEditor}
+  | {call: 'insert'; opened: OpenedEditor; template: Template}
+  | {call: 'missing'; file: string}
   | {call: 'folder'; path: string; mode: number}
   | {call: 'file'; path: string; mode: number}
   | {call: 'settings'; query: string}
@@ -58,17 +61,19 @@ function handlerOf(world: World) {
       return Promise.resolve(world.take(choice));
     },
     open: file => {
-      world.calls.push({call: 'open', file});
-      return Promise.resolve();
+      const opened: OpenedEditor = {file};
+      world.calls.push({call: 'open', file, opened});
+      return Promise.resolve(opened);
     },
-    insertTemplate: (file, template) => {
-      world.calls.push({call: 'insert', file, template});
+    insertTemplate: (opened, template) => {
+      world.calls.push({call: 'insert', opened, template});
       return Promise.resolve();
     },
   };
   const files: ConfigFiles = {
     exists: path => Promise.resolve(world.existing.has(path)),
     missingFolders: file => {
+      world.calls.push({call: 'missing', file});
       const missing: string[] = [];
       let folder = file.slice(0, file.lastIndexOf('/'));
       while (folder !== '' && !world.existing.has(folder)) {
@@ -191,17 +196,25 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
   it('F-2203 AC-3: an existing user file is opened, with nothing created and no template', async () => {
     const world = worldWith({existing: new Set([PLACES.userFile])});
     deepStrictEqual(await runTaking(world, PLACES.userFile), [
-      {call: 'open', file: PLACES.userFile},
+      {call: 'open', file: PLACES.userFile, opened: {file: PLACES.userFile}},
     ]);
   });
 
   it('F-2203 AC-5: a user file and its folder that are missing are made, the folder first, then the file is opened', async () => {
     const world = worldWith({existing: new Set([HOME])});
-    deepStrictEqual((await runTaking(world, PLACES.userFile)).slice(0, 3), [
-      {call: 'folder', path: `${HOME}/.ssh`, mode: 0o700},
-      {call: 'file', path: PLACES.userFile, mode: 0o600},
-      {call: 'open', file: PLACES.userFile},
-    ]);
+    deepStrictEqual(
+      (await runTaking(world, PLACES.userFile)).filter(
+        call =>
+          call.call === 'folder' ||
+          call.call === 'file' ||
+          call.call === 'open',
+      ),
+      [
+        {call: 'folder', path: `${HOME}/.ssh`, mode: 0o700},
+        {call: 'file', path: PLACES.userFile, mode: 0o600},
+        {call: 'open', file: PLACES.userFile, opened: {file: PLACES.userFile}},
+      ],
+    );
   });
 
   it('F-2203 AC-31: with the folder in place only the file is made', async () => {
@@ -218,10 +231,10 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
     const world = worldWith({existing: new Set([HOME, `${HOME}/.ssh`])});
     const calls = await runTaking(world, PLACES.userFile);
     deepStrictEqual(calls.slice(-2), [
-      {call: 'open', file: PLACES.userFile},
+      {call: 'open', file: PLACES.userFile, opened: {file: PLACES.userFile}},
       {
         call: 'insert',
-        file: PLACES.userFile,
+        opened: {file: PLACES.userFile},
         template: starterTemplate({insertSpaces: true, tabSize: 4}),
       },
     ]);
@@ -240,25 +253,32 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
   it('F-2203 AC-10: an existing system file is opened and nothing is created', async () => {
     const world = worldWith({existing: new Set([PLACES.systemFile])});
     deepStrictEqual(await runTaking(world, PLACES.systemFile), [
-      {call: 'open', file: PLACES.systemFile},
+      {
+        call: 'open',
+        file: PLACES.systemFile,
+        opened: {file: PLACES.systemFile},
+      },
     ]);
   });
 
   it('F-2203 Q2: a missing system file in an existing folder is made with the configured mode and the template', async () => {
     const world = worldWith({existing: new Set(['/etc/ssh'])});
     deepStrictEqual(
-      (await runTaking(world, PLACES.systemFile)).map(call => call.call),
+      (await runTaking(world, PLACES.systemFile))
+        .filter(call => call.call !== 'missing')
+        .map(call => call.call),
       ['file', 'open', 'insert'],
     );
   });
 
   it('F-2203 Q2: the system file takes the mode 0644', async () => {
     const world = worldWith({existing: new Set(['/etc/ssh'])});
-    deepStrictEqual((await runTaking(world, PLACES.systemFile))[0], {
-      call: 'file',
-      path: PLACES.systemFile,
-      mode: 0o644,
-    });
+    deepStrictEqual(
+      (await runTaking(world, PLACES.systemFile)).find(
+        call => call.call === 'file',
+      ),
+      {call: 'file', path: PLACES.systemFile, mode: 0o644},
+    );
   });
 
   it('F-2203 AC-12: a configured file in missing folders makes them outermost first with the configured modes', async () => {
@@ -266,12 +286,24 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
       configFile: '/x/a/b/my_config',
       existing: new Set(['/x']),
     });
-    deepStrictEqual((await runTaking(world, '/x/a/b/my_config')).slice(0, 4), [
-      {call: 'folder', path: '/x/a', mode: 0o755},
-      {call: 'folder', path: '/x/a/b', mode: 0o755},
-      {call: 'file', path: '/x/a/b/my_config', mode: 0o644},
-      {call: 'open', file: '/x/a/b/my_config'},
-    ]);
+    deepStrictEqual(
+      (await runTaking(world, '/x/a/b/my_config')).filter(
+        call =>
+          call.call === 'folder' ||
+          call.call === 'file' ||
+          call.call === 'open',
+      ),
+      [
+        {call: 'folder', path: '/x/a', mode: 0o755},
+        {call: 'folder', path: '/x/a/b', mode: 0o755},
+        {call: 'file', path: '/x/a/b/my_config', mode: 0o644},
+        {
+          call: 'open',
+          file: '/x/a/b/my_config',
+          opened: {file: '/x/a/b/my_config'},
+        },
+      ],
+    );
   });
 
   it('F-2203 AC-13: a leading ~ in the configured file is the home folder, and no folder is named ~', async () => {
@@ -283,7 +315,13 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
       (await runTaking(world, '~/cfg/my_config')).filter(
         call => call.call === 'open',
       ),
-      [{call: 'open', file: `${HOME}/cfg/my_config`}],
+      [
+        {
+          call: 'open',
+          file: `${HOME}/cfg/my_config`,
+          opened: {file: `${HOME}/cfg/my_config`},
+        },
+      ],
     );
   });
 
@@ -300,8 +338,62 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
       ],
       [
         {call: 'file', path: `${HOME}/relcfg/rel_config`, mode: 0o644},
-        {call: 'open', file: `${HOME}/relcfg/rel_config`},
+        {
+          call: 'open',
+          file: `${HOME}/relcfg/rel_config`,
+          opened: {file: `${HOME}/relcfg/rel_config`},
+        },
       ],
+    );
+  });
+
+  it('#408 (1), F-2201 BR-4: a configured file of ~ alone is the home folder', async () => {
+    const world = worldWith({configFile: '~'});
+    deepStrictEqual(
+      (await runTaking(world, '~')).filter(call => call.call === 'open'),
+      [{call: 'open', file: HOME, opened: {file: HOME}}],
+    );
+  });
+
+  it('#408 (1): on Linux a backslash after the ~ is not the home folder', async () => {
+    const world = worldWith({configFile: '~\\cfg\\c'});
+    deepStrictEqual(
+      (await runTaking(world, '~\\cfg\\c')).filter(
+        call => call.call === 'open',
+      ),
+      [
+        {
+          call: 'open',
+          file: `${HOME}/~\\cfg\\c`,
+          opened: {file: `${HOME}/~\\cfg\\c`},
+        },
+      ],
+    );
+  });
+
+  it('#408 (2): insertTemplate gets the very object open returned', async () => {
+    const world = worldWith({existing: new Set([HOME, `${HOME}/.ssh`])});
+    const calls = await runTaking(world, PLACES.userFile);
+    const opened = calls.find(call => call.call === 'open');
+    const insert = calls.find(call => call.call === 'insert');
+    deepStrictEqual(
+      [
+        opened?.call === 'open' &&
+          insert?.call === 'insert' &&
+          insert.opened === opened.opened,
+        insert?.call === 'insert' && insert.template,
+      ],
+      [true, starterTemplate({insertSpaces: true, tabSize: 4})],
+    );
+  });
+
+  it('#408 (3): the missing folders are not asked when the file exists', async () => {
+    const world = worldWith({existing: new Set([PLACES.userFile])});
+    deepStrictEqual(
+      (await runTaking(world, PLACES.userFile)).filter(
+        call => call.call === 'missing',
+      ),
+      [],
     );
   });
 
@@ -363,6 +455,7 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
       'file',
       'folder',
       'insert',
+      'missing',
       'open',
       'pick',
     ]);
