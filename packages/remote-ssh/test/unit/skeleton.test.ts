@@ -770,3 +770,131 @@ function deepEqualStrings(actual: string[], expected: string[]): boolean {
     actual.every((entry, position) => entry === expected[position])
   );
 }
+
+describe('the manifest rows of slice 1', () => {
+  /** The manifest and its default strings. */
+  const manifest = JSON.parse(
+    readFileSync(path.join(PACKAGE, 'package.json'), 'utf8'),
+  ) as {
+    extensionKind: string[];
+    capabilities: Record<string, unknown>;
+    activationEvents: string[];
+    contributes: {
+      configuration: {properties: Record<string, Record<string, unknown>>};
+      commands: Array<{command: string; title: string; category: string}>;
+      menus: Record<string, Array<{command: string; when?: string}>>;
+      keybindings?: Array<{command: string}>;
+    };
+  };
+  const strings = JSON.parse(
+    readFileSync(path.join(PACKAGE, 'package.nls.json'), 'utf8'),
+  ) as Record<string, string>;
+  const {properties} = manifest.contributes.configuration;
+
+  /** The default text of a manifest value `%key%`. */
+  function resolved(value: unknown): string | undefined {
+    return typeof value === 'string' ? strings[value.slice(1, -1)] : undefined;
+  }
+
+  /** The menus that name `command`, and the keybindings that run it. */
+  function placesOf(command: string): string[] {
+    return [
+      ...Object.entries(manifest.contributes.menus)
+        .filter(([, entries]) =>
+          entries.some(entry => entry.command === command),
+        )
+        .map(([menu]) => menu),
+      ...(manifest.contributes.keybindings ?? [])
+        .filter(binding => binding.command === command)
+        .map(() => 'keybinding'),
+    ];
+  }
+
+  it('F-2001 AC-19: extensionKind ui, untrusted workspaces supported, no virtual-workspace limit, no * or onStartupFinished (engines per ADR-0007)', () => {
+    deepStrictEqual(
+      [
+        manifest.extensionKind,
+        manifest.capabilities.untrustedWorkspaces,
+        'virtualWorkspaces' in manifest.capabilities,
+        manifest.activationEvents.filter(
+          event => event === '*' || event === 'onStartupFinished',
+        ),
+      ],
+      [['ui'], {supported: true}, false, []],
+    );
+  });
+
+  it('F-2102 AC-1: remote.SSH.useLocalServer is a boolean, true by default, application scope, with the description of 3.2', () => {
+    const setting = properties['remote.SSH.useLocalServer'];
+    deepStrictEqual(
+      [
+        setting?.type,
+        setting?.default,
+        setting?.scope,
+        resolved(setting?.markdownDescription),
+      ],
+      [
+        'boolean',
+        true,
+        'application',
+        'Enables a mode for connecting using a single connection shared between windows and across window reloads. This makes it faster to open new windows and reduces the number of times a password needs to be entered.',
+      ],
+    );
+  });
+
+  it('F-2102 AC-32: the Kill command is in no menu but the palette, and has no keybinding', () => {
+    deepStrictEqual(placesOf('opensshremotes.cleanLocalServer'), [
+      'commandPalette',
+    ]);
+  });
+
+  it('F-2201 AC-30: remote.SSH.configFile has the description of 3.2, an empty default and application scope', () => {
+    const setting = properties['remote.SSH.configFile'];
+    deepStrictEqual(
+      [resolved(setting?.description), setting?.default, setting?.scope],
+      [
+        'The absolute file path to a custom SSH config file.',
+        '',
+        'application',
+      ],
+    );
+  });
+
+  it('F-2206 AC-30: remotePlatform and windowsRemotes have the texts, deprecation message and values of 3.2', () => {
+    const platform = properties['remote.SSH.remotePlatform'];
+    const windows = properties['remote.SSH.windowsRemotes'];
+    deepStrictEqual(
+      [
+        resolved(platform?.markdownDescription),
+        (platform?.additionalProperties as {enum?: string[]} | undefined)?.enum,
+        resolved(windows?.markdownDescription),
+        windows?.deprecationMessage,
+      ],
+      [
+        "A map of the remote hostname to the platform for that remote. The hostname may include a star '*' to wildcard match. Valid values: `linux`, `macOS`, `windows`. Note - this setting will soon be required when `#remote.SSH.useLocalServer#` is disabled, so it is currently being autopopulated for successful connections, but is not currently used.",
+        ['macOS', 'windows', 'linux'],
+        '**Deprecated**: Enables experimental support for connecting to Windows remotes. Add the names of windows remotes to this list.',
+        'Deprecated: Please use `#remote.SSH.remotePlatorm#` instead',
+      ],
+    );
+  });
+
+  it('F-2301 AC-1: "Remote-SSH: Connect to Host..." is in the palette unconditionally and has no keybinding', () => {
+    const command = manifest.contributes.commands.find(
+      entry => entry.command === 'opensshremotes.openEmptyWindow',
+    );
+    deepStrictEqual(
+      [
+        command?.category,
+        resolved(command?.title),
+        manifest.contributes.menus.commandPalette?.filter(
+          entry => entry.command === 'opensshremotes.openEmptyWindow',
+        ),
+        manifest.contributes.keybindings?.filter(
+          binding => binding.command === 'opensshremotes.openEmptyWindow',
+        ) ?? [],
+      ],
+      ['Remote-SSH', 'Connect to Host...', [], []],
+    );
+  });
+});
