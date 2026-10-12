@@ -16,6 +16,7 @@ Reviewers: `themis`; runtime review `daedalus`; design check `athena`.
 | `packages/lib-server/test/unit/node-files.test.ts`, `lock-loop.test.ts`, `network-rule.test.ts` | new |
 | `packages/remote-ssh/test/unit/node-download.test.ts` | new |
 | `tests/acceptance/server/real-download.ts` | deleted; its importers take `nodeClientFiles` from `lib-server` and `fetchDownloadPort` from remote-ssh's `src/transfer/node-download.ts` |
+| `tests/acceptance/package.json`, `tests/acceptance/server/tsconfig.json`, `pnpm-lock.yaml` | the acceptance package declares `remote-ssh` (`workspace:*`; layout.md: it "may import any extension or library") and `server/tsconfig.json` references `../../../packages/remote-ssh` and its `tsconfig.test.json`, so check-workspace stays green; `pnpm install` writes the lockfile. Only `real-server.test.ts` imports the download port today |
 | `tests/acceptance/server/support.ts` | `lockLoop` calls `hostLockLoopOf` with its short test waits (no copy of the loop) |
 | `packages/remote-ssh/src/surfaces/licence-modal.ts` | new: `licenceModalOf` |
 | `packages/remote-ssh/src/surfaces/acceptance-store.ts` | new: `acceptanceStoreOf` |
