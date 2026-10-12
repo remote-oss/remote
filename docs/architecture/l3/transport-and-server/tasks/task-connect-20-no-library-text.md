@@ -64,8 +64,19 @@ connect log as `the <kind> failure: <logDetail>` (F-2003). `failedWith` never co
 ruling says what fills it. Proposal: two named entries of ours, chosen by the problem's kind, with its value:
 `unknownPlaceholder` → `the placeholder {0} is not known` (`{0}` = the placeholder's name), `notHttpUrl` → `it does not
 give an http or https address`. `ofPlan` then gives the reason `{id: <that entry>, values: […]}`, and the presenter's
-`reasonText` fills `{3}` with it. **This row waits on athena's wording.** The rest of the card can be built first, with
-`invalidServerTemplate` given no reason until it lands, so that no identifier shows.
+`reasonText` fills `{3}` with it.
+
+**Ruled (athena, 2026-10-12): the proposal, with one refinement.** The dialog is our own text (F-3902 rule 8, no
+reference counterpart; remote-ssh#87 fixes only the template and calls `{3}` "the problem"), so `{3}`'s wording is ours.
+- `unknownPlaceholder` → `the placeholder {0} is not known`, with `{0}` the placeholder **as the user wrote it, braces
+  included** (`${name}`; lib-product's `name` is the bare name, so the reason builds `` `${${name}}` ``), so the user can
+  find it in their setting.
+- `notHttpUrl` → `it does not give an http or https address`. It names no value: the expanded address may carry the
+  user's own host names and isn't needed to see the fault.
+- Both are named entries in `FAILURE_TEMPLATES` (`templateUnknownPlaceholder`, `templateNotHttp`) and keys in all 15
+  bundles. Rows: each problem kind gives its entry; the placeholder row's text holds `${name}`; and the dialog reads
+  `The value of remote.SSH.serverDownloadUrlTemplate is not a usable server download URL template: the placeholder
+  ${foo} is not known.`
 
 ## 3. Test table
 
@@ -100,5 +111,5 @@ PR title `remote-ssh: no library text in the failure dialog (card connect-20)`.
 
 ## 6. Open rows
 
-One: the wording that fills the template dialog's `{3}` (section 2.3), for athena. Everything else is ruled (contracts
+None: section 2.3 is ruled (athena, 2026-10-12). Everything else is ruled too (contracts
 R1, fb7516b).
