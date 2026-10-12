@@ -203,6 +203,7 @@ export function steps(
       note('installExtensions', undefined);
       return Promise.resolve();
     },
+    tunnelPath: () => 'socks',
     openTunnel: () =>
       Promise.resolve(
         note('openTunnel', {kind: 'done', value: tunnelOf(recording)}),

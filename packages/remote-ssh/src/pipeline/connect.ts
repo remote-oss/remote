@@ -62,27 +62,28 @@ export function portOf(server: StartedServer): number {
 }
 
 /** Whether the signal has been aborted by now; read through a call because it changes while a step runs. */
-function isAborted(signal: AbortSignal): boolean {
+export function isAborted(signal: AbortSignal): boolean {
   return signal.aborted;
 }
 
 /**
- * Runs `work` with a signal that ends at the caller's cancellation or at the limit. The result does not wait for a
- * step that ignores its signal; what such a step gives later is handed to `discard`, so that it is not leaked.
+ * Runs `work` with a signal that ends at the caller's cancellation or at the limit; a step with no limit is ended by the
+ * cancellation alone. The result does not wait for a step that ignores its signal; what such a step gives later is
+ * handed to `discard`, so that it is not leaked.
  */
 async function bounded<Value>(
   work: (signal: AbortSignal) => Promise<Value>,
-  milliseconds: number,
+  milliseconds: number | undefined,
   cancellation: AbortSignal,
   discard: (late: Value) => void,
 ): Promise<{value: Value} | {interrupted: Interrupted}> {
   if (cancellation.aborted) {
     return {interrupted: 'cancelled'};
   }
-  const signal = AbortSignal.any([
-    cancellation,
-    AbortSignal.timeout(milliseconds),
-  ]);
+  const signal =
+    milliseconds === undefined
+      ? cancellation
+      : AbortSignal.any([cancellation, AbortSignal.timeout(milliseconds)]);
   const ended = new Promise<'ended'>(resolve => {
     signal.addEventListener('abort', () => {
       resolve('ended');
@@ -182,7 +183,7 @@ async function runSteps(
   /** A bounded step that gives a result; a result that is not its value is the failure to return. */
   async function runBounded<Value>(
     work: (signal: AbortSignal) => Promise<StepResult<Value>>,
-    milliseconds: number,
+    milliseconds: number | undefined,
     onTimeout: FailureDetail,
     discard: (late: Value) => void,
   ): Promise<{value: Value} | {failed: Failed}> {
@@ -347,7 +348,8 @@ async function runSteps(
         },
         signal,
       ),
-    waits.tunnelMilliseconds,
+    // A second `ssh` has bounds of its own and a login to wait for, which a limit sized for the relay would cut off.
+    steps.tunnelPath() === 'socks' ? waits.tunnelMilliseconds : undefined,
     {kind: 'timeout'},
     late => {
       late.close();

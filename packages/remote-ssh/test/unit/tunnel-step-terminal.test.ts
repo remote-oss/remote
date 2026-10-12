@@ -53,6 +53,7 @@ const FORWARD_FAILURE = 'Could not request local forwarding.';
 function stepWith(
   options: {
     settings?: TunnelSettings;
+    settingsNow?: () => TunnelSettings;
     server?: StartedServer;
     port?: number | undefined;
     reveal?: boolean;
@@ -70,16 +71,20 @@ function stepWith(
   const logins: TerminalLogin[] = [];
   const disposals = {questions: 0};
   let waits = 0;
+  let portsChosen = 0;
   const port = 'port' in options ? options.port : LOCAL_PORT;
   const step = openTunnelStep({
-    settings: () => options.settings ?? SECOND_SSH,
+    settings: () => options.settingsNow?.() ?? options.settings ?? SECOND_SSH,
     local,
     scheduler: clock.scheduler(),
     limits: {...LIMITS, retryMilliseconds: options.retryMilliseconds ?? 10},
     dialerFor: () => {
       throw new Error('a terminal path does not dial through the relay');
     },
-    chooseLocalPort: () => Promise.resolve(port),
+    chooseLocalPort: () => {
+      portsChosen += 1;
+      return Promise.resolve(port);
+    },
     environment: () => ENVIRONMENT,
     terminals,
     tunnelInvocation: (forward): Invocation => {
@@ -114,16 +119,19 @@ function stepWith(
     }
     return terminal;
   }
+  const cancellation = new AbortController();
   return {
+    cancellation,
+    tunnelPath: () => step.tunnelPath(),
     open: () =>
-      step(
+      step.openTunnel(
         INPUT,
         lease,
         options.server ?? STARTED.server,
         () => {
           waits += 1;
         },
-        new AbortController().signal,
+        cancellation.signal,
       ),
     local,
     terminals,
@@ -135,6 +143,7 @@ function stepWith(
     logins,
     disposals,
     waits: () => waits,
+    portsChosen: () => portsChosen,
   };
 }
 
@@ -404,6 +413,110 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     });
     await advance(clock, 599_000, 1_000);
     deepStrictEqual(outcome(), undefined);
+  });
+
+  it('R1: the step names the second-ssh path from the settings', () => {
+    deepStrictEqual(stepWith().tunnelPath(), 'secondSsh');
+  });
+
+  it('R1: the step names the socket path from the settings', () => {
+    deepStrictEqual(stepWith({settings: SOCKET}).tunnelPath(), 'socket');
+  });
+
+  it('R1: the path is read once for a connect, so the step takes the branch it named', async () => {
+    let current: TunnelSettings = SECOND_SSH;
+    const context = stepWith({settingsNow: () => current});
+    context.tunnelPath();
+    current = {
+      listenOnSocket: false,
+      useLocalServer: true,
+      enableDynamicForwarding: true,
+    };
+    void context.open();
+    await settled();
+    deepStrictEqual(context.terminals.opened.length, 1);
+  });
+
+  it('contracts: a cancel during the login settles the step as cancelled', async () => {
+    const {open, cancellation} = stepWith();
+    const pending = open();
+    await settled();
+    cancellation.abort();
+    deepStrictEqual(await pending, {
+      kind: 'failed',
+      failure: {kind: 'cancelled'},
+    });
+  });
+
+  it('contracts: a cancel during the login stops the session', async () => {
+    const {open, opened, cancellation} = stepWith();
+    void open();
+    await settled();
+    cancellation.abort();
+    await settled();
+    deepStrictEqual(opened().disposed, true);
+  });
+
+  it('contracts: a cancel during the login takes the questions down', async () => {
+    const {open, cancellation, disposals} = stepWith();
+    void open();
+    await settled();
+    cancellation.abort();
+    await settled();
+    deepStrictEqual(disposals.questions, 1);
+  });
+
+  it('contracts: a cancel while a question is open still takes the questions down once', async () => {
+    const {open, opened, cancellation, disposals, clock} = stepWith();
+    void open();
+    await settled();
+    opened().write("alex@dev's password: ");
+    await advance(clock, 120);
+    cancellation.abort();
+    await settled();
+    deepStrictEqual(disposals.questions, 1);
+  });
+
+  it('contracts: a cancel during the 10 s wait settles the step as cancelled and stops the session', async () => {
+    const {open, opened, cancellation, clock} = stepWith({
+      connectScript: ['fail'],
+    });
+    const pending = open();
+    await settled();
+    opened().write(`${TUNNEL_SUCCESS_LINE}\n`);
+    await advance(clock, 100);
+    cancellation.abort();
+    await advance(clock, 100);
+    deepStrictEqual(
+      [await pending, opened().disposed],
+      [{kind: 'failed', failure: {kind: 'cancelled'}}, true],
+    );
+  });
+
+  it('contracts: a connect already cancelled opens no terminal', async () => {
+    const context = stepWith();
+    context.cancellation.abort();
+    deepStrictEqual(
+      [await context.open(), context.terminals.opened.length],
+      [{kind: 'failed', failure: {kind: 'cancelled'}}, 0],
+    );
+  });
+
+  it('contracts: a connect already cancelled does not even choose a local port', async () => {
+    const context = stepWith();
+    context.cancellation.abort();
+    await context.open();
+    deepStrictEqual(context.portsChosen(), 0);
+  });
+
+  it('contracts: a cancel while the local port is being chosen opens no terminal', async () => {
+    const context = stepWith();
+    const pending = context.open();
+    context.cancellation.abort();
+    deepStrictEqual(
+      [await pending, context.terminals.opened.length],
+      [{kind: 'failed', failure: {kind: 'cancelled'}}, 0],
+    );
   });
 
   it('contracts: closing the opened tunnel twice stops the session once', async () => {

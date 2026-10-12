@@ -53,7 +53,7 @@ function stepWith(
     onWaiting?: () => void;
   } = {},
 ): {
-  open: () => ReturnType<ReturnType<typeof openTunnelStep>>;
+  open: () => ReturnType<ReturnType<typeof openTunnelStep>['openTunnel']>;
   local: FakeLocalPort;
   dialer: FakeDialer;
   socksPorts: number[];
@@ -83,7 +83,7 @@ function stepWith(
   const lease = leaseOf(emptyRecording());
   return {
     open: () =>
-      step(
+      step.openTunnel(
         INPUT,
         lease,
         STARTED.server,

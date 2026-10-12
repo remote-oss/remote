@@ -274,7 +274,7 @@ export function stepsOf(
     start: (input, ...rest) => serverSteps(input).start(input, ...rest),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
-    openTunnel: openTunnelStep({
+    ...openTunnelStep({
       ...ports.tunnel,
       environment: () =>
         windowEnvironment(lookedUp(state).localForwards, ports.logger),

@@ -13,6 +13,7 @@ import {
   openForwardedTunnel,
   openRelayTunnel,
   selectTunnelPath,
+  type TunnelPath,
   type TunnelSettings,
   type WaitLimits,
 } from 'lib-forwarding';
@@ -28,7 +29,7 @@ import {
   type TunnelSession,
 } from 'lib-ssh';
 import type {TerminalLogin} from '../surfaces/terminal-questions.ts';
-import {portOf} from './connect.ts';
+import {isAborted, portOf} from './connect.ts';
 import type {ConnectInput, ConnectSteps} from './steps.ts';
 
 /** What the window gets besides the tunnel: the variables of its extension host and its environment tunnels. */
@@ -157,10 +158,16 @@ async function openTerminalTunnel(
   path: 'secondSsh' | 'socket',
   given: Parameters<ConnectSteps['openTunnel']>,
 ): Promise<TunnelResult> {
-  const [input, , server, onWaiting] = given;
+  const [input, , server, onWaiting, cancellation] = given;
+  if (isAborted(cancellation)) {
+    return CANCELLED;
+  }
   const localPort = await dependencies.chooseLocalPort();
   if (localPort === undefined) {
     return NOT_OPENED;
+  }
+  if (isAborted(cancellation)) {
+    return CANCELLED;
   }
   const forward = forwardFor(path, localPort, server);
   const stallSignal: {stalled: () => void} = {stalled: () => undefined};
@@ -198,8 +205,21 @@ async function openTerminalTunnel(
     reader.stop();
     questions.dispose();
   }
-  const gate = await Promise.race([session.gate, unreachable]);
+  const cancelled = new Promise<'cancelled'>(resolve => {
+    cancellation.addEventListener(
+      'abort',
+      () => {
+        resolve('cancelled');
+      },
+      {once: true},
+    );
+  });
+  const gate = await Promise.race([session.gate, unreachable, cancelled]);
   takeDown();
+  if (gate === 'cancelled') {
+    session.stop();
+    return CANCELLED;
+  }
   if (gate === 'unreachable') {
     session.stop();
     return {kind: 'failed', failure: {kind: 'timeout'}};
@@ -213,7 +233,7 @@ async function openTerminalTunnel(
     return NOT_OPENED;
   }
   onWaiting();
-  const outcome = await openForwardedTunnel({
+  const opening = openForwardedTunnel({
     local: dependencies.local,
     scheduler: dependencies.scheduler,
     localPort,
@@ -225,6 +245,12 @@ async function openTerminalTunnel(
       session.stop();
     },
   });
+  const outcome = await Promise.race([opening, cancelled]);
+  if (outcome === 'cancelled') {
+    // The session is the tunnel: stopped, there is nothing left for the wait to hand over, and it ends at its bound.
+    session.stop();
+    return CANCELLED;
+  }
   if (outcome.kind !== 'open') {
     return {
       kind: 'failed',
@@ -252,13 +278,27 @@ async function openTerminalTunnel(
   };
 }
 
-/** The step over the connection's SOCKS relay. */
+/** The failure of a connect that was cancelled while the tunnel was being opened. */
+const CANCELLED: TunnelResult = {kind: 'failed', failure: {kind: 'cancelled'}};
+
+/**
+ * The step that names the window tunnel's path and opens the tunnel on it. The path is read from the settings once,
+ * the first time it is asked for, and the step opens the tunnel on that path, so the pipeline's bound and the step
+ * cannot disagree. The step is made for one connect, so the choice lasts for that connect alone.
+ */
 export function openTunnelStep(
   dependencies: TunnelStepDependencies,
-): ConnectSteps['openTunnel'] {
-  return async (...given) => {
+): Pick<ConnectSteps, 'tunnelPath' | 'openTunnel'> {
+  let chosen: TunnelPath | undefined;
+  function tunnelPath(): TunnelPath {
+    chosen ??= selectTunnelPath(dependencies.settings());
+    return chosen;
+  }
+  async function openTunnel(
+    ...given: Parameters<ConnectSteps['openTunnel']>
+  ): Promise<TunnelResult> {
     const [, lease, server, onWaiting] = given;
-    const path = selectTunnelPath(dependencies.settings());
+    const path = tunnelPath();
     if (path !== 'socks') {
       return openTerminalTunnel(dependencies, path, given);
     }
@@ -308,5 +348,6 @@ export function openTunnelStep(
         onClosed: outcome.onClosed,
       },
     };
-  };
+  }
+  return {tunnelPath, openTunnel};
 }
