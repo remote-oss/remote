@@ -91,7 +91,11 @@ export function factoryFor(init: FactoryInit): TunnelFactory {
           localPort: request.localPort,
           ...(request.label === undefined ? {} : {label: request.label}),
         };
-        entries.push({port, close: outcome.close});
+        const entry: Entry = {port, close: outcome.close};
+        entries.push(entry);
+        outcome.onClosed(() => {
+          entries.splice(entries.indexOf(entry), 1);
+        });
         return {kind: 'forwarded', port};
       }
       return {
@@ -117,10 +121,13 @@ export function factoryFor(init: FactoryInit): TunnelFactory {
           ),
         })),
       );
-      const revived = probed
+      const listed = probed.filter(probe =>
+        entries.some(entry => entry.port === probe.port),
+      );
+      const revived = listed
         .filter(probe => probe.worked)
         .map(probe => probe.port);
-      const failed = probed
+      const failed = listed
         .filter(probe => !probe.worked)
         .map(probe => probe.port);
       return {revived, failed};

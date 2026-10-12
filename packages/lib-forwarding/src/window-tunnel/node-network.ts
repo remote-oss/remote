@@ -4,8 +4,13 @@
  * attached, an error ends it like a close, and back-pressure runs through `send`, `pause`, `resume` and `onDrain`.
  */
 
-import {createConnection, createServer, type Socket} from 'node:net';
-import type {Duplex, LocalPort} from './ports.ts';
+import {
+  createConnection,
+  createServer,
+  type Server,
+  type Socket,
+} from 'node:net';
+import type {Duplex, Listening, LocalPort} from './ports.ts';
 
 /** The only address the library listens on or connects to. */
 const LOOPBACK = '127.0.0.1';
@@ -51,24 +56,46 @@ function socketDuplex(socket: Socket): Duplex {
   };
 }
 
+/**
+ * Listens with `server` on `port` of the loopback. An error before listening rejects; the first error after it is
+ * told to `onFailure` and closes the server. Later errors, and errors after `close`, are not told.
+ */
+export function listenOn(
+  server: Server,
+  port: number,
+  onConnection: (connection: Duplex) => void,
+  onFailure: (detail: string) => void,
+): Promise<Listening> {
+  return new Promise((resolve, reject) => {
+    server.on('connection', (socket: Socket) => {
+      onConnection(socketDuplex(socket));
+    });
+    server.once('error', reject);
+    server.listen(port, LOOPBACK, () => {
+      server.off('error', reject);
+      let ended = false;
+      server.on('error', error => {
+        if (!ended) {
+          ended = true;
+          server.close();
+          onFailure(error.message);
+        }
+      });
+      resolve({
+        close: () => {
+          ended = true;
+          server.close();
+        },
+      });
+    });
+  });
+}
+
 /** The loopback of this machine over `node:net`. */
 export function nodeLocalPort(): LocalPort {
   return {
-    listen: (port, onConnection) =>
-      new Promise((resolve, reject) => {
-        const server = createServer(socket => {
-          onConnection(socketDuplex(socket));
-        });
-        server.once('error', reject);
-        server.listen(port, LOOPBACK, () => {
-          server.off('error', reject);
-          resolve({
-            close: () => {
-              server.close();
-            },
-          });
-        });
-      }),
+    listen: (port, onConnection, onFailure) =>
+      listenOn(createServer(), port, onConnection, onFailure),
     connect: port =>
       new Promise((resolve, reject) => {
         const socket = createConnection({host: LOOPBACK, port});

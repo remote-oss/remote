@@ -40,5 +40,6 @@ export async function openForwardedTunnel(
     close: () => {
       request.stopSession();
     },
+    onClosed: () => undefined,
   };
 }

@@ -176,3 +176,45 @@ describe('the tunnel factory', () => {
     deepStrictEqual((await pending).failed.length, 3);
   });
 });
+
+describe('a forward whose listener fails after listening', () => {
+  async function oneFailed(): Promise<Fixture> {
+    const made = fixture();
+    await made.factory.forward({remotePort: 3000, localPort: 3001});
+    await made.factory.forward({remotePort: 4000, localPort: 4001});
+    made.local.fail(3001, 'accept failed');
+    return made;
+  }
+
+  it('#253 Q1: leaves the list', async () => {
+    const {factory} = await oneFailed();
+    deepStrictEqual(factory.forwarded(), [{remotePort: 4000, localPort: 4001}]);
+  });
+
+  it('#253 Q1: is not part of the next reconnection', async () => {
+    const {factory} = await oneFailed();
+    const replacement = new FakeDialer();
+    const report = await factory.reconnect(replacement);
+    deepStrictEqual(
+      [report, replacement.dialed],
+      [
+        {revived: [{remotePort: 4000, localPort: 4001}], failed: []},
+        [{kind: 'port', port: 4000}],
+      ],
+    );
+  });
+
+  it('#253 Q1: is in neither list when it ends while the probes run', async () => {
+    const {factory, local} = fixture();
+    await factory.forward({remotePort: 3000, localPort: 3001});
+    const replacement = new FakeDialer(['later']);
+    const reconnecting = factory.reconnect(replacement);
+    await settled();
+    local.fail(3001, 'accept failed');
+    replacement.openNext();
+    deepStrictEqual(
+      [await reconnecting, factory.forwarded()],
+      [{revived: [], failed: []}, []],
+    );
+  });
+});

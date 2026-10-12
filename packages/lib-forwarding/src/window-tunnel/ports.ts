@@ -41,6 +41,8 @@ export interface LocalPort {
   listen(
     port: number,
     onConnection: (connection: Duplex) => void,
+    /** Told at most once, for an error after listening, and never after the `Listening` is closed. */
+    onFailure: (detail: string) => void,
   ): Promise<Listening>;
   connect(port: number): Promise<Duplex>;
 }
