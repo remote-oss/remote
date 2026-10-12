@@ -28,6 +28,7 @@ import {
   type HarnessVariables,
   mappedPort,
   packagedExtensions,
+  removeBundles,
   RETRY_PAUSE_MILLISECONDS,
   runAcceptance,
   runCommand,
@@ -276,6 +277,15 @@ describe('acceptance', () => {
   });
 
   describe('runAcceptance', () => {
+    it('#439: the run removes the suite bundles when it ends', async () => {
+      workspace.write('tests/acceptance/dist-remote/window.test.cjs', '');
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      strictEqual(
+        existsSync(path.join(workspace.root, 'tests/acceptance/dist-remote')),
+        false,
+      );
+    });
+
     it('builds the host, starts it with the run key, waits for SSH, bundles and runs the tests', async () => {
       await runAcceptance(workspace.root, harness);
       deepStrictEqual(
@@ -908,6 +918,37 @@ describe('acceptance', () => {
           ),
         ],
         [true, false],
+      );
+    });
+
+    it('#439: a bundle a former run left in an output folder is gone after bundling', async () => {
+      workspace.write('tests/acceptance/dist-failure/stale.test.cjs', '');
+      await bundleSuite(workspace.root);
+      strictEqual(
+        existsSync(
+          path.join(
+            workspace.root,
+            'tests/acceptance/dist-failure/stale.test.cjs',
+          ),
+        ),
+        false,
+      );
+    });
+
+    it('#439: removeBundles leaves no output folder', async () => {
+      await bundleSuite(workspace.root);
+      removeBundles(workspace.root);
+      deepStrictEqual(
+        [
+          'dist',
+          'dist-local',
+          'dist-remote',
+          'dist-reconnect',
+          'dist-failure',
+        ].map(folder =>
+          existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
+        ),
+        [false, false, false, false, false],
       );
     });
 

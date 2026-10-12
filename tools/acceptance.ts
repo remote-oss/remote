@@ -361,6 +361,7 @@ export async function runAcceptance(
       dependencies.command('docker', ['rm', '--force', container]);
     }
     rmSync(runFolder, {recursive: true, force: true});
+    removeBundles(root);
   }
 }
 
@@ -499,6 +500,16 @@ const SUITES: ReadonlyArray<{source: string; output: string}> = [
   {source: 'suite-failure', output: 'dist-failure'},
 ];
 
+/** Removes every suite's bundle folder, so that no run leaves bundles in a checkout. */
+export function removeBundles(root: string): void {
+  for (const {output} of SUITES) {
+    rmSync(path.join(root, 'tests', 'acceptance', output), {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
 /** Bundles every `*.test.ts` of each suite folder of tests/acceptance into its output folder, one `.cjs` file each. */
 export async function bundleSuite(root: string): Promise<void> {
   for (const {source, output} of SUITES) {
@@ -513,11 +524,14 @@ async function bundleFolder(
   output: string,
 ): Promise<void> {
   const suite = path.join(root, 'tests', 'acceptance', source);
+  const outputFolder = path.join(root, 'tests', 'acceptance', output);
+  // A bundle a former run left behind would run with these; a shared runner keeps its checkout between jobs.
+  rmSync(outputFolder, {recursive: true, force: true});
   await build({
     entryPoints: sortedEntries(suite)
       .filter(entry => entry.name.endsWith('.test.ts'))
       .map(entry => path.join(suite, entry.name)),
-    outdir: path.join(root, 'tests', 'acceptance', output),
+    outdir: outputFolder,
     bundle: true,
     platform: 'node',
     // The repository's package.json says "type": "module", so a CommonJS bundle needs the .cjs extension.

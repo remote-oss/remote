@@ -8,10 +8,7 @@
     "**/node_modules/**",
     "**/.tsc/**",
     "**/dist/**",
-    "**/dist-local/**",
-    "**/dist-remote/**",
-    "**/dist-reconnect/**",
-    "**/dist-failure/**",
+    "**/dist-*/**",
     "**/.vscode-test/**",
     "**/vscode-dts/**"
   ],

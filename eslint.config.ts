@@ -159,10 +159,7 @@ export default defineConfig(
     ignores: [
       '**/node_modules/',
       '**/dist/',
-      '**/dist-local/',
-      '**/dist-remote/',
-      '**/dist-reconnect/',
-      '**/dist-failure/',
+      '**/dist-*/',
       '**/.tsc/',
       '**/.vscode-test/',
       // The editor's own declaration files, kept as published.
