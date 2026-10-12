@@ -810,7 +810,7 @@ describe('the manifest rows of slice 1', () => {
     ];
   }
 
-  it('F-2001 AC-19: extensionKind ui, untrusted workspaces supported, no virtual-workspace limit, no * or onStartupFinished (engines per ADR-0007)', () => {
+  it('F-2001 BR-1, BR-2, BR-7: extensionKind ui, untrusted workspaces supported, no virtual-workspace limit, no * or onStartupFinished', () => {
     deepStrictEqual(
       [
         manifest.extensionKind,
