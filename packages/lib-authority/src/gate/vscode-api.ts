@@ -9,8 +9,8 @@ import type {ProbeApi} from './probe.ts';
 /** The probes' view of the editor's API, reading each guarded member at the moment it is asked for. */
 export function probeApiOf(editor: typeof vscode): ProbeApi {
   return {
-    get remoteAuthority() {
-      return editor.env.remoteAuthority;
+    get appCommit() {
+      return editor.env.appCommit;
     },
     get tunnels() {
       return editor.workspace.tunnels;

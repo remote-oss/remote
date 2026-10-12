@@ -6,9 +6,9 @@ import {probeApiOf} from '../../src/index.ts';
 function fakeEditor(reads: string[]): typeof vscode {
   return {
     env: {
-      get remoteAuthority() {
-        reads.push('env.remoteAuthority');
-        return 'ssh-remote+host';
+      get appCommit() {
+        reads.push('env.appCommit');
+        return 'abc';
       },
     },
     workspace: {
@@ -39,13 +39,10 @@ describe('the editor behind the probes', () => {
     deepStrictEqual(reads, []);
   });
 
-  it('reads the remote authority when the probe asks for it', () => {
+  it('F-3903 rule 4: the resolvers probe reads env.appCommit', () => {
     const reads: string[] = [];
-    const authority = probeApiOf(fakeEditor(reads)).remoteAuthority;
-    deepStrictEqual(
-      [authority, reads],
-      ['ssh-remote+host', ['env.remoteAuthority']],
-    );
+    const appCommit = probeApiOf(fakeEditor(reads)).appCommit;
+    deepStrictEqual([appCommit, reads], ['abc', ['env.appCommit']]);
   });
 
   it('reads the tunnels when the probe asks for them', async () => {

@@ -10,7 +10,7 @@ const BUTTON = 'Show Other Extension';
 
 const SETUP_TEXTS = [
   "{0} needs proposed VS Code APIs that {1} has not enabled for it. Add {2} to 'enable-proposed-api' in argv.json, then restart {1}.",
-  "The previous setup attempt did not enable the proposed APIs {0} needs. Check that 'enable-proposed-api' in argv.json lists '{2}', then restart {1}.",
+  "The previous setup attempt did not enable the proposed APIs {0} needs. Check that 'enable-proposed-api' in argv.json lists 'remote-oss.remote-ssh', then restart {1}.",
   'Quit and start {1} again to apply the changes to argv.json.',
   'Configure Runtime Arguments',
   'Not Now',

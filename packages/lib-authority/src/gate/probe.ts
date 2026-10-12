@@ -20,7 +20,7 @@ export type ProposalState = 'granted' | 'missing' | 'unprobeable';
 /** What a probe reads: the members of the editor's API that a missing proposal guards. */
 export interface ProbeApi {
   /** Guarded by `resolvers`: reading it throws without the grant. */
-  readonly remoteAuthority: string | undefined;
+  readonly appCommit: string | undefined;
   /** Guarded by `tunnels`: reading it throws without the grant. */
   readonly tunnels: PromiseLike<unknown>;
   /** Guarded by `terminalDataWriteEvent`: subscribing throws without the grant. */
@@ -78,7 +78,7 @@ async function probeOne(
 ): Promise<ProposalState> {
   switch (proposal) {
     case 'resolvers':
-      return attempt(() => editor.remoteAuthority);
+      return attempt(() => editor.appCommit);
     case 'tunnels':
       return attempt(() => {
         // Only the guard is under test; the list itself, and a failure to get it, do not matter here.

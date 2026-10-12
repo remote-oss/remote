@@ -26,8 +26,8 @@ class FakeApi implements ProbeApi {
     this.editor = {guarded: new Set(), ...editor};
   }
 
-  get remoteAuthority(): string | undefined {
-    this.reads.push('remoteAuthority');
+  get appCommit(): string | undefined {
+    this.reads.push('appCommit');
     if (this.editor.guarded.has('resolvers')) {
       throw REFUSAL;
     }
@@ -74,13 +74,22 @@ async function stateOf(
 }
 
 describe('probing the proposals of the editor (F-1403)', () => {
-  it('F-1403: resolvers is granted when the guarded member can be read', async () => {
-    deepStrictEqual(await stateOf(new FakeApi(), 'resolvers'), 'granted');
+  it('F-3903 rule 4: the resolvers probe reads appCommit and is granted when it reads', async () => {
+    const editor = new FakeApi();
+    deepStrictEqual(
+      [await stateOf(editor, 'resolvers'), editor.reads],
+      ['granted', ['appCommit']],
+    );
   });
 
-  it('F-1403: resolvers is missing when the guarded member throws', async () => {
-    const editor = new FakeApi({guarded: new Set(['resolvers'])});
-    deepStrictEqual(await stateOf(editor, 'resolvers'), 'missing');
+  it('F-3903 rule 4: the resolvers probe is missing when appCommit throws', async () => {
+    deepStrictEqual(
+      await stateOf(
+        new FakeApi({guarded: new Set(['resolvers'])}),
+        'resolvers',
+      ),
+      'missing',
+    );
   });
 
   it('F-1403: tunnels is granted when the guarded member can be read', async () => {
@@ -178,13 +187,13 @@ describe('probing the proposals of the editor (F-1403)', () => {
   it('F-1403: a proposal that was not asked for is not touched', async () => {
     const editor = new FakeApi();
     await stateOf(editor, 'resolvers');
-    deepStrictEqual(editor.reads, ['remoteAuthority']);
+    deepStrictEqual(editor.reads, ['appCommit']);
   });
 
   it('F-1403: nothing is remembered between two probes', async () => {
     const editor = new FakeApi();
     await stateOf(editor, 'resolvers');
     await stateOf(editor, 'resolvers');
-    deepStrictEqual(editor.reads, ['remoteAuthority', 'remoteAuthority']);
+    deepStrictEqual(editor.reads, ['appCommit', 'appCommit']);
   });
 });
