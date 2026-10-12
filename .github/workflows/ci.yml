@@ -3,10 +3,13 @@
 # jobs (slice 1, server lifecycle) at its head, so that "passing in CI" means the head, not the last dispatch. The
 # costly jobs (real server, VSCodium, host variants) stay opt-in on a manual dispatch, and always run on the tag of a
 # release (`<package>-v<semver>`). The jobs run on the self-hosted runners, so they use no Actions minutes.
+# A draft pull request runs nothing: its pushes would hold the runners while merge-ready heads wait. Marking it ready for
+# review starts its run (`ready_for_review`), and that run, at the head, is the one green-at-head looks for.
 name: ci
 
 on:
-  # a fork's pull request never runs: its code would run on the self-hosted runners (each job checks the head's repo)
+  # a fork's pull request never runs: its code would run on the self-hosted runners (each job checks the head's repo);
+  # nor does a draft (each job checks `draft`) until it is marked ready
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
@@ -39,7 +42,7 @@ concurrency:
 
 jobs:
   checks:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
@@ -71,7 +74,7 @@ jobs:
   # dupes: jscpd; dead: knip; coverage: c8 with the gates and the ratchet.
   quality:
     name: ${{ matrix.check }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     strategy:
       fail-fast: false
       matrix:
@@ -95,7 +98,7 @@ jobs:
   # and OpenSSH client are preinstalled, and xvfb or a display of its own.
   acceptance-slice-1:
     name: acceptance (slice 1)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
@@ -130,7 +133,7 @@ jobs:
   # SSH host container, with no editor and no download.
   acceptance-server:
     name: acceptance (server lifecycle)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
