@@ -379,10 +379,10 @@ marker are login noise and dropped; the script's lines go to the asking lease on
 The shared channel's three policy values (ruled on #253 Q10 part 2, 2026-10-12), named constants in remote-ssh's
 bounds:
 - `runDeadlineMilliseconds` is **derived, not stated**: `SERVER_BOUNDS.downloadSeconds + SERVER_BOUNDS.readySeconds`
-  plus a 5-minute margin for unpacking (35 min with today's Q7 values). The deadline must never be shorter than the
+  plus a 5-minute margin for unpacking (36 min with today's Q7 values: 30 + 1 + 5). The deadline must never be shorter than the
   longest step a run may legitimately take, and deriving it keeps that true if Q7's bounds change. Every run (probe,
   install, start, extensions install, kill) gets its own deadline from its start.
-- `runWaitMilliseconds` is the deadline plus 5 minutes (40 min today): one run's deadline plus a margin for the run
+- `runWaitMilliseconds` is the deadline plus 5 minutes (41 min today): one run's deadline plus a margin for the run
   queued ahead, since the helper serialises and the steps run one after another.
 - `maximumInputBytes` is **1 MiB**. It guards the session against an unexpectedly large input, which would be written
   through the shell as base64 while every other run waits. It's not a path switch: nothing falls back automatically.
