@@ -18,7 +18,7 @@ import type {Logger} from 'lib-log';
 import type {ConnectSteps, StepFailure} from './steps.ts';
 
 /** What the window gets besides the tunnel: the variables of its extension host and its environment tunnels. */
-export interface WindowEnvironment {
+interface WindowEnvironment {
   extensionHostEnv: Readonly<Record<string, string | null>>;
   environmentTunnels: readonly unknown[];
 }
