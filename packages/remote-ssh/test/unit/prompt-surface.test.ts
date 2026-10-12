@@ -1,10 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import type {ConnectionNotice} from 'lib-ssh';
+import type {LoginLease} from '../../src/pipeline/connection-step.ts';
 import {
   attachPromptSurface,
   type PickRequest,
   type PromptEditor,
-  type PromptLease,
 } from '../../src/surfaces/prompt-surface.ts';
 
 const FINGERPRINT_TEXT = [
@@ -16,7 +16,7 @@ const FINGERPRINT_TEXT = [
 const PASSWORD_TEXT = "user@box's password:";
 
 /** A lease that records the answers and hands the notices the test sends. */
-class FakeLease implements PromptLease {
+class FakeLease implements LoginLease {
   answers: Array<[number, string]> = [];
   refused: number[] = [];
   listeners = new Set<(notice: ConnectionNotice) => void>();

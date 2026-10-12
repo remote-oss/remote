@@ -6,7 +6,10 @@ import {
   type ConnectionNotice,
   SharedConnection,
 } from 'lib-ssh';
-import {openConnectionStep} from '../../src/pipeline/connection-step.ts';
+import {
+  type LoginLease,
+  openConnectionStep,
+} from '../../src/pipeline/connection-step.ts';
 import type {ConnectInput, ConnectionTerms} from '../../src/pipeline/steps.ts';
 
 const INPUT: ConnectInput = {
@@ -67,6 +70,8 @@ interface Fixture {
   lease: FakeLease;
   requests: ConnectionAcquireRequest[];
   notices: ConnectionNotice[];
+  logins: {attached: number; disposed: number; inputs: ConnectInput[]};
+  login: LoginLease | undefined;
   channelsFor: unknown[];
   termsAsked: ConnectionTerms[];
   connecting: (
@@ -81,6 +86,8 @@ function fixture(
   const lease = new FakeLease();
   const requests: ConnectionAcquireRequest[] = [];
   const notices: ConnectionNotice[] = [];
+  const logins: Fixture['logins'] = {attached: 0, disposed: 0, inputs: []};
+  const held: {login?: LoginLease} = {};
   const channelsFor: unknown[] = [];
   const termsAsked: ConnectionTerms[] = [];
   const step = openConnectionStep({
@@ -124,14 +131,29 @@ function fixture(
       channelsFor.push([connection instanceof SharedConnection, terms]);
       return CHANNEL;
     },
-    onNotice: notice => {
-      notices.push(notice);
+    attachLogin: (login, input) => {
+      logins.attached += 1;
+      logins.inputs.push(input);
+      held.login = login;
+      const stop = login.onNotice(notice => {
+        notices.push(notice);
+      });
+      return {
+        dispose: () => {
+          logins.disposed += 1;
+          stop();
+        },
+      };
     },
   });
   return {
     lease,
     requests,
     notices,
+    logins,
+    get login() {
+      return held.login;
+    },
     channelsFor,
     termsAsked,
     connecting: cancellation =>
@@ -244,13 +266,74 @@ describe('the connection step', () => {
     ]);
   });
 
-  it('stops telling the window once the connect is over', async () => {
-    const {lease, notices, outcome} = await loggedIn();
-    if (outcome.kind === 'done') {
-      outcome.value.release();
-    }
+  it('connect-14: takes the questions down once the login is done, before the lease is given back', async () => {
+    const {lease, notices} = await loggedIn();
     lease.emit({type: 'waitingForOtherWindow'});
     deepStrictEqual(notices, []);
+  });
+
+  it('connect-14: shows the questions from the acquire, once, for this connect', async () => {
+    const {logins} = await loggedIn();
+    deepStrictEqual([logins.attached, logins.inputs], [1, [INPUT]]);
+  });
+
+  it('connect-14: takes the questions down once the login is done', async () => {
+    const {logins} = await loggedIn();
+    deepStrictEqual(logins.disposed, 1);
+  });
+
+  it('connect-14: takes the questions down when the login fails', async () => {
+    const {lease, connecting, logins} = fixture();
+    const pending = connecting();
+    await settled();
+    lease.emit({
+      type: 'loginFailed',
+      kind: 'authentication',
+      reason: {text: 'Permission denied (publickey).'},
+      hints: [],
+    });
+    await pending;
+    deepStrictEqual(logins.disposed, 1);
+  });
+
+  it('connect-14: takes the questions down when the connect is cancelled during the login', async () => {
+    const {connecting, logins} = fixture();
+    const controller = new AbortController();
+    const pending = connecting(controller.signal);
+    await settled();
+    controller.abort();
+    await pending;
+    deepStrictEqual(logins.disposed, 1);
+  });
+
+  it('connect-14: shows no questions when no lease could be taken', async () => {
+    const {connecting, logins} = fixture('spawnFailed');
+    await connecting();
+    deepStrictEqual(logins.attached, 0);
+  });
+
+  it('connect-14: the window answers a question of the login through the connection', async () => {
+    const ready = fixture();
+    const pending = ready.connecting();
+    await settled();
+    await ready.login?.answer(3, 'secret');
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    await pending;
+    deepStrictEqual(ready.lease.asked.at(-2), {
+      type: 'answer',
+      promptId: 3,
+      text: 'secret',
+    });
+  });
+
+  it('connect-14: the window refuses a question of the login through the connection', async () => {
+    const ready = fixture();
+    const pending = ready.connecting();
+    await settled();
+    await ready.login?.refuse(3);
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    await pending;
+    deepStrictEqual(ready.lease.asked.at(-2), {type: 'refuse', promptId: 3});
   });
 
   it('fails with the kind, reason and hints of a login that failed, and gives the lease back', async () => {

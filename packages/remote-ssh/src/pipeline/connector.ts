@@ -80,10 +80,20 @@ const NOT_SSH_TARGET: Failed = {
   diagnostics: [],
 };
 
-/** The connection the window holds, and the end of hearing its transport. */
+/** The connection the window holds, the end of hearing its transport, and whether its transport was lost. */
 interface Held {
   connection: Connection;
   stop: () => void;
+  lost: boolean;
+}
+
+/** The connector of Remote - SSH, with what the window's commands read of its connection. */
+export interface SshConnector extends Connector {
+  /**
+   * The TCP port of the server of the connection the window holds; `none` while it holds none or its transport was
+   * lost, since a reconnection's server may listen elsewhere. It never throws.
+   */
+  serverPort(): number | 'none';
 }
 
 function isConnection(result: Connection | Failed): result is Connection {
@@ -91,7 +101,7 @@ function isConnection(result: Connection | Failed): result is Connection {
 }
 
 /** The connector of Remote - SSH over its pipeline. */
-export function connectorOf(dependencies: ConnectorDependencies): Connector {
+export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
   const phases = new Listeners<ConnectPhase>();
   const lost = new Listeners<undefined>();
   const closed = new Listeners<undefined>();
@@ -147,10 +157,13 @@ export function connectorOf(dependencies: ConnectorDependencies): Connector {
         const stop = result.onTransport(event => {
           // A connection given back may still deliver an event already under way; only the held one counts.
           if (held?.connection === result) {
+            if (event === 'lost') {
+              held.lost = true;
+            }
             (event === 'lost' ? lost : closed).tell(undefined);
           }
         });
-        held = {connection: result, stop};
+        held = {connection: result, stop, lost: false};
         return result.connected;
       } finally {
         if (running === controller) {
@@ -165,6 +178,11 @@ export function connectorOf(dependencies: ConnectorDependencies): Connector {
     },
     revealDetails() {
       dependencies.revealLog();
+    },
+    serverPort() {
+      return held === undefined || held.lost
+        ? 'none'
+        : held.connection.serverPort;
     },
     onPhase: listener => phases.subscribe(listener),
     onTransportLost: listener =>
