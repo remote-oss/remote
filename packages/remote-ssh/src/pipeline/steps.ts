@@ -12,6 +12,7 @@ import type {
   ProbedHost,
   StartedServer,
   StartOutcome,
+  CliInstallOutcome,
   TransferOutcome,
   TransferPhase,
 } from 'lib-server';
@@ -150,6 +151,24 @@ export interface ConnectSteps {
     lease: ConnectionLease,
     host: ProbedHost,
     licenceAccepted: boolean,
+    cancellation: AbortSignal,
+  ): Promise<StartOutcome>;
+  /** Places the CLI on the host, from the archive the plan's host gets, unless it is there already. */
+  installCli(
+    input: ConnectInput,
+    lease: ConnectionLease,
+    host: ProbedHost,
+    plan: Extract<Plan, {kind: 'cli'}>,
+    onPhase: (phase: TransferPhase) => void,
+    cancellation: AbortSignal,
+  ): Promise<CliInstallOutcome>;
+  /** Starts the placed CLI, which requires `controlToken` of every caller. */
+  startCli(
+    input: ConnectInput,
+    lease: ConnectionLease,
+    host: ProbedHost,
+    plan: Extract<Plan, {kind: 'cli'}>,
+    controlToken: string,
     cancellation: AbortSignal,
   ): Promise<StartOutcome>;
   /** Installs the default extensions on a server that was already running; a failure never fails the connect. */

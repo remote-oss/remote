@@ -292,6 +292,9 @@ export function stepsOf(
     gate: (input, ...rest) => serverSteps(input).gate(input, ...rest),
     transfer: (input, ...rest) => serverSteps(input).transfer(input, ...rest),
     start: (input, ...rest) => serverSteps(input).start(input, ...rest),
+    installCli: (input, ...rest) =>
+      serverSteps(input).installCli(input, ...rest),
+    startCli: (input, ...rest) => serverSteps(input).startCli(input, ...rest),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
     ...openTunnelStep({

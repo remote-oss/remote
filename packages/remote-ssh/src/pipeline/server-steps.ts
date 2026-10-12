@@ -27,12 +27,15 @@ import {
   ensureAccepted,
   installExtensions,
   type HostLockLoop,
+  installCli,
   type LicenceModal,
+  type Plan,
   plan,
   type ProbedHost,
   type PlanInput,
   probe,
   type ServerPolicyRecord,
+  startCli,
   startOrReuse,
   transfer,
 } from 'lib-server';
@@ -85,6 +88,8 @@ type ServerStepNames =
   | 'gate'
   | 'transfer'
   | 'start'
+  | 'installCli'
+  | 'startCli'
   | 'installExtensions';
 
 /** The archive source the planner reads, from what the resolution found. */
@@ -98,6 +103,9 @@ function sourceOf(resolution: ArchiveResolution): PlanInput['source'] {
       return {kind: 'invalidOverride', problem: resolution.problem};
   }
 }
+
+/** The script parameters' key for the CLI's name and data folder. */
+const CLI_PARAMETERS = 'cli';
 
 /** Why the CLI path was not used, as the log says it once per connect. */
 const CLI_NOT_USED_REASONS: Readonly<
@@ -175,6 +183,32 @@ export function createServerSteps(
       bounds: dependencies.bounds,
       ...changes,
     });
+  }
+
+  /** The CLI archive's address, which a CLI plan always comes with: asking for it before such a plan is a defect. */
+  function plannedCliAddress(): string {
+    if (cliAddress === undefined) {
+      throw new Error('a CLI step ran before a CLI plan');
+    }
+    return cliAddress;
+  }
+
+  /** The script parameters of the CLI's install and start: its name in the archive, and its place on the host. */
+  function cliParametersFor(
+    cliPlan: Extract<Plan, {kind: 'cli'}>,
+    host: ProbedHost,
+  ): ReturnType<typeof scriptParametersFor> {
+    return {
+      ...parametersFor({
+        archiveUrl: plannedCliAddress(),
+        hostOperatingSystem: host.operatingSystem,
+      }),
+      launcher: profile.applicationName,
+      [CLI_PARAMETERS]: {
+        name: `${profile.applicationName}-${names.commit}`,
+        dataFolder: cliPlan.cliDataFolder,
+      },
+    };
   }
 
   return {
@@ -333,6 +367,41 @@ export function createServerSteps(
         runtimeOptionsFor(settings, dependencies.bounds, licenceAccepted),
         dependencies.policy.allowedExtraStartOptions,
         {lockLoop: dependencies.lockLoop, logger: dependencies.logger},
+        cancellation,
+      ),
+    installCli: async (input, lease, host, cliPlan, onPhase, cancellation) =>
+      installCli(
+        cliParametersFor(cliPlan, host),
+        {
+          plan: cliPlan,
+          address: plannedCliAddress(),
+          transfer: {
+            clientFolder: dependencies.clientFolder,
+            cache: dependencies.archiveCache,
+            downloadBounds: dependencies.downloadBounds,
+            temporaryToken: dependencies.newTemporaryToken(),
+            verification: dependencies.policy.verification,
+            hostFolder: host.temporaryFolder,
+            discardDeadlineMilliseconds:
+              dependencies.discardDeadlineMilliseconds,
+          },
+        },
+        {
+          channel: lease.channel,
+          download: dependencies.download,
+          files: dependencies.files,
+          lockLoop: dependencies.lockLoop,
+          logger: dependencies.logger,
+          onPhase,
+        },
+        cancellation,
+      ),
+    startCli: async (input, lease, host, cliPlan, controlToken, cancellation) =>
+      startCli(
+        lease.channel,
+        cliParametersFor(cliPlan, host),
+        controlToken,
+        {lockLoop: dependencies.lockLoop},
         cancellation,
       ),
     installExtensions: async (input, lease, cancellation) => {

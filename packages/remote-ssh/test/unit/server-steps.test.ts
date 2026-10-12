@@ -1,4 +1,4 @@
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, rejects} from 'node:assert';
 import type {RecordingChannel} from 'lib-host/testing/recording-channel';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
@@ -277,6 +277,142 @@ describe('the server steps: plan, the CLI path', () => {
       },
     });
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+});
+
+describe("the server steps: the CLI's install and start", () => {
+  const CLI_TEMPLATE =
+    'https://example.invalid/cli-${os}-${arch}-${version}.tar.gz';
+
+  /** The steps for a product with a CLI template, and the CLI plan they make for HOST. */
+  function cliSteps() {
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    if (!('plan' in result) || result.plan.kind !== 'cli') {
+      throw new Error('the plan should take the CLI path');
+    }
+    return {steps, cliPlan: result.plan};
+  }
+
+  /** The scripts a channel was asked to run, with their environments. */
+  function scriptsOf(channel: RecordingChannel) {
+    return channel.calls.flatMap(call =>
+      call.operation === 'runScript' ? [call.request] : [],
+    );
+  }
+
+  it('F-3902 rule 5 (i): a CLI already on the host is reported where the plan puts it', async () => {
+    const {steps, cliPlan} = cliSteps();
+    const outcome = await steps.installCli(
+      INPUT,
+      leaseOn(
+        channelAnswering(
+          lines('Ok', 'cli.path=/home/alex/.fixture-server/fixture-abc123'),
+        ),
+      ),
+      HOST,
+      {...cliPlan, download: false},
+      () => undefined,
+      new AbortController().signal,
+    );
+    deepStrictEqual(outcome, {
+      kind: 'placed',
+      path: '/home/alex/.fixture-server/fixture-abc123',
+    });
+  });
+
+  it('F-3902 rule 5 (i): the install step names the CLI <applicationName>-<commit>', async () => {
+    const {steps, cliPlan} = cliSteps();
+    const channel = channelAnswering(
+      lines('Ok', 'cli.path=/home/alex/.fixture-server/fixture-abc123'),
+    );
+    await steps.installCli(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      {...cliPlan, download: false},
+      () => undefined,
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      scriptsOf(channel)[0]?.script.includes("CLI_NAME='fixture-abc123'"),
+      true,
+    );
+  });
+
+  it('contracts S10: the CLI is started with the control token in its environment', async () => {
+    const {steps, cliPlan} = cliSteps();
+    const channel = channelAnswering(
+      lines('Ok', 'cli.port=5432', 'cli.pid=88'),
+    );
+    await steps.startCli(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      cliPlan,
+      'control-token-1',
+      new AbortController().signal,
+    );
+    deepStrictEqual(scriptsOf(channel)[0]?.environment, {
+      VSCODE_CLI_REQUIRE_TOKEN: 'control-token-1',
+    });
+  });
+
+  it('contracts S10: the control token is in no script text', async () => {
+    const {steps, cliPlan} = cliSteps();
+    const channel = channelAnswering(
+      lines('Ok', 'cli.port=5432', 'cli.pid=88'),
+    );
+    await steps.startCli(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      cliPlan,
+      'control-token-1',
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      scriptsOf(channel).some(request =>
+        request.script.includes('control-token-1'),
+      ),
+      false,
+    );
+  });
+
+  it('a CLI step before a CLI plan is a defect', async () => {
+    const steps = createServerSteps(dependencies());
+    const {cliPlan} = cliSteps();
+    await rejects(
+      steps.startCli(
+        INPUT,
+        leaseOn(channelAnswering([])),
+        HOST,
+        cliPlan,
+        'control-token-1',
+        new AbortController().signal,
+      ),
+      /a CLI step ran before a CLI plan/,
+    );
+  });
+
+  it('V7a: a started CLI gives its port and process', async () => {
+    const {steps, cliPlan} = cliSteps();
+    const outcome = await steps.startCli(
+      INPUT,
+      leaseOn(channelAnswering(lines('Ok', 'cli.port=5432', 'cli.pid=88'))),
+      HOST,
+      cliPlan,
+      'control-token-1',
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      outcome.kind === 'started' ? outcome.server.endpoint : outcome,
+      {kind: 'port', port: 5432},
+    );
   });
 });
 

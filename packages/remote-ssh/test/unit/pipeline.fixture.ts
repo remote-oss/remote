@@ -79,6 +79,18 @@ export const STARTED = {
   notices: [],
 } satisfies StartOutcome;
 
+/** A CLI that started and listens on its own port of the host. */
+export const CLI_STARTED = {
+  kind: 'started',
+  server: {
+    endpoint: {kind: 'port', port: 5432},
+    processId: 88,
+    connectionToken: 'control-token',
+    reused: false,
+  },
+  notices: [],
+} satisfies StartOutcome;
+
 /** The steps' calls in order, the lease releases, and the phases the window saw. */
 export interface Recording {
   /** The listener the lease's `onNotice` was given last, for a test to send notices through. */
@@ -199,6 +211,14 @@ export function steps(
         }),
       ),
     start: () => Promise.resolve(note('start', STARTED)),
+    installCli: () =>
+      Promise.resolve(
+        note('installCli', {
+          kind: 'placed' as const,
+          path: '/home/dev/.server/fixture-abc',
+        }),
+      ),
+    startCli: () => Promise.resolve(note('startCli', CLI_STARTED)),
     installExtensions: () => {
       note('installExtensions', undefined);
       return Promise.resolve();
