@@ -2,6 +2,29 @@
 import os, shutil, subprocess, sys, time
 
 # >>> docker mode (the conformance runner gets a copy of this region as dind.py)
+SOCKET_PATH_MAX = 107   # a unix socket's path: sun_path holds 108 bytes on Linux, one of them the final NUL
+
+
+def socket_path_refusal(path):
+    """None when a unix socket can be bound at `path`, else why not (dirty-side, 2026-10-12: a deep clone made the
+    slot's socket path too long, and bind() failed with a bare EINVAL)."""
+    n = len(os.fsencode(path))
+    if n <= SOCKET_PATH_MAX:
+        return None
+    return (f"the socket path {path} is {n} bytes, over the {SOCKET_PATH_MAX} a unix socket allows; move the run "
+            "folders to a shorter path (ENCODE_ISO, ENCODE_HOMES, ENCODE_SLOTS_DIR, ENCODE_WORKSPACES, ENCODE_DIND_MOUNT)")
+
+
+def _units():
+    """The kit's units module beside this file, or None (the standalone runner's copy has no units module)."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import units
+        return units
+    except ImportError:
+        return None
+
+
 LABEL = ""
 ROOT = os.environ.get("ENCODE_ROOT") or os.environ.get("CONFORMANCE_WORK") or os.path.expanduser("~/conformance-work")
 WS = os.environ.get("ENCODE_DIND_MOUNT") or f"{ROOT}/workspaces"   # mounted into the daemon at the same path
@@ -99,11 +122,17 @@ def docker_up(fid, slot, data_root=None, daemon_args=(), seed=None):
     bad = route_conflicts(pool, bip)
     if bad:  # R-39: never start a daemon whose networks would shadow a route of this machine (the LAN, the NAS, ...)
         raise RuntimeError(f"R-39: slot {slot}'s private daemon space {pool} (bridge {bip}) overlaps routes here: {', '.join(bad)}")
+    bad = socket_path_refusal(f"{ISO}/{fid}/docker.sock")   # before anything starts: nothing is left behind
+    if bad:
+        raise RuntimeError(bad)
     docker_down(fid)
     if data_root:
         restore_data_root(name, data_root)
     elif LABEL:   # R-51: the data volume exists, labelled, before the run that mounts it
         sh("docker", "volume", "create", *labels(), name, check=True)
+    # the mounted folder exists, ours, before the daemon mounts it: Docker would create a missing bind source as root,
+    # and the recorder could not write its own workspaces (dirty-side, 2026-10-12)
+    os.makedirs(WS, exist_ok=True)
     sh("docker", "run", "-d", *labels(), "--privileged", "--name", name, "--label", f"lab.isolation={fid}",
        "-e", "DOCKER_TLS_CERTDIR=", "-p", f"127.0.0.1:{port}:2375",
        "-v", f"{name}:/var/lib/docker", "-v", f"{WS}:{WS}", "docker:dind", f"--bip={bip}",
@@ -119,11 +148,12 @@ def docker_up(fid, slot, data_root=None, daemon_args=(), seed=None):
     os.makedirs(f"{ISO}/{fid}", exist_ok=True)
     sock = f"{ISO}/{fid}/docker.sock"
     relay = ["socat", f"UNIX-LISTEN:{sock},fork,unlink-early,mode=600", f"TCP:127.0.0.1:{port}"]
-    if os.environ.get("ENCODE_NO_SYSTEMD"):  # the standalone runner on a CI machine without a user systemd
+    if os.environ.get("ENCODE_NO_SYSTEMD") and not _units():  # the standalone runner (no kit units module there)
         pid = subprocess.Popen(relay, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).pid
         open(f"{ISO}/{fid}/relay.pid", "w").write(str(pid))
-    else:
-        sh("systemd-run", "--user", f"--unit=labdind-relay-{fid}", "--collect", "-q", *relay, check=True)
+    else:   # a kit unit: systemd, or a detached session where there is none (the kit's units module)
+        u = _units()
+        u.start(f"labdind-relay-{fid}", relay, {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}, "/")
     for _ in range(20):
         if os.path.exists(sock):
             break
@@ -147,7 +177,9 @@ def docker_down(fid):
         except (OSError, ValueError):
             pass
     else:
-        sh("systemctl", "--user", "stop", f"labdind-relay-{fid}")
+        u = _units()
+        if u:   # the standalone runner's copy has no units module: there the relay ran from relay.pid, or not at all
+            u.stop(f"labdind-relay-{fid}")
     shutil.rmtree(f"{ISO}/{fid}", ignore_errors=True)
     sh("docker", "rm", "-f", "-v", name)
     sh("docker", "volume", "rm", "-f", name)

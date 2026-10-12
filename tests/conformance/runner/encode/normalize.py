@@ -11,11 +11,16 @@ import yaml
 
 import redact
 
-NORM_VERSION = 8   # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines (<docker command> ...);
+NORM_VERSION = 12  # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines (<docker command> ...);
 #                  5: environment noise dropped from notification observations (ENV_NOISE)
 #                  6: the extension's host temp root (per window since the R-42 temp-root amendment)
 #                  7: VS Code core's keychain-write warning is environment noise (kit parity, 2026-10-02)
 #                  8: ${SSH_HOST}, an SSH window's host alias (2026-10-03; only runs of SSH-window profiles have one)
+#                  9: ${SSH_TARGET_ADDR}, a per-run SSH target's address (kit #170; only runs with an sshtarget variant)
+#                 10: VS Code core's extension-recommendation prompt is environment noise, matched by its buttons (R-106)
+#                 11: ${RELAY}, the kit's askpass relay path (athena on kit #186: remote.SSH.path holds it, F-2101 AC-26
+#                     logs that setting, and the kit is not under ROOT)
+#                 12: ${SSH_HOST_UPPER}, the SSH host alias in upper case (athena on F-2409 BR-3/AC-4), before ssh-host
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # (name, placeholder, regex, description); applied to every string value, in this order, after the path rules
@@ -52,15 +57,51 @@ ENV_NOISE = [
     ("env-noise-core-keychain-write", re.compile(r"^Writing login information to the keychain failed with error "),
      "VS Code core's keychain-write warning: the machine's OS keyring is locked or missing"),
 ]
+# R-106 (athena): VS Code core's extension-recommendation prompt names a different extension each time, so it is matched
+# by its BUTTONS, never its text: a notification with no source whose button set is exactly this one. A notification of
+# the extension under test has a source and is never matched.
+ENV_NOISE_BUTTONS = [
+    ("env-noise-core-recommendation", ("Install", "Show Recommendations"),
+     "VS Code core's extension-recommendation prompt: the editor's own default, not the extension under test"),
+]
+# Cases whose subject IS such a prompt keep it (R-106 guard a; dirty-side's scan): exempt from the button rule only.
+R106_EXEMPT = frozenset({
+    "F-1406-AC3-2",   # Dev Containers, reference-only: core recommends the extension for the folder and devcontainer.json
+})
 NOTIFICATION_KEYS = ("notifications", "notification_center")
 
 
-def env_noise(item):
-    """The ENV_NOISE rule a notification observation item matches, or None."""
+def dropped_noise(obj, key=None, counts=None, case=None):
+    """{ENV_NOISE rule: how many items it dropped} over an observation (R-106: every drop is counted, never silent)."""
+    counts = {} if counts is None else counts
+    if isinstance(obj, list):
+        for v in obj:
+            hit = env_noise(v, case) if key in NOTIFICATION_KEYS else None
+            if hit:
+                counts[hit] = counts.get(hit, 0) + 1
+            else:
+                dropped_noise(v, None, counts, case)
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            dropped_noise(v, k, counts, case)
+    return counts
+
+
+def env_noise(item, case=None):
+    """The ENV_NOISE rule a notification observation item matches, or None. A case in R106_EXEMPT keeps the
+    recommendation prompt (the button rule); the text rules apply to every case."""
     if not isinstance(item, dict) or item.get("source"):
         return None
     text = str(item.get("text") or "")
-    return next((name for name, rx, _ in ENV_NOISE if rx.search(text)), None)
+    hit = next((name for name, rx, _ in ENV_NOISE if rx.search(text)), None)
+    if hit:
+        return hit
+    buttons = item.get("buttons")
+    if case in R106_EXEMPT:
+        return None
+    if isinstance(buttons, list) and all(isinstance(b, str) for b in buttons):   # both observers: a list of labels
+        return next((name for name, want, _ in ENV_NOISE_BUTTONS if sorted(buttons) == sorted(want)), None)
+    return None
 
 
 def identity_config():
@@ -80,15 +121,27 @@ def rules_used(ctx):
          if "GENERATED_NAME" in redact.ROOM_RULES else [])
     pats = [{"rule": n, "placeholder": p.replace("\\1", "<host>"), "what": d} for n, p, _, d in PATTERN_RULES]
     binds = [{"rule": f"bind-{k[5:]}", "placeholder": "${" + k + "}", "applies": "whole tokens"} for k, _ in _binds(ctx)]
+    binds += [{"rule": "ssh-host-upper", "placeholder": "${SSH_HOST_UPPER}",
+               "applies": "whole tokens (the SSH window's host alias in upper case; before ssh-host)"}] if _upper_host(ctx) else []
     binds += [{"rule": "ssh-host", "placeholder": "${SSH_HOST}", "applies": "whole tokens (the SSH window's host alias)"}
               ] if ctx.get("SSH_HOST") else []
+    binds += [{"rule": "ssh-target-addr", "placeholder": "${SSH_TARGET_ADDR}",
+               "applies": "whole addresses (a per-run SSH target's address)"}] if ctx.get("SSH_TARGET_ADDR") else []
     noise = [{"rule": n, "placeholder": "(dropped)", "applies": "notifications, notification_center: " + why}
              for n, _, why in ENV_NOISE]
+    noise += [{"rule": n, "placeholder": "(dropped)", "applies": "notifications, notification_center with no source and "
+               "exactly the buttons " + " + ".join(want) + ": " + why} for n, want, why in ENV_NOISE_BUTTONS]
     return {"version": NORM_VERSION, "rules": noise + redact.RULES[:2] + paths + binds + ident + pats}
 
 
+def _upper_host(ctx):
+    """The upper-case SSH host alias when it differs from the alias, else None."""
+    up = str(ctx.get("SSH_HOST_UPPER") or "")
+    return up if up and up != str(ctx.get("SSH_HOST") or "") else None
+
+
 def _path_pairs(ctx):
-    pairs = [(k, ctx[k]) for k in ("WORKSPACE", "FIXTURES_WS", "STATE_DIR", "ISO", "HOME", "SLOT_DIR", "ROOT") if ctx.get(k)]
+    pairs = [(k, ctx[k]) for k in ("WORKSPACE", "FIXTURES_WS", "STATE_DIR", "ISO", "HOME", "SLOT_DIR", "ROOT", "RELAY") if ctx.get(k)]
     return sorted(pairs, key=lambda kv: -len(kv[1]))
 
 
@@ -114,8 +167,12 @@ def norm_str(s, ctx, key=None):
         for eid in eids:
             value = value.replace(eid, "${EXT_ID}")
         s = re.sub(r"(?<![A-Za-z0-9])" + re.escape(value) + r"(?![A-Za-z0-9])", "${" + name + "}", s)
+    if _upper_host(ctx):   # its upper-case form first, so the two never collide (an alias with no letters has none)
+        s = re.sub(r"(?<![\w.-])" + re.escape(_upper_host(ctx)) + r"(?![\w.-])", "${SSH_HOST_UPPER}", s)
     if ctx.get("SSH_HOST"):   # the SSH window's host alias (title "[SSH: <host>]", the remote indicator)
         s = re.sub(r"(?<![\w.-])" + re.escape(str(ctx["SSH_HOST"])) + r"(?![\w.-])", "${SSH_HOST}", s)
+    if ctx.get("SSH_TARGET_ADDR"):   # a per-run target's address (an IPv4 address; never part of a longer one)
+        s = re.sub(r"(?<![\w.])" + re.escape(str(ctx["SSH_TARGET_ADDR"])) + r"(?![\w.])", "${SSH_TARGET_ADDR}", s)
     if key == "source":
         for side in ("reference", "reimplementation"):
             dn = (ident.get(side) or {}).get("display_name")
@@ -136,7 +193,7 @@ def normalize(obj, ctx, key=None):
         return norm_str(obj, ctx, key)
     if isinstance(obj, list):
         if key in NOTIFICATION_KEYS:   # environment noise is not part of what a case observes
-            obj = [v for v in obj if not env_noise(v)]
+            obj = [v for v in obj if not env_noise(v, (ctx or {}).get("CASE"))]
         if key == "items":   # the editor's copy of a state database, written whenever it likes (remote-oss/remote#72
             # triage): a picker over the profile folders lists it or not by timing, never by the extension
             obj = [v for v in obj if not (isinstance(v, dict) and v.get("label") == "state.vscdb.backup")]

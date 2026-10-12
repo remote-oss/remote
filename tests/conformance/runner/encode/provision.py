@@ -18,6 +18,7 @@ Teardown: window, daemon (with everything in it), case workspace and HOME (write
 convention; record_batch never runs two cases of the same engine fixture with workspaces at once).
 """
 import json
+import re
 import os
 import shlex
 import shutil
@@ -104,6 +105,42 @@ def case_fixtures(case, profile, platform=None, counterparts=False):
     return out
 
 
+# the placeholders only a per-case SSH target defines (provision_ssh_target, step 8)
+TARGET_PH = re.compile(r"\$\{(?:SSH_HOST|SSH_HOST_UPPER|SSH_TARGET_ADDR)\}")
+
+
+TARGET_ENV_RE = re.compile(r"\bENC_SSH_(?:HOST|TARGET_ADDR)\b|\$\{(?:SSH_HOST|SSH_HOST_UPPER|SSH_TARGET_ADDR)\}")
+
+
+def target_substituted(body, ph):
+    """A late state script's text with ${SSH_HOST} and ${SSH_TARGET_ADDR} replaced by the run's values (themis on #188:
+    the placeholder moved the script late but stayed literal). The values are an ssh alias and an IPv4 address, which
+    need no quoting in either quote style; anything else is refused rather than written into a shell script."""
+    def value(m):
+        v = str(ph.get(m.group(0)[2:-1]) or "")
+        if not re.fullmatch(r"[\w.-]+", v):
+            raise ProvisionError(f"state script: {m.group(0)} has no plain value in this run ({v!r})")
+        return v
+    return TARGET_PH.sub(value, body)
+
+
+def names_target(body):
+    """Whether a state script uses the SSH target: ENC_SSH_HOST or ENC_SSH_TARGET_ADDR, or a placeholder for them."""
+    return bool(TARGET_ENV_RE.search(body))
+
+
+def split_target_scripts(scripts, per_case_target):
+    """([(name, body)] run at step 6, [(name, body)] run after the per-case target exists), in profile order each."""
+    late = [x for x in scripts if per_case_target and names_target(x[1])]
+    return [x for x in scripts if x not in late], late
+
+
+def split_target_settings(settings, per_case_target):
+    """(written at step 4, written after the per-case target exists): a top-level setting that names the target in its
+    key or anywhere in its value goes second, whole; without a per-case target everything goes first."""
+    late = {k: v for k, v in settings.items() if per_case_target and TARGET_PH.search(json.dumps({k: v}))}
+    return {k: v for k, v in settings.items() if k not in late}, late
+
 class Run:
     def __init__(self, case, profile, slot, host, run_id, log=print, counterparts=False):
         self.case, self.profile, self.slot, self.host, self.run_id = case, profile, int(slot), host, run_id
@@ -119,9 +156,19 @@ class Run:
         self.t0 = time.time()
         self.info = {"fid": self.fid, "steps": []}
         self.editor_env, self.engine_env = caselib.topology(profile)   # NotProvisionable -> not-applicable
-        # an SSH window: the window opens the case folder on the recording host's own SSH host, where it has the same path
-        self.ssh_host = caselib.ssh_host(host) if caselib.ssh_target(profile) is not None else None
-        if caselib.ssh_target(profile) is not None and not self.ssh_host:
+        # an SSH window: on the recording host's own SSH host (the case folder has the same path there), or on a target
+        # made for this run (an sshtarget `variant`, kit #170: set by provision_ssh_target once the HOME exists)
+        self.ssh_variant = caselib.ssh_variant(profile)
+        self.late_settings = {}   # settings naming the per-case target, written once it exists (step 8)
+        self.late_scripts = []    # state scripts naming it, run once it exists (step 8)
+        # fixture.window_start (athena on F-2409): local = the window starts on the case folder here, and the case's steps
+        # open the SSH window; the run's R-63 rule is then its own target on its case folder only (LAB_RUN_TARGET)
+        self.local_start = (case.get("fixture") or {}).get("window_start", "remote") == "local"
+        self.ssh_run = f"{self.fid}-{case['id']}".lower() if self.ssh_variant else None
+        self.ssh_agent = None
+        self.ssh_host = (caselib.ssh_host(host) if caselib.ssh_target(profile) is not None and not self.ssh_variant
+                         else None)
+        if caselib.ssh_target(profile) is not None and not self.ssh_variant and not self.ssh_host:
             raise caselib.NotProvisionable(caselib.provisionable(profile, host))
         self.fixtures = {}
         self.known_names = list((self.engine_env or {}).get("known_names") or [])
@@ -131,7 +178,7 @@ class Run:
             "ISO": f"{caselib.ISO}/{self.fid}", "FIXTURES_WS": fixture.FX_WS, "ROOT": caselib.ROOT,
         }
         if self.ssh_host:
-            self.ph["SSH_HOST"] = self.ssh_host   # normalized to ${SSH_HOST}; cases may name it so in waits and settings
+            self.set_ssh_host(self.ssh_host)   # normalized to ${SSH_HOST}; cases may name it so in waits and settings
         # ${EXT_ID}: the id of the extension under test, for settings keyed by it (remote.extensionKind ...); a case never
         # names an identity itself, and observations already show it as ${EXT_ID} (normalize)
         self.ph["EXT_ID"] = (fixture.normalize.identity_config().get("reimplementation") or {}).get("extension_id") or ""
@@ -258,12 +305,12 @@ class Run:
         # may carry one, and folder pickers over the profile then list it (remote-oss/remote#72 triage). Never provision it.
         self.sh(["find", f"{self.slot_dir}/user-data", "-name", "state.vscdb.backup", "-delete"], check=True)
         settings_path = f"{self.slot_dir}/user-data/User/settings.json"
-        extra = caselib.subst(dict(self.editor_env.get("settings") or {}, **(fx.get("settings") or {})), self.ph)
-        # A snapshot's remote.SSH.configFile (a path on the machine that captured it) never reaches a run: the window
-        # uses the SSH config of its own HOME unless the profile or the case sets the key (to a ${HOME} path).
-        merge = ("import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.pop('remote.SSH.configFile', None); "
-                 "d.update(json.loads(sys.stdin.read())); json.dump(d, open(p,'w'), indent=2)")
-        self.sh(["python3", "-c", merge, settings_path], input=json.dumps(extra), check=True)
+        # a setting that names the per-case target (${SSH_HOST}, ${SSH_TARGET_ADDR}, in its key or value) waits for the
+        # target, step 8 (dirty-side, F-2409 2026-10-12: written here it kept the literal placeholder and matched no host)
+        now, self.late_settings = split_target_settings(
+            dict(self.editor_env.get("settings") or {}, **(fx.get("settings") or {})), bool(self.ssh_variant))
+        extra = caselib.subst(now, self.ph)
+        self.write_settings(settings_path, extra)
         ids = []
         # An SSH window needs the Remote - SSH extensions: a profile that names nothing besides the extension under test
         # gets the companions too
@@ -315,13 +362,16 @@ class Run:
         lib = f"{caselib.PROFILES}/state/lib"
         guard = open(f"{lib}/guard.sh", encoding="utf-8").read() if os.path.exists(f"{lib}/guard.sh") else ""
         senv["ENC_STATE_LIB"] = lib
-        for script in self.profile.get("state_scripts") or []:
-            with open(f"{caselib.PROFILES}/{script}", encoding="utf-8") as f:
-                body = f.read()
-            p = self.sh(["bash", "-s"], env=senv, input=guard + "\n" + body, timeout=600)
-            self.step("state-script", script=script, exit=p.returncode, output=(p.stdout + p.stderr).strip()[-1500:])
-            if p.returncode != 0:
-                raise ProvisionError(f"state script {script} failed: {(p.stderr or p.stdout).strip()[-400:]}")
+        # a script that names the per-case target runs after it exists, step 8 (athena on F-2409: the same rule as the
+        # case's settings); one that names a target this run has none of is refused, never run with an empty value
+        scripts = [(s, open(f"{caselib.PROFILES}/{s}", encoding="utf-8").read()) for s in self.profile.get("state_scripts") or []]
+        now, self.late_scripts = split_target_scripts(scripts, bool(self.ssh_variant))
+        for script, body in now:
+            if names_target(body) and not self.ssh_host:
+                raise ProvisionError(f"state script {script} names the SSH target, and this run has none")
+        self.state_env, self.state_guard = senv, guard
+        for script, body in now:
+            self.run_state_script(script, body)
         # 7. the case's file modes, last, so the window sees them whatever a state script did (the teardown gives the
         # owner write permission back before it removes the folder)
         self.apply_modes(fx.get("modes") or {})
@@ -330,6 +380,34 @@ class Run:
         self.owned = {"containers": {c["name"] for c in self.docker.containers()},
                       "volumes": {v["name"] for v in self.docker.volumes([])}} if self.docker else \
             {"containers": set(), "volumes": set()}
+
+    def run_target(self):
+        """The run's R-63 rule for the driver under fixture.window_start: local: its own per-case target on its case
+        folder (LAB_RUN_TARGET, which kitlib.remote_policy accepts only inside the room's own rule); None otherwise."""
+        return f"{self.ssh_host}:{self.ws}" if self.local_start and self.ssh_variant and self.ssh_host else None
+
+    def run_state_script(self, script, body):
+        p = self.sh(["bash", "-s"], env=self.state_env, input=self.state_guard + "\n" + body, timeout=600)
+        self.step("state-script", script=script, exit=p.returncode, output=(p.stdout + p.stderr).strip()[-1500:])
+        if p.returncode != 0:
+            raise ProvisionError(f"state script {script} failed: {(p.stderr or p.stdout).strip()[-400:]}")
+
+    def set_ssh_host(self, alias):
+        """${SSH_HOST} and its upper-case form ${SSH_HOST_UPPER} (athena on F-2409 BR-3/AC-4: a host key in another letter
+        case must not match, so a case types the run's alias in upper case without naming it). A case that names the
+        upper form on an alias with no letters would pass vacuously: refused."""
+        self.ph["SSH_HOST"], self.ph["SSH_HOST_UPPER"] = alias, alias.upper()
+        if alias.upper() == alias and "${SSH_HOST_UPPER}" in json.dumps(self.case):
+            raise ProvisionError(f"the case names ${{SSH_HOST_UPPER}}, but the alias {alias!r} has no letters: its upper-case "
+                                 "form is the alias itself, so the case would test nothing")
+
+    def write_settings(self, path, values):
+        """Merge values into the slot's settings.json. A snapshot's remote.SSH.configFile (a path on the machine that
+        captured it) never reaches a run: the window uses the SSH config of its own HOME unless the profile or the case
+        sets the key (to a ${HOME} path)."""
+        merge = ("import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.pop('remote.SSH.configFile', None); "
+                 "d.update(json.loads(sys.stdin.read())); json.dump(d, open(p,'w'), indent=2)")
+        self.sh(["python3", "-c", merge, path], input=json.dumps(values), check=True)
 
     def workspace_fixture(self, fx):
         """Extract the case's workspace fixture (fixture.workspace_fixture, pinned <name>@<sha12>) into the case folder:
@@ -376,17 +454,37 @@ class Run:
         elif state == "paused":
             self.docker.run(["pause", name], check=True)
 
+
     def start_window(self, mode="start"):
         folder = [] if (self.case.get("fixture") or {}).get("workspace", "folder") == "empty-window" else [self.ws]
         env = {"LAB_SLOT": str(self.slot)}
         for k in ("LAB_DOCKER_SOCK", "LAB_HOME"):
             if self.env.get(k):
                 env[k] = self.env[k]
+        # fixture.env: the case's own window variables (names the room allows; a path only inside the case workspace or
+        # the run's lab HOME, refused before the window starts), handed through lab-code's LAB_PASSENV
+        try:
+            case_env = caselib.window_env_values((self.case.get("fixture") or {}).get("env"), self.ws, self.env.get("LAB_HOME"))
+        except ValueError as e:
+            raise ProvisionError(str(e))
+        bad = caselib.window_env_errors(case_env)
+        if bad:
+            raise ProvisionError("; ".join(bad))
+        env.update(case_env)
+        if case_env:
+            env["LAB_PASSENV"] = " ".join(sorted(case_env))
+        if case_env:
+            self.step("window-env", names=sorted(case_env))
         if self.ssh_host:
             # an SSH window on the case folder (an empty SSH window without one); its ssh authenticates with the
-            # slot's lab agent (the throwaway lab key), never the recorder's own agent
-            folder = [f"--remote=ssh-remote+{self.ssh_host}"] + folder
-            env["LAB_AGENT"] = "lab"
+            # slot's lab agent (the throwaway lab key), never the recorder's own agent. With window_start: local the
+            # window opens the folder here and the case's steps connect; the agent is the same either way
+            if not self.local_start:
+                folder = [f"--remote=ssh-remote+{self.ssh_host}"] + folder
+            if self.ssh_agent:   # a per-run target: the run's own agent (a socket under LAB_HOME, which lab-code keeps)
+                env["SSH_AUTH_SOCK"] = self.ssh_agent
+            else:
+                env["LAB_AGENT"] = "lab"
         p = subprocess.run([caselib.LAB_CODE, mode, *folder], capture_output=True, text=True, timeout=300,
                            env=dict(driver.BASE_ENV, **env))
         self.step("window" if mode == "start" else "window-restart", exit=p.returncode, output=(p.stdout + p.stderr).strip()[-400:])
@@ -397,7 +495,7 @@ class Run:
         """The window answers and shows its folder (or any title for an empty window), then the screen is quiet. An
         SSH window first connects: its title names the host ([SSH: <host>]), with a longer bound."""
         cond = [{"title": os.path.basename(self.ws)}] if (self.case.get("fixture") or {}).get("workspace", "folder") != "empty-window" else []
-        if self.ssh_host:
+        if self.ssh_host and not self.local_start:
             cond.append({"title": f"[SSH: {self.ssh_host}]"})
             timeout = max(timeout, 300)
         r = session.wait(cond + [{"quiet": 3}], timeout)

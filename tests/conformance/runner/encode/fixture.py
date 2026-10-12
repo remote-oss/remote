@@ -109,11 +109,38 @@ def serves(e, platform):
     return platform is None or entry_platform(e) in ("any", platform)
 
 
-def put_entry(entry):
+REBUILT = f"{FIXTURES}/CATALOG.rebuilt.json"
+
+
+def put_entry(entry, replace_pin=None):
+    """Add a built fixture to the catalogue. An entry of the same kind, name, version and platform with ANOTHER sha256 is
+    a pin cases are bound to: it is kept, the new build goes to CATALOG.rebuilt.json beside it, and the build fails
+    with both hashes (2026-10-12, dirty side: an editor fixture is a capture of a live profile and an engine fixture
+    carries data-root metadata, so a rebuild from the definition does not reproduce them byte for byte; the cases need
+    the archived tarball). replace_pin (fixture.py build --replace-pin, or KIT_REPLACE_PIN=1) overwrites it on purpose."""
+    if replace_pin is None:
+        replace_pin = bool(os.environ.get("KIT_REPLACE_PIN"))
     cat = load_catalog()
-    cat["fixtures"] = [e for e in cat["fixtures"] if not (e["kind"] == entry["kind"] and e["name"] == entry["name"]
-                                                          and e["version"] == entry["version"]
-                                                          and entry_platform(e) == entry_platform(entry))]
+    same = [e for e in cat["fixtures"] if e["kind"] == entry["kind"] and e["name"] == entry["name"]
+            and e["version"] == entry["version"] and entry_platform(e) == entry_platform(entry)]
+    pinned = [e for e in same if e.get("sha256") != entry.get("sha256")]
+    if pinned and not replace_pin:
+        rb = {"fixtures": []}
+        if os.path.exists(REBUILT):
+            with open(REBUILT) as f:
+                rb = json.load(f)
+        rb["fixtures"] = [e for e in rb["fixtures"] if e.get("sha256") != entry.get("sha256")] + [entry]
+        with open(REBUILT + ".tmp", "w") as f:
+            json.dump(rb, f, indent=1)
+        os.replace(REBUILT + ".tmp", REBUILT)
+        p = pinned[0]
+        raise SystemExit(f"{entry['kind']}/{entry['name']} v{entry['version']} [{entry_platform(entry)}]: the rebuild is "
+                         f"{entry['sha256'][:12]}, the pin is {p['sha256'][:12]}. The catalogue is unchanged (cases are "
+                         f"bound to the pin); the rebuild is recorded in {os.path.relpath(REBUILT, caselib.ROOT)}. "
+                         + ("An editor or engine fixture is a capture: restore the pinned tarball from the archive. "
+                            if entry["kind"] in ("editor", "engine") else "")
+                         + "To replace the pin on purpose: fixture.py build --replace-pin.")
+    cat["fixtures"] = [e for e in cat["fixtures"] if e not in same]
     cat["fixtures"].append(entry)
     save_catalog(cat)
 
@@ -511,7 +538,10 @@ def install_extensions(slot_dir, ids, remote=None):
     sh = lambda c: run(c, timeout=600)  # noqa: E731
     for ext in ids:
         sh(base + ["--install-extension", ext])
-    return sh(base + ["--list-extensions", "--show-versions"]).stdout.split()
+    listed = sh(base + ["--list-extensions", "--show-versions"]).stdout.split()
+    return listed
+
+
 
 
 def under_test_ids():
@@ -895,6 +925,9 @@ def pin(paths, platform=None):
 def main(a):
     pull = "--pull" in a
     a = [x for x in a if x != "--pull"]
+    if a[:1] == ["build"] and "--replace-pin" in a:
+        a = [x for x in a if x != "--replace-pin"]
+        os.environ["KIT_REPLACE_PIN"] = "1"
     if a[:1] == ["build"] and len(a) == 2:
         if a[1].split("/")[0] == "mirror":
             build_mirror(a[1].split("/", 1)[1] if "/" in a[1] else None, pull=pull)

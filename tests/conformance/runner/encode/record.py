@@ -73,7 +73,7 @@ def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counter
     try:
         run.provision()
         known = [c["name"] for c in (case.get("fixture") or {}).get("containers") or []] + run.known_names
-        sess = driver.Session(slot, host, run.ph, docker=run.docker, known_names=known, log=log)
+        sess = driver.Session(slot, host, run.ph, docker=run.docker, known_names=known, log=log, run_target=run.run_target())
         run.start_window()
         run.ready(sess)
         for i, step in enumerate(case["steps"]):
@@ -178,6 +178,7 @@ def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counter
     norm_ctx = dict(run.ph)
     tr["normalized"] = {k: normalize.normalize(v, norm_ctx) for k, v in tr["observations"].items()}
     tr["normalization"] = normalize.rules_used(norm_ctx)
+    tr["normalization"]["dropped"] = normalize.dropped_noise(tr["observations"], case=norm_ctx.get("CASE"))   # R-106
     tr["provision"] = run.info
     tr["placeholders"] = run.ph
     tr.update(meta)
@@ -279,6 +280,23 @@ def record_case(path, runs, host, slot, log=print, allow_platform_change=False):
     return status
 
 
+def norm_version_refusal(case):
+    """Why a case cannot be compared by this normalizer, or None (athena, 2026-10-12: the monorepo runner at v8 compared
+    cases recorded under v9-v12 and failed them silently on rule differences that look like the product's). A case
+    recorded under a NEWER normalization version than this code's is not-comparable: named, counted, never a pass or a
+    fail. An equal or older version (or none, before versions were recorded) compares as before."""
+    norm = (case.get("recorded") or {}).get("normalization") or {}
+    if "version" not in norm:
+        return None
+    v = norm["version"]
+    if not isinstance(v, int) or isinstance(v, bool) or v < 1:   # athena on #193: a hand-edited "9" fails closed
+        return f"recorded normalization version {v!r} is not a whole number: not comparable"
+    if v > normalize.NORM_VERSION:
+        return (f"recorded under normalization v{v}, newer than this runner's v{normalize.NORM_VERSION}: sync the runner "
+                "before comparing")
+    return None
+
+
 def replay_case(path, host, slot, result_path, log=print):
     """One run compared to the recorded expectation (suite.py)."""
     case = caselib.load_yaml(path)
@@ -298,6 +316,8 @@ def replay_case(path, host, slot, result_path, log=print):
         res.update(result="not-applicable", reason=topo_error)
     elif profile and case.get("status") != "recorded" and not case.get("flaky"):
         res.update(result="not-applicable", reason=f"case not recorded (status {case.get('status')})")
+    elif norm_version_refusal(case):
+        res.update(result="not-comparable", reason=norm_version_refusal(case))
     elif profile and plat not in caselib.case_platforms(case):
         # a case counts only where it was recorded or confirmed: never silently on another platform
         res.update(result="not-applicable", reason=f"recorded for {', '.join(caselib.case_platforms(case)) or 'no platform'}, "
@@ -329,7 +349,7 @@ def confirm_case(path, runs, host, slot, log=print):
     """Confirm a recorded case on another platform: `runs` runs on `host`, each compared to the recorded expect. When all
     match, recorded.confirmed gets {platform, host, date, fixtures, runs, normalization} and the case counts for that
     platform too; otherwise nothing changes. The expect itself is never touched, and an architecture-sensitive case is
-    never confirmed. Returns confirmed | mismatch | failed | not-applicable."""
+    never confirmed. Returns confirmed | mismatch | failed | not-applicable | not-comparable."""
     case = caselib.load_yaml(path)
     profile = caselib.load_profile(case["profile"])
     plat = caselib.host_platform(host)
@@ -349,6 +369,9 @@ def confirm_case(path, runs, host, slot, log=print):
     if schema.validate_case(path, case):
         log(f"{case['id']}: not confirmed: the case does not validate (re-record it first)")
         return "not-applicable"
+    if norm_version_refusal(case):
+        log(f"{case['id']}: not confirmed: {norm_version_refusal(case)}")
+        return "not-comparable"
     trs, mism = [], []
     for k in range(1, runs + 1):
         tr = run_once(case, profile, slot, host, new_run_id(host, slot, f"c{k}"), log=log, counterparts=True)

@@ -121,7 +121,7 @@ def provisionable(profile, host):
         topology(profile)
     except NotProvisionable as e:
         return str(e)
-    if ssh_target(profile) is not None and not ssh_host(host):
+    if ssh_target(profile) is not None and not ssh_variant(profile) and not ssh_host(host):
         return f"an SSH-window profile, and {host} names no SSH host (hosts.yaml: ssh_target, or provides ssh-target)"
     return None
 
@@ -152,6 +152,62 @@ def load_profile(ref):
     if prof.get("version") != version:
         raise ValueError(f"profile {name} is version {prof.get('version')}, the case wants @{version}")
     return prof
+
+
+# fixture.env (athena's ruling, 2026-10-12; F-2305's askpass relay): a case may pass named variables to its window. The
+# room allow-lists the names ([lab] window_env); a value may use ${WORKSPACE} (the case folder) and ${HOME} (the run's
+# private lab HOME, never the recorder's), and a value that is a path must resolve inside one of them.
+# Never allowed, whatever the room says: the guard's own variables and anything credential-shaped.
+WINDOW_ENV_DENY = re.compile(r"^(?:SSH_AUTH_SOCK|SSH_AGENT_PID|DR_[A-Z_]*|CC_[A-Z_]*|KIT[A-Z_]*|LAB_[A-Z_]*|ENCODE_[A-Z_]*|"
+                             r"DOCKER_[A-Z_]*|KUBECONFIG|GH_[A-Z_]*|GITHUB_[A-Z_]*|GIT_ASKPASS|SSH_ASKPASS|"
+                             r"ANTHROPIC_[A-Z_]*|CLAUDE_[A-Z_]*|OPENAI_[A-Z_]*|AWS_[A-Z_]*|AZURE_[A-Z_]*|"
+                             r"HOME|PATH|LD_[A-Z_]*|PYTHON[A-Z_]*|NODE_[A-Z_]*|XDG_[A-Z_]*|DISPLAY|DBUS_[A-Z_]*|"
+                             r"[A-Z_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|API_KEY|APIKEY|PRIVATE_KEY))$")
+WINDOW_ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def window_env_names():
+    """The names the room lets a case pass to its window ([lab] window_env), refusing any WINDOW_ENV_DENY name."""
+    import json   # the package's allow-list, in its rules.json beside the suite (publish_tests.rules_json)
+    path = _env("ENCODE_RULES") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "rules.json")
+    with open(path, encoding="utf-8") as f:
+        names = list(json.load(f).get("WINDOW_ENV") or [])
+    bad = [n for n in names if not WINDOW_ENV_NAME.match(str(n)) or WINDOW_ENV_DENY.match(str(n))]
+    if bad:
+        raise SystemExit(f"caselib: [lab] window_env names {bad}: a guard, credential or launcher variable never reaches a "
+                         "window (fixture.env)")
+    return frozenset(names)
+
+
+def window_env_errors(env, names=None):
+    """Why a case's fixture.env is malformed, as a list (empty when fine); values are checked at run time."""
+    if env is None:
+        return []
+    if not isinstance(env, dict):
+        return ["fixture.env must be a mapping of NAME: value"]
+    names = window_env_names() if names is None else names
+    errs = [f"fixture.env: {k} is not allowed in this room ([lab] window_env: {sorted(names) or 'none'})"
+            for k in env if k not in names]
+    errs += [f"fixture.env: {k}'s value must be a string" for k, v in env.items() if not isinstance(v, str)]
+    errs += [f"fixture.env: {k}'s value names {sorted(set(re.findall(r'\$\{([^}]*)\}', v)) - {'WORKSPACE', 'HOME'})}; "
+             "only ${WORKSPACE} and ${HOME}" for k, v in env.items()
+             if isinstance(v, str) and set(re.findall(r"\$\{([^}]*)\}", v)) - {"WORKSPACE", "HOME"}]
+    return errs
+
+
+def window_env_values(env, workspace, home):
+    """fixture.env with ${WORKSPACE} and ${HOME} filled in; a value that is a path must resolve inside the workspace or
+    the run's lab HOME, else ValueError (refused before the window starts)."""
+    out = {}
+    roots = [os.path.realpath(r) for r in (workspace, home) if r]
+    for k, v in (env or {}).items():
+        val = v.replace("${WORKSPACE}", workspace or "").replace("${HOME}", home or "")
+        if val.startswith(("/", "~", "./", "../")) or "/" in val:
+            real = os.path.realpath(os.path.expanduser(val))
+            if not any(real == r or real.startswith(r + os.sep) for r in roots):
+                raise ValueError(f"fixture.env: {k} resolves to {real}, outside the case workspace and the run's lab HOME")
+        out[k] = val
+    return out
 
 
 def workspace_of(case_id):
@@ -261,8 +317,9 @@ def profile_extensions(env, default):
 
 
 def ssh_target(profile):
-    """The sshtarget environment of an SSH-window profile (editor -ssh-> sshtarget, the target without a fixture: the
-    recording host's own SSH host, ssh_host()), else None."""
+    """The sshtarget environment of an SSH-window profile (editor -ssh-> sshtarget), else None. Without a `variant` the
+    window reaches the recording host's own SSH host (ssh_host()); with one, a target made for the run (ssh_variant(),
+    kit #170)."""
     envs = profile.get("environments") or []
     links = profile.get("links") or []
     if sorted(e.get("kind") for e in envs) != ["editor", "sshtarget"] or len(links) != 1:
@@ -271,6 +328,13 @@ def ssh_target(profile):
     st = next(e for e in envs if e["kind"] == "sshtarget")
     l = links[0]
     return st if (l.get("from"), l.get("to"), l.get("kind")) == (ed.get("id"), st.get("id"), "ssh") else None
+
+
+def ssh_variant(profile):
+    """The variant spec of a profile whose SSH target is made per run (its sshtarget environment's `variant`, e.g.
+    `debian`, `debian+password`, `alpine+noforward`, made by the sshtarget plugin), else None: the host's shared SSH
+    host."""
+    return (ssh_target(profile) or {}).get("variant") or None
 
 
 def topology(profile):
@@ -292,8 +356,10 @@ def topology(profile):
         if not ed.get("fixture"):
             raise NotProvisionable("an SSH-window profile needs its editor fixture")
         if st.get("fixture"):
-            raise NotProvisionable("per-run SSH targets (an sshtarget fixture) are not provisionable yet; an SSH window "
-                                   "reaches the recording host's own SSH host (an sshtarget without a fixture)")
+            raise NotProvisionable("an sshtarget environment names no catalogue fixture: its per-run target is a "
+                                   "`variant` (kit #170), or none for the recording host's own SSH host")
+        if st.get("variant"):   # the plugin's images do not cross: never a pass, never a fail (kit #170 (b))
+            raise NotProvisionable("a per-run SSH target (sshtarget variant) is not provisionable by this runner")
         return ed, None
     if kinds != ["editor", "engine"] or len(links) != 1:
         raise NotProvisionable(f"topology not provisionable yet: environments {kinds}, links "

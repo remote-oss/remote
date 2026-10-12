@@ -17,7 +17,7 @@ import redact
 # environment for subprocesses that must talk to the HOST's Docker / lab tooling, never to some DOCKER_HOST of ours
 BASE_ENV = {k: v for k, v in os.environ.items()
             if k not in ("DOCKER_HOST", "DOCKER_CONTEXT", "LAB_DOCKER_SOCK", "LAB_HOME", "LAB_WINDOW", "LAB_JSON",
-                         "LAB_HOST", "LAB_SLOT", "LAB_PASSENV", "LAB_AGENT")}
+                         "LAB_HOST", "LAB_SLOT", "LAB_PASSENV", "LAB_AGENT", "LAB_RUN_TARGET")}
 
 STATE_WHATS = ("title", "dialogs", "notifications", "statusbar", "contextmenu", "banner", "editors", "welcome",
                "sidebar")
@@ -161,8 +161,9 @@ def screen_only(st):
 class Session:
     """One run's view of its slot: lab calls, waits, observations."""
 
-    def __init__(self, slot, host, ph, docker=None, known_names=(), log=None):
+    def __init__(self, slot, host, ph, docker=None, known_names=(), log=None, run_target=None):
         self.slot, self.host, self.ph, self.docker = slot, host, ph, docker
+        self.run_target = run_target   # "<alias>:<case folder>": the run's narrower R-63 rule (fixture.window_start: local)
         self.known_names = set(known_names)
         self.window = None
         self.log = log or (lambda *_: None)
@@ -172,6 +173,8 @@ class Session:
         env = dict(BASE_ENV, LAB_SLOT=str(self.slot), LAB_JSON="1")
         if self.window:
             env["LAB_WINDOW"] = self.window
+        if self.run_target:
+            env["LAB_RUN_TARGET"] = self.run_target
         t0 = time.time()
         try:
             p = subprocess.run([caselib.LAB, *map(str, args)], capture_output=True, text=True, env=env, timeout=timeout)
