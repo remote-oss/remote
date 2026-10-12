@@ -194,6 +194,11 @@ export function tableKinds(sources: PackageSources): TableKind[] {
       plainIds(manifest.languages),
     ),
     tableKind(
+      'runtimeCommands',
+      'The reference command ids of identifiers.json that the extension registers at runtime only.',
+      plainIds(declared.runtimeCommands.map(command => command.id)),
+    ),
+    tableKind(
       'internalCommands',
       'The internal command ids of identifiers.json, served or called.',
       new Map(

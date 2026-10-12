@@ -95,6 +95,26 @@ function internalProblems(sources: PackageSources): string[] {
   return problems;
 }
 
+function runtimeCommandProblems(sources: PackageSources): string[] {
+  const {manifest, declared} = sources;
+  const contributed = new Set(manifest.commands.map(command => command.id));
+  const prefixes = declared.namespaces.commands ?? [];
+  const problems: string[] = [];
+  for (const command of declared.runtimeCommands) {
+    if (contributed.has(command.id)) {
+      problems.push(
+        `runtime command '${command.id}' is contributed in contributes.commands`,
+      );
+    }
+    if (!prefixes.some(prefix => command.id.startsWith(prefix))) {
+      problems.push(
+        `runtime command '${command.id}' is outside the reference namespace of commands: ${prefixes.length === 0 ? 'none declared' : prefixes.join(', ')}`,
+      );
+    }
+  }
+  return problems;
+}
+
 function referenceProblems(sources: PackageSources): string[] {
   const {declared} = sources;
   const known = knownIds(sources);
@@ -228,6 +248,7 @@ export function checkPackageRules(sources: PackageSources): RuleOutcome {
     problems: [
       ...ledgerProblems(sources),
       ...internalProblems(sources),
+      ...runtimeCommandProblems(sources),
       ...referenceProblems(sources),
       ...(standingDownKey === undefined
         ? []

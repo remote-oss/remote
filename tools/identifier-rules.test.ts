@@ -159,6 +159,77 @@ describe('identifier-rules', () => {
     });
   });
 
+  describe('runtime commands', () => {
+    const showDetails = {id: 'opensshremotes.showDetails', purpose: 'p'};
+
+    it('passes an id in the namespace that is not contributed', () => {
+      const outcome = checkPackageRules(
+        syntheticSources({
+          declared: {
+            namespaces: {commands: ['opensshremotes.']},
+            runtimeCommands: [showDetails],
+          },
+        }),
+      );
+      deepStrictEqual(outcome.problems, []);
+    });
+
+    it('reports an id that is also contributed', () => {
+      const outcome = checkPackageRules(
+        syntheticSources({
+          manifest: {
+            commands: [
+              {id: 'opensshremotes.showDetails', title: 'T', palette: true},
+            ],
+          },
+          declared: {
+            namespaces: {commands: ['opensshremotes.']},
+            runtimeCommands: [showDetails],
+          },
+        }),
+      );
+      deepStrictEqual(outcome.problems, [
+        "runtime command 'opensshremotes.showDetails' is contributed in contributes.commands",
+      ]);
+    });
+
+    it('reports an id outside the namespace, naming the prefixes', () => {
+      const outcome = checkPackageRules(
+        syntheticSources({
+          declared: {
+            namespaces: {commands: ['opensshremotes.']},
+            runtimeCommands: [{id: 'remote.SSH.showDetails', purpose: 'p'}],
+          },
+        }),
+      );
+      deepStrictEqual(outcome.problems, [
+        "runtime command 'remote.SSH.showDetails' is outside the reference namespace of commands: opensshremotes.",
+      ]);
+    });
+
+    it('reports an id when no namespace is declared', () => {
+      const outcome = checkPackageRules(
+        syntheticSources({declared: {runtimeCommands: [showDetails]}}),
+      );
+      deepStrictEqual(outcome.problems, [
+        "runtime command 'opensshremotes.showDetails' is outside the reference namespace of commands: none declared",
+      ]);
+    });
+
+    it('does not require an activation event', () => {
+      const outcome = checkPackageRules(
+        syntheticSources({
+          manifest: {activationEvents: []},
+          declared: {
+            namespaces: {commands: ['opensshremotes.']},
+            runtimeCommands: [showDetails],
+          },
+        }),
+      );
+      deepStrictEqual(outcome.problems, []);
+    });
+  });
+
   describe('internal ids (F-5902 §5)', () => {
     it('passes a served id with its activation event', () => {
       const outcome = checkPackageRules(
