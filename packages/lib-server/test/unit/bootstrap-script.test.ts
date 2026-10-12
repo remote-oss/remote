@@ -1025,6 +1025,115 @@ describe('the POSIX bootstrap script', () => {
         );
       });
 
+      /** A socket start with `TMPDIR` as given (`undefined` leaves it unset), and what the start reported about its folder. */
+      function folderOutcome(
+        temporary: string | undefined,
+        shell?: string,
+      ): {status: string; folder: string; fallback: string | undefined} {
+        const block = blockOf(host, single('start'), socket(), {
+          environment: temporary === undefined ? {} : {TMPDIR: temporary},
+          ...(shell === undefined ? {} : {shell}),
+        });
+        return block === 'none'
+          ? {status: 'none', folder: '', fallback: undefined}
+          : {
+              status: block.status,
+              folder: path.dirname(block.serverFacts.socketPath ?? ''),
+              fallback: block.serverFacts.socketFolderFallback,
+            };
+      }
+
+      /** A folder of the test whose name holds `separator`. */
+      function folderNamed(separator: string): string {
+        const folder = path.join(host.home, `my${separator}dir`);
+        mkdirSync(folder);
+        return folder;
+      }
+
+      it('F-2410 BR-4: an absolute folder without white space is used and reports no fallback', () => {
+        const folder = path.join(host.home, 'temporary');
+        mkdirSync(folder);
+        deepStrictEqual(folderOutcome(folder), {
+          status: 'Ok',
+          folder,
+          fallback: undefined,
+        });
+      });
+
+      it('#342: an absolute folder with a space falls back to /tmp and says why', () => {
+        deepStrictEqual(folderOutcome(folderNamed(' ')), {
+          status: 'Ok',
+          folder: '/tmp',
+          fallback: 'whiteSpace',
+        });
+      });
+
+      it('#342: an absolute folder with a tab falls back to /tmp and says why', () => {
+        deepStrictEqual(folderOutcome(folderNamed('\t')), {
+          status: 'Ok',
+          folder: '/tmp',
+          fallback: 'whiteSpace',
+        });
+      });
+
+      it('#342: an absolute folder with a newline falls back to /tmp and says why', () => {
+        deepStrictEqual(folderOutcome(folderNamed('\n')), {
+          status: 'Ok',
+          folder: '/tmp',
+          fallback: 'whiteSpace',
+        });
+      });
+
+      it('#342: a relative TMPDIR falls back to /tmp, says why, and the start is Ok', () => {
+        deepStrictEqual(folderOutcome('tmp'), {
+          status: 'Ok',
+          folder: '/tmp',
+          fallback: 'relative',
+        });
+      });
+
+      it('F-2410 BR-4: an unset TMPDIR uses /tmp as its default and reports no fallback', () => {
+        deepStrictEqual(folderOutcome(undefined), {
+          status: 'Ok',
+          folder: '/tmp',
+          fallback: undefined,
+        });
+      });
+
+      it('F-2410 BR-4: an empty TMPDIR falls back to /tmp and says why', () => {
+        deepStrictEqual(folderOutcome(''), {
+          status: 'Ok',
+          folder: '/tmp',
+          fallback: 'empty',
+        });
+      });
+
+      it('F-2703 BR-9: under dash a folder with a space falls back to /tmp and says why', () => {
+        deepStrictEqual(folderOutcome(folderNamed(' '), '/bin/dash'), {
+          status: 'Ok',
+          folder: '/tmp',
+          fallback: 'whiteSpace',
+        });
+      });
+
+      it('#342: the path the start reports is the whole path the server was given', () => {
+        const block = blockOf(host, single('start'), socket(), {
+          environment: {TMPDIR: folderNamed(' ')},
+        });
+        const given = readFileSync(
+          host.environment.SERVER_ARGUMENTS ?? '',
+          'utf8',
+        )
+          .trim()
+          .split(' --')
+          .find(option => option.startsWith('socket-path '))
+          ?.slice('socket-path '.length);
+        deepStrictEqual(
+          block === 'none' ? block : block.serverFacts.socketPath,
+          given,
+        );
+      });
+
       it('F-2410 BR-6: a second socket start has the first path and reuses the server', () => {
         const first = factsOf(socket());
         const second = factsOf(socket());
