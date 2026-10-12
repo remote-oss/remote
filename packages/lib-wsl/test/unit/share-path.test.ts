@@ -13,15 +13,15 @@ function share(distro: string, linuxPath: string) {
 describe('shareToDistro', () => {
   it('F-6204.BR-1: reads a wsl.localhost path', () => {
     deepStrictEqual(
-      shareToDistro('\\\\wsl.localhost\\Ubuntu\\home\\lex\\proj'),
-      share('Ubuntu', '/home/lex/proj'),
+      shareToDistro('\\\\wsl.localhost\\Ubuntu\\home\\user\\proj'),
+      share('Ubuntu', '/home/user/proj'),
     );
   });
 
   it('F-6204.BR-1: reads a wsl$ path', () => {
     deepStrictEqual(
-      shareToDistro('\\\\wsl$\\Ubuntu\\home\\lex\\proj'),
-      share('Ubuntu', '/home/lex/proj'),
+      shareToDistro('\\\\wsl$\\Ubuntu\\home\\user\\proj'),
+      share('Ubuntu', '/home/user/proj'),
     );
   });
 
@@ -68,7 +68,7 @@ describe('shareToDistro', () => {
   });
 
   const notShares = [
-    'C:\\Users\\lex',
+    'C:\\Users\\user',
     '\\\\server\\share\\x',
     '\\\\wsl.localhost',
     '\\\\wsl.localhost\\',
@@ -85,8 +85,8 @@ describe('shareToDistro', () => {
 describe('distroToShare', () => {
   it('F-6207.BR-3: turns a Linux path into a wsl.localhost path', () => {
     deepStrictEqual(
-      distroToShare('Ubuntu', '/home/lex/proj'),
-      '\\\\wsl.localhost\\Ubuntu\\home\\lex\\proj',
+      distroToShare('Ubuntu', '/home/user/proj'),
+      '\\\\wsl.localhost\\Ubuntu\\home\\user\\proj',
     );
   });
 
