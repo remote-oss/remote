@@ -59,12 +59,14 @@ The remote command is `ssh`'s argument on the client and `sh -c`'s on the host, 
   `\n` with a final `\n`, goes on stdin **ahead of the input**. The remote command reads exactly the prelude and runs it:
 
   ```sh
-  sh -c 'eval "$(head -c <n>)"'
+  sh -c 'eval "$(dd bs=1 count=<n> 2>/dev/null)"'
   ```
 
   `<n>` is the prelude's length in bytes (UTF-8). It is the only variable part of the command, and it's a number,
-  never a value. `head -c` consumes exactly the prelude, and the script then reads the rest of its stdin: the input,
-  byte for byte.
+  never a value. `dd bs=1` reads one byte per `read`, so it consumes exactly the prelude, and the script then reads the
+  rest of its stdin: the input, byte for byte. `head -c` must not be used here: POSIX lets it read ahead, and BusyBox's
+  does from a pipe, so bytes of the input are lost (hestia on #429: 947 of 65 536 bytes after a 17-byte prelude).
+  `dd` is POSIX and present in BusyBox, GNU coreutils and macOS.
 
   `ScriptPlan`'s `input` becomes lib-ssh's own type (lib-host's `ScriptInput` is unchanged):
 
@@ -79,9 +81,10 @@ The remote command is `ssh`'s argument on the client and `sh -c`'s on the host, 
   `{kind: 'prefixedFile', prefix: prelude, localFile}`. `SshHostChannel.feed` takes `PlannedInput`, and for
   `prefixedFile` writes `prefix` first, then the file's bytes, as for `file`.
 
-Checked on this machine (dash and bash) and on the pinned Alpine host image (BusyBox `head`). A 100 000-byte random
-input arrived intact (`cmp`); the value reached the script; `ps -eo args` showed only
-`sh -c eval "$(head -c 89)"` and the script's own commands, never the value.
+Checked on this machine (dash, GNU) and on the pinned Alpine host image (BusyBox), with the prelude and 65 536 random
+bytes **through a pipe**: `dd bs=1 count=<n>` left all 65 536 bytes to the script on both, and `head -c <n>` left only
+64 533 on BusyBox. The card's first check fed a file, where BusyBox doesn't read ahead, which hid it. `ps -eo args`
+shows only `sh -c eval "$(dd bs=1 count=<n> 2>/dev/null)"` and the script's own commands, never the value.
 
 ## 3. Test table
 
@@ -100,7 +103,7 @@ One assertion per `it`; the cite starts the name.
 | §S10 | `commandsFor` with an empty environment | the body lines are today's |
 | §S10 | `parseConnectionRequest` of a `runScript` with `environment: {A: 1}` | refused (`undefined`) |
 | §S10 | the same with `environment: {A: '1'}` | accepted, with that environment |
-| §S10 | `planScript` with input, environment `{A: 'v'}`, script `cat` | `remoteProgram` is `sh -c 'eval "$(head -c 19)"'` (the prelude `A='v'\nexport A\ncat\n` is 19 bytes) |
+| §S10 | `planScript` with input, environment `{A: 'v'}`, script `cat` | `remoteProgram` is `sh -c 'eval "$(dd bs=1 count=19 2>/dev/null)"'` (the prelude `A='v'\nexport A\ncat\n` is 19 bytes) |
 | §S10 | the same | `remoteProgram` contains no `v` value (`!includes("'v'")`) |
 | §S10 | the same with a text input `xyz` | the plan's input text is the prelude followed by `xyz` |
 | §S10 | the same with a file input `/tmp/in` | the plan's input is `{kind: 'prefixedFile', prefix: <prelude>, localFile: '/tmp/in'}` |
