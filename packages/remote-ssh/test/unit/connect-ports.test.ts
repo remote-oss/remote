@@ -19,6 +19,10 @@ import {
 } from '../../src/connect-ports.ts';
 import {settings as SETTINGS} from '../../src/identifiers.generated.ts';
 import {
+  type ConnectorDependencies,
+  connectorOf,
+} from '../../src/pipeline/connector.ts';
+import {
   OPENSSH,
   OPTIONS_TEXT,
   type Seen,
@@ -275,6 +279,31 @@ describe('the connect assembled from the editor and the machine', () => {
       [options.family, options.cancellable, options.allowsTrust],
       ['ssh-remote', false, false],
     );
+  });
+
+  /** The connector's and the client check's answers on the mode, for the user's `written` settings. */
+  function modesFor(written: Written): [boolean | undefined, string] {
+    const {surfaces, machine, recorded} = assemblyInputs(written);
+    let given: ConnectorDependencies | undefined;
+    connectAssemblyOf(surfaces, machine, loggerOf(recorded), dependencies => {
+      given = dependencies;
+      return connectorOf(dependencies);
+    });
+    return [
+      given?.terminalMode(),
+      wiringPortsOf(surfaces, machine, loggerOf(recorded)).locate.mode(),
+    ];
+  }
+
+  it('contracts §3.2 (athena on #385): the details link and the client check agree on shared mode', () => {
+    deepStrictEqual(modesFor({}), [false, 'shared']);
+  });
+
+  it('contracts §3.2 (athena on #385): the details link and the client check agree on terminal mode', () => {
+    deepStrictEqual(modesFor({'remote.SSH.useLocalServer': false}), [
+      true,
+      'terminal',
+    ]);
   });
 
   it('F-2304: the details link reveals the log', () => {

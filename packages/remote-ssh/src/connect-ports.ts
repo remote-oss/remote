@@ -299,9 +299,10 @@ export function connectAssemblyOf(
   surfaces: ConnectSurfaces,
   machine: ConnectMachine,
   logger: Logger,
+  connectorFrom: typeof connectorOf = connectorOf,
 ): ConnectAssembly {
   const ports = wiringPortsOf(surfaces, machine, logger);
-  const connector = connectorOf({
+  const connector = connectorFrom({
     stepsFor: () => stepsOf(ports),
     options: {
       // A getter, so each connect reads the setting as it is then.
@@ -312,6 +313,7 @@ export function connectAssemblyOf(
       logger,
     },
     revealLog: surfaces.revealLog,
+    terminalMode: () => terminalModeOf(surfaces.settings),
   });
   const {translate} = surfaces;
   let shownTitle = '';
