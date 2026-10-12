@@ -138,11 +138,36 @@ describe('PlainTextFilter (card ssh-18 table)', () => {
       ]);
     });
 
-    it('#341: a string whose terminator comes in the piece that crosses the cap ends normally', () => {
+    it('#341: a string whose terminator comes before the cap ends normally, also in the piece that crosses it', () => {
       deepStrictEqual(
-        filtered(`a\x1b]0;${'x'.repeat(3000)}`, `${'y'.repeat(2000)}\x07z`),
+        filtered(`a\x1b]0;${'x'.repeat(3000)}`, `${'y'.repeat(900)}\x07z`),
         ['a', 'z', ''],
       );
+    });
+
+    const longStray = `a\x1b]0;${'z'.repeat(5000)}\nB`;
+
+    it('#341: a later escape sequence does not rescue a string that is past the cap', () => {
+      deepStrictEqual(filtered(`${longStray}\x1b[1mC`), ['aBC', '']);
+    });
+
+    it('#341: a later operating system command does not rescue a string that is past the cap', () => {
+      deepStrictEqual(filtered(`${longStray}\x1b]0;t\x07C`), ['aBC', '']);
+    });
+
+    it('#341: a later bell does not rescue a string that is past the cap', () => {
+      deepStrictEqual(filtered(`${longStray}\x07C`), ['aB\x07C', '']);
+    });
+
+    it('#341: a bell past the cap does not end a string that is open at the cap', () => {
+      deepStrictEqual(filtered(`a\x1b]0;${'z'.repeat(4100)}\x07\nB`), [
+        'aB',
+        '',
+      ]);
+    });
+
+    it('#341: a bell before the cap still ends the string normally', () => {
+      deepStrictEqual(filtered(`a\x1b]0;${'z'.repeat(4000)}\x07B`), ['aB', '']);
     });
 
     it('#341: an escape that ends a piece inside a string waits for the next piece', () => {

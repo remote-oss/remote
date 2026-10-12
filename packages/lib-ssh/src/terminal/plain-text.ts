@@ -49,10 +49,12 @@ function csiEnd(text: string): number {
 /**
  * The end of a string sequence: up to the string terminator, or the bell when `bellEnds`. A string is cancelled where it
  * meets another escape, a cancel or a substitute character (that character ends it, and an escape starts the next
- * sequence). Gives -1 while the string is open.
+ * sequence). Only the first `STRING_LIMIT` characters from the escape are scanned: a terminator past them does not end
+ * the string, which the caller drops. Gives -1 while the string is open.
  */
 function stringEnd(text: string, bellEnds: boolean): number {
-  for (let index = 2; index < text.length; index++) {
+  const scanned = Math.min(text.length, STRING_LIMIT);
+  for (let index = 2; index < scanned; index++) {
     const char = text[index];
     if (bellEnds && char === BELL) {
       return index + 1;
