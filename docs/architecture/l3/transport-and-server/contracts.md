@@ -119,7 +119,13 @@ It is the only place these strings may appear (ADR-0006 Check). P4 has no operat
 | `buildInvocation` | target, purpose (`connection`, `tunnel`, `oneShot`, `copy`), the settings snapshot (`configFile`, `connectTimeout`, `permitPtyAllocation`), `remoteCommandInEffect` (decided by R1), effective options from S4, forwards, remote program | program, argument list, environment additions | none (validation runs first) |
 
 The argument rules:
-- `-F <file>` when `configFile` is set, with `~/` expanded against the editor's home (F-2201 BR-4).
+- `-F <file>` when `configFile` is set, with `~/` expanded against the editor's home (F-2201 BR-4). **A value that is
+  still not absolute after that expansion (relative, or starting with `$`) is an invalid setting** (metis on
+  remote-ssh#30 Q1, F-2201 BR-3 and 7.E8, F-2203 7.E3): one lib-ssh check, used by `-F`, by the host list and by
+  "Open SSH Configuration File", so all three judge it alike. A connect that needs it fails before any `ssh` starts,
+  with F-2601's reasonless dialog and a log line naming the setting and value. The host list offers no hosts from
+  it. The command rejects the pick with core's command-error dialog and the detail `remote.SSH.configFile must be an
+  absolute path or start with ~/: "<value>"`, creating and opening nothing. `ssh` never gets a relative `-F`.
 - `-T` on the connection `ssh` unless `permitPtyAllocation` is truthy (F-2106).
 - `-o ConnectTimeout=<n>` on every `ssh` of an attempt, the tunnel `ssh` and the window's `scp` included, only when
   the host sets none (F-2105; `scp` passes `-o` to its `ssh`, ruled on #253 Q13: without it a copy to an unreachable
