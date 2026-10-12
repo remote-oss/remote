@@ -35,7 +35,6 @@ import {
 } from './acceptance-run.ts';
 import {
   isMainModule,
-  messageOf,
   REPOSITORY_ROOT,
   resolveBinary,
   sortedEntries,
@@ -214,7 +213,7 @@ export async function runAcceptance(
       console.log.bind(console),
     );
   } catch (error) {
-    console.error(`acceptance: ${messageOf(error)}`);
+    console.error(`acceptance: ${failureText(error)}`);
     return 1;
   } finally {
     for (const container of started) {
@@ -280,7 +279,11 @@ export async function bundleSuite(root: string): Promise<void> {
  * extensions folder, the one the editor is started with; test-cli's own install would use its default folder.
  */
 async function editorCli(): Promise<string> {
-  const executable = await downloadAndUnzipVSCode(EDITOR_VERSION);
+  const executable = await withOneRetry(
+    () => downloadAndUnzipVSCode(EDITOR_VERSION),
+    delay,
+    console.log.bind(console),
+  );
   return resolveCliPathFromVSCodeExecutablePath(executable);
 }
 
@@ -318,6 +321,60 @@ export async function runWithRetry(
   report('acceptance: editor window unresponsive on attempt 1; retrying once');
   const second = await attempt();
   return second.exitCode;
+}
+
+/** How long the harness waits before its one retry of a step that failed, in milliseconds. */
+export const RETRY_PAUSE_MILLISECONDS = 5000;
+
+/**
+ * The text of a failure for the harness's line: an Error's message; when that is empty, its cause's text; when it
+ * has none, the first two lines of its stack, trimmed and joined with a space, or its name when it has no stack.
+ * Anything else as `String(caught)`.
+ */
+export function failureText(caught: unknown): string {
+  if (!(caught instanceof Error)) {
+    return String(caught);
+  }
+  if (caught.message !== '') {
+    return caught.message;
+  }
+  const cause = caught.cause;
+  if (cause instanceof Error) {
+    return cause.message;
+  }
+  if (typeof cause === 'string') {
+    return cause;
+  }
+  if (caught.stack !== undefined) {
+    return caught.stack
+      .split('\n')
+      .slice(0, 2)
+      .map(line => line.trim())
+      .join(' ');
+  }
+  return caught.name;
+}
+
+/**
+ * Runs `step`; when it throws, reports the failure through `report`, waits `RETRY_PAUSE_MILLISECONDS`, and runs
+ * it once more. The second attempt's result or error is the outcome.
+ */
+export async function withOneRetry<Value>(
+  step: () => Promise<Value>,
+  sleep: (milliseconds: number) => Promise<void>,
+  report: (line: string) => void,
+): Promise<Value> {
+  try {
+    return await step();
+  } catch (error) {
+    report(
+      `acceptance: ${failureText(error)}; retrying once in ${String(
+        RETRY_PAUSE_MILLISECONDS / 1000,
+      )} s`,
+    );
+    await sleep(RETRY_PAUSE_MILLISECONDS);
+    return await step();
+  }
 }
 
 /**

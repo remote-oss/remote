@@ -1,6 +1,7 @@
 import {
   deepStrictEqual,
   notStrictEqual,
+  rejects,
   strictEqual,
   throws,
 } from 'node:assert';
@@ -11,14 +12,17 @@ import {
   type AttemptResult,
   bundleSuite,
   type CommandResult,
+  failureText,
   harnessSshConfig,
   type HarnessDependencies,
   type HarnessVariables,
   mappedPort,
   packagedExtensions,
+  RETRY_PAUSE_MILLISECONDS,
   runAcceptance,
   runCommand,
   runTestCli,
+  withOneRetry,
   writeUserSettings,
 } from './acceptance.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -32,6 +36,7 @@ class FakeHarness implements HarnessDependencies {
   variables: HarnessVariables | undefined;
   runFolder = '';
   sshFailures = 0;
+  bundleSuiteError: Error | undefined;
   testResult: AttemptResult = {exitCode: 0, output: ''};
   readonly answers = new Map<string, CommandResult>();
 
@@ -69,6 +74,9 @@ class FakeHarness implements HarnessDependencies {
 
   readonly bundleSuite = (): Promise<void> => {
     this.calls.push('bundle suite');
+    if (this.bundleSuiteError !== undefined) {
+      return Promise.reject(this.bundleSuiteError);
+    }
     return Promise.resolve();
   };
 
@@ -81,6 +89,40 @@ class FakeHarness implements HarnessDependencies {
     this.variables = variables;
     return Promise.resolve(this.testResult);
   };
+}
+
+/** The sleeper and reporter of the retry rows, recording their calls. */
+class RetryRecorder {
+  readonly sleeps: number[] = [];
+  readonly lines: string[] = [];
+
+  readonly sleep = (milliseconds: number): Promise<void> => {
+    this.sleeps.push(milliseconds);
+    return Promise.resolve();
+  };
+
+  readonly report = (line: string): void => {
+    this.lines.push(line);
+  };
+}
+
+/** Steps a list of outcomes one per call, repeating the last, and counts the calls. */
+function scriptedStep(outcomes: unknown[]) {
+  let calls = 0;
+
+  function step(): Promise<unknown> {
+    const outcome = outcomes[Math.min(calls, outcomes.length - 1)];
+    calls += 1;
+    if (outcome instanceof Error) {
+      return Promise.reject(outcome);
+    }
+    return Promise.resolve(outcome);
+  }
+
+  function called(): number {
+    return calls;
+  }
+  return {step, called};
 }
 
 describe('acceptance', () => {
@@ -236,6 +278,115 @@ describe('acceptance', () => {
       });
       const status = await runAcceptance(workspace.root, harness);
       deepStrictEqual([status, harness.calls.length], [1, 1]);
+    });
+
+    it('prints the cause of an empty error and returns 1', async () => {
+      harness.bundleSuiteError = new Error('', {cause: 'no space'});
+      const lines: string[] = [];
+      const previousError = console.error;
+      console.error = (line: unknown) => lines.push(String(line));
+      try {
+        const status = await runAcceptance(workspace.root, harness);
+        deepStrictEqual([status, lines], [1, ['acceptance: no space']]);
+      } finally {
+        console.error = previousError;
+      }
+    });
+  });
+
+  describe('withOneRetry', () => {
+    it('returns the step result without sleeping or reporting when the step resolves', async () => {
+      const recorder = new RetryRecorder();
+      const {step} = scriptedStep(['ok']);
+      const result = await withOneRetry(step, recorder.sleep, recorder.report);
+      deepStrictEqual(
+        [result, recorder.sleeps, recorder.lines],
+        ['ok', [], []],
+      );
+    });
+
+    it('returns the retry result when the first attempt rejects', async () => {
+      const recorder = new RetryRecorder();
+      const {step} = scriptedStep([new Error('busy'), 'ok']);
+      const result = await withOneRetry(step, recorder.sleep, recorder.report);
+      strictEqual(result, 'ok');
+    });
+
+    it('sleeps the retry pause before the one retry', async () => {
+      const recorder = new RetryRecorder();
+      const {step} = scriptedStep([new Error('busy'), 'ok']);
+      await withOneRetry(step, recorder.sleep, recorder.report);
+      deepStrictEqual(recorder.sleeps, [RETRY_PAUSE_MILLISECONDS]);
+    });
+
+    it('reports the failure and the pause in seconds before the one retry', async () => {
+      const recorder = new RetryRecorder();
+      const {step} = scriptedStep([new Error('busy'), 'ok']);
+      await withOneRetry(step, recorder.sleep, recorder.report);
+      deepStrictEqual(recorder.lines, [
+        'acceptance: busy; retrying once in 5 s',
+      ]);
+    });
+
+    it('rejects with the second error when the retry rejects too', async () => {
+      const recorder = new RetryRecorder();
+      const {step} = scriptedStep([new Error('busy'), new Error('down')]);
+      await rejects(
+        withOneRetry(step, recorder.sleep, recorder.report),
+        /down/,
+      );
+    });
+
+    it('runs the step once more after a rejection, and no more', async () => {
+      const recorder = new RetryRecorder();
+      const {step, called} = scriptedStep([
+        new Error('busy'),
+        new Error('busy'),
+      ]);
+      let rejected = false;
+      try {
+        await withOneRetry(step, recorder.sleep, recorder.report);
+      } catch {
+        rejected = true;
+      }
+      deepStrictEqual([called(), rejected], [2, true]);
+    });
+  });
+
+  describe('failureText', () => {
+    it('returns the message of an error that has one', () => {
+      strictEqual(failureText(new Error('boom')), 'boom');
+    });
+
+    it('returns the cause message when the message is empty and the cause is an error', () => {
+      strictEqual(
+        failureText(new Error('', {cause: new Error('ECONNRESET')})),
+        'ECONNRESET',
+      );
+    });
+
+    it('returns the cause text when the message is empty and the cause is not an error', () => {
+      strictEqual(
+        failureText(new Error('', {cause: 'socket hang up'})),
+        'socket hang up',
+      );
+    });
+
+    it('returns the first two stack lines, trimmed and joined, for an empty message without a cause', () => {
+      const error = new Error('');
+      error.stack =
+        'Error\n    at a (x.js:1:1)\n    at b (y.js:2:2)\n    at c (z.js:3:3)';
+      strictEqual(failureText(error), 'Error at a (x.js:1:1)');
+    });
+
+    it('returns the error name when the message is empty and there is no cause or stack', () => {
+      const error = new Error('');
+      delete error.stack;
+      strictEqual(failureText(error), 'Error');
+    });
+
+    it('returns the string of a non-error', () => {
+      strictEqual(failureText(42), '42');
     });
   });
 
