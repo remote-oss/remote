@@ -18,7 +18,7 @@ stop and report.
 
 | File | Change |
 |---|---|
-| `eslint.config.ts` | append one entry to `IMPOSED_PROPERTY_KEYS`, after `'read'`, with its comment (section 2) |
+| `eslint.config.ts` | append three entries (`'os'`, `'all'`, `'get'`) to `IMPOSED_PROPERTY_KEYS`, after `'read'`, with their two comments (section 2) |
 | `packages/lib-server/src/cli-path/decision.ts` | `cliArchiveTemplateVariables` returns an object literal (section 2) |
 | `packages/lib-server/test/unit/result-block.test.ts` | delete the two lines `// eslint-disable-next-line id-length -- the host fact key is the table's word` (above `hostFacts: {os: 'linux', arch: 'x64'}` and above `deepStrictEqual(blockOf('duplicate-host').hostFacts, {os: 'alpine'})`) |
 | `packages/lib-authority/test/unit/gate-vscode-setup.test.ts` | delete the two lines `// eslint-disable-next-line id-length -- the editor's own member name` (above `all: [` and above `get: (key: string) =>`) |
