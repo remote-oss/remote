@@ -88,6 +88,10 @@ export interface HarnessVariables {
   HARNESS_RUN_FOLDER: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
   HARNESS_VSIX_FILES: string;
+  /** The file the scripted adapters read their script from, in the run's folder. */
+  REMOTE_OSS_ACCEPTANCE_SCRIPT: string;
+  /** The file the scripted adapters append their record to, in the run's folder. */
+  REMOTE_OSS_ACCEPTANCE_RECORD: string;
   /** The editor of the run. */
   HARNESS_EDITOR: EditorChoice;
   /** The VSCodium executable, in the VSCodium run only. */
@@ -228,6 +232,8 @@ async function prepare(
     HARNESS_SSH_CONFIG: configFile,
     HARNESS_CONTAINER: host.container,
     HARNESS_RUN_FOLDER: runFolder,
+    REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
+    REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
     HARNESS_EDITOR: editor,
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),

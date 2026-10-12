@@ -241,6 +241,14 @@ describe('acceptance', () => {
         HARNESS_SSH_CONFIG: path.join(harness.runFolder, 'ssh_config'),
         HARNESS_CONTAINER: CONTAINER,
         HARNESS_RUN_FOLDER: harness.runFolder,
+        REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(
+          harness.runFolder,
+          'script.json',
+        ),
+        REMOTE_OSS_ACCEPTANCE_RECORD: path.join(
+          harness.runFolder,
+          'record.jsonl',
+        ),
         HARNESS_VSIX_FILES: '',
         HARNESS_EDITOR: 'vscode',
       });
@@ -807,6 +815,8 @@ describe('acceptance', () => {
           HARNESS_SSH_CONFIG: '',
           HARNESS_CONTAINER: '',
           HARNESS_RUN_FOLDER: '',
+          REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
+          REMOTE_OSS_ACCEPTANCE_RECORD: '',
           HARNESS_VSIX_FILES: '',
           HARNESS_EDITOR: 'vscode',
         })
