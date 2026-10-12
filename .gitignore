@@ -7,3 +7,7 @@ dist/
 coverage/
 packages/*/src/identifiers.generated.ts
 tests/acceptance/dist/
+
+# Python bytecode (the conformance runner)
+__pycache__/
+*.pyc

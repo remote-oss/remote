@@ -9,6 +9,8 @@ Each selected case runs once in its profile (same provisioning as record.py) and
   fail            a step failed or an observation differs (the mismatches and the full observation are in the result)
   flaky           the case is marked flaky (its two recordings disagreed); it still runs, mismatches are reported
   not-applicable  the case's profile is not available on any host given (or the case has no recording yet)
+  not-comparable  the case was recorded under a newer normalization version than this runner's: never a pass or a
+                  fail, and the run exits 1 while any case is not-comparable (the runner needs a sync)
 plus summary.json (counts, per-case result, timing). Exit 0 when every applicable case passed.
 """
 import argparse
@@ -100,8 +102,19 @@ def main():
         print(f"  {cid:24} {res['result']:15} {res.get('reason') or ''}")
         for m in (res.get("mismatches") or [])[:10]:
             print(f"      {m}")
-    applicable = [r for r in results.values() if r["result"] != "not-applicable"]
-    sys.exit(0 if applicable and all(r["result"] == "pass" for r in applicable) else 1)
+    stale = [cid for cid, r in results.items() if r["result"] == "not-comparable"]
+    if stale:
+        print(f"suite: {len(stale)} case(s) not comparable: recorded under a newer normalization than this runner's; "
+              "sync the runner (kit sync_runner.py) before taking a verdict from this run")
+    sys.exit(exit_code(results))
+
+
+def exit_code(results):
+    """0 when at least one case applied and every applicable case passed, and no case was not-comparable (a runner whose
+    normalization is older than a case's gives no verdict at all); else 1."""
+    applicable = [r for r in results.values() if r["result"] not in ("not-applicable", "not-comparable")]
+    stale = any(r["result"] == "not-comparable" for r in results.values())
+    return 0 if applicable and not stale and all(r["result"] == "pass" for r in applicable) else 1
 
 
 if __name__ == "__main__":

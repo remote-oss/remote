@@ -6,5 +6,6 @@
   "REFERENCE_PUBLISHER": {
     "re": "\\bMicrosoft\\b",
     "flags": 32
-  }
+  },
+  "WINDOW_ENV": []
 }

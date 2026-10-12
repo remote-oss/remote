@@ -287,12 +287,25 @@ def _fixture_errors(fx, case, profile):
         return errs
     if not isinstance(fx, dict):
         return ["fixture must be a mapping"]
+    errs += caselib.window_env_errors(fx.get("env"))   # fixture.env: names the room allows, ${WORKSPACE}/${HOME} only
     bad = set(fx) - {"workspace", "files", "settings", "containers", "volumes", "extensions", "workspace_fixture",
-                     "workspace_paths", "links", "modes"}
+                     "workspace_paths", "links", "modes", "env", "window_start"}
     if bad:
         errs.append(f"fixture: unknown keys {sorted(bad)}")
     if fx.get("workspace", "folder") not in ("folder", "empty-window"):
         errs.append("fixture.workspace: folder | empty-window")
+    # athena on F-2409: where the window starts. remote (default): on the SSH target, connected; local: on the case folder
+    # on this machine, and the case's own steps open the SSH window (to observe the first resolve). local needs a
+    # per-case SSH target to open, and a folder to start on
+    start = fx.get("window_start", "remote")
+    if start not in ("local", "remote"):
+        errs.append("fixture.window_start: local | remote")
+    elif start == "local":
+        if profile is not None and not caselib.ssh_variant(profile):
+            errs.append(f"fixture.window_start: local needs a profile with a per-case SSH target (sshtarget variant); "
+                        f"{case.get('profile')} has none to open")
+        if fx.get("workspace", "folder") == "empty-window":
+            errs.append("fixture.window_start: local opens the case folder; not with fixture.workspace: empty-window")
     for rel, content in (fx.get("files") or {}).items():
         if not _inside(rel):
             errs.append(f"fixture.files: {rel!r} must be a relative path inside the workspace")
@@ -421,6 +434,8 @@ def _workspace_fixture_errors(fx):
     return errs
 
 
+
+
 def _identity_errors(path):
     """Scan the writer's part of the file (atoms and covers excluded) for identity assertions."""
     with open(path, encoding="utf-8") as f:
@@ -464,7 +479,7 @@ PROFILE_KEYS = {"name", "version", "description", "os", "arch", "hosts", "state"
 ENV_KEYS = {
     "editor": {"id", "kind", "fixture", "extensions", "home", "settings"},
     "engine": {"id", "kind", "engine", "fixture", "known_names", "network"},
-    "sshtarget": {"id", "kind", "fixture", "distro", "user", "host"},
+    "sshtarget": {"id", "kind", "fixture", "variant", "distro", "user", "host"},
     "wsl": {"id", "kind", "fixture", "distro", "wsl_version"},
     "tunnel": {"id", "kind", "fixture", "provider"},
 }
@@ -525,8 +540,14 @@ def validate_profile(ref_or_path):
             errs.append(f"{w}: keys for {e['kind']}: {sorted(ENV_KEYS[e['kind']])}")
         if e["kind"] in ("editor", "engine") and not e.get("fixture"):
             errs.append(f"{w}: an {e['kind']} environment names its golden fixture")
-        if e.get("fixture") and not fixture.find(e["kind"], e["fixture"], cat=cat):
+        if e["kind"] == "sshtarget" and e.get("fixture"):
+            errs.append(f"{w}: an sshtarget names no catalogue fixture; a per-run target is a `variant` (kit #170)")
+        elif e.get("fixture") and not fixture.find(e["kind"], e["fixture"], cat=cat):
             errs.append(f"{w}: fixture {e['kind']}/{e['fixture']} is not in fixtures/CATALOG.json")
+        if "variant" in e and e["kind"] != "sshtarget":
+            errs.append(f"{w}: `variant` is for environments whose plugin makes per-run targets (sshtarget)")
+        elif e.get("variant"):
+            pass   # no sshtarget plugin here: a `variant` case is not-applicable (R-103(b)), its spec unchecked
         if e["kind"] == "editor":
             for x in caselib.profile_extensions(e, "under-test"):
                 if x not in ("under-test", "companions") and x not in caselib.FIXTURE_EXTENSIONS:

@@ -17,7 +17,7 @@ For each case, once:
 - normalize the observations and compare them with `expect`;
 - tear everything down.
 
-Results: `$CONFORMANCE_WORK/results/<suite-run>/<case>.json` (`pass`, `fail` with the differences, `not-applicable`)
+Results: `$CONFORMANCE_WORK/results/<suite-run>/<case>.json` (`pass`, `fail` with the differences, `not-applicable`, `not-comparable`)
 and `summary.json`.
 
 ## Requirements (one Linux machine or CI runner)
@@ -115,6 +115,8 @@ One job per profile:
 3. publish `summary.json`.
 
 The job fails on any `fail`. `not-applicable` (a profile the machine cannot provide) is reported, not failed.
+`not-comparable` (a case recorded under a newer normalization than this runner's) also fails the job: the runner is
+out of date, and no verdict may be taken from it until it is synced.
 
 ## Not here
 
