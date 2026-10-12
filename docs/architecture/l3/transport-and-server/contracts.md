@@ -133,7 +133,8 @@ The argument rules:
   target as `-p <port>`, only then and never from the configuration (F-2501 BR-2, AC-9).
 - `--` comes right before the host in every invocation and in the options query (ruled on #253 Q9): defence in depth
   behind `validateTarget`, so a host starting with `-` is never read as an option by any caller. Checked on OpenSSH
-  10.2p1: the options and the connection are unchanged with it.
+  10.2p1: the options and the connection are unchanged with it. For `scp`, `--` comes before the two operands (the
+  local file and `host:path`), so neither is read as an option.
 - `scp` gets the same `-F` and the alias (F-2405 BR-6); an IPv6 host is bracketed.
 - `~/` (and `~\` on Windows) in `configFile` expands against the home folder with the platform's separator;
   `C:/x` stays as written (F-2201 Q4, lead's ruling 2026-10-07).
