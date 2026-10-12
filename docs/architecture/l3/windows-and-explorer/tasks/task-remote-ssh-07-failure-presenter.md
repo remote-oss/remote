@@ -15,6 +15,7 @@ runtime review `daedalus`; design check `athena`.
 | `packages/remote-ssh/src/surfaces/progress-titles.ts` | new: `startTitleOf`, `phaseTitleOf` |
 | `packages/remote-ssh/l10n/bundle.l10n.json` and the 14 locale bundles | each new template as a key, its English text as the value in every file (the stand-down strings' pattern) |
 | `packages/remote-ssh/test/unit/failure-presenter.test.ts`, `progress-titles.test.ts`, `failure-strings.test.ts` | new |
+| `packages/remote-ssh/src/pipeline/connect.ts` and its test | one line: `failure({kind: 'licenceDeclined', reason: {id: 'S027', values: []}})` (ruled 2026-10-12: the reason belongs to the failure, not the presenter) |
 
 Nothing else. No `vscode` import in these modules: the editor is behind the ports of section 2. The activation wiring
 is part E of #140, not this card. `feature/ssh-resolver-front` (#141's old branch) may be read as material; nothing is
@@ -48,8 +49,9 @@ remote-oss/remote-ssh#87 (question 1) records them:
 (`noServerSource`) and `The value of {1} is not a usable server download URL template: {3}.`
 (`invalidServerTemplate`); their buttons are `Open Setting` and S015 `Cancel` (S015's template `Cancel`, as in
 `prompt-strings.ts`). `licenceDeclined` shows F-2601's dialog with S027 as its reason (contracts §3.2, F-3902 rule
-11): the pipeline returns that failure without a reason (`connect.ts`: `failure({kind: 'licenceDeclined'})`, checked
-2026-10-12), so the presenter supplies `{id 'S027'}` for this kind and then applies the S031 rule.
+11): the pipeline sets that reason itself (`connect.ts`, amended in this card: the reason belongs to the failure, so the
+presenter has no branch for this kind and any other reader of `Failed` sees it; athena 2026-10-12), and the presenter
+applies the S031 rule as for every reason.
 
 ### Progress titles
 
