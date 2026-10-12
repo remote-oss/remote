@@ -5,3 +5,10 @@
 export {type OnlineResult, type OnlineRow, parseOnline} from './online.ts';
 export {parseStatus, type WslStatus} from './status.ts';
 export {decodeManagementOutput} from './decode.ts';
+export {
+  type DistroRow,
+  type DistroState,
+  type DistroVersion,
+  type ListResult,
+  parseList,
+} from './list.ts';
