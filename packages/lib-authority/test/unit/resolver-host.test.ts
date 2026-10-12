@@ -551,7 +551,7 @@ describe('the resolver host: a failure (contracts section 3.2)', () => {
     );
   });
 
-  it('F-2601.BR-9: a failure while reconnecting is plain not available and the presenter is not asked', async () => {
+  it('F-2601 AC-20: BR-9, a failure while reconnecting is plain not available and the presenter is not asked', async () => {
     const context = await setup();
     await resolve(context);
     context.connector.answer = FAILURE;

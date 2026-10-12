@@ -282,19 +282,19 @@ F-2304.AC-32	todo
 F-2304.AC-33	todo	
 F-2304.AC-34	todo	
 F-2305.AC-1	todo	
-F-2305.AC-2	todo	
+F-2305.AC-2	core	core: the input box masking the typed characters
 F-2305.AC-3	todo	
 F-2305.AC-4	todo	
 F-2305.AC-5	todo	
 F-2305.AC-6	todo	
-F-2305.AC-7	todo	
+F-2305.AC-7	core	core: the input box staying open, with its text, when focus leaves it
 F-2305.AC-8	todo	
 F-2305.AC-9	todo	
 F-2305.AC-10	todo	
 F-2305.AC-11	todo	
 F-2305.AC-12	todo	
 F-2305.AC-13	todo	
-F-2305.AC-14	todo	
+F-2305.AC-14	core	core: the quick pick filtering its items as the user types
 F-2305.AC-15	todo	
 F-2305.AC-16	todo	
 F-2305.AC-17	todo	
@@ -317,7 +317,7 @@ F-2305.AC-33	todo
 F-2305.AC-34	todo	
 F-2305.AC-35	todo	
 F-2305.AC-36	todo	
-F-2305.AC-37	todo	
+F-2305.AC-37	core	core: the remote indicator disconnected text
 F-2305.AC-38	todo	
 F-2305.AC-39	todo	
 F-2305.AC-40	todo	
@@ -326,9 +326,9 @@ F-2305.AC-42	todo
 F-2305.AC-43	todo	
 F-2305.AC-44	todo	
 F-2305.AC-45	todo	
-F-2306.AC-1	todo	
-F-2306.AC-2	todo	
-F-2306.AC-3	todo	
+F-2306.AC-1	unit	
+F-2306.AC-2	core	core: the input box masking the typed characters
+F-2306.AC-3	core	core: the input box staying open, with its text, when focus moves
 F-2306.AC-4	todo	
 F-2306.AC-5	todo	
 F-2306.AC-6	todo	
@@ -364,7 +364,7 @@ F-2306.AC-35	todo
 F-2306.AC-36	todo	
 F-2307.AC-1	todo	
 F-2307.AC-2	todo	
-F-2307.AC-3	todo	
+F-2307.AC-3	acceptance	
 F-2307.AC-4	todo	
 F-2307.AC-5	todo	
 F-2307.AC-6	todo	
@@ -374,7 +374,7 @@ F-2307.AC-9	todo
 F-2307.AC-10	todo	
 F-2307.AC-11	todo	
 F-2307.AC-12	todo	
-F-2307.AC-13	todo	
+F-2307.AC-13	core	core: the "Cannot reconnect. Please reload the window." dialog and its Cancel and Reload Window buttons
 F-2307.AC-14	todo	
 F-2307.AC-15	todo	
 F-2307.AC-16	todo	
@@ -385,9 +385,9 @@ F-2307.AC-20	todo
 F-2307.AC-21	todo	
 F-2307.AC-22	todo	
 F-2307.AC-23	todo	
-F-2307.AC-24	todo	
+F-2307.AC-24	acceptance	
 F-2307.AC-25	todo	
-F-2307.AC-26	todo	
+F-2307.AC-26	core	core: the "Cannot reconnect" dialog's Reload Window and Cancel buttons, and the remote indicator after Cancel
 F-2307.AC-27	todo	
 F-2307.AC-28	todo	
 F-2307.AC-29	todo	
@@ -395,66 +395,66 @@ F-2307.AC-30	todo
 F-2307.AC-31	todo	
 F-2307.AC-32	todo	
 F-2401.AC-1	todo	
-F-2401.AC-2	todo	
-F-2401.AC-3	todo	
+F-2401.AC-2	acceptance	
+F-2401.AC-3	acceptance	
 F-2401.AC-4	todo	
 F-2401.AC-5	todo	
 F-2401.AC-6	todo	
 F-2401.AC-7	todo	
 F-2401.AC-8	todo	
 F-2401.AC-9	todo	
-F-2401.AC-10	todo	
-F-2401.AC-11	todo	
+F-2401.AC-10	unit	
+F-2401.AC-11	unit	
 F-2401.AC-12	todo	
 F-2401.AC-13	todo	
-F-2401.AC-14	todo	
+F-2401.AC-14	core	core: the unsupported-OS dialog's Allow and Cancel outcomes and its banner
 F-2401.AC-15	todo	
 F-2401.AC-16	todo	
 F-2401.AC-17	todo	
-F-2401.AC-18	todo	
-F-2401.AC-19	todo	
+F-2401.AC-18	unit	
+F-2401.AC-19	deferred	build order slice 1: Linux hosts only
 F-2403.AC-1	todo	
 F-2403.AC-2	todo	
 F-2403.AC-3	todo	
 F-2403.AC-4	todo	
-F-2403.AC-5	todo	
+F-2403.AC-5	acceptance	
 F-2403.AC-6	todo	
 F-2403.AC-7	todo	
 F-2403.AC-8	todo	
 F-2403.AC-9	todo	
 F-2403.AC-10	todo	
-F-2403.AC-11	todo	
+F-2403.AC-11	acceptance	
 F-2403.AC-12	todo	
 F-2403.AC-13	todo	
 F-2403.AC-14	todo	
-F-2403.AC-15	todo	
-F-2403.AC-16	todo	
+F-2403.AC-15	acceptance	
+F-2403.AC-16	acceptance	
 F-2403.AC-17	todo	
 F-2403.AC-18	todo	
 F-2403.AC-19	todo	
 F-2403.AC-21	todo	
 F-2403.AC-22	todo	
-F-2403.AC-23	todo	
-F-2403.AC-24	todo	
+F-2403.AC-23	unit	
+F-2403.AC-24	unit	
 F-2403.AC-25	todo	
 F-2403.AC-26	todo	
 F-2403.AC-27	todo	
-F-2409.AC-1	todo	
+F-2409.AC-1	acceptance	cited by start.test.ts as renamed in PR #470
 F-2409.AC-2	todo	
 F-2409.AC-3	todo	
 F-2409.AC-4	todo	
 F-2409.AC-5	todo	
 F-2409.AC-6	todo	
-F-2409.AC-7	todo	
+F-2409.AC-7	acceptance	cited by start.test.ts as renamed in PR #470
 F-2409.AC-8	todo	
 F-2409.AC-9	todo	
 F-2409.AC-10	todo	
 F-2409.AC-11	todo	
 F-2409.AC-12	todo	
-F-2409.AC-13	todo	
+F-2409.AC-13	acceptance	cited by start.test.ts as renamed in PR #470
 F-2409.AC-14	todo	
 F-2409.AC-15	todo	
-F-2409.AC-16	todo	
+F-2409.AC-16	acceptance	cited by start.test.ts as renamed in PR #470
 F-2409.AC-17	todo	
 F-2409.AC-18	todo	
 F-2409.AC-19	todo	
@@ -463,7 +463,7 @@ F-2409.AC-21	todo
 F-2409.AC-22	todo	
 F-2409.AC-23	todo	
 F-2409.AC-24	todo	
-F-2409.AC-25	todo	
+F-2409.AC-25	acceptance	cited by start.test.ts as renamed in PR #470
 F-2409.AC-26	todo	
 F-2409.AC-27	todo	
 F-2409.AC-28	todo	
@@ -471,7 +471,7 @@ F-2409.AC-29	todo
 F-2409.AC-30	todo	
 F-2501.AC-1	todo	
 F-2501.AC-2	todo	
-F-2501.AC-3	todo	
+F-2501.AC-3	core	core: the remote indicator's text and the window title
 F-2501.AC-4	todo	
 F-2501.AC-5	todo	
 F-2501.AC-6	todo	
@@ -483,100 +483,100 @@ F-2501.AC-11	todo
 F-2501.AC-12	todo	
 F-2501.AC-13	todo	
 F-2501.AC-14	todo	
-F-2501.AC-15	todo	
+F-2501.AC-15	core	core: VS Code's own notifications (none shown)
 F-2501.AC-16	todo	
 F-2501.AC-17	todo	
 F-2501.AC-18	todo	
 F-2501.AC-19	todo	
 F-2501.AC-20	todo	
-F-2501.AC-21	todo	
+F-2501.AC-21	core	core: the window's title and state after Close Remote
 F-2501.AC-22	todo	
-F-2501.AC-23	todo	
+F-2501.AC-23	core	core: the Cannot reconnect dialog and the indicator
 F-2501.AC-24	todo	
 F-2501.AC-25	todo	
-F-2501.AC-26	todo	
+F-2501.AC-26	core	core: the indicator's text and the download progress notification
 F-2501.AC-27	todo	
-F-2501.AC-28	todo	
+F-2501.AC-28	core	core: the dialog closing and the remote indicator menu
 F-2501.AC-29	todo	
-F-2501.AC-30	todo	
+F-2501.AC-30	core	core: the stored folder URI
 F-2501.AC-31	todo	
 F-2501.AC-32	todo	
 F-2501.AC-33	todo	
 F-2501.AC-34	todo	
-F-2501.AC-35	todo	
-F-2502.AC-1	todo	
-F-2502.AC-2	todo	
-F-2502.AC-3	todo	
-F-2502.AC-4	todo	
-F-2502.AC-5	todo	
-F-2502.AC-6	todo	
-F-2502.AC-7	todo	
-F-2502.AC-8	todo	
-F-2502.AC-9	todo	
-F-2502.AC-10	todo	
-F-2502.AC-11	todo	
-F-2502.AC-12	todo	
+F-2501.AC-35	core	core: the Ports view and the remote terminal
+F-2502.AC-1	unit	
+F-2502.AC-2	core	core: the window title and the Explorer header
+F-2502.AC-3	core	core: the remote indicator's text and icon
+F-2502.AC-4	core	core: the label formatter cache in core's global state
+F-2502.AC-5	core	core: the window title variables
+F-2502.AC-6	core	core: the window title variable and the Open Recent entry
+F-2502.AC-7	core	core: the window title variable
+F-2502.AC-8	core	core: the labels of a folder whose name has a space
+F-2502.AC-9	core	core: the window title, the Explorer header and the root folder hovers
+F-2502.AC-10	core	core: the remote indicator and the window title of an empty window
+F-2502.AC-11	core	core: the descriptions in Open Editors
+F-2502.AC-12	core	core: the Open Recent labels and core's label cache
 F-2502.AC-13	todo	
 F-2502.AC-14	todo	
 F-2502.AC-15	todo	
 F-2502.AC-16	todo	
-F-2502.AC-17	todo	
-F-2502.AC-18	todo	
-F-2502.AC-19	todo	
-F-2502.AC-20	todo	
-F-2502.AC-21	todo	
-F-2502.AC-22	todo	
-F-2502.AC-23	todo	
-F-2502.AC-24	todo	
-F-2502.AC-25	todo	
-F-2502.AC-26	todo	
-F-2502.AC-27	todo	
-F-2502.AC-28	todo	
-F-2502.AC-29	todo	
-F-2502.AC-30	todo	
-F-2502.AC-31	todo	
-F-2502.AC-32	todo	
-F-2502.AC-33	todo	
-F-2502.AC-34	todo	
+F-2502.AC-17	core	core: the title, the indicator and the label cache after a failed first resolve
+F-2502.AC-18	core	core: the indicator's reconnecting text and the window title
+F-2502.AC-19	core	core: the indicator's truncated text and the window title
+F-2502.AC-20	core	core: the Extensions view section name
+F-2502.AC-21	core	core: the window title before the connection
+F-2502.AC-22	core	core: the title, the Explorer header and the indicator from the cached formatter
+F-2502.AC-23	core	core: the indicator, core's Cannot reconnect dialog and the window title
+F-2502.AC-24	core	core: the window title and the breadcrumbs
+F-2502.AC-25	core	core: the Open Recent entry of the current folder
+F-2502.AC-26	core	core: the Explorer header and the Open Recent description
+F-2502.AC-27	core	core: the Go to File descriptions and the title variable
+F-2502.AC-28	core	core: the Open Recent entry of a workspace
+F-2502.AC-29	core	core: the title variables and the breadcrumbs
+F-2502.AC-30	core	core: the Open Recent files list
+F-2502.AC-31	core	core: the Open Recent descriptions
+F-2502.AC-32	core	core: the Open Recent entries of two spellings
+F-2502.AC-33	core	core: the Welcome page's Recent list
+F-2502.AC-34	core	core: the Open Recent entry after a failed resolve
 F-2502.AC-35	todo	
-F-2601.AC-1	todo	
-F-2601.AC-2	todo	
-F-2601.AC-3	todo	
+F-2601.AC-1	acceptance	
+F-2601.AC-2	core	core: the dialog's button order, primary and focused button
+F-2601.AC-3	acceptance	
 F-2601.AC-4	todo	
 F-2601.AC-5	todo	
-F-2601.AC-6	todo	
+F-2601.AC-6	acceptance	
 F-2601.AC-7	todo	
 F-2601.AC-8	todo	
-F-2601.AC-9	todo	
+F-2601.AC-9	acceptance	
 F-2601.AC-10	todo	
 F-2601.AC-11	todo	
-F-2601.AC-12	todo	
-F-2601.AC-13	todo	
+F-2601.AC-12	acceptance	
+F-2601.AC-13	acceptance	
 F-2601.AC-14	todo	
-F-2601.AC-15	todo	
-F-2601.AC-16	todo	
-F-2601.AC-17	todo	
-F-2601.AC-18	todo	
+F-2601.AC-15	core	core: the window becoming an empty local window
+F-2601.AC-16	core	core: the new window becoming an empty local window and the originating window staying as it was
+F-2601.AC-17	core	core: the window title, the indicator and the Explorer while the dialog is shown
+F-2601.AC-18	core	core: the panel showing the Output view behind the dialog
 F-2601.AC-19	todo	
-F-2601.AC-20	todo	
+F-2601.AC-20	unit	
 F-2601.AC-21	todo	
 F-2601.AC-22	todo	
 F-2601.AC-23	todo	
 F-2601.AC-24	todo	
 F-2601.AC-25	todo	
 F-2601.AC-26	todo	
-F-2601.AC-27	todo	
+F-2601.AC-27	core	core: core's workspace-trust modal over the pick
 F-2601.AC-28	todo	
 F-2601.AC-29	todo	
 F-2601.AC-30	todo	
-F-2601.AC-31	todo	
-F-2601.AC-32	todo	
+F-2601.AC-31	core	core: the dialog's close X
+F-2601.AC-32	core	core: the dialog's Enter on its focused button
 F-2601.AC-33	todo	
 F-2601.AC-34	todo	
 F-2601.AC-35	todo	
 F-2601.AC-36	todo	
-F-2601.AC-37	todo	
-F-3902.AC-1	todo	
+F-2601.AC-37	core	core: the dialog's rendering: icon, no heading
+F-3902.AC-1	acceptance	cited by real-server.test.ts as renamed in PR #470
 F-3902.AC-2	todo	
 F-3902.AC-3	todo	
 F-3902.AC-4	todo	

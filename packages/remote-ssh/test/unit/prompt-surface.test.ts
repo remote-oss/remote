@@ -196,7 +196,7 @@ describe('the prompt surface: a masked input (F-2306, F-2307)', () => {
     });
   });
 
-  it('F-2306: a password question is a masked input with its own placeholder', async () => {
+  it('F-2306 AC-1: a password question is a masked input with its own placeholder', async () => {
     const context = setup();
     await question(context, 1, PASSWORD_TEXT);
     deepStrictEqual(
