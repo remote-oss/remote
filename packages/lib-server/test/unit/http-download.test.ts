@@ -244,6 +244,64 @@ describe('the download of a server archive over fetch (V4)', () => {
     }
   });
 
+  it('V4: after a redirect, a response with no address of its own reports the last address, not the first', async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'node-download-'));
+    try {
+      const outcome = await downloadPortOf(address =>
+        Promise.resolve(
+          address.endsWith('/first')
+            ? new Response(null, {status: 302, headers: {location: '/last'}})
+            : new Response('body'),
+        ),
+      ).download(requestFor('http://127.0.0.1:1/first', folder));
+      deepStrictEqual(
+        outcome.kind === 'downloaded' ? outcome.finalAddress : outcome,
+        'http://127.0.0.1:1/last',
+      );
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
+  });
+
+  for (const header of ['abc', '12abc', '-5', '1.5', '']) {
+    it(`V4: a content-length of ${JSON.stringify(header)} announces nothing, so the bound still applies`, async () => {
+      const folder = mkdtempSync(path.join(tmpdir(), 'node-download-'));
+      try {
+        const outcome = await downloadPortOf(() =>
+          Promise.resolve(
+            new Response('x'.repeat(5000), {
+              headers: {'content-length': header},
+            }),
+          ),
+        ).download(
+          requestFor('http://127.0.0.1:1/asked', folder, {maximumBytes: 1000}),
+        );
+        deepStrictEqual(
+          outcome.kind === 'failed' ? outcome.cause : outcome,
+          'tooLarge',
+        );
+      } finally {
+        rmSync(folder, {recursive: true, force: true});
+      }
+    });
+  }
+
+  it('V4: a content-length that is a plain number is announced and bounds the body', async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'node-download-'));
+    try {
+      const outcome = await downloadPortOf(() =>
+        Promise.resolve(
+          new Response('hello', {headers: {'content-length': '5'}}),
+        ),
+      ).download(requestFor('http://127.0.0.1:1/asked', folder));
+      deepStrictEqual(outcome.kind === 'downloaded' ? outcome.facts : outcome, {
+        announcedLength: 5,
+      });
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
+  });
+
   it('V4: an HTTP function that rejects with something that is not an error fails with its text', async () => {
     const folder = mkdtempSync(path.join(tmpdir(), 'node-download-'));
     try {

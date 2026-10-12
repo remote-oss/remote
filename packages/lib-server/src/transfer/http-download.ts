@@ -19,11 +19,11 @@ export type HttpGet = (
 
 const MAXIMUM_REDIRECTS = 10;
 
-/** The final response of a download, following redirects only through hosts the request allows. */
+/** The final response of a download and the address it came from, following redirects only through allowed hosts. */
 async function finalResponse(
   httpGet: HttpGet,
   request: DownloadRequest,
-): Promise<Response | {refused: string}> {
+): Promise<{response: Response; address: string} | {refused: string}> {
   let address = request.address;
   for (let redirects = 0; redirects <= MAXIMUM_REDIRECTS; redirects++) {
     if (!request.allowedHosts.includes(new URL(address).hostname)) {
@@ -35,13 +35,18 @@ async function finalResponse(
     });
     const next = response.headers.get('location');
     if (response.status < 300 || response.status >= 400 || next === null) {
-      return response;
+      return {response, address};
     }
     await response.body?.cancel();
     // A redirect from https to http is not refused here; the library checks the final address.
     address = new URL(next, address).toString();
   }
   return {refused: 'too many redirects'};
+}
+
+/** The length a response announced, when the header is a plain number; any other text announces nothing. */
+function announcedLengthOf(header: string | null): number | undefined {
+  return header !== null && /^\d+$/.test(header) ? Number(header) : undefined;
 }
 
 /** Writes the body to the destination, ending it as `stalled` or `tooLarge` when the bounds say so. */
@@ -91,15 +96,17 @@ export function downloadPortOf(httpGet: HttpGet): DownloadPort {
   return {
     download: async (request): Promise<DownloadResult> => {
       try {
-        const response = await finalResponse(httpGet, request);
-        if ('refused' in response) {
-          return {kind: 'failed', detail: response.refused};
+        const final = await finalResponse(httpGet, request);
+        if ('refused' in final) {
+          return {kind: 'failed', detail: final.refused};
         }
+        const {response} = final;
         if (!response.ok || response.body === null) {
           return {kind: 'failed', detail: `HTTP ${String(response.status)}`};
         }
-        const length = response.headers.get('content-length');
-        const announcedLength = length === null ? undefined : Number(length);
+        const announcedLength = announcedLengthOf(
+          response.headers.get('content-length'),
+        );
         const ending = await writeBody(response.body, request, announcedLength);
         if (ending !== 'done') {
           return {
@@ -111,7 +118,7 @@ export function downloadPortOf(httpGet: HttpGet): DownloadPort {
         return {
           kind: 'downloaded',
           facts: announcedLength === undefined ? {} : {announcedLength},
-          finalAddress: response.url === '' ? request.address : response.url,
+          finalAddress: response.url === '' ? final.address : response.url,
         };
       } catch (caught) {
         return request.cancellation.aborted

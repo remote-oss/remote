@@ -82,6 +82,21 @@ describe('the licence modal (F-3902 rule 11)', () => {
     deepStrictEqual(await answer, 'cancel');
   });
 
+  it('F-3902 rule 11: the abort listener is removed once the answer is given', async () => {
+    const {modal} = surroundings(() => Promise.resolve('Cancel'));
+    const signal = new AbortController().signal;
+    const added: string[] = [];
+    const removed: string[] = [];
+    signal.addEventListener = (type: string) => {
+      added.push(type);
+    };
+    signal.removeEventListener = (type: string) => {
+      removed.push(type);
+    };
+    await modal.askUser(TERMS, signal);
+    deepStrictEqual([added, removed], [['abort'], ['abort']]);
+  });
+
   it('F-3902 rule 11: the detail names the address of the terms', async () => {
     const {modal, shown} = surroundings(() => Promise.resolve(undefined));
     await modal.askUser(TERMS, new AbortController().signal);

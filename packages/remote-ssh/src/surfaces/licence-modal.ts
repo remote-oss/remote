@@ -60,12 +60,21 @@ export function licenceModalOf(
         // A modal that cannot be shown is no acceptance.
         (): ModalAnswer => 'cancel',
       );
+      const waiting: {stop?: () => void} = {};
       const aborted = new Promise<ModalAnswer>(resolve => {
-        cancellation.addEventListener('abort', () => {
+        function onAbort(): void {
           resolve('cancel');
-        });
+        }
+        cancellation.addEventListener('abort', onAbort, {once: true});
+        waiting.stop = () => {
+          cancellation.removeEventListener('abort', onAbort);
+        };
       });
-      return Promise.race([answered, aborted]);
+      try {
+        return await Promise.race([answered, aborted]);
+      } finally {
+        waiting.stop?.();
+      }
     },
   };
 }
