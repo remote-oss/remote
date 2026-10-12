@@ -55,11 +55,12 @@ describe('contracts §S10: a script environment is in no process command line, o
     token: string,
     script: string,
     input: ScriptRequest['input'],
+    environment: Record<string, string> = {MARKER: token},
   ): ScriptRequest {
     return {
       script,
       interpreter: 'posixShell',
-      environment: {MARKER: token},
+      environment,
       input,
       cancellation: new AbortController().signal,
     };
@@ -70,21 +71,26 @@ describe('contracts §S10: a script environment is in no process command line, o
     channel: HostChannel,
     token: string,
     script: ScriptRequest,
-  ): Promise<{hostLines: string[]; clientLines: string[]; status: number}> {
+  ): Promise<{
+    hostLines: string[];
+    clientLines: string[];
+    status: number;
+    ready: boolean;
+  }> {
     const running = channel.runScript(script, () => undefined);
-    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
-      if (
+    let ready = false;
+    for (let attempt = 0; attempt < POLL_ATTEMPTS && !ready; attempt++) {
+      ready =
         host
           .onHost(
             'sh',
             '-c',
             `test -e ${receivedFile(token)} && echo yes || echo no`,
           )
-          .trim() === 'yes'
-      ) {
-        break;
+          .trim() === 'yes';
+      if (!ready) {
+        await new Promise(resolve => setTimeout(resolve, POLL_MILLISECONDS));
       }
-      await new Promise(resolve => setTimeout(resolve, POLL_MILLISECONDS));
     }
     const hostLines = host.onHost('ps', '-o', 'args').split('\n');
     const clientLines = listProcesses(['ps', '-eo', 'args']);
@@ -93,6 +99,7 @@ describe('contracts §S10: a script environment is in no process command line, o
       hostLines,
       clientLines,
       status: outcome.kind === 'exited' ? outcome.status : -1,
+      ready,
     };
   }
 
@@ -107,7 +114,12 @@ describe('contracts §S10: a script environment is in no process command line, o
   async function leaks(
     channel: HostChannel,
     input: ScriptRequest['input'],
-  ): Promise<{hostLeaks: number; clientLeaks: number; received: string}> {
+  ): Promise<{
+    ready: boolean;
+    hostLeaks: number;
+    clientLeaks: number;
+    received: string;
+  }> {
     const token = tokenOf();
     const seen = await watched(
       channel,
@@ -122,6 +134,7 @@ describe('contracts §S10: a script environment is in no process command line, o
       return lines.filter(line => line.includes(token)).length;
     }
     return {
+      ready: seen.ready,
       hostLeaks: count(seen.hostLines),
       clientLeaks: count(seen.clientLines),
       received:
@@ -131,15 +144,37 @@ describe('contracts §S10: a script environment is in no process command line, o
     };
   }
 
+  it('positive control: a marker on the command line is found by the same ps reads on the host and the client', async () => {
+    const token = tokenOf();
+    const seen = await watched(
+      host.channel,
+      token,
+      request(
+        token,
+        `: ${token}; ${sleeping(token, true)}`,
+        {kind: 'text', text: 'data'},
+        {},
+      ),
+    );
+    function count(lines: string[]): number {
+      return lines.filter(line => line.includes(token)).length;
+    }
+    deepStrictEqual(
+      [seen.ready, count(seen.hostLines) > 0, count(seen.clientLines) > 0],
+      [true, true, true],
+    );
+  });
+
   it('the shared session with a text input', async () => {
     deepStrictEqual(
       await leaks(session.channel, {kind: 'text', text: 'data'}),
-      {hostLeaks: 0, clientLeaks: 0, received: 'the value'},
+      {ready: true, hostLeaks: 0, clientLeaks: 0, received: 'the value'},
     );
   });
 
   it('the shared session without input', async () => {
     deepStrictEqual(await leaks(session.channel, {kind: 'text', text: ''}), {
+      ready: true,
       hostLeaks: 0,
       clientLeaks: 0,
       received: 'the value',
@@ -149,7 +184,7 @@ describe('contracts §S10: a script environment is in no process command line, o
   it('the direct channel with a text input', async () => {
     deepStrictEqual(
       await leaks(host.channel, {kind: 'text', text: 'data\n\n'}),
-      {hostLeaks: 0, clientLeaks: 0, received: 'the value'},
+      {ready: true, hostLeaks: 0, clientLeaks: 0, received: 'the value'},
     );
   });
 
@@ -157,6 +192,7 @@ describe('contracts §S10: a script environment is in no process command line, o
     const localFile = path.join(inputFolder, 'input.bin');
     writeFileSync(localFile, randomBytes(1000));
     deepStrictEqual(await leaks(host.channel, {kind: 'file', localFile}), {
+      ready: true,
       hostLeaks: 0,
       clientLeaks: 0,
       received: 'the value',
@@ -165,6 +201,7 @@ describe('contracts §S10: a script environment is in no process command line, o
 
   it('the direct channel without input', async () => {
     deepStrictEqual(await leaks(host.channel, {kind: 'text', text: ''}), {
+      ready: true,
       hostLeaks: 0,
       clientLeaks: 0,
       received: 'the value',
