@@ -8,6 +8,7 @@ import type {Interpreter} from 'lib-host';
 import type {Cleanup} from '../policy/record.ts';
 import {
   BUSYBOX_FUNCTIONS,
+  CLI_FUNCTIONS,
   COMMON_FUNCTIONS,
   ENVIRONMENT_FUNCTIONS,
   FETCH_FUNCTIONS,
@@ -28,6 +29,8 @@ export type ScriptStep =
   | 'discard'
   | 'start'
   | 'installExtensions'
+  | 'installCli'
+  | 'startCli'
   | 'kill'
   | 'uninstall'
   | 'cleanup';
@@ -40,7 +43,9 @@ export type BootstrapRequest =
   | {installMode: 'singleScript'; step: ScriptStep}
   | {
       installMode: 'stepwise';
-      step: Exclude<ScriptStep, 'install'> | StepwiseAction;
+      step:
+        | Exclude<ScriptStep, 'install' | 'installCli' | 'startCli'>
+        | StepwiseAction;
     };
 
 /** The proxy variables to export when the host's own environment sets none, as the final text. */
@@ -66,6 +71,14 @@ export interface StartParameters {
   readySeconds: number;
   /** Whether the server listens on a socket in the host's temporary folder instead of a TCP port. */
   socketMode: boolean;
+}
+
+/** Where the CLI lives on the host: its file name in the data folder and its own data folder. */
+interface CliParameters {
+  /** `<applicationName>-<commit>`, the CLI's file name in the data folder. */
+  name: string;
+  /** The CLI's `--cli-data-dir`. */
+  dataFolder: string;
 }
 
 /** Everything a script needs, as data; nothing in it is specific to one product. */
@@ -106,6 +119,8 @@ export interface ScriptParameters {
   environmentSetup: string;
   cleanup: Cleanup;
   start: StartParameters;
+  /** The CLI's place, for the steps `installCli` and `startCli`; absent for every other step. */
+  cli?: CliParameters;
 }
 
 function yesNo(value: boolean): string {
@@ -154,6 +169,8 @@ function parameterBlock(parameters: ScriptParameters): string[] {
     assignment('SERVER_PORT', start.port),
     assignment('READY_SECONDS', start.readySeconds),
     assignment('SOCKET_MODE', yesNo(start.socketMode)),
+    assignment('CLI_NAME', parameters.cli?.name ?? ''),
+    assignment('CLI_DATA', parameters.cli?.dataFolder ?? ''),
   ];
 }
 
@@ -282,6 +299,68 @@ const INSTALL_BODY: readonly string[] = [
   'fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
   'fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"',
   'leave Ok',
+];
+
+const INSTALL_CLI_BODY: readonly string[] = [
+  'clear_staging() {',
+  '  rm -rf "$CLI_STAGING" "$CLI_STAGING".stage.*',
+  '  rmdir "$DATA_DIR/cli-bin" 2>/dev/null',
+  '}',
+  'STARTED_AT=$(now_seconds)',
+  '[ -n "$DATA_ROOT" ] && [ -n "$CLI_NAME" ] || finish CreateInstallDirFailed',
+  'mkdir -p "$INSTALL_DIR" 2>/dev/null || finish CreateInstallDirFailed',
+  'lock_take "$COMMIT" || finish LockBusy',
+  'if [ -x "$CLI_FILE" ]; then',
+  '  fact cli.path "$CLI_FILE"',
+  '  leave Ok',
+  'fi',
+  'mkdir -p "$CLI_STAGING" 2>/dev/null || leave CreateInstallDirFailed',
+  'prepare_environment',
+  'if [ -n "$ARCHIVE_PATH" ]; then',
+  '  ARCHIVE=$ARCHIVE_PATH',
+  'else',
+  '  have wget || have curl || leave NoDownloaderAvailable',
+  '  ARCHIVE=$CLI_STAGING.archive.$$',
+  '  fetch_archive "$ARCHIVE_URL" "$ARCHIVE" || { rm -f "$ARCHIVE"; clear_staging; leave ServerDownloadFailed; }',
+  'fi',
+  'DOWNLOADED_AT=$(now_seconds)',
+  'unpack_into "$ARCHIVE" "$CLI_STAGING" || UNPACK_FAILED=yes',
+  '[ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
+  'if [ -n "${UNPACK_FAILED:-}" ] || [ ! -f "$CLI_STAGING/$LAUNCHER" ]; then',
+  '  clear_staging',
+  '  leave UnpackFailed',
+  'fi',
+  'chmod +x "$CLI_STAGING/$LAUNCHER" && mv "$CLI_STAGING/$LAUNCHER" "$CLI_FILE" || { clear_staging; leave UnpackFailed; }',
+  'clear_staging',
+  'fact cli.path "$CLI_FILE"',
+  'fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
+  'fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"',
+  'leave Ok',
+];
+
+const START_CLI_BODY: readonly string[] = [
+  '[ -x "$CLI_FILE" ] || finish ServerFailedToStart',
+  '[ -n "${VSCODE_CLI_REQUIRE_TOKEN:-}" ] || { fact cli.tokenMissing yes; finish ServerFailedToStart; }',
+  'LOG_FILE=$DATA_DIR/.cli.$COMMIT.log',
+  '(umask 077; printf \'\' >"$LOG_FILE") || finish ServerFailedToStart',
+  'nohup "$CLI_FILE" command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA" --parent-process-id "$PPID" </dev/null >"$LOG_FILE" 2>&1 9>&- &',
+  'CLI_PID=$!',
+  'if sleep 0.2 2>/dev/null; then TICK=0.2; TICKS=$((READY_SECONDS * 5)); else TICK=1; TICKS=$READY_SECONDS; fi',
+  'WAITED=0',
+  'while [ "$WAITED" -lt "$TICKS" ]; do',
+  '  CLI_PORT=$(cli_ready_port)',
+  '  if [ -n "$CLI_PORT" ]; then',
+  '    fact cli.port "$CLI_PORT"',
+  '    fact cli.pid "$CLI_PID"',
+  '    fact cli.log "$LOG_FILE"',
+  '    finish Ok',
+  '  fi',
+  '  kill -0 "$CLI_PID" 2>/dev/null || finish ServerFailedToStart',
+  '  sleep "$TICK"',
+  '  WAITED=$((WAITED + 1))',
+  'done',
+  'kill "$CLI_PID" 2>/dev/null',
+  'finish ServerFailedToStart',
 ];
 
 const STEPWISE_BODIES: Readonly<Record<StepwiseAction, readonly string[]>> = {
@@ -491,6 +570,10 @@ function bodyOf(step: BodyStep): readonly string[] {
       return PROBE_BODY;
     case 'install':
       return INSTALL_BODY;
+    case 'installCli':
+      return INSTALL_CLI_BODY;
+    case 'startCli':
+      return START_CLI_BODY;
     case 'discard':
       return DISCARD_BODY;
     case 'kill':
@@ -530,6 +613,16 @@ const FUNCTION_GROUPS: Readonly<
     LEAVE,
   ],
   installExtensions: [COMMON_FUNCTIONS, ENVIRONMENT_FUNCTIONS],
+  installCli: [
+    COMMON_FUNCTIONS,
+    ENVIRONMENT_FUNCTIONS,
+    LOCK_FUNCTIONS,
+    BUSYBOX_FUNCTIONS,
+    FETCH_FUNCTIONS,
+    UNPACK_FUNCTIONS,
+    LEAVE,
+  ],
+  startCli: [COMMON_FUNCTIONS, CLI_FUNCTIONS],
   kill: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
   uninstall: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
   cleanup: [COMMON_FUNCTIONS, LOCK_FUNCTIONS, FOLDER_KIND_FUNCTIONS],

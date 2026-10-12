@@ -8,7 +8,7 @@ import type {ChannelFailure, HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {ExtraStartOption} from '../policy/record.ts';
 import type {ScriptParameters} from '../scripts/bootstrap.ts';
-import type {ScriptStatus} from '../scripts/result-block.ts';
+import type {ResultBlock, ScriptStatus} from '../scripts/result-block.ts';
 import {keptExtensions} from './extensions.ts';
 import {runStep, type StepRun} from './run-step.ts';
 
@@ -59,7 +59,7 @@ export interface StartNotice {
 /** Why no server was started. */
 export type StartFailure =
   | {kind: 'invalidPortRange'}
-  | {kind: 'serverStart'}
+  | {kind: 'serverStart'; detail?: string}
   | {kind: 'prerequisitesMissing'}
   | {kind: 'retriesExhausted'}
   | {kind: 'scriptFailed'; status: ScriptStatus}
@@ -125,21 +125,33 @@ function endpointOf(
     : undefined;
 }
 
+/** The result block of a finished step, or the failed start that a step with none is. */
+export function blockOfStart(
+  stepRun: StepRun | 'retriesExhausted',
+): {block: ResultBlock} | {unfinished: StartOutcome} {
+  if (stepRun === 'retriesExhausted') {
+    return {unfinished: failed({kind: 'retriesExhausted'})};
+  }
+  if (stepRun.kind === 'channelFailed') {
+    return {
+      unfinished: failed({kind: 'channelFailed', failure: stepRun.failure}),
+    };
+  }
+  return stepRun.kind === 'noResultBlock'
+    ? {unfinished: failed({kind: 'noResultBlock'})}
+    : {block: stepRun.block};
+}
+
 /** The start outcome of a finished step run. */
 function outcomeOf(
   stepRun: StepRun | 'retriesExhausted',
   notices: readonly StartNotice[],
 ): StartOutcome {
-  if (stepRun === 'retriesExhausted') {
-    return failed({kind: 'retriesExhausted'});
+  const read = blockOfStart(stepRun);
+  if ('unfinished' in read) {
+    return read.unfinished;
   }
-  if (stepRun.kind === 'channelFailed') {
-    return failed({kind: 'channelFailed', failure: stepRun.failure});
-  }
-  if (stepRun.kind === 'noResultBlock') {
-    return failed({kind: 'noResultBlock'});
-  }
-  const {block} = stepRun;
+  const {block} = read;
   if (block.status === 'Ok') {
     const endpoint = endpointOf(block.serverFacts);
     const processId = Number(block.serverFacts.pid);
