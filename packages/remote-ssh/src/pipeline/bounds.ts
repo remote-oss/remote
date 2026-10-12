@@ -3,6 +3,7 @@
  * and the tunnel waits derive from.
  */
 
+import type {ConnectionLimits} from 'lib-ssh';
 import type {ServerBounds} from './parameters.ts';
 import type {ConnectWaits} from './steps.ts';
 
@@ -19,7 +20,16 @@ export const PRECONNECT_MILLISECONDS = 5 * 60 * 1000;
 export const CLIENT_CHECK_MILLISECONDS = 30 * 1000;
 
 /** The connect timeout of a host whose configuration sets 0, which waits on the system's own limit. */
-const HOST_ZERO_TIMEOUT_SECONDS = 600;
+export const HOST_ZERO_TIMEOUT_SECONDS = 600;
+
+/** How long the shared connection's helper outlives its last window, long enough to carry a reload. */
+export const HELPER_GRACE_MILLISECONDS = 3000;
+
+/** How long the helper may take to answer one request over its local socket. */
+const HELPER_REQUEST_MILLISECONDS = 10 * 1000;
+
+/** The margin of the window's own login wait over the helper's, so the helper's timeout is heard first. */
+const LOGIN_MARGIN_MILLISECONDS = 10 * 1000;
 
 /** The default connect timeout, when neither the host nor the setting names one. */
 const DEFAULT_TIMEOUT_SECONDS = 15;
@@ -59,5 +69,24 @@ export function connectWaitsFor(seconds: number): ConnectWaits {
   return {
     probeMilliseconds: (seconds + EXTRA_WAIT_SECONDS) * 1000,
     tunnelMilliseconds: (seconds === 0 ? EXTRA_WAIT_SECONDS : seconds) * 1000,
+  };
+}
+
+/**
+ * The window's waits on the helper: one reply, and the whole login. The login wait is the helper's own connect wait
+ * plus a margin: a host's 0 waits the ceiling, the setting's 0 only the extra wait.
+ */
+export function connectionLimitsFor(
+  hostValue: string | undefined,
+  settingValue: unknown,
+): ConnectionLimits {
+  const helperWaitSeconds =
+    hostValue !== undefined && wholeSeconds(hostValue) === 0
+      ? HOST_ZERO_TIMEOUT_SECONDS
+      : effectiveConnectTimeoutSeconds(hostValue, settingValue) +
+        EXTRA_WAIT_SECONDS;
+  return {
+    requestMilliseconds: HELPER_REQUEST_MILLISECONDS,
+    loginMilliseconds: helperWaitSeconds * 1000 + LOGIN_MARGIN_MILLISECONDS,
   };
 }
