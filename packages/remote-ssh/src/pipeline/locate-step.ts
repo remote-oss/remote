@@ -15,6 +15,7 @@ import {
   type ConnectionMode,
   type EffectiveOptions,
   judge,
+  LineSplitter,
   parseEffectiveOptions,
   type ProcessSpawner,
   scpProgram,
@@ -156,7 +157,14 @@ async function lookUp(
     dependencies.logger.warn(`ssh -G: ${parsed.parseError}`);
     return {failure: {kind: 'unknown'}};
   }
-  const errorLines = outcome.errorOutput.split('\n').filter(line => line);
+  const errorLines: string[] = [];
+  const splitter = new LineSplitter(line => {
+    if (line !== '') {
+      errorLines.push(line);
+    }
+  });
+  splitter.push(outcome.errorOutput);
+  splitter.flush();
   for (const line of errorLines) {
     dependencies.logger.warn(line);
   }

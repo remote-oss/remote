@@ -302,6 +302,46 @@ describe("the lookup of the host's configuration", () => {
     );
   });
 
+  it("F-2201 7.E6: ssh's lines ended with \\r\\n reach the log without the \\r", async () => {
+    const {logged} = await located({
+      lookup: lookupFailing(
+        '/cfg line 3: Bad configuration option: foo\r\n/cfg: terminating, 1 bad configuration options\r\n',
+      ),
+    });
+    deepStrictEqual(logged, [
+      '/cfg line 3: Bad configuration option: foo',
+      '/cfg: terminating, 1 bad configuration options',
+    ]);
+  });
+
+  it('F-2201 AC-26: a refused configuration file ended with \\r\\n shows no reason either', async () => {
+    const {result} = await located({
+      lookup: lookupFailing(
+        '/cfg line 3: Bad configuration option: foo\r\n/cfg: terminating, 1 bad configuration options\r\n',
+      ),
+    });
+    deepStrictEqual(result, {
+      kind: 'failed',
+      failure: {kind: 'unknown', hints: []},
+    });
+  });
+
+  it("F-2201: a reason taken from ssh's words carries no \\r", async () => {
+    const {result} = await located({
+      lookup: lookupFailing('alex@dev: Permission denied (publickey).\r\n'),
+    });
+    deepStrictEqual(result.kind === 'failed' && result.failure.reason, {
+      text: 'Permission denied (publickey).',
+    });
+  });
+
+  it('F-2201 7.E6: a last line with no line end is logged too', async () => {
+    const {logged} = await located({
+      lookup: lookupFailing('first\r\nlast'),
+    });
+    deepStrictEqual(logged, ['first', 'last']);
+  });
+
   it("connect-14: the connect's mode reads the failure: a changed host key in a shared connection", async () => {
     const {result} = await located({
       lookup: lookupFailing(
