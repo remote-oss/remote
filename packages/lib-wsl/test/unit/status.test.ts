@@ -55,6 +55,15 @@ describe('parseStatus', () => {
     );
   });
 
+  it('D1a: labels that are names of Object members give nothing', () => {
+    deepStrictEqual(
+      parseStatus(
+        '__proto__: x\nconstructor: abc\ntoString: y\nhasOwnProperty: z',
+      ),
+      {},
+    );
+  });
+
   it('D1a: localised labels and empty text give nothing', () => {
     deepStrictEqual(
       [parseStatus('Standarddistribution: Ubuntu'), parseStatus('')],
