@@ -51,7 +51,7 @@ interface Queued {
 
 /** The commands of one run: the start marker, the script with its input, and the end marker with the status. */
 export function commandsFor(marker: string, request: ShellRun): string {
-  const start = `printf '%s\\n' ${posixQuote(`${marker}:start`)}`;
+  const start = `printf '%s%s\\n' ${posixQuote(`${marker}:st`)} 'art'`;
   const script = posixQuote(request.script);
   const body =
     request.inputBase64 === null
@@ -63,7 +63,7 @@ export function commandsFor(marker: string, request: ShellRun): string {
           ) ?? []),
           `${marker}_input`,
         ].join('\n');
-  const end = `printf '%s %s\\n' ${posixQuote(`${marker}:end`)} "$?"`;
+  const end = `printf '%s%s %s\\n' ${posixQuote(`${marker}:e`)} 'nd' "$?"`;
   return `${start}\n${body}\n${end}\n`;
 }
 

@@ -603,7 +603,7 @@ describe('connection handler (contracts §4 S9)', () => {
       await settled();
       deepStrictEqual(
         spawner.started[0]?.inputText(),
-        "printf '%s\\n' 'm1:start'\nsh -c 'echo hello' </dev/null\nprintf '%s %s\\n' 'm1:end' \"$?\"\n",
+        "printf '%s%s\\n' 'm1:st' 'art'\nsh -c 'echo hello' </dev/null\nprintf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"\n",
       );
     });
 
@@ -665,7 +665,7 @@ describe('connection handler (contracts §4 S9)', () => {
       await settled();
       const text = spawner.started[0]?.inputText() ?? '';
       deepStrictEqual(
-        [text.includes('m1:start'), text.includes('m2:start')],
+        [text.includes('m1:st'), text.includes('m2:st')],
         [true, false],
       );
     });
