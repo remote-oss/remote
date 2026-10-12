@@ -85,6 +85,7 @@ describe('the runtime strings of the extension', () => {
           ...FAILURE_TEXTS,
           ...LICENCE_TEXTS,
           ...PICKER_TEXTS,
+          'SSH: {0}',
         ].map(text => [text, text]),
       ),
     });
