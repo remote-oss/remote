@@ -1,9 +1,8 @@
-> Lead's rulings on §6 (2026-10-08): O1 a second record with the same `started` replaces the first (same resolve);
-> O2 a corrupt persisted store is treated as empty and logged once; O3 a cancelled prompt stores no answer field at
-> all; O4 the record never carries settings values or environment values (only ids and statuses), so there is
-> nothing to redact beyond the token rule, and a test asserts the record type has no free-text fields except the
-> reason text; O5 line breaks in a reason text are replaced by a space before the line is written; O6 the skeleton
-> card declares `lib-ssh` as a dependency (added to card remote-ssh-00).
+> Status of the old lead's notes on §6 (2026-10-08), settled 2026-10-12 by the architect (#265): they do NOT bind this
+> card. Sections 2, 4 and 6 do: append-only `addHint`, `Answer: ***` for every prompt, nothing built for §6. O1
+> (a record with the same `started` replaces the earlier one), O3 (`answer?` and `Answer: (none)`) and O5 (line
+> breaks) go to a follow-up card; O2 to the card that reads the persisted store; O4 is met by §2 (no settings or
+> environment values as free text, the token scrubbed); O6 is done.
 
 # Task connect-04: the pure parts of the SSH diagnostics (R2)
 
