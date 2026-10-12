@@ -29,7 +29,13 @@ import {
   SSH_PROGRAM,
   spawnerOf,
 } from './locate.fixture.ts';
-import {INPUT, leaseOf, STARTED, TERMS} from './pipeline.fixture.ts';
+import {
+  emptyRecording,
+  INPUT,
+  leaseOf,
+  STARTED,
+  TERMS,
+} from './pipeline.fixture.ts';
 import {
   channelAnswering,
   dependencies,
@@ -176,6 +182,12 @@ function portsOf(
     },
     server: dependencies(),
     tunnel: {
+      terminals: seen.terminals,
+      attachQuestions: () => ({
+        onQuestion: () => undefined,
+        dispose: () => undefined,
+      }),
+      revealLoginTerminals: () => false,
       settings: () => ({
         listenOnSocket: false,
         useLocalServer: true,
@@ -487,6 +499,88 @@ describe('the connection step by mode (card connect-17)', () => {
     deepStrictEqual(
       [seen.acquires.length, seen.terminals.opened.length],
       [0, 1],
+    );
+  });
+});
+
+describe("a terminal-mode connect's tunnel run", () => {
+  const REMOTE_COMMAND_LOOKUP: Answer = {
+    kind: 'exit',
+    output: `${OPTIONS_TEXT}remotecommand bash -l\n`,
+    status: 0,
+  };
+
+  /** The arguments of the tunnel run a connect with `terms` opens on the second-ssh path. */
+  async function tunnelArguments(
+    remoteCommandInEffect: boolean,
+  ): Promise<readonly string[] | undefined> {
+    const {ports, seen} = portsOf({lookup: REMOTE_COMMAND_LOOKUP});
+    const steps = stepsOf({
+      ...ports,
+      tunnel: {
+        ...ports.tunnel,
+        settings: () => ({
+          listenOnSocket: false,
+          useLocalServer: false,
+          enableDynamicForwarding: false,
+        }),
+      },
+    });
+    await steps.locateClient(inputFor('dev'));
+    await steps
+      .openConnection(
+        inputFor('dev'),
+        {...TERMS, remoteCommandInEffect},
+        new AbortController().signal,
+      )
+      .catch(() => undefined);
+    void steps.openTunnel(
+      inputFor('dev'),
+      leaseOf(emptyRecording()),
+      STARTED.server,
+      () => undefined,
+      new AbortController().signal,
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    return seen.terminals.opened[0]?.invocation.arguments;
+  }
+
+  it('ssh-19: the run clears a RemoteCommand the terms say is not in effect', async () => {
+    deepStrictEqual(
+      (await tunnelArguments(false))?.includes('RemoteCommand=none'),
+      true,
+    );
+  });
+
+  it('ssh-19: the run leaves a RemoteCommand the terms say is in effect', async () => {
+    deepStrictEqual(
+      (await tunnelArguments(true))?.includes('RemoteCommand=none'),
+      false,
+    );
+  });
+
+  it('connect-18: a tunnel asked for before the connection is a defect, and throws', async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf({
+      ...ports,
+      tunnel: {
+        ...ports.tunnel,
+        settings: () => ({
+          listenOnSocket: false,
+          useLocalServer: false,
+          enableDynamicForwarding: false,
+        }),
+      },
+    });
+    await rejects(
+      steps.openTunnel(
+        inputFor('dev'),
+        leaseOf(emptyRecording()),
+        STARTED.server,
+        () => undefined,
+        new AbortController().signal,
+      ),
+      /before the connection/,
     );
   });
 });

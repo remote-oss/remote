@@ -8,6 +8,7 @@ import {environmentTunnels} from 'lib-forwarding';
 import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {OverrideValue} from 'lib-product';
+import {buildInvocation} from 'lib-ssh';
 import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
@@ -104,7 +105,10 @@ export interface WiringPorts {
     'settings' | 'remoteUser' | 'override' | 'useExecServer'
   >;
   /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
-  tunnel: Omit<TunnelStepDependencies, 'environment'>;
+  tunnel: Omit<
+    TunnelStepDependencies,
+    'environment' | 'connectWait' | 'tunnelInvocation'
+  >;
   logger: Logger;
 }
 
@@ -163,6 +167,7 @@ export function stepsOf(
   const held: {
     server?: ReturnType<typeof createServerSteps>;
     connection?: ConnectionRequestSettings;
+    opening?: {input: ConnectInput; terms: ConnectionTerms};
   } = {};
 
   /** The connection's settings, read once for this connect, so all of its runs use the same. */
@@ -263,10 +268,12 @@ export function stepsOf(
       connectTimeout: () => connectionSettings().connectTimeout,
       state,
     }),
-    openConnection: (input, connectTerms, cancellation) =>
-      (ports.locate.mode() === 'shared'
-        ? sharedConnection
-        : terminalConnection)(input, connectTerms, cancellation),
+    openConnection: (input, connectTerms, cancellation) => {
+      held.opening = {input, terms: connectTerms};
+      return (
+        ports.locate.mode() === 'shared' ? sharedConnection : terminalConnection
+      )(input, connectTerms, cancellation);
+    },
     probe: (input, ...rest) => serverSteps(input).probe(input, ...rest),
     plan: (input, ...rest) => serverSteps(input).plan(input, ...rest),
     gate: (input, ...rest) => serverSteps(input).gate(input, ...rest),
@@ -276,6 +283,27 @@ export function stepsOf(
       serverSteps(input).installExtensions(input, ...rest),
     ...openTunnelStep({
       ...ports.tunnel,
+      connectWait: () =>
+        terminalWaitOf(
+          lookedUp(state).connectTimeout,
+          connectionSettings().connectTimeout,
+        ),
+      tunnelInvocation: forward => {
+        if (held.opening === undefined) {
+          throw new Error('the tunnel was asked for before the connection');
+        }
+        return buildInvocation({
+          ...runBaseOf(
+            held.opening.input,
+            held.opening.terms,
+            state,
+            connectionSettings(),
+            ports.requestEnvironment,
+          ),
+          purpose: 'tunnel',
+          forwards: [forward],
+        });
+      },
       environment: () =>
         windowEnvironment(lookedUp(state).localForwards, ports.logger),
     }),

@@ -170,15 +170,15 @@ async function openTerminalTunnel(
     return CANCELLED;
   }
   const forward = forwardFor(path, localPort, server);
-  const stallSignal: {stalled: () => void} = {stalled: () => undefined};
   const session = openTunnelSession(
     dependencies.terminals,
     dependencies.tunnelInvocation(forward),
     localPort,
     dependencies.revealLoginTerminals(),
   );
+  let stall: (() => void) | undefined;
   const unreachable = new Promise<'unreachable'>(resolve => {
-    stallSignal.stalled = () => {
+    stall = () => {
       resolve('unreachable');
     };
   });
@@ -190,7 +190,7 @@ async function openTerminalTunnel(
         questions.onQuestion(text);
       },
       onUnreachable: () => {
-        stallSignal.stalled();
+        stall?.();
       },
     },
   );
