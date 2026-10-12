@@ -392,7 +392,15 @@ describe("the window's scp in a hidden login terminal (card ssh-29 table)", () =
       'scp failed: scp: dest open "/x/f": No such file',
     );
   });
-  it('daedalus on #434: of 21 error lines, the first is dropped and the 20 latest are told', async () => {
+  it('#434: the 20 error lines are all told, none dropped', async () => {
+    const told = await errorLines(20);
+    deepStrictEqual(
+      [told.length, told[0], told.at(-1)],
+      [20, 'scp failed: scp: error 0', 'scp: error 19'],
+    );
+  });
+
+  it('#434: of 21 error lines, the first is dropped and the 20 latest are told', async () => {
     const told = await errorLines(21);
     deepStrictEqual(
       [told.length, told[0], told.at(-1)],

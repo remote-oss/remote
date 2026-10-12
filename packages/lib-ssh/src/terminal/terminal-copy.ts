@@ -25,7 +25,7 @@ import {PromptReader} from './prompt-reader.ts';
 /** The exit status `scp` gives when it could not keep its connection. */
 const CONNECTION_FAILED_STATUS = 255;
 
-/** How many kept lines are held for a failure's cause, and told. */
+/** How many of the last non-debug lines a failure's detail tells. */
 const TOLD_LINES = 20;
 
 /** Copies one file to the host. */
