@@ -31,6 +31,7 @@ export type ScriptStep =
   | 'installExtensions'
   | 'installCli'
   | 'startCli'
+  | 'stopCli'
   | 'kill'
   | 'uninstall'
   | 'cleanup';
@@ -44,7 +45,7 @@ export type BootstrapRequest =
   | {
       installMode: 'stepwise';
       step:
-        | Exclude<ScriptStep, 'install' | 'installCli' | 'startCli'>
+        | Exclude<ScriptStep, 'install' | 'installCli' | 'startCli' | 'stopCli'>
         | StepwiseAction;
     };
 
@@ -79,6 +80,8 @@ interface CliParameters {
   name: string;
   /** The CLI's `--cli-data-dir`. */
   dataFolder: string;
+  /** The process `stopCli` ends, the one `startCli` reported; absent for the other steps. */
+  stopProcessId?: number;
 }
 
 /** Everything a script needs, as data; nothing in it is specific to one product. */
@@ -171,6 +174,7 @@ function parameterBlock(parameters: ScriptParameters): string[] {
     assignment('SOCKET_MODE', yesNo(start.socketMode)),
     assignment('CLI_NAME', parameters.cli?.name ?? ''),
     assignment('CLI_DATA', parameters.cli?.dataFolder ?? ''),
+    assignment('CLI_STOP_PID', parameters.cli?.stopProcessId ?? ''),
   ];
 }
 
@@ -559,6 +563,23 @@ const CLEANUP_BODY: readonly string[] = [
   'finish Ok',
 ];
 
+/**
+ * Ends the CLI that `startCli` started, only while its process id is still that CLI: the guard reads the process's
+ * command line for the CLI's own file, so a recycled process id of another program is left alone.
+ */
+const STOP_CLI_BODY: readonly string[] = [
+  'if is_server_process "$CLI_STOP_PID" "$CLI_FILE"; then',
+  '  if have pkill; then',
+  '    pkill -P "$CLI_STOP_PID" 2>/dev/null',
+  '  fi',
+  '  kill "$CLI_STOP_PID" 2>/dev/null',
+  '  fact cli.stopped yes',
+  'else',
+  '  fact cli.stopped no',
+  'fi',
+  'finish Ok',
+];
+
 type BodyStep = Exclude<
   BootstrapRequest['step'],
   'start' | 'installExtensions'
@@ -574,6 +595,8 @@ function bodyOf(step: BodyStep): readonly string[] {
       return INSTALL_CLI_BODY;
     case 'startCli':
       return START_CLI_BODY;
+    case 'stopCli':
+      return STOP_CLI_BODY;
     case 'discard':
       return DISCARD_BODY;
     case 'kill':
@@ -623,6 +646,7 @@ const FUNCTION_GROUPS: Readonly<
     LEAVE,
   ],
   startCli: [COMMON_FUNCTIONS, CLI_FUNCTIONS],
+  stopCli: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS],
   kill: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
   uninstall: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
   cleanup: [COMMON_FUNCTIONS, LOCK_FUNCTIONS, FOLDER_KIND_FUNCTIONS],

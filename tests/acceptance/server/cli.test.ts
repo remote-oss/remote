@@ -10,6 +10,7 @@ import {
   nodeClientFiles,
   openCliControl,
   runStep,
+  stopCli,
   type ScriptParameters,
   startCli,
   type StartOutcome,
@@ -313,5 +314,44 @@ describe('V7a the CLI on a real host', function () {
       ],
       [['ServerFailedToStart', 'yes'], false],
     );
+  });
+
+  it("themis on #458: stopCli with the CLI's process id leaves no command-shell on the host", async () => {
+    await install();
+    const outcome = await started();
+    const stop = await stopCli(
+      host.channel,
+      parameters,
+      outcome.kind === 'started' ? outcome.server.processId : -1,
+      NEVER_CANCELLED,
+    );
+    let remaining = true;
+    for (let attempt = 0; attempt < SESSION_END_POLLS && remaining; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, POLL_MILLISECONDS));
+      remaining = host.onHost('ps', '-o', 'args').includes('command-shell');
+    }
+    deepStrictEqual([stop.kind, remaining], ['stopped', false]);
+  });
+
+  it('themis on #458: stopCli with the process id of another program leaves it running', async () => {
+    await install();
+    host.onHost(
+      'sh',
+      '-c',
+      'nohup sleep 60 >/dev/null 2>&1 & echo $! > /tmp/foreign.pid',
+    );
+    const foreign = Number(host.onHost('cat', '/tmp/foreign.pid').trim());
+    const stop = await stopCli(
+      host.channel,
+      parameters,
+      foreign,
+      NEVER_CANCELLED,
+    );
+    const alive =
+      host
+        .onHost('sh', '-c', `kill -0 ${String(foreign)} && echo yes || echo no`)
+        .trim() === 'yes';
+    host.onHost('sh', '-c', `kill ${String(foreign)} 2>/dev/null; true`);
+    deepStrictEqual([stop.kind, alive], ['notRunning', true]);
   });
 });

@@ -11,6 +11,7 @@ import {
   installCli,
   startCli,
   type StartOutcome,
+  stopCli,
   type TransferDependencies,
 } from '../../src/index.ts';
 import {parametersFor} from './fake-host.ts';
@@ -352,6 +353,72 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
         kind: 'failed',
         failure: {kind: 'serverDownload', cause: 'downloadFailed'},
       });
+    });
+  });
+});
+
+describe("the CLI's stop (card cli-04, themis on #458)", () => {
+  /** A stop of process 4242 over a channel that prints `output`. */
+  async function stopped(output: readonly string[]) {
+    const channel = startingChannel(output);
+    const outcome = await stopCli(
+      channel,
+      baseParameters(),
+      4242,
+      NEVER_CANCELLED,
+    );
+    return {outcome, channel};
+  }
+
+  it('themis on #458: the stop checks the process is still the CLI before it kills it', async () => {
+    const {channel} = await stopped(block('Ok', 'cli.stopped=yes'));
+    const script = scriptRequests(channel)[0];
+    const text = script?.operation === 'runScript' ? script.request.script : '';
+    deepStrictEqual(
+      text.indexOf('is_server_process "$CLI_STOP_PID" "$CLI_FILE"') <
+        text.indexOf('kill "$CLI_STOP_PID"'),
+      true,
+    );
+  });
+
+  it('themis on #458: the stop is given the process id of the CLI', async () => {
+    const {channel} = await stopped(block('Ok', 'cli.stopped=yes'));
+    const script = scriptRequests(channel)[0];
+    deepStrictEqual(
+      script?.operation === 'runScript' &&
+        script.request.script.includes("CLI_STOP_PID='4242'"),
+      true,
+    );
+  });
+
+  it('themis on #458: a CLI that was ended is stopped', async () => {
+    const {outcome} = await stopped(block('Ok', 'cli.stopped=yes'));
+    deepStrictEqual(outcome, {kind: 'stopped'});
+  });
+
+  it('themis on #458: a process that is no longer the CLI is not running', async () => {
+    const {outcome} = await stopped(block('Ok', 'cli.stopped=no'));
+    deepStrictEqual(outcome, {kind: 'notRunning'});
+  });
+
+  it('themis on #458: the stop carries no secret and needs no host lock', async () => {
+    const {channel} = await stopped(block('Ok', 'cli.stopped=yes'));
+    deepStrictEqual(environmentsOf(channel), [{}]);
+  });
+
+  it('themis on #458: a stop whose script gives no result block failed', async () => {
+    const {outcome} = await stopped([]);
+    deepStrictEqual(outcome, {
+      kind: 'failed',
+      failure: {kind: 'noResultBlock'},
+    });
+  });
+
+  it('themis on #458: a stop whose script fails reports its status', async () => {
+    const {outcome} = await stopped(block('CreateInstallDirFailed'));
+    deepStrictEqual(outcome, {
+      kind: 'failed',
+      failure: {kind: 'scriptFailed', status: 'CreateInstallDirFailed'},
     });
   });
 });

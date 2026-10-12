@@ -19,6 +19,9 @@ import {blockOfStart, type HostLockLoop, type StartOutcome} from './runtime.ts';
 /** The variable the CLI reads its connection token from. */
 const TOKEN_VARIABLE = 'VSCODE_CLI_REQUIRE_TOKEN';
 
+/** The script parameters' key for the CLI's name, data folder and the process to stop. */
+const CLI_PARAMETERS = 'cli';
+
 /** The highest TCP port. */
 const MAXIMUM_PORT = 65535;
 
@@ -150,4 +153,53 @@ export async function startCli(
     cancellation,
   );
   return outcomeOf(stepRun, token);
+}
+
+/** The outcome of a stop of the CLI: it was ended, it no longer ran as that CLI, or the step could not finish. */
+export type CliStopOutcome =
+  | {kind: 'stopped'}
+  | {kind: 'notRunning'}
+  | {
+      kind: 'failed';
+      failure: Extract<StartOutcome, {kind: 'failed'}>['failure'];
+    };
+
+/**
+ * Ends the CLI that `startCli` started, `processId`, only while that process is still the CLI. No host lock is taken:
+ * stopping one process changes nothing another connect relies on.
+ */
+export async function stopCli(
+  channel: HostChannel,
+  base: ScriptParameters,
+  processId: number,
+  cancellation: AbortSignal,
+): Promise<CliStopOutcome> {
+  const stepRun = await runStep(
+    channel,
+    {installMode: 'singleScript', step: 'stopCli'},
+    {
+      ...base,
+      [CLI_PARAMETERS]: {
+        name: base.cli?.name ?? '',
+        dataFolder: base.cli?.dataFolder ?? '',
+        stopProcessId: processId,
+      },
+    },
+    {cancellation},
+  );
+  const read = blockOfStart(stepRun);
+  if ('unfinished' in read) {
+    return read.unfinished.kind === 'failed'
+      ? read.unfinished
+      : {kind: 'failed', failure: {kind: 'noResultBlock'}};
+  }
+  if (read.block.status !== 'Ok') {
+    return {
+      kind: 'failed',
+      failure: {kind: 'scriptFailed', status: read.block.status},
+    };
+  }
+  return read.block.cliFacts.stopped === 'yes'
+    ? {kind: 'stopped'}
+    : {kind: 'notRunning'};
 }
