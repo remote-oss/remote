@@ -129,3 +129,10 @@ export {
   clientArchiveFolder,
   isFromSameGallery,
 } from './cache/folders.ts';
+export {
+  type CliPathDecision,
+  type CliPathInput,
+  cliArchiveTemplateVariables,
+  decideCliPath,
+} from './cli-path/decision.ts';
+export {type CliServeError, parseCliServeError} from './cli-path/cli-output.ts';
