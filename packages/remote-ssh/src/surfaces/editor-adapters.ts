@@ -10,6 +10,7 @@ import type {FailureDialogPort} from './failure-presenter.ts';
 import type {LicenceDialogPort} from './licence-modal.ts';
 import type {MitigationPickPort} from './mitigation-picker.ts';
 import {ownText} from './own-strings.ts';
+import type {PromptEditor} from './prompt-surface.ts';
 import type {Translate} from './strings.ts';
 
 type Editor = Pick<typeof vscode, 'window'>;
@@ -74,6 +75,42 @@ function pickOne<Answer>(
       settle(answer);
     });
     pick.show();
+  });
+}
+
+/**
+ * Shows a masked input box that stays open when the user looks away and gives what was typed on accept, or nothing
+ * when it is hidden without one or `cancellation` ends. A cancellation that has ended already shows nothing. The input
+ * box is disposed after.
+ */
+function askText(
+  editor: Editor,
+  placeholder: string,
+  cancellation: AbortSignal,
+): Promise<string | undefined> {
+  if (cancellation.aborted) {
+    return Promise.resolve(undefined);
+  }
+  return new Promise(settle => {
+    const inputBox = editor.window.createInputBox();
+    inputBox.placeholder = placeholder;
+    inputBox.password = true;
+    inputBox.ignoreFocusOut = true;
+    let typed: string | undefined;
+    function onAbort(): void {
+      inputBox.hide();
+    }
+    cancellation.addEventListener('abort', onAbort);
+    inputBox.onDidAccept(() => {
+      typed = inputBox.value;
+      inputBox.hide();
+    });
+    inputBox.onDidHide(() => {
+      cancellation.removeEventListener('abort', onAbort);
+      inputBox.dispose();
+      settle(typed);
+    });
+    inputBox.show();
   });
 }
 
@@ -151,5 +188,28 @@ export function mitigationPickPortOf(editor: Editor): MitigationPickPort {
         },
         new AbortController().signal,
       ),
+  };
+}
+
+/** The questions of a login: a pick that closes when the user looks away, and a masked input that stays open. */
+export function promptEditorOf(
+  editor: Editor,
+  translate: Translate,
+): PromptEditor {
+  return {
+    pick: (request, cancellation) =>
+      pickOne(
+        editor,
+        {
+          ...(request.title === undefined ? {} : {title: request.title}),
+          placeholder: request.placeholder,
+          choices: request.items,
+          ignoreFocusOut: false,
+        },
+        cancellation,
+      ),
+    maskedInput: (request, cancellation) =>
+      askText(editor, request.placeholder, cancellation),
+    translate,
   };
 }
