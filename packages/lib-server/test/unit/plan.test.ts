@@ -404,6 +404,13 @@ describe('install planner, the CLI mode (card cli-02 table)', () => {
     deepStrictEqual([planned.kind, planned.notes], ['download', []]);
   });
 
+  it('brief §2 row 1: a manual bootstrap gets a direct plan that notes nothing', () => {
+    const planned = asPlan(
+      plan(cliInput({cliMode: {...cliMode, manualBootstrap: true}})),
+    );
+    deepStrictEqual([planned.kind, planned.notes], ['download', []]);
+  });
+
   it('brief §2 row 3: a platform without a CLI build gets a direct plan that notes why', () => {
     const planned = asPlan(
       plan(
