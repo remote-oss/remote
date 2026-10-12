@@ -4,6 +4,7 @@ import {
   type ConnectionRequestEnvironment,
   type ConnectionRequestSettings,
   connectionRequestOf,
+  installRequestOf,
 } from '../../src/pipeline/connection-request.ts';
 import type {ConnectState} from '../../src/pipeline/locate-step.ts';
 import {INPUT, TERMS} from './pipeline.fixture.ts';
@@ -196,5 +197,53 @@ describe("the shared connection's acquire request", () => {
       () => requestWith({state: {effective: EFFECTIVE}}),
       /before the client was found/,
     );
+  });
+});
+
+describe("the install connection's request in terminal mode (card connect-17)", () => {
+  function installWith(
+    socksPort: number | undefined,
+    state: ConnectState = STATE,
+  ) {
+    return installRequestOf(
+      {...INPUT, target: {kind: 'plain', text: 'alex@dev:2222'}},
+      TERMS,
+      state,
+      SETTINGS,
+      ENVIRONMENT,
+      socksPort,
+    );
+  }
+
+  it('F-2704 BR-1: it runs the host shell as the remote program', () => {
+    deepStrictEqual(installWith(undefined).remoteProgram, 'sh');
+  });
+
+  it('F-2104 6.3: with a SOCKS port it holds the dynamic forward and keeps the user forwards', () => {
+    const request = installWith(41000);
+    deepStrictEqual(
+      [request.forwards, request.clearUserForwards],
+      [[{kind: 'dynamic', localPort: 41000}], undefined],
+    );
+  });
+
+  it('F-2104 6.2 step 1: without a SOCKS port it clears the user forwards and holds none', () => {
+    const request = installWith(undefined);
+    deepStrictEqual(
+      [request.forwards, request.clearUserForwards],
+      [undefined, true],
+    );
+  });
+
+  it('connect-14: it starts from the same request as the shared connection', () => {
+    const {remoteProgram, clearUserForwards, ...base} = installWith(undefined);
+    deepStrictEqual(
+      [base, remoteProgram, clearUserForwards],
+      [sshRequestOf(requestWith({text: 'alex@dev:2222'})), 'sh', true],
+    );
+  });
+
+  it('connect-14: asking before the client step is a defect, and throws', () => {
+    throws(() => installWith(undefined, {}), /before the client was found/);
   });
 });

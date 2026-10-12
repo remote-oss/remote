@@ -56,19 +56,19 @@ const HELPER_POLICY: EndPolicy = {
   milliseconds: HELPER_GRACE_MILLISECONDS,
 };
 
-/** The acquire request of one connect, apart from the host string and the cancellation. */
-export function connectionRequestOf(
+/** The `ssh` request every connection of a connect starts from, built from what the client step found and the terms. */
+function baseRequestOf(
   input: ConnectInput,
   terms: ConnectionTerms,
   state: ConnectState,
   settings: ConnectionRequestSettings,
   environment: ConnectionRequestEnvironment,
-): Omit<ConnectionAcquireRequest, 'hostString' | 'cancellation'> {
+): SshRequest {
   const {programs, effective} = state;
   if (programs === undefined || effective === undefined) {
     throw new Error('the connection was asked for before the client was found');
   }
-  const request: SshRequest = {
+  return {
     purpose: 'connection',
     target: sshTargetOf(input.target),
     settings: {
@@ -85,6 +85,17 @@ export function connectionRequestOf(
     homeFolder: environment.homeFolder,
     platform: environment.platform,
   };
+}
+
+/** The acquire request of one connect, apart from the host string and the cancellation. */
+export function connectionRequestOf(
+  input: ConnectInput,
+  terms: ConnectionTerms,
+  state: ConnectState,
+  settings: ConnectionRequestSettings,
+  environment: ConnectionRequestEnvironment,
+): Omit<ConnectionAcquireRequest, 'hostString' | 'cancellation'> {
+  const request = baseRequestOf(input, terms, state, settings, environment);
   const userAskpass = environment.processEnvironment.SSH_ASKPASS ?? '';
   return {
     folder: environment.registryFolder,
@@ -100,5 +111,26 @@ export function connectionRequestOf(
       askpassFirstMessageMilliseconds: DEFAULT_FIRST_MESSAGE_MILLISECONDS,
     },
     policy: HELPER_POLICY,
+  };
+}
+
+/**
+ * The `ssh` request of the install connection in terminal mode: the host's shell as the remote program, and either our
+ * `-D` port when the window tunnel rides it, or, with no `-D`, the user's own forwards cleared so the run holds none.
+ */
+export function installRequestOf(
+  input: ConnectInput,
+  terms: ConnectionTerms,
+  state: ConnectState,
+  settings: ConnectionRequestSettings,
+  environment: ConnectionRequestEnvironment,
+  socksPort: number | undefined,
+): SshRequest {
+  return {
+    ...baseRequestOf(input, terms, state, settings, environment),
+    remoteProgram: 'sh',
+    ...(socksPort === undefined
+      ? {clearUserForwards: true}
+      : {forwards: [{kind: 'dynamic' as const, localPort: socksPort}]}),
   };
 }

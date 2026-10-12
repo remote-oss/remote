@@ -4,7 +4,6 @@
  * decides what the gate and the transfer need.
  */
 
-import {effectiveUseLocalServer, type TunnelSettings} from 'lib-forwarding';
 import type {Logger} from 'lib-log';
 import {
   type ArchiveResolution,
@@ -48,11 +47,6 @@ export interface ServerStepDependencies {
   profile: ProductProfile;
   policy: ServerPolicyRecord;
   settings: HostServerSettings;
-  /** The settings that choose how the connection is made; read for each connect. */
-  connectionSettings: () => Pick<
-    TunnelSettings,
-    'listenOnSocket' | 'useLocalServer'
-  >;
   /** `remote.SSH.useExecServer`: the plan notes it and never applies it. */
   useExecServer: boolean;
   /** The user's download override and where it came from, when one is set. */
@@ -139,12 +133,6 @@ export function createServerSteps(
             reason: {id: problem.reason, values: [problem.character]},
           },
         };
-      }
-      if (!effectiveUseLocalServer(dependencies.connectionSettings())) {
-        dependencies.logger.warn(
-          'a connection without the shared connection is not built yet',
-        );
-        return {kind: 'failed', failure: {kind: 'unknown'}};
       }
       return settings.installFolder.kind === 'invalid'
         ? {
