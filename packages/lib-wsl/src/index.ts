@@ -12,6 +12,7 @@ export {
   type ListResult,
   parseList,
 } from './list.ts';
+export {filterDockerDesktop, type MatchResult, matchDistro} from './match.ts';
 export {
   installCommandLine,
   type InstallLine,
