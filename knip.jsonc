@@ -28,6 +28,8 @@
         "suite/*.test.ts",
         "suite-local/*.test.ts",
         "suite-remote/*.test.ts",
+        "suite-reconnect/*.test.ts",
+        "suite-failure/*.test.ts",
         "server/*.test.ts",
       ],
       "project": ["**/*.ts", "vscode-test.mjs"],

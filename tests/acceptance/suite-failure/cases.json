@@ -1,0 +1,60 @@
+{
+  "cases": [
+    {
+      "alias": "refused",
+      "cite": "F-2601 AC-1",
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"refused\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"refused\"."
+    },
+    {
+      "alias": "nowhere",
+      "cite": "F-2601 AC-3, AC-9",
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"nowhere\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"nowhere\": Could not resolve hostname."
+    },
+    {
+      "alias": "stranger",
+      "cite": "F-2601 AC-6",
+      "script": [
+        {
+          "surface": "pick",
+          "match": "has fingerprint",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "failureDialog",
+          "match": "\"stranger\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"stranger\"."
+    }
+  ]
+}

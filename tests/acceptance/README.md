@@ -65,12 +65,20 @@ engines floor of ADR-0007. A mismatch fails the run with `the VSCodium download 
 the tag is a reviewed change that also updates both checksums.
 
 The VSIX files are installed with the command-line wrapper in the build's `bin/` folder; the tests run in the build's
-own executable, which test-cli starts. test-cli runs twice, by label:
+own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `local`: `runner/` in a plain window, with the tests of `suite-local/` bundled into `dist-local/`;
 - `remote`: `runner-remote/`, an extension of the workspace kind, in a window on
-  `vscode-remote://ssh-remote+harness/home/harness`, with the tests of `suite-remote/` bundled into `dist-remote/`.
+  `vscode-remote://ssh-remote+harness/home/harness`, with the tests of `suite-remote/` bundled into `dist-remote/`;
+- `reconnect`: the same window in a second launch, with `suite-reconnect/`. It compares the host's server with the
+  one the `remote` launch kept in the run's folder, so it shows that a new connection reuses the server;
+- `failure-<alias>`: one launch per entry of `suite-failure/cases.json`, in a window on
+  `vscode-remote://ssh-remote+<alias>/home/harness`, with `suite-failure/`. Its alias fails to connect (the harness
+  `ssh_config` has `refused`, `nowhere` and `stranger`), and its window answers from the entry's own script, which the
+  harness writes before the launch. The tests check the record.
 
-Both run even when the first fails, and the run fails when either does. `HARNESS_EDITOR` (`vscode` or `vscodium`)
+Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
+local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
+they start in a window whose connect failed. `HARNESS_EDITOR` (`vscode` or `vscodium`)
 and, for VSCodium, `HARNESS_VSCODIUM_EXECUTABLE` join the harness variables. In CI the job `acceptance (VSCodium)` runs
 when the workflow is dispatched with the `vscodium` input set to true, and on the tag of a release.

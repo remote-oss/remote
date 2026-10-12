@@ -2,12 +2,16 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "types": ["node", "mocha", "vscode"],
+    "resolveJsonModule": true,
     "tsBuildInfoFile": "${configDir}/.tsc/suite.tsbuildinfo"
   },
   "include": [
     "${configDir}/suite",
     "${configDir}/suite-local",
-    "${configDir}/suite-remote"
+    "${configDir}/suite-remote",
+    "${configDir}/suite-reconnect",
+    "${configDir}/suite-failure",
+    "${configDir}/suite-failure/cases.json"
   ],
   "references": [
     {

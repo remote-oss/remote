@@ -6,7 +6,13 @@ import {
   throws,
 } from 'node:assert';
 import {createHash} from 'node:crypto';
-import {existsSync, readFileSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {
   acceptanceConfiguration,
@@ -15,12 +21,14 @@ import {
   downloadWithRetry,
   editorChoiceOf,
   type CommandResult,
+  failureCases,
   failureText,
   harnessSshConfig,
   type HarnessDependencies,
   type HarnessVariables,
   mappedPort,
   packagedExtensions,
+  removeBundles,
   RETRY_PAUSE_MILLISECONDS,
   runAcceptance,
   runCommand,
@@ -49,6 +57,8 @@ class FakeHarness implements HarnessDependencies {
   testResult: AttemptResult = {exitCode: 0, output: ''};
   readonly labelResults = new Map<string, AttemptResult>();
   readonly launched: Array<string | undefined> = [];
+  /** The files of the run's folder as the first launch found them, by name. */
+  readonly firstLaunchFiles = new Map<string, string>();
   readonly answers = new Map<string, CommandResult>();
 
   readonly command = (
@@ -104,6 +114,17 @@ class FakeHarness implements HarnessDependencies {
     label?: string,
   ): Promise<AttemptResult> => {
     this.variables = variables;
+    if (this.launched.length === 0) {
+      for (const name of readdirSync(variables.HARNESS_RUN_FOLDER).filter(
+        entry =>
+          statSync(path.join(variables.HARNESS_RUN_FOLDER, entry)).isFile(),
+      )) {
+        this.firstLaunchFiles.set(
+          name,
+          readFileSync(path.join(variables.HARNESS_RUN_FOLDER, name), 'utf8'),
+        );
+      }
+    }
     this.launched.push(label);
     return Promise.resolve(
       this.labelResults.get(label ?? '') ?? this.testResult,
@@ -170,7 +191,7 @@ describe('acceptance', () => {
 
   it('writes Host harness with the run key, its own known hosts and no agent', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run'),
+      harnessSshConfig(49153, '/run').split('\n\n')[0],
       [
         'Host harness',
         '  HostName 127.0.0.1',
@@ -183,6 +204,44 @@ describe('acceptance', () => {
         '  BatchMode yes',
         '  ConnectTimeout 10',
         '  UserKnownHostsFile /run/known_hosts',
+      ].join('\n'),
+    );
+  });
+
+  it('F-2601 AC-1: Host refused points at a closed port of the loopback', () => {
+    strictEqual(
+      harnessSshConfig(49153, '/run').split('\n\n')[1],
+      [
+        'Host refused',
+        '  HostName 127.0.0.1',
+        '  Port 9',
+        '  BatchMode yes',
+      ].join('\n'),
+    );
+  });
+
+  it('F-2601 AC-3: Host nowhere names a host that never resolves', () => {
+    strictEqual(
+      harnessSshConfig(49153, '/run').split('\n\n')[2],
+      ['Host nowhere', '  HostName nowhere.invalid', '  BatchMode yes'].join(
+        '\n',
+      ),
+    );
+  });
+
+  it('F-2601 AC-6: Host stranger is the harness host with its own empty known hosts, and asks', () => {
+    strictEqual(
+      harnessSshConfig(49153, '/run').split('\n\n')[3],
+      [
+        'Host stranger',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_ed25519',
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        '  StrictHostKeyChecking ask',
+        '  UserKnownHostsFile /run/known_hosts_stranger',
         '',
       ].join('\n'),
     );
@@ -218,6 +277,15 @@ describe('acceptance', () => {
   });
 
   describe('runAcceptance', () => {
+    it('#439: the run removes the suite bundles when it ends', async () => {
+      workspace.write('tests/acceptance/dist-remote/window.test.cjs', '');
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      strictEqual(
+        existsSync(path.join(workspace.root, 'tests/acceptance/dist-remote')),
+        false,
+      );
+    });
+
     it('builds the host, starts it with the run key, waits for SSH, bundles and runs the tests', async () => {
       await runAcceptance(workspace.root, harness);
       deepStrictEqual(
@@ -451,6 +519,28 @@ describe('acceptance', () => {
   describe('the VSCodium run', () => {
     const EXECUTABLE = '/vscodium/codium-insiders';
     const CONFIGURATION_ENVIRONMENT = {HARNESS_RUN_FOLDER: '/run'};
+    const FAILURE = {
+      alias: 'refused',
+      cite: 'F-2601 AC-1',
+      script: [{surface: 'failureDialog', match: 'refused', answer: 'dismiss'}],
+      dialog: 'Could not establish connection to "refused".',
+    };
+
+    beforeEach(() => {
+      workspace.write(
+        'tests/acceptance/suite-failure/cases.json',
+        JSON.stringify({cases: [FAILURE]}),
+      );
+    });
+
+    /** The configurations of the run, from the workspace's failure cases. */
+    function configurations() {
+      return vscodiumConfigurations(
+        workspace.root,
+        CONFIGURATION_ENVIRONMENT,
+        EXECUTABLE,
+      );
+    }
 
     it('#253 Q14: with no editor the VSCodium executable is not asked for, and the VS Code CLI installs the VSIX files', async () => {
       workspace.write('dist/remote-ssh-0.0.0.vsix', '');
@@ -475,9 +565,59 @@ describe('acceptance', () => {
       );
     });
 
-    it('#253 Q14: test-cli ran twice, the local label then the remote one', async () => {
+    it('#253 Q14, rulings 1 and 2: test-cli ran the local label, the remote one, the reconnection and each failing connect', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.launched, ['local', 'remote']);
+      deepStrictEqual(harness.launched, [
+        'local',
+        'remote',
+        'reconnect',
+        'failure-refused',
+      ]);
+    });
+
+    it("ruling 1: a failing connect's script is written before the first launch", async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        JSON.parse(
+          harness.firstLaunchFiles.get('failure-refused-script.json') ?? '',
+        ),
+        {
+          entries: FAILURE.script,
+        },
+      );
+    });
+
+    it('ruling 1: a failing connect opens a window on its alias', () => {
+      deepStrictEqual(configurations()[3]?.launchArgs.slice(0, 2), [
+        '--folder-uri',
+        'vscode-remote://ssh-remote+refused/home/harness',
+      ]);
+    });
+
+    it('ruling 1: a failing connect answers from its own script and record', () => {
+      deepStrictEqual(
+        [
+          configurations()[3]?.env.REMOTE_OSS_ACCEPTANCE_SCRIPT,
+          configurations()[3]?.env.REMOTE_OSS_ACCEPTANCE_RECORD,
+        ],
+        [
+          path.join('/run', 'failure-refused-script.json'),
+          path.join('/run', 'failure-refused-record.jsonl'),
+        ],
+      );
+    });
+
+    it("ruling 1: the other launches keep the run's script", () => {
+      deepStrictEqual(
+        configurations()
+          .slice(0, 3)
+          .map(configuration => configuration.env.REMOTE_OSS_ACCEPTANCE_SCRIPT),
+        [undefined, undefined, undefined],
+      );
+    });
+
+    it('ruling 1: the failing connects come from the cases file', () => {
+      deepStrictEqual(failureCases(workspace.root), [FAILURE]);
     });
 
     it('#253 Q14: the harness variables name the editor and its executable', async () => {
@@ -496,10 +636,15 @@ describe('acceptance', () => {
       strictEqual(await runAcceptance(workspace.root, harness, 'vscodium'), 3);
     });
 
-    it('#253 Q14: with the local run failing the remote one still ran', async () => {
+    it('#253 Q14: with the local run failing the remote ones still ran', async () => {
       harness.labelResults.set('local', {exitCode: 3, output: ''});
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.launched, ['local', 'remote']);
+      deepStrictEqual(harness.launched, [
+        'local',
+        'remote',
+        'reconnect',
+        'failure-refused',
+      ]);
     });
 
     it('#253 Q14: with the remote run failing the exit code is non-zero', async () => {
@@ -508,75 +653,74 @@ describe('acceptance', () => {
     });
 
     it('#253 Q14: the remote configuration opens the folder on ssh-remote+harness', () => {
-      deepStrictEqual(
-        vscodiumConfigurations(
-          '/repo',
-          CONFIGURATION_ENVIRONMENT,
-          EXECUTABLE,
-        )[1]?.launchArgs.slice(0, 2),
-        ['--folder-uri', 'vscode-remote://ssh-remote+harness/home/harness'],
-      );
+      deepStrictEqual(configurations()[1]?.launchArgs.slice(0, 2), [
+        '--folder-uri',
+        'vscode-remote://ssh-remote+harness/home/harness',
+      ]);
     });
 
     it('#253 Q14: the local configuration opens no folder', () => {
       strictEqual(
-        vscodiumConfigurations(
-          '/repo',
-          CONFIGURATION_ENVIRONMENT,
-          EXECUTABLE,
-        )[0]?.launchArgs.includes('--folder-uri'),
+        configurations()[0]?.launchArgs.includes('--folder-uri'),
         false,
       );
     });
 
-    it('#253 Q14: both configurations use the executable', () => {
+    it('#253 Q14: every configuration uses the executable', () => {
       deepStrictEqual(
-        vscodiumConfigurations(
-          '/repo',
-          CONFIGURATION_ENVIRONMENT,
-          EXECUTABLE,
-        ).map(configuration => configuration.useInstallation.fromPath),
-        [EXECUTABLE, EXECUTABLE],
+        configurations().map(
+          configuration => configuration.useInstallation.fromPath,
+        ),
+        [EXECUTABLE, EXECUTABLE, EXECUTABLE, EXECUTABLE],
       );
     });
 
-    it('#253 Q14: both configurations enable the proposed API of remote-ssh', () => {
+    it('#253 Q14: every configuration enables the proposed API of remote-ssh', () => {
       deepStrictEqual(
-        vscodiumConfigurations(
-          '/repo',
-          CONFIGURATION_ENVIRONMENT,
-          EXECUTABLE,
-        ).map(configuration =>
+        configurations().map(configuration =>
           configuration.launchArgs.includes(
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        [true, true],
+        [true, true, true, true],
       );
     });
 
     it('#253 Q14: the configurations are labelled and read their own bundles', () => {
       deepStrictEqual(
-        vscodiumConfigurations(
-          '/repo',
-          CONFIGURATION_ENVIRONMENT,
-          EXECUTABLE,
-        ).map(configuration => [configuration.label, configuration.files]),
+        configurations().map(configuration => [
+          configuration.label,
+          configuration.files,
+        ]),
         [
           ['local', 'dist-local/**/*.test.cjs'],
           ['remote', 'dist-remote/**/*.test.cjs'],
+          ['reconnect', 'dist-reconnect/**/*.test.cjs'],
+          ['failure-refused', 'dist-failure/**/*.test.cjs'],
         ],
       );
     });
 
-    it('#253 Q14: the remote runner is the workspace-kind extension', () => {
-      strictEqual(
-        vscodiumConfigurations(
-          '/repo',
-          CONFIGURATION_ENVIRONMENT,
-          EXECUTABLE,
-        )[1]?.extensionDevelopmentPath,
-        path.join('/repo', 'tests', 'acceptance', 'runner-remote'),
+    it('#253 Q14: every remote launch uses the workspace-kind runner', () => {
+      deepStrictEqual(
+        configurations()
+          .slice(1)
+          .map(configuration => configuration.extensionDevelopmentPath),
+        [1, 2, 3].map(() =>
+          path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
+        ),
+      );
+    });
+
+    it('#253 ruling 2: the reconnection opens the same folder as the remote launch', () => {
+      deepStrictEqual(
+        configurations()
+          .slice(1, 3)
+          .map(configuration => configuration.launchArgs.slice(0, 2)),
+        [
+          ['--folder-uri', 'vscode-remote://ssh-remote+harness/home/harness'],
+          ['--folder-uri', 'vscode-remote://ssh-remote+harness/home/harness'],
+        ],
       );
     });
 
@@ -758,6 +902,8 @@ describe('acceptance', () => {
       );
       workspace.write('tests/acceptance/suite-local/window.test.ts', '');
       workspace.write('tests/acceptance/suite-remote/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-reconnect/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-failure/window.test.ts', '');
     });
 
     it('bundles each suite test file into one CommonJS file', async () => {
@@ -775,24 +921,52 @@ describe('acceptance', () => {
       );
     });
 
-    it('bundles the local and the remote suite into their own folders', async () => {
+    it('#439: a bundle a former run left in an output folder is gone after bundling', async () => {
+      workspace.write('tests/acceptance/dist-failure/stale.test.cjs', '');
       await bundleSuite(workspace.root);
+      strictEqual(
+        existsSync(
+          path.join(
+            workspace.root,
+            'tests/acceptance/dist-failure/stale.test.cjs',
+          ),
+        ),
+        false,
+      );
+    });
+
+    it('#439: removeBundles leaves no output folder', async () => {
+      await bundleSuite(workspace.root);
+      removeBundles(workspace.root);
       deepStrictEqual(
         [
-          existsSync(
-            path.join(
-              workspace.root,
-              'tests/acceptance/dist-local/window.test.cjs',
+          'dist',
+          'dist-local',
+          'dist-remote',
+          'dist-reconnect',
+          'dist-failure',
+        ].map(folder =>
+          existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
+        ),
+        [false, false, false, false, false],
+      );
+    });
+
+    it('bundles the local, remote, reconnection and failure suites into their own folders', async () => {
+      await bundleSuite(workspace.root);
+      deepStrictEqual(
+        ['dist-local', 'dist-remote', 'dist-reconnect', 'dist-failure'].map(
+          folder =>
+            existsSync(
+              path.join(
+                workspace.root,
+                'tests/acceptance',
+                folder,
+                'window.test.cjs',
+              ),
             ),
-          ),
-          existsSync(
-            path.join(
-              workspace.root,
-              'tests/acceptance/dist-remote/window.test.cjs',
-            ),
-          ),
-        ],
-        [true, true],
+        ),
+        [true, true, true, true],
       );
     });
   });
