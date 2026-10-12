@@ -307,10 +307,11 @@ describe('the connect pipeline, when a step fails', () => {
     deepStrictEqual(
       [
         'kind' in result ? result.kind : result,
+        'reason' in result ? result.reason : result,
         recording.calls.slice(-1),
         recording.releases,
       ],
-      ['licenceDeclined', ['plan'], 1],
+      ['licenceDeclined', {id: 'S027'}, ['plan'], 1],
     );
   });
 

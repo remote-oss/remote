@@ -280,7 +280,7 @@ async function runSteps(
     return stopped;
   }
   if (gate.kind === 'licenceDeclined') {
-    return failure({kind: 'licenceDeclined'});
+    return failure({kind: 'licenceDeclined', reason: {id: 'S027'}});
   }
   if (gate.kind === 'cancelled') {
     return failure({kind: 'cancelled'});
