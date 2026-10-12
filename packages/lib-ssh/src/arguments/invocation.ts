@@ -223,9 +223,12 @@ function forwardArguments(forward: Forward): string[] {
     return ['-D', `${LOOPBACK}:${localPort}`];
   }
   if (forward.kind === 'local') {
-    return ['-L', `${localPort}:${LOOPBACK}:${String(forward.remotePort)}`];
+    return [
+      '-L',
+      `${LOOPBACK}:${localPort}:${LOOPBACK}:${String(forward.remotePort)}`,
+    ];
   }
-  return ['-L', `${localPort}:${forward.socketPath}`];
+  return ['-L', `${LOOPBACK}:${localPort}:${forward.socketPath}`];
 }
 
 /**
