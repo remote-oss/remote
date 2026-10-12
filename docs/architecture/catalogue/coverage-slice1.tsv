@@ -326,7 +326,7 @@ F-2305.AC-42	todo
 F-2305.AC-43	todo	
 F-2305.AC-44	todo	
 F-2305.AC-45	todo	
-F-2306.AC-1	unit	
+F-2306.AC-1	todo	
 F-2306.AC-2	core	core: the input box masking the typed characters
 F-2306.AC-3	core	core: the input box staying open, with its text, when focus moves
 F-2306.AC-4	todo	
@@ -403,15 +403,15 @@ F-2401.AC-6	todo
 F-2401.AC-7	todo	
 F-2401.AC-8	todo	
 F-2401.AC-9	todo	
-F-2401.AC-10	unit	
-F-2401.AC-11	unit	
+F-2401.AC-10	todo	
+F-2401.AC-11	todo	
 F-2401.AC-12	todo	
 F-2401.AC-13	todo	
 F-2401.AC-14	core	core: the unsupported-OS dialog's Allow and Cancel outcomes and its banner
 F-2401.AC-15	todo	
 F-2401.AC-16	todo	
 F-2401.AC-17	todo	
-F-2401.AC-18	unit	
+F-2401.AC-18	todo	
 F-2401.AC-19	deferred	build order slice 1: Linux hosts only
 F-2403.AC-1	todo	
 F-2403.AC-2	todo	
@@ -434,8 +434,8 @@ F-2403.AC-18	todo
 F-2403.AC-19	todo	
 F-2403.AC-21	todo	
 F-2403.AC-22	todo	
-F-2403.AC-23	unit	
-F-2403.AC-24	unit	
+F-2403.AC-23	acceptance	
+F-2403.AC-24	todo	
 F-2403.AC-25	todo	
 F-2403.AC-26	todo	
 F-2403.AC-27	todo	
@@ -558,7 +558,7 @@ F-2601.AC-16	core	core: the new window becoming an empty local window and the or
 F-2601.AC-17	core	core: the window title, the indicator and the Explorer while the dialog is shown
 F-2601.AC-18	core	core: the panel showing the Output view behind the dialog
 F-2601.AC-19	todo	
-F-2601.AC-20	unit	
+F-2601.AC-20	todo	
 F-2601.AC-21	todo	
 F-2601.AC-22	todo	
 F-2601.AC-23	todo	
