@@ -16,6 +16,10 @@ import {asyncPieces, channelBase} from './host-channel-fixture.ts';
 
 const LOCAL_FILE = '/local/archive.tar.gz';
 
+/** The script every staged run is given; with no environment staged, its prelude is the script plus a line end. */
+const STAGED_SCRIPT = 'scenario';
+const STAGED_PRELUDE = `${STAGED_SCRIPT}\n`;
+
 /** Prints `lines`, then ends with `status`. */
 function prints(lines: readonly string[], status: number): ClientScript {
   return process => {
@@ -87,7 +91,7 @@ function scenarioScripts(
     case 'digestsInput':
       return [
         process => {
-          process.digestInputThenExit();
+          process.digestInputThenExit(Buffer.from(STAGED_PRELUDE, 'utf8'));
         },
       ];
     default:
@@ -168,7 +172,7 @@ const SSH_HARNESS: ChannelHarness = {
         timeoutMilliseconds: 1000,
       }),
       script: {
-        script: 'scenario',
+        script: STAGED_SCRIPT,
         interpreter: 'posixShell',
         environment: {},
         input: inputFor(scenario),

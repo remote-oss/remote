@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {createHash, randomBytes} from 'node:crypto';
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -14,6 +14,9 @@ type ScriptRequest = Parameters<HostChannel['runScript']>[0];
 const SLEEP_SECONDS = 3;
 const POLL_MILLISECONDS = 100;
 const POLL_ATTEMPTS = 100;
+
+/** How long the control's own child on the client lives: it must still run when the ps reads run. */
+const LOCAL_CHILD_SECONDS = 30;
 
 /** Where on the host the script writes the value it received. */
 function receivedFile(token: string): string {
@@ -111,6 +114,11 @@ describe('contracts §S10: a script environment is in no process command line, o
     return `${readsInput ? 'cat >/dev/null; ' : ''}echo "$MARKER" >${receivedFile(token)}; sleep ${String(SLEEP_SECONDS)}; true`;
   }
 
+  /** The positive control's script: it reads its input, starts a child whose command line carries the marker, then sleeps for the reads. */
+  function controlScript(token: string): string {
+    return `cat >/dev/null; echo "$MARKER" >${receivedFile(token)}; sh -c 'sleep ${String(SLEEP_SECONDS)}; true' ${token} & sleep ${String(SLEEP_SECONDS)}; true`;
+  }
+
   async function leaks(
     channel: HostChannel,
     input: ScriptRequest['input'],
@@ -146,16 +154,18 @@ describe('contracts §S10: a script environment is in no process command line, o
 
   it('positive control: a marker on the command line is found by the same ps reads on the host and the client', async () => {
     const token = tokenOf();
+    const localChild = spawn(
+      'sh',
+      ['-c', `sleep ${String(LOCAL_CHILD_SECONDS)}; true`, token],
+      {detached: true, stdio: 'ignore'},
+    );
+    localChild.unref();
     const seen = await watched(
       host.channel,
       token,
-      request(
-        token,
-        `: ${token}; ${sleeping(token, true)}`,
-        {kind: 'text', text: 'data'},
-        {},
-      ),
+      request(token, controlScript(token), {kind: 'text', text: 'data'}, {}),
     );
+    localChild.kill('SIGKILL');
     function count(lines: string[]): number {
       return lines.filter(line => line.includes(token)).length;
     }
