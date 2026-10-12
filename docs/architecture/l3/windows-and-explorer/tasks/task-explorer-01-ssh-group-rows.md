@@ -14,7 +14,15 @@ only (checked with `git ls-files`); it has no `src/` and no `coverage.json`. Thi
 |---|---|
 | `packages/remote-explorer/src/model/ssh-group.ts` | new |
 | `packages/remote-explorer/test/unit/ssh-group.test.ts` | new |
-| `packages/remote-explorer/coverage.json` | new, exactly the block below |
+| `packages/remote-explorer/identifiers.json` | new, exactly the first block below |
+| `packages/remote-explorer/coverage.json` | new, exactly the second block below |
+
+```json
+{
+  "source": "remote-oss/remote-explorer#7 (F-5901)",
+  "standsDownFor": "ms-vscode.remote-explorer"
+}
+```
 
 ```json
 {
@@ -28,9 +36,13 @@ only (checked with `git ls-files`); it has no `src/` and no `coverage.json`. Thi
 ```
 
 Nothing else may change: no `package.json`, no `src/index.ts`, no dependency. (Amended 2026-10-12: the package gets
-its first `src/` file here, so the coverage tool measures it from this card on and needs its ratchet now; checked on
-main with a stand-in module: 100/100/100, no problem, `pnpm check-layout` green. The README already lists the
-coverage exclusions as none.)
+its first `src/` file here. From then on the identifier generator requires an `identifiers.json`, since an extension
+with `src/` needs one, and every gate runs `pnpm identifiers` first. The coverage tool measures the package and needs
+its ratchet. Both files are the minimum: the source and the reference id of the identity decision, F-5901; no
+`standingDownKey`, `internal` or `locales` yet, which later cards add with the code that uses them. Checked on main
+with a stand-in module: `pnpm identifiers`, `check-identifiers`, `check-layout`, `typecheck`, `lint`,
+`format:check`, `dead`, `dupes` all green; coverage 100/100/100 with no problem. The README already lists the coverage
+exclusions as none.)
 
 ## 2. Contract
 
@@ -98,8 +110,8 @@ answers R1 to R4 and R6, maps each cite to its test name (R5), and lists the sec
 
 ## 6. Open rows (stop and report)
 
-1. If `pnpm coverage` or `pnpm check-layout` still reports a problem for remote-explorer with the `coverage.json` of
-   section 1 in place, stop and report the exact message; do not add a `src/index.ts`, an exclusion or a dummy.
+1. If any gate still reports a problem for remote-explorer with the two files of section 1 in place, stop and
+   report the exact message; do not add a `src/index.ts`, an exclusion, a field to `identifiers.json` or a dummy.
 2. The same alias twice in `aliases` (the companion's list already has none): two rows or one? Not tested.
 3. Characters outside the Basic Multilingual Plane in the alphabetical sort: the spec says "character codes". Code
    unit or code point comparison? Not tested.
