@@ -22,7 +22,8 @@ import type {ConnectInput, ConnectSteps} from './steps.ts';
 
 /** What the connector is made of. */
 export interface ConnectorDependencies {
-  steps: ConnectSteps;
+  /** Makes the steps of one connect, so what they share lives for that connect alone. */
+  stepsFor: () => ConnectSteps;
   /** The options of one connect, except its cancellation and its phase listener, which the connector supplies. */
   options: Omit<ConnectOptions, 'cancellation' | 'onPhase'>;
   /** Reveals the connection's log: what the progress's details link shows. */
@@ -117,7 +118,7 @@ export function connectorOf(dependencies: ConnectorDependencies): Connector {
       const controller = new AbortController();
       running = controller;
       try {
-        const result = await connect(input, dependencies.steps, {
+        const result = await connect(input, dependencies.stepsFor(), {
           ...dependencies.options,
           cancellation: controller.signal,
           onPhase: event => {

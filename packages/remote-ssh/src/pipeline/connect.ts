@@ -38,20 +38,14 @@ export type PhaseEvent =
   | {kind: 'settingUpTunnel'}
   | {kind: 'waitingForForwarding'};
 
-/** The longest each step that waits on the machine may take, in milliseconds. */
-interface StepLimits {
-  preconnectMilliseconds: number;
-  probeMilliseconds: number;
-  tunnelMilliseconds: number;
-}
-
 /** What one connect is given besides its steps. */
 export interface ConnectOptions {
   cancellation: AbortSignal;
   onPhase: (event: PhaseEvent) => void;
   /** The value of `remote.SSH.maxReconnectionAttempts`, as the user wrote it. */
   maximumReconnectionAttempts: unknown;
-  limits: StepLimits;
+  /** How long the pre-connection script may take, with its question to the user. */
+  preconnectMilliseconds: number;
   logger: Logger;
 }
 
@@ -169,7 +163,7 @@ async function runSteps(
   held: Held,
   failure: (step: StepFailure) => Failed,
 ): Promise<Connection | Failed> {
-  const {cancellation, limits} = options;
+  const {cancellation} = options;
 
   /** A bounded step that gives a result; a result that is not its value is the failure to return. */
   async function runBounded<Value>(
@@ -219,17 +213,13 @@ async function runSteps(
   if (input.attempt === 1) {
     const script = await runBounded(
       signal => steps.preconnect(input, signal),
-      limits.preconnectMilliseconds,
+      options.preconnectMilliseconds,
       {kind: 'preconnectFailed'},
       () => undefined,
     );
     if ('failed' in script) {
       return script.failed;
     }
-  }
-  const located = await steps.locateClient(input);
-  if (located.kind === 'failed') {
-    return failure(located.failure);
   }
   const terms = await steps.decideTerms(input, cancellation);
   if (terms.kind === 'failed') {
@@ -239,6 +229,15 @@ async function runSteps(
   if (undecided !== undefined) {
     return undecided;
   }
+  const located = await steps.locateClient(input);
+  if (located.kind === 'failed') {
+    return failure(located.failure);
+  }
+  const unlocated = cancelled();
+  if (unlocated !== undefined) {
+    return unlocated;
+  }
+  const waits = located.value;
   const connection = await steps.openConnection(
     input,
     terms.value,
@@ -255,7 +254,7 @@ async function runSteps(
   }
   const probed = await bounded(
     signal => steps.probe(input, lease, signal),
-    limits.probeMilliseconds,
+    waits.probeMilliseconds,
     cancellation,
     () => undefined,
   );
@@ -334,7 +333,7 @@ async function runSteps(
         },
         signal,
       ),
-    limits.tunnelMilliseconds,
+    waits.tunnelMilliseconds,
     {kind: 'timeout'},
     late => {
       late.close();

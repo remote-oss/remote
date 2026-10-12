@@ -20,6 +20,10 @@ export type {
 } from './window-tunnel/ports.ts';
 export {succeedsWithin, type WaitLimits} from './window-tunnel/wait.ts';
 export {
+  SOCKS_HANDSHAKE_MILLISECONDS,
+  TUNNEL_WAIT_LIMITS,
+} from './window-tunnel/bounds.ts';
+export {
   openRelayTunnel,
   type RelayTunnelRequest,
   type WindowAddress,

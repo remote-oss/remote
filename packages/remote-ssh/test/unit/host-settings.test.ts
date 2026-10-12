@@ -7,6 +7,7 @@ import {
   graceSecondsOf,
   hostAlias,
   installFolderFor,
+  sshTargetOf,
 } from '../../src/pipeline/host-settings.ts';
 
 describe('the alias that keys the per-host settings', () => {
@@ -216,5 +217,26 @@ describe('the reconnection grace time and the flags', () => {
       ],
       [true, false, true, false],
     );
+  });
+});
+
+describe('the target as ssh is given it', () => {
+  it('connect-14: a plain host text is read as typed, with its user and port', () => {
+    deepStrictEqual(sshTargetOf({kind: 'plain', text: 'alice@h1:2222'}), {
+      host: 'h1',
+      user: 'alice',
+      port: 2222,
+    });
+  });
+
+  it('connect-14: a structured host keeps its user and port', () => {
+    deepStrictEqual(
+      sshTargetOf({kind: 'host', hostName: 'h1', user: 'alice', port: 2222}),
+      {host: 'h1', user: 'alice', port: 2222},
+    );
+  });
+
+  it('connect-14: a structured host with no user or port is the host alone', () => {
+    deepStrictEqual(sshTargetOf({kind: 'host', hostName: 'h1'}), {host: 'h1'});
   });
 });
