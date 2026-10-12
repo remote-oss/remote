@@ -611,6 +611,81 @@ Remote environment (F-2311, F-2312):
 - The link step is gated by core's terminal trust (F-2311). It runs as a hidden terminal process through S8's
   mechanism, not through H1. A failed link only logs a warning.
 
+#### V7a. The CLI path's start and control protocol (cli-01, #412; brief-cli-path.md §4, §4a)
+
+Read from `[cli]` at `07f806f999227108933c2e30515b26eecc1fda74` (`cli/src/commands/tunnels.rs` `command_shell`,
+`cli/src/commands/args.rs` `CommandShellArgs`, `cli/src/tunnels/control_server.rs`, `protocol.rs`, `challenge.rs`,
+`code_server.rs`, `cli/src/log.rs`). Measured 2026-10-12 against a CLI built without `vsda` (`1.140.06729-insider`),
+on the harness host image (Alpine 3.22, aarch64). A CLI's `--version` reports its build's own revision. The `[cli]`
+commit is the one its release names as its upstream.
+
+| Operation | Inputs | Output | Failures |
+|---|---|---|---|
+| `startCli` | H1, the placed CLI, its data folder `~/<serverDataFolderName>/cli`, a token | the CLI's port on the host's loopback, the token, the CLI's process id | `serverStart` when no ready line comes within the ready bound (section 6's fallback row), `cancelled` |
+
+**Start.** `VSCODE_CLI_REQUIRE_TOKEN=<token> <cli> command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir
+<data>`, under `/bin/sh` (F-2103 §6.7), inside V5's lock loop, as `startOrReuse` is.
+- **The token goes in the environment variable `VSCODE_CLI_REQUIRE_TOKEN` and nowhere else** (`[cli]` `args.rs`:
+  `require_token` reads that variable). It is never on the command line, where any local user can read it with `ps`, and
+  it is never omitted: without a token the CLI accepts any caller (`AuthRequired::VSDA`, which a CLI without `vsda` signs
+  with a public hash).
+- `--on-port` takes 0 to 2 values. With no value or `0`, the system picks the port; two values are a range.
+- `--server-data-dir`, `--extensions-dir`, `--reconnection-grace-time` and `--install-extension` pass through to the
+  server it starts.
+- **Ready line:** `Listening on 127.0.0.1:<port>`, once, on standard output (`log.result`). The CLI then serves
+  connections until it is ended.
+
+**Control protocol.** The port speaks msgpack-RPC: concatenated msgpack maps.
+- A request is `{id, method, params}`. A reply is `{id, result}` or `{id, error: {code, message}}`. A notification is
+  `{id: nil, method, params}`.
+- **Challenge:** `challenge_issue {token}` replies `{challenge}` (16 alphanumerics). Then `challenge_verify {response}`,
+  where `response` is base64url without padding of SHA-256 of the challenge. That holds for a CLI without `vsda`
+  only. A `vsda` CLI's challenge can't be signed by the extension, which is section 6's "CLI doesn't start" fallback.
+- **Serve:** `serve {socket_id, commit_id, quality, extensions, connection_token, use_local_download, compress}`.
+  `commit_id` is the CLI's own commit: a patched CLI expands its server template only for its own release.
+  `use_local_download` makes the client download the server; `compress` is `false`.
+  - While it runs, `serve` streams `serverlog {line, level}` notifications. Levels are 0 trace, 1 debug, 2 info,
+    3 warn, 4 error. Every level reaches the caller.
+  - It replies `{}` when the server has started.
+- **Bridge:** after `serve`, the editor's connection rides as `servermsg {i, body}` frames in both directions, and
+  `serverclose` ends one.
+
+**The `serverlog` lines of a first install, in order, and S045 (F-2103 5.0 steps 6–8):**
+
+| Line (`level`) | S045 |
+|---|---|
+| `Checking <data>/servers/<Quality>-<commit>/log.txt and …/pid.txt for a running server...` (2) | — |
+| `Installing and setting up <server name>...` (1) | — |
+| `Downloading <product> server -> <temporary file>` (2) | shown, indeterminate |
+| `server download progress: <bytes>/<total> (<pct>%)` (0), about every 2.4 % | the percentage |
+| `server inflate progress: <files>/<total> (<pct>%)` (0) | stays at 100 % (step 7: the unpack isn't shown) |
+| `Server integrity verified, version: <release> / <commit> / <arch> / ` (0) | stays at 100 % |
+| `Server setup complete` (1), `Starting server...` (2), `Starting server process: "<path>"` (1) | stays at 100 % |
+| `Server bound to <socket>` (0), `Extension host agent listening on <socket>` (0) | stays at 100 % |
+| `Server started` (2), then `serve`'s reply | closed |
+
+With the server already present, `serve` prints the check line and the start lines with no download, in about 0.1 s
+(F-2103 BR-8), and S045 is never shown. The server listens on a socket under `/tmp`. The bridge, not a forward,
+reaches it.
+
+**Errors.** A failed `serve` sends a level-4 `serverlog` line `Error installing server: <text>`, then the error reply.
+The reply's `message` is the Rust `Debug` form, which `parseCliServeError` reads, for example
+`WrappedError(WrappedError { message: "<text>", original: "<detail>" })`. The challenge's errors are
+`CodeError(AuthChallengeBadToken)`, `CodeError(AuthChallengeNotIssued)` and `CodeError(ServerAuthRequired)`. Every
+measured error had `code: -1`.
+
+**Lifetime.** Provisional, pending `remote-oss/remote-ssh#21`: what ends the CLI after its connection ends. The
+server outlives it in any case (F-2103 BR-10, AC-33). `command-shell` itself stops only on Ctrl-C or when the process of
+its `--parent-process-id` dies, after open connections finish (`[cli]` `command_shell`), so which process the CLI is
+tied to is the extension's choice and is open until metis answers.
+
+**Logging.** Every `serverlog` line goes to the connect's log. Only the error line (level 4) may reach a failure's
+detail, as text the presenter shows through S031 (contracts R1: no other library text in a dialog).
+
+**Layout** under `<data>`: `agent-host-token`, and `servers/` with `lru.json` (the kept servers by folder name),
+`.locks/`, and `<Quality>-<commit>/{log.txt, pid.txt, server/}`. The server is in `server/`, and its launcher is
+`server/bin/<serverApplicationName>` (F-3902 rule 10's reuse).
+
 ### V8 server-maintenance
 
 | Operation | Inputs | Output | Failures |
