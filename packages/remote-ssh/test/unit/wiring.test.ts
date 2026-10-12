@@ -656,17 +656,28 @@ async function tunnelWith(
   };
 }
 
+/** The channel run of a shared connect to `text` that logs in, with `lookup` as the host's options. */
+async function channelRunOf(
+  text: string,
+  lookup?: Answer,
+): Promise<ChannelRun | undefined> {
+  const {ports, seen} = portsOf({
+    connection: CONNECTED,
+    ...(lookup === undefined ? {} : {lookup}),
+  });
+  const steps = stepsOf(ports);
+  await steps.locateClient(inputFor(text));
+  await steps.openConnection(
+    inputFor(text),
+    TERMS,
+    new AbortController().signal,
+  );
+  return seen.channels[0];
+}
+
 describe("the composition's channel and window environment", () => {
   it("connect-14: the channel is made with the host as written and this connect's runs", async () => {
-    const {ports, seen} = portsOf({connection: CONNECTED});
-    const steps = stepsOf(ports);
-    await steps.locateClient(inputFor('alex@dev:22'));
-    await steps.openConnection(
-      inputFor('alex@dev:22'),
-      TERMS,
-      new AbortController().signal,
-    );
-    const [channelRun] = seen.channels;
+    const channelRun = await channelRunOf('alex@dev:22');
     deepStrictEqual(
       [channelRun?.hostString, channelRun?.base.target, channelRun?.terms],
       ['alex@dev:22', {host: 'dev', port: 22, user: 'alex'}, TERMS],
@@ -674,19 +685,9 @@ describe("the composition's channel and window environment", () => {
   });
 
   it("connect-14: the channel's runs use the programs and options the client step found", async () => {
-    const {ports, seen} = portsOf({connection: CONNECTED});
-    const steps = stepsOf(ports);
-    await steps.locateClient(inputFor('dev'));
-    await steps.openConnection(
-      inputFor('dev'),
-      TERMS,
-      new AbortController().signal,
-    );
+    const channelRun = await channelRunOf('dev');
     deepStrictEqual(
-      [
-        seen.channels[0]?.base.programs.sshProgram,
-        seen.channels[0]?.base.effective.user,
-      ],
+      [channelRun?.base.programs.sshProgram, channelRun?.base.effective.user],
       [SSH_PROGRAM, 'alex'],
     );
   });
@@ -867,5 +868,22 @@ describe("a terminal-mode connect's wait, from this connect's lookup and setting
       ],
       [false, true],
     );
+  });
+
+  it("F-2405 BR-8: the channel's own login waits as this connect does, from its looked-up timeout", async () => {
+    const channelRun = await channelRunOf('dev', {
+      kind: 'exit',
+      output: `${OPTIONS_TEXT}connecttimeout 7\n`,
+      status: 0,
+    });
+    deepStrictEqual(channelRun?.connectWait, {
+      connectTimeoutSeconds: 7,
+      fromHost: true,
+      unboundedWaitSeconds: 600,
+    });
+  });
+
+  it("F-2305 3.4: the channel's own login names the host as the user wrote it, without user and port", async () => {
+    deepStrictEqual((await channelRunOf('alex@dev:22'))?.displayHost, 'dev');
   });
 });

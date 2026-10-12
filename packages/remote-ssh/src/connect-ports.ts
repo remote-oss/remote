@@ -40,6 +40,7 @@ import {
 } from 'lib-server';
 import {
   acquireConnection,
+  buildInvocation,
   type ClientEnvironment,
   type ClientPlatform,
   type ConnectionClientEnvironment,
@@ -48,6 +49,7 @@ import {
   type ProcessSpawner,
   SharedSessionChannel,
   SshHostChannel,
+  terminalCopierOf,
   type TerminalLogin,
 } from 'lib-ssh';
 import type {RemotePlatform} from './pipeline/platform.ts';
@@ -245,10 +247,24 @@ export function wiringPortsOf(
           base: channelRun.base,
           spawner: machine.spawner,
           editorEnvironment: machine.processEnvironment,
-          // The window's own copy cannot ask anything yet: a copy that needs a login fails as a failed copy.
+          // The copy runs in a login terminal of its own, so no run of this channel asks through askpass.
           askpassEnvironment: {},
           files: machine.files,
           scheduler: machine.scheduler,
+          copier: terminalCopierOf({
+            terminals: surfaces.terminals,
+            scheduler: machine.scheduler,
+            invocationFor: copy =>
+              buildInvocation({...channelRun.base, purpose: 'copy', copy}),
+            connectWait: () => channelRun.connectWait,
+            attachQuestions: login =>
+              attachTerminalQuestions(
+                login,
+                surfaces.prompts,
+                channelRun.displayHost,
+              ),
+            revealLoginTerminals: () => switchOf(settings, 'showLoginTerminal'),
+          }),
         }),
         files: machine.files,
         ...SESSION_RUN_LIMITS,
