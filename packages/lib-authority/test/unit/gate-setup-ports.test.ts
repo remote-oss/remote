@@ -328,6 +328,13 @@ describe('the ports of the proposed-API setup', () => {
     );
   });
 
+  it('tells the log once when the argv file cannot be read as JSON', async () => {
+    const {editor, identity, logged} = firing();
+    editor.readFile = () => Promise.resolve('not json');
+    const ports = setupPortsOf(editor, identity);
+    deepStrictEqual([await ports.argvEnabled(), logged.length], [[], 1]);
+  });
+
   it('lists nothing and logs once when the data folder cannot be found', async () => {
     const {editor, identity, logged} = firing();
     const ports = setupPortsOf(editor, {

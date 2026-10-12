@@ -347,6 +347,18 @@ describe('the proposed-API setup (F-1403)', () => {
     });
   }
 
+  it('F-1403: a port that rejects with something that is not an error is logged by its text', async () => {
+    const ports = new FakePorts({missing: ['tunnels']});
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a port that breaks its contract, on purpose
+    ports.showSetup = () => Promise.reject('refused as text');
+    await (
+      await runSetup(ports, true)
+    ).interaction;
+    deepStrictEqual(ports.failures, [
+      'the setup was given up: refused as text',
+    ]);
+  });
+
   it('F-1403: the restart offered for a listed extension is guarded too', async () => {
     const ports = new FakePorts({
       missing: ['tunnels'],
