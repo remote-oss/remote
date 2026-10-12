@@ -28,8 +28,8 @@ import {
   PromptReader,
   type ConnectWaitSettings,
   type TunnelSession,
+  type TerminalLogin,
 } from 'lib-ssh';
-import type {TerminalLogin} from '../surfaces/terminal-questions.ts';
 import {isAborted, portOf} from './connect.ts';
 import type {ConnectInput, ConnectSteps} from './steps.ts';
 

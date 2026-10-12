@@ -1,12 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
+import type {TerminalLogin} from 'lib-ssh';
 import type {
   PickRequest,
   PromptEditor,
 } from '../../src/surfaces/prompt-surface.ts';
-import {
-  attachTerminalQuestions,
-  type TerminalLogin,
-} from '../../src/surfaces/terminal-questions.ts';
+import {attachTerminalQuestions} from '../../src/surfaces/terminal-questions.ts';
 
 const FIRST_CONTACT_TEXT = [
   "Warning: Permanently added 'box (192.0.2.1)' (ED25519) to the list of known hosts.",

@@ -194,6 +194,7 @@ export {
   type LoginTerminalName,
   type LoginTerminals,
   type LoginTerminalSession,
+  type TerminalLogin,
   type TerminalEnd,
 } from './terminal/login-terminal.ts';
 export {PlainTextFilter} from './terminal/plain-text.ts';

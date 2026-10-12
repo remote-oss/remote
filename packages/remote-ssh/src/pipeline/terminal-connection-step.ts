@@ -22,6 +22,7 @@ import {
   type SshRequest,
   type TerminalEnd,
   TerminalSessionRunner,
+  type TerminalLogin,
 } from 'lib-ssh';
 import type {
   ConnectInput,
@@ -31,7 +32,6 @@ import type {
   StepFailure,
   StepResult,
 } from './steps.ts';
-import type {TerminalLogin} from '../surfaces/terminal-questions.ts';
 
 /** What the terminal connection step is made from. */
 export interface TerminalConnectionDependencies {

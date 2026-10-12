@@ -5,18 +5,8 @@
  * an empty line for a credential and no for a host key.
  */
 
-import {
-  classifyPrompt,
-  type LoginTerminalSession,
-  type PromptReader,
-} from 'lib-ssh';
+import {classifyPrompt, type TerminalLogin} from 'lib-ssh';
 import {askQuestion, type PromptEditor} from './prompt-surface.ts';
-
-/** The terminal and the reader one login's questions come from. */
-export interface TerminalLogin {
-  terminal: Pick<LoginTerminalSession, 'send'>;
-  reader: Pick<PromptReader, 'inputOpened' | 'inputClosed'>;
-}
 
 /**
  * Shows each question the reader reports and answers the terminal; a dismissal refuses the rest of the attempt,
