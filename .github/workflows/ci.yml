@@ -14,6 +14,10 @@ on:
         description: Also run the acceptance tests in the pinned VSCodium Insiders, a local and a remote window
         type: boolean
         default: false
+      variants:
+        description: Also run the host-variant rows, once per login shell and download tool of the SSH host
+        type: boolean
+        default: false
   push:
     tags: ['*-v*']
 
@@ -21,11 +25,11 @@ permissions:
   contents: read
 
 # One run per branch and kind: a new dispatch on a branch cancels that branch's older run of the same kind, so two
-# runners do not spend their time on superseded heads. The kind (the real-server input) is part of the key, so a plain
-# and a real-server dispatch on one branch run side by side. The tag of a release is its own group and is never
+# runners do not spend their time on superseded heads. The kind (the real-server, vscodium and variants inputs) is part of
+# the key, so a plain and an opt-in dispatch on one branch run side by side. The tag of a release is its own group and is never
 # cancelled.
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.ref }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}-${{ inputs.variants && 'variants' || 'one-host' }}
   cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 jobs:
@@ -129,6 +133,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm acceptance:clean
       - run: pnpm test:acceptance:server
+      - if: always()
+        run: pnpm acceptance:clean
+
+  # The host variants (#443): the rows that depend on the host's download tool (and, later, its login shell), once per
+  # variant on the same SSH host image, each variant chosen when its container starts. Part of the release gate: opt-in
+  # on a dispatch (the `variants` input, default false), always on the tag of a release.
+  acceptance-host-variants:
+    name: acceptance (host variants)
+    if: inputs.variants || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm acceptance:clean
+      - run: pnpm build
+      - run: pnpm test:acceptance:variants
       - if: always()
         run: pnpm acceptance:clean
 
