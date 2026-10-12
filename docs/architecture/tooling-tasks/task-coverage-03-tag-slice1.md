@@ -40,6 +40,10 @@ Read each AC in its spec issue (`gh issue view <n> -R remote-oss/remote-ssh`). T
 2. **`core`**: everything the AC requires is shown by VS Code core, and the extension API can't read it: the window
    title, the status-bar remote indicator, Open Recent, a modal's button order or rendering, the progress notification's
    look, core's workspace-trust dialog. Reason: `core: <what core shows>`, for example `core: the remote indicator's text`.
+
+   Core means core alone decides what is shown. When our extension supplies the content core shows (a message's text,
+   the buttons we pass, a label, a progress message), that content is in the scripted adapters' record, so the AC takes
+   rule 3 for it, and only the rendering goes in "Core halves".
 3. **`acceptance`**: the AC's outcome can be seen by the harness (`tests/acceptance/README.md`):
    - the test extension's view through the API (the resolved authority, workspace folders, the remote file system,
      commands, settings, context keys);
@@ -54,6 +58,12 @@ Read each AC in its spec issue (`gh issue view <n> -R remote-oss/remote-ssh`). T
    `acceptance` in kind: list it in section 5's "harness capability missing" table, never as a unit row.
 4. **`unit`**: everything else. Our own decision, with no host or editor needed: parsing, planning, a string's choice,
    a bound, a retry decision, an error path the harness can't provoke.
+
+   An AC that states what our code decides from its inputs (which settings entry matches, which value wins, how a name
+   is encoded or parsed, a manifest value) is `unit` once a unit row proves it on the AC's case, even when a harness run
+   could also show it. Each such decision still needs one acceptance row of its feature that runs it end to end in some
+   case (its wiring). If there is none, list one line `<feature> wiring: <decision>` under "Needs an acceptance row",
+   once per decision, not once per AC.
 
 Two cases the rules settle:
 - **An AC with an observable part and a core part** (F-2405 AC-9's two halves, #406) takes the observable part's tag
