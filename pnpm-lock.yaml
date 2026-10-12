@@ -268,6 +268,8 @@ importers:
 
   packages/lib-standdown: {}
 
+  packages/lib-wsl: {}
+
   packages/remote-containers: {}
 
   packages/remote-explorer: {}

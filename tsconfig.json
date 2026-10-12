@@ -107,6 +107,12 @@
       "path": "packages/lib-authority/tsconfig.test.json"
     },
     {
+      "path": "packages/lib-wsl"
+    },
+    {
+      "path": "packages/lib-wsl/tsconfig.test.json"
+    },
+    {
       "path": "tests/acceptance"
     },
     {
