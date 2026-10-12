@@ -8,9 +8,13 @@ still needs. Those lists become the row cards of #141 and #142. Two halves, one 
 | Half | Issue | Features (spec issue in `remote-oss/remote-ssh`) | ACs |
 |---|---|---|---|
 | A | #473 | F-2001 (#11), F-2101 (#19), F-2102 (#20), F-2201 (#28), F-2202 (#29), F-2206 (#33), F-2301 (#34), F-2304 (#37) | 283 |
-| B | #474 | F-2305 (#38), F-2306 (#39), F-2307 (#40), F-2401 (#46), F-2403 (#48), F-2409 (#54), F-2501 (#59), F-2502 (#60), F-2601 (#68), F-3902 (#79) | 319 |
+| B | #474 | F-2305 (#38), F-2306 (#39), F-2307 (#40), F-2401 (#46), F-2403 (#48), F-2409 (#54), F-2501 (#59), F-2502 (#60), F-2601 (#68), F-3902 (#79) | 321 |
 
 Each half touches only its own features' lines of the TSV, so the two PRs merge in either order.
+
+The counts are the TSV's on 2026-10-12, after `remote-oss/remote-ssh#79` added F-3902.AC-24 and AC-25 at 21:56Z: 604 in
+all. coverage-04 (#478) removes the two ACs the spec withdrew, F-2304.AC-26 (half A) and F-2403.AC-20 (half B). The spec
+can change again: a half covers every line of its features that the TSV holds when its PR opens, whatever the count.
 
 **Depends on coverage-01 (PR #467).** Start on its branch `feature/coverage-01`; rebase on main once it merges, and open
 the PR after that.
