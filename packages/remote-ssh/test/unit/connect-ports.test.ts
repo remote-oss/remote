@@ -254,6 +254,20 @@ describe('the connect assembled from the editor and the machine', () => {
     );
   });
 
+  it("F-2304: a new connect's share downloaded does not keep the last connect's message", () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
+    options.titleOf({name: 'downloading'}, decoded('dev'));
+    options.startTitle(decoded('dev'));
+    deepStrictEqual(
+      options.titleOf(
+        {name: 'serverDownloadPercent', percent: 40},
+        decoded('dev'),
+      ),
+      '',
+    );
+  });
+
   it('F-2304 BR-2, F-2001 BR-12: ssh-remote is not cancellable and never trusted', () => {
     const {surfaces, machine, recorded} = assemblyInputs();
     const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));

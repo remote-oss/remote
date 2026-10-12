@@ -551,4 +551,26 @@ describe("the composition's channel and window environment", () => {
     stepsOf(counted).validate(inputFor('dev'));
     deepStrictEqual(reads, ['override', 'override']);
   });
+
+  it("connect-14: one connect reads the connection's settings once, so its runs agree", async () => {
+    const {ports} = portsOf({connection: CONNECTED});
+    let reads = 0;
+    const steps = stepsOf({
+      ...ports,
+      settings: {
+        ...ports.settings,
+        connection: () => {
+          reads += 1;
+          return ports.settings.connection();
+        },
+      },
+    });
+    await steps.locateClient(inputFor('dev'));
+    await steps.openConnection(
+      inputFor('dev'),
+      TERMS,
+      new AbortController().signal,
+    );
+    deepStrictEqual(reads, 1);
+  });
 });

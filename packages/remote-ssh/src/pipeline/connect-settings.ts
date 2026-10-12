@@ -4,7 +4,7 @@
  * connection's switches. The values are as the editor reports them; the steps judge them.
  */
 
-import type {TunnelSettings} from 'lib-forwarding';
+import {effectiveUseLocalServer, type TunnelSettings} from 'lib-forwarding';
 import {readSetting, type SettingHost} from 'lib-identifiers';
 import type {OverrideValue} from 'lib-product';
 import {settings} from '../identifiers.generated.ts';
@@ -98,4 +98,9 @@ export function overrideOf(host: SettingHost): OverrideValue | undefined {
   return typeof globalValue === 'string' && globalValue !== ''
     ? {value: globalValue, layer: 'defaultProfileUser'}
     : undefined;
+}
+
+/** Whether a connect runs in terminal mode: each window its own `ssh`, when the shared connection is not in effect. */
+export function terminalModeOf(host: SettingHost): boolean {
+  return !effectiveUseLocalServer(tunnelSettingsOf(host));
 }

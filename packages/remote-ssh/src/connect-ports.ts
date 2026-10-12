@@ -10,7 +10,6 @@ import type {
   ResolverOptions,
 } from 'lib-authority';
 import {
-  effectiveUseLocalServer,
   findFreePort,
   type LocalPort,
   parseRange,
@@ -62,6 +61,7 @@ import {
   overrideOf,
   serverSettingsOf,
   switchOf,
+  terminalModeOf,
   termsSettingsOf,
   textOf,
   tunnelSettingsOf,
@@ -207,10 +207,7 @@ export function wiringPortsOf(
     },
     locate: {
       settingValue: () => textOf(settings, 'path'),
-      mode: () =>
-        effectiveUseLocalServer(tunnelSettingsOf(settings))
-          ? 'shared'
-          : 'terminal',
+      mode: () => (terminalModeOf(settings) ? 'terminal' : 'shared'),
       environment: machine.clientSearch,
       platform: machine.platform,
       homeFolder: machine.homeFolder,
@@ -327,6 +324,8 @@ export function connectAssemblyOf(
       cancellable: false,
       allowsTrust: false,
       startTitle: target => {
+        // A new connect starts here: a stage without a message of its own has nothing before it to keep.
+        shownTitle = '';
         const title = startTitleOf(aliasOf(target));
         return textOfId(title.id as FailureStringId, translate, title.values);
       },

@@ -125,7 +125,16 @@ function windowEnvironment(
 /** The steps of one connect, sharing a state that lives for that connect alone. */
 export function stepsOf(ports: WiringPorts): ConnectSteps {
   const state: ConnectState = {};
-  const held: {server?: ReturnType<typeof createServerSteps>} = {};
+  const held: {
+    server?: ReturnType<typeof createServerSteps>;
+    connection?: ConnectionRequestSettings;
+  } = {};
+
+  /** The connection's settings, read once for this connect, so all of its runs use the same. */
+  function connectionSettings(): ConnectionRequestSettings {
+    held.connection ??= ports.settings.connection();
+    return held.connection;
+  }
 
   /** The server steps for this connect's host, made the first time a step needs them. */
   function serverSteps(
@@ -154,8 +163,8 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
     decideTerms: terms.decideTerms,
     locateClient: locateClientStep({
       ...ports.locate,
-      configFile: () => ports.settings.connection().configFile,
-      connectTimeout: () => ports.settings.connection().connectTimeout,
+      configFile: () => connectionSettings().configFile,
+      connectTimeout: () => connectionSettings().connectTimeout,
       state,
     }),
     openConnection: openConnectionStep({
@@ -164,7 +173,7 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
           request,
           connectionLimitsFor(
             lookedUp(state).connectTimeout,
-            ports.settings.connection().connectTimeout,
+            connectionSettings().connectTimeout,
           ),
         ),
       requestFor: (input, connectTerms) =>
@@ -172,7 +181,7 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
           input,
           connectTerms,
           state,
-          ports.settings.connection(),
+          connectionSettings(),
           ports.requestEnvironment,
         ),
       channelFor: (connection, connectTerms, input) =>
@@ -182,7 +191,7 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
             input,
             connectTerms,
             state,
-            ports.settings.connection(),
+            connectionSettings(),
             ports.requestEnvironment,
           ),
           terms: connectTerms,
