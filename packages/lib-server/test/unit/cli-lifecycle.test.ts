@@ -31,7 +31,9 @@ const DOWNLOADED: DownloadResult = {
   finalAddress: ADDRESS,
 };
 
-function baseParameters(): ReturnType<typeof parametersFor> {
+function baseParameters(): ReturnType<typeof parametersFor> & {
+  cli: NonNullable<ReturnType<typeof parametersFor>['cli']>;
+} {
   return {
     ...parametersFor(),
     launcher: 'codium-insiders',
@@ -370,13 +372,25 @@ describe("the CLI's stop (card cli-04, themis on #458)", () => {
     return {outcome, channel};
   }
 
-  it('themis on #458: the stop checks the process is still the CLI before it kills it', async () => {
+  it('themis on #458: the stop checks the process is still the CLI, by its first two arguments, before it kills it', async () => {
     const {channel} = await stopped(block('Ok', 'cli.stopped=yes'));
     const script = scriptRequests(channel)[0];
     const text = script?.operation === 'runScript' ? script.request.script : '';
     deepStrictEqual(
-      text.indexOf('is_server_process "$CLI_STOP_PID" "$CLI_FILE"') <
+      text.indexOf('is_cli_process "$CLI_STOP_PID"') <
         text.indexOf('kill "$CLI_STOP_PID"'),
+      true,
+    );
+  });
+
+  it('themis on #458: the check compares the first argument with the CLI file and the second with command-shell', async () => {
+    const {channel} = await stopped(block('Ok', 'cli.stopped=yes'));
+    const script = scriptRequests(channel)[0];
+    const text = script?.operation === 'runScript' ? script.request.script : '';
+    deepStrictEqual(
+      text.includes(
+        '[ "$CLI_ARGUMENT_0" = "$CLI_FILE" ] && [ "$CLI_ARGUMENT_1" = command-shell ]',
+      ),
       true,
     );
   });

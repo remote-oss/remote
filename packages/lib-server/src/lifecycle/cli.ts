@@ -170,28 +170,19 @@ export type CliStopOutcome =
  */
 export async function stopCli(
   channel: HostChannel,
-  base: ScriptParameters,
+  base: ScriptParameters & {cli: NonNullable<ScriptParameters['cli']>},
   processId: number,
   cancellation: AbortSignal,
 ): Promise<CliStopOutcome> {
   const stepRun = await runStep(
     channel,
     {installMode: 'singleScript', step: 'stopCli'},
-    {
-      ...base,
-      [CLI_PARAMETERS]: {
-        name: base.cli?.name ?? '',
-        dataFolder: base.cli?.dataFolder ?? '',
-        stopProcessId: processId,
-      },
-    },
+    {...base, [CLI_PARAMETERS]: {...base.cli, stopProcessId: processId}},
     {cancellation},
   );
   const read = blockOfStart(stepRun);
   if ('unfinished' in read) {
-    return read.unfinished.kind === 'failed'
-      ? read.unfinished
-      : {kind: 'failed', failure: {kind: 'noResultBlock'}};
+    return read.unfinished;
   }
   if (read.block.status !== 'Ok') {
     return {

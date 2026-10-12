@@ -564,11 +564,19 @@ const CLEANUP_BODY: readonly string[] = [
 ];
 
 /**
- * Ends the CLI that `startCli` started, only while its process id is still that CLI: the guard reads the process's
- * command line for the CLI's own file, so a recycled process id of another program is left alone.
+ * Ends the CLI that `startCli` started, only while its process is still that CLI: its first argument is the CLI's own
+ * file and its second `command-shell`, read field by field from `/proc`, so neither a recycled process id nor a
+ * process that merely mentions the file passes. Without `/proc` the fields can't be read, and nothing is ended.
  */
 const STOP_CLI_BODY: readonly string[] = [
-  'if is_server_process "$CLI_STOP_PID" "$CLI_FILE"; then',
+  'is_cli_process() {',
+  "  case $1 in ''|*[!0-9]*|0|1) return 1 ;; esac",
+  '  [ -r "/proc/$1/cmdline" ] || return 1',
+  "  CLI_ARGUMENT_0=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | sed -n 1p)",
+  "  CLI_ARGUMENT_1=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | sed -n 2p)",
+  '  [ "$CLI_ARGUMENT_0" = "$CLI_FILE" ] && [ "$CLI_ARGUMENT_1" = command-shell ]',
+  '}',
+  'if is_cli_process "$CLI_STOP_PID"; then',
   '  if have pkill; then',
   '    pkill -P "$CLI_STOP_PID" 2>/dev/null',
   '  fi',
@@ -646,7 +654,7 @@ const FUNCTION_GROUPS: Readonly<
     LEAVE,
   ],
   startCli: [COMMON_FUNCTIONS, CLI_FUNCTIONS],
-  stopCli: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS],
+  stopCli: [COMMON_FUNCTIONS],
   kill: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
   uninstall: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
   cleanup: [COMMON_FUNCTIONS, LOCK_FUNCTIONS, FOLDER_KIND_FUNCTIONS],

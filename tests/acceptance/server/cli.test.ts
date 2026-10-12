@@ -45,7 +45,9 @@ describe('V7a the CLI on a real host', function () {
   this.timeout(180000);
   let host: RunningHost;
   let session: SharedSession;
-  let parameters: ScriptParameters;
+  let parameters: ScriptParameters & {
+    cli: NonNullable<ScriptParameters['cli']>;
+  };
   let cliPath: string;
   const running: number[] = [];
 
@@ -352,6 +354,29 @@ describe('V7a the CLI on a real host', function () {
         .onHost('sh', '-c', `kill -0 ${String(foreign)} && echo yes || echo no`)
         .trim() === 'yes';
     host.onHost('sh', '-c', `kill ${String(foreign)} 2>/dev/null; true`);
+    deepStrictEqual([stop.kind, alive], ['notRunning', true]);
+  });
+
+  it('themis on #458: stopCli with the process id of a program that only names the CLI file leaves it running', async () => {
+    await install();
+    const cliFile = cliPath;
+    host.onHost(
+      'sh',
+      '-c',
+      `nohup sh -c 'sleep 60; echo ${cliFile} command-shell' >/dev/null 2>&1 & echo $! > /tmp/mention.pid`,
+    );
+    const mention = Number(host.onHost('cat', '/tmp/mention.pid').trim());
+    const stop = await stopCli(
+      host.channel,
+      parameters,
+      mention,
+      NEVER_CANCELLED,
+    );
+    const alive =
+      host
+        .onHost('sh', '-c', `kill -0 ${String(mention)} && echo yes || echo no`)
+        .trim() === 'yes';
+    host.onHost('sh', '-c', `kill ${String(mention)} 2>/dev/null; true`);
     deepStrictEqual([stop.kind, alive], ['notRunning', true]);
   });
 });
