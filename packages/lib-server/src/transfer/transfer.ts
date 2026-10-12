@@ -55,6 +55,8 @@ export type ArchiveCache =
 /** What one transfer is asked to do. */
 export interface TransferInput {
   plan: DownloadPlan;
+  /** The install step the archive goes to; the server's by default, the CLI's for the CLI. */
+  step?: 'install' | 'installCli';
   /** The script parameters of the install; the plan's address and the archive's place are filled in here. */
   parameters: ScriptParameters;
   /** The client's temporary folder, where an archive that is not kept lives until the transfer ends. */
@@ -227,7 +229,7 @@ async function install(
     () =>
       runStep(
         dependencies.channel,
-        {installMode: 'singleScript', step: 'install'},
+        {installMode: 'singleScript', step: input.step ?? 'install'},
         parameters,
         {
           cancellation: input.cancellation,
@@ -242,6 +244,14 @@ async function install(
     input.cancellation,
   );
   return outcomeOf(stepRun, input.plan);
+}
+
+/** Runs the install step without an archive of its own: for an install the host already has, the step answers at once. */
+export function installPlaced(
+  input: TransferInput,
+  dependencies: TransferDependencies,
+): Promise<TransferOutcome> {
+  return install(input, dependencies, {archivePath: '', removeArchive: false});
 }
 
 /** The host downloads the archive itself. */

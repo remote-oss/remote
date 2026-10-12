@@ -48,7 +48,16 @@ export const COMMON_FUNCTIONS: readonly string[] = [
   'DATA_ROOT=${INSTALL_ROOT:-$HOME}',
   'DATA_DIR=$DATA_ROOT/$DATA_FOLDER',
   'INSTALL_DIR=$DATA_DIR/bin/$COMMIT',
+  'CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT',
+  'CLI_FILE=$DATA_DIR/$CLI_NAME',
   'BOOT_PREFIX=$DATA_DIR/.$COMMIT',
+];
+
+/** The port the CLI reports in its log: the first line that is exactly `Listening on 127.0.0.1:<port>`. */
+export const CLI_FUNCTIONS: readonly string[] = [
+  'cli_ready_port() {',
+  `  sed -n 's/^Listening on 127\\.0\\.0\\.1:\\([0-9][0-9]*\\)$/\\1/p' "$LOG_FILE" 2>/dev/null | head -n 1`,
+  '}',
 ];
 
 /** Source the environment setup once and export the proxy variables the host's own environment does not set. */
