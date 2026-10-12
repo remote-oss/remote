@@ -63,13 +63,15 @@ export type CliControlFailure =
 export interface CliControl {
   /** Runs `challenge_issue` then `challenge_verify` (V7a). */
   authenticate(token: string): Promise<{kind: 'authenticated'} | CliControlFailure>;
-  /** Runs `serve`; `onLog` gets each `serverlog` line as it arrives, before the reply. */
+  /** Runs the connect's `serve` on socket 0; `onLog` gets each `serverlog` line as it arrives, before the reply. */
   serve(
     params: {commit: string; quality: string; connectionToken: string; useLocalDownload: boolean},
     onLog: (line: {text: string; level: number}) => void,
-  ): Promise<{kind: 'serving'} | CliControlFailure>;
-  /** Opens one server socket for an editor connection: `socket_id` is allocated by the client (0, 1, 2…). */
-  openSocket(): CliSocket;
+  ): Promise<{kind: 'serving'; socket: CliSocket} | CliControlFailure>;
+  /** Runs `serve` again, with the next `socket_id` and the first `serve`'s parameters, and opens that socket. */
+  openSocket(
+    onLog: (line: {text: string; level: number}) => void,
+  ): Promise<{kind: 'serving'; socket: CliSocket} | CliControlFailure>;
   close(): void;
 }
 
@@ -88,15 +90,29 @@ export function openCliControl(stream: ByteStream): CliControl;
 - **The challenge's response** is base64url without padding of the SHA-256 of the challenge's UTF-8 bytes (V7a), with
   `node:crypto`'s `createHash('sha256')` and `Buffer.toString('base64url')`. An error reply to either step is
   `challengeRefused` with the reply's `message`.
+- **Every socket has its own `serve`.** `[cli]` attaches one server bridge per `serve` call, for that call's
+  `socket_id` (`src/tunnels/control_server.rs` `attach_server_bridge`), and a `servermsg` whose `i` has no bridge fails
+  with `NoAttachedServerError` (`handle_server_message`). Because `servermsg` goes without id, that failure is never
+  answered: the editor's connection would just hang. So `serve` and `openSocket` share one implementation, which
+  sends `serve` for a new socket id and resolves that socket only after the reply.
 - **`serve`** sends `{socket_id: 0, commit_id: commit, quality, extensions: [], connection_token, use_local_download,
   compress: false}`. Every `serverlog {line, level}` notification goes to `onLog` in arrival order. A `{}` reply is
-  `serving`. An error reply is `serveFailed`, where:
+  `serving` with socket 0, which the client keeps for the first editor connection (cli-04). An error reply is
+  `serveFailed`, where:
   - `error` is `parseCliServeError(message)`, the existing function;
   - `errorLine` is the text of the last `serverlog` line whose level was 4, or `undefined` when there was none. V7a:
     only this line may reach a failure's detail.
-- **`openSocket`**: from then on, a `servermsg {i, body}` with `i === socketId` is delivered to that socket's `onData`,
-  and `serverclose {i}` ends it. `send` writes `servermsg {i: socketId, body}` as a **request without id** (a
-  notification), as `[cli]` `handle_server_message` reads it. A `servermsg` for an unknown `i` is ignored.
+  `serve` is called once per connection. A second call throws `Error('serve was already called')`.
+- **`openSocket`** sends `serve` with the next socket id (1, 2, 3…) and the parameters the first `serve` sent, and
+  handles its `serverlog` lines, reply and failures as `serve` does. The CLI finds its server running and only attaches
+  the bridge, with no download, in about 0.1 s (V7a). Called before `serve` resolved `serving`, it throws
+  `Error('serve has not succeeded')`. A failed `openSocket` leaves the other sockets open; its id is not reused.
+- **One `serve` at a time.** `[cli]`'s `serverlog` names no socket, so a level-4 line could not be told apart between two
+  running `serve` calls. A `serve` request is sent only after the previous one has replied; calls wait in order.
+- **The socket:** a `servermsg {i, body}` with `i === socketId` is delivered to that socket's `onData`, and
+  `serverclose {i}` ends it. `send` writes `servermsg {i: socketId, body}` as a **request without id** (a
+  notification), as `[cli]` `handle_server_message` reads it. A `send` after the socket ended sends nothing. A
+  `servermsg` for an unknown `i` is ignored.
 - `close()` closes the stream. Every pending reply settles `closed`, and every open socket's `onClose` runs once.
 - The stream's `onClose` does the same as `close()`.
 
@@ -124,8 +140,9 @@ Closing S045 at `serve`'s reply is cli-04's.
 
 One assertion per `it`; the cite starts the name. `fake-cli.ts` gives `fakeCli(script)`: a pair of in-memory
 `ByteStream`s, where the CLI side decodes the client's requests and answers from `script`. `script` is a function from
-a request to a list of messages to send back (notifications and a reply), and the fake records every request. Messages
-use the exact shapes of the live record on #412.
+a request to a list of messages to send back (notifications and a reply), and the fake records every request. Like `[cli]`, the
+fake attaches a bridge for each `serve` it answers with `{}`, and it records as `rejected` every `servermsg` whose `i`
+has no bridge, without answering it. Messages use the exact shapes of the live record on #412.
 
 `cli-control.test.ts`:
 
@@ -141,11 +158,25 @@ use the exact shapes of the live record on #412.
 | V7a | a reply and a notification in one chunk | both handled, in order |
 | V7a | a message split across three chunks | handled once complete |
 | V7a | a non-map message, then a valid reply | the reply is handled; nothing throws |
-| §4a | `openSocket()` twice | socket ids 0 and 1 |
-| §4a | `socket.send(bytes)` | the CLI side got `{method: 'servermsg', params: {i: 0, body: bytes}}` with no `id` |
+| §4a | `serve` resolved | its socket's id is 0 |
+| `[cli]` attach_server_bridge | `serve`, then `openSocket` twice | the CLI side got three `serve` requests, with `socket_id` 0, 1 and 2 |
+| `[cli]` attach_server_bridge | the same | the second and third `serve` params equal the first's apart from `socket_id` |
+| `[cli]` attach_server_bridge | `openSocket` whose `serve` the CLI has not answered yet | the promise is still pending |
+| `[cli]` attach_server_bridge | `serve`, `openSocket`, then `send(bytes)` on each socket | the fake's `rejected` is empty |
+| `[cli]` attach_server_bridge | the fake receives `servermsg {i: 5}` with no `serve` for 5 | the fake's `rejected` is `[5]` (the fake's own row) |
+| V7a | `openSocket`, the CLI sends a level-4 line then the error reply of #412's run 5 | `serveFailed`, `errorLine` that line's text |
+| V7a | the same | socket 0's `onClose` has not run |
+| V7a | `openSocket` with `onLog`, the CLI sends two `serverlog` lines then `{}` | `onLog` got the two |
+| contracts | `openSocket` before `serve` | it throws `serve has not succeeded` |
+| contracts | `openSocket` after a failed `serve` | it throws `serve has not succeeded` |
+| contracts | `serve` twice | the second throws `serve was already called` |
+| V7a, `[cli]` serverlog | two `openSocket` calls at once | the second `serve` request was sent after the first's reply |
+| §4a | `socket.send(bytes)` on socket 0 | the CLI side got `{method: 'servermsg', params: {i: 0, body: bytes}}` with no `id` |
 | §4a | the CLI sends `servermsg {i: 1, body}` | only socket 1's `onData` got `body` |
 | §4a | the CLI sends `serverclose {i: 0}` | socket 0's `onClose` ran once |
-| contracts | the stream closes during `serve` | `serve` resolves `closed`, and every socket's `onClose` ran once |
+| §4a | `send` on socket 0 after `serverclose {i: 0}` | the CLI side got no `servermsg` for 0 after it |
+| contracts | the stream closes during `serve` | `serve` resolves `closed` |
+| contracts | the stream closes during `openSocket` | `openSocket` resolves `closed`, and every open socket's `onClose` ran once |
 | contracts | `close()` twice | the stream was closed once |
 
 `cli-progress.test.ts` (one row per line of V7a's table, with the measured texts):
