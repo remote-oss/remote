@@ -485,6 +485,57 @@ describe('SSH host channel', () => {
         ['cancelled', true],
       );
     });
+
+    describe('with a copier', () => {
+      it('#253 Q11: asks the copier and starts no process', async () => {
+        const spawner = new ScriptedSpawner(prints('', 0));
+        const asked: CopyRequest[] = [];
+        const request = copyRequest();
+        const outcome = await new SshHostChannel({
+          ...channelBase(),
+          spawner: spawner.spawn,
+          copier: asking => {
+            asked.push(asking);
+            return Promise.resolve<CopyOutcome>({kind: 'copied'});
+          },
+        }).copyToHost(request);
+        deepStrictEqual(
+          [outcome, asked, spawner.started.length],
+          [{kind: 'copied'}, [request], 0],
+        );
+      });
+
+      it('#253 Q11: a cancellation that came before the copy does not reach the copier', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        let asked = 0;
+        const outcome = await new SshHostChannel({
+          ...channelBase(),
+          copier: () => {
+            asked += 1;
+            return Promise.resolve<CopyOutcome>({kind: 'copied'});
+          },
+        }).copyToHost({...copyRequest(), cancellation: controller.signal});
+        deepStrictEqual(
+          [outcome.kind === 'failed' ? outcome.failure.kind : outcome, asked],
+          ['cancelled', 0],
+        );
+      });
+
+      it('#253 Q11: what the copier answers is the outcome', async () => {
+        const failed: CopyOutcome = {
+          kind: 'failed',
+          failure: {kind: 'copyFailed', detail: 'scp failed: no space'},
+        };
+        deepStrictEqual(
+          await new SshHostChannel({
+            ...channelBase(),
+            copier: () => Promise.resolve(failed),
+          }).copyToHost(copyRequest()),
+          failed,
+        );
+      });
+    });
   });
 });
 

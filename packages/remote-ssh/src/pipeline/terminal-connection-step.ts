@@ -16,6 +16,7 @@ import {
   type ConnectionNotice,
   LineSplitter,
   type LoginTerminals,
+  followLoginOutput,
   PromptReader,
   type SessionRunner,
   setupMarkerOf,
@@ -211,17 +212,13 @@ export function openTerminalConnectionStep(
           handOver();
         }
       });
-      let heardOutput = false;
-      terminal.onOutput(text => {
-        if (finished) {
-          return;
-        }
-        if (!heardOutput) {
-          heardOutput = true;
+      followLoginOutput(terminal, {
+        isFinished: () => finished,
+        onFirstOutput: () => {
           wait.stop();
-        }
-        reader.push(text);
-        splitter.push(text);
+        },
+        reader,
+        lines: splitter,
       });
       terminal.onEnd(end => {
         if (handedOver) {

@@ -214,3 +214,12 @@ export {
   type TunnelGate,
   type TunnelSession,
 } from './terminal/tunnel-session.ts';
+export {
+  type Copier,
+  terminalCopierOf,
+  type TerminalCopierOptions,
+} from './terminal/terminal-copy.ts';
+export {
+  followLoginOutput,
+  type LoginOutputSinks,
+} from './terminal/login-output.ts';
