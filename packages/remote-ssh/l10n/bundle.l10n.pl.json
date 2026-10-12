@@ -47,5 +47,6 @@
   "SSH host name cannot begin with {0}": "SSH host name cannot begin with {0}",
   "SSH host name cannot include the character {0}": "SSH host name cannot include the character {0}",
   "SSH user name cannot begin with {0}": "SSH user name cannot begin with {0}",
-  "SSH user name cannot include the character {0}": "SSH user name cannot include the character {0}"
+  "SSH user name cannot include the character {0}": "SSH user name cannot include the character {0}",
+  "SSH: {0}": "SSH: {0}"
 }
