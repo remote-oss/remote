@@ -95,6 +95,17 @@ What is removed (ECMA-48, the forms a terminal emits):
 A sequence that a piece ends inside (for example a piece ending in `\x1b[` or `\x1b]0;tit`) is held and joined with
 the next piece; the text before it is returned at once.
 
+**A held string is bounded** (amended 2026-10-12, athena on #341; brief 311a9f5, after the DEC VT500 parser). An OSC,
+DCS, SOS, PM or APC string ends at BEL (OSC only) or ST, and is also **cancelled** by:
+- any other ESC: the string is dropped up to that ESC, and the ESC starts the next sequence;
+- CAN (`\x18`) or SUB (`\x1a`): the string is dropped up to and including that byte.
+
+And a string that is **still unterminated and held** when `push` returns, once more than 4096 characters from its ESC
+are held, is dropped: its first 4096 characters are discarded and parsing resumes as plain text at the 4097th. (The
+rest of an endless string then shows as text; that is the accepted cost, so that a stray `ESC ]` in a host's banner
+can never swallow the password prompt or a marker that follows.) A string whose terminator arrives in the piece that
+takes it past 4096 characters ends normally: the cap applies only to a string still held after a piece.
+
 ### 2.3 The recording fake (`lib-ssh/src/testing/recording-terminal.ts`)
 
 ```ts
@@ -175,6 +186,12 @@ One assertion per `it`; the cite starts the name.
 | #299 | `'x\x1b'`, then `'[2Ky'` (split right after ESC) | `'x'` then `'y'` |
 | #299 | `'\x07bell\ttab'` (BEL outside an OSC, tab) | `'\x07bell\ttab'` |
 | #299 | `'end\x1b[1'`, then `flush()` | `'end'` then `''` |
+| #341 | `'motd\x1b]0;oops\r\n\x1b[0mpassword: '` (a stray OSC in a banner, cancelled by the next ESC) | `'motdpassword: '` |
+| #341 | `'a\x1b]0;x\x18b'` (CAN) | `'ab'` |
+| #341 | `'a\x1b]0;x\x1ab'` (SUB) | `'ab'` |
+| #341 | `'a\x1b]0;x\x1bPdcs\x1b\\b'` (another string's ESC cancels the first; the DCS then ends at ST) | `'ab'` |
+| #341 | `'a\x1b]0;'` + 5000 × `'x'` + `'tail'` in one piece | `'a'` + 908 × `'x'` + `'tail'` (913 characters: the 5008 from the ESC minus the 4096 dropped) |
+| #341 | `'a\x1b]0;'` + 3000 × `'x'`, then 2000 × `'y'` + `'\x07z'` | `'a'` then `'z'` (the terminator came in the piece that crossed 4096) |
 
 ### 3.2 `recording-terminal.test.ts`
 
