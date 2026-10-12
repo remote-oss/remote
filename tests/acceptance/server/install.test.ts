@@ -76,7 +76,7 @@ describe('F-2407 the install of the server', function () {
     );
   });
 
-  it('F-3902.6: removes a copied archive after the install', async () => {
+  it('contracts V4: removes a copied archive after the install', async () => {
     host.onHost('cp', HOST_ARCHIVE, '/tmp/copied.tar.gz');
     await installStatus(
       host,

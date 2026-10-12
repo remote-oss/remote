@@ -46,7 +46,7 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
     record = await recordAfterDialog();
   });
 
-  it('F-2601 5.0: the window is one of the failing connects', () => {
+  it('contracts harness: the window is one of the failing connects', () => {
     strictEqual(failure === undefined, false);
   });
 

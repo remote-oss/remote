@@ -57,7 +57,7 @@ describe('F-2401 the probe of a host', function () {
     return outcome.host;
   }
 
-  it('F-2401: finds an Alpine host to be a musl Linux with the tools of BusyBox', async () => {
+  it('F-2401 AC-2: finds an Alpine host to be a musl Linux with the tools of BusyBox', async () => {
     const {operatingSystem, libc, release, tools, busyboxWget} = await probed();
     deepStrictEqual(
       {operatingSystem, libc, release, tools, busyboxWget},
@@ -71,7 +71,7 @@ describe('F-2401 the probe of a host', function () {
     );
   });
 
-  it("F-2401: reads the user's home, the login shell and the temporary folder", async () => {
+  it("contracts V2: reads the user's home, the login shell and the temporary folder", async () => {
     const {home, loginShell, temporaryFolder} = await probed();
     deepStrictEqual(
       {home, loginShell, temporaryFolder},
@@ -79,7 +79,7 @@ describe('F-2401 the probe of a host', function () {
     );
   });
 
-  it("F-2401: reads the host's architecture as the editor names it", async () => {
+  it("F-2401 AC-11: reads the host's architecture as the editor names it", async () => {
     const machine = host.onHost('uname', '-m').trim();
     deepStrictEqual(
       (await probed()).architecture,
