@@ -335,6 +335,22 @@ describe("the lookup of the host's configuration", () => {
     });
   });
 
+  it('F-2201 AC-35: a configuration file ssh cannot read, its line ended with \\r\\n, is "Permission denied"', async () => {
+    const {result} = await located({
+      lookup: lookupFailing(
+        "Can't open user config file /home/a/cfg: Permission denied\r\n",
+      ),
+    });
+    deepStrictEqual(result, {
+      kind: 'failed',
+      failure: {
+        kind: 'unknown',
+        reason: {text: 'Permission denied'},
+        hints: [],
+      },
+    });
+  });
+
   it('F-2201 7.E6: a last line with no line end is logged too', async () => {
     const {logged} = await located({
       lookup: lookupFailing('first\r\nlast'),
