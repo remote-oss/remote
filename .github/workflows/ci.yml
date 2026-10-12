@@ -16,6 +16,14 @@ on:
 permissions:
   contents: read
 
+# One run per branch and kind: a new dispatch on a branch cancels that branch's older run of the same kind, so two
+# runners do not spend their time on superseded heads. The kind (the real-server input) is part of the key, so a plain
+# and a real-server dispatch on one branch run side by side. The tag of a release is its own group and is never
+# cancelled.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}-${{ inputs.real-server && 'real-server' || 'plain' }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
+
 jobs:
   checks:
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
