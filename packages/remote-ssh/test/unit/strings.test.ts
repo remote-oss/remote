@@ -74,6 +74,7 @@ const CONFIG_FILE_TEXTS = [
   'Settings',
   'about SSH configuration files',
   'specify a custom configuration file',
+  'remote.SSH.configFile must be an absolute path or start with ~/: "{0}"',
 ];
 
 const PICKER_TEXTS = ['Select the platform of the remote host "{0}"'];

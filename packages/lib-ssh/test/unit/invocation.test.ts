@@ -1,9 +1,9 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {
-  expandHome,
   TUNNEL_COMMAND,
   TUNNEL_SUCCESS_LINE,
 } from '../../src/arguments/invocation.ts';
+import {expandHome} from '../../src/config/files.ts';
 import {posixQuote} from '../../src/process/remote-program.ts';
 import {buildInvocation, buildOptionsQuery} from '../../src/index.ts';
 import type {
@@ -296,17 +296,32 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     deepStrictEqual(flagPair(invocation, '-F'), ['-F', '/home/dev']);
   });
 
-  const AS_WRITTEN = ['config', '$HOME/x', '${env:HOME}/x'] as const;
-  for (const setting of AS_WRITTEN) {
-    it(`F-2201.BR-3: a configFile of ${setting} stays as written`, () => {
-      const invocation = buildInvocation(makeRequest({configFile: setting}));
-      deepStrictEqual(flagPair(invocation, '-F'), ['-F', setting]);
+  const NOT_ABSOLUTE = ['config', '$HOME/x', '${env:HOME}/x'] as const;
+  for (const setting of NOT_ABSOLUTE) {
+    it(`S2: a configFile of ${setting} that is not absolute is refused before the arguments are built`, () => {
+      throws(() => buildInvocation(makeRequest({configFile: setting})), {
+        message: 'remote.SSH.configFile is not absolute',
+      });
     });
   }
 
-  it('F-2201.BR-2: a spaces-only configFile is used as written', () => {
-    const invocation = buildInvocation(makeRequest({configFile: '   '}));
-    deepStrictEqual(flagPair(invocation, '-F'), ['-F', '   ']);
+  it('F-2201.BR-2: a spaces-only configFile is unset, so no -F', () => {
+    strictEqual(
+      flagPair(buildInvocation(makeRequest({configFile: '   '})), '-F').length,
+      0,
+    );
+  });
+
+  it('S2: buildInvocation refuses a configFile that is not absolute', () => {
+    throws(() => buildInvocation(makeRequest({configFile: 'relcfg/x'})), {
+      message: 'remote.SSH.configFile is not absolute',
+    });
+  });
+
+  it('S2: buildOptionsQuery refuses a configFile that is not absolute', () => {
+    throws(() => buildOptionsQuery(makeQuery({configFile: 'relcfg/x'})), {
+      message: 'remote.SSH.configFile is not absolute',
+    });
   });
 
   const PSEUDO_TERMINALS: Array<[string, unknown]> = [

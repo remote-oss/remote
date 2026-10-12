@@ -113,6 +113,7 @@ function handlerOf(world: World) {
     PLACES,
     () => world.configFile,
     EXTENSION,
+    template => template,
   );
 }
 
@@ -325,25 +326,38 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
     );
   });
 
-  it('F-2203 Q1, AC-23: a relative configured file is made and opened at one and the same place under the home folder', async () => {
+  it('F-2203 AC-32: a relative configured file is refused, with the absolute-path text as the command error', async () => {
     const world = worldWith({
       configFile: 'relcfg/rel_config',
       existing: new Set([HOME]),
     });
-    const calls = await runTaking(world, 'relcfg/rel_config');
+    world.take = choice => rowOf(choice, 'relcfg/rel_config');
+    await rejects(
+      Promise.resolve(handlerOf(world).execute()),
+      new Error(
+        'remote.SSH.configFile must be an absolute path or start with ~/: "relcfg/rel_config"',
+      ),
+    );
+  });
+
+  it('F-2203 AC-23: the refusal asks the file ports nothing and opens nothing', async () => {
+    const world = worldWith({
+      configFile: 'relcfg/rel_config',
+      existing: new Set([HOME]),
+    });
+    world.take = choice => rowOf(choice, 'relcfg/rel_config');
+    await Promise.resolve(handlerOf(world).execute()).catch(() => undefined);
     deepStrictEqual(
-      [
-        calls.find(call => call.call === 'file'),
-        calls.find(call => call.call === 'open'),
-      ],
-      [
-        {call: 'file', path: `${HOME}/relcfg/rel_config`, mode: 0o644},
-        {
-          call: 'open',
-          file: `${HOME}/relcfg/rel_config`,
-          opened: {file: `${HOME}/relcfg/rel_config`},
-        },
-      ],
+      world.calls.filter(call => call.call !== 'pick'),
+      [],
+    );
+  });
+
+  it('F-2203 7.E3: a configured ~/cfg with the file missing opens the home folder path, as before', async () => {
+    const world = worldWith({configFile: '~/cfg', existing: new Set([HOME])});
+    deepStrictEqual(
+      (await runTaking(world, '~/cfg')).filter(call => call.call === 'open'),
+      [{call: 'open', file: `${HOME}/cfg`, opened: {file: `${HOME}/cfg`}}],
     );
   });
 
@@ -355,19 +369,14 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
     );
   });
 
-  it('#408 (1): on Linux a backslash after the ~ is not the home folder', async () => {
+  it('#408 (1), F-2203 7.E3: on Linux a backslash after the ~ is not expanded, so the value is refused', async () => {
     const world = worldWith({configFile: '~\\cfg\\c'});
-    deepStrictEqual(
-      (await runTaking(world, '~\\cfg\\c')).filter(
-        call => call.call === 'open',
+    world.take = choice => rowOf(choice, '~\\cfg\\c');
+    await rejects(
+      Promise.resolve(handlerOf(world).execute()),
+      new Error(
+        'remote.SSH.configFile must be an absolute path or start with ~/: "~\\cfg\\c"',
       ),
-      [
-        {
-          call: 'open',
-          file: `${HOME}/~\\cfg\\c`,
-          opened: {file: `${HOME}/~\\cfg\\c`},
-        },
-      ],
     );
   });
 

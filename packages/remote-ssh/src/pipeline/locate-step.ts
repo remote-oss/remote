@@ -7,6 +7,7 @@
 
 import {
   buildOptionsQuery,
+  configFilePath,
   type ClientCandidate,
   type ClientEnvironment,
   type ClientPlatform,
@@ -194,6 +195,17 @@ export function locateClientStep(
   dependencies: LocateStepDependencies,
 ): ConnectSteps['locateClient'] {
   return async input => {
+    const configured = configFilePath(
+      dependencies.configFile(),
+      dependencies.homeFolder,
+      dependencies.platform,
+    );
+    if (configured.kind === 'invalid') {
+      dependencies.logger.error(
+        `remote.SSH.configFile is not an absolute path: "${configured.value}"`,
+      );
+      return {kind: 'failed', failure: {kind: 'unknown'}};
+    }
     for (const candidate of candidates(
       dependencies.settingValue(),
       dependencies.environment,

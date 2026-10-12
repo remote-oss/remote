@@ -19,16 +19,16 @@ export type {
 export {
   buildInvocation,
   buildOptionsQuery,
-  expandHome,
   TUNNEL_SUCCESS_LINE,
 } from './arguments/invocation.ts';
 export type {ClientPlatform} from './config/platform.ts';
 export type {
   ClientLocations,
   ConfigFileReader,
+  ConfigFileSetting,
   FileInEffect,
 } from './config/files.ts';
-export {filesInEffect} from './config/files.ts';
+export {configFilePath, expandHome, filesInEffect} from './config/files.ts';
 export type {HostEntry, HostListResult} from './config/hosts.ts';
 export {listHosts} from './config/hosts.ts';
 export type {

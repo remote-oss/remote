@@ -4,9 +4,10 @@
  * works over the ports of the editor and of the client's files, so it imports neither.
  */
 
-import path from 'node:path';
 import type {CommandHandler} from 'lib-identifiers';
-import {expandHome, type ClientPlatform} from 'lib-ssh';
+import {configFilePath, type ClientPlatform} from 'lib-ssh';
+import {ownText} from '../surfaces/own-strings.ts';
+import type {Translate} from '../surfaces/strings.ts';
 import {
   buildFileChoice,
   type FileChoice,
@@ -72,21 +73,29 @@ export interface ConfigFileExtension {
 const STARTER_INDENT = {insertSpaces: true, tabSize: 4} as const;
 
 /**
- * The path a file row stands for. A user or system row is already absolute. A configured one is as the user wrote
- * it, with `~` read as `ssh -F` reads it, and whatever is left relative under the home folder.
+ * The path a file row stands for. A user or system row is already absolute. A configured one passes the one check
+ * of the setting, and a value that is neither absolute nor a `~` form is a command error, not a place under the
+ * home folder.
  */
 function pathOf(
   fileRow: Extract<FileChoiceItem, {kind: 'file'}>,
   homeFolder: string,
   platform: ClientPlatform,
+  translate: Translate,
 ): string {
   if (fileRow.role !== 'configured') {
     return fileRow.label;
   }
-  return path.resolve(
-    homeFolder,
-    expandHome(fileRow.label, homeFolder, platform),
-  );
+  const setting = configFilePath(fileRow.label, homeFolder, platform);
+  if (setting.kind !== 'file') {
+    throw new Error(
+      ownText(
+        {id: 'configFileNotAbsolute', values: [fileRow.label]},
+        translate,
+      ),
+    );
+  }
+  return setting.path;
 }
 
 /** The command: pick a file, make it when it is missing, open it, and give a new one its template. */
@@ -98,6 +107,8 @@ export function openConfigFileHandler(
   /** `remote.SSH.configFile` as written, read at each run. */
   configFile: () => string,
   extension: ConfigFileExtension,
+  /** An English template into the display language. */
+  translate: Translate,
 ): CommandHandler {
   return {
     execute: async () => {
@@ -121,7 +132,12 @@ export function openConfigFileHandler(
         await actions.openHelp();
         return;
       }
-      const file = pathOf(picked, places.homeFolder, places.platform);
+      const file = pathOf(
+        picked,
+        places.homeFolder,
+        places.platform,
+        translate,
+      );
       const exists = await files.exists(file);
       const plan = planCreation({
         file,

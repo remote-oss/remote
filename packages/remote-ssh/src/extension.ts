@@ -170,6 +170,7 @@ export async function activate(
       },
       () => textOf(host, 'configFile'),
       extension,
+      translate,
     ),
     channels: vscode.window,
     clock: Date.now,
