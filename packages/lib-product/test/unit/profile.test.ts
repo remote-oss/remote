@@ -23,6 +23,7 @@ describe('readProfile', () => {
       urlProtocol: 'fixture',
       serverDownloadUrlTemplate:
         'https://archives.example.invalid/${quality}/${commit}/${version}${release}/server-${os}-${arch}.tar.gz',
+      cliDownloadUrlTemplate: '',
       updateUrl: '',
       downloadUrl: '',
       serverLicense: [],
@@ -48,11 +49,41 @@ describe('readProfile', () => {
         tunnelApplicationName: '',
         urlProtocol: '',
         serverDownloadUrlTemplate: '',
+        cliDownloadUrlTemplate: '',
         updateUrl: '',
         downloadUrl: '',
         serverLicense: [],
         serverLicenseUrl: '',
       },
+    });
+  });
+
+  it('brief §3: reads the CLI download template the product names', () => {
+    const reading = readProfile(
+      '{"cliDownloadUrlTemplate": "https://x/${version}/cli-${os}-${arch}.tar.gz"}',
+    );
+    deepStrictEqual(
+      reading.kind === 'profile'
+        ? reading.profile.cliDownloadUrlTemplate
+        : reading,
+      'https://x/${version}/cli-${os}-${arch}.tar.gz',
+    );
+  });
+
+  it('brief §3: gives a product with no CLI template the empty text', () => {
+    const reading = readProfile('{}');
+    deepStrictEqual(
+      reading.kind === 'profile'
+        ? reading.profile.cliDownloadUrlTemplate
+        : reading,
+      '',
+    );
+  });
+
+  it('brief §3: reports a CLI template that is not a string as unreadable, naming the field', () => {
+    deepStrictEqual(readProfile('{"cliDownloadUrlTemplate": 3}'), {
+      kind: 'unreadable',
+      reason: 'cliDownloadUrlTemplate is not a string',
     });
   });
 

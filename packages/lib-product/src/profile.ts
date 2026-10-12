@@ -19,6 +19,8 @@ export interface ProductProfile {
   readonly urlProtocol: string;
   /** The product's own server archive template; empty when it declares none. */
   readonly serverDownloadUrlTemplate: string;
+  /** The product's own template for the editor's command-line archive; empty when it names no source. */
+  readonly cliDownloadUrlTemplate: string;
   readonly updateUrl: string;
   readonly downloadUrl: string;
   /** The licence lines the server shows; empty when the product's server needs no acceptance. */
@@ -45,6 +47,7 @@ const STRING_FIELDS = [
   'tunnelApplicationName',
   'urlProtocol',
   'serverDownloadUrlTemplate',
+  'cliDownloadUrlTemplate',
   'updateUrl',
   'downloadUrl',
   'serverLicenseUrl',
@@ -123,6 +126,7 @@ export function readProfile(productJsonText: string): ProfileReading {
       tunnelApplicationName: textOf(parsed, 'tunnelApplicationName'),
       urlProtocol: textOf(parsed, 'urlProtocol'),
       serverDownloadUrlTemplate: textOf(parsed, 'serverDownloadUrlTemplate'),
+      cliDownloadUrlTemplate: textOf(parsed, 'cliDownloadUrlTemplate'),
       updateUrl: textOf(parsed, 'updateUrl'),
       downloadUrl: textOf(parsed, 'downloadUrl'),
       serverLicense: (parsed.serverLicense as string[] | undefined) ?? [],
