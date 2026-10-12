@@ -760,7 +760,9 @@ step reports it when the lease's `waitingForOtherWindow` notice arrives. It is a
 prompt surface's `showWaiting` leaves the PromptEditor port. The mirrored prompt shows at the same time and is
 independent of it (5.2 step 3: the phase **and** the mirrored input together). When the login falls to this window
 (the owner gave up), the step reports `initializing` again, so the phase moves from waiting to this window's own login
-(F-2102 5.3 step 4, "(details) Initializing VS Code Server").
+(F-2102 5.3 step 4, "(details) Initializing VS Code Server"). Today lib-ssh's client becomes the owner on the helper's
+`accepted` reply without telling anyone, so the client gains a notice for it (`loginOwned`), emitted when a window that
+had been told `waitingForOtherWindow` becomes the owner. The connection step maps it to `initializing`.
 
 Rules:
 - `Failed.kind` is one of the closed list: `unreachable`, `timeout`, `authentication`, `hostKeyChanged`,
