@@ -5,11 +5,17 @@
 
 import {isIP} from 'node:net';
 import type {SshTarget} from 'lib-authority';
+import {parseTypedHost} from '../connect/typed-input.ts';
 
 /** The host label of an SSH target: the host text, and a `:port` after an IP address literal that names a port. */
 export function hostLabel(target: SshTarget): string {
   if (target.kind === 'plain') {
-    return target.text;
+    const {host, port} = parseTypedHost(target.text);
+    return hostLabel({
+      kind: 'host',
+      hostName: host,
+      ...(port === undefined ? {} : {port}),
+    });
   }
   const hostName = target.hostName.replace(/^\[([\s\S]*)\]$/, '$1');
   if (target.port === undefined || isIP(hostName) === 0) {

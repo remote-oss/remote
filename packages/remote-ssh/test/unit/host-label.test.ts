@@ -82,10 +82,24 @@ describe('hostLabel', () => {
     );
   });
 
-  it('{kind:"plain", text:"anything typed"} is anything typed', () => {
-    deepStrictEqual(
-      hostLabel({kind: 'plain', text: 'anything typed'}),
-      'anything typed',
-    );
-  });
+  const plainRows: Array<[string, string]> = [
+    ['my-alias', 'my-alias'],
+    ['my-alias:22', 'my-alias'],
+    ['u@192.0.2.10', '192.0.2.10'],
+    ['u@192.0.2.10:22', '192.0.2.10:22'],
+    ['u@192.0.2.10:2222', '192.0.2.10:2222'],
+    ['192.0.2.10:2222', '192.0.2.10:2222'],
+    ['192.0.2.10', '192.0.2.10'],
+    ['u@my-alias', 'my-alias'],
+    ['u@my-alias:2200', 'my-alias'],
+    ['u@build.example.com:2200', 'build.example.com'],
+    ['[2001:db8::1]:2222', '2001:db8::1:2222'],
+    ['u@[2001:db8::1]', '2001:db8::1'],
+    ['anything typed', 'anything typed'],
+  ];
+  for (const [text, label] of plainRows) {
+    it(`F-2502.BR-3: {kind:"plain", text:${JSON.stringify(text)}} is ${label}`, () => {
+      deepStrictEqual(hostLabel({kind: 'plain', text}), label);
+    });
+  }
 });
