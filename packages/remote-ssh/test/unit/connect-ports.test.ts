@@ -9,7 +9,8 @@ import {clientEnvironment} from 'lib-helper/testing/client-environment';
 import type {SettingInspection} from 'lib-identifiers';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import type {SharedConnection} from 'lib-ssh';
+import type {RunBase, SharedConnection} from 'lib-ssh';
+import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {
   connectAssemblyOf,
   type ConnectMachine,
@@ -672,24 +673,121 @@ describe("the assembled ports' window port", () => {
   });
 });
 
+/** A run base for the host `dev`, with the client the lookup accepted. */
+const RUN_BASE: RunBase = {
+  target: {host: 'dev', user: 'alex', port: 22},
+  settings: {
+    configFile: '',
+    connectTimeout: 15,
+    permitPtyAllocation: false,
+    remoteCommandInEffect: false,
+  },
+  effective: {
+    hostName: 'dev',
+    user: 'alex',
+    port: '22',
+    localForwards: [],
+    clearAllForwardings: false,
+  },
+  programs: {sshProgram: 'ssh', scpProgram: 'scp'},
+  homeFolder: '/home/alex',
+  platform: 'linux',
+};
+
+/** The channel the assembly makes for `dev`, with its terminals and what the fake spawner started. */
+function channelOver(written: Written = {}): {
+  channel: ReturnType<ReturnType<typeof wiringPortsOf>['channelFor']>;
+  terminals: RecordingTerminals;
+  recorded: Recorded;
+} {
+  const {surfaces, machine, recorded} = assemblyInputs(written);
+  const terminals = new RecordingTerminals();
+  const channel = wiringPortsOf(
+    {...surfaces, terminals},
+    machine,
+    loggerOf(recorded),
+  ).channelFor({} as unknown as SharedConnection, {
+    hostString: 'alex@dev:22',
+    base: RUN_BASE,
+    terms: TERMS,
+    connectWait: {
+      connectTimeoutSeconds: 15,
+      fromHost: false,
+      unboundedWaitSeconds: 600,
+    },
+    displayHost: 'dev',
+  });
+  return {channel, terminals, recorded};
+}
+
+/** Starts a copy over the channel and lets the terminal open. */
+async function copyStarted(
+  written: Written = {},
+): Promise<ReturnType<typeof channelOver> & {copy: Promise<unknown>}> {
+  const over = channelOver(written);
+  const copy = over.channel.copyToHost({
+    localFile: '/tmp/server.tar.gz',
+    remotePath: '/home/alex/.server/server.tar.gz',
+    cancellation: new AbortController().signal,
+  });
+  await Promise.resolve();
+  return {...over, copy};
+}
+
 describe("the assembled ports' channel", () => {
   it('ruled on #253 Q10: the channel runs on the shared session', () => {
-    const {surfaces, machine, recorded} = assemblyInputs();
-    const channel = wiringPortsOf(
-      surfaces,
-      machine,
-      loggerOf(recorded),
-    ).channelFor({} as unknown as SharedConnection, {
-      hostString: 'alex@dev:22',
-      base: {} as unknown as Parameters<
-        ReturnType<typeof wiringPortsOf>['channelFor']
-      >[1]['base'],
-      terms: TERMS,
-    });
+    const {channel} = channelOver();
     deepStrictEqual(
       [channel.identity(), channel.platformHint()],
       ['alex@dev:22', 'unknown'],
     );
+  });
+
+  it('F-2405 BR-8, AC-9: the window copies in a login terminal of its own', async () => {
+    const {terminals} = await copyStarted();
+    deepStrictEqual(
+      terminals.opened.map(terminal => terminal.name),
+      ['Copy VS Code Server'],
+    );
+  });
+
+  it('F-2405 BR-8: no copy process is started outside the terminal', async () => {
+    const {recorded} = await copyStarted();
+    deepStrictEqual(recorded.spawned.started, []);
+  });
+
+  it("F-2405 BR-6, #253 Q13: the terminal runs scp to the run's host with -v and the timeout", async () => {
+    const {terminals} = await copyStarted();
+    deepStrictEqual(terminals.opened[0]?.invocation, {
+      program: 'scp',
+      arguments: [
+        '-v',
+        '-o',
+        'ConnectTimeout=15',
+        '--',
+        '/tmp/server.tar.gz',
+        'dev:/home/alex/.server/server.tar.gz',
+      ],
+      environment: {},
+    });
+  });
+
+  it('F-2405 AC-10: the copy terminal stays hidden', async () => {
+    const {terminals} = await copyStarted();
+    deepStrictEqual(terminals.opened[0]?.revealedAtOpen, false);
+  });
+
+  it('F-2308 BR-3: remote.SSH.showLoginTerminal reveals the copy terminal', async () => {
+    const {terminals} = await copyStarted({
+      'remote.SSH.showLoginTerminal': true,
+    });
+    deepStrictEqual(terminals.opened[0]?.revealedAtOpen, true);
+  });
+
+  it('F-2405 5.0 step 7: the copy ends copied when scp exits 0', async () => {
+    const {terminals, copy} = await copyStarted();
+    terminals.opened[0]?.end(0);
+    deepStrictEqual(await copy, {kind: 'copied'});
   });
 
   it('lib-product: a policy table without remote-ssh is a defect', () => {

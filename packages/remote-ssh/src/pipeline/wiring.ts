@@ -73,6 +73,10 @@ export interface ChannelRun {
   hostString: string;
   base: RunBase;
   terms: ConnectionTerms;
+  /** The connect wait of this connect, for a login of the channel's own, such as the window's copy. */
+  connectWait: ConnectWaitSettings;
+  /** The host as the user named it, which that login's questions name. */
+  displayHost: string;
 }
 
 /** What the steps of every connect are made from. */
@@ -209,6 +213,11 @@ export function stepsOf(
         ports.requestEnvironment,
       ),
       terms: connectTerms,
+      connectWait: terminalWaitOf(
+        lookedUp(state).connectTimeout,
+        connectionSettings().connectTimeout,
+      ),
+      displayHost: hostAlias(input.target),
     });
   }
 
