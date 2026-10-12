@@ -44,9 +44,7 @@ line-oriented ready reader.
 holds for every usable `TMPDIR`, and `/tmp` is the folder BR-4 observed on Linux. The ready reader is unchanged: with
 the folder chosen this way, the first word is always the whole path.
 
-**Open row (athena):** whether falling back to `/tmp` for such a `TMPDIR` is acceptable, or the start should fail with
-a named reason instead. The proposal is the fallback, because the user can't easily see or fix their remote `TMPDIR`
-and `/tmp` is what BR-4 observed.
+**Ruled (athena, 2026-10-12): the fallback to `/tmp`.** F-2410 BR-4 observes `/tmp` on Linux and calls the `TMPDIR` behaviour inconclusive; following `TMPDIR` is our own choice (for macOS's per-user folder), so an unusable one has no spec standing to fail the connect. Failing would turn a harmless quirk of the user's remote environment into a broken connection. `/tmp` exists on every POSIX host we support (on macOS a link to `/private/tmp`). The script logs the fallback in its result block's facts (`server.socketFolderFallback=<why>`), so a user who wonders why the socket isn't in their `TMPDIR` can find it in the log. Rows: a `TMPDIR` with a space, a relative `TMPDIR` and an empty one each use `/tmp` and report the fallback fact; an absolute `TMPDIR` without white space is used with no fact. The explicit space, tab and newline in the `case` pattern (dash takes `[[:space:]]` literally, checked) is right.
 
 ## 3. Test table
 
