@@ -12,3 +12,9 @@ export {
   type ListResult,
   parseList,
 } from './list.ts';
+export {
+  installCommandLine,
+  type InstallLine,
+  sortOnlineCatalogue,
+} from './install.ts';
+export {multiDistroAllowed, windowsBuildFromRelease} from './windows-build.ts';
