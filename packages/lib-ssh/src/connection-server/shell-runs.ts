@@ -6,7 +6,7 @@
  */
 
 import type {Scheduler} from 'lib-helper';
-import {posixQuote} from '../process/remote-program.ts';
+import {environmentPrefix, posixQuote} from '../process/remote-program.ts';
 
 /** The characters of base64 text on one line of the input. */
 const BASE64_LINE_LENGTH = 76;
@@ -20,6 +20,8 @@ const SESSION_ENDED: RunEnd = {
 /** What a run is asked to do. */
 export interface ShellRun {
   script: string;
+  /** Variables added to the script's environment; they reach it as words in front of its command. */
+  environment: Readonly<Record<string, string>>;
   /** What the script reads on its standard input as base64; null for none (the script reads nothing). */
   inputBase64: string | null;
   /** How long the script may take once it has started, in milliseconds. */
@@ -52,12 +54,12 @@ interface Queued {
 /** The commands of one run: the start marker, the script with its input, and the end marker with the status. */
 export function commandsFor(marker: string, request: ShellRun): string {
   const start = `printf '%s%s\\n' ${posixQuote(`${marker}:st`)} 'art'`;
-  const script = posixQuote(request.script);
+  const script = `${environmentPrefix(request.environment)}sh -c ${posixQuote(request.script)}`;
   const body =
     request.inputBase64 === null
-      ? `sh -c ${script} </dev/null`
+      ? `${script} </dev/null`
       : [
-          `base64 -d <<'${marker}_input' | sh -c ${script}`,
+          `base64 -d <<'${marker}_input' | ${script}`,
           ...(request.inputBase64.match(
             new RegExp(`.{1,${String(BASE64_LINE_LENGTH)}}`, 'gu'),
           ) ?? []),

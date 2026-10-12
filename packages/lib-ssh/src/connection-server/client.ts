@@ -270,6 +270,8 @@ class LoginWait {
 /** A script to run on the shared session. */
 export interface SessionRun {
   script: string;
+  /** Variables added to the script's environment. */
+  environment: Readonly<Record<string, string>>;
   /** What the script reads, as base64; null for none. */
   inputBase64: string | null;
   /** How long the script may take once it has started, in milliseconds. */

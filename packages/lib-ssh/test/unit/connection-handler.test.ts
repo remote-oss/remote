@@ -577,6 +577,7 @@ describe('connection handler (contracts §4 S9)', () => {
       type: 'runScript',
       runId: 7,
       script: 'echo hello',
+      environment: {},
       inputBase64: null,
       deadlineMilliseconds: 1000,
     } as const;

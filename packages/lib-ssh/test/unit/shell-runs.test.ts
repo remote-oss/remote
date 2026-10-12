@@ -10,6 +10,7 @@ import {
 
 const SCRIPT: ShellRun = {
   script: 'echo hello',
+  environment: {},
   inputBase64: null,
   deadlineMilliseconds: 1000,
 };
@@ -74,6 +75,34 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
       deepStrictEqual(
         commandsFor('m1', {...SCRIPT, script: "echo 'x'"}).split('\n')[1],
         "sh -c 'echo '\\''x'\\''' </dev/null",
+      );
+    });
+
+    it('§S10: put the environment in front of sh -c as assignments, with no input', () => {
+      deepStrictEqual(
+        commandsFor('m1', {
+          ...SCRIPT,
+          environment: {FIRST: 'x y', SECOND: "it's"},
+        }).split('\n')[1],
+        "FIRST='x y' SECOND='it'\\''s' sh -c 'echo hello' </dev/null",
+      );
+    });
+
+    it('§S10: put the environment in front of sh -c as assignments, after the pipe, with input', () => {
+      deepStrictEqual(
+        commandsFor('m1', {
+          ...SCRIPT,
+          environment: {FIRST: 'x y'},
+          inputBase64: 'AQID',
+        }).split('\n')[1],
+        "base64 -d <<'m1_input' | FIRST='x y' sh -c 'echo hello'",
+      );
+    });
+
+    it('§S10: an empty environment leaves the command as it was', () => {
+      deepStrictEqual(
+        commandsFor('m1', SCRIPT).split('\n')[1],
+        "sh -c 'echo hello' </dev/null",
       );
     });
 
@@ -163,6 +192,7 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
     it('#299: the same with an input keeps the payload, not the commands', async () => {
       const request: ShellRun = {
         script: 'cat',
+        environment: {},
         inputBase64: Buffer.from('payload\n').toString('base64'),
         deadlineMilliseconds: 1000,
       };

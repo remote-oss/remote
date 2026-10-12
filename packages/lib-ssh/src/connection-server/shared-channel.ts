@@ -108,6 +108,7 @@ export class SharedSessionChannel implements HostChannel {
       this.options.session.runOnSession(
         {
           script: script.text,
+          environment: request.environment,
           inputBase64: input.base64,
           deadlineMilliseconds: this.options.runDeadlineMilliseconds,
         },

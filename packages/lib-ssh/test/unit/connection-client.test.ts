@@ -466,6 +466,7 @@ describe('the window side of the shared connection (S9)', () => {
     const running = connection.runOnSession(
       {
         script: 'echo hello',
+        environment: {},
         inputBase64: null,
         deadlineMilliseconds: 1000,
       },
@@ -488,6 +489,7 @@ describe('the window side of the shared connection (S9)', () => {
     await outcome;
     const request = {
       script: 'echo',
+      environment: {},
       inputBase64: null,
       deadlineMilliseconds: 1000,
     };
@@ -516,6 +518,7 @@ describe('the window side of the shared connection (S9)', () => {
     const running = connection.runOnSession(
       {
         script: 'sleep 100',
+        environment: {},
         inputBase64: null,
         deadlineMilliseconds: 100000,
       },
@@ -542,6 +545,7 @@ describe('the window side of the shared connection (S9)', () => {
         connection.runOnSession(
           {
             script: 'x',
+            environment: {},
             inputBase64: null,
             deadlineMilliseconds: 1000,
           },

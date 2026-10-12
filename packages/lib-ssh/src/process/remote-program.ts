@@ -9,6 +9,10 @@ import type {ScriptInput, ScriptRequest} from 'lib-host';
 
 const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/** What goes to the standard input of a planned command: a script's input, possibly with text in front of a file. */
+export type PlannedInput =
+  ScriptInput | {kind: 'prefixedFile'; prefix: string; localFile: string};
+
 /** A script to run and how it reaches the host. */
 export type ScriptPlan =
   | {
@@ -16,7 +20,7 @@ export type ScriptPlan =
       /** The command `ssh` runs on the host. */
       remoteProgram: string;
       /** What goes to the command's standard input. */
-      input: ScriptInput;
+      input: PlannedInput;
     }
   | {kind: 'refused'; reason: string};
 
@@ -25,21 +29,36 @@ export function posixQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-/** The lines that set the added environment variables for the script, or the first name that cannot be one. */
-function environmentLines(
+/** The first name in the environment that cannot be a variable's, if any. */
+function badNameIn(
   environment: Readonly<Record<string, string>>,
-): string[] | {badName: string} {
-  const lines: string[] = [];
-  for (const [name, value] of Object.entries(environment)) {
-    if (!ENVIRONMENT_NAME.test(name)) {
-      return {badName: name};
-    }
-    lines.push(`${name}=${posixQuote(value)}`, `export ${name}`);
-  }
-  return lines;
+): string | undefined {
+  return Object.keys(environment).find(name => !ENVIRONMENT_NAME.test(name));
 }
 
-/** The text of a script with the added environment variables set in front of it, or why it cannot be run. */
+/** The lines that set and export the added environment variables; their names are already checked. */
+function environmentLines(
+  environment: Readonly<Record<string, string>>,
+): string[] {
+  return Object.entries(environment).flatMap(([name, value]) => [
+    `${name}=${posixQuote(value)}`,
+    `export ${name}`,
+  ]);
+}
+
+/**
+ * The environment as the words in front of a command (`A='x y' B='it'\''s' `), empty for none, so that the command
+ * receives it without the values appearing in any process's command line.
+ */
+export function environmentPrefix(
+  environment: Readonly<Record<string, string>>,
+): string {
+  return Object.entries(environment)
+    .map(([name, value]) => `${name}=${posixQuote(value)} `)
+    .join('');
+}
+
+/** The text of a script, or why it cannot be run. The environment is not part of it. */
 export function scriptText(
   request: Pick<ScriptRequest, 'script' | 'interpreter' | 'environment'>,
 ): {kind: 'text'; text: string} | {kind: 'refused'; reason: string} {
@@ -49,14 +68,14 @@ export function scriptText(
       reason: `the ${request.interpreter} interpreter is not available over SSH yet`,
     };
   }
-  const lines = environmentLines(request.environment);
-  if ('badName' in lines) {
+  const badName = badNameIn(request.environment);
+  if (badName !== undefined) {
     return {
       kind: 'refused',
-      reason: `'${lines.badName}' is not a name an environment variable can have`,
+      reason: `'${badName}' is not a name an environment variable can have`,
     };
   }
-  return {kind: 'text', text: [...lines, request.script].join('\n')};
+  return {kind: 'text', text: request.script};
 }
 
 /** Plans the run of a script: the remote command and the standard input it needs. */
@@ -70,16 +89,33 @@ export function planScript(
   if (script.kind === 'refused') {
     return script;
   }
+  const lines = environmentLines(request.environment);
   const hasInput = request.input.kind === 'file' || request.input.text !== '';
-  return hasInput
-    ? {
-        kind: 'planned',
-        remoteProgram: `sh -c ${posixQuote(script.text)}`,
-        input: request.input,
-      }
-    : {
-        kind: 'planned',
-        remoteProgram: 'sh -s',
-        input: {kind: 'text', text: script.text},
-      };
+  if (!hasInput) {
+    return {
+      kind: 'planned',
+      remoteProgram: 'sh -s',
+      input: {kind: 'text', text: [...lines, script.text].join('\n')},
+    };
+  }
+  if (lines.length === 0) {
+    return {
+      kind: 'planned',
+      remoteProgram: `sh -c ${posixQuote(script.text)}`,
+      input: request.input,
+    };
+  }
+  const prelude = `${[...lines, script.text].join('\n')}\n`;
+  return {
+    kind: 'planned',
+    remoteProgram: `sh -c 'eval "$(dd bs=1 count=${String(Buffer.byteLength(prelude, 'utf8'))} 2>/dev/null)"'`,
+    input:
+      request.input.kind === 'text'
+        ? {kind: 'text', text: prelude + request.input.text}
+        : {
+            kind: 'prefixedFile',
+            prefix: prelude,
+            localFile: request.input.localFile,
+          },
+  };
 }
