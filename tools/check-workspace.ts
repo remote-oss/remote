@@ -822,12 +822,12 @@ class WorkspaceChecker {
       {encoding: 'utf8', cwd: this.root},
     );
     const offenders = new Set<WorkspacePackage>();
+    const declarationHits = new Set<WorkspacePackage>();
     for (const line of result.stdout.split('\n')) {
       const file = line.trim();
       if (
         file === '' ||
         /: error TS\d{4}/.test(file) ||
-        file.endsWith('.d.ts') ||
         file.includes(`${path.sep}node_modules${path.sep}`)
       ) {
         continue;
@@ -845,12 +845,13 @@ class WorkspaceChecker {
           candidate !== owner && isInside(this.realDirectory(candidate), real),
       );
       if (other !== undefined) {
-        offenders.add(other);
+        (file.endsWith('.d.ts') ? declarationHits : offenders).add(other);
       }
     }
-    for (const other of [...offenders].sort((left, right) =>
-      left.name < right.name ? -1 : 1,
-    )) {
+    function byName(left: WorkspacePackage, right: WorkspacePackage): number {
+      return left.name < right.name ? -1 : 1;
+    }
+    for (const other of [...offenders].sort(byName)) {
       const declares = this.declaredDependencyNames(owner).includes(other.name);
       this.problems.push(
         `${where}: compiles ${other.name} sources; ${owner.name} ${
@@ -860,6 +861,48 @@ class WorkspaceChecker {
         }`,
       );
     }
+    const declared = this.declaredDependencyNames(owner);
+    const referenced = this.referencedPackages(config);
+    for (const other of [...declarationHits].sort(byName)) {
+      if (
+        !offenders.has(other) &&
+        declared.includes(other.name) &&
+        !referenced.has(other)
+      ) {
+        this.problems.push(
+          `${where}: resolves ${other.name} through its declaration output; ${owner.name} declares ${other.name} but is missing a reference to ${other.manifestDir}`,
+        );
+      }
+    }
+  }
+
+  /** The packages a project reaches through its project references, followed transitively. */
+  private referencedPackages(config: string): Set<WorkspacePackage> {
+    const found = new Set<WorkspacePackage>();
+    const visited = new Set<string>();
+    const pending = [config];
+    for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+      if (visited.has(next)) {
+        continue;
+      }
+      visited.add(next);
+      const parsed = typescript.getParsedCommandLineOfConfigFile(
+        next,
+        undefined,
+        {
+          ...typescript.sys,
+          onUnRecoverableConfigFileDiagnostic: () => undefined,
+        },
+      );
+      for (const reference of parsed?.projectReferences ?? []) {
+        const target = this.packageAt(path.resolve(reference.path));
+        if (target !== undefined) {
+          found.add(target);
+        }
+        pending.push(typescript.resolveProjectReferencePath(reference));
+      }
+    }
+    return found;
   }
 
   /** The package names a package declares as `workspace:` dependencies in any dependency field. */

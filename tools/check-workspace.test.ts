@@ -464,6 +464,139 @@ describe('check-workspace', () => {
         `${remoteATsconfig}: compiles lib-x sources; remote-a declares lib-x but is missing a reference to packages/lib-x`,
       ]);
     });
+
+    const declarationMessage = `${remoteATsconfig}: resolves lib-x through its declaration output; remote-a declares lib-x but is missing a reference to packages/lib-x`;
+
+    function emitted(library: string, content: string): void {
+      write(`packages/${library}/.tsc/src/index.d.ts`, content);
+    }
+
+    function consumer(references: object[]): void {
+      write('packages/remote-a/tsconfig.json', {
+        extends: '../../tsconfig.base.json',
+        references,
+      });
+    }
+
+    function libraryY(references: object[]): void {
+      manifest('lib-y', {
+        dependencies: {'lib-x': 'workspace:*'},
+        exports: {
+          '.': {types: './.tsc/src/index.d.ts', default: './src/index.ts'},
+        },
+      });
+      write('packages/lib-y/tsconfig.json', {
+        extends: '../../tsconfig.base.json',
+        references,
+      });
+      write('packages/lib-y/src/index.ts', "export {x} from 'lib-x';");
+      emitted('lib-y', "export {x} from 'lib-x';");
+      link('packages/lib-y/node_modules/lib-x', 'packages/lib-x');
+      link('packages/remote-a/node_modules/lib-y', 'packages/lib-y');
+    }
+
+    it('names a declared library that resolves to its declaration output without a reference', function () {
+      this.timeout(10_000);
+      declarationProjects();
+      emitted('lib-x', 'export declare const x = 1;');
+      consumer([]);
+      deepStrictEqual(problems(), [declarationMessage]);
+    });
+
+    it('names only the source message when the library has no declaration output', function () {
+      this.timeout(10_000);
+      declarationProjects();
+      consumer([]);
+      deepStrictEqual(
+        problems().filter(problem => problem.includes('declaration output')),
+        [],
+      );
+    });
+
+    it('accepts a library with a reference and declaration output', function () {
+      this.timeout(10_000);
+      declarationProjects();
+      emitted('lib-x', 'export declare const x = 1;');
+      consumer([{path: '../lib-x'}]);
+      deepStrictEqual(problems(), []);
+    });
+
+    it('accepts a reference that the test project reaches through the package project', function () {
+      this.timeout(10_000);
+      declarationProjects();
+      emitted('lib-x', 'export declare const x = 1;');
+      consumer([{path: '../lib-x'}]);
+      write('packages/remote-a/tsconfig.test.json', {
+        extends: '../../tsconfig.base.json',
+        include: ['${configDir}/test'],
+        references: [{path: './tsconfig.json'}],
+      });
+      write(
+        'packages/remote-a/test/index.test.ts',
+        "import {x} from 'lib-x';\nexport const tested = x;",
+      );
+      deepStrictEqual(problems(), []);
+    });
+
+    it('accepts a library reached through the reference of another library', function () {
+      this.timeout(10_000);
+      declarationProjects();
+      manifest('remote-a', {
+        dependencies: {'lib-x': 'workspace:*', 'lib-y': 'workspace:*'},
+      });
+      emitted('lib-x', 'export declare const x = 1;');
+      libraryY([{path: '../lib-x'}]);
+      write(
+        'packages/remote-a/src/index.ts',
+        "import {x} from 'lib-x';\nimport {x as again} from 'lib-y';\nexport const a = [x, again];",
+      );
+      consumer([{path: '../lib-y'}]);
+      deepStrictEqual(problems(), []);
+    });
+
+    it('does not name a library that only the declaration of another library reaches', function () {
+      this.timeout(10_000);
+      declarationProjects();
+      manifest('remote-a', {dependencies: {'lib-y': 'workspace:*'}});
+      emitted('lib-x', 'export declare const x = 1;');
+      libraryY([{path: '../lib-x'}]);
+      write(
+        'packages/remote-a/src/index.ts',
+        "import {x} from 'lib-y';\nexport const a = x;",
+      );
+      consumer([{path: '../lib-y'}]);
+      deepStrictEqual(problems(), []);
+    });
+
+    it('takes no packages from a referenced project that does not exist', function () {
+      this.timeout(10_000);
+      declarationProjects();
+      emitted('lib-x', 'export declare const x = 1;');
+      consumer([{path: '../lib-x'}]);
+      write('packages/lib-x/tsconfig.json', {
+        extends: '../../tsconfig.base.json',
+        references: [{path: '../lib-missing'}],
+      });
+      deepStrictEqual(
+        problems().filter(problem => problem.includes('declaration output')),
+        [],
+      );
+    });
+
+    it('ends the walk of project references that form a cycle', function () {
+      this.timeout(10_000);
+      declarationProjects();
+      emitted('lib-x', 'export declare const x = 1;');
+      consumer([{path: '../lib-x'}]);
+      write('packages/lib-x/tsconfig.json', {
+        extends: '../../tsconfig.base.json',
+        references: [{path: '../remote-a'}],
+      });
+      deepStrictEqual(
+        problems().filter(problem => problem.includes('declaration output')),
+        [],
+      );
+    });
   });
 
   describe('dependency cycles', () => {
