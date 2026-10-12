@@ -35,5 +35,8 @@
   "Remote host key has changed, port forwarding is disabled": "Remote host key has changed, port forwarding is disabled",
   "The connection timed out": "The connection timed out",
   "The operation timed out": "The operation timed out",
-  "The process tried to write to a nonexistent pipe": "The process tried to write to a nonexistent pipe"
+  "The process tried to write to a nonexistent pipe": "The process tried to write to a nonexistent pipe",
+  "{0} needs you to accept the license terms of the {1} server before installing it.": "{0} needs you to accept the license terms of the {1} server before installing it.",
+  "Read the terms at {0}.": "Read the terms at {0}.",
+  "Accept and Continue": "Accept and Continue"
 }

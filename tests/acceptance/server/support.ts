@@ -8,10 +8,9 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   type HostLockLoop,
-  hostLockLoop,
+  hostLockLoopOf,
   runStep,
   type ScriptParameters,
-  type StepRun,
 } from 'lib-server';
 import type {RunningHost} from './host-fixture.ts';
 import {
@@ -133,19 +132,5 @@ export function lockLoop(
   attempts = 30,
   intervalMilliseconds = 100,
 ): HostLockLoop {
-  return async step => {
-    const outcome = await hostLockLoop<StepRun>(
-      async () => {
-        const stepRun = await step();
-        return stepRun.kind === 'result' && stepRun.block.status === 'LockBusy'
-          ? {kind: 'lockBusy'}
-          : {kind: 'result', value: stepRun};
-      },
-      REAL_CLOCK,
-      () => undefined,
-      attempts,
-      intervalMilliseconds,
-    );
-    return outcome.kind === 'done' ? outcome.value : 'retriesExhausted';
-  };
+  return hostLockLoopOf(REAL_CLOCK, attempts, intervalMilliseconds);
 }
