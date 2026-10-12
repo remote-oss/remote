@@ -39,7 +39,7 @@ export type PhaseEvent =
   | {kind: 'waitingForForwarding'};
 
 /** The longest each step that waits on the machine may take, in milliseconds. */
-interface StepLimits {
+export interface StepLimits {
   preconnectMilliseconds: number;
   probeMilliseconds: number;
   tunnelMilliseconds: number;
