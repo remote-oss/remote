@@ -1,40 +1,68 @@
-# Task card tooling-21: a timeout for the other suites that run real processes
+# Task card tooling-21: a 10 s default timeout for every unit suite
 
-Issue: #494. Why: triton on #475. Three unit suites spawn real processes under Mocha's 2 s default, as
-`shared-channel-contract.test.ts` did before tooling-15 (#480, #483). A busy CI runner can time them out:
-`lib-ssh`'s `shell-runs.test.ts` (`spawnSync('/bin/sh', …)`) and `askpass-launcher.test.ts` (`execFileSync`), and
-`lib-server`'s `cli-script.test.ts` (`spawnSync`: `tar`, `ps`, `test`, the bootstrap script). Builder: selene.
+Issue: #494. Why: triton on #475, then selene's run (hermes, 2026-10-12). Many unit suites run real processes under
+Mocha's 2 s default, and a busy runner times them out at random:
+- lib-ssh: `shell-runs.test.ts` and `askpass-launcher.test.ts`;
+- lib-server: every suite over the fake host's real shell (`test/unit/fake-host.ts`, `shell-channel.ts`), which are
+  `bootstrap-script`, `cli-script`, `cli-lifecycle`, `lifecycle`, `extensions`, `runtime`, `transfer` and `fake-host`;
+- `bootstrap-script.test.ts` failed on selene's run and passed on a re-run.
+
+Setting the timeout suite by suite (this card's first version) would leave every new suite to remember it. So this
+card sets **one default for the whole unit run**, 10 000 ms. Tried on main 4dd35ae: the new row fails without the
+argument and passes with it. The suites that set their own keep it: `this.timeout` in
+a suite wins over the default. Builder: selene.
 
 ## 1. Files
 
-| File | The `describe` | Line on main |
-|---|---|---|
-| `packages/lib-ssh/test/unit/shell-runs.test.ts` | `'the scripts on the shared session (contracts §4 S10)'` | 18 |
-| `packages/lib-ssh/test/unit/askpass-launcher.test.ts` | `'askpass launcher'` | 28 |
-| `packages/lib-server/test/unit/cli-script.test.ts` | `'the CLI steps of the bootstrap script (card cli-03b, contracts V7a)'` | 74 |
+| File | Change |
+|---|---|
+| `.mocharc.json` | `"timeout": 10000` |
+| `tools/coverage.ts` | the Mocha arguments it builds (line 191 on main, after `'--extension=ts'`) gain `'--timeout=10000'`: it runs Mocha with `--no-config`, so it doesn't read `.mocharc.json` |
+| `tools/coverage.test.ts` | one row (section 3) |
 
-Nothing else. No row's name, body or assertion changes.
+Nothing else: no test file changes, and the existing `this.timeout(20000)` and `this.timeout(60_000)` stay.
 
-## 2. The change
+## 2. Exact edits
 
-The same as tooling-15: in each of the three, turn the arrow function of that top-level `describe` into a `function`
-expression, and make its first statement `this.timeout(20000);`, exactly as
-`packages/lib-ssh/test/unit/shared-channel-contract.test.ts` line 89 does on main:
+`.mocharc.json` becomes:
 
-```ts
-describe('askpass launcher', function () {
-  this.timeout(20000);
+```json
+{
+  "spec": ["tools/**/*.test.ts", "packages/*/test/unit/**/*.test.ts"],
+  "extension": ["ts"],
+  "timeout": 10000
+}
 ```
 
-If a file already holds a nested `describe` or `it` with its own `this.timeout`, leave that one as it is.
+In `tools/coverage.ts`, the array that holds `'--no-config'` and `'--extension=ts'` gets `'--timeout=10000'` right after
+`'--extension=ts'`.
 
-## 3. Done when
+## 3. Row (`tools/coverage.test.ts`)
 
-- `pnpm lint`, `pnpm format:check`, `pnpm typecheck` and `pnpm test:unit` pass, with the same number of passing rows
-  as before;
-- `pnpm coverage` passes (test files only, so coverage doesn't move).
+`measureUnit` runs real c8 and Mocha in the file's temporary workspace, as the rows of `describe('measurement')` do.
+Add one row at the end of that `describe`, in the same form as `'returns nothing when the tests fail'`:
 
-## 4. Review
+```ts
+    it('tooling-21: a unit test of 2.5 s passes under the 10 s default', function () {
+      this.timeout(30_000);
+      workspace.write(
+        'packages/remote-a/test/unit/slow.test.ts',
+        "it('waits', async () => {\n  await new Promise(resolve => setTimeout(resolve, 2500));\n});\n",
+      );
+      notStrictEqual(measureUnit(workspace.root, packageUnit(), []), undefined);
+    });
+```
 
-PR title `tests: a 20 s timeout for the other suites that run real processes (card tooling-21)`. themis or triton
-reviews.
+Without `--timeout=10000` the slow test fails at Mocha's 2 s default and `measureUnit` returns `undefined`, so the row
+proves the argument. Import `notStrictEqual` from `node:assert` beside the file's other assertions.
+
+## 4. Done when
+
+- `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test:unit` and `pnpm coverage` pass, with the same number of
+  passing rows as before plus the one new row;
+- `tools/` stays at its ratchet.
+
+## 5. Review
+
+PR title `tests: a 10 s default timeout for the unit run and the coverage run (card tooling-21)`. proteus reviews (it
+changes how CI runs the unit tests); themis or triton too.
