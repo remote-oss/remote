@@ -32,7 +32,10 @@ export function resolverEditorOf(editor: typeof vscode, options: ResolverEditorO
   `new editor.ResolvedAuthority(host, port, connectionToken)` with `extensionHostEnv`, `environmentTunnels`,
   `tunnelFeatures` and, only when present, `isTrusted` assigned onto it. Its `tunnelFactory` is a **getter** that
   reads `resolver.tunnelFactory` on every access (the host replaces the factory at every connect; a copy taken at
-  registration would stay `undefined`). Translating lib-forwarding's factory into core's shape is part D's.
+  registration would stay `undefined`). The getter sits on the **resolver object** passed to
+  `registerRemoteAuthorityResolver`, not on the `ResolvedAuthority`: core reads `resolver.tunnelFactory` after each
+  `resolve()` returns ([oss] `extHostExtensionService.ts`, `setTunnelFactory(resolver, …)`), while `tunnelFeatures` is
+  read from the result (clarified by athena 2026-10-12). Translating lib-forwarding's factory into core's shape is part D's.
 - `notAvailable(message, handled)` is `editor.RemoteAuthorityResolverError.NotAvailable(message, handled)`;
   `temporarilyNotAvailable(message)` is `…TemporarilyNotAvailable(message)`.
 - `progress.withProgress(request, task)` runs `editor.window.withProgress` at `ProgressLocation.Notification` with

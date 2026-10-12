@@ -30,6 +30,7 @@ behaviour over a table, because a library never imports an extension (layout rul
 | contextKeys | name, key, `extensionSet` or `core` | the identity decision's list |
 | views, authorities, languages | name, id | `contributes.views`, `activationEvents`, `contributes.languages` |
 | internalCommands | id, `served` or `called`, kind `query`, `change` or `push` | the companion and internal list (F-5902 §5) |
+| runtimeCommands | id, purpose | reference command ids a spec names that the extension registers at runtime only: never contributed, no palette entry, no activation event (a keybinding in a window where the extension never ran gets core's "not found", R-46). The check verifies the namespace and that the id is not contributed; the generator emits them into the table, so code registers the generated id, never a literal (ruled 2026-10-12, #253 Q4; first entry `opensshremotes.showDetails`, F-2304 BR-12) |
 | invented | id, kind, spec, date | the ledger (R-27) |
 
 ### 1.2 Operations
