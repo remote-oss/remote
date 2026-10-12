@@ -27,6 +27,7 @@
     "check-public-surface": "node tools/public-surface.ts",
     "check-string-tables": "node tools/string-tables.ts",
     "package": "pnpm build && node tools/package-extensions.ts",
+    "acceptance:clean": "node tools/acceptance-run.ts --clean",
     "test:acceptance": "pnpm package && node tools/acceptance.ts",
     "test:acceptance:server": "pnpm build && mocha --no-config --extension ts --spec 'tests/acceptance/server/*.test.ts'",
     "test:acceptance:real-server": "REMOTE_OSS_REAL_SERVER=1 mocha --no-config --extension ts --spec 'tests/acceptance/server/real-server.test.ts'"

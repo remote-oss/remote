@@ -20,11 +20,12 @@ import {
   SshHostChannel,
 } from 'lib-ssh';
 import {
-  harnessSshConfig,
-  HOST_IMAGE,
-  mappedPort,
+  acceptanceRunId,
+  checked,
   runCommand,
-} from '../../../tools/acceptance.ts';
+  startHostContainer,
+} from '../../../tools/acceptance-run.ts';
+import {harnessSshConfig} from '../../../tools/acceptance.ts';
 
 const REPOSITORY_ROOT = path.join(import.meta.dirname, '..', '..', '..');
 
@@ -62,16 +63,6 @@ export interface RunningHost {
   stop(): void;
 }
 
-function checked(program: string, programArguments: readonly string[]): string {
-  const result = runCommand(program, programArguments);
-  if (result.status !== 0) {
-    throw new Error(
-      `${program} ${programArguments.join(' ')} failed (${String(result.status)}): ${result.stderr.trim()}`,
-    );
-  }
-  return result.stdout;
-}
-
 async function waitForHost(configFile: string): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     const result = runCommand('ssh', ['-F', configFile, 'harness', 'true']);
@@ -90,7 +81,7 @@ async function waitForHost(configFile: string): Promise<void> {
 /** What every run to a `Host` of an ssh_config shares, with the options `ssh -G` computes for it. */
 function baseFor(configFile: string, alias: string): RunBase {
   const parsed = parseEffectiveOptions(
-    checked('ssh', ['-F', configFile, '-G', alias]),
+    checked(runCommand, 'ssh', ['-F', configFile, '-G', alias]),
   );
   if ('parseError' in parsed) {
     throw new Error(`ssh -G ${alias}: ${parsed.parseError}`);
@@ -137,38 +128,15 @@ export async function startHost(): Promise<RunningHost> {
   const runFolder = mkdtempSync(path.join(tmpdir(), 'server-acceptance-'));
   let container = '';
   try {
-    checked('docker', [
-      'build',
-      '--load',
-      '--quiet',
-      '--tag',
-      HOST_IMAGE,
-      path.join(REPOSITORY_ROOT, 'tests', 'acceptance', 'host'),
-    ]);
-    const keyFile = path.join(runFolder, 'id_ed25519');
-    checked('ssh-keygen', [
-      '-q',
-      '-t',
-      'ed25519',
-      '-N',
-      '',
-      '-C',
-      'acceptance',
-      '-f',
-      keyFile,
-    ]);
-    const publicKey = readFileSync(`${keyFile}.pub`, 'utf8').trim();
-    container = checked('docker', [
-      'run',
-      '--detach',
-      '--rm',
-      '--env',
-      `AUTHORIZED_KEY=${publicKey}`,
-      '--publish',
-      '127.0.0.1::22',
-      HOST_IMAGE,
-    ]).trim();
-    const port = mappedPort(checked('docker', ['port', container, '22']));
+    const runId = acceptanceRunId(process.env, process.pid);
+    const host = startHostContainer(
+      runCommand,
+      REPOSITORY_ROOT,
+      runId,
+      runFolder,
+    );
+    container = host.container;
+    const port = host.port;
     const configFile = path.join(runFolder, 'ssh_config');
     writeFileSync(configFile, harnessSshConfig(port, runFolder));
     await waitForHost(configFile);
@@ -188,7 +156,7 @@ export async function startHost(): Promise<RunningHost> {
       port,
       runFolder,
       generateKey: (keyFile, passphrase) => {
-        checked('ssh-keygen', [
+        checked(runCommand, 'ssh-keygen', [
           '-q',
           '-t',
           'ed25519',
@@ -200,7 +168,7 @@ export async function startHost(): Promise<RunningHost> {
       },
       authorize: publicKeyFile => {
         const publicKey = readFileSync(publicKeyFile, 'utf8').trim();
-        checked('docker', [
+        checked(runCommand, 'docker', [
           'exec',
           '--user',
           'harness',
@@ -218,12 +186,28 @@ export async function startHost(): Promise<RunningHost> {
         );
       },
       onHost: (...command) =>
-        checked('docker', ['exec', '--user', 'harness', container, ...command]),
+        checked(runCommand, 'docker', [
+          'exec',
+          '--user',
+          'harness',
+          container,
+          ...command,
+        ]),
       asRoot: (...command) =>
-        checked('docker', ['exec', '--user', 'root', container, ...command]),
+        checked(runCommand, 'docker', [
+          'exec',
+          '--user',
+          'root',
+          container,
+          ...command,
+        ]),
       copyIn: (localFile, hostFile) => {
-        checked('docker', ['cp', localFile, `${container}:${hostFile}`]);
-        checked('docker', [
+        checked(runCommand, 'docker', [
+          'cp',
+          localFile,
+          `${container}:${hostFile}`,
+        ]);
+        checked(runCommand, 'docker', [
           'exec',
           '--user',
           'root',
