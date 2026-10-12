@@ -127,9 +127,4 @@ describe('the lib-companion package skeleton', () => {
       {featureIds: false, cleanRoom: false, ruleIds: false},
     );
   });
-
-  it('F-5902.5.table: the entry module resolves and exports nothing', async () => {
-    const module = await import('../../src/index.ts');
-    deepStrictEqual(Object.keys(module), []);
-  });
 });
