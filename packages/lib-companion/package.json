@@ -1,0 +1,11 @@
+{
+  "name": "lib-companion",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./.tsc/src/index.d.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}
