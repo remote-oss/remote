@@ -1,6 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
 import type {HostChannel} from 'lib-host';
 import type {HelperLease, PlainData} from 'lib-helper';
+import {createLogger, type Level} from 'lib-log';
+import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
   type ConnectionAcquireRequest,
   type ConnectionNotice,
@@ -72,6 +74,7 @@ interface Fixture {
   notices: ConnectionNotice[];
   logins: {attached: number; disposed: number; inputs: ConnectInput[]};
   login: LoginLease | undefined;
+  logged: () => string[];
   channelsFor: unknown[];
   termsAsked: ConnectionTerms[];
   connecting: (
@@ -80,7 +83,11 @@ interface Fixture {
 }
 
 function fixture(
-  acquired: 'acquired' | 'spawnFailed' | 'endpointUnreachable' = 'acquired',
+  acquired:
+    | 'acquired'
+    | 'spawnFailed'
+    | 'endpointUnreachable'
+    | 'cancelled' = 'acquired',
   channelFailureMessage?: string,
 ): Fixture {
   const lease = new FakeLease();
@@ -88,6 +95,7 @@ function fixture(
   const notices: ConnectionNotice[] = [];
   const logins: Fixture['logins'] = {attached: 0, disposed: 0, inputs: []};
   const held: {login?: LoginLease} = {};
+  const sink = new MemorySink();
   const channelsFor: unknown[] = [];
   const termsAsked: ConnectionTerms[] = [];
   const step = openConnectionStep({
@@ -131,6 +139,7 @@ function fixture(
       channelsFor.push([connection instanceof SharedConnection, terms]);
       return CHANNEL;
     },
+    logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
     attachLogin: (login, input) => {
       logins.attached += 1;
       logins.inputs.push(input);
@@ -151,6 +160,7 @@ function fixture(
     requests,
     notices,
     logins,
+    logged: () => sink.lines.map(line => line.message),
     get login() {
       return held.login;
     },
@@ -374,12 +384,34 @@ describe('the connection step', () => {
     );
   });
 
-  it('fails when no lease can be taken, by the reason of the acquire', async () => {
+  it('#253 Q10: a helper that cannot be reached fails with no reason of its own, not as a closed connection', async () => {
     const {connecting} = fixture('endpointUnreachable');
     deepStrictEqual(await connecting(), {
       kind: 'failed',
-      failure: {kind: 'channelClosed'},
+      failure: {kind: 'unknown'},
     });
+  });
+
+  it('#253 Q10: a helper that did not start fails with no reason of its own', async () => {
+    const {connecting} = fixture('spawnFailed');
+    deepStrictEqual(await connecting(), {
+      kind: 'failed',
+      failure: {kind: 'unknown'},
+    });
+  });
+
+  it('F-2003: a cancelled acquire is no fault of the helper, and logs nothing', async () => {
+    const {connecting, logged} = fixture('cancelled');
+    await connecting();
+    deepStrictEqual(logged(), []);
+  });
+
+  it('F-2003: the cause of a helper that cannot be reached is in the log', async () => {
+    const {connecting, logged} = fixture('endpointUnreachable');
+    await connecting();
+    deepStrictEqual(logged(), [
+      'the connection helper could not be reached or started: endpointUnreachable',
+    ]);
   });
 
   it('gives the lease back when the channel for the connection cannot be opened', async () => {

@@ -103,16 +103,12 @@ export function ofProbe(failure: ProbeFailure): FailureDetail {
   }
 }
 
-/** The failure to take a lease on the connection server's helper. */
+/**
+ * The failure to take a lease on the connection server's helper: a cancel, or a helper that could not be reached or
+ * started, which has no reason of its own for the window; the caller logs the cause.
+ */
 export function ofAcquire(failure: AcquireFailure): FailureDetail {
-  switch (failure) {
-    case 'cancelled':
-      return {kind: 'cancelled'};
-    case 'endpointUnreachable':
-      return {kind: 'channelClosed'};
-    default:
-      return detailOf('unknown', 'the connection helper did not start');
-  }
+  return failure === 'cancelled' ? {kind: 'cancelled'} : {kind: 'unknown'};
 }
 
 /**

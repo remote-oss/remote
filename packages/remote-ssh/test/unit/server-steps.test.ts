@@ -1,28 +1,20 @@
 import {deepStrictEqual} from 'node:assert';
-import {RecordingChannel} from 'lib-host/testing/recording-channel';
+import type {RecordingChannel} from 'lib-host/testing/recording-channel';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {BASE_PLACEHOLDERS, type ProductProfile} from 'lib-product';
+import {createServerSteps} from '../../src/pipeline/server-steps.ts';
+import type {ConnectInput} from '../../src/pipeline/steps.ts';
 import {
-  type AcceptanceStore,
-  type HostLockLoop,
-  type LicenceModal,
-  type ModalAnswer,
-  type ProbedHost,
-  RESULT_BEGIN,
-  RESULT_END,
-  SSH_POLICY,
-} from 'lib-server';
-import {
-  hostServerSettings,
-  type HostServerSettings,
-  type RawServerSettings,
-} from '../../src/pipeline/host-settings.ts';
-import {
-  createServerSteps,
-  type ServerStepDependencies,
-} from '../../src/pipeline/server-steps.ts';
-import type {ConnectInput, ConnectionLease} from '../../src/pipeline/steps.ts';
+  channelAnswering,
+  dependencies,
+  HOST,
+  leaseOn,
+  lines,
+  modalAnswering,
+  PROFILE,
+  settingsWith,
+  storeOf,
+} from './server-steps.fixture.ts';
 
 const INPUT: ConnectInput = {
   target: {kind: 'plain', text: 'devbox'},
@@ -33,163 +25,7 @@ const INPUT: ConnectInput = {
   windowWorkspace: undefined,
 };
 
-const PROFILE: ProductProfile = {
-  applicationName: 'fixture',
-  version: '1.2.3',
-  commit: 'abc123',
-  quality: 'stable',
-  release: '',
-  serverApplicationName: 'fixture-server',
-  serverDataFolderName: '.fixture-server',
-  dataFolderName: '.fixture',
-  tunnelApplicationName: 'fixture-tunnel',
-  urlProtocol: 'fixture',
-  serverDownloadUrlTemplate: '',
-  updateUrl: '',
-  downloadUrl: '',
-  serverLicense: [],
-  serverLicenseUrl: '',
-};
-
-const HOST: ProbedHost = {
-  operatingSystem: 'linux',
-  architecture: 'x64',
-  libc: 'glibc',
-  release: 'debian',
-  home: '/home/alex',
-  temporaryFolder: '/tmp',
-  loginShell: 'sh',
-  tools: ['wget', 'tar'],
-  busyboxWget: false,
-  sshAuthSock: '',
-  display: '',
-  installed: false,
-  installFolder: '/home/alex/.fixture-server/bin/abc123',
-};
-
 const NEVER_CANCELLED = new AbortController().signal;
-
-const OVERRIDE = {
-  value: 'https://example.invalid/server-${os}-${arch}-${commit}.tar.gz',
-  layer: 'defaultProfileUser',
-} as const;
-
-/** The lines of a result block with the given status and facts. */
-function lines(status: string, ...facts: string[]): string[] {
-  return [RESULT_BEGIN, `status=${status}`, ...facts, RESULT_END];
-}
-
-/** A channel whose one script prints `output` and exits cleanly. */
-function channelAnswering(output: readonly string[]): RecordingChannel {
-  return new RecordingChannel({
-    identity: 'devbox',
-    platformHint: 'linux',
-    scripts: [
-      {
-        interpreter: 'posixShell',
-        matches: () => true,
-        lines: output,
-        ending: {kind: 'exit', status: 0},
-      },
-    ],
-  });
-}
-
-function leaseOn(channel: RecordingChannel): ConnectionLease {
-  return {
-    channel,
-    socksPort: 1080,
-    storeSharedRecord: () => Promise.resolve(true),
-    onNotice: () => () => undefined,
-    answer: () => Promise.resolve(false),
-    refuse: () => Promise.resolve(false),
-    release: () => undefined,
-  };
-}
-
-function runOnce(step: Parameters<HostLockLoop>[0]): ReturnType<HostLockLoop> {
-  return step();
-}
-
-/** A store that says what was asked and answers from a set of accepted keys. */
-function storeOf(accepted: readonly string[] = []): AcceptanceStore {
-  return {
-    isAccepted: storeKey => accepted.includes(storeKey),
-    accept: () => Promise.resolve(),
-  };
-}
-
-function modalAnswering(answer: ModalAnswer, asked: string[]): LicenceModal {
-  return {
-    askUser: termsUrl => {
-      asked.push(termsUrl);
-      return Promise.resolve(answer);
-    },
-  };
-}
-
-/** The settings of the host `devbox`, with the raw values given changed. */
-function settingsWith(changes: Partial<RawServerSettings>): HostServerSettings {
-  return hostServerSettings(
-    {
-      serverInstallPath: undefined,
-      bindHost: undefined,
-      serverPickPortsFromRange: undefined,
-      httpProxy: '',
-      httpsProxy: '',
-      reconnectionGraceTime: null,
-      defaultExtensions: undefined,
-      useFlock: true,
-      lockfilesInTmp: false,
-      useCurlAndWgetConfigurationFiles: false,
-      ...changes,
-    },
-    'devbox',
-  );
-}
-
-function dependencies(
-  changes: Partial<ServerStepDependencies> = {},
-): ServerStepDependencies {
-  return {
-    profile: PROFILE,
-    policy: SSH_POLICY,
-    settings: settingsWith({
-      serverInstallPath: undefined,
-      defaultExtensions: undefined,
-    }),
-    useExecServer: true,
-    override: OVERRIDE,
-    overridePolicy: {
-      settingKey: 'remote.SSH.serverDownloadUrlTemplate',
-      layers: ['defaultProfileUser'],
-      acceptsBaseUrl: false,
-      placeholders: BASE_PLACEHOLDERS,
-    },
-    connectionSettings: () => ({listenOnSocket: false, useLocalServer: true}),
-    remoteUser: 'alex',
-    clock: () => 1700000000000,
-    bounds: {downloadSeconds: 60, readySeconds: 20},
-    store: storeOf(),
-    modal: modalAnswering('accept', []),
-    download: {
-      fetch: () => Promise.reject(new Error('no download in this test')),
-    } as unknown as ServerStepDependencies['download'],
-    files: {} as unknown as ServerStepDependencies['files'],
-    lockLoop: runOnce,
-    clientFolder: '/tmp/client',
-    archiveCache: {kind: 'none'},
-    downloadBounds: {
-      deadlineMilliseconds: 60_000,
-      stallMilliseconds: 10_000,
-      maximumBytes: 500_000_000,
-    },
-    newTemporaryToken: () => 'token',
-    discardDeadlineMilliseconds: 50,
-    logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
-    ...changes,
-  };
-}
 
 /** A validate step whose connection settings are fixed to a row's values. */
 function stepsWith(settings: {

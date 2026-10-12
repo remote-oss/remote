@@ -64,6 +64,19 @@ export function installFolderFor(
     : {kind: 'invalid'};
 }
 
+/**
+ * The pre-connection script that applies to the alias, or none: a text applies to every host, an object by the alias
+ * exactly as written, and an empty text, a missing or empty entry, or a value of another type is no script.
+ */
+export function preconnectScriptFor(
+  setting: unknown,
+  alias: string,
+): string | undefined {
+  const script =
+    typeof setting === 'string' ? setting : entryText(setting, alias);
+  return script === '' ? undefined : script;
+}
+
 /** The text of a per-host map entry that is a string, or the empty text. */
 export function entryText(setting: unknown, alias: string): string {
   const entry = exactEntry(setting, alias);
