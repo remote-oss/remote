@@ -26,12 +26,13 @@ import type {SshTarget} from 'lib-ssh';
 import type {PickerItem} from '../connect/picker-model.ts';
 
 export const MAINTENANCE_PICKER_OPTIONS: {hasTitle: false; canSelectMany: false; hasBackButton: false; focusFirst: true};
-export type MaintenanceStep = {run: {text: string; target: SshTarget}} | {stop: 'addHost' | 'configure'};
+export type MaintenanceStep = {proceed: {text: string; target: SshTarget}} | {stop: 'addHost' | 'configure'};
+// Amended 2026-10-12 (#255): `proceed`, not `run`; a three-letter property fails the name rule, and D-74 allows no disable.
 export function maintenanceStep(item: PickerItem): MaintenanceStep;
 ```
 
-Rules. `maintenanceStep`: a `host` item gives `run` with `text` the item's `label` and `target` the target of
-`outcomeOfPick`; a `typed` item gives `run` with `text` the item's `text` (never its label, which has the arrow
+Rules. `maintenanceStep`: a `host` item gives `proceed` with `text` the item's `label` and `target` the target of
+`outcomeOfPick`; a `typed` item gives `proceed` with `text` the item's `text` (never its label, which has the arrow
 prefix) and the same `target`; `addHost` and `configure` give `{stop}` with the same word, because the command does
 not continue after them. The text is not trimmed or changed, and nothing is validated here.
 
@@ -42,12 +43,12 @@ not continue after them. The text is not trimmed or changed, and nothing is vali
 | Cite | Given | Expected |
 |---|---|---|
 | F-2411.5.0 | `MAINTENANCE_PICKER_OPTIONS` | deep-equal `{hasTitle:false, canSelectMany:false, hasBackButton:false, focusFirst:true}` |
-| F-2412.5.0 | `maintenanceStep(ALPHA)` | `{run:{text:'alpha', target:{host:'alpha'}}}` |
-| F-2412.5.0 | `maintenanceStep` of a `host` item labelled `Beta-Upper` | `{run:{text:'Beta-Upper', target:{host:'Beta-Upper'}}}` (case kept) |
-| F-2411.6.3 | `maintenanceStep` of a `typed` item with label `➤ lab@203.0.113.6:2222` and text `lab@203.0.113.6:2222` | `{run:{text:'lab@203.0.113.6:2222', target:{host:'203.0.113.6', user:'lab', port:2222}}}` |
+| F-2412.5.0 | `maintenanceStep(ALPHA)` | `{proceed:{text:'alpha', target:{host:'alpha'}}}` |
+| F-2412.5.0 | `maintenanceStep` of a `host` item labelled `Beta-Upper` | `{proceed:{text:'Beta-Upper', target:{host:'Beta-Upper'}}}` (case kept) |
+| F-2411.6.3 | `maintenanceStep` of a `typed` item with label `➤ lab@203.0.113.6:2222` and text `lab@203.0.113.6:2222` | `{proceed:{text:'lab@203.0.113.6:2222', target:{host:'203.0.113.6', user:'lab', port:2222}}}` |
 | F-2412.6.4 | `maintenanceStep` of a `typed` item with text `lab@alias.invalid` | `text` `lab@alias.invalid`, target `{host:'alias.invalid', user:'lab'}` |
 | F-2411.6.3 | `maintenanceStep` of a `typed` item with text ` lab@x.invalid ` (spaces kept) | `text` ` lab@x.invalid ` unchanged; target from the same text |
-| F-2411.6.3 | (each) `maintenanceStep` of typed items with text `-oProxyCommand=x`; `a b.invalid`; three spaces | `run` with the text as given, nothing refused |
+| F-2411.6.3 | (each) `maintenanceStep` of typed items with text `-oProxyCommand=x`; `a b.invalid`; three spaces | `proceed` with the text as given, nothing refused |
 | F-2411.6.4 | `maintenanceStep` of the `addHost` item (label `{id:'S167', values:['$(plus)']}`) | `{stop:'addHost'}` |
 | F-2411.6.4 | `maintenanceStep` of the `configure` item (label `{id:'S024', values:[]}`) | `{stop:'configure'}` |
 | F-2412.6.5 | the same two calls | `{stop:'addHost'}` and `{stop:'configure'}` |
