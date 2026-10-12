@@ -656,13 +656,15 @@ async function tunnelWith(
   };
 }
 
-/** The channel run of a shared connect to `text` that logs in, with `lookup` as the host's options. */
+/** The channel run of a shared connect to `text` that logs in, with `lookup` as the host's options and `connectTimeout` as the setting's. */
 async function channelRunOf(
   text: string,
   lookup?: Answer,
+  connectTimeout?: unknown,
 ): Promise<ChannelRun | undefined> {
   const {ports, seen} = portsOf({
     connection: CONNECTED,
+    connectTimeout,
     ...(lookup === undefined ? {} : {lookup}),
   });
   const steps = stepsOf(ports);
@@ -879,6 +881,15 @@ describe("a terminal-mode connect's wait, from this connect's lookup and setting
     deepStrictEqual(channelRun?.connectWait, {
       connectTimeoutSeconds: 7,
       fromHost: true,
+      unboundedWaitSeconds: 600,
+    });
+  });
+
+  it('themis on #419 (3), F-2105 BR-1: the channel run takes the setting when the host sets no timeout', async () => {
+    const channelRun = await channelRunOf('dev', undefined, 30);
+    deepStrictEqual(channelRun?.connectWait, {
+      connectTimeoutSeconds: 30,
+      fromHost: false,
       unboundedWaitSeconds: 600,
     });
   });

@@ -23,6 +23,8 @@ import {
   type ConnectorDependencies,
   connectorOf,
 } from '../../src/pipeline/connector.ts';
+import type {PromptEditor} from '../../src/surfaces/prompt-surface.ts';
+import {textOf} from '../../src/surfaces/prompt-strings.ts';
 import {
   OPENSSH,
   OPTIONS_TEXT,
@@ -30,7 +32,7 @@ import {
   SSH_PROGRAM,
   spawnerOf,
 } from './locate.fixture.ts';
-import {INPUT, TERMS} from './pipeline.fixture.ts';
+import {INPUT, SILENT_PROMPTS, TERMS} from './pipeline.fixture.ts';
 import {PROFILE, surfacesOf} from './server-steps.fixture.ts';
 
 /** The settings the user wrote, by id, at the user level. */
@@ -69,7 +71,12 @@ function settingHostOf(written: Written): {
 function assemblyInputs(
   written: Written = {},
   changes: {prober?: FakeProber} = {},
-): {surfaces: ConnectSurfaces; machine: ConnectMachine; recorded: Recorded} {
+): {
+  surfaces: ConnectSurfaces;
+  machine: ConnectMachine;
+  clock: FakeClock;
+  recorded: Recorded;
+} {
   const recorded: Recorded = {
     spawned: {started: [], killed: []},
     helperStarts: [],
@@ -126,7 +133,7 @@ function assemblyInputs(
     prober: changes.prober ?? new FakeProber({}),
     newTemporaryToken: () => 'token',
   };
-  return {surfaces, machine, recorded};
+  return {surfaces, machine, clock, recorded};
 }
 
 function loggerOf(recorded: Recorded): ReturnType<typeof createLogger> {
@@ -694,16 +701,20 @@ const RUN_BASE: RunBase = {
   platform: 'linux',
 };
 
-/** The channel the assembly makes for `dev`, with its terminals and what the fake spawner started. */
-function channelOver(written: Written = {}): {
+/** The channel the assembly makes for `dev`, with `prompts` in place of the silent ones, its terminals and its clock. */
+function channelOver(
+  written: Written = {},
+  prompts?: PromptEditor,
+): {
   channel: ReturnType<ReturnType<typeof wiringPortsOf>['channelFor']>;
   terminals: RecordingTerminals;
+  clock: FakeClock;
   recorded: Recorded;
 } {
-  const {surfaces, machine, recorded} = assemblyInputs(written);
+  const {surfaces, machine, clock, recorded} = assemblyInputs(written);
   const terminals = new RecordingTerminals();
   const channel = wiringPortsOf(
-    {...surfaces, terminals},
+    {...surfaces, prompts: prompts ?? SILENT_PROMPTS, terminals},
     machine,
     loggerOf(recorded),
   ).channelFor({} as unknown as SharedConnection, {
@@ -717,14 +728,15 @@ function channelOver(written: Written = {}): {
     },
     displayHost: 'dev',
   });
-  return {channel, terminals, recorded};
+  return {channel, terminals, clock, recorded};
 }
 
-/** Starts a copy over the channel and lets the terminal open. */
+/** Starts a copy over the channel, with `prompts` in place of the silent ones, and lets the terminal open. */
 async function copyStarted(
   written: Written = {},
+  prompts?: PromptEditor,
 ): Promise<ReturnType<typeof channelOver> & {copy: Promise<unknown>}> {
-  const over = channelOver(written);
+  const over = channelOver(written, prompts);
   const copy = over.channel.copyToHost({
     localFile: '/tmp/server.tar.gz',
     remotePath: '/home/alex/.server/server.tar.gz',
@@ -732,6 +744,36 @@ async function copyStarted(
   });
   await Promise.resolve();
   return {...over, copy};
+}
+
+/** Lets the microtasks that are ready run. */
+async function settled(): Promise<void> {
+  for (let round = 0; round < 5; round++) {
+    await Promise.resolve();
+  }
+}
+
+/** Whether the copy has not settled by the time the microtasks drain. */
+async function stillOpen(copy: Promise<unknown>): Promise<boolean> {
+  const which = await Promise.race([
+    copy.then(() => 'settled'),
+    settled().then(() => 'still-open'),
+  ]);
+  return which === 'still-open';
+}
+
+/** A prompt editor that records each pick's title and answers nothing; `translate` is the identity. */
+function recordingPrompts(): {prompts: PromptEditor; titles: string[]} {
+  const titles: string[] = [];
+  const prompts: PromptEditor = {
+    pick: request => {
+      titles.push(request.title ?? '');
+      return Promise.resolve(undefined);
+    },
+    maskedInput: () => Promise.resolve(undefined),
+    translate: template => template,
+  };
+  return {prompts, titles};
 }
 
 describe("the assembled ports' channel", () => {
@@ -788,6 +830,36 @@ describe("the assembled ports' channel", () => {
     const {terminals, copy} = await copyStarted();
     terminals.opened[0]?.end(0);
     deepStrictEqual(await copy, {kind: 'copied'});
+  });
+
+  it('themis on #419 (1), F-2105 BR-3: a silent copy is unsettled just before its connect wait (16 999 ms)', async () => {
+    const {copy, clock} = await copyStarted();
+    clock.advance(16_999);
+    deepStrictEqual(await stillOpen(copy), true);
+  });
+
+  it('themis on #419 (1), F-2105 BR-3: a silent copy settles with a timeout at its connect wait (17 000 ms)', async () => {
+    const {copy, clock} = await copyStarted();
+    clock.advance(17_000);
+    deepStrictEqual(await copy, {
+      kind: 'failed',
+      failure: {kind: 'timeout', detail: 'the copy login did not finish'},
+    });
+  });
+
+  it("themis on #419 (2), F-2305 BR-2: the copy terminal's host-key question names the display host and the fingerprint", async () => {
+    const {prompts, titles} = recordingPrompts();
+    const {terminals, clock} = await copyStarted({}, prompts);
+    const [terminal] = terminals.opened;
+    terminal?.write(
+      "The authenticity of host 'dev (192.0.2.1)' can't be established.\n" +
+        'ED25519 key fingerprint is SHA256:abc.\n' +
+        'Are you sure you want to continue connecting (yes/no/[fingerprint])? ',
+    );
+    clock.advance(100);
+    deepStrictEqual(titles, [
+      textOf({id: 'S001', values: ['dev', 'SHA256:abc']}, template => template),
+    ]);
   });
 
   it('lib-product: a policy table without remote-ssh is a defect', () => {
