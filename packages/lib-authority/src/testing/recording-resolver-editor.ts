@@ -17,7 +17,7 @@ export interface RecordingResolverEditor {
 
 /**
  * The fake editor. It records `register <prefix>`, `unregister <prefix>`, `progress <title>`, `phase <text>`,
- * `notAvailable <message> <handled>`, `temporarilyNotAvailable <message>`, `reload` and `closeRemote`.
+ * `phase <text> (details)`, `notAvailable <message> <handled>`, `temporarilyNotAvailable <message>`, `reload` and `closeRemote`.
  */
 export function recordingResolverEditor(
   events: string[],
@@ -40,8 +40,8 @@ export function recordingResolverEditor(
         events.push(`progress ${request.title}`);
         cancel = request.onCancel;
         try {
-          return await task(text => {
-            events.push(`phase ${text}`);
+          return await task((text, details) => {
+            events.push(details ? `phase ${text} (details)` : `phase ${text}`);
           });
         } finally {
           cancel = undefined;

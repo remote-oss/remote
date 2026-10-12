@@ -27,6 +27,8 @@ export type PhaseName =
 export interface ConnectPhase {
   name: PhaseName;
   percent?: number;
+  /** Whether the progress shows the "(details)" link in front of this stage's text. */
+  details?: boolean;
 }
 
 /** What the connector is asked to connect to. */
@@ -95,7 +97,9 @@ export interface ProgressRequest {
 export interface ProgressPort {
   withProgress<Result>(
     request: ProgressRequest,
-    task: (update: (title: string) => void) => Promise<Result>,
+    task: (
+      update: (title: string, details: boolean) => void,
+    ) => Promise<Result>,
   ): Promise<Result>;
 }
 
@@ -294,7 +298,7 @@ export async function registerResolver(
       },
       async update => {
         const stop = connector.onPhase(phase => {
-          update(options.titleOf(phase, decoded));
+          update(options.titleOf(phase, decoded), phase.details === true);
         });
         try {
           return await connector.connect(input);
