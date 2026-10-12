@@ -22,6 +22,15 @@ describe('Remote - SSH, activated in the editor', () => {
     );
   });
 
+  it('F-2203 AC-1, #397: Open SSH Configuration File is served', async () => {
+    deepStrictEqual(
+      (await commandsAfterActivation()).includes(
+        'opensshremotes.openConfigFile',
+      ),
+      true,
+    );
+  });
+
   it('F-2004: the help commands are served', async () => {
     deepStrictEqual(
       (await commandsAfterActivation()).includes('opensshremotes.getHelp'),

@@ -40,6 +40,7 @@ You do not install anything on the host yourself, and you do not need administra
 | **Remote-SSH: Connect Current Window to Host...** | The same picker, but the window you are in reloads connected to the host. What it showed before is closed. |
 | **Remote-SSH: New Window on Active Host** | In a connected window, opens another window on the same host without asking again. |
 | **Remote-SSH: Kill Local Connection Server For Host...** | Ends the shared connection to a host. Windows of that host reconnect, and ask for a password again where one is needed. |
+| **Remote-SSH: Open SSH Configuration File...** | Pick one of your SSH configuration files and open it, making it first if it does not exist. See [SSH configuration files](ssh-config.md). |
 | **Remote-SSH: Show Log** | Opens the *Remote - SSH* output channel. |
 | **Remote-SSH: Help**, **Remote-SSH: Get Started with SSH**, **Remote-SSH: Provide Feedback**, **Remote-SSH: Settings**, **Remote-SSH: Report Issue...** | Open this guide, the getting-started page, the feedback page, the extension's settings and the issue reporter. |
 
@@ -53,7 +54,7 @@ settings: a workspace cannot change them.
 | Setting | Default | What it does |
 |---|---|---|
 | `remote.SSH.path` *(application)* | empty | Full path of the `ssh` program. Empty means the one on your `PATH`. |
-| `remote.SSH.configFile` *(application)* | empty | One SSH configuration file to use instead of `~/.ssh/config` and the system file. When set, only its hosts are listed and `ssh` is told to read it. |
+| `remote.SSH.configFile` *(application)* | empty | One SSH configuration file to use instead of `~/.ssh/config` and the system file. When set, only its hosts are listed and `ssh` is told to read it. See [SSH configuration files](ssh-config.md). |
 | `remote.SSH.useLocalServer` | on | Share one `ssh` connection per host between windows. Turn off to give each window its own connection. |
 | `remote.SSH.remotePlatform` | none | Maps host names (`*` matches any run of characters) to `linux`, `macOS` or `windows`. With the shared connection off, the extension asks once for the platform of a host that has no entry and records the answer here. |
 | `remote.SSH.connectTimeout` | 15 | Seconds to wait for an unreachable host before giving up. |

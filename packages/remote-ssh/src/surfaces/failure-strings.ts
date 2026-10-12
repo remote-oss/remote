@@ -20,9 +20,11 @@ export type FailureStringId =
   | 'S041'
   | 'S043'
   | 'S044'
+  | 'S047'
   | 'S067'
   | 'S073'
   | 'S075'
+  | 'S077'
   | 'S079'
   | 'S082'
   | 'S084'
@@ -43,13 +45,17 @@ export type FailureStringId =
   | 'S120'
   | 'S121'
   | 'S122'
+  | 'S126'
   | 'S129'
   | 'S130'
+  | 'S131'
   | 'S137'
   | 'S140'
   | 'S142'
   | 'S157'
   | 'S158'
+  | 'S162'
+  | 'S166'
   | 'installPathProvided'
   | 'templateNotHttp'
   | 'templateUnknownPlaceholder'
@@ -68,9 +74,11 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S041: 'Downloading VS Code Server',
   S043: 'Downloading VS Code Server failed. Please try again later.',
   S044: 'Downloading VS Code Server locally',
+  S047: 'Edit custom SSH configuration file',
   S067: 'Error establishing tunnel ({0}).',
   S073: 'Failed to find a free local port: {0}',
   S075: 'Failed to install the VS Code Server',
+  S077: 'Help',
   S079: 'Hostname contains invalid characters',
   S082: 'Initializing VS Code Server',
   S084: 'Installing VS Code Server',
@@ -91,13 +99,17 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S120: 'SSH host name cannot include the character {0}',
   S121: 'SSH user name cannot begin with {0}',
   S122: 'SSH user name cannot include the character {0}',
+  S126: 'Select SSH configuration file to update',
   S129: 'Setting up SSH Host {0}',
   S130: 'Setting up SSH tunnel',
+  S131: 'Settings',
   S137: 'The connection timed out',
   S140: 'The operation timed out',
   S142: 'The process tried to write to a nonexistent pipe',
   S157: 'Waiting for other windows to connect',
   S158: 'Waiting for port forwarding to be ready',
+  S162: 'about SSH configuration files',
+  S166: 'specify a custom configuration file',
   installPathProvided: 'Provided: "{0}"',
   templateNotHttp: 'it does not give an http or https address',
   templateUnknownPlaceholder: 'the placeholder {0} is not known',

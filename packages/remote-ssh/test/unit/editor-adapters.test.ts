@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import type * as vscode from 'vscode';
+import {FakeQuickPick, FakeWidget} from './editor-fakes.fixture.ts';
 import {platformPickOf} from '../../src/connect/platform-picker.ts';
 import {mitigationPickOf} from '../../src/surfaces/mitigation-picker.ts';
 import {
@@ -11,67 +12,6 @@ import {
 } from '../../src/surfaces/editor-adapters.ts';
 
 type Editor = Pick<typeof vscode, 'window'>;
-
-interface FakeItem {
-  label: string;
-}
-
-/** What a quick pick and an input box share: the events the editor fires and the calls the adapter makes. */
-class FakeWidget {
-  ignoreFocusOut: boolean | undefined;
-  placeholder: string | undefined;
-  title: string | undefined;
-  shown = 0;
-  hides = 0;
-  disposals = 0;
-  private readonly accepts: Array<() => void> = [];
-  private readonly hidings: Array<() => void> = [];
-
-  onDidAccept(listener: () => void): {dispose(): void} {
-    this.accepts.push(listener);
-    return {dispose: () => undefined};
-  }
-
-  onDidHide(listener: () => void): {dispose(): void} {
-    this.hidings.push(listener);
-    return {dispose: () => undefined};
-  }
-
-  show(): void {
-    this.shown += 1;
-  }
-
-  hide(): void {
-    this.hides += 1;
-    for (const listener of this.hidings) {
-      listener();
-    }
-  }
-
-  dispose(): void {
-    this.disposals += 1;
-  }
-
-  /** The user accepts: the listeners hear it. */
-  protected accepted(): void {
-    for (const listener of this.accepts) {
-      listener();
-    }
-  }
-}
-
-/** A quick pick the test drives: what the adapter set on it, and the choice the test makes. */
-class FakeQuickPick extends FakeWidget {
-  items: FakeItem[] = [];
-  activeItems: FakeItem[] = [];
-  selectedItems: FakeItem[] = [];
-  canSelectMany: boolean | undefined;
-
-  accept(item: FakeItem): void {
-    this.selectedItems = [item];
-    this.accepted();
-  }
-}
 
 /** An input box the test drives: what the adapter set on it, and what the test types. */
 class FakeInputBox extends FakeWidget {

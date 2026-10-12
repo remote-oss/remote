@@ -32,6 +32,7 @@ const TABLE: ActivationTable = {
     provideFeedback: command('provideFeedback'),
     settings: command('settings'),
     reportIssue: command('reportIssue'),
+    openConfigFile: command('openConfigFile'),
   },
   settings: {logLevel: {id: 'remote.SSH.logLevel', scope: 'application'}},
   standDown: {
@@ -122,6 +123,11 @@ function surroundings(options: {
       inspectSetting: (): SettingInspection =>
         options.logLevel === undefined ? {} : {globalValue: options.logLevel},
     },
+    openConfigFile: {
+      execute: () => {
+        seen.events.push('open config file');
+      },
+    },
     help: {
       openExternal: address => {
         seen.events.push(`external ${address}`);
@@ -162,7 +168,7 @@ describe('the activation', () => {
     );
   });
 
-  it('serves when it does not run: the key is cleared first, the help addresses are read, then the six commands are registered', async () => {
+  it('serves when it does not run: the key is cleared first, the help addresses are read, then the seven commands are registered', async () => {
     const {inputs, seen} = surroundings({otherRuns: false});
     const result = await activateRemoteSsh(inputs);
     deepStrictEqual(
@@ -179,6 +185,7 @@ describe('the activation', () => {
           'register opensshremotes.provideFeedback',
           'register opensshremotes.settings',
           'register opensshremotes.reportIssue',
+          'register opensshremotes.openConfigFile',
         ],
       ],
     );
@@ -219,7 +226,7 @@ describe('the activation', () => {
       [
         'serving',
         ['claim', 'notice'],
-        6,
+        7,
         '[00:00:00.000] Missing proposed APIs: resolvers',
       ],
     );
@@ -266,7 +273,7 @@ describe('the activation', () => {
           .length,
         seen.registered.size,
       ],
-      ['serving', 1, 6],
+      ['serving', 1, 7],
     );
   });
 
@@ -365,6 +372,7 @@ describe('the activation', () => {
       'unregister opensshremotes.provideFeedback',
       'unregister opensshremotes.settings',
       'unregister opensshremotes.reportIssue',
+      'unregister opensshremotes.openConfigFile',
       'channel disposed',
     ]);
   });
@@ -383,7 +391,7 @@ describe('the activation', () => {
     );
   });
 
-  it('serves the generated table of the manifest, which holds more commands than it serves, and registers six', async () => {
+  it('serves the generated table of the manifest, which holds more commands than it serves, and registers seven', async () => {
     const {inputs, seen} = surroundings({otherRuns: false});
     await activateRemoteSsh({
       ...inputs,
@@ -392,6 +400,7 @@ describe('the activation', () => {
     deepStrictEqual([...seen.registered.keys()].sort(), [
       'opensshremotes.getHelp',
       'opensshremotes.getStarted',
+      'opensshremotes.openConfigFile',
       'opensshremotes.provideFeedback',
       'opensshremotes.reportIssue',
       'opensshremotes.settings',

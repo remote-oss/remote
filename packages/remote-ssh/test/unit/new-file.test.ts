@@ -106,6 +106,27 @@ describe('planCreation (what to create for a picked file)', () => {
   });
 });
 
+describe('planCreation for the system file (F-2203 Q2, option a)', () => {
+  it('F-2203.Q2: a missing system file with a missing folder takes the configured modes and inserts the template', () => {
+    deepStrictEqual(
+      planCreation(
+        input({
+          file: '/etc/ssh/ssh_config',
+          role: 'system',
+          missingFolders: ['/etc/ssh'],
+        }),
+      ),
+      {
+        steps: [
+          {path: '/etc/ssh', kind: 'folder', mode: 0o755},
+          {path: '/etc/ssh/ssh_config', kind: 'file', mode: 0o644},
+        ],
+        insertTemplate: true,
+      },
+    );
+  });
+});
+
 describe('starterTemplate (the lines and tab stops of the new file)', () => {
   it('F-2203.AC-6: a four-space indent, the four lines joined, no trailing newline', () => {
     deepStrictEqual(
