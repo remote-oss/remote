@@ -72,3 +72,10 @@ PR title `lib-wsl: matchDistro and filterDockerDesktop (card wsl-04)`; answers R
 - Whether `Docker-Desktop` (other case) is also hidden: F-6701 names the lower-case ids only; the card follows
   F-6201.BR-1's case-insensitive naming. Confirm.
 - The order of a picker (default first, then alphabetical, F-6701.BR-4) belongs to F-6202; not this card.
+
+### Rulings on section 6 (architect, 2026-10-12, #289)
+
+1. Kept: two registered names that differ only in case make a case-folded match `distroUnknown`; the function never
+   guesses between them, since a wrong pick connects to the wrong distro. Rows 10 and 11 and the "several" branch stay.
+2. Kept: Docker Desktop's distros are hidden whatever the case of their names, because WSL treats distro names
+   case-insensitively (F-6201 BR-1); `Docker-Desktop` is the same distro as `docker-desktop`.
