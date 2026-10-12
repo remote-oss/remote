@@ -1,231 +1,26 @@
 import {deepStrictEqual} from 'node:assert';
-import type {ChannelFailure, HostChannel} from 'lib-host';
-import {createLogger} from 'lib-log';
-import {MemorySink} from 'lib-log/testing/memory-sink';
+import type {StartOutcome, TransferPhase} from 'lib-server';
+import {connect, type TransportEvent} from '../../src/pipeline/connect.ts';
 import type {
-  Plan,
-  ProbedHost,
-  StartOutcome,
-  TransferOutcome,
-  TransferPhase,
-} from 'lib-server';
-import {
-  connect,
-  type ConnectOptions,
-  type PhaseEvent,
-} from '../../src/pipeline/connect.ts';
-import type {SharedRecord} from 'lib-ssh';
-import type {
-  ConnectInput,
-  ConnectionLease,
-  ConnectionTerms,
   ConnectSteps,
   StepResult,
   TunnelOpening,
 } from '../../src/pipeline/steps.ts';
-
-const INPUT: ConnectInput = {
-  target: {kind: 'plain', text: 'dev'},
-  rawHostString: 'dev',
-  attempt: 1,
-  isReconnection: false,
-  windowId: 'window-1',
-  windowWorkspace: undefined,
-};
-
-const HOST: ProbedHost = {
-  operatingSystem: 'linux',
-  architecture: 'x64',
-  libc: 'glibc',
-  release: 'debian',
-  home: '/home/dev',
-  temporaryFolder: '/tmp',
-  loginShell: 'sh',
-  tools: ['wget', 'tar'],
-  busyboxWget: false,
-  sshAuthSock: '',
-  display: '',
-  installed: false,
-  installFolder: '/home/dev/.server/bin/abc',
-};
-
-const DOWNLOAD: Plan = {
-  kind: 'download',
-  where: 'host',
-  clientFallback: true,
-  address: 'https://example.invalid/server.tar.gz',
-  installFolder: '/home/dev/.server/bin/abc',
-  dataFolder: '/home/dev/.server',
-  launcher: 'bin/launcher',
-  lockPlace: 'folder',
-  notes: [],
-} as unknown as Plan;
-
-const REUSE: Plan = {
-  kind: 'reuse',
-  layout: {kind: 'bin', commit: 'abc', path: '/home/dev/.server/bin/abc'},
-  dataFolder: '/home/dev/.server',
-  launcher: 'bin/launcher',
-  lockPlace: 'folder',
-  notes: [],
-} as unknown as Plan;
-
-const STARTED: StartOutcome = {
-  kind: 'started',
-  server: {
-    port: 4321,
-    processId: 77,
-    connectionToken: 'secret-token',
-    reused: false,
-  },
-  notices: [],
-};
-
-/** The steps' calls in order, the lease releases, and the phases the window saw. */
-interface Recording {
-  calls: string[];
-  releases: number;
-  tunnelCloses: number;
-  records: SharedRecord[];
-  phases: PhaseEvent[];
-}
-
-const TERMS: ConnectionTerms = {
-  platform: 'unknown',
-  remoteCommandInEffect: false,
-};
-
-const OPENED = {
-  address: {host: '127.0.0.1', port: 50000},
-  extensionHostEnv: {FLAG: 'yes'},
-  environmentTunnels: [],
-  tunnelFeatures: {elevation: false},
-};
-
-/** The tunnel a step opens, counting its close in the recording. */
-function tunnelOf(
-  recording: Recording,
-  opened: TunnelOpening['opened'] = OPENED,
-): TunnelOpening {
-  return {
-    opened,
-    close: () => {
-      recording.tunnelCloses += 1;
-    },
-  };
-}
-
-/** The lease a step hands out, counting its release and the records it stores in the recording. */
-function leaseOf(recording: Recording): ConnectionLease {
-  return {
-    channel: {} as unknown as HostChannel,
-    socksPort: 1080,
-    storeSharedRecord: record => {
-      recording.records.push(record);
-      return Promise.resolve(true);
-    },
-    onNotice: () => () => undefined,
-    answer: () => Promise.resolve(false),
-    refuse: () => Promise.resolve(false),
-    release: () => {
-      recording.releases += 1;
-    },
-  };
-}
-
-function steps(
-  recording: Recording,
-  changes: Partial<ConnectSteps> = {},
-): ConnectSteps {
-  const lease = leaseOf(recording);
-  function note<Value>(name: string, value: Value): Value {
-    recording.calls.push(name);
-    return value;
-  }
-  return {
-    validate: () => note('validate', {kind: 'done', value: undefined}),
-    preconnect: () =>
-      Promise.resolve(note('preconnect', {kind: 'done', value: undefined})),
-    locateClient: () =>
-      Promise.resolve(note('locateClient', {kind: 'done', value: undefined})),
-    decideTerms: () =>
-      Promise.resolve(note('decideTerms', {kind: 'done', value: TERMS})),
-    openConnection: () =>
-      Promise.resolve(note('openConnection', {kind: 'done', value: lease})),
-    probe: () => Promise.resolve(note('probe', {kind: 'probed', host: HOST})),
-    plan: () => note('plan', {plan: DOWNLOAD}),
-    gate: () =>
-      Promise.resolve(
-        note('gate', {
-          kind: 'cleared',
-          acceptanceFlag: true,
-          remembered: true,
-        }),
-      ),
-    transfer: () =>
-      Promise.resolve(
-        note<TransferOutcome>('transfer', {
-          kind: 'transferred',
-          installFolder: '/home/dev/.server/bin/abc',
-        }),
-      ),
-    start: () => Promise.resolve(note('start', STARTED)),
-    installExtensions: () => {
-      note('installExtensions', undefined);
-      return Promise.resolve();
-    },
-    openTunnel: () =>
-      Promise.resolve(
-        note('openTunnel', {kind: 'done', value: tunnelOf(recording)}),
-      ),
-    rememberPlatform: () => {
-      note('rememberPlatform', undefined);
-      return Promise.resolve();
-    },
-    ...changes,
-  };
-}
-
-function setup(): {recording: Recording; options: ConnectOptions} {
-  const recording: Recording = {
-    calls: [],
-    releases: 0,
-    tunnelCloses: 0,
-    records: [],
-    phases: [],
-  };
-  return {
-    recording,
-    options: {
-      cancellation: new AbortController().signal,
-      onPhase: event => {
-        recording.phases.push(event);
-      },
-      maximumReconnectionAttempts: null,
-      limits: {
-        preconnectMilliseconds: 1000,
-        probeMilliseconds: 1000,
-        tunnelMilliseconds: 1000,
-      },
-      logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
-    },
-  };
-}
-
-/** A promise that never settles, for a step that hangs. */
-function never<Value>(): Promise<Value> {
-  return new Promise<Value>(() => undefined);
-}
-
-/** A tunnel step that fails with a closed channel. */
-function tunnelFails(): ReturnType<ConnectSteps['openTunnel']> {
-  return Promise.resolve({
-    kind: 'failed',
-    failure: {kind: 'channelClosed', reason: {text: 'gone'}},
-  });
-}
-
-const CHANNEL_CLOSED: ChannelFailure = {kind: 'channelClosed', detail: 'gone'};
+import {
+  CHANNEL_CLOSED,
+  INPUT,
+  leaseOf,
+  type Recording,
+  never,
+  OPENED,
+  REUSE,
+  setup,
+  STARTED,
+  steps,
+  TERMS,
+  tunnelFails,
+  tunnelOf,
+} from './pipeline.fixture.ts';
 
 describe('the connect pipeline, when it works', () => {
   it('runs the steps in the order of the contract, transferring a server that is not there', async () => {
@@ -968,5 +763,51 @@ describe('the connect pipeline, what it keeps and gives back', () => {
       ['kind' in result ? result.kind : result, recording.releases],
       ['cancelled', 1],
     );
+  });
+});
+
+describe('the connect pipeline, the transport of a connection that worked', () => {
+  /** A connect that worked, with the recording whose lease takes the notices, and the events the window heard. */
+  async function connected(): Promise<{
+    send: (notice: Parameters<NonNullable<Recording['notice']>>[0]) => void;
+    heard: TransportEvent[];
+    stop: () => void;
+  }> {
+    const {recording, options} = setup();
+    const result = await connect(INPUT, steps(recording), options);
+    if (!('onTransport' in result)) {
+      throw new Error('the connect did not work');
+    }
+    const heard: TransportEvent[] = [];
+    const stop = result.onTransport(event => {
+      heard.push(event);
+    });
+    return {
+      send: notice => {
+        recording.notice?.(notice);
+      },
+      heard,
+      stop,
+    };
+  }
+
+  it('R1: a lost transport is lost, and the end of the connection server is closed', async () => {
+    const {send, heard} = await connected();
+    send({type: 'transportLost'});
+    send({type: 'helperGone'});
+    deepStrictEqual(heard, ['lost', 'closed']);
+  });
+
+  it('R1: the other notices of the lease are not transport events', async () => {
+    const {send, heard} = await connected();
+    send({type: 'waitingForOtherWindow'});
+    deepStrictEqual(heard, []);
+  });
+
+  it('R1: nothing is heard once the window stops following', async () => {
+    const {send, heard, stop} = await connected();
+    stop();
+    send({type: 'transportLost'});
+    deepStrictEqual(heard, []);
   });
 });

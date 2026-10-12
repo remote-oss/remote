@@ -110,11 +110,16 @@ function phaseOfTransfer(phase: TransferPhase): PhaseEvent | undefined {
   }
 }
 
+/** What happened to the connection after the connect: lost (it may come back) or closed (it will not). */
+export type TransportEvent = 'lost' | 'closed';
+
 /** A connect that worked: what the window gets, and the end of the connection when the window ends. */
 export interface Connection {
   connected: Connected;
   /** Closes the tunnel and gives the lease on the connection back; the connector calls it when the window ends. */
   release(): void;
+  /** Hears what happens to the connection's transport; the returned function stops it. */
+  onTransport(listener: (event: TransportEvent) => void): () => void;
 }
 
 /** What a connect has made so far, to give back when it fails; the tunnel is last, and it is the window's to close. */
@@ -361,5 +366,13 @@ async function runSteps(
       tunnel.value.close();
       lease.release();
     },
+    onTransport: listener =>
+      lease.onNotice(notice => {
+        if (notice.type === 'transportLost') {
+          listener('lost');
+        } else if (notice.type === 'helperGone') {
+          listener('closed');
+        }
+      }),
   };
 }
