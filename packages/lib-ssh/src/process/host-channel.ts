@@ -17,6 +17,7 @@ import {
 } from 'lib-host';
 import type {Scheduler} from 'lib-helper';
 import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
+import {isDebugLine} from '../diagnostics/classify.ts';
 import type {Copier} from '../terminal/terminal-copy.ts';
 import {LineSplitter} from './line-splitter.ts';
 import type {LocalFiles} from './node-files.ts';
@@ -27,18 +28,11 @@ import {type SshSession, spawnSession} from './session.ts';
 /** The exit status with which `ssh` and `scp` report that the connection itself failed. */
 const CONNECTION_FAILED_STATUS = 255;
 
+/** How many lines are kept for a failure's detail while collecting, oldest dropped first. */
+const ERROR_LINES_KEPT = 50;
+
 /** How much of the client's standard error is kept for a failure's detail, in characters. */
 const ERROR_TEXT_LIMIT = 2000;
-
-/** Whether a line of the client's standard error is a debug line of `-v`, which a failure's detail leaves out. */
-export function isDebugLine(line: string): boolean {
-  const body = line.startsWith('scp: ') ? line.slice(5) : line;
-  return (
-    body.startsWith('debug1:') ||
-    body.startsWith('debug2:') ||
-    body.startsWith('debug3:')
-  );
-}
 
 /** What every run of this channel shares: the target, the settings and the client programs. */
 export type RunBase = Omit<
@@ -224,6 +218,9 @@ export class SshHostChannel implements HostChannel {
     const lines = new LineSplitter(line => {
       if (line.trim() !== '' && !isDebugLine(line)) {
         kept.push(line);
+        if (kept.length > ERROR_LINES_KEPT) {
+          kept.shift();
+        }
       }
     });
     session.onError(piece => {

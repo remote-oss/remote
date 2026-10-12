@@ -57,7 +57,12 @@ export type {
   FailureReason,
   FilledString,
 } from './diagnostics/classify.ts';
-export {classify, endWithFullStop, logLinesOf} from './diagnostics/classify.ts';
+export {
+  classify,
+  endWithFullStop,
+  isDebugLine,
+  logLinesOf,
+} from './diagnostics/classify.ts';
 export type {
   PickItem,
   PromptStringId,
@@ -95,7 +100,6 @@ export {
   type RunBase,
   SshHostChannel,
   type SshHostChannelOptions,
-  isDebugLine,
 } from './process/host-channel.ts';
 export {LineSplitter} from './process/line-splitter.ts';
 export {type LocalFiles, nodeLocalFiles} from './process/node-files.ts';
