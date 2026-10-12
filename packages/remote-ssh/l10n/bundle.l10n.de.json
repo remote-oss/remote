@@ -42,5 +42,6 @@
   "Error establishing tunnel ({0}).": "Error establishing tunnel ({0}).",
   "Failed to find a free local port: {0}": "Failed to find a free local port: {0}",
   "Max wait time exhausted": "Max wait time exhausted",
-  "No free ports in specified range '{0}-{1}'.  Remove or update the 'Preferred Local Port Range' setting and try again.": "No free ports in specified range '{0}-{1}'.  Remove or update the 'Preferred Local Port Range' setting and try again."
+  "No free ports in specified range '{0}-{1}'.  Remove or update the 'Preferred Local Port Range' setting and try again.": "No free ports in specified range '{0}-{1}'.  Remove or update the 'Preferred Local Port Range' setting and try again.",
+  "Select the platform of the remote host \"{0}\"": "Select the platform of the remote host \"{0}\""
 }
