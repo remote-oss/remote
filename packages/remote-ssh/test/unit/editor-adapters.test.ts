@@ -1,9 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import type * as vscode from 'vscode';
 import {platformPickOf} from '../../src/connect/platform-picker.ts';
+import {mitigationPickOf} from '../../src/surfaces/mitigation-picker.ts';
 import {
   failureDialogOf,
   licenceDialogOf,
+  mitigationPickPortOf,
   platformPickPortOf,
 } from '../../src/surfaces/editor-adapters.ts';
 
@@ -308,5 +310,58 @@ describe('platformPickPortOf (card remote-ssh-17 table)', () => {
     pick.accept(first);
     await result;
     deepStrictEqual(pick.disposals, 1);
+  });
+});
+
+describe('mitigationPickPortOf (the "More Actions..." picker, F-2602)', () => {
+  function shown(fake: ReturnType<typeof fakeEditor>) {
+    const result = mitigationPickPortOf(fake.editor).pick(
+      mitigationPickOf(same),
+    );
+    const [pick] = fake.picks;
+    if (pick === undefined) {
+      throw new Error('no quick pick was created');
+    }
+    return {result, pick};
+  }
+
+  it('F-2602 AC-2: the placeholder and the five items are shown in order, the first focused', () => {
+    const {pick} = shown(fakeEditor(() => undefined));
+    const expected = mitigationPickOf(same);
+    deepStrictEqual(
+      [
+        pick.placeholder,
+        pick.items.map(item => item.label),
+        pick.activeItems.map(item => item.label),
+        pick.title,
+      ],
+      [
+        expected.placeholder,
+        expected.items.map(item => item.label),
+        [expected.items[0]?.label],
+        undefined,
+      ],
+    );
+  });
+
+  it('F-2602 §17 Q2: the pick closes when the user looks away', () => {
+    const {pick} = shown(fakeEditor(() => undefined));
+    deepStrictEqual([pick.ignoreFocusOut, pick.canSelectMany], [false, false]);
+  });
+
+  it('F-2602: the item taken gives its action', async () => {
+    const {result, pick} = shown(fakeEditor(() => undefined));
+    const third = pick.items[2];
+    if (third === undefined) {
+      throw new Error('no third item');
+    }
+    pick.accept(third);
+    deepStrictEqual(await result, 'openDocumentation');
+  });
+
+  it('F-2602: a pick hidden without a choice gives nothing', async () => {
+    const {result, pick} = shown(fakeEditor(() => undefined));
+    pick.hide();
+    deepStrictEqual(await result, undefined);
   });
 });

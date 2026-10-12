@@ -1,13 +1,14 @@
 /**
- * @fileoverview The editor adapters of the connect's surfaces: the failure dialog, the licence modal and the platform
- * pick, each a small function over the editor it is given. `vscode` is imported for its types only, so every adapter
- * is tested with a fake editor.
+ * @fileoverview The editor adapters of the connect's surfaces: the failure dialog, the licence modal, the platform pick
+ * and the "More Actions..." pick, each a small function over the editor it is given. `vscode` is imported for its types
+ * only, so every adapter is tested with a fake editor.
  */
 
 import type * as vscode from 'vscode';
 import type {PlatformPickPort} from '../connect/platform-picker.ts';
 import type {FailureDialogPort} from './failure-presenter.ts';
 import type {LicenceDialogPort} from './licence-modal.ts';
+import type {MitigationPickPort} from './mitigation-picker.ts';
 import {ownText} from './own-strings.ts';
 import type {Translate} from './strings.ts';
 
@@ -130,6 +131,25 @@ export function platformPickPortOf(
           ignoreFocusOut: false,
         },
         cancellation,
+      ),
+  };
+}
+
+/** The "More Actions..." pick: five fixed items as a quick pick without a title, closing when the user looks away. */
+export function mitigationPickPortOf(editor: Editor): MitigationPickPort {
+  return {
+    pick: pick =>
+      pickOne(
+        editor,
+        {
+          placeholder: pick.placeholder,
+          choices: pick.items.map(item => ({
+            label: item.label,
+            answer: item.action,
+          })),
+          ignoreFocusOut: false,
+        },
+        new AbortController().signal,
       ),
   };
 }
