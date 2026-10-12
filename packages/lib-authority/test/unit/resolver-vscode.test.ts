@@ -197,7 +197,10 @@ describe('the editor behind the resolver host', () => {
     deepStrictEqual(seen.registered?.tunnelFactory, factory);
   });
 
-  it('F-2304 §3.3: the progress shows the details link on the first stage only', async () => {
+  /** The progress messages for the stages `run` reports, in order. */
+  async function messagesFor(
+    report: (update: (title: string, details: boolean) => void) => void,
+  ): Promise<string[]> {
     const seen: Seen = {events: []};
     await resolverEditorOf(fakeEditor(seen), {
       detailsCommand: DETAILS,
@@ -209,16 +212,48 @@ describe('the editor behind the resolver host', () => {
         onDetails: () => undefined,
       },
       update => {
-        update('Initializing VS Code Server');
-        update('Downloading VS Code Server');
+        report(update);
         return Promise.resolve();
       },
     );
-    deepStrictEqual(seen.events, [
-      'progress Setting up SSH Host box false notification',
-      `message ([details](command:${DETAILS})) Initializing VS Code Server`,
-      'message Downloading VS Code Server',
-    ]);
+    return seen.events.filter(event => event.startsWith('message '));
+  }
+
+  it('contracts §3.2: the details link goes with the stage that has it, whatever its position', async () => {
+    deepStrictEqual(
+      await messagesFor(update => {
+        update('Waiting', false);
+        update('Initializing VS Code Server', true);
+        update('Downloading VS Code Server', false);
+      }),
+      [
+        'message Waiting',
+        `message ([details](command:${DETAILS})) Initializing VS Code Server`,
+        'message Downloading VS Code Server',
+      ],
+    );
+  });
+
+  it('F-2308 6.2: the link also goes with a later stage that has it', async () => {
+    deepStrictEqual(
+      await messagesFor(update => {
+        update('Initializing VS Code Server', true);
+        update('Setting up SSH tunnel', true);
+      }),
+      [
+        `message ([details](command:${DETAILS})) Initializing VS Code Server`,
+        `message ([details](command:${DETAILS})) Setting up SSH tunnel`,
+      ],
+    );
+  });
+
+  it('contracts §3.2: the first stage has no link when it is not flagged', async () => {
+    deepStrictEqual(
+      await messagesFor(update => {
+        update('Initializing VS Code Server', false);
+      }),
+      ['message Initializing VS Code Server'],
+    );
   });
 
   it('contracts §3.2: the progress gives back what its task gave', async () => {

@@ -66,7 +66,7 @@ function editorResolverOf(
   return editorResolver as vscode.RemoteAuthorityResolver;
 }
 
-/** The progress of a connect as a notification, with the details link in front of its first stage. */
+/** The progress of a connect as a notification, with the details link in front of each stage that has it. */
 function progressOf(
   editor: typeof vscode,
   options: ResolverEditorOptions,
@@ -85,13 +85,11 @@ function progressOf(
               cancelled.dispose();
               request.onCancel();
             });
-            let first = true;
             try {
-              return await task(text => {
+              return await task((text, details) => {
                 progress.report({
-                  message: phaseMessage(text, first, options.detailsCommand),
+                  message: phaseMessage(text, details, options.detailsCommand),
                 });
-                first = false;
               });
             } finally {
               cancelled.dispose();

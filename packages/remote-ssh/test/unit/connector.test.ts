@@ -15,7 +15,10 @@ import {
 const HOST_INPUT: ConnectInput = {...INPUT, target: INPUT.target};
 
 /** A connector over the fixture's steps, with the recording, and a log the details reveal counts in. */
-function connectorFor(changes: Partial<ConnectSteps> = {}): {
+function connectorFor(
+  changes: Partial<ConnectSteps> = {},
+  terminalMode: () => boolean = () => false,
+): {
   connector: SshConnector;
   recording: Recording;
   revealed: string[];
@@ -26,6 +29,7 @@ function connectorFor(changes: Partial<ConnectSteps> = {}): {
   return {
     connector: connectorOf({
       stepsFor: () => steps(recording, changes),
+      terminalMode,
       options: {maximumReconnectionAttempts, preconnectMilliseconds, logger},
       revealLog: () => {
         revealed.push('log');
@@ -86,9 +90,61 @@ describe('the connector over the connect pipeline', () => {
 
   it('F-2304: the stages of the connect reach the phase listeners', async () => {
     deepStrictEqual((await phasesHeard({kind: 'downloading'})).slice(0, 2), [
-      {name: 'initializing'},
+      {name: 'initializing', details: true},
       {name: 'downloading'},
     ]);
+  });
+
+  /** The phases heard for a connect to the tunnel, in the mode `terminalMode` says. */
+  async function tunnelPhasesHeard(
+    terminalMode: () => boolean,
+  ): Promise<ConnectPhase[]> {
+    const {connector} = connectorFor({}, terminalMode);
+    const heard: ConnectPhase[] = [];
+    connector.onPhase(given => {
+      heard.push(given);
+    });
+    await connector.connect(HOST_INPUT);
+    return heard;
+  }
+
+  it('F-2304 3.4: in shared mode the tunnel stage carries no details link', async () => {
+    deepStrictEqual(
+      (await tunnelPhasesHeard(() => false)).find(
+        given => given.name === 'settingUpTunnel',
+      ),
+      {name: 'settingUpTunnel'},
+    );
+  });
+
+  it('F-2308 6.1 step 4: in terminal mode the tunnel stage carries the details link', async () => {
+    deepStrictEqual(
+      (await tunnelPhasesHeard(() => true)).find(
+        given => given.name === 'settingUpTunnel',
+      ),
+      {name: 'settingUpTunnel', details: true},
+    );
+  });
+
+  it('contracts §3.2: the mode is read once for a connect, at its start', async () => {
+    let calls = 0;
+    const heard = await tunnelPhasesHeard(() => {
+      calls += 1;
+      return calls === 1;
+    });
+    deepStrictEqual(
+      [calls, heard.find(given => given.name === 'settingUpTunnel')],
+      [1, {name: 'settingUpTunnel', details: true}],
+    );
+  });
+
+  it('contracts §3.2: no stage but initializing and the terminal tunnel stage carries the link', async () => {
+    deepStrictEqual(
+      (await tunnelPhasesHeard(() => true))
+        .filter(given => given.details === true)
+        .map(given => given.name),
+      ['initializing', 'settingUpTunnel'],
+    );
   });
 
   it('F-2304: a percentage stage keeps its share', async () => {
@@ -224,6 +280,7 @@ describe('the connector over the connect pipeline', () => {
         made += 1;
         return steps(recording);
       },
+      terminalMode: () => false,
       options: {maximumReconnectionAttempts, preconnectMilliseconds, logger},
       revealLog: () => undefined,
     });

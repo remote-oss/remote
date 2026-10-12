@@ -24,6 +24,8 @@ import type {ConnectInput, ConnectSteps} from './steps.ts';
 export interface ConnectorDependencies {
   /** Makes the steps of one connect, so what they share lives for that connect alone. */
   stepsFor: () => ConnectSteps;
+  /** Whether a connect runs in terminal mode (each window its own `ssh`); read once when the connect starts. */
+  terminalMode: () => boolean;
   /** The options of one connect, except its cancellation and its phase listener, which the connector supplies. */
   options: Omit<ConnectOptions, 'cancellation' | 'onPhase'>;
   /** Reveals the connection's log: what the progress's details link shows. */
@@ -54,11 +56,18 @@ class Listeners<Event> {
   }
 }
 
-/** The stage the window is shown for a pipeline phase. */
-function phaseOf(event: PhaseEvent): ConnectPhase {
-  return event.kind === 'serverDownloadPercent'
-    ? {name: event.kind, percent: event.percent}
-    : {name: event.kind};
+/**
+ * The stage the window is shown for a pipeline phase. The details link goes with `initializing` and, in terminal
+ * mode, with `settingUpTunnel`, whatever the order of the stages; no other stage carries it.
+ */
+function phaseOf(event: PhaseEvent, terminalMode: boolean): ConnectPhase {
+  if (event.kind === 'serverDownloadPercent') {
+    return {name: event.kind, percent: event.percent};
+  }
+  const details =
+    event.kind === 'initializing' ||
+    (event.kind === 'settingUpTunnel' && terminalMode);
+  return details ? {name: event.kind, details: true} : {name: event.kind};
 }
 
 /**
@@ -128,11 +137,12 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
       const controller = new AbortController();
       running = controller;
       try {
+        const terminalMode = dependencies.terminalMode();
         const result = await connect(input, dependencies.stepsFor(), {
           ...dependencies.options,
           cancellation: controller.signal,
           onPhase: event => {
-            phases.tell(phaseOf(event));
+            phases.tell(phaseOf(event, terminalMode));
           },
         });
         if (!isConnection(result)) {
