@@ -273,21 +273,14 @@ describe('the reading of each library failure', () => {
     );
   });
 
-  it('a lease on the helper: cancelled, unreachable endpoint, helper that did not start', () => {
+  it('#253 Q10: a lease on the helper: cancelled, unreachable endpoint, helper that did not start', () => {
     deepStrictEqual(
       [
         ofAcquire('cancelled'),
         ofAcquire('endpointUnreachable'),
         ofAcquire('spawnFailed'),
       ],
-      [
-        {kind: 'cancelled'},
-        {kind: 'channelClosed'},
-        {
-          kind: 'unknown',
-          reason: {text: 'the connection helper did not start'},
-        },
-      ],
+      [{kind: 'cancelled'}, {kind: 'unknown'}, {kind: 'unknown'}],
     );
   });
 

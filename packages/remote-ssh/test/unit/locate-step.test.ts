@@ -1,97 +1,22 @@
 import {deepStrictEqual} from 'node:assert';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import type {ConnectionMode, ProcessHandle, ProcessSpawner} from 'lib-ssh';
+import type {ConnectionMode} from 'lib-ssh';
 import {
   type ConnectState,
   locateClientStep,
 } from '../../src/pipeline/locate-step.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
+import {
+  type Answer,
+  LOOKUP,
+  OPENSSH,
+  OPTIONS_TEXT,
+  type Seen,
+  SSH_PROGRAM,
+  spawnerOf,
+} from './locate.fixture.ts';
 import {INPUT} from './pipeline.fixture.ts';
-
-/** How a fake run answers: what it prints on each stream and its status, no exit at all, or a start failure. */
-type Answer =
-  | {
-      kind: 'exit';
-      output?: string;
-      errorOutput?: string;
-      status: number | undefined;
-    }
-  | {kind: 'hang'}
-  | {kind: 'refuse'};
-
-/** What the spawner saw: each run as one line, and the programs it killed. */
-interface Seen {
-  started: string[];
-  killed: string[];
-}
-
-/** A spawner whose programs answer `-V` from `checks` and `-G` with `lookup`. */
-function spawnerOf(
-  checks: Readonly<Record<string, Answer>>,
-  lookup: Answer,
-  seen: Seen,
-): ProcessSpawner {
-  return specification => {
-    const answer = specification.programArguments.includes('-G')
-      ? lookup
-      : (checks[specification.program] ?? {kind: 'refuse'});
-    if (answer.kind === 'refuse') {
-      return Promise.reject(new Error('not found'));
-    }
-    seen.started.push(
-      `${specification.program} ${specification.programArguments.join(' ')}`,
-    );
-    function later(
-      text: string | undefined,
-      listener: (chunk: string) => void,
-    ) {
-      if (text !== undefined) {
-        queueMicrotask(() => {
-          listener(text);
-        });
-      }
-    }
-    const handle: ProcessHandle = {
-      onOutput: listener => {
-        later(answer.kind === 'exit' ? answer.output : undefined, listener);
-      },
-      onError: listener => {
-        later(
-          answer.kind === 'exit' ? answer.errorOutput : undefined,
-          listener,
-        );
-      },
-      onExit: listener => {
-        if (answer.kind === 'exit') {
-          setTimeout(() => {
-            listener(answer.status);
-          }, 1);
-        }
-      },
-      write: () => Promise.resolve(),
-      endInput: () => undefined,
-      kill: () => {
-        seen.killed.push(specification.program);
-      },
-    };
-    return Promise.resolve(handle);
-  };
-}
-
-/** The program name the search path finds. */
-const SSH_PROGRAM = 'ssh';
-
-const OPENSSH: Answer = {
-  kind: 'exit',
-  errorOutput: 'OpenSSH_9.6p1, OpenSSL 3.0.13',
-  status: 0,
-};
-
-/** What `ssh -G` prints for a host that sets no connect timeout. */
-const OPTIONS_TEXT = 'hostname dev\nuser alex\nport 22\n';
-
-const LOOKUP: Answer = {kind: 'exit', output: OPTIONS_TEXT, status: 0};
 
 /** A lookup that fails with ssh's own words on standard error. */
 function lookupFailing(errorOutput: string): Answer {

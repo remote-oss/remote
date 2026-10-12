@@ -5,6 +5,7 @@
  */
 
 import type {HostChannel} from 'lib-host';
+import type {Logger} from 'lib-log';
 import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
@@ -38,6 +39,7 @@ export interface ConnectionStepDependencies {
    * returned handle takes the questions down.
    */
   attachLogin: (login: LoginLease, input: ConnectInput) => {dispose(): void};
+  logger: Logger;
 }
 
 /** What the window's questions need of the connection: its notices, and the answer or the refusal of each. */
@@ -64,6 +66,11 @@ export function openConnectionStep(
       cancellation,
     });
     if (acquired.kind === 'failed') {
+      if (acquired.failure !== 'cancelled') {
+        dependencies.logger.warn(
+          `the connection helper could not be reached or started: ${acquired.failure}`,
+        );
+      }
       return {kind: 'failed', failure: ofAcquire(acquired.failure)};
     }
     const {connection} = acquired;

@@ -7,6 +7,7 @@ import {
   graceSecondsOf,
   hostAlias,
   installFolderFor,
+  preconnectScriptFor,
   sshTargetOf,
 } from '../../src/pipeline/host-settings.ts';
 
@@ -238,5 +239,63 @@ describe('the target as ssh is given it', () => {
 
   it('connect-14: a structured host with no user or port is the host alone', () => {
     deepStrictEqual(sshTargetOf({kind: 'host', hostName: 'h1'}), {host: 'h1'});
+  });
+});
+
+describe('the pre-connection script that applies to a host', () => {
+  it('F-2108 BR-1: a text applies to every host', () => {
+    deepStrictEqual(
+      preconnectScriptFor('/home/a/renew.sh', 'devbox'),
+      '/home/a/renew.sh',
+    );
+  });
+
+  it('F-2108 6.5: an object applies by the alias exactly as written', () => {
+    deepStrictEqual(
+      preconnectScriptFor({devbox: '/home/a/renew.sh'}, 'devbox'),
+      '/home/a/renew.sh',
+    );
+  });
+
+  it('F-2108 6.5 step 3: another alias, or the same in another case, is no script', () => {
+    deepStrictEqual(
+      [
+        preconnectScriptFor({other: '/x'}, 'devbox'),
+        preconnectScriptFor({DevBox: '/x'}, 'devbox'),
+        preconnectScriptFor({'*': '/x'}, 'devbox'),
+      ],
+      [undefined, undefined, undefined],
+    );
+  });
+
+  it('F-2108 6.5 step 4: a matching entry of "" or null is no script', () => {
+    deepStrictEqual(
+      [
+        preconnectScriptFor({devbox: ''}, 'devbox'),
+        preconnectScriptFor({devbox: null}, 'devbox'),
+      ],
+      [undefined, undefined],
+    );
+  });
+
+  it('F-2108 6.6: an absent or empty setting is no script', () => {
+    deepStrictEqual(
+      [
+        preconnectScriptFor(undefined, 'devbox'),
+        preconnectScriptFor('', 'devbox'),
+      ],
+      [undefined, undefined],
+    );
+  });
+
+  it('F-2108 6.6 step 2: a value of another type is no script', () => {
+    deepStrictEqual(
+      [
+        preconnectScriptFor(true, 'devbox'),
+        preconnectScriptFor(3, 'devbox'),
+        preconnectScriptFor(['/x'], 'devbox'),
+      ],
+      [undefined, undefined, undefined],
+    );
   });
 });

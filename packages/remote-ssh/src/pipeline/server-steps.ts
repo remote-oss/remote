@@ -58,8 +58,8 @@ export interface ServerStepDependencies {
   /** The user's download override and where it came from, when one is set. */
   override: OverrideValue | undefined;
   overridePolicy: OverridePolicy;
-  /** The user name on the host, from the effective ssh config. */
-  remoteUser: string;
+  /** The user name on the host, from the effective ssh config; read when a step needs it, once the lookup has run. */
+  remoteUser: () => string;
   clock: () => number;
   bounds: ServerBounds;
   store: AcceptanceStore;
@@ -119,7 +119,7 @@ export function createServerSteps(
       names,
       policy: dependencies.policy,
       settings,
-      remoteUser: dependencies.remoteUser,
+      remoteUser: dependencies.remoteUser(),
       hostOperatingSystem: undefined,
       archiveUrl: '',
       epochMilliseconds: dependencies.clock(),
