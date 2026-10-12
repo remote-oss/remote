@@ -803,6 +803,14 @@ Rules:
 - `Connected` is data; the pipeline's internal step result carries a `release` handle beside it, which the
   connector keeps for `cancel` and window teardown (connect-02, accepted 2026-10-08).
 - Every attempt makes a fresh connection when S9 reports the transport lost (F-2505 BR-1).
+- **A dialog reason is never a library's internal text** (ruled 2026-10-12, found via connect-18; the same class as
+  #253 Q10's `ofAcquire` fix). A `detail`, `cause`, `reason` or `mismatch` string from a library failure (lib-host's
+  `failFrom` details such as `no end in time` or `the session ended`, a transfer's cause) goes to the connect log
+  (F-2003), never into `Failed.reason`. A reason is an id: one from the spec's string table, or our own named entry,
+  set per kind where the spec places it. `serverDownload` carries **S043** (`Downloading VS Code Server failed. Please
+  try again later.`, F-2403 7.E1, POST-4), `serverInstall` carries **S075** (`Failed to install the VS Code Server`,
+  F-2403 7.E2/7.E3), and a kind with no placement in the spec has no reason (S030). ssh's own failure lines still
+  reach the dialog through S5's `classify`: they are ssh's words, which F-2601 shows.
 - Every recorded hang becomes a bound wait followed by F-2601's dialog (R-79). This covers:
   - F-2103 Q1, F-2104 Q1, F-2304 Q2, F-2308 7.E2, 7.E8, BR-6 and BR-11 (the former Q3 and Q4), F-2405 Q3;
   - after the revisions of 2026-10-06: F-2105 (a `ProxyCommand` that never answers, `ConnectTimeout 0`), F-2108
