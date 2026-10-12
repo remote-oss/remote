@@ -623,8 +623,12 @@ commit is the one its release names as its upstream.
 |---|---|---|---|
 | `startCli` | H1, the placed CLI, its data folder `~/<serverDataFolderName>/cli`, a token | the CLI's port on the host's loopback, the token, the CLI's process id | `serverStart` when no ready line comes within the ready bound (section 6's fallback row), `cancelled` |
 
-**Start.** `<cli> command-shell --on-host 127.0.0.1 --on-port 0 --require-token <token> --cli-data-dir <data>`, under
-`/bin/sh` (F-2103 §6.7), inside V5's lock loop, as `startOrReuse` is.
+**Start.** `VSCODE_CLI_REQUIRE_TOKEN=<token> <cli> command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir
+<data>`, under `/bin/sh` (F-2103 §6.7), inside V5's lock loop, as `startOrReuse` is.
+- **The token goes in the environment variable `VSCODE_CLI_REQUIRE_TOKEN` and nowhere else** (`[cli]` `args.rs`:
+  `require_token` reads that variable). It is never on the command line, where any local user can read it with `ps`, and
+  it is never omitted: without a token the CLI accepts any caller (`AuthRequired::VSDA`, which a CLI without `vsda` signs
+  with a public hash).
 - `--on-port` takes 0 to 2 values. With no value or `0`, the system picks the port; two values are a range.
 - `--server-data-dir`, `--extensions-dir`, `--reconnection-grace-time` and `--install-extension` pass through to the
   server it starts.
