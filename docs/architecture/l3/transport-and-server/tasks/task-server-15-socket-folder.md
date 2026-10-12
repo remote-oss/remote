@@ -1,0 +1,77 @@
+# Task card server-15: the socket's folder is always one the start can report (follow-up to server-14)
+
+Why: themis's notes on #342 (card server-14, terminal mode T6). The socket path is `${TMPDIR:-/tmp}/code-<hex>`, and
+the start reads it back from the server's ready line as **the first word** after `Extension host agent listening on`
+(server-14 §2.1, a POSIX `sed`). Two `TMPDIR` values break that:
+- a `TMPDIR` with a space (`/tmp/my dir`) reports `/tmp/my` (checked: the reader gives the cut path), so the window
+  forwards to a socket that isn't there;
+- a relative `TMPDIR` (`tmp`) reports a path the start's own `yes:/*` check refuses, so the start fails as
+  `ServerFailedToStart`.
+
+Reviewing coder: `remote-coding-worker-1`.
+
+## 1. Package and file boundary
+
+| File | Change |
+|---|---|
+| `packages/lib-server/src/scripts/bootstrap.ts` | the socket's folder (section 2) |
+| `packages/lib-server/test/unit/bootstrap-script.test.ts` | rows (section 3) |
+
+Nothing else.
+
+## 2. Contract
+
+The socket's folder is `$TMPDIR` only when it is an absolute path containing no white space; otherwise `/tmp`:
+
+```sh
+TAB=$(printf '\t')
+NEWLINE='
+'
+case $TMPDIR in
+  *" "*|*"$TAB"*|*"$NEWLINE"*|'') SOCKET_FOLDER=/tmp ;;
+  /*) SOCKET_FOLDER=$TMPDIR ;;
+  *) SOCKET_FOLDER=/tmp ;;
+esac
+SOCKET_FILE="$SOCKET_FOLDER/code-$SOCKET_NAME"
+```
+
+**Not `[[:space:]]`:** dash (Debian's `/bin/sh`, which the script must run under, F-2703 BR-9) treats a bracket class
+in a `case` pattern literally, so `/*[[:space:]]*` doesn't match `/tmp/my dir` there (checked: dash keeps the spaced
+folder; bash in POSIX mode doesn't). The explicit space, tab and newline work in both. A newline would also break the
+line-oriented ready reader.
+
+(in place of `"${TMPDIR:-/tmp}/code-$SOCKET_NAME"`). F-2410 BR-4 puts the socket in the host's temporary folder; that
+holds for every usable `TMPDIR`, and `/tmp` is the folder BR-4 observed on Linux. The ready reader is unchanged: with
+the folder chosen this way, the first word is always the whole path.
+
+**Open row (athena):** whether falling back to `/tmp` for such a `TMPDIR` is acceptable, or the start should fail with
+a named reason instead. The proposal is the fallback, because the user can't easily see or fix their remote `TMPDIR`
+and `/tmp` is what BR-4 observed.
+
+## 3. Test table
+
+One assertion per `it`; the cite starts the name. Each row is a socket-mode start (server-14's `socket()` parameters)
+over the real shell, with `TMPDIR` set in the run's environment.
+
+| Cite | `TMPDIR` | Expected `server.socketPath` |
+|---|---|---|
+| F-2410 BR-4 | a folder of the test, absolute, no space | starts with that folder |
+| #342 (themis) | an absolute folder with a space (created by the test) | starts with `/tmp/code-` |
+| #342 (themis) | `tmp` (relative) | starts with `/tmp/code-`, and the start is `Ok` |
+| F-2410 BR-4 | unset | starts with `/tmp/code-` |
+| F-2410 BR-4 | empty | starts with `/tmp/code-` |
+| F-2703 BR-9 | an absolute folder with a space, the script run under **dash** | starts with `/tmp/code-` (the row that a `[[:space:]]` pattern would fail) |
+| #342 | an absolute folder with a tab | starts with `/tmp/code-` |
+| #342 | any of the above | the reported path is a socket the server listens on (the stand-in prints it back whole) |
+
+## 4. Rule for the worker
+
+As card log-01; coverage at lib-server's ratchet.
+
+## 5. Gates and review
+
+PR title `lib-server: the socket's folder is always one the start can report (card server-15)`.
+
+## 6. Open rows
+
+One: the fallback to `/tmp` versus a named failure (section 2), for athena.
