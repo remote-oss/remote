@@ -48,10 +48,12 @@ Every path destroys the socket and answers once. It never listens on, or binds, 
 for a connect that hasn't started reporting (checked: a bare `new Socket()` given `setTimeout(20)` never answered,
 while a 20 ms timer answered `'error'` after 21 ms).
 
-**The timeout (open row, athena).** `findFreePort`'s 3 s budget (F-2104 BR-7) is checked *between* probes, so one probe
+**The timeout (ruled, athena, 2026-10-12): 500 ms, as proposed.** `findFreePort`'s 3 s budget (F-2104 BR-7) is checked *between* probes, so one probe
 that never answers would stall the search past it. A per-probe bound keeps the search within budget plus one probe.
 The loopback answers in well under a millisecond (refused or open). Proposal: **500 ms**, under the 3 s budget and far
-above any loopback answer, so a real answer is never mislabelled.
+above any loopback answer, so a real answer is never mislabelled. A probe that times out is `'error'`, so not free, which is the safe side: the search moves on and never picks a port
+it couldn't confirm was free, and the stalled socket is destroyed with the rest. It's a named lib-forwarding constant,
+with its basis (F-2104 BR-7's budget) in the test name.
 
 ## 3. Test table
 
