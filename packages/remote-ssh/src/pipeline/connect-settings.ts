@@ -6,23 +6,33 @@
 
 import type {TunnelSettings} from 'lib-forwarding';
 import {readSetting, type SettingHost} from 'lib-identifiers';
+import type {OverrideValue} from 'lib-product';
 import {settings} from '../identifiers.generated.ts';
 import type {ConnectionRequestSettings} from './connection-request.ts';
 import type {RawServerSettings} from './host-settings.ts';
 import type {TermsSettings} from './terms-steps.ts';
 
 /** A setting's value, as the editor reports it. */
-function valueOf(host: SettingHost, entry: keyof typeof settings): unknown {
+export function valueOf(
+  host: SettingHost,
+  entry: keyof typeof settings,
+): unknown {
   return readSetting(host, settings[entry]);
 }
 
 /** A switch's value: true only for the boolean true. */
-function switchOf(host: SettingHost, entry: keyof typeof settings): boolean {
+export function switchOf(
+  host: SettingHost,
+  entry: keyof typeof settings,
+): boolean {
   return valueOf(host, entry) === true;
 }
 
 /** A setting's text, or the empty text for any other value. */
-function textOf(host: SettingHost, entry: keyof typeof settings): string {
+export function textOf(
+  host: SettingHost,
+  entry: keyof typeof settings,
+): string {
   const value = valueOf(host, entry);
   return typeof value === 'string' ? value : '';
 }
@@ -75,4 +85,17 @@ export function tunnelSettingsOf(host: SettingHost): TunnelSettings {
     useLocalServer: switchOf(host, 'useLocalServer'),
     enableDynamicForwarding: switchOf(host, 'enableDynamicForwarding'),
   };
+}
+
+/**
+ * The user's server download template and its layer. The setting applies to the whole application, so the value the
+ * editor holds for the user is the default profile's; an empty or non-text value is no override.
+ */
+export function overrideOf(host: SettingHost): OverrideValue | undefined {
+  const {globalValue} = host.inspectSetting(
+    settings.serverDownloadUrlTemplate.id,
+  );
+  return typeof globalValue === 'string' && globalValue !== ''
+    ? {value: globalValue, layer: 'defaultProfileUser'}
+    : undefined;
 }

@@ -132,11 +132,15 @@ function fixture(
         policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
       };
     },
-    channelFor: (connection, terms) => {
+    channelFor: (connection, terms, input) => {
       if (channelFailureMessage !== undefined) {
         throw new Error(channelFailureMessage);
       }
-      channelsFor.push([connection instanceof SharedConnection, terms]);
+      channelsFor.push([
+        connection instanceof SharedConnection,
+        terms,
+        input.rawHostString,
+      ]);
       return CHANNEL;
     },
     logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
@@ -204,7 +208,7 @@ describe('the connection step', () => {
         outcome.kind === 'done' ? outcome.value.channel === CHANNEL : outcome,
         channelsFor,
       ],
-      [true, [[true, TERMS]]],
+      [true, [[true, TERMS, 'harness']]],
     );
   });
 

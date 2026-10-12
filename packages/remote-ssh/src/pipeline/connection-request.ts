@@ -9,7 +9,7 @@ import {
   type ClientPlatform,
   type ConnectionAcquireRequest,
   DEFAULT_FIRST_MESSAGE_MILLISECONDS,
-  type SshRequest,
+  type RunBase,
 } from 'lib-ssh';
 import {
   effectiveConnectTimeoutSeconds,
@@ -56,20 +56,22 @@ const HELPER_POLICY: EndPolicy = {
   milliseconds: HELPER_GRACE_MILLISECONDS,
 };
 
-/** The acquire request of one connect, apart from the host string and the cancellation. */
-export function connectionRequestOf(
+/**
+ * What every `ssh` and `scp` run of one connect shares: the target, the settings, and what the client step found. A
+ * field the client step should have filled and did not is a defect, and throws.
+ */
+export function runBaseOf(
   input: ConnectInput,
   terms: ConnectionTerms,
   state: ConnectState,
   settings: ConnectionRequestSettings,
-  environment: ConnectionRequestEnvironment,
-): Omit<ConnectionAcquireRequest, 'hostString' | 'cancellation'> {
+  environment: Pick<ConnectionRequestEnvironment, 'homeFolder' | 'platform'>,
+): RunBase {
   const {programs, effective} = state;
   if (programs === undefined || effective === undefined) {
     throw new Error('the connection was asked for before the client was found');
   }
-  const request: SshRequest = {
-    purpose: 'connection',
+  return {
     target: sshTargetOf(input.target),
     settings: {
       configFile: settings.configFile,
@@ -85,12 +87,23 @@ export function connectionRequestOf(
     homeFolder: environment.homeFolder,
     platform: environment.platform,
   };
+}
+
+/** The acquire request of one connect, apart from the host string and the cancellation. */
+export function connectionRequestOf(
+  input: ConnectInput,
+  terms: ConnectionTerms,
+  state: ConnectState,
+  settings: ConnectionRequestSettings,
+  environment: ConnectionRequestEnvironment,
+): Omit<ConnectionAcquireRequest, 'hostString' | 'cancellation'> {
+  const base = runBaseOf(input, terms, state, settings, environment);
   const userAskpass = environment.processEnvironment.SSH_ASKPASS ?? '';
   return {
     folder: environment.registryFolder,
     script: environment.helperScript,
     options: {
-      request: JSON.stringify(request),
+      request: JSON.stringify({...base, purpose: 'connection'}),
       unboundedWaitSeconds: HOST_ZERO_TIMEOUT_SECONDS,
       runtimeFolder: environment.runtimeFolder,
       runtime: environment.runtime,

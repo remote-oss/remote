@@ -4,19 +4,23 @@
  * imports the editor; the extension passes the real ports and a test passes fakes.
  */
 
+import {environmentTunnels} from 'lib-forwarding';
+import type {HostChannel} from 'lib-host';
+import type {Logger} from 'lib-log';
+import type {OverrideValue} from 'lib-product';
 import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
   ConnectionLimits,
+  RunBase,
   SharedConnection,
 } from 'lib-ssh';
-import type {HostChannel} from 'lib-host';
-import type {Logger} from 'lib-log';
 import {connectionLimitsFor} from './bounds.ts';
 import {
   type ConnectionRequestEnvironment,
   type ConnectionRequestSettings,
   connectionRequestOf,
+  runBaseOf,
 } from './connection-request.ts';
 import {type LoginLease, openConnectionStep} from './connection-step.ts';
 import {
@@ -46,6 +50,17 @@ interface WiringSettings {
   server: () => RawServerSettings;
   /** The settings the connection's request reads. */
   connection: () => ConnectionRequestSettings;
+  /** The user's server download override and the layer it came from, when one is set. */
+  override: () => OverrideValue | undefined;
+  /** `remote.SSH.useExecServer`. */
+  useExecServer: () => boolean;
+}
+
+/** What the channel of one connect is made from: the host as written, the runs' shared part, and the terms. */
+export interface ChannelRun {
+  hostString: string;
+  base: RunBase;
+  terms: ConnectionTerms;
 }
 
 /** What the steps of every connect are made from. */
@@ -65,13 +80,17 @@ export interface WiringPorts {
   requestEnvironment: ConnectionRequestEnvironment;
   channelFor: (
     connection: SharedConnection,
-    terms: ConnectionTerms,
+    channelRun: ChannelRun,
   ) => HostChannel;
   /** Shows the login's questions for this connect; the alias names the host in them. */
   attachLogin: (login: LoginLease, alias: string) => {dispose(): void};
   /** The server steps' dependencies, apart from what depends on the connect's host. */
-  server: Omit<ServerStepDependencies, 'settings' | 'remoteUser'>;
-  tunnel: TunnelStepDependencies;
+  server: Omit<
+    ServerStepDependencies,
+    'settings' | 'remoteUser' | 'override' | 'useExecServer'
+  >;
+  /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
+  tunnel: Omit<TunnelStepDependencies, 'environment'>;
   logger: Logger;
 }
 
@@ -81,6 +100,26 @@ function lookedUp(state: ConnectState): NonNullable<ConnectState['effective']> {
     throw new Error('the host was used before its configuration was read');
   }
   return state.effective;
+}
+
+/**
+ * The window's environment: no variables of its own, and the host's `LocalForward` entries as tunnels; an entry
+ * left out is logged with its position and why.
+ */
+function windowEnvironment(
+  localForwards: readonly string[],
+  logger: Logger,
+): {
+  extensionHostEnv: Readonly<Record<string, string | null>>;
+  environmentTunnels: readonly unknown[];
+} {
+  const {tunnels, skipped} = environmentTunnels(localForwards);
+  for (const entry of skipped) {
+    logger.info(
+      `LocalForward entry ${String(entry.index)} is not shown as a tunnel: ${entry.reason}`,
+    );
+  }
+  return {extensionHostEnv: {}, environmentTunnels: tunnels};
 }
 
 /** The steps of one connect, sharing a state that lives for that connect alone. */
@@ -98,6 +137,8 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
         ports.settings.server(),
         hostAlias(input.target),
       ),
+      override: ports.settings.override(),
+      useExecServer: ports.settings.useExecServer(),
       remoteUser: () => lookedUp(state).user,
     });
     return held.server;
@@ -134,7 +175,18 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
           ports.settings.connection(),
           ports.requestEnvironment,
         ),
-      channelFor: ports.channelFor,
+      channelFor: (connection, connectTerms, input) =>
+        ports.channelFor(connection, {
+          hostString: input.rawHostString,
+          base: runBaseOf(
+            input,
+            connectTerms,
+            state,
+            ports.settings.connection(),
+            ports.requestEnvironment,
+          ),
+          terms: connectTerms,
+        }),
       attachLogin: (login, input) =>
         ports.attachLogin(login, hostAlias(input.target)),
       logger: ports.logger,
@@ -146,7 +198,11 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
     start: (input, ...rest) => serverSteps(input).start(input, ...rest),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
-    openTunnel: openTunnelStep(ports.tunnel),
+    openTunnel: openTunnelStep({
+      ...ports.tunnel,
+      environment: () =>
+        windowEnvironment(lookedUp(state).localForwards, ports.logger),
+    }),
     rememberPlatform: terms.rememberPlatform,
   };
 }

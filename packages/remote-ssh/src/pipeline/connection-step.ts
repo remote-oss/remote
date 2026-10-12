@@ -33,6 +33,7 @@ export interface ConnectionStepDependencies {
   channelFor: (
     connection: SharedConnection,
     terms: ConnectionTerms,
+    input: ConnectInput,
   ) => HostChannel;
   /**
    * Shows the login's questions to the user and passes the answers on, from the acquire until the login ends; the
@@ -90,7 +91,7 @@ export function openConnectionStep(
     }
     let channel: HostChannel;
     try {
-      channel = dependencies.channelFor(connection, terms);
+      channel = dependencies.channelFor(connection, terms, input);
     } catch (caught) {
       end();
       return {
