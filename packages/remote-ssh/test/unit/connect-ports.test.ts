@@ -525,6 +525,30 @@ describe("the assembled ports' terminal mode", () => {
     );
   });
 
+  it("themis on #385: the install ssh's -D port is the machine's free loopback port", async () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    deepStrictEqual(
+      await wiringPortsOf(
+        surfaces,
+        {...machine, freeSocksPort: () => Promise.resolve(43210)},
+        loggerOf(recorded),
+      ).terminal.freePort(),
+      43210,
+    );
+  });
+
+  it("themis on #385: the install terminal's run markers are the helper client's nonces", () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    deepStrictEqual(
+      wiringPortsOf(
+        surfaces,
+        {...machine, helpers: {...machine.helpers, newNonce: () => 'n0nce'}},
+        loggerOf(recorded),
+      ).terminal.newMarker(),
+      'n0nce',
+    );
+  });
+
   it('F-2308 BR-3: remote.SSH.showLoginTerminal is read as a switch', () => {
     const {surfaces, machine, recorded} = assemblyInputs({
       'remote.SSH.showLoginTerminal': true,

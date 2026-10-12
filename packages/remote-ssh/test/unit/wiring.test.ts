@@ -68,6 +68,8 @@ interface WiringSeen {
   channels: ChannelRun[];
   sink: MemorySink;
   terminals: RecordingTerminals;
+  /** The clock the terminal step's waits run on. */
+  clock: FakeClock;
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -88,6 +90,7 @@ function portsOf(
     channels: [],
     sink: new MemorySink(),
     terminals: new RecordingTerminals(),
+    clock: new FakeClock(),
   };
   const logger = createLogger(seen.sink, {
     minimumLevel: (): Level => 'info',
@@ -161,7 +164,7 @@ function portsOf(
     },
     terminal: {
       terminals: seen.terminals,
-      scheduler: new FakeClock().scheduler(),
+      scheduler: seen.clock.scheduler(),
       dynamicForwarding: () => false,
       freePort: () => Promise.resolve(41000),
       newMarker: () => 'marker',
@@ -695,6 +698,56 @@ describe("a terminal-mode connect's channel", () => {
     deepStrictEqual(
       [seen.channels[0]?.hostString, seen.channels[0]?.base.effective.user],
       ['alex@dev:22', 'alex'],
+    );
+  });
+});
+
+describe("a terminal-mode connect's wait, from this connect's lookup and settings", () => {
+  /** Whether a terminal-mode connect whose terminal stays silent has settled after `milliseconds`. */
+  async function settledAfter(
+    milliseconds: number,
+    changes: {lookup?: Answer; connectTimeout?: unknown},
+  ): Promise<boolean> {
+    const {ports, seen} = portsOf({mode: 'terminal', ...changes});
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    let settled = false;
+    void steps
+      .openConnection(inputFor('dev'), TERMS, new AbortController().signal)
+      .then(() => {
+        settled = true;
+      });
+    await Promise.resolve();
+    seen.clock.advance(milliseconds);
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+    return settled;
+  }
+
+  const HOST_SEVEN: Answer = {
+    kind: 'exit',
+    output: `${OPTIONS_TEXT}connecttimeout 7\n`,
+    status: 0,
+  };
+
+  it("themis on #385: the host's looked-up ConnectTimeout bounds the wait (7 s + 2 s)", async () => {
+    deepStrictEqual(
+      [
+        await settledAfter(8999, {lookup: HOST_SEVEN, connectTimeout: 30}),
+        await settledAfter(9000, {lookup: HOST_SEVEN, connectTimeout: 30}),
+      ],
+      [false, true],
+    );
+  });
+
+  it('themis on #385: without a host value, the setting bounds the wait (30 s + 2 s)', async () => {
+    deepStrictEqual(
+      [
+        await settledAfter(31999, {connectTimeout: 30}),
+        await settledAfter(32000, {connectTimeout: 30}),
+      ],
+      [false, true],
     );
   });
 });
