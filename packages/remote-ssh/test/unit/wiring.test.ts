@@ -2,6 +2,7 @@ import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
+import {TUNNEL_SUCCESS_LINE} from 'lib-ssh';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
@@ -544,6 +545,24 @@ describe("a terminal-mode connect's tunnel run", () => {
     await new Promise(resolve => setImmediate(resolve));
     return seen.terminals.opened[0]?.invocation.arguments;
   }
+
+  it('connect-18: the run is a tunnel run holding the forward to the server', async () => {
+    const given = await tunnelArguments(true);
+    deepStrictEqual(
+      [
+        given?.includes('-L'),
+        given?.some(argument => argument.includes(':4321')),
+      ],
+      [true, true],
+    );
+  });
+
+  it('connect-18: the run carries the tunnel command, not an install shell', async () => {
+    deepStrictEqual(
+      (await tunnelArguments(true))?.at(-1)?.includes(TUNNEL_SUCCESS_LINE),
+      true,
+    );
+  });
 
   it('ssh-19: the run clears a RemoteCommand the terms say is not in effect', async () => {
     deepStrictEqual(

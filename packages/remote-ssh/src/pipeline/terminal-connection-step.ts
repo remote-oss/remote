@@ -16,7 +16,6 @@ import {
   type ConnectionNotice,
   LineSplitter,
   type LoginTerminals,
-  type LoginTerminalSession,
   PromptReader,
   type SessionRunner,
   setupMarkerOf,
@@ -32,12 +31,7 @@ import type {
   StepFailure,
   StepResult,
 } from './steps.ts';
-
-/** The terminal and the reader one login's questions come from. */
-interface TerminalLogin {
-  terminal: Pick<LoginTerminalSession, 'send'>;
-  reader: Pick<PromptReader, 'inputOpened' | 'inputClosed'>;
-}
+import type {TerminalLogin} from '../surfaces/terminal-questions.ts';
 
 /** What the terminal connection step is made from. */
 export interface TerminalConnectionDependencies {
