@@ -74,6 +74,20 @@ function overridePolicy(): OverridePolicy {
   return policy;
 }
 
+/**
+ * Whether a transfer failed on a channel timeout: the one failure the host-download rows answer with an infrastructure
+ * retry (athena's ruling on #420: a transient failure may re-run the install once, labelled; the product never
+ * retries). The harness channel's bound is 60 s, and the host's download from the CDN normally ends in a few seconds,
+ * so a timeout is a stalled or very slow connection. Any other failure, and a second timeout, is reported as it is.
+ */
+function timedOut(transferred: TransferOutcome): boolean {
+  return (
+    transferred.kind === 'failed' &&
+    transferred.failure.kind === 'channelFailed' &&
+    transferred.failure.failure.kind === 'timeout'
+  );
+}
+
 interface Installation {
   phases: TransferPhase[];
   transferred: TransferOutcome;
@@ -254,6 +268,15 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
     before(async () => {
       host = await startHost();
       installation = await install(host);
+      if (timedOut(installation.transferred)) {
+        // an infrastructure retry, not a product one (athena's ruling on #420); see `timedOut`
+        console.log(
+          `      infrastructure retry: the host's download timed out (${JSON.stringify(installation.transferred)}); once more on a fresh host`,
+        );
+        host.stop();
+        host = await startHost();
+        installation = await install(host);
+      }
       started = await start(host, installation.parameters);
     });
 
