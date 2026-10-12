@@ -1,5 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type {RecordingChannel} from 'lib-host/testing/recording-channel';
+import {createLogger} from 'lib-log';
+import {MemorySink} from 'lib-log/testing/memory-sink';
 import {createServerSteps} from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
 import {
@@ -167,6 +169,114 @@ describe('the server steps: plan', () => {
         : result,
       '/data/.fixture-server/bin/abc123',
     );
+  });
+});
+
+describe('the server steps: plan, the CLI path', () => {
+  const CLI_TEMPLATE =
+    'https://example.invalid/cli-${os}-${arch}-${version}.tar.gz';
+
+  /** The plan and the log lines of a plan step for a product with `cliTemplate`. */
+  function planned(
+    cliTemplate: string,
+    changes: Parameters<typeof dependencies>[0] = {},
+  ) {
+    const sink = new MemorySink();
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: cliTemplate},
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+        ...changes,
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    return {result, messages: sink.lines.map(line => line.message)};
+  }
+
+  it('F-3902 rule 5 (ii): a product with a usable CLI template plans the CLI', () => {
+    const {result} = planned(CLI_TEMPLATE);
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'cli');
+  });
+
+  it('F-3902 rule 5 (i): the CLI is placed as <applicationName>-<commit> in the data folder', () => {
+    const {result} = planned(CLI_TEMPLATE);
+    deepStrictEqual(
+      'plan' in result && result.plan.kind === 'cli'
+        ? result.plan.cliPath
+        : result,
+      '/home/alex/.fixture-server/fixture-abc123',
+    );
+  });
+
+  it('brief §2 row 1: useExecServer off plans the direct install', () => {
+    const {result} = planned(CLI_TEMPLATE, {useExecServer: false});
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('brief §2 row 1: useExecServer off logs no reason', () => {
+    const {messages} = planned(CLI_TEMPLATE, {useExecServer: false});
+    deepStrictEqual(
+      messages.filter(message => message.startsWith('the CLI path')),
+      [],
+    );
+  });
+
+  it('brief §2 row 2: no CLI template plans the direct install', () => {
+    const {result} = planned('');
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('brief §2 row 3: a template with an unknown placeholder plans the direct install', () => {
+    const {result} = planned('https://example.invalid/${platform}.tar.gz');
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('brief §2 row 3: an unusable template is logged once, with its reason', () => {
+    const {messages} = planned('not a url ${os}');
+    deepStrictEqual(
+      messages.filter(message => message.startsWith('the CLI path')),
+      ['the CLI path was not used: the CLI template is unusable'],
+    );
+  });
+
+  it('brief §2 row 4: a host without a CLI build plans the direct install, logged', () => {
+    const sink = new MemorySink();
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+      }),
+    );
+    steps.plan(INPUT, {
+      ...HOST,
+      architecture: 'riscv64' as typeof HOST.architecture,
+    });
+    deepStrictEqual(
+      sink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('the CLI path')),
+      ['the CLI path was not used: there is no CLI build for this host'],
+    );
+  });
+
+  it('brief §2 row 5: a CLI source under the terms plans the direct install, logged', () => {
+    const {messages} = planned(
+      'https://update.code.visualstudio.com/cli-${os}-${arch}',
+    );
+    deepStrictEqual(
+      messages.filter(message => message.startsWith('the CLI path')),
+      ["the CLI path was not used: the server's terms must be accepted first"],
+    );
+  });
+
+  it('brief §2 row 5: a server source under the terms keeps the CLI out too', () => {
+    const {result} = planned(CLI_TEMPLATE, {
+      override: {
+        value: 'https://update.code.visualstudio.com/server-${os}-${arch}',
+        layer: 'defaultProfileUser',
+      },
+    });
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
   });
 });
 

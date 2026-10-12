@@ -99,7 +99,7 @@ function sourceOf(resolution: ArchiveResolution): PlanInput['source'] {
   }
 }
 
-/** Why the CLI path was not used, as the log says it once per connect (brief-cli-path §2, rows 2, 4 and 5). */
+/** Why the CLI path was not used, as the log says it once per connect. */
 const CLI_NOT_USED_REASONS: Readonly<
   Record<Exclude<DirectReason, 'settingOff' | 'manualBootstrap'>, string>
 > = {
@@ -121,7 +121,7 @@ function templatePlatformOf(host: ProbedHost): {
 
 /**
  * The address of the CLI archive for a host, from the product's `cliDownloadUrlTemplate`, or why it gives none: no
- * template (brief §2 row 2), or one that is unusable for this host (row 3).
+ * template, or one that is unusable for this host.
  */
 export function cliAddressOf(
   profile: ProductProfile,
@@ -212,13 +212,13 @@ export function createServerSteps(
         dependencies.overridePolicy,
         dependencies.override,
       );
-      const cli = cliAddressOf(profile, platform);
-      if (cli.kind === 'unusable') {
+      const cliSource = cliAddressOf(profile, platform);
+      if (cliSource.kind === 'unusable') {
         dependencies.logger.info(
           'the CLI path was not used: the CLI template is unusable',
         );
       }
-      cliAddress = cli.kind === 'address' ? cli.address : undefined;
+      cliAddress = cliSource.kind === 'address' ? cliSource.address : undefined;
       const serverFree =
         resolution.kind !== 'resolved' ||
         !classifyLicence({
@@ -251,13 +251,13 @@ export function createServerSteps(
         placement: dependencies.policy.downloadPlacement,
         useExecServerSetting: dependencies.useExecServer,
         source: sourceOf(resolution),
-        // An unusable template (row 3) plans the direct install, as no template does.
+        // An unusable template plans the direct install, as no template does.
         ...(cliAddress === undefined
           ? {}
           : {
               cliMode: {
                 useExecServerSetting: dependencies.useExecServer,
-                // `localServerDownload` has no manual bootstrap value in this extension (F-2103 BR-3).
+                // `localServerDownload` has no manual bootstrap value in this extension.
                 manualBootstrap: false,
                 cliTemplate: profile.cliDownloadUrlTemplate,
                 sourcesFree: serverFree && cliFree,
@@ -268,11 +268,9 @@ export function createServerSteps(
             }),
       });
       for (const note of 'plan' in result ? result.plan.notes : []) {
-        if (note.kind === 'cliNotUsed') {
-          dependencies.logger.info(
-            `the CLI path was not used: ${CLI_NOT_USED_REASONS[note.reason]}`,
-          );
-        }
+        dependencies.logger.info(
+          `the CLI path was not used: ${CLI_NOT_USED_REASONS[note.reason]}`,
+        );
       }
       if (
         'plan' in result &&
