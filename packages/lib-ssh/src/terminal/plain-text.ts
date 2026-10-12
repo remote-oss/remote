@@ -5,6 +5,11 @@
 
 const ESCAPE = '\u001b';
 const BELL = '\u0007';
+const CANCEL = '\u0018';
+const SUBSTITUTE = '\u001a';
+
+/** How many characters a string sequence may stay open before it is dropped. */
+const STRING_LIMIT = 4096;
 
 /** Where a sequence that starts with an escape ends in `text` (the index after its last character), or -1. */
 function sequenceEnd(text: string): number {
@@ -41,17 +46,29 @@ function csiEnd(text: string): number {
   return -1;
 }
 
-/** The end of a string sequence: up to the string terminator, or the bell when `bellEnds`. */
+/**
+ * The end of a string sequence: up to the string terminator, or the bell when `bellEnds`. A string is cancelled where it
+ * meets another escape, a cancel or a substitute character (that character ends it, and an escape starts the next
+ * sequence), and one that is still open after `STRING_LIMIT` characters is dropped, so a stray start cannot swallow what
+ * follows. Gives -1 while the string is open.
+ */
 function stringEnd(text: string, bellEnds: boolean): number {
   for (let index = 2; index < text.length; index++) {
-    if (bellEnds && text[index] === BELL) {
+    const char = text[index];
+    if (bellEnds && char === BELL) {
       return index + 1;
     }
-    if (text[index] === ESCAPE && text[index + 1] === '\\') {
-      return index + 2;
+    if (char === ESCAPE) {
+      if (index + 1 === text.length) {
+        return -1;
+      }
+      return text[index + 1] === '\\' ? index + 2 : index;
+    }
+    if (char === CANCEL || char === SUBSTITUTE) {
+      return index + 1;
     }
   }
-  return -1;
+  return text.length >= STRING_LIMIT ? text.length : -1;
 }
 
 /** The end of an escape with intermediate bytes: the intermediates and one final byte. */

@@ -77,4 +77,58 @@ describe('PlainTextFilter (card ssh-18 table)', () => {
   it('#299: an escape with intermediates broken off by a byte past the final range keeps what follows', () => {
     deepStrictEqual(filtered('a\x1b(\x7fb'), ['a\x7fb', '']);
   });
+
+  describe('a string sequence that never ends', () => {
+    it('#341: a stray operating system command is cancelled by the next escape sequence', () => {
+      deepStrictEqual(filtered('\x1b]0;stray\n\x1b[31mmotd\x1b[0m\n'), [
+        'motd\n',
+        '',
+      ]);
+    });
+
+    it('#341: the cancelling escape starts the next sequence, which is removed', () => {
+      deepStrictEqual(filtered('a\x1b]0;x\x1b[1mb'), ['ab', '']);
+    });
+
+    it('#341: a cancelled string ends at the cancel character, and the text after it stays', () => {
+      deepStrictEqual(filtered('a\x1b]0;x\x18b'), ['ab', '']);
+    });
+
+    it('#341: a substitute character cancels a string too', () => {
+      deepStrictEqual(filtered('a\x1bP1$r\x1ab'), ['ab', '']);
+    });
+
+    it('#341: the prompt after a stray string is not swallowed', () => {
+      deepStrictEqual(filtered('\x1b]0;stray\nlast login\n\x1b[0mPassword: '), [
+        'Password: ',
+        '',
+      ]);
+    });
+
+    it('#341: a string cancelled in a later piece lets the text through', () => {
+      deepStrictEqual(filtered('a\x1b]0;x', '\x18b'), ['a', 'b', '']);
+    });
+
+    it('#341: a string still open after 4 KiB is dropped and the text after it flows', () => {
+      const filter = new PlainTextFilter();
+      const pieces = [
+        filter.push('a\x1b]0;'),
+        filter.push('x'.repeat(4096)),
+        filter.push('tail'),
+      ];
+      deepStrictEqual(pieces, ['a', '', 'tail']);
+    });
+
+    it('#341: an escape that ends a piece inside a string waits for the next piece', () => {
+      deepStrictEqual(filtered('a\x1b]0;x\x1b', '\\b'), ['a', 'b', '']);
+    });
+
+    it('#341: a string just under 4 KiB is still held', () => {
+      const filter = new PlainTextFilter();
+      deepStrictEqual(
+        [filter.push(`\x1b]0;${'x'.repeat(4000)}`), filter.push('tail')],
+        ['', ''],
+      );
+    });
+  });
 });
