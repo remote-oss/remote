@@ -136,6 +136,12 @@ lib-ssh's `transportLost` (the session to the host ended while the connection se
 is `transportLost`, after which core resolves again; lib-helper's `helperGone` (the connection server itself ended,
 nothing of the lease comes back) is `transportClosed`, which the tracker accepts from `connected` or `transportLost`.
 The pipeline's `Connection` exposes them through `onTransport`, since its lease is otherwise hidden after `connect`.
+The window tunnel's own end is the third source (ruled on #299, 2026-10-12, daedalus's finding; on main since #302):
+when the tunnel ends after `open` without being asked to (W2's `onClosed`: the local listener failed, or on the
+second-login and socket paths the tunnel `ssh` exited), `onTransport` reports it as `transportLost`. From the window's
+side a dead tunnel is a lost transport, whatever the ssh session's state, and core's reconnection makes a fresh
+connection and a fresh tunnel (F-2505 BR-1). A `close()` the window asked for never fires `onClosed` (W2), so window
+teardown never starts a spurious reconnection. `transportClosed` stays the helper's end alone.
 
 The host's ports are part of the package's public surface (ruled 2026-10-09, #192): `ResolverEditor`, `ProgressPort` with `ProgressRequest` (title, `cancellable`, `onCancel`, details), `Connector` (`connect`, `cancel`, `revealDetails`, `onPhase`, `onTransportLost`, `onTransportClosed`), `FailurePresenter`, `Readiness` (`guard`, `resolversGranted`), and the results `Registration` (`registered` with a `ResolverHandle`, `standing`, `proposalMissing`); the extensions write the adapters and the test fakes use the same types.
 
