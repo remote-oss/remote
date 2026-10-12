@@ -3,6 +3,7 @@ import {
   allowedRedirectHosts,
   REFERENCE_LAYOUT_APPLICATION_NAMES,
   keepsReferenceLayout,
+  volumeServerFolder,
 } from '../../src/index.ts';
 
 describe('reference-layout application names (card product-01 table)', () => {
@@ -32,6 +33,20 @@ describe('reference-layout application names (card product-01 table)', () => {
         keepsReferenceLayout(''),
       ],
       [false, false, false, false],
+    );
+  });
+
+  it("volumeServerFolder('code') and ('code-insiders') -> the shared folder", () => {
+    deepStrictEqual(
+      [volumeServerFolder('code'), volumeServerFolder('code-insiders')],
+      ['vscode-server', 'vscode-server'],
+    );
+  });
+
+  it("volumeServerFolder('codium') and ('synthetic-editor') -> the editor's own folder", () => {
+    deepStrictEqual(
+      [volumeServerFolder('codium'), volumeServerFolder('synthetic-editor')],
+      ['codium-server', 'synthetic-editor-server'],
     );
   });
 });

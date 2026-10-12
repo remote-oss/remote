@@ -33,6 +33,31 @@ describe('the V9 cache folders (card server-06)', () => {
     );
   });
 
+  it('codium serves its own server tree on the volume', () => {
+    deepStrictEqual(
+      cacheFolders(product('codium', 'stable'), 'abc', 'linux-x64', true),
+      {
+        serverTree: '/vscode/codium-server/bin/linux-x64/abc',
+        extensionsCache: '/vscode/extensionsCache-codium',
+      },
+    );
+  });
+
+  it('a synthetic editor serves its own server tree on the volume', () => {
+    deepStrictEqual(
+      cacheFolders(
+        product('synthetic-editor', 'stable'),
+        'abc',
+        'linux-x64',
+        true,
+      ),
+      {
+        serverTree: '/vscode/synthetic-editor-server/bin/linux-x64/abc',
+        extensionsCache: '/vscode/extensionsCache-synthetic-editor',
+      },
+    );
+  });
+
   it('code-insiders keeps the reference extension cache', () => {
     deepStrictEqual(
       cacheFolders(

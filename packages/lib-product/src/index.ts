@@ -24,6 +24,7 @@ export {
   type LicenceRuleName,
   REFERENCE_LAYOUT_APPLICATION_NAMES,
   keepsReferenceLayout,
+  volumeServerFolder,
 } from './product-table.ts';
 export {
   type ProductProfile,

@@ -73,3 +73,10 @@ export const REFERENCE_LAYOUT_APPLICATION_NAMES: readonly string[] =
 export function keepsReferenceLayout(applicationName: string): boolean {
   return REFERENCE_LAYOUT_APPLICATION_NAMES.includes(applicationName);
 }
+
+/** The folder the editor's server occupies on the volume mount: the shared one while it keeps the shared layout, a folder of the editor's own otherwise. */
+export function volumeServerFolder(applicationName: string): string {
+  return keepsReferenceLayout(applicationName)
+    ? 'vscode-server'
+    : `${applicationName}-server`;
+}

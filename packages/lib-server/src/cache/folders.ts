@@ -4,16 +4,13 @@
  * The product table decides the layout; nothing here names a product.
  */
 
-import {keepsReferenceLayout} from 'lib-product';
+import {keepsReferenceLayout, volumeServerFolder} from 'lib-product';
 
 /** The keys that decide a product's cache layout: its application name and quality. */
 export interface ProductKeys {
   applicationName: string;
   quality: string;
 }
-
-/** The server's folder on the volume mount, named in two parts: the product table is the only code that may name it outright. */
-const SERVER_FOLDER = 'vscode' + '-server';
 
 /** The extension cache folder: the shared folder while the product keeps the shared layout, a folder of the product's own otherwise. */
 function extensionsCacheOf(applicationName: string): string {
@@ -31,7 +28,7 @@ export function cacheFolders(
 ): {serverTree: string | undefined; extensionsCache: string} {
   return {
     serverTree: volumeMounted
-      ? `/vscode/${SERVER_FOLDER}/bin/${platform}/${commit}`
+      ? `/vscode/${volumeServerFolder(product.applicationName)}/bin/${platform}/${commit}`
       : undefined,
     extensionsCache: extensionsCacheOf(product.applicationName),
   };
