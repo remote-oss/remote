@@ -9,6 +9,7 @@ import {
   type ClientPlatform,
   type ConnectionAcquireRequest,
   DEFAULT_FIRST_MESSAGE_MILLISECONDS,
+  type RunBase,
   type SshRequest,
 } from 'lib-ssh';
 import {
@@ -56,20 +57,22 @@ const HELPER_POLICY: EndPolicy = {
   milliseconds: HELPER_GRACE_MILLISECONDS,
 };
 
-/** The `ssh` request every connection of a connect starts from, built from what the client step found and the terms. */
-function baseRequestOf(
+/**
+ * What every `ssh` and `scp` run of one connect shares: the target, the settings, and what the client step found. A
+ * field the client step should have filled and did not is a defect, and throws.
+ */
+export function runBaseOf(
   input: ConnectInput,
   terms: ConnectionTerms,
   state: ConnectState,
   settings: ConnectionRequestSettings,
-  environment: ConnectionRequestEnvironment,
-): SshRequest {
+  environment: Pick<ConnectionRequestEnvironment, 'homeFolder' | 'platform'>,
+): RunBase {
   const {programs, effective} = state;
   if (programs === undefined || effective === undefined) {
     throw new Error('the connection was asked for before the client was found');
   }
   return {
-    purpose: 'connection',
     target: sshTargetOf(input.target),
     settings: {
       configFile: settings.configFile,
@@ -95,13 +98,13 @@ export function connectionRequestOf(
   settings: ConnectionRequestSettings,
   environment: ConnectionRequestEnvironment,
 ): Omit<ConnectionAcquireRequest, 'hostString' | 'cancellation'> {
-  const request = baseRequestOf(input, terms, state, settings, environment);
+  const base = runBaseOf(input, terms, state, settings, environment);
   const userAskpass = environment.processEnvironment.SSH_ASKPASS ?? '';
   return {
     folder: environment.registryFolder,
     script: environment.helperScript,
     options: {
-      request: JSON.stringify(request),
+      request: JSON.stringify({...base, purpose: 'connection'}),
       unboundedWaitSeconds: HOST_ZERO_TIMEOUT_SECONDS,
       runtimeFolder: environment.runtimeFolder,
       runtime: environment.runtime,
@@ -127,7 +130,8 @@ export function installRequestOf(
   socksPort: number | undefined,
 ): SshRequest {
   return {
-    ...baseRequestOf(input, terms, state, settings, environment),
+    ...runBaseOf(input, terms, state, settings, environment),
+    purpose: 'connection',
     remoteProgram: 'sh',
     ...(socksPort === undefined
       ? {clearUserForwards: true}

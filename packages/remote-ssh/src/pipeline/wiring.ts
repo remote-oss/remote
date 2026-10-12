@@ -4,20 +4,29 @@
  * imports the editor; the extension passes the real ports and a test passes fakes.
  */
 
+import {environmentTunnels} from 'lib-forwarding';
+import type {HostChannel} from 'lib-host';
+import type {Logger} from 'lib-log';
+import type {OverrideValue} from 'lib-product';
 import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
   ConnectionLimits,
-  SharedConnection,
+  ConnectWaitSettings,
+  RunBase,
+  SessionRunner,
 } from 'lib-ssh';
-import type {HostChannel} from 'lib-host';
-import type {Logger} from 'lib-log';
-import {connectionLimitsFor} from './bounds.ts';
+import {
+  connectionLimitsFor,
+  effectiveConnectTimeoutSeconds,
+  HOST_ZERO_TIMEOUT_SECONDS,
+} from './bounds.ts';
 import type {PhaseEvent} from './connect.ts';
 import {
   type ConnectionRequestEnvironment,
   type ConnectionRequestSettings,
   connectionRequestOf,
+  runBaseOf,
   installRequestOf,
 } from './connection-request.ts';
 import {type LoginLease, openConnectionStep} from './connection-step.ts';
@@ -52,6 +61,17 @@ interface WiringSettings {
   server: () => RawServerSettings;
   /** The settings the connection's request reads. */
   connection: () => ConnectionRequestSettings;
+  /** The user's server download override and the layer it came from, when one is set. */
+  override: () => OverrideValue | undefined;
+  /** `remote.SSH.useExecServer`. */
+  useExecServer: () => boolean;
+}
+
+/** What the channel of one connect is made from: the host as written, the runs' shared part, and the terms. */
+export interface ChannelRun {
+  hostString: string;
+  base: RunBase;
+  terms: ConnectionTerms;
 }
 
 /** What the steps of every connect are made from. */
@@ -69,17 +89,22 @@ export interface WiringPorts {
     limits: ConnectionLimits,
   ) => Promise<AcquireConnectionOutcome>;
   requestEnvironment: ConnectionRequestEnvironment;
-  channelFor: (
-    connection: SharedConnection,
-    terms: ConnectionTerms,
-  ) => HostChannel;
+  /** The channel of the server steps over a connection's session, in either mode. */
+  channelFor: (session: SessionRunner, channelRun: ChannelRun) => HostChannel;
   /** Shows the login's questions for this connect; the alias names the host in them. */
   attachLogin: (login: LoginLease, alias: string) => {dispose(): void};
   /** The terminal connection step's ports, apart from what the connect's own state and settings give. */
-  terminal: Omit<TerminalConnectionDependencies, 'installRequest' | 'logger'>;
+  terminal: Omit<
+    TerminalConnectionDependencies,
+    'installRequest' | 'connectWait' | 'channelFor' | 'logger'
+  >;
   /** The server steps' dependencies, apart from what depends on the connect's host. */
-  server: Omit<ServerStepDependencies, 'settings' | 'remoteUser'>;
-  tunnel: TunnelStepDependencies;
+  server: Omit<
+    ServerStepDependencies,
+    'settings' | 'remoteUser' | 'override' | 'useExecServer'
+  >;
+  /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
+  tunnel: Omit<TunnelStepDependencies, 'environment'>;
   logger: Logger;
 }
 
@@ -91,13 +116,60 @@ function lookedUp(state: ConnectState): NonNullable<ConnectState['effective']> {
   return state.effective;
 }
 
+/**
+ * The window's environment: no variables of its own, and the host's `LocalForward` entries as tunnels; an entry
+ * left out is logged with its position and why.
+ */
+function windowEnvironment(
+  localForwards: readonly string[],
+  logger: Logger,
+): {
+  extensionHostEnv: Readonly<Record<string, string | null>>;
+  environmentTunnels: readonly unknown[];
+} {
+  const {tunnels, skipped} = environmentTunnels(localForwards);
+  for (const entry of skipped) {
+    logger.info(
+      `LocalForward entry ${String(entry.index)} is not shown as a tunnel: ${entry.reason}`,
+    );
+  }
+  return {extensionHostEnv: {}, environmentTunnels: tunnels};
+}
+
+/**
+ * The wait of a terminal-mode login, as the shared helper's: a host's own 0 waits the ceiling with no margin;
+ * otherwise the host's timeout, else the setting's, else the default.
+ */
+export function terminalWaitOf(
+  hostValue: string | undefined,
+  settingValue: unknown,
+): ConnectWaitSettings {
+  return {
+    connectTimeoutSeconds:
+      hostValue === '0'
+        ? 0
+        : effectiveConnectTimeoutSeconds(hostValue, settingValue),
+    fromHost: hostValue !== undefined,
+    unboundedWaitSeconds: HOST_ZERO_TIMEOUT_SECONDS,
+  };
+}
+
 /** The steps of one connect, sharing a state that lives for that connect alone. */
 export function stepsOf(
   ports: WiringPorts,
   onPhase: (event: PhaseEvent) => void,
 ): ConnectSteps {
   const state: ConnectState = {};
-  const held: {server?: ReturnType<typeof createServerSteps>} = {};
+  const held: {
+    server?: ReturnType<typeof createServerSteps>;
+    connection?: ConnectionRequestSettings;
+  } = {};
+
+  /** The connection's settings, read once for this connect, so all of its runs use the same. */
+  function connectionSettings(): ConnectionRequestSettings {
+    held.connection ??= ports.settings.connection();
+    return held.connection;
+  }
 
   /** The server steps for this connect's host, made the first time a step needs them. */
   function serverSteps(
@@ -109,9 +181,30 @@ export function stepsOf(
         ports.settings.server(),
         hostAlias(input.target),
       ),
+      override: ports.settings.override(),
+      useExecServer: ports.settings.useExecServer(),
       remoteUser: () => lookedUp(state).user,
     });
     return held.server;
+  }
+
+  /** The channel over `session` for this connect's input and terms, with the runs' shared part. */
+  function channelOf(
+    session: SessionRunner,
+    connectTerms: ConnectionTerms,
+    input: ConnectInput,
+  ): HostChannel {
+    return ports.channelFor(session, {
+      hostString: input.rawHostString,
+      base: runBaseOf(
+        input,
+        connectTerms,
+        state,
+        connectionSettings(),
+        ports.requestEnvironment,
+      ),
+      terms: connectTerms,
+    });
   }
 
   const terms = createTermsSteps(ports.terms);
@@ -121,7 +214,7 @@ export function stepsOf(
         request,
         connectionLimitsFor(
           lookedUp(state).connectTimeout,
-          ports.settings.connection().connectTimeout,
+          connectionSettings().connectTimeout,
         ),
       ),
     requestFor: (input, connectTerms) =>
@@ -129,10 +222,10 @@ export function stepsOf(
         input,
         connectTerms,
         state,
-        ports.settings.connection(),
+        connectionSettings(),
         ports.requestEnvironment,
       ),
-    channelFor: ports.channelFor,
+    channelFor: channelOf,
     attachLogin: (login, input) =>
       ports.attachLogin(login, hostAlias(input.target)),
     onPhase,
@@ -145,9 +238,15 @@ export function stepsOf(
         input,
         connectTerms,
         state,
-        ports.settings.connection(),
+        connectionSettings(),
         ports.requestEnvironment,
         socksPort,
+      ),
+    channelFor: channelOf,
+    connectWait: () =>
+      terminalWaitOf(
+        lookedUp(state).connectTimeout,
+        connectionSettings().connectTimeout,
       ),
     logger: ports.logger,
   });
@@ -160,8 +259,8 @@ export function stepsOf(
     decideTerms: terms.decideTerms,
     locateClient: locateClientStep({
       ...ports.locate,
-      configFile: () => ports.settings.connection().configFile,
-      connectTimeout: () => ports.settings.connection().connectTimeout,
+      configFile: () => connectionSettings().configFile,
+      connectTimeout: () => connectionSettings().connectTimeout,
       state,
     }),
     openConnection: (input, connectTerms, cancellation) =>
@@ -175,7 +274,11 @@ export function stepsOf(
     start: (input, ...rest) => serverSteps(input).start(input, ...rest),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
-    openTunnel: openTunnelStep(ports.tunnel),
+    openTunnel: openTunnelStep({
+      ...ports.tunnel,
+      environment: () =>
+        windowEnvironment(lookedUp(state).localForwards, ports.logger),
+    }),
     rememberPlatform: terms.rememberPlatform,
   };
 }

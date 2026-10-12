@@ -57,7 +57,11 @@ export interface TerminalConnectionDependencies {
   scheduler: Scheduler;
   newMarker(): string;
   /** The channel over the install terminal's runner for the server steps. */
-  channelFor(runner: SessionRunner, terms: ConnectionTerms): HostChannel;
+  channelFor(
+    runner: SessionRunner,
+    terms: ConnectionTerms,
+    input: ConnectInput,
+  ): HostChannel;
   /** Shows the login's questions for this connect; the returned handle takes an open input down. */
   attachQuestions(
     login: TerminalLogin,
@@ -176,7 +180,7 @@ export function openTerminalConnectionStep(
         });
         let channel: HostChannel;
         try {
-          channel = dependencies.channelFor(runner, terms);
+          channel = dependencies.channelFor(runner, terms, input);
         } catch (caught) {
           disposeTerminal();
           settle({

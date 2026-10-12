@@ -39,6 +39,13 @@ const ASKPASS_BUNDLE = path.join(BUNDLES, 'askpass.js');
 /** How long a helper stays after its last window leaves, in milliseconds: long enough to carry a reload. */
 const GRACE_MILLISECONDS = 3000;
 
+/** The waits of the window's client of the helper, as the extension's own (#253 Q10). */
+const HELPER_WAITS = {
+  helloLimitMilliseconds: 2000,
+  startLimitMilliseconds: 10000,
+  retryMilliseconds: 100,
+};
+
 /** The limits a window puts on the waits of one connection, in milliseconds. */
 const LIMITS: ConnectionLimits = {
   requestMilliseconds: 10000,
@@ -78,7 +85,7 @@ export class WindowSide {
     this.environment = {
       freePort,
       helper: {
-        ...nodeClientEnvironment(process.execPath),
+        ...nodeClientEnvironment(process.execPath, HELPER_WAITS),
         endpointFolder: this.folder,
       },
     };

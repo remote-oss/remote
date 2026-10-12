@@ -540,6 +540,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
       namespaces: Record<string, string[]>;
       contextKeys: Array<{id: string; setter: string}>;
       infoLineCommands: unknown[];
+      runtimeCommands: Array<{id: string; purpose: string}>;
       internal: Array<{id: string; role: string; kind: string}>;
       invented: Array<{id: string; kind: string; spec: string; date: string}>;
       settingPairs: unknown[];
@@ -611,6 +612,13 @@ describe('manifest (card remote-ssh-01 table)', () => {
           id: 'remote-internal.sshHostsChanged',
           kind: 'internalCommands',
           spec: 'F-2203',
+        },
+      ],
+      runtimeCommands: [
+        {
+          id: 'opensshremotes.showDetails',
+          purpose:
+            'the "(details)" link of the connect progress, which reveals the connection\'s log',
         },
       ],
       settingPairs: [],

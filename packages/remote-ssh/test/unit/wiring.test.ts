@@ -1,5 +1,6 @@
 import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
+import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {createLogger, type Level} from 'lib-log';
@@ -15,7 +16,9 @@ import type {LoginLease} from '../../src/pipeline/connection-step.ts';
 import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
 import {
+  type ChannelRun,
   stepsOf as stepsWith,
+  terminalWaitOf,
   type WiringPorts,
 } from '../../src/pipeline/wiring.ts';
 import {
@@ -26,7 +29,7 @@ import {
   SSH_PROGRAM,
   spawnerOf,
 } from './locate.fixture.ts';
-import {INPUT, TERMS} from './pipeline.fixture.ts';
+import {INPUT, leaseOf, STARTED, TERMS} from './pipeline.fixture.ts';
 import {
   channelAnswering,
   dependencies,
@@ -62,6 +65,8 @@ interface WiringSeen {
     limits: ConnectionLimits;
   }>;
   logins: string[];
+  channels: ChannelRun[];
+  sink: MemorySink;
   terminals: RecordingTerminals;
 }
 
@@ -72,6 +77,7 @@ function portsOf(
     server?: Partial<RawServerSettings>;
     preconnect?: unknown;
     connectTimeout?: unknown;
+    connection?: SharedConnection;
     mode?: ConnectionMode;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
@@ -79,9 +85,11 @@ function portsOf(
     spawned: {started: [], killed: []},
     acquires: [],
     logins: [],
+    channels: [],
+    sink: new MemorySink(),
     terminals: new RecordingTerminals(),
   };
-  const logger = createLogger(new MemorySink(), {
+  const logger = createLogger(seen.sink, {
     minimumLevel: (): Level => 'info',
   });
   const ports: WiringPorts = {
@@ -94,6 +102,11 @@ function portsOf(
         permitPtyAllocation: false,
         externalAskpass: false,
       }),
+      override: () => ({
+        value: 'https://example.invalid/server-${os}-${arch}-${commit}.tar.gz',
+        layer: 'defaultProfileUser',
+      }),
+      useExecServer: () => false,
     },
     terms: {
       settings: () => ({
@@ -122,10 +135,11 @@ function portsOf(
     },
     acquire: (request, limits) => {
       seen.acquires.push({request, limits});
-      return Promise.resolve<AcquireConnectionOutcome>({
-        kind: 'failed',
-        failure: 'spawnFailed',
-      });
+      return Promise.resolve<AcquireConnectionOutcome>(
+        changes.connection === undefined
+          ? {kind: 'failed', failure: 'spawnFailed'}
+          : {kind: 'acquired', connection: changes.connection},
+      );
     },
     requestEnvironment: {
       registryFolder: '/storage/registry',
@@ -137,7 +151,10 @@ function portsOf(
       platform: 'linux',
       processEnvironment: {},
     },
-    channelFor: () => ({}) as unknown as HostChannel,
+    channelFor: (connection, channelRun) => {
+      seen.channels.push(channelRun);
+      return {} as unknown as HostChannel;
+    },
     attachLogin: (login: LoginLease, alias: string) => {
       seen.logins.push(alias);
       return {dispose: () => undefined};
@@ -148,20 +165,30 @@ function portsOf(
       dynamicForwarding: () => false,
       freePort: () => Promise.resolve(41000),
       newMarker: () => 'marker',
-      channelFor: () => ({}) as unknown as HostChannel,
       attachQuestions: () => ({
         onQuestion: () => undefined,
         dispose: () => undefined,
       }),
       revealLoginTerminals: () => false,
-      connectWait: () => ({
-        connectTimeoutSeconds: 10,
-        fromHost: false,
-        unboundedWaitSeconds: 600,
-      }),
     },
     server: dependencies(),
-    tunnel: {} as unknown as WiringPorts['tunnel'],
+    tunnel: {
+      settings: () => ({
+        listenOnSocket: false,
+        useLocalServer: true,
+        enableDynamicForwarding: true,
+      }),
+      local: new FakeLocalPort(),
+      scheduler: new FakeClock().scheduler(),
+      limits: {
+        readyMilliseconds: 50,
+        retryMilliseconds: 10,
+        heldBytesMaximum: 8,
+      },
+      dialerFor: () => new FakeDialer(['work']),
+      chooseLocalPort: () => Promise.resolve(50000),
+      logger,
+    },
     logger,
   };
   return {ports, seen};
@@ -471,5 +498,208 @@ describe("the composition's server steps", () => {
         new AbortController().signal,
       );
     }, /before its configuration was read/);
+  });
+});
+
+/** A connection that logs in at once on the SOCKS port 1080. */
+const CONNECTED = {
+  onNotice: () => () => undefined,
+  answer: () => Promise.resolve(false),
+  refuse: () => Promise.resolve(false),
+  connect: () => Promise.resolve({kind: 'connected', socksPort: 1080}),
+  release: () => undefined,
+} as unknown as SharedConnection;
+
+/** The lookup's output with the `LocalForward` lines `forwards`. */
+function lookupWith(...forwards: string[]): Answer {
+  return {
+    kind: 'exit',
+    output:
+      OPTIONS_TEXT + forwards.map(line => `localforward ${line}\n`).join(''),
+    status: 0,
+  };
+}
+
+/** The opened tunnel of a connect whose lookup prints `forwards`, with what the fakes saw. */
+async function tunnelWith(
+  ...forwards: string[]
+): Promise<{opened: unknown; seen: WiringSeen}> {
+  const {ports, seen} = portsOf({lookup: lookupWith(...forwards)});
+  const steps = stepsOf(ports);
+  await steps.locateClient(inputFor('dev'));
+  const outcome = await steps.openTunnel(
+    inputFor('dev'),
+    leaseOf({calls: [], releases: 0, tunnelCloses: 0, records: [], phases: []}),
+    STARTED.server,
+    () => undefined,
+    new AbortController().signal,
+  );
+  return {
+    opened: outcome.kind === 'done' ? outcome.value.opened : outcome,
+    seen,
+  };
+}
+
+describe("the composition's channel and window environment", () => {
+  it("connect-14: the channel is made with the host as written and this connect's runs", async () => {
+    const {ports, seen} = portsOf({connection: CONNECTED});
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('alex@dev:22'));
+    await steps.openConnection(
+      inputFor('alex@dev:22'),
+      TERMS,
+      new AbortController().signal,
+    );
+    const [channelRun] = seen.channels;
+    deepStrictEqual(
+      [channelRun?.hostString, channelRun?.base.target, channelRun?.terms],
+      ['alex@dev:22', {host: 'dev', port: 22, user: 'alex'}, TERMS],
+    );
+  });
+
+  it("connect-14: the channel's runs use the programs and options the client step found", async () => {
+    const {ports, seen} = portsOf({connection: CONNECTED});
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    await steps.openConnection(
+      inputFor('dev'),
+      TERMS,
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      [
+        seen.channels[0]?.base.programs.sshProgram,
+        seen.channels[0]?.base.effective.user,
+      ],
+      [SSH_PROGRAM, 'alex'],
+    );
+  });
+
+  it('F-2507: the window is told the looked-up LocalForward entries as tunnels', async () => {
+    const {opened} = await tunnelWith('127.0.0.1:13000 localhost:3000');
+    deepStrictEqual(
+      (opened as {environmentTunnels: unknown}).environmentTunnels,
+      [
+        {
+          remoteAddress: {host: 'localhost', port: 3000},
+          localAddress: {host: '127.0.0.1', port: 13000},
+        },
+      ],
+    );
+  });
+
+  it('F-2507: the window gets no environment variables of its own', async () => {
+    const {opened} = await tunnelWith();
+    deepStrictEqual(
+      (opened as {extensionHostEnv: unknown}).extensionHostEnv,
+      {},
+    );
+  });
+
+  it('F-2507: an entry left out is logged with its position and why', async () => {
+    const {seen} = await tunnelWith(
+      '127.0.0.1:13000 localhost:3000',
+      '/tmp/local.sock localhost:3000',
+    );
+    deepStrictEqual(
+      seen.sink.lines.some(line =>
+        line.message.includes(
+          'LocalForward entry 1 is not shown as a tunnel: localSocket',
+        ),
+      ),
+      true,
+    );
+  });
+
+  it("F-3902 rule 1: the download override is read at each connect's server steps", () => {
+    const reads: string[] = [];
+    const {ports} = portsOf();
+    const counted = {
+      ...ports,
+      settings: {
+        ...ports.settings,
+        override: () => {
+          reads.push('override');
+          return ports.settings.override();
+        },
+      },
+    };
+    stepsOf(counted).validate(inputFor('dev'));
+    stepsOf(counted).validate(inputFor('dev'));
+    deepStrictEqual(reads, ['override', 'override']);
+  });
+
+  it("connect-14: one connect reads the connection's settings once, so its runs agree", async () => {
+    const {ports} = portsOf({connection: CONNECTED});
+    let reads = 0;
+    const steps = stepsOf({
+      ...ports,
+      settings: {
+        ...ports.settings,
+        connection: () => {
+          reads += 1;
+          return ports.settings.connection();
+        },
+      },
+    });
+    await steps.locateClient(inputFor('dev'));
+    await steps.openConnection(
+      inputFor('dev'),
+      TERMS,
+      new AbortController().signal,
+    );
+    deepStrictEqual(reads, 1);
+  });
+});
+
+describe("a terminal-mode login's wait", () => {
+  it("F-2105 BR-2: the host's own timeout wins over the setting", () => {
+    deepStrictEqual(terminalWaitOf('7', 30), {
+      connectTimeoutSeconds: 7,
+      fromHost: true,
+      unboundedWaitSeconds: 600,
+    });
+  });
+
+  it('F-2105 BR-1: with no host timeout the setting applies', () => {
+    deepStrictEqual(terminalWaitOf(undefined, 30), {
+      connectTimeoutSeconds: 30,
+      fromHost: false,
+      unboundedWaitSeconds: 600,
+    });
+  });
+
+  it("ruled on #253 Q8: a host's own 0 waits the 600 s ceiling with no margin", () => {
+    deepStrictEqual(terminalWaitOf('0', 30), {
+      connectTimeoutSeconds: 0,
+      fromHost: true,
+      unboundedWaitSeconds: 600,
+    });
+  });
+
+  it("F-2105 AC-9: the setting's 0 stays 0, which the wait reads as the extra wait alone", () => {
+    deepStrictEqual(terminalWaitOf(undefined, 0).connectTimeoutSeconds, 0);
+  });
+});
+
+describe("a terminal-mode connect's channel", () => {
+  it("connect-17: the install terminal's channel gets this connect's host and runs", async () => {
+    const {ports, seen} = portsOf({mode: 'terminal'});
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('alex@dev:22'));
+    const result = steps.openConnection(
+      inputFor('alex@dev:22'),
+      TERMS,
+      new AbortController().signal,
+    );
+    await Promise.resolve();
+    seen.terminals.opened[0]?.write(
+      'Authenticated to dev ([192.0.2.1]:22) using "publickey".\n',
+    );
+    await result;
+    deepStrictEqual(
+      [seen.channels[0]?.hostString, seen.channels[0]?.base.effective.user],
+      ['alex@dev:22', 'alex'],
+    );
   });
 });

@@ -4,6 +4,7 @@ import {
   type ConnectionRequestEnvironment,
   type ConnectionRequestSettings,
   connectionRequestOf,
+  runBaseOf,
   installRequestOf,
 } from '../../src/pipeline/connection-request.ts';
 import type {ConnectState} from '../../src/pipeline/locate-step.ts';
@@ -196,6 +197,20 @@ describe("the shared connection's acquire request", () => {
     throws(
       () => requestWith({state: {effective: EFFECTIVE}}),
       /before the client was found/,
+    );
+  });
+
+  it("connect-14: the runs' shared part is the connection's request without its purpose", () => {
+    const input = {
+      ...INPUT,
+      target: {kind: 'plain', text: 'alex@dev:2222'},
+    } as const;
+    deepStrictEqual(
+      {
+        ...runBaseOf(input, TERMS, STATE, SETTINGS, ENVIRONMENT),
+        purpose: 'connection',
+      },
+      sshRequestOf(requestWith()),
     );
   });
 });

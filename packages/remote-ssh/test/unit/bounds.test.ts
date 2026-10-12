@@ -3,9 +3,13 @@ import {
   CLIENT_CHECK_MILLISECONDS,
   connectionLimitsFor,
   effectiveConnectTimeoutSeconds,
+  HELPER_CLIENT_WAITS,
   HELPER_GRACE_MILLISECONDS,
+  HOST_LOCK_ATTEMPTS,
+  HOST_LOCK_INTERVAL_MILLISECONDS,
   PRECONNECT_MILLISECONDS,
   SERVER_BOUNDS,
+  SESSION_RUN_LIMITS,
   connectWaitsFor,
 } from '../../src/pipeline/bounds.ts';
 
@@ -100,5 +104,45 @@ describe("the window's waits on the shared connection's helper", () => {
 
   it("F-2105 AC-9: the setting's 0 waits the extra 2 s plus the margin", () => {
     deepStrictEqual(connectionLimitsFor(undefined, 0).loginMilliseconds, 12000);
+  });
+});
+
+describe('the waits around the helper and the host lock', () => {
+  it("ruled on #253 Q10: the client's hello 2 s, a started helper's listening 10 s, retries 100 ms apart", () => {
+    deepStrictEqual(HELPER_CLIENT_WAITS, {
+      helloLimitMilliseconds: 2000,
+      startLimitMilliseconds: 10000,
+      retryMilliseconds: 100,
+    });
+  });
+
+  it('F-2408: the host lock is asked for 30 times', () => {
+    deepStrictEqual(HOST_LOCK_ATTEMPTS, 30);
+  });
+
+  it('F-2408: one second apart', () => {
+    deepStrictEqual(HOST_LOCK_INTERVAL_MILLISECONDS, 1000);
+  });
+});
+
+describe("the shared session's run limits", () => {
+  it('ruled on #253 Q10: a run may take the host download and the ready wait, and 5 minutes more (36 minutes)', () => {
+    deepStrictEqual(SESSION_RUN_LIMITS.runDeadlineMilliseconds, 2_160_000);
+  });
+
+  it('ruled on #253 Q10: a caller waits one run more (41 minutes)', () => {
+    deepStrictEqual(SESSION_RUN_LIMITS.runWaitMilliseconds, 2_460_000);
+  });
+
+  it('ruled on #253 Q10: the deadline is never shorter than the host download and the ready wait', () => {
+    deepStrictEqual(
+      SESSION_RUN_LIMITS.runDeadlineMilliseconds >
+        (SERVER_BOUNDS.downloadSeconds + SERVER_BOUNDS.readySeconds) * 1000,
+      true,
+    );
+  });
+
+  it('ruled on #253 Q10: an input of 1 MiB at most goes through the shell', () => {
+    deepStrictEqual(SESSION_RUN_LIMITS.maximumInputBytes, 1_048_576);
   });
 });

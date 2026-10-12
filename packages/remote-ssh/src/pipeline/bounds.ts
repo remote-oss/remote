@@ -13,6 +13,23 @@ export const SERVER_BOUNDS: ServerBounds = {
   readySeconds: 60,
 };
 
+/** The margin each run of the shared session gets beyond the longest step it may take, and a queued run beyond that. */
+const RUN_MARGIN_MILLISECONDS = 5 * 60 * 1000;
+
+/** The longest step a run of the shared session may take: the host's download of the server, then its ready wait. */
+const LONGEST_STEP_MILLISECONDS =
+  (SERVER_BOUNDS.downloadSeconds + SERVER_BOUNDS.readySeconds) * 1000;
+
+/**
+ * The limits of the shared session's runs: a run's own deadline, never shorter than the host download and the
+ * server's ready wait together; a caller's whole wait, one run more; and the largest input carried through the shell.
+ */
+export const SESSION_RUN_LIMITS = {
+  runDeadlineMilliseconds: LONGEST_STEP_MILLISECONDS + RUN_MARGIN_MILLISECONDS,
+  runWaitMilliseconds: LONGEST_STEP_MILLISECONDS + 2 * RUN_MARGIN_MILLISECONDS,
+  maximumInputBytes: 1024 * 1024,
+} as const;
+
 /** How long the pre-connection script, with its question to the user, may take. */
 export const PRECONNECT_MILLISECONDS = 5 * 60 * 1000;
 
@@ -24,6 +41,19 @@ export const HOST_ZERO_TIMEOUT_SECONDS = 600;
 
 /** How long the shared connection's helper outlives its last window, long enough to carry a reload. */
 export const HELPER_GRACE_MILLISECONDS = 3000;
+
+/** The waits of the window's client of the helper: a running helper's answer, a started one's listening, the pause. */
+export const HELPER_CLIENT_WAITS = {
+  helloLimitMilliseconds: 2000,
+  startLimitMilliseconds: 10 * 1000,
+  retryMilliseconds: 100,
+} as const;
+
+/** How often the install asks for the host's lock while another window holds it, and how far apart. */
+export const HOST_LOCK_ATTEMPTS = 30;
+
+/** The pause between two asks for the host's lock. */
+export const HOST_LOCK_INTERVAL_MILLISECONDS = 1000;
 
 /** How long the helper may take to answer one request over its local socket. */
 const HELPER_REQUEST_MILLISECONDS = 10 * 1000;
