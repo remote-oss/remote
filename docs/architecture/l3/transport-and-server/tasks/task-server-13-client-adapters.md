@@ -35,7 +35,9 @@ comment loses "for the tests only" and its proxy sentence, which the network rul
 
 `network-rule.test.ts` is the test that rule asks for: it reads every `.ts` file under `packages/*/src` and fails
 when one imports `node:http`, `node:https`, `undici`, `http-proxy-agent`, `https-proxy-agent` or `proxy-agent`, or
-names `http.proxy`, `HTTP_PROXY`, `HTTPS_PROXY` or `NO_PROXY`. It passes on main plus this card.
+names `http.proxy`, `HTTP_PROXY`, `HTTPS_PROXY` or `NO_PROXY`. Every import form counts: `import`, `export … from`,
+`import()` and `require()`, with or without the `node:` prefix (`'http'` is `node:http`); a test row plants each form
+(athena 2026-10-12). It passes on main plus this card.
 
 ### Host lock loop (lib-server)
 
