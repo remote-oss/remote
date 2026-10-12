@@ -67,16 +67,28 @@ function baseSettings(changes: RequestChanges): InvocationSettings {
   };
 }
 
-/** An `ssh` run of the base row; a row only changes what it names. */
-function makeRequest(changes: RequestChanges = {}): SshRequest {
-  const request: SshRequest = {
-    purpose: changes.purpose ?? 'connection',
+/** The parts of the base row that every run of `ssh` or `scp` shares. */
+function baseRequest(
+  changes: RequestChanges,
+): Omit<
+  SshRequest,
+  'purpose' | 'forwards' | 'remoteProgram' | 'clearUserForwards'
+> {
+  return {
     target: changes.target ?? {host: 'alias'},
     settings: baseSettings(changes),
     effective: baseOptions(changes.effective ?? {}),
     programs: {sshProgram: '/x/ssh', scpProgram: '/x/scp'},
     homeFolder: changes.homeFolder ?? '/home/dev',
     platform: changes.platform ?? 'linux',
+  };
+}
+
+/** An `ssh` run of the base row; a row only changes what it names. */
+function makeRequest(changes: RequestChanges = {}): SshRequest {
+  const request: SshRequest = {
+    purpose: changes.purpose ?? 'connection',
+    ...baseRequest(changes),
   };
   if (changes.remoteProgram !== undefined) {
     request.remoteProgram = changes.remoteProgram;
@@ -95,6 +107,10 @@ function makeCopyRequest(
   changes: {
     target?: SshTarget;
     configFile?: string;
+    connectTimeout?: number;
+    permitPtyAllocation?: unknown;
+    remoteCommandInEffect?: boolean;
+    effective?: Partial<EffectiveOptions>;
     platform?: ClientPlatform;
     homeFolder?: string;
     copy?: CopyRequest;
@@ -102,12 +118,7 @@ function makeCopyRequest(
 ): CopyRunRequest {
   return {
     purpose: 'copy',
-    target: changes.target ?? {host: 'alias'},
-    settings: baseSettings(changes),
-    effective: baseOptions({}),
-    programs: {sshProgram: '/x/ssh', scpProgram: '/x/scp'},
-    homeFolder: changes.homeFolder ?? '/home/dev',
-    platform: changes.platform ?? 'linux',
+    ...baseRequest(changes),
     copy: changes.copy ?? {
       localFile: '/tmp/boot.sh',
       remotePath: '/tmp/x/boot.sh',
@@ -526,7 +537,14 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
   it('F-2405.BR-6: a copy run copies the file to the alias', () => {
     deepStrictEqual(buildInvocation(makeCopyRequest()), {
       program: '/x/scp',
-      arguments: ['--', '/tmp/boot.sh', 'alias:/tmp/x/boot.sh'],
+      arguments: [
+        '-v',
+        '-o',
+        'ConnectTimeout=15',
+        '--',
+        '/tmp/boot.sh',
+        'alias:/tmp/x/boot.sh',
+      ],
       environment: {},
     });
   });
@@ -538,6 +556,9 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     deepStrictEqual(invocation.arguments, [
       '-F',
       '/etc/custom/config',
+      '-v',
+      '-o',
+      'ConnectTimeout=15',
       '--',
       '/tmp/boot.sh',
       'alias:/tmp/x/boot.sh',
@@ -547,11 +568,43 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
   it('F-2405.BR-6: a copy run carries no ssh option', () => {
     const invocation = buildInvocation(makeCopyRequest());
     strictEqual(
-      ['-T', '-v', '-o', '-D', '-L'].some(flag =>
-        invocation.arguments.includes(flag),
-      ),
+      ['-T', '-D', '-L'].some(flag => invocation.arguments.includes(flag)),
       false,
     );
+  });
+
+  it('F-2105 BR-2, #253 Q13: a host that sets its timeout gets no ConnectTimeout', () => {
+    const invocation = buildInvocation(
+      makeCopyRequest({effective: {connectTimeout: '7'}}),
+    );
+    deepStrictEqual(invocation.arguments, [
+      '-v',
+      '--',
+      '/tmp/boot.sh',
+      'alias:/tmp/x/boot.sh',
+    ]);
+  });
+
+  it('F-2105 AC-9: a copy with the setting 0 writes ConnectTimeout=0', () => {
+    const invocation = buildInvocation(makeCopyRequest({connectTimeout: 0}));
+    strictEqual(hasPair(invocation, '-o', 'ConnectTimeout=0'), true);
+  });
+
+  it('#253 Q13: a copy never takes the host remote command out of effect', () => {
+    const invocation = buildInvocation(
+      makeCopyRequest({
+        effective: {remoteCommand: 'echo hi'},
+        remoteCommandInEffect: false,
+      }),
+    );
+    strictEqual(invocation.arguments.includes('RemoteCommand=none'), false);
+  });
+
+  it('#253 Q13: a copy without a pseudo-terminal gets no -T', () => {
+    const invocation = buildInvocation(
+      makeCopyRequest({permitPtyAllocation: false}),
+    );
+    strictEqual(invocation.arguments.includes('-T'), false);
   });
 
   it('ADR-0004.2: no option beyond the listed ones, in every purpose and setting', () => {
@@ -608,6 +661,9 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
       makeCopyRequest({target: {host: 'alias', user: 'u', port: 2222}}),
     );
     deepStrictEqual(invocation.arguments, [
+      '-v',
+      '-o',
+      'ConnectTimeout=15',
       '--',
       '/tmp/boot.sh',
       'alias:/tmp/x/boot.sh',
@@ -637,7 +693,17 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     const invocation = buildInvocation(makeCopyRequest());
     deepStrictEqual(
       [countOf(invocation, '--'), invocation.arguments],
-      [1, ['--', '/tmp/boot.sh', 'alias:/tmp/x/boot.sh']],
+      [
+        1,
+        [
+          '-v',
+          '-o',
+          'ConnectTimeout=15',
+          '--',
+          '/tmp/boot.sh',
+          'alias:/tmp/x/boot.sh',
+        ],
+      ],
     );
   });
 
