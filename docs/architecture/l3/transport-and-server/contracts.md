@@ -342,8 +342,10 @@ Rules:
 - `acquire` is not used when `remote.SSH.useLocalServer` is off or socket mode is on (F-2102 BR-10, F-2410).
   Interim until terminal mode is built (ruled on #299, 2026-10-12; a 0.2 release blocker with the two tunnel paths):
   R1's validate step fails such a connect, after the target check and before the platform question, the
-  pre-connection script, the client check and any lease. Kind `unknown`, no reason (F-2601's S030), not retried, no
-  hang (R-79), and the cause named in the connect log (F-2003). Running the shared connection the user turned off
+  pre-connection script, the client check and any lease. Kind `unknown`, no reason (F-2601's S030), no hang (R-79),
+  and the cause named in the connect log (F-2003). `unknown` stays retryable during a reconnection, which is right
+  here: the setting is read live (F-2102 BR-9), so turning it back on lets the next attempt connect, and each attempt
+  until then fails at once and runs nothing (card connect-15). Running the shared connection the user turned off
   would ignore the setting silently; asking the platform question first would ask something nothing uses.
 
 S9 is built on lib-helper (§9): a per-profile registry, the end policy `graceAfterLastLease`, and the oldest-first
