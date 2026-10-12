@@ -670,6 +670,12 @@ The reply's `message` is the Rust `Debug` form, which `parseCliServeError` reads
 `CodeError(AuthChallengeBadToken)`, `CodeError(AuthChallengeNotIssued)` and `CodeError(ServerAuthRequired)`. Every
 measured error had `code: -1`.
 
+**Lifetime.** The CLI ends with the connect's session (the shared connection's, or the install terminal's); the
+server it started outlives it and is found again by the next `serve` (F-2103 BR-10, AC-33).
+
+**Logging.** Every `serverlog` line goes to the connect's log. Only the error line (level 4) may reach a failure's
+detail, as text the presenter shows through S031 (contracts R1: no other library text in a dialog).
+
 **Layout** under `<data>`: `agent-host-token`, and `servers/` with `lru.json` (the kept servers by folder name),
 `.locks/`, and `<Quality>-<commit>/{log.txt, pid.txt, server/}`. The server is in `server/`, and its launcher is
 `server/bin/<serverApplicationName>` (F-3902 rule 10's reuse).
