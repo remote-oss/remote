@@ -6,7 +6,7 @@ import {gateEditorOf} from '../../src/index.ts';
 function fakeEditor(events: string[], registered = false): typeof vscode {
   const document = {uri: {fsPath: '/x/argv.json'}};
   return {
-    env: {remoteAuthority: undefined},
+    env: {appCommit: undefined},
     workspace: {
       tunnels: Promise.resolve([]),
       onDidSaveTextDocument: (listener: (value: unknown) => void) => {
