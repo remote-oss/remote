@@ -31,7 +31,7 @@ export interface ResolveRecord {
   settings: Array<{name: string; value: string}>;
   sshStarted: boolean;
   sshLines: string[];
-  prompts: Array<{text: string; answer: string}>;
+  prompts: Array<{text: string; answer?: string}>;
   connectionToken?: string;
   remoteOutput: string[];
   listeningPort?: number;
@@ -44,6 +44,15 @@ export interface ResolveRecord {
 const RULE = '-'.repeat(40);
 
 const SUMMARY_HEADING = `${'-'.repeat(10)} [Session Summary] ${'-'.repeat(10)}`;
+
+const LINE_BREAK = /\r\n|\n|\r/;
+
+/** The non-empty lines of the entries, each entry split at its line breaks. */
+function linesOfEntries(entries: readonly string[]): string[] {
+  return entries
+    .flatMap(entry => entry.split(LINE_BREAK))
+    .filter(part => part !== '');
+}
 
 /** `token` with every digit changed to `1` and every ASCII letter to `a`. */
 function maskOf(token: string): string {
@@ -63,6 +72,11 @@ function masked(text: string, token: string | undefined): string {
   return token === undefined || token === ''
     ? text
     : text.replaceAll(token, () => maskOf(token));
+}
+
+/** `text` with the token masked and each line break made one space. */
+function onOneLine(text: string, token: string | undefined): string {
+  return masked(text, token).replaceAll(new RegExp(LINE_BREAK, 'g'), ' ');
 }
 
 function windowLines(start: WindowStart): string[] {
@@ -85,7 +99,7 @@ function summaryLines(summary: Summary, token: string | undefined): string[] {
   return [
     SUMMARY_HEADING,
     ...summary.issues.map(
-      issue => `[${issue.status}]: ${masked(issue.message, token)}`,
+      issue => `[${issue.status}]: ${onOneLine(issue.message, token)}`,
     ),
     RULE,
   ];
@@ -97,7 +111,9 @@ export function resolveLogLines(record: ResolveRecord): string[] {
   const start = record.windowStart;
   const resolving = `Resolving ssh-remote+${record.authority}, attempt ${String(record.attempt)}`;
   const sshLines =
-    record.level === 'trace' ? record.sshLines : logLinesOf(record.sshLines);
+    record.level === 'trace'
+      ? linesOfEntries(record.sshLines)
+      : logLinesOf(linesOfEntries(record.sshLines));
   return [
     ...(start === undefined ? [] : [`Log level: ${record.level}`]),
     record.reconnection ? `${resolving}, reconnection` : resolving,
@@ -111,9 +127,9 @@ export function resolveLogLines(record: ResolveRecord): string[] {
     ...prefixed('[ssh] ', sshLines, token),
     ...record.prompts.flatMap(prompt => [
       `Prompt: ${masked(prompt.text, token)}`,
-      'Answer: ***',
+      prompt.answer === undefined ? 'Answer: (none)' : 'Answer: ***',
     ]),
-    ...prefixed('[remote] ', record.remoteOutput, token),
+    ...prefixed('[remote] ', linesOfEntries(record.remoteOutput), token),
     ...(record.listeningPort === undefined
       ? []
       : [`Remote server listening on port ${String(record.listeningPort)}`]),
@@ -124,13 +140,13 @@ export function resolveLogLines(record: ResolveRecord): string[] {
         ]),
     ...(record.failure === undefined
       ? []
-      : [`Resolution failed: ${masked(record.failure, token)}`]),
+      : [`Resolution failed: ${onOneLine(record.failure, token)}`]),
     RULE,
     '',
     '',
     '',
     '',
     ...summaryLines(record.summary, token),
-    ...prefixed('[server] ', record.serverOutput, token),
+    ...prefixed('[server] ', linesOfEntries(record.serverOutput), token),
   ];
 }

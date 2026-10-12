@@ -532,4 +532,135 @@ describe('resolveLogLines (card connect-04 table)', () => {
     Object.freeze(record);
     deepStrictEqual(resolveLogLines(record), resolveLogLines(record));
   });
+
+  describe('follow-ups (card connect-12)', () => {
+    it('F-2003.BR-6 item 7 (O3): a prompt without an answer is marked', () => {
+      deepStrictEqual(
+        linesOf({prompts: [{text: 'Password: '}]}).filter(line =>
+          /^(Prompt|Answer):/.test(line),
+        ),
+        ['Prompt: Password: ', 'Answer: (none)'],
+      );
+    });
+
+    it('F-2003.BR-6 item 7 (O3): answered and unanswered prompts are told apart', () => {
+      deepStrictEqual(
+        linesOf({
+          prompts: [{text: 'a: ', answer: 'x'}, {text: 'b: '}],
+        }).filter(line => /^(Prompt|Answer):/.test(line)),
+        ['Prompt: a: ', 'Answer: ***', 'Prompt: b: ', 'Answer: (none)'],
+      );
+    });
+
+    it('F-2003.BR-6 item 7 (O3): an empty answer is still masked', () => {
+      deepStrictEqual(
+        linesOf({prompts: [{text: 'Password: ', answer: ''}]}).filter(line =>
+          /^(Prompt|Answer):/.test(line),
+        ),
+        ['Prompt: Password: ', 'Answer: ***'],
+      );
+    });
+
+    function remoteLines(remoteOutput: string[], token?: string): string[] {
+      const base = recordWith({remoteOutput});
+      const record =
+        token === undefined
+          ? without(base, 'connectionToken')
+          : {...base, connectionToken: token};
+      return resolveLogLines(record).filter(line =>
+        line.startsWith('[remote] '),
+      );
+    }
+
+    it('F-2003.BR-4 (O5): a remote entry is split at a line feed', () => {
+      deepStrictEqual(remoteLines(['one\ntwo']), [
+        '[remote] one',
+        '[remote] two',
+      ]);
+    });
+
+    it('F-2003.BR-4 (O5): a server entry is split at every kind of line break', () => {
+      deepStrictEqual(
+        linesOf({serverOutput: ['a\r\nb\rc']}).filter(line =>
+          line.startsWith('[server] '),
+        ),
+        ['[server] a', '[server] b', '[server] c'],
+      );
+    });
+
+    it('F-2003.BR-4 (O5): empty parts are dropped', () => {
+      deepStrictEqual(remoteLines(['x\n\ny\n']), ['[remote] x', '[remote] y']);
+    });
+
+    it('F-2003.BR-4 (O5): an entry of line breaks only gives no line', () => {
+      deepStrictEqual(remoteLines(['\n']), []);
+    });
+
+    it('F-2003.BR-4 (O5): the token is masked in every part', () => {
+      deepStrictEqual(
+        remoteLines(['token ab12-cd34\nagain ab12-cd34'], 'ab12-cd34'),
+        ['[remote] token aa11-aa11', '[remote] again aa11-aa11'],
+      );
+    });
+
+    it('F-2003.BR-4 (O5): at debug level a debug1 part of a multi-line entry is dropped', () => {
+      deepStrictEqual(
+        linesOf({
+          level: 'debug',
+          sshLines: ['real error\ndebug1: noise'],
+        }).filter(line => line.startsWith('[ssh] ')),
+        ['[ssh] real error'],
+      );
+    });
+
+    it('F-2003.BR-4 (O5): at trace level every part is kept', () => {
+      deepStrictEqual(
+        linesOf({
+          level: 'trace',
+          sshLines: ['real error\ndebug1: noise'],
+        }).filter(line => line.startsWith('[ssh] ')),
+        ['[ssh] real error', '[ssh] debug1: noise'],
+      );
+    });
+
+    it('F-2003.BR-4: every kind of line break in the failure becomes a space', () => {
+      deepStrictEqual(
+        linesOf({failure: 'first\nsecond\r\nthird\rfourth'}).filter(line =>
+          line.startsWith('Resolution failed:'),
+        ),
+        ['Resolution failed: first second third fourth'],
+      );
+    });
+
+    it('F-2003.BR-4: line breaks in the failure are not collapsed', () => {
+      deepStrictEqual(
+        linesOf({failure: 'a\n\nb'}).filter(line =>
+          line.startsWith('Resolution failed:'),
+        ),
+        ['Resolution failed: a  b'],
+      );
+    });
+
+    it('F-2003.BR-4: the token is masked in a failure of several lines', () => {
+      deepStrictEqual(
+        linesOf({
+          failure: 'x ab12-cd34\ny',
+          connectionToken: 'ab12-cd34',
+        }).filter(line => line.startsWith('Resolution failed:')),
+        ['Resolution failed: x aa11-aa11 y'],
+      );
+    });
+
+    it('F-2003.BR-4: a line break in a summary message becomes a space', () => {
+      deepStrictEqual(
+        linesOf({
+          summary: {
+            kind: 'issues',
+            issues: [{status: 'E', message: 'a\rb'}],
+          },
+        }).filter(line => line.startsWith('[E]:')),
+        ['[E]: a b'],
+      );
+    });
+  });
 });
