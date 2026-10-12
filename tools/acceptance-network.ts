@@ -4,7 +4,7 @@
  * session stalls, and a new connection gets no answer. The container runs with NET_ADMIN and its image has `iptables`.
  */
 
-import {type CommandRunner} from './acceptance-run.ts';
+import {checked, type CommandRunner} from './acceptance-run.ts';
 
 /** The two rules that drop the packets of the host's port 22: those arriving and those leaving. */
 const DROP_RULES: ReadonlyArray<{chain: string; match: readonly string[]}> = [
@@ -12,35 +12,51 @@ const DROP_RULES: ReadonlyArray<{chain: string; match: readonly string[]}> = [
   {chain: 'OUTPUT', match: ['-p', 'tcp', '--sport', '22', '-j', 'DROP']},
 ];
 
-/** Runs `iptables` in the container, as root; the result says whether it succeeded. */
-function iptables(
-  command: CommandRunner,
+/** The arguments of `docker exec` that run `iptables` in the container, as root. */
+function iptablesCommand(
   container: string,
   programArguments: readonly string[],
+): string[] {
+  return ['exec', container, 'iptables', ...programArguments];
+}
+
+/** Whether the container holds the rule; `iptables -C` fails when it does not. */
+function holdsRule(
+  command: CommandRunner,
+  container: string,
+  {chain, match}: {chain: string; match: readonly string[]},
 ): boolean {
   return (
-    command('docker', ['exec', container, 'iptables', ...programArguments])
+    command('docker', iptablesCommand(container, ['-C', chain, ...match]))
       .status === 0
   );
 }
 
-/** Cuts the network of the container. Cutting twice is harmless. */
+/** Cuts the network of the container; it throws, naming the chain and the error of `iptables`, when a rule is refused. Cutting twice is harmless. */
 export function cutNetwork(command: CommandRunner, container: string): void {
-  for (const {chain, match} of DROP_RULES) {
-    if (!iptables(command, container, ['-C', chain, ...match])) {
-      iptables(command, container, ['-I', chain, ...match]);
+  for (const rule of DROP_RULES) {
+    if (!holdsRule(command, container, rule)) {
+      checked(
+        command,
+        'docker',
+        iptablesCommand(container, ['-I', rule.chain, ...rule.match]),
+      );
     }
   }
 }
 
-/** Brings the network of the container back on the same port. Restoring twice, or when nothing was cut, is harmless. */
+/** Brings the network of the container back on the same port; it throws as `cutNetwork` does. Restoring twice, or when nothing was cut, is harmless. */
 export function restoreNetwork(
   command: CommandRunner,
   container: string,
 ): void {
-  for (const {chain, match} of DROP_RULES) {
-    if (iptables(command, container, ['-C', chain, ...match])) {
-      iptables(command, container, ['-D', chain, ...match]);
+  for (const rule of DROP_RULES) {
+    if (holdsRule(command, container, rule)) {
+      checked(
+        command,
+        'docker',
+        iptablesCommand(container, ['-D', rule.chain, ...rule.match]),
+      );
     }
   }
 }
