@@ -16,7 +16,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -35,6 +34,14 @@ import {
   type CommandRunner,
   runCommand,
 } from './acceptance-run.ts';
+import {
+  bundleFolderOf,
+  failureCases,
+  failureLabel,
+  type Launch,
+  launchesOf,
+  suitesOf,
+} from './acceptance-launches.ts';
 import {
   isMainModule,
   REPOSITORY_ROOT,
@@ -183,13 +190,20 @@ export function packagedExtensions(root: string): string[] {
     .map(entry => path.join(folder, entry.name));
 }
 
-/** The editor's user settings of the run: the extensions under test read the harness's ssh_config. */
-export function writeUserSettings(runFolder: string, configFile: string): void {
+/**
+ * The editor's user settings of the run: the extensions under test read the harness's ssh_config, and `extra` is a
+ * launch's own settings.
+ */
+export function writeUserSettings(
+  runFolder: string,
+  configFile: string,
+  extra: Readonly<Record<string, unknown>> = {},
+): void {
   const folder = path.join(runFolder, 'user-data', 'User');
   mkdirSync(folder, {recursive: true});
   writeFileSync(
     path.join(folder, 'settings.json'),
-    `${JSON.stringify({'remote.SSH.configFile': configFile}, null, 2)}\n`,
+    `${JSON.stringify({'remote.SSH.configFile': configFile, ...extra}, null, 2)}\n`,
   );
 }
 
@@ -264,59 +278,6 @@ async function prepare(
   };
 }
 
-/** One failing connect of the VSCodium run: its own launch on `alias`, the script its window answers from. */
-export interface FailureCase {
-  alias: string;
-  cite: string;
-  script: unknown[];
-  dialog: string;
-}
-
-/** The form of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
-const ALIAS_FORM = /^[a-z][a-z0-9-]*$/;
-
-/** The failing connects, from tests/acceptance/suite-failure/cases.json, which the failure suite also reads. */
-export function failureCases(root: string): FailureCase[] {
-  const {cases} = JSON.parse(
-    readFileSync(
-      path.join(root, 'tests', 'acceptance', 'suite-failure', 'cases.json'),
-      'utf8',
-    ),
-  ) as {cases: FailureCase[]};
-  for (const failure of cases) {
-    // The alias becomes part of a file name, a test-cli label and a URI authority.
-    if (!ALIAS_FORM.test(failure.alias)) {
-      throw new Error(
-        `a failing connect's alias must match ${String(ALIAS_FORM)}: "${failure.alias}"`,
-      );
-    }
-  }
-  return cases;
-}
-
-/** The label of the launch of a failing connect. */
-function failureLabel(alias: string): string {
-  return `failure-${alias}`;
-}
-
-/**
- * The test-cli labels each editor runs, in order: the VS Code run has one configuration and needs no label; the
- * VSCodium run has the local window, the remote one, the reconnection, and one launch per failing connect.
- */
-function labelsOf(
-  root: string,
-  editor: EditorChoice,
-): Array<string | undefined> {
-  return editor === 'vscode'
-    ? [undefined]
-    : [
-        'local',
-        'remote',
-        'reconnect',
-        ...failureCases(root).map(failure => failureLabel(failure.alias)),
-      ];
-}
-
 /** The script and record files of a launch: the run's own, or a failing connect's. */
 function launchFiles(
   runFolder: string,
@@ -326,6 +287,31 @@ function launchFiles(
     script: path.join(runFolder, `${label}-script.json`),
     record: path.join(runFolder, `${label}-record.jsonl`),
   };
+}
+
+/**
+ * Runs each launch in order and returns their exit codes. The VS Code run has one configuration and needs no label;
+ * each VSCodium launch finds the run's base settings plus its own, so none inherits another's.
+ */
+export async function runLaunches(
+  runFolder: string,
+  configFile: string,
+  launches: ReadonlyArray<Launch | undefined>,
+  runTests: (label?: string) => Promise<AttemptResult>,
+): Promise<number[]> {
+  const exitCodes: number[] = [];
+  for (const launch of launches) {
+    if (launch !== undefined) {
+      writeUserSettings(runFolder, configFile, launch.settings);
+    }
+    exitCodes.push(
+      await runWithRetry(
+        () => runTests(launch?.label),
+        console.log.bind(console),
+      ),
+    );
+  }
+  return exitCodes;
 }
 
 /**
@@ -354,14 +340,14 @@ export async function runAcceptance(
         JSON.stringify({entries: failure.script}),
       );
     }
-    for (const label of labelsOf(root, editor)) {
-      exitCodes.push(
-        await runWithRetry(
-          () => dependencies.runTests(root, variables, label),
-          console.log.bind(console),
-        ),
-      );
-    }
+    exitCodes.push(
+      ...(await runLaunches(
+        runFolder,
+        variables.HARNESS_SSH_CONFIG,
+        editor === 'vscodium' ? launchesOf(root) : [undefined],
+        label => dependencies.runTests(root, variables, label),
+      )),
+    );
     return exitCodes.find(exitCode => exitCode !== 0) ?? 0;
   } catch (error) {
     console.error(`acceptance: ${failureText(error)}`);
@@ -413,107 +399,71 @@ export function acceptanceConfiguration(
   };
 }
 
-/** The window the remote VSCodium run opens: the harness host's home folder over `ssh-remote`. */
-const REMOTE_FOLDER_URI = 'vscode-remote://ssh-remote+harness/home/harness';
-
 /** The test-cli configuration of one VSCodium window; the window's folder, when it has one, comes first on the editor's command line. */
-function vscodiumConfiguration(
+export function vscodiumConfiguration(
   root: string,
   environment: Readonly<Record<string, string | undefined>>,
   executable: string,
-  window: {
-    label: string;
-    runner: string;
-    files: string;
-    folderUri?: string;
-    ownScript?: boolean;
-  },
+  launch: Launch,
 ) {
   const runFolder = environment.HARNESS_RUN_FOLDER ?? '';
-  const files = launchFiles(runFolder, window.label);
+  const files = launchFiles(runFolder, launch.label);
+  const acceptance = path.join(root, 'tests', 'acceptance');
+  const runner = path.join(acceptance, launch.runner);
+  const env: Record<string, string | undefined> = {
+    ...environment,
+    ...(launch.ownScript === true
+      ? {
+          REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,
+          REMOTE_OSS_ACCEPTANCE_RECORD: files.record,
+        }
+      : {}),
+    ...launch.environment,
+  };
   return {
-    label: window.label,
+    label: launch.label,
     useInstallation: {fromPath: executable},
-    extensionDevelopmentPath: path.join(
-      root,
-      'tests',
-      'acceptance',
-      window.runner,
-    ),
-    files: window.files,
+    extensionDevelopmentPath:
+      launch.extraExtensions === undefined
+        ? runner
+        : [
+            runner,
+            ...launch.extraExtensions.map(extension =>
+              path.join(acceptance, extension),
+            ),
+          ],
+    files: `${bundleFolderOf(launch.suite)}/**/*.test.cjs`,
     launchArgs: [
-      ...(window.folderUri === undefined
+      ...(launch.folderUri === undefined
         ? []
-        : ['--folder-uri', window.folderUri]),
+        : ['--folder-uri', launch.folderUri]),
       ...editorArguments(runFolder),
     ],
-    env: {
-      ...environment,
-      ...(window.ownScript === true
-        ? {
-            REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,
-            REMOTE_OSS_ACCEPTANCE_RECORD: files.record,
-          }
-        : {}),
-    },
+    env,
     mocha: {ui: 'bdd' as const, timeout: 120_000},
   };
 }
 
-/**
- * The VSCodium configurations: `local` runs suite-local in a plain window; `remote` runs suite-remote in a window on
- * `ssh-remote+harness`, where the runner is an extension of the workspace kind; `reconnect` runs suite-reconnect in
- * a second launch on the same folder, which finds the first launch's server (ruling 2); and each failing connect
- * runs suite-failure in a window on its alias, answered from its own script, written before the launch.
- */
+/** The VSCodium configurations, one per launch of the table in acceptance-launches.ts. */
 export function vscodiumConfigurations(
   root: string,
   environment: Readonly<Record<string, string | undefined>>,
   executable: string,
 ) {
-  return [
-    vscodiumConfiguration(root, environment, executable, {
-      label: 'local',
-      runner: 'runner',
-      files: 'dist-local/**/*.test.cjs',
-    }),
-    vscodiumConfiguration(root, environment, executable, {
-      label: 'remote',
-      runner: 'runner-remote',
-      files: 'dist-remote/**/*.test.cjs',
-      folderUri: REMOTE_FOLDER_URI,
-    }),
-    vscodiumConfiguration(root, environment, executable, {
-      label: 'reconnect',
-      runner: 'runner-remote',
-      files: 'dist-reconnect/**/*.test.cjs',
-      folderUri: REMOTE_FOLDER_URI,
-    }),
-    ...failureCases(root).map(failure =>
-      vscodiumConfiguration(root, environment, executable, {
-        label: failureLabel(failure.alias),
-        runner: 'runner-remote',
-        files: 'dist-failure/**/*.test.cjs',
-        folderUri: `vscode-remote://ssh-remote+${failure.alias}/home/harness`,
-        ownScript: true,
-      }),
-    ),
-  ];
+  return launchesOf(root).map(launch =>
+    vscodiumConfiguration(root, environment, executable, launch),
+  );
 }
 
-/** The suites that are bundled, each into the folder of tests/acceptance named after it. */
-const SUITES: ReadonlyArray<{source: string; output: string}> = [
-  {source: 'suite', output: 'dist'},
-  {source: 'suite-local', output: 'dist-local'},
-  {source: 'suite-remote', output: 'dist-remote'},
-  {source: 'suite-reconnect', output: 'dist-reconnect'},
-  {source: 'suite-failure', output: 'dist-failure'},
-];
+/** The suites that are bundled: the shared helpers and the suite of each launch. */
+function suitesOfRun(root: string): string[] {
+  return suitesOf(launchesOf(root));
+}
 
 /** Removes every suite's bundle folder, so that no run leaves bundles in a checkout. */
 export function removeBundles(root: string): void {
-  for (const {output} of SUITES) {
-    rmSync(path.join(root, 'tests', 'acceptance', output), {
+  for (const suite of suitesOfRun(root)) {
+    rmSync(path.join(root, 'tests', 'acceptance', bundleFolderOf(suite)), {
       recursive: true,
       force: true,
     });
@@ -522,8 +472,8 @@ export function removeBundles(root: string): void {
 
 /** Bundles every `*.test.ts` of each suite folder of tests/acceptance into its output folder, one `.cjs` file each. */
 export async function bundleSuite(root: string): Promise<void> {
-  for (const {source, output} of SUITES) {
-    await bundleFolder(root, source, output);
+  for (const suite of suitesOfRun(root)) {
+    await bundleFolder(root, suite, bundleFolderOf(suite));
   }
 }
 
