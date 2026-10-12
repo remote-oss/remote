@@ -29,3 +29,5 @@ What becomes easier, what becomes harder, what it costs, and what must now be tr
 ## Check
 
 How the decision is enforced or verified: a lint, a CI job, a conformance case, a review rule. "None" needs a reason.
+
+<!-- ci probe: docs-only run (#501); this pull request is closed unmerged -->
