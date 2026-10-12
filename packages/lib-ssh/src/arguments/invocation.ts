@@ -106,13 +106,7 @@ export function buildInvocation(request: InvocationRequest): Invocation {
   ) {
     argumentList.push('-T');
   }
-  argumentList.push('-v');
-  if (request.effective.connectTimeout === undefined) {
-    argumentList.push(
-      '-o',
-      `ConnectTimeout=${String(request.settings.connectTimeout)}`,
-    );
-  }
+  argumentList.push(...attemptOptions(request));
   if (
     request.effective.remoteCommand !== undefined &&
     !request.settings.remoteCommandInEffect
@@ -235,6 +229,18 @@ function forwardArguments(forward: Forward): string[] {
   return ['-L', `${LOOPBACK}:${localPort}:${forward.socketPath}`];
 }
 
+/** The options every run of an attempt carries: the log level the diagnostics read, and the connect timeout when the host sets none. */
+function attemptOptions(request: InvocationRequest): string[] {
+  const options = ['-v'];
+  if (request.effective.connectTimeout === undefined) {
+    options.push(
+      '-o',
+      `ConnectTimeout=${String(request.settings.connectTimeout)}`,
+    );
+  }
+  return options;
+}
+
 /**
  * The `scp` run: the same configuration file, then the source and the destination on the target, which reaches the
  * host through its configuration entry. An IPv6 address is bracketed so that its colons are not read as the path's.
@@ -245,6 +251,7 @@ function copyInvocation(request: CopyRunRequest, common: string[]): Invocation {
     : request.target.host;
   const argumentList = [
     ...common,
+    ...attemptOptions(request),
     '--',
     request.copy.localFile,
     `${host}:${request.copy.remotePath}`,
