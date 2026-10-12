@@ -21,6 +21,17 @@ export interface ConnectWaitSettings {
   unboundedWaitSeconds: number;
 }
 
+/**
+ * The length of the connect wait: a host's own `ConnectTimeout 0` waits the ceiling with no margin; any other timeout,
+ * the setting's 0 included, waits that many seconds plus the 2 s margin.
+ */
+export function connectWaitMilliseconds(settings: ConnectWaitSettings): number {
+  return settings.connectTimeoutSeconds === 0 && settings.fromHost
+    ? settings.unboundedWaitSeconds * MILLISECONDS_PER_SECOND
+    : settings.connectTimeoutSeconds * MILLISECONDS_PER_SECOND +
+        GRACE_MILLISECONDS;
+}
+
 /** The wait for one connection attempt. */
 export class ConnectWait {
   private readonly durationMilliseconds: number;
@@ -35,11 +46,7 @@ export class ConnectWait {
     scheduler: Scheduler,
     onTimeout: () => void,
   ) {
-    this.durationMilliseconds =
-      settings.connectTimeoutSeconds === 0 && settings.fromHost
-        ? settings.unboundedWaitSeconds * MILLISECONDS_PER_SECOND
-        : settings.connectTimeoutSeconds * MILLISECONDS_PER_SECOND +
-          GRACE_MILLISECONDS;
+    this.durationMilliseconds = connectWaitMilliseconds(settings);
     this.scheduler = scheduler;
     this.onTimeout = onTimeout;
   }

@@ -84,9 +84,19 @@ interface Fixture {
 }
 
 function fixture(
-  options: {dynamic?: boolean; reveal?: boolean; timeoutSeconds?: number} = {},
+  options: {
+    dynamic?: boolean;
+    reveal?: boolean;
+    timeoutSeconds?: number;
+    fromHost?: boolean;
+  } = {},
 ): Fixture {
-  const {dynamic = false, reveal = false, timeoutSeconds = 10} = options;
+  const {
+    dynamic = false,
+    reveal = false,
+    timeoutSeconds = 10,
+    fromHost = false,
+  } = options;
   const clock = new FakeClock();
   const terminals = new RecordingTerminals();
   const made: Fixture = {
@@ -129,7 +139,7 @@ function fixture(
     revealLoginTerminals: () => reveal,
     connectWait: () => ({
       connectTimeoutSeconds: timeoutSeconds,
-      fromHost: false,
+      fromHost,
       unboundedWaitSeconds: 600,
     }),
     logger: createLogger(new MemorySink(), {minimumLevel: (): Level => 'info'}),
@@ -270,8 +280,19 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     const {result, terminal} = await started(made);
     terminal.write('debug1: SSH2_MSG_NEWKEYS received\n');
     terminal.write('Some unknown question? ');
-    made.clock.advance(10_000);
+    made.clock.advance(12_000);
     return {outcome: await result, terminal};
+  }
+
+  /** `true` when the step has not settled by the time the microtasks drain. */
+  async function notSettled(
+    result: Promise<StepResult<ConnectionLease>>,
+  ): Promise<boolean> {
+    const which = await Promise.race([
+      result.then(() => 'settled'),
+      settled().then(() => 'still-open'),
+    ]);
+    return which === 'still-open';
   }
 
   it('F-2308 BR-5: a question nobody can reach after the handshake times out', async () => {
@@ -283,6 +304,36 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
 
   it('F-2308 BR-5: the terminal is disposed when the question is unreachable', async () => {
     deepStrictEqual((await unreachable()).terminal.disposed, true);
+  });
+
+  it('athena on #385: an open question is not failed 11 999 ms after the handshake', async () => {
+    const made = fixture({timeoutSeconds: 10});
+    const {result, terminal} = await started(made);
+    terminal.write('debug1: SSH2_MSG_NEWKEYS received\n');
+    terminal.write('Some unknown question? ');
+    made.clock.advance(11_999);
+    deepStrictEqual(await notSettled(result), true);
+  });
+
+  it('athena on #385: the setting 0 no longer fails an open question at once', async () => {
+    const made = fixture({timeoutSeconds: 0});
+    const {result, terminal} = await started(made);
+    terminal.write('debug1: SSH2_MSG_NEWKEYS received\n');
+    terminal.write('Some unknown question? ');
+    made.clock.advance(1);
+    deepStrictEqual(await notSettled(result), true);
+  });
+
+  it('athena on #385: a host 0 fails the open question at the ceiling', async () => {
+    const made = fixture({timeoutSeconds: 0, fromHost: true});
+    const {result, terminal} = await started(made);
+    terminal.write('debug1: SSH2_MSG_NEWKEYS received\n');
+    terminal.write('Some unknown question? ');
+    made.clock.advance(600_000);
+    deepStrictEqual(await result, {
+      kind: 'failed',
+      failure: {kind: 'timeout'},
+    });
   });
 
   it('F-2105 BR-3: no output for the connect wait is a timeout', async () => {

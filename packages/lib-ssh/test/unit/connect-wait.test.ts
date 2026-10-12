@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {ConnectWait} from '../../src/index.ts';
+import {ConnectWait, connectWaitMilliseconds} from '../../src/index.ts';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 
 const POLICY = {
@@ -143,5 +143,49 @@ describe('connect wait', () => {
     wait.promptAnswered();
     clock.advance(600000);
     deepStrictEqual(timeouts, 1);
+  });
+
+  it('F-2105 BR-4, AC-8: the length is the whole ceiling for a host 0', () => {
+    deepStrictEqual(
+      connectWaitMilliseconds({
+        connectTimeoutSeconds: 0,
+        fromHost: true,
+        unboundedWaitSeconds: 600,
+      }),
+      600000,
+    );
+  });
+
+  it('F-2105 BR-4, AC-9: the length is the margin alone for the setting 0', () => {
+    deepStrictEqual(
+      connectWaitMilliseconds({
+        connectTimeoutSeconds: 0,
+        fromHost: false,
+        unboundedWaitSeconds: 600,
+      }),
+      2000,
+    );
+  });
+
+  it('F-2105 BR-1: the length is the timeout plus the margin', () => {
+    deepStrictEqual(
+      connectWaitMilliseconds({
+        connectTimeoutSeconds: 7,
+        fromHost: true,
+        unboundedWaitSeconds: 600,
+      }),
+      9000,
+    );
+  });
+
+  it('F-2105 BR-3: the length is the setting plus the margin', () => {
+    deepStrictEqual(
+      connectWaitMilliseconds({
+        connectTimeoutSeconds: 15,
+        fromHost: false,
+        unboundedWaitSeconds: 600,
+      }),
+      17000,
+    );
   });
 });

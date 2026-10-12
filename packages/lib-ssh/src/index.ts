@@ -72,7 +72,11 @@ export {
   scpProgram,
   VERSION_ARGUMENTS,
 } from './client/locate.ts';
-export {ConnectWait, type ConnectWaitSettings} from './process/connect-wait.ts';
+export {
+  ConnectWait,
+  connectWaitMilliseconds,
+  type ConnectWaitSettings,
+} from './process/connect-wait.ts';
 export {nodeProcessSpawner} from './process/node-spawner.ts';
 export type {
   ProcessHandle,
