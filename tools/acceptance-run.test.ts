@@ -3,7 +3,12 @@
  * fake CommandRunner that records each call and answers from a script.
  */
 
-import {deepStrictEqual, strictEqual, throws} from 'node:assert';
+import {
+  deepStrictEqual,
+  notStrictEqual,
+  strictEqual,
+  throws,
+} from 'node:assert';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -78,10 +83,48 @@ function scriptedCommands(): ScriptedCommands & CommandRunner {
 }
 
 describe('acceptanceRunId (card tooling-10)', () => {
-  it('gives GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT while both are set', () => {
+  it('gives the run id, the attempt and the job in CI', () => {
     strictEqual(
-      acceptanceRunId({GITHUB_RUN_ID: '77', GITHUB_RUN_ATTEMPT: '2'}, 1),
-      '77-2',
+      acceptanceRunId(
+        {
+          GITHUB_RUN_ID: '77',
+          GITHUB_RUN_ATTEMPT: '2',
+          GITHUB_JOB: 'acceptance-server',
+        },
+        1,
+      ),
+      '77-2-acceptance-server',
+    );
+  });
+
+  it('gives different ids for two jobs of one run', () => {
+    notStrictEqual(
+      acceptanceRunId(
+        {
+          GITHUB_RUN_ID: '77',
+          GITHUB_RUN_ATTEMPT: '2',
+          GITHUB_JOB: 'acceptance-slice-1',
+        },
+        1,
+      ),
+      acceptanceRunId(
+        {
+          GITHUB_RUN_ID: '77',
+          GITHUB_RUN_ATTEMPT: '2',
+          GITHUB_JOB: 'acceptance-server',
+        },
+        1,
+      ),
+    );
+  });
+
+  it('gives local-<process id> when the job is empty', () => {
+    strictEqual(
+      acceptanceRunId(
+        {GITHUB_RUN_ID: '77', GITHUB_RUN_ATTEMPT: '2', GITHUB_JOB: ''},
+        4242,
+      ),
+      'local-4242',
     );
   });
 
@@ -92,6 +135,13 @@ describe('acceptanceRunId (card tooling-10)', () => {
   it('gives local-<process id> when the attempt is empty', () => {
     strictEqual(
       acceptanceRunId({GITHUB_RUN_ID: '77', GITHUB_RUN_ATTEMPT: ''}, 4242),
+      'local-4242',
+    );
+  });
+
+  it('gives local-<process id> when the job is absent', () => {
+    strictEqual(
+      acceptanceRunId({GITHUB_RUN_ID: '77', GITHUB_RUN_ATTEMPT: '2'}, 4242),
       'local-4242',
     );
   });

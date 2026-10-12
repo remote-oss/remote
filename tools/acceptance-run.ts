@@ -61,20 +61,27 @@ export function checked(
   return result.stdout;
 }
 
-/** The run's id: `GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT` in CI, else `local-<process id>`. */
+/**
+ * The run's id: `GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT-GITHUB_JOB` in CI, else `local-<process id>`. The job's id is
+ * in the id because the acceptance jobs of one workflow run share the run and the attempt, and may run at the
+ * same time on runners that share a Docker daemon.
+ */
 export function acceptanceRunId(
   environment: NodeJS.ProcessEnv,
   processId: number,
 ): string {
   const runId = environment.GITHUB_RUN_ID;
   const attempt = environment.GITHUB_RUN_ATTEMPT;
+  const jobId = environment.GITHUB_JOB;
   if (
     runId !== undefined &&
     runId !== '' &&
     attempt !== undefined &&
-    attempt !== ''
+    attempt !== '' &&
+    jobId !== undefined &&
+    jobId !== ''
   ) {
-    return `${runId}-${attempt}`;
+    return `${runId}-${attempt}-${jobId}`;
   }
   return `local-${String(processId)}`;
 }
