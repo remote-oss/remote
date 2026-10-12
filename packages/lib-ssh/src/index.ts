@@ -189,6 +189,12 @@ export {
   type TerminalEnd,
 } from './terminal/login-terminal.ts';
 export {PlainTextFilter} from './terminal/plain-text.ts';
+export {
+  PARTIAL_LINE_PAUSE_MILLISECONDS,
+  type PromptReaderEvents,
+  PromptReader,
+  isTerminalPrompt,
+} from './terminal/prompt-reader.ts';
 export {TerminalStream} from './terminal/terminal-stream.ts';
 export {
   TerminalSessionRunner,

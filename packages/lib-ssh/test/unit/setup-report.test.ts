@@ -66,4 +66,29 @@ describe('the setup report of ssh -v (F-2105, F-2308 BR-5)', () => {
       undefined,
     );
   });
+
+  it('#299: the line that says the key exchange ended is the handshake', () => {
+    deepStrictEqual(
+      setupMarkerOf('debug1: SSH2_MSG_NEWKEYS received'),
+      'handshake',
+    );
+  });
+
+  it('#299: the handshake line is the same with a trailing carriage return', () => {
+    deepStrictEqual(
+      setupMarkerOf('debug1: SSH2_MSG_NEWKEYS received\r'),
+      'handshake',
+    );
+  });
+
+  it('#299: the key exchange that is only sent is not the handshake', () => {
+    deepStrictEqual(setupMarkerOf('debug1: SSH2_MSG_NEWKEYS sent'), undefined);
+  });
+
+  it('F-2308 BR-5: the authentication line is still the marker it was', () => {
+    deepStrictEqual(
+      setupMarkerOf('Authenticated to dev ([10.0.0.1]:22) using "publickey".'),
+      'authenticated',
+    );
+  });
 });
