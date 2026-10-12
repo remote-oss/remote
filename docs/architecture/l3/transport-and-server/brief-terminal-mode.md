@@ -188,6 +188,18 @@ connect in validate; this brief replaces that interim.
      `LogLevel`.
 4. **The connect wait ends at the first output** in terminal mode (F-2105 BR-3), not at `authenticated`. The `-v`
    banner arriving first is what the spec observed (F-2308 5.0 step 4).
+5a. **When the terminal connection step hands over** (ruled on #299, connect-17): at the install terminal's `Authenticated
+   to … using` line (`setupMarkerOf`'s `authenticated`, as in shared mode); from then on the remote `sh` reads the
+   runs. This is a different event from the connect wait's end (ruling 4: the first output), and the two are
+   consistent: the wait stops at the first output, and between it and `Authenticated to` only ssh's own timeouts and
+   T2's prompt rules apply (F-2308 BR-5). A terminal that ends before the handover is classified by S5 as the
+   connection's own run, `classify(lines, code, 'connection', 'terminal')`.
+5b. **The trust-Cancel failure** (F-2308 7.E7/AC-24, F-2410 7.E7/AC-30): the reason text `Got bad result from install
+   script` has **no STR id** (F-2410 3.4: "extension error text (unmapped)"), so it's our own entry in remote-ssh's
+   failure table (`FAILURE_TEMPLATES`, where `reasonText` resolves dialog reasons; not own-strings.ts, which has no
+   path into the dialog). It gets a named id (`trustRefused`), the spec's English verbatim without the final period
+   (the presenter adds one), and a key in all 15 bundles. Kind **`cancelled`**: the user refused trust, so it's
+   permanent (no automatic reconnection re-asks; Retry is the user's), and the reason gives the dialog's text.
 5. **A late trust answer** (after the attempt failed): nothing runs. The terminal isn't created after the attempt's
    end, and no stale input appears (F-2306 7.E7 says it should not; the reference's late install is a defect, not
    reproduced).
