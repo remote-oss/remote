@@ -48,9 +48,10 @@ Read each AC in its spec issue (`gh issue view <n> -R remote-oss/remote-ssh`). T
    - the host's state through `overSsh` or `onHost` (files, processes);
    - a failure window of `suite-failure/cases.json`.
 
-   The condition must be one the harness can set up: the host image, its `ssh_config` aliases (`harness`, `refused`,
-   `nowhere`, `stranger`), the real-server and VSCodium runs, and tooling-14's host variants (#446: login shells, `curl`,
-   GNU and BusyBox `wget`, no downloader).
+   The harness today sets up: the host image, its `ssh_config` aliases (`harness`, `refused`, `nowhere`, `stranger`),
+   the real-server and VSCodium runs, and tooling-14's host variants (#446: login shells, `curl`, GNU and BusyBox
+   `wget`, no downloader). An outcome the harness could see under a condition it can't set up yet is still
+   `acceptance` in kind: list it in section 5's "harness capability missing" table, never as a unit row.
 4. **`unit`**: everything else. Our own decision, with no host or editor needed: parsing, planning, a string's choice,
    a bound, a retry decision, an error path the harness can't provoke.
 
@@ -95,12 +96,21 @@ The PR body has one table per tag still to write, for your features. Every AC st
 |---|---|---|
 | F-2304.AC-5 | the host's server folder holds … after a connect | `F-2304: …` (unit, partial) |
 
+### Needs an acceptance row: harness capability missing
+| AC | What the row must show | Missing capability | Rows that prove part of it now |
+|---|---|---|---|
+| F-2102.AC-8 | both windows reconnect after Kill and one password is asked | `password host`, `two windows` | none |
+
 ### Needs a unit row
 | AC | What the row must show | Rows that prove part of it now |
 
 ### Core halves
 | AC | The part core shows |
 ```
+
+In the "harness capability missing" table, name the capability in a few words: `password host`, `two windows`,
+`window reload`, `network cut`, `terminal mode`. "Needs a unit row" holds only what rule 4 describes: our own decision,
+testable with no host or editor.
 
 "What the row must show" is one sentence in the AC's own terms: the case and the expected outcome. When nothing proves
 any part, write `none`.
