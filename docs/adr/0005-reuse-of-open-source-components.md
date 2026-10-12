@@ -62,6 +62,9 @@ open, which is the user's decision through the register.
    `@devcontainers/cli` is MIT open source distinct from the reference extensions. The wall stays around the
    `ms-vscode-remote.*` and `ms-vscode.*` extension packages and the dirty rooms. The editor CLI archive is fetched
    like the server archive, from the product's own download location per `product.json` (R-47 extended).
+4. **`@msgpack/msgpack` (ISC, no dependencies) for the CLI's control protocol** (brief-cli-path §4a, athena's ruling on
+   #412): lib-server's `cli-control` reads and writes the msgpack maps the editor's command-line program speaks, with
+   our own framing over a byte stream. It is a plain library reuse, pinned to `3.1.3`, and the licence check admits ISC.
 
 ## Options considered
 
