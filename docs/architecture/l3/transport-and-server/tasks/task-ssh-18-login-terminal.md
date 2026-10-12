@@ -105,8 +105,11 @@ end** (the line end included), and the text after that line end flows as plain t
 brief c213613). When the piece holds no line end after the cap, the filter keeps dropping the following pieces up to
 and including the first line end. The tail of an endless string is junk, and dropping it keeps it out of the line the
 prompt matcher reads; the next line starts clean, so a stray `ESC ]` in a host's banner can never swallow the password
-prompt or a marker that follows. A string whose terminator (or a cancelling byte) arrives before the cap ends normally,
-also when it arrives in the piece that crosses 4096.
+prompt or a marker that follows. **The scan for a terminator stops at the cap** (athena on #341, at ee58309): a
+terminator or cancelling byte within the first 4096 characters from the ESC ends the string normally; if none lies
+within them, the string is capped and dropped through the next line end, **even when a terminator exists later**. So
+the output never depends on how the editor chunks the stream, and a later ESC, BEL or CAN can't end a capped string
+early and swallow the line after the junk.
 
 ### 2.3 The recording fake (`lib-ssh/src/testing/recording-terminal.ts`)
 
@@ -195,7 +198,12 @@ One assertion per `it`; the cite starts the name.
 | #341 | `'a\x1b]0;'` + 5000 × `'z'` + `'\nnext line'` in one piece | `'anext line'` (no `z`; the line end is dropped with the string) |
 | #341 | `'a\x1b]0;'` + 3000 × `'z'`, then 3000 × `'z'` + `'\nafter'` | `'a'` then `'after'` |
 | #341 | `'a\x1b]0;'` + 5000 × `'z'`, then `'zz\nok'` (the cap reached with no line end in the first piece) | `'a'` then `'ok'` |
-| #341 | `'a\x1b]0;'` + 3000 × `'x'`, then 2000 × `'y'` + `'\x07z'` | `'a'` then `'z'` (the terminator arrived before the cap was applied) |
+| #341 | `'a\x1b]0;'` + 3996 × `'x'` + `'\x07tail'` (the BEL at character 4000 from the ESC) | `'atail'` (a terminator within the cap ends the string normally) |
+| #341 | `'a\x1b]0;'` + 4096 × `'x'` + `'\x07'` + 900 × `'z'` + `'\nnext'` (the BEL at character 4100) | `'anext'` (a terminator past the cap doesn't rescue the string) |
+| #341 | `'a\x1b]0;'` + 3000 × `'x'`, then 896 × `'y'` + `'\x07z'` (the BEL at character 3900, in the second piece) | `'a'` then `'z'` (a terminator within the cap ends the string across pieces too) |
+| #341 | `'a\x1b]0;'` + 5000 × `'z'` + `'\nB\x1b[1mC'` (a later CSI) | `'aBC'` (`B` survives; the CSI is removed) |
+| #341 | `'a\x1b]0;'` + 5000 × `'z'` + `'\nB\x1b]0;t\x07C'` (a later OSC) | `'aBC'` (the second OSC is removed) |
+| #341 | `'a\x1b]0;'` + 5000 × `'z'` + `'\nB\x07C'` (a later BEL outside a string) | `'aB\x07C'` (a BEL outside a string is text) |
 
 ### 3.2 `recording-terminal.test.ts`
 
