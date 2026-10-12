@@ -48,8 +48,9 @@ Merge order: 01, 03, 02, 04, 05, 06.
 
 ## Card template rules (2026-10-08)
 
-- The file list is complete, including every `src/testing/*.ts` file; `package.json` `exports` lists the testing
-  entries by name, as `lib-host` does, never a glob.
+- The file list is complete, including every `src/testing/*.ts` file. `package.json` `exports` lists the testing
+  entries by name (as `lib-host` does) or as the one glob `./testing/*` with its `types` condition (as `lib-forwarding`
+  does); both are fine (amended 2026-10-12, #253: no check depends on the named form, and knip reaches the testing files through the tests).
 - Every exported name is at least four characters (ADR-0003); a contract name shorter than that is renamed in the
   card (`onceKey`, not `key`).
 - An export the card's tests do not use is not in the card (knip fails otherwise).
