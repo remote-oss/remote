@@ -115,6 +115,10 @@ export class PromptReader {
   /** One piece of output: its lines and its partial line, then the timers that follow them. */
   private ingest(text: string): void {
     const end = text.lastIndexOf('\n');
+    if (end >= 0) {
+      // A line end ends the reported question, so the same text later is a re-ask.
+      this.reportedPartial = undefined;
+    }
     this.partial = end < 0 ? this.partial + text : text.slice(end + 1);
     this.splitter.push(text);
     this.armPause();

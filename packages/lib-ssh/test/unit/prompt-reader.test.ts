@@ -162,6 +162,21 @@ describe('the prompt reader of the login terminal (F-2308)', () => {
     deepStrictEqual(questions, ["alex@dev's password: "]);
   });
 
+  it('#352 (themis): a repeated question after a deny line is reported again', () => {
+    reader.push("alex@dev's password: ");
+    clock.advance(PARTIAL_LINE_PAUSE_MILLISECONDS);
+    reader.inputOpened();
+    reader.inputClosed();
+    reader.push(
+      "\r\nPermission denied, please try again.\r\nalex@dev's password: ",
+    );
+    clock.advance(PARTIAL_LINE_PAUSE_MILLISECONDS);
+    deepStrictEqual(questions, [
+      "alex@dev's password: ",
+      "\nPermission denied, please try again.\nalex@dev's password: ",
+    ]);
+  });
+
   it('#299: the same partial line is not tried again after a further pause', () => {
     reader.push("alex@dev's password: ");
     clock.advance(PARTIAL_LINE_PAUSE_MILLISECONDS);
