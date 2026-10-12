@@ -131,10 +131,10 @@ describe('loginTerminalsOf (card ssh-18 table)', () => {
     deepStrictEqual(opened().terminal.shown, []);
   });
 
-  it('#299: output reaches the listener as plain text', () => {
+  it('#299: output reaches the listener as plain text with its line ends normalised', () => {
     const made = opened();
     made.write('\x1b[0mok\r\n');
-    deepStrictEqual(made.output, ['ok\r\n']);
+    deepStrictEqual(made.output, ['ok\n']);
   });
 
   it('F-2308: output of another terminal is ignored', () => {

@@ -6,12 +6,16 @@
 import type {TerminalEnd} from './login-terminal.ts';
 import {PlainTextFilter} from './plain-text.ts';
 
+/** One or more carriage returns before a line feed: a pty adds one to the line end the program wrote. */
+const LINE_END = /\r+\n/g;
+
 /** The output and the end of one terminal. */
 export class TerminalStream {
   private readonly outputListeners: Array<(text: string) => void> = [];
   private readonly endListeners: Array<(end: TerminalEnd) => void> = [];
   private readonly filter = new PlainTextFilter();
   private hadOutput = false;
+  private heldReturns = '';
   private ended: TerminalEnd | undefined;
 
   /** Calls `listener` with each piece of output as plain text. */
@@ -28,10 +32,25 @@ export class TerminalStream {
     }
   }
 
-  /** Delivers the plain text of `data`, unless the terminal has ended or nothing but escape sequences arrived. */
+  /**
+   * Delivers the plain text of `data` with its line ends normalised, unless the terminal has ended or nothing is left
+   * to deliver. A run of carriage returns that ends the text waits for the next piece, which decides what it was.
+   */
   write(data: string): void {
-    const text = this.filter.push(data);
-    if (this.ended !== undefined || text === '') {
+    if (this.ended !== undefined) {
+      return;
+    }
+    const text = this.heldReturns + this.filter.push(data);
+    const trailing = /\r+$/.exec(text)?.[0] ?? '';
+    this.heldReturns = trailing;
+    this.deliver(
+      text.slice(0, text.length - trailing.length).replace(LINE_END, '\n'),
+    );
+  }
+
+  /** Tells the listeners `text`, unless it is empty; any text counts as output. */
+  private deliver(text: string): void {
+    if (text === '') {
       return;
     }
     this.hadOutput = true;
@@ -45,6 +64,9 @@ export class TerminalStream {
     if (this.ended !== undefined) {
       return;
     }
+    const released = this.heldReturns;
+    this.heldReturns = '';
+    this.deliver(released);
     const finished: TerminalEnd = {code, reason, hadOutput: this.hadOutput};
     this.ended = finished;
     for (const listener of this.endListeners) {
