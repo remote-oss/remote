@@ -9,9 +9,11 @@ coder: `remote-coding-worker-1`.
 every process's command line (contracts §S10). **Start after #429 is merged.** It merges after #422, without waiting
 for step 0 (brief §10: unwired, no behaviour change).
 
-**Not in this card:** any rule for when the CLI ends (contracts V7a's Lifetime is provisional, pending
-`remote-oss/remote-ssh#21`). `--parent-process-id` is **not** passed: tying the CLI to a process is open until metis
-answers. The CLI is started detached (`nohup`), as the server is.
+**The CLI's lifetime** is contracts V7a's (athena, after metis on `remote-oss/remote-ssh#21`): the CLI is started with
+`--parent-process-id` naming the connect's session process on the host, so `command-shell` ends when that session
+ends, after its open connections finish. The server it started outlives it (F-2103 BR-10). The session process is the
+start step's **`$PPID`**. Measured over real `ssh` on Alpine 3.22 with ssh-34's session start: a script run on the
+session sees as `$PPID` the session's `sh`, a child of `sshd-session`, which lives exactly as long as the connection.
 
 ## 1. Package and file boundary
 
@@ -52,8 +54,15 @@ the CLI's `--cli-data-dir`, `<data folder>/cli`. The parameter block writes `CLI
 
 **`startCli`**, the start body's shape with the CLI's own command and ready line:
 1. `[ -x "$CLI_FILE" ] || finish ServerFailedToStart`.
+   Then `[ -n "${VSCODE_CLI_REQUIRE_TOKEN:-}" ] || { fact cli.tokenMissing yes; finish ServerFailedToStart; }`.
+   **The CLI is never started without its token.** Without `VSCODE_CLI_REQUIRE_TOKEN`, `command-shell` requires no
+   token: `challenge_issue` accepts any token, and the response is a SHA-256 that anyone can compute (`[cli]`
+   `commands/tunnels.rs` `AuthRequired::VSDA`, `control_server.rs` `handle_challenge_issue`, `challenge.rs`). Such a CLI
+   would serve any local user of the host. The variable goes missing when the request's `environment` is dropped on
+   the way, for example by a helper of the previous extension version that is still in its grace time and doesn't know
+   the field (themis on #430). The test names no value, so nothing reaches a command line (§S10).
 2. The log is `$DATA_DIR/.cli.$COMMIT.log` (F-2103's `.cli.<commit>.log`), created with `umask 077`.
-3. `nohup "$CLI_FILE" command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA" </dev/null
+3. `nohup "$CLI_FILE" command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA" --parent-process-id "$PPID" </dev/null
    >"$LOG_FILE" 2>&1 9>&- &`. **No token on the command line:** `VSCODE_CLI_REQUIRE_TOKEN` is in the script's
    environment (section 2.3), and the `nohup` child inherits it. Record `CLI_PID=$!`.
 4. The ready wait, as `start`'s (the same `READY_SECONDS` and ticks): `cli_ready_port` reads the first line matching
@@ -92,7 +101,11 @@ export function startCli(channel, base: ScriptParameters, token: string, depende
 - `startCli` runs `startCli`'s step with `environment: {VSCODE_CLI_REQUIRE_TOKEN: token}`, inside the lock loop, and
   returns `StartOutcome`'s `started` with `server: {endpoint: {kind: 'port', port}, processId, connectionToken: token,
   reused: false}` (brief §4: the CLI's port and token, in today's shape). A `ServerFailedToStart` result is
-  `serverStart`, as `startOrReuse`'s.
+  `serverStart`, as `startOrReuse`'s; with the fact `cli.tokenMissing` its detail is `the CLI's token did not reach
+  the host`.
+- A second check, on the connection, is cli-04's: its first control request is `challenge_issue` with a token that
+  isn't the CLI's, and anything but the error `CodeError(AuthChallengeBadToken)` ends the connect as `serverStart` and
+  stops that CLI. This card only builds the script's guard.
 
 ## 3. Test table
 
@@ -103,7 +116,7 @@ One assertion per `it`; the cite starts the name.
 | Cite | Given | Expected |
 |---|---|---|
 | brief §3 | the `installCli` script with `cli: {name: 'codium-insiders-c1', dataFolder: '/h/.d/cli'}` | the parameter block has `CLI_NAME='codium-insiders-c1'` and `CLI_DATA='/h/.d/cli'` |
-| V7a | the `startCli` script | it contains `command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA"` and no `--require-token` and no `--parent-process-id` |
+| V7a | the `startCli` script | it contains `command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA" --parent-process-id "$PPID"` and no `--require-token` |
 | §S10 | `startCli(channel, base, 'tok-xyz', …)` | the channel's `runScript` request has `environment: {VSCODE_CLI_REQUIRE_TOKEN: 'tok-xyz'}` |
 | §S10 | the same | the request's `script` text does not contain `tok-xyz` |
 | V7a | a recorded result block with `cli.port 41234` and `cli.pid 77` | `started`, endpoint `{kind: 'port', port: 41234}`, `processId` 77, `connectionToken` `'tok-xyz'`, `reused` false |
@@ -111,6 +124,9 @@ One assertion per `it`; the cite starts the name.
 | brief §4 | `installCli` with `plan.download` false | one script run (no download, no copy) |
 | F-3902 rule 6 | `installCli` with `where: 'host'`, the host download failing, `clientFallback: true` | the client download and the copy ran, as the server transfer's fallback |
 | §S10 | every step's `runScript` over `installCli` | `environment` is `{}` (only `startCli` carries the token) |
+| themis on #430 | the `startCli` script | the token test comes before the line that starts the CLI |
+| themis on #430 | a recorded result block `ServerFailedToStart` with `cli.tokenMissing yes` | `serverStart`, detail `the CLI's token did not reach the host` |
+| themis on #430 | the `startCli` script run by `sh` with an empty environment and a stand-in `CLI_FILE` that writes a marker file | the result is `ServerFailedToStart` with `cli.tokenMissing yes`, and the marker file doesn't exist |
 
 ### 3.2 Real host (`tests/acceptance/server/cli.test.ts`, `pnpm test:acceptance:server`)
 
@@ -127,6 +143,8 @@ tarball. The archive is copied with `copyIn`, and `installCli` runs with `ARCHIV
 | V7a | the CLI's log `<data>/.cli.<commit>.log` holds `Listening on 127.0.0.1:<port>` with the reported port |
 | V7a | a client of the control protocol (cli-03a's `openCliControl` over a forward to the port) authenticates with the token |
 | V7a | the same with a wrong token is `challengeRefused` |
+| V7a | `startCli` over the shared session, then the session is closed | within 10 s, `ps -eo args` on the host shows no `command-shell` (the CLI ended with its session) |
+| themis on #430 | the `startCli` step run with `environment: {}` reports `ServerFailedToStart` with `cli.tokenMissing yes`, and `ps -eo args` on the host shows no `command-shell` |
 
 Stop the CLI after each row with `kill <pid>` (no lifetime rule is built; the test ends what it started).
 
@@ -141,5 +159,7 @@ PR title `lib-server: the CLI's install and start on the host (card cli-03b, #41
 
 ## 6. Open rows
 
-None for this card. The CLI's lifetime and `--parent-process-id` stay open (`remote-oss/remote-ssh#21`). The CI source
-of a CLI archive is the user's decision (brief §11), so the real-host rows skip without one.
+- Whether the extension also passes the server source to the CLI at start (`VSCODE_CLI_SERVER_DOWNLOAD_URL_TEMPLATE`,
+  `VSCODE_CLI_COMMIT`, `VSCODE_CLI_QUALITY`, metis on `remote-oss/remote-ssh#79` point 1) is asked on #79: in `[cli]`
+  the last two are build-time constants. Until it's answered, `startCli`'s environment holds only the token.
+- The CI source of a CLI archive is the user's decision (brief §11), so the real-host rows skip without one.
