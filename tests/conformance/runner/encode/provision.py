@@ -124,6 +124,12 @@ def target_substituted(body, ph):
     return TARGET_PH.sub(value, body)
 
 
+def uses_fingerprints(case):
+    """Whether a case needs its target's fingerprints bound: it names ${SSH_TARGET_FINGERPRINT[_NEW]} or rekeys."""
+    text = json.dumps(case)
+    return "${SSH_TARGET_FINGERPRINT" in text or any(isinstance(s, dict) and "target" in s for s in case.get("steps") or [])
+
+
 def names_target(body):
     """Whether a state script uses the SSH target: ENC_SSH_HOST or ENC_SSH_TARGET_ADDR, or a placeholder for them."""
     return bool(TARGET_ENV_RE.search(body))
@@ -161,6 +167,7 @@ class Run:
         self.ssh_variant = caselib.ssh_variant(profile)
         self.late_settings = {}   # settings naming the per-case target, written once it exists (step 8)
         self.late_scripts = []    # state scripts naming it, run once it exists (step 8)
+        self.late_files = {}      # fixture.files whose content names it, written once it exists (step 8)
         # fixture.window_start (athena on F-2409): local = the window starts on the case folder here, and the case's steps
         # open the SSH window; the run's R-63 rule is then its own target on its case folder only (LAB_RUN_TARGET)
         self.local_start = (case.get("fixture") or {}).get("window_start", "remote") == "local"
@@ -279,13 +286,13 @@ class Run:
         remove_tree(self.ws)
         os.makedirs(self.ws)
         wsfx = self.workspace_fixture(fx)
-        for rel, content in (fx.get("files") or {}).items():
-            path = os.path.join(self.ws, rel)
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            if os.path.lexists(path) and not os.path.isdir(path):
-                os.remove(path)   # a workspace fixture's file or link of the same name (it may be read-only)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(caselib.subst(content if isinstance(content, str) else json.dumps(content, indent=2), self.ph))
+        # a file whose content names the per-case target waits for it, step 8 (dirty-side, F-2502: an alias written into
+        # an ssh configuration file; the same rule as the settings and state scripts). The target mounts the folder live.
+        texts = {rel: c if isinstance(c, str) else json.dumps(c, indent=2) for rel, c in (fx.get("files") or {}).items()}
+        self.late_files = {rel: t for rel, t in texts.items() if self.ssh_variant and TARGET_PH.search(t)}
+        for rel, text in texts.items():
+            if rel not in self.late_files:
+                self.write_case_file(rel, text)
         for rel, target in (fx.get("links") or {}).items():
             path = os.path.join(self.ws, rel)
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -373,13 +380,24 @@ class Run:
         for script, body in now:
             self.run_state_script(script, body)
         # 7. the case's file modes, last, so the window sees them whatever a state script did (the teardown gives the
-        # owner write permission back before it removes the folder)
-        self.apply_modes(fx.get("modes") or {})
+        # owner write permission back before it removes the folder). With a file written after the target they wait for
+        # it (triton on #197: a mode for a file not yet written was refused, and a folder's mode could block writing it)
+        if not self.late_files:
+            self.apply_modes(fx.get("modes") or {})
         # what the case owns from here on: everything its private daemon holds now (engine fixture, case fixture,
         # state scripts); engine steps add what they create (see owns_container / owns_volume)
         self.owned = {"containers": {c["name"] for c in self.docker.containers()},
                       "volumes": {v["name"] for v in self.docker.volumes([])}} if self.docker else \
             {"containers": set(), "volumes": set()}
+
+    def write_case_file(self, rel, text):
+        """One of the case's own files, over a workspace fixture's file or link of the same name, placeholders substituted."""
+        path = os.path.join(self.ws, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.lexists(path) and not os.path.isdir(path):
+            os.remove(path)   # a workspace fixture's file or link of the same name (it may be read-only)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(caselib.subst(text, self.ph))
 
     def run_target(self):
         """The run's R-63 rule for the driver under fixture.window_start: local: its own per-case target on its case
@@ -400,6 +418,42 @@ class Run:
         if alias.upper() == alias and "${SSH_HOST_UPPER}" in json.dumps(self.case):
             raise ProvisionError(f"the case names ${{SSH_HOST_UPPER}}, but the alias {alias!r} has no letters: its upper-case "
                                  "form is the alias itself, so the case would test nothing")
+
+    def host_fingerprints(self):
+        """Every host key the per-case target serves: [(key type, SHA256:<base64>, MD5:<hex pairs>)], read inside the
+        target (sshtarget hostkeys), so every route works: a port, a jump host, a proxy, an inner network."""
+        p = self.sshtarget("hostkeys", self.ssh_run, self.ssh_variant.split("+")[0], timeout=60)
+        if p.returncode != 0:
+            raise ProvisionError("the per-case target's host keys: " + (p.stderr or p.stdout).strip()[-300:])
+        out = [tuple(l.split()[:3]) for l in p.stdout.splitlines() if len(l.split()) >= 3]
+        if not out:
+            raise ProvisionError("the per-case target reported no host key")
+        return sorted(out)
+
+    def bind_fingerprints(self, name):
+        """${<name>}: the target's own fingerprints, every key type in both forms (athena on #198: bound values, so a
+        wrong fingerprint stays literal and fails). normalize maps every bound value back; a case that names the
+        placeholder in a wait or check gets the ssh-ed25519 SHA256 form, ssh's default (fingerprint_for_case)."""
+        keys = self.host_fingerprints()
+        keys.sort(key=lambda k: k[0] != "ssh-ed25519")   # ssh's default key first: the value a case gets (caselib._one)
+        self.ph[name] = " ".join(v for _, sha, md5 in keys for v in (sha, md5))
+        return keys
+
+    def target_action(self, action):
+        """One declarative step on the per-case target. `target: rekey`: new host keys, ${SSH_TARGET_FINGERPRINT_NEW}
+        bound to them; the old ones keep ${SSH_TARGET_FINGERPRINT}. Returns a transcript record."""
+        if action != "rekey":
+            return {"ok": False, "error": f"unknown target action {action!r}"}
+        if not self.ssh_run:
+            return {"ok": False, "error": "target: rekey needs a per-case SSH target"}
+        p = self.sshtarget("rekey", self.ssh_run, self.ssh_variant.split("+")[0], timeout=120)
+        if p.returncode != 0:
+            return {"ok": False, "error": "sshtarget rekey: " + (p.stderr or p.stdout).strip()[-300:]}
+        try:
+            keys = self.bind_fingerprints("SSH_TARGET_FINGERPRINT_NEW")
+        except ProvisionError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "action": "rekey", "key_types": [k for k, _, _ in keys]}
 
     def write_settings(self, path, values):
         """Merge values into the slot's settings.json. A snapshot's remote.SSH.configFile (a path on the machine that
