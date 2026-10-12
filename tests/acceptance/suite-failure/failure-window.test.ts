@@ -46,7 +46,7 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
     record = await recordAfterDialog();
   });
 
-  it('F-2601 5.0: the window is one of the failing connects', () => {
+  it('contracts harness: the window is one of the failing connects', () => {
     strictEqual(failure === undefined, false);
   });
 
@@ -57,7 +57,7 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
     );
   });
 
-  it('F-2601 AC-12, AC-13, ruling 5: dismissing the dialog opened the pick of actions, and every question was the next one of the script', () => {
+  it('F-2601 AC-12, AC-13: dismissing the dialog opened the pick of actions, and every question was the next one of the script (ruling 5)', () => {
     deepStrictEqual(
       record.map(line => [line.surface, line.matched]),
       failure?.script.map(entry => [entry.surface, true]),

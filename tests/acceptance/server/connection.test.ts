@@ -71,7 +71,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
   }
 
   describe('F-2102 one connection server for every window of a host', () => {
-    it('F-2102: two windows share one ssh login and one SOCKS port', async () => {
+    it('F-2102 AC-13: two windows share one ssh login and one SOCKS port', async () => {
       const before = host.logins();
       const first = await connected();
       const second = await connected();
@@ -88,7 +88,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       );
     });
 
-    it('F-2102: what the first window stores for the server reaches the second', async () => {
+    it('contracts S9: what the first window stores for the server reaches the second', async () => {
       const first = await connected();
       await first.connection.storeSharedRecord({
         remotePort: 41001,
@@ -117,7 +117,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       );
     });
 
-    it('F-2102.BR-7: killing the server ends its ssh session on the host and its record', async () => {
+    it('F-2102 AC-6: killing the server ends its ssh session on the host and its record', async () => {
       await connected();
       const recordsBefore = windows.records().length;
       await windows.kill('harness');
@@ -130,14 +130,14 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       deepStrictEqual([recordsBefore, gone, windows.records()], [1, true, []]);
     });
 
-    it('F-2102.BR-7: killing a server that does not run is a success, silently', async () => {
+    it('F-2102 AC-16: killing a server that does not run is a success, silently', async () => {
       await windows.kill('harness');
       deepStrictEqual(windows.records(), []);
     });
   });
 
   describe('F-2601 a host that cannot be reached', () => {
-    it('F-2601: a TEST-NET host ends as a failed login of a kind that says so, with its hints, within the bound', async () => {
+    it('contracts S5: a TEST-NET host ends as a failed login of a kind that says so, with its hints, within the bound', async () => {
       host.appendConfig(
         'Host unreachable\n  HostName 192.0.2.1\n  User harness\n  IdentitiesOnly yes\n  IdentityAgent none\n  BatchMode yes\n  ConnectTimeout 3\n',
       );
@@ -159,7 +159,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
   });
 
   describe('F-2101 a client that is missing', () => {
-    it('F-2101: a program that is not there is told as a failed start of a vanished client', async () => {
+    it('F-2101 AC-19: a program that is not there is told as a failed start of a vanished client', async () => {
       const base = host.baseOf('harness');
       const acquired = await windows.acquire({
         ...base,
@@ -178,7 +178,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
     });
   });
 
-  describe('F-2305 a passphrase asked by ssh reaches the window through the askpass endpoint', () => {
+  describe('F-2307 a passphrase asked by ssh reaches the window through the askpass endpoint', () => {
     before(() => {
       const keyFile = path.join(host.runFolder, 'id_locked');
       host.generateKey(keyFile, PASSPHRASE);
@@ -188,7 +188,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       );
     });
 
-    it('F-2305: the question is shown as a masked input, and the answer lets the login finish', async () => {
+    it('F-2307 AC-3: the question is shown as a masked input, and the answer lets the login finish', async () => {
       const {connection, notices} = await window('locked');
       const waiting = connection.connect(new AbortController().signal);
       const asked = await eventually(() =>
@@ -212,7 +212,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       );
     });
 
-    it('F-2305: the question closes for every window once it is answered', async () => {
+    it('F-2102 AC-10: the question closes for every window once it is answered', async () => {
       const first = await window('locked');
       const second = await window('locked');
       const waiting = first.connection.connect(new AbortController().signal);
@@ -230,7 +230,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       strictEqual(closed, true);
     });
 
-    it('F-2305: the passphrase is kept in no record and no file the helper wrote', async () => {
+    it('F-2307 AC-24: the passphrase is kept in no record and no file the helper wrote', async () => {
       const {connection, notices} = await window('locked');
       const waiting = connection.connect(new AbortController().signal);
       await eventually(() => notices.some(notice => notice.type === 'prompt'));
@@ -255,7 +255,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
     });
   });
 
-  describe('F-2307 a host key that ssh does not know', () => {
+  describe('F-2305 a host key that ssh does not know', () => {
     let counter = 0;
 
     /** A `Host` of its own that asks about host keys and has never seen this one. */
@@ -285,12 +285,12 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       return {prompt, outcome};
     }
 
-    it('F-2307: yes to the question lets the login finish', async () => {
+    it('F-2305 AC-11: yes to the question lets the login finish', async () => {
       const result = await asked('yes');
       strictEqual(result.outcome.kind, 'connected');
     });
 
-    it('F-2307: the question is a pick of the fingerprint', async () => {
+    it('F-2305 AC-8: the question is a pick of the fingerprint', async () => {
       const result = await asked('yes');
       strictEqual(
         result.prompt?.type === 'prompt' && result.prompt.surface,
@@ -298,7 +298,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       );
     });
 
-    it('F-2307: no refuses the host, as a rejected host key', async () => {
+    it('F-2305 AC-12: no refuses the host, as a rejected host key', async () => {
       const result = await asked('no');
       deepStrictEqual(
         result.outcome.kind === 'failed' &&

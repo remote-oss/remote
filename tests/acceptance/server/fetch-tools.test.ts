@@ -158,7 +158,7 @@ function launcherOf(host: RunningHost, parameters: ScriptParameters): string {
 }
 
 for (const variant of fetchVariantsToRun(process.env)) {
-  describe(`F-2403 the download with the tool ${variant}`, function () {
+  describe(`the download with the tool ${variant}`, function () {
     this.timeout(3 * MINUTE);
     let host: RunningHost;
     let forward: ChildProcess | undefined;
@@ -189,18 +189,18 @@ for (const variant of fetchVariantsToRun(process.env)) {
       host.stop();
     });
 
-    it('F-2403: the host has the wget this variant names', () => {
+    it('contracts harness: the host has the wget this variant names', () => {
       deepStrictEqual(
         whereIs(host, 'wget') !== '',
         variant === 'busybox-wget' || variant === 'gnu-wget',
       );
     });
 
-    it('F-2403: the host has the curl this variant names', () => {
+    it('contracts harness: the host has the curl this variant names', () => {
       deepStrictEqual(whereIs(host, 'curl') !== '', variant === 'curl');
     });
 
-    it('F-2401: the probe lists exactly the downloaders of this variant', async () => {
+    it('contracts V2: the probe lists exactly the downloaders of this variant', async () => {
       deepStrictEqual(
         (await probed(host)).tools.filter(tool =>
           ['wget', 'curl'].includes(tool),
@@ -214,7 +214,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
       );
     });
 
-    it('F-2401: the probe tells a BusyBox wget from a GNU one', async () => {
+    it('contracts V2: the probe tells a BusyBox wget from a GNU one', async () => {
       deepStrictEqual(
         (await probed(host)).busyboxWget,
         variant === 'busybox-wget',
@@ -222,7 +222,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
     });
 
     if (variant !== 'none') {
-      it('F-2403: the host downloads the archive and installs it', async () => {
+      it('F-2403 AC-23: the host downloads the archive and installs it', async () => {
         const {outcome} = await installFrom(
           host,
           `http://127.0.0.1:${String(SOURCE_PORT)}/server.tar.gz`,
@@ -230,7 +230,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
         deepStrictEqual(outcome.kind, 'transferred');
       });
 
-      it('F-2403: the install folder holds the launcher of the stand-in', async () => {
+      it('contracts V4: the install folder holds the launcher of the stand-in', async () => {
         const {parameters} = await installFrom(
           host,
           `http://127.0.0.1:${String(SOURCE_PORT)}/server.tar.gz`,
@@ -243,7 +243,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
     }
 
     if (variant === 'gnu-wget') {
-      it('F-2403 BR-8: a wgetrc with an unreachable proxy is kept out with --no-config', async () => {
+      it('F-2403 AC-15: a wgetrc with an unreachable proxy is kept out with --no-config', async () => {
         host.onHost('sh', '-c', `printf '%s' '${WGETRC}' > ~/.wgetrc`);
         const {outcome} = await installFrom(
           host,
@@ -252,7 +252,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
         deepStrictEqual(outcome.kind, 'transferred');
       });
 
-      it('F-2403 BR-8: the same wgetrc is read when the configuration files are used', async () => {
+      it('F-2403 AC-16: the same wgetrc is read when the configuration files are used', async () => {
         host.onHost('sh', '-c', `printf '%s' '${WGETRC}' > ~/.wgetrc`);
         const {outcome} = await installFrom(
           host,
@@ -266,7 +266,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
     }
 
     if (variant === 'curl') {
-      it('F-2403 BR-8: a curlrc with an unreachable proxy is kept out with -q', async () => {
+      it('F-2403 AC-15: a curlrc with an unreachable proxy is kept out with -q', async () => {
         host.onHost('sh', '-c', `printf '%s' '${CURLRC}' > ~/.curlrc`);
         const {outcome} = await installFrom(
           host,
@@ -275,7 +275,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
         deepStrictEqual(outcome.kind, 'transferred');
       });
 
-      it('F-2403 BR-8: the same curlrc is read when the configuration files are used', async () => {
+      it('F-2403 AC-16: the same curlrc is read when the configuration files are used', async () => {
         host.onHost('sh', '-c', `printf '%s' '${CURLRC}' > ~/.curlrc`);
         const {outcome} = await installFrom(
           host,
@@ -289,7 +289,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
     }
 
     if (variant === 'none') {
-      it('F-2403: with no downloader and the client as a fallback the client downloads and copies', async () => {
+      it('F-2403 AC-11: with no downloader and the client as a fallback the client downloads and copies', async () => {
         const {outcome, phases} = await installFrom(host, sourceOnClient, {
           clientFallback: true,
         });
@@ -306,7 +306,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
         );
       });
 
-      it('F-2403, S043: with no downloader and no fallback the install fails as no downloader', async () => {
+      it('contracts V4: with no downloader and no fallback the install fails as no downloader', async () => {
         const {outcome} = await installFrom(host, sourceOnClient);
         deepStrictEqual(outcome, {
           kind: 'failed',

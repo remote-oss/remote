@@ -59,7 +59,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
     );
   }
 
-  it('F-2102: probes, installs and starts the server over the session, with the one login of the session', async () => {
+  it('F-2102 AC-10: probes, installs and starts the server over the session, with the one login of the session', async () => {
     const parameters = parametersFor();
     const probed = await probe(session.channel, parameters, CANCELLATION);
     const installed = await runStep(
@@ -94,7 +94,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
     deepStrictEqual(accepted, true);
   });
 
-  it('F-2102: a text input arrives as its UTF-8 bytes', async () => {
+  it('contracts S10: a text input arrives as its UTF-8 bytes', async () => {
     const outcome: string[] = [];
     const result = await session.channel.runScript(
       {
@@ -109,7 +109,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
     deepStrictEqual([outcome, result], [['16'], {kind: 'exited', status: 0}]);
   });
 
-  it('F-2102: a binary file input arrives byte for byte, every byte value included', async () => {
+  it('contracts S10: a binary file input arrives byte for byte, every byte value included', async () => {
     const folder = mkdtempSync(path.join(tmpdir(), 'shared-input-'));
     const localFile = path.join(folder, 'input');
     writeFileSync(
@@ -131,7 +131,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
     deepStrictEqual(lines, ['259']);
   });
 
-  it('F-2102: runs the scripts of two callers one after the other on the session', async () => {
+  it('contracts S9: runs the scripts of two callers one after the other on the session', async () => {
     const lines: string[] = [];
     const runs = ['one', 'two'].map(word =>
       session.channel.runScript(
@@ -149,7 +149,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
     deepStrictEqual(lines, ['one', 'one', 'two', 'two']);
   });
 
-  it('F-2102: sees an environment variable of the run and the exit status of the script', async () => {
+  it('contracts S10: sees an environment variable of the run and the exit status of the script', async () => {
     const lines: string[] = [];
     const result = await session.channel.runScript(
       {

@@ -110,7 +110,7 @@ The other `F-2407:` rows of this file are F-2407's (not in slice 1) and keep the
 | 269 | `F-2403 BR-8: a curlrc with an unreachable proxy is kept out with -q` | `F-2403 AC-15:` |
 | 278 | `F-2403 BR-8: the same curlrc is read when the configuration files are used` | `F-2403 AC-16:` |
 | 292 | `F-2403: with no downloader and the client as a fallback the client downloads and copies` | `F-2403 AC-11:` |
-| 309 | `F-2403, S043: with no downloader and no fallback the install fails as no downloader` | `F-2403 AC-9:` |
+| 309 | `F-2403, S043: with no downloader and no fallback the install fails as no downloader` | `contracts V4:` |
 
 Also rename that file's `describe` title `F-2403 the download with the tool …` to `the download with the tool …`.
 
@@ -119,6 +119,15 @@ Also rename that file's `describe` title `F-2403 the download with the tool …`
 | Line | Today's name (start) | New prefix |
 |---|---|---|
 | 49 | `F-2601 5.0: the window is one of the failing connects` | `contracts harness:` (it checks the launch, not the product) |
+
+**`tests/acceptance/server/login-shells.test.ts`** (landed after the first mapping; daedalus on #464)
+
+| Line | Today's name (start) | New prefix |
+|---|---|---|
+| 223 | `F-2102: a run's environment reaches the script as written` | `contracts H1: #443, ` |
+| 236 | `F-2102: a text input of 70 000 random characters arrives byte for byte` | `contracts H1: #443, ` |
+
+Both keep their text after the prefix; the full names are `contracts H1: #443, a run's environment reaches the script as written` and `contracts H1: #443, a text input of 70 000 random characters arrives byte for byte`. They check H1's `runScript` contract (environment additions, and a text input sent as UTF-8) over the shared session, on each login shell of #443, so neither proves an F-2102 AC.
 
 ## 3. Test table
 
