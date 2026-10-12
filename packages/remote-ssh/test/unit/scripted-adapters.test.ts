@@ -1,11 +1,15 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {licenceModalOf} from '../../src/surfaces/licence-modal.ts';
 import type {EditorAdapters} from '../../src/editor-surfaces.ts';
+import type {ProgressPort, ProgressRequest} from 'lib-authority';
+import type {ChannelPort, RevealableChannel} from '../../src/log-channel.ts';
 import {
   adaptersFor,
+  channelPortFor,
+  progressFor,
   type RecordLine,
   type ScriptEntry,
   scriptedAdapters,
@@ -641,5 +645,304 @@ describe('the scripted adapters answer from the script only', () => {
 
   it('#253: the terminals are the real ones', () => {
     strictEqual(scripted([]).adapters.terminals, REAL.terminals);
+  });
+});
+
+const LOG_FILE = '/run/log.txt';
+
+/** The variables of a harness run: the switch, the record file and the log file. */
+const SWITCHED_ON = {
+  REMOTE_OSS_ACCEPTANCE: '1',
+  REMOTE_OSS_ACCEPTANCE_RECORD: RECORD_FILE,
+  REMOTE_OSS_ACCEPTANCE_LOG: LOG_FILE,
+};
+
+/** Files that keep every append, by file. */
+class AppendedFiles {
+  readonly appended = new Map<string, string>();
+
+  readonly read = (): string => '';
+
+  readonly append = (file: string, text: string): void => {
+    this.appended.set(file, `${this.appended.get(file) ?? ''}${text}`);
+  };
+
+  /** The lines appended to a file. */
+  linesOf(file: string): string[] {
+    return (this.appended.get(file) ?? '').split('\n').filter(Boolean);
+  }
+}
+
+const REQUEST: ProgressRequest = {
+  title: 'Setting up SSH Host harness',
+  cancellable: false,
+  onCancel: () => undefined,
+  onDetails: () => undefined,
+};
+
+/** A real progress port that notes the updates it gets and the request it was given. */
+class NotingProgress implements ProgressPort {
+  readonly updates: Array<[string, boolean]> = [];
+
+  requests: ProgressRequest[] = [];
+
+  withProgress<Result>(
+    request: ProgressRequest,
+    task: (
+      update: (title: string, details: boolean) => void,
+    ) => Promise<Result>,
+  ): Promise<Result> {
+    this.requests.push(request);
+    return task((title, details) => {
+      this.updates.push([title, details]);
+    });
+  }
+}
+
+/** The task of the card's rows: it updates `A` with details, then `B` without, and answers 7. */
+function twoUpdates(
+  update: (title: string, details: boolean) => void,
+): Promise<number> {
+  update('A', true);
+  update('B', false);
+  return Promise.resolve(7);
+}
+
+describe('progressFor (card tooling-18)', () => {
+  const SWITCHED_RECORD = {
+    REMOTE_OSS_ACCEPTANCE: '1',
+    REMOTE_OSS_ACCEPTANCE_RECORD: RECORD_FILE,
+  };
+
+  it('D-85: with the switch off it is the real port itself', () => {
+    const real = new NotingProgress();
+    strictEqual(
+      progressFor(
+        {REMOTE_OSS_ACCEPTANCE_RECORD: RECORD_FILE},
+        real,
+        new AppendedFiles(),
+      ),
+      real,
+    );
+  });
+
+  it('D-85: with the switch on and no record file it is the real port itself', () => {
+    const real = new NotingProgress();
+    strictEqual(
+      progressFor({REMOTE_OSS_ACCEPTANCE: '1'}, real, new AppendedFiles()),
+      real,
+    );
+  });
+
+  it('D-85: with the switch on and an empty record file it is the real port itself', () => {
+    const real = new NotingProgress();
+    strictEqual(
+      progressFor(
+        {REMOTE_OSS_ACCEPTANCE: '1', REMOTE_OSS_ACCEPTANCE_RECORD: ''},
+        real,
+        new AppendedFiles(),
+      ),
+      real,
+    );
+  });
+
+  it('D-85: the record holds the title, then each phase with its details flag, in order', async () => {
+    const files = new AppendedFiles();
+    await progressFor(
+      SWITCHED_RECORD,
+      new NotingProgress(),
+      files,
+    ).withProgress(REQUEST, twoUpdates);
+    deepStrictEqual(
+      files.linesOf(RECORD_FILE).map(line => JSON.parse(line) as RecordLine),
+      [
+        {
+          surface: 'progress',
+          question: 'Setting up SSH Host harness',
+          answer: 'shown',
+          matched: true,
+        },
+        {
+          surface: 'progress',
+          question: 'A',
+          answer: 'shown',
+          matched: true,
+          details: true,
+        },
+        {
+          surface: 'progress',
+          question: 'B',
+          answer: 'shown',
+          matched: true,
+          details: false,
+        },
+      ],
+    );
+  });
+
+  it('D-85: the real port gets both updates, in order, with their details', async () => {
+    const real = new NotingProgress();
+    await progressFor(SWITCHED_RECORD, real, new AppendedFiles()).withProgress(
+      REQUEST,
+      twoUpdates,
+    );
+    deepStrictEqual(real.updates, [
+      ['A', true],
+      ['B', false],
+    ]);
+  });
+
+  it('D-85: the real port gets the request unchanged', async () => {
+    const real = new NotingProgress();
+    await progressFor(SWITCHED_RECORD, real, new AppendedFiles()).withProgress(
+      REQUEST,
+      twoUpdates,
+    );
+    deepStrictEqual(real.requests, [REQUEST]);
+  });
+
+  it("D-85: the result is the task's", async () => {
+    strictEqual(
+      await progressFor(
+        SWITCHED_RECORD,
+        new NotingProgress(),
+        new AppendedFiles(),
+      ).withProgress(REQUEST, twoUpdates),
+      7,
+    );
+  });
+
+  it('D-85: nothing is appended when the task ends', async () => {
+    const files = new AppendedFiles();
+    await progressFor(
+      SWITCHED_RECORD,
+      new NotingProgress(),
+      files,
+    ).withProgress(REQUEST, () => Promise.resolve(0));
+    strictEqual(files.linesOf(RECORD_FILE).length, 1);
+  });
+
+  it("D-85: a task that fails fails the progress with the task's error", async () => {
+    await rejects(
+      progressFor(
+        SWITCHED_RECORD,
+        new NotingProgress(),
+        new AppendedFiles(),
+      ).withProgress(REQUEST, () =>
+        Promise.reject(new Error('connect failed')),
+      ),
+      {message: 'connect failed'},
+    );
+  });
+});
+
+/** A real channel that notes what it is given. */
+class NotingChannel implements RevealableChannel {
+  readonly lines: string[] = [];
+
+  readonly shown: Array<boolean | undefined> = [];
+
+  disposed = 0;
+
+  appendLine(text: string): void {
+    this.lines.push(text);
+  }
+
+  show(preserveFocus?: boolean): void {
+    this.shown.push(preserveFocus);
+  }
+
+  dispose(): void {
+    this.disposed += 1;
+  }
+}
+
+/** A real channel port that hands out one noting channel and remembers its name. */
+class NotingChannels implements ChannelPort {
+  readonly channel = new NotingChannel();
+
+  readonly names: string[] = [];
+
+  createOutputChannel(name: string): RevealableChannel {
+    this.names.push(name);
+    return this.channel;
+  }
+}
+
+describe('channelPortFor (card tooling-18)', () => {
+  it('D-85: with the switch off it is the real port itself', () => {
+    const real = new NotingChannels();
+    strictEqual(
+      channelPortFor(
+        {REMOTE_OSS_ACCEPTANCE_LOG: LOG_FILE},
+        real,
+        new AppendedFiles(),
+      ),
+      real,
+    );
+  });
+
+  it('D-85: with the switch on and an empty log variable it is the real port itself', () => {
+    const real = new NotingChannels();
+    strictEqual(
+      channelPortFor(
+        {REMOTE_OSS_ACCEPTANCE: '1', REMOTE_OSS_ACCEPTANCE_LOG: ''},
+        real,
+        new AppendedFiles(),
+      ),
+      real,
+    );
+  });
+
+  it('D-85: with the switch on and no log variable it is the real port itself', () => {
+    const real = new NotingChannels();
+    strictEqual(
+      channelPortFor({REMOTE_OSS_ACCEPTANCE: '1'}, real, new AppendedFiles()),
+      real,
+    );
+  });
+
+  it('D-85: the file holds both lines, in order, each ending in a newline', () => {
+    const files = new AppendedFiles();
+    const channel = channelPortFor(
+      SWITCHED_ON,
+      new NotingChannels(),
+      files,
+    ).createOutputChannel('Remote - SSH');
+    channel.appendLine('first');
+    channel.appendLine('second');
+    strictEqual(files.appended.get(LOG_FILE), 'first\nsecond\n');
+  });
+
+  it('D-85: the real channel gets both lines too', () => {
+    const real = new NotingChannels();
+    const channel = channelPortFor(
+      SWITCHED_ON,
+      real,
+      new AppendedFiles(),
+    ).createOutputChannel('Remote - SSH');
+    channel.appendLine('first');
+    channel.appendLine('second');
+    deepStrictEqual(real.channel.lines, ['first', 'second']);
+  });
+
+  it('D-85: the real channel is opened under the name asked for', () => {
+    const real = new NotingChannels();
+    channelPortFor(SWITCHED_ON, real, new AppendedFiles()).createOutputChannel(
+      'Remote - SSH',
+    );
+    deepStrictEqual(real.names, ['Remote - SSH']);
+  });
+
+  it('D-85: show and dispose reach the real channel', () => {
+    const real = new NotingChannels();
+    const channel = channelPortFor(
+      SWITCHED_ON,
+      real,
+      new AppendedFiles(),
+    ).createOutputChannel('Remote - SSH');
+    channel.show(false);
+    channel.dispose();
+    deepStrictEqual([real.channel.shown, real.channel.disposed], [[false], 1]);
   });
 });
