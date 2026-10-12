@@ -7,6 +7,7 @@ import {
   licenceDialogOf,
   mitigationPickPortOf,
   platformPickPortOf,
+  promptEditorOf,
 } from '../../src/surfaces/editor-adapters.ts';
 
 type Editor = Pick<typeof vscode, 'window'>;
@@ -15,15 +16,11 @@ interface FakeItem {
   label: string;
 }
 
-/** A quick pick the test drives: what the adapter set on it, and the events it fires. */
-class FakeQuickPick {
-  title: string | undefined;
-  placeholder: string | undefined;
-  items: FakeItem[] = [];
-  activeItems: FakeItem[] = [];
-  selectedItems: FakeItem[] = [];
-  canSelectMany: boolean | undefined;
+/** What a quick pick and an input box share: the events the editor fires and the calls the adapter makes. */
+class FakeWidget {
   ignoreFocusOut: boolean | undefined;
+  placeholder: string | undefined;
+  title: string | undefined;
   shown = 0;
   hides = 0;
   disposals = 0;
@@ -55,11 +52,35 @@ class FakeQuickPick {
     this.disposals += 1;
   }
 
-  accept(item: FakeItem): void {
-    this.selectedItems = [item];
+  /** The user accepts: the listeners hear it. */
+  protected accepted(): void {
     for (const listener of this.accepts) {
       listener();
     }
+  }
+}
+
+/** A quick pick the test drives: what the adapter set on it, and the choice the test makes. */
+class FakeQuickPick extends FakeWidget {
+  items: FakeItem[] = [];
+  activeItems: FakeItem[] = [];
+  selectedItems: FakeItem[] = [];
+  canSelectMany: boolean | undefined;
+
+  accept(item: FakeItem): void {
+    this.selectedItems = [item];
+    this.accepted();
+  }
+}
+
+/** An input box the test drives: what the adapter set on it, and what the test types. */
+class FakeInputBox extends FakeWidget {
+  password: boolean | undefined;
+  value = '';
+
+  accept(typed: string): void {
+    this.value = typed;
+    this.accepted();
   }
 }
 
@@ -72,6 +93,7 @@ interface Shown {
 
 function fakeEditor(answer: (shown: Shown) => string | undefined) {
   const picks: FakeQuickPick[] = [];
+  const boxes: FakeInputBox[] = [];
   const errors: Shown[] = [];
   const warnings: Shown[] = [];
   function messageIn(record: Shown[]) {
@@ -97,11 +119,16 @@ function fakeEditor(answer: (shown: Shown) => string | undefined) {
         picks.push(pick);
         return pick;
       },
+      createInputBox: () => {
+        const inputBox = new FakeInputBox();
+        boxes.push(inputBox);
+        return inputBox;
+      },
       showErrorMessage: messageIn(errors),
       showWarningMessage: messageIn(warnings),
     },
   } as unknown as Editor;
-  return {editor, picks, errors, warnings};
+  return {editor, picks, boxes, errors, warnings};
 }
 
 function same(template: string): string {
@@ -363,5 +390,176 @@ describe('mitigationPickPortOf (the "More Actions..." picker, F-2602)', () => {
     const {result, pick} = shown(fakeEditor(() => undefined));
     pick.hide();
     deepStrictEqual(await result, undefined);
+  });
+});
+
+describe('promptEditorOf (the login questions, F-2305 and F-2306)', () => {
+  const NEVER = new AbortController().signal;
+  const REQUEST = {
+    title: 'Continue?',
+    placeholder: 'Choose',
+    items: [
+      {label: 'Yes', answer: 'yes' as const},
+      {label: 'No', answer: 'no' as const},
+    ],
+  };
+
+  function asked(
+    fake: ReturnType<typeof fakeEditor>,
+    controller?: AbortController,
+  ) {
+    const result = promptEditorOf(fake.editor, same).pick(
+      REQUEST,
+      controller?.signal ?? NEVER,
+    );
+    const [pick] = fake.picks;
+    if (pick === undefined) {
+      throw new Error('no quick pick was created');
+    }
+    return {result, pick};
+  }
+
+  function typedInto(
+    fake: ReturnType<typeof fakeEditor>,
+    controller?: AbortController,
+  ) {
+    const result = promptEditorOf(fake.editor, same).maskedInput(
+      {placeholder: 'Password: '},
+      controller?.signal ?? NEVER,
+    );
+    const [inputBox] = fake.boxes;
+    if (inputBox === undefined) {
+      throw new Error('no input box was created');
+    }
+    return {result, inputBox};
+  }
+
+  it('F-2305 BR-5: the pick closes when the user looks away', () => {
+    const {pick} = asked(fakeEditor(() => undefined));
+    deepStrictEqual([pick.ignoreFocusOut, pick.canSelectMany], [false, false]);
+  });
+
+  it('F-2305: the title, the placeholder and the items are shown in order, the first active', () => {
+    const {pick} = asked(fakeEditor(() => undefined));
+    deepStrictEqual(
+      [
+        pick.title,
+        pick.placeholder,
+        pick.items.map(item => item.label),
+        pick.activeItems.map(item => item.label),
+      ],
+      ['Continue?', 'Choose', ['Yes', 'No'], ['Yes']],
+    );
+  });
+
+  it('F-2305: a pick without a title has none', () => {
+    const fake = fakeEditor(() => undefined);
+    void promptEditorOf(fake.editor, same).pick(
+      {placeholder: 'Choose', items: REQUEST.items},
+      NEVER,
+    );
+    deepStrictEqual(fake.picks[0]?.title, undefined);
+  });
+
+  it('F-2305 BR-4: the item taken gives its answer', async () => {
+    const {result, pick} = asked(fakeEditor(() => undefined));
+    const second = pick.items[1];
+    if (second === undefined) {
+      throw new Error('no second item');
+    }
+    pick.accept(second);
+    deepStrictEqual(await result, 'no');
+  });
+
+  it('F-2305 BR-5: a pick hidden without a choice gives nothing', async () => {
+    const {result, pick} = asked(fakeEditor(() => undefined));
+    pick.hide();
+    deepStrictEqual(await result, undefined);
+  });
+
+  it('contracts: a cancellation hides the pick and gives nothing', async () => {
+    const controller = new AbortController();
+    const {result, pick} = asked(
+      fakeEditor(() => undefined),
+      controller,
+    );
+    controller.abort();
+    deepStrictEqual([await result, pick.hides], [undefined, 1]);
+  });
+
+  it('contracts: a cancellation that aborted before the pick shows nothing', async () => {
+    const fake = fakeEditor(() => undefined);
+    const controller = new AbortController();
+    controller.abort();
+    const result = promptEditorOf(fake.editor, same).pick(
+      REQUEST,
+      controller.signal,
+    );
+    deepStrictEqual([await result, fake.picks.length], [undefined, 0]);
+  });
+
+  it('F-2306: the input is masked and stays open when the user looks away', () => {
+    const {inputBox} = typedInto(fakeEditor(() => undefined));
+    deepStrictEqual(
+      [
+        inputBox.password,
+        inputBox.ignoreFocusOut,
+        inputBox.placeholder,
+        inputBox.title,
+        inputBox.shown,
+      ],
+      [true, true, 'Password: ', undefined, 1],
+    );
+  });
+
+  it('F-2306: the typed text is the answer', async () => {
+    const {result, inputBox} = typedInto(fakeEditor(() => undefined));
+    inputBox.accept('secret');
+    deepStrictEqual(await result, 'secret');
+  });
+
+  it('F-2306: an input hidden without being accepted gives nothing', async () => {
+    const {result, inputBox} = typedInto(fakeEditor(() => undefined));
+    inputBox.hide();
+    deepStrictEqual(await result, undefined);
+  });
+
+  it('contracts: a cancellation hides the input, gives nothing and disposes it', async () => {
+    const controller = new AbortController();
+    const {result, inputBox} = typedInto(
+      fakeEditor(() => undefined),
+      controller,
+    );
+    controller.abort();
+    deepStrictEqual(
+      [await result, inputBox.hides, inputBox.disposals],
+      [undefined, 1, 1],
+    );
+  });
+
+  it('contracts: a cancellation that aborted before the input shows nothing', async () => {
+    const fake = fakeEditor(() => undefined);
+    const controller = new AbortController();
+    controller.abort();
+    const result = promptEditorOf(fake.editor, same).maskedInput(
+      {placeholder: 'Password: '},
+      controller.signal,
+    );
+    deepStrictEqual([await result, fake.boxes.length], [undefined, 0]);
+  });
+
+  it('contracts: the input is disposed after an answer', async () => {
+    const {result, inputBox} = typedInto(fakeEditor(() => undefined));
+    inputBox.accept('secret');
+    await result;
+    deepStrictEqual(inputBox.disposals, 1);
+  });
+
+  it('F-3902 rule 8: the translation is the one the adapter was given', () => {
+    const fake = fakeEditor(() => undefined);
+    deepStrictEqual(
+      promptEditorOf(fake.editor, template => `<${template}>`).translate('x'),
+      '<x>',
+    );
   });
 });
