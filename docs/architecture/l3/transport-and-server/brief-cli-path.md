@@ -81,6 +81,38 @@ resolve).
 - **Reuse (F-2103 BR-8, BR-9):** one CLI process per SSH connection, each finding the running server. A reload in a
   window that keeps its connection keeps its CLI. The server outlives the CLI (BR-10).
 
+### 4a. The control protocol and the window's route (ruled on #412, cli-01 part 1)
+
+daedalus read `[cli]` at `07f806f999`. The CLI listens with `command-shell --on-host 127.0.0.1 --on-port 0
+--require-token <t> --cli-data-dir <d>` and prints `Listening on 127.0.0.1:<port>` on stdout once ready. Its port
+speaks **msgpack-RPC**, not the server protocol: `challenge_issue` and `challenge_verify`, then `serve`, which installs
+and starts the server and streams `serverlog {line, level}` notifications, then `servermsg {i, body}` frames carrying
+the editor's connection in both directions. S045 is not in the editor core (`[oss]`: the text appears only in the
+test resolver), so the extension is the `serve` caller and draws S045 from `serverlog`.
+
+- **The window's route: a local bridge, not a managed authority, and not the ExecServer route.**
+  - The extension holds one authenticated control connection to the CLI per connect. It reaches the CLI's port on the
+    host through W2's dialer (the SOCKS relay of the shared connection, or a terminal forward).
+  - It opens a **local listener on `127.0.0.1`**, ephemeral, and the resolver returns it as today's `Connected.address`.
+    Each socket the editor opens there gets its own `serve` socket id, and its bytes are relayed as `servermsg` frames.
+  - So `lib-authority`'s `Connected` and W2's contract stay as they are: one shape for every path, the same
+    connection-token check by the server, and the same lost-transport rule (the bridge's `onClosed`, contracts §W2).
+  - **Rejected:** `ManagedResolvedAuthority`, which would need a second `Connected` shape in `lib-authority` and a
+    second loss rule for one path. And `resolveExecServer` / `getRemoteExecServer`, which is the editor's contract for
+    *other* extensions that run processes on the host (F-1302's nested authorities, slice 3). It isn't the window's
+    route to its own server, and when slice 3 builds it, it can be served over this same control client.
+- **The challenge:** the extension signs only a CLI built **without `vsda`** (`sign_challenge` = base64url, no
+  padding, of SHA-256 of the challenge). A `vsda` CLI, which genuine VS Code's is, can be driven only by the editor,
+  so the CLI path never applies there. Row 5 already sends Microsoft's sources to direct install. A challenge the
+  extension can't satisfy is section 6's "CLI doesn't start" row: a fallback, logged.
+- **The codec: reuse `@msgpack/msgpack`** (ISC, no dependencies), bundled by esbuild (ADR-0002 rule 8), recorded as an
+  ADR-0005 reuse row. A binary codec is where a maintained implementation beats ours: integer widths, str8/16/32,
+  bin and ext. The RPC framing on top of it (ids, notifications, error replies) is ours and small. `compress` starts
+  `false`; ssh compresses if the user asks it to.
+- **Where it lives:** `lib-server` gains a `cli-control` component: the challenge, `serve`, the `serverlog` stream and
+  the error reply (`parseCliServeError`). `remote-ssh` owns the bridge listener next to W2's other paths. The card
+  numbering in section 10 shifts: cli-03 builds the control client, and cli-04 the bridge and the wiring.
+
 ## 5. Licence (R-68, V6)
 
 The CLI never installs a server whose terms need the user's acceptance. Row 5 sends any source that V6 doesn't classify
