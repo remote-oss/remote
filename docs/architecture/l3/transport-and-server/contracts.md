@@ -475,7 +475,7 @@ Rules:
   2026-10-08, corrected the same day: a plain same-host rule would fail every GitHub release download.)
 - Bounds are the library's (R-79): `DownloadRequest` carries `deadlineMilliseconds` (the whole transfer),
   `stallMilliseconds` (no bytes for that long ends it) and `maximumBytes` (the content length when known, else the
-  policy table's ceiling), plus cancellation; the port implements them and the library proves them with a fake port
+  library's default ceiling, 1 GiB; the values are lib-server's named defaults, ruled on #253 Q7), plus cancellation; the port implements them and the library proves them with a fake port
   that stalls, overruns and never answers. A connect never hangs on a download.
 - Manual bootstrap reads the fixed file and shows STR:S088 on every attempt (F-2406).
 - The commit is rewritten by editing the unpacked `product.json` only (F-3902 rule 9, pending the room's
