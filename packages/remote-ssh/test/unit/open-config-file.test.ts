@@ -28,6 +28,7 @@ type Call =
   | {call: 'pick'; choice: FileChoice}
   | {call: 'open'; file: string; opened: OpenedEditor}
   | {call: 'insert'; opened: OpenedEditor; template: Template}
+  | {call: 'exists'; path: string}
   | {call: 'missing'; file: string}
   | {call: 'folder'; path: string; mode: number}
   | {call: 'file'; path: string; mode: number}
@@ -71,7 +72,10 @@ function handlerOf(world: World) {
     },
   };
   const files: ConfigFiles = {
-    exists: path => Promise.resolve(world.existing.has(path)),
+    exists: path => {
+      world.calls.push({call: 'exists', path});
+      return Promise.resolve(world.existing.has(path));
+    },
     missingFolders: file => {
       world.calls.push({call: 'missing', file});
       const missing: string[] = [];
@@ -197,6 +201,7 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
   it('F-2203 AC-3: an existing user file is opened, with nothing created and no template', async () => {
     const world = worldWith({existing: new Set([PLACES.userFile])});
     deepStrictEqual(await runTaking(world, PLACES.userFile), [
+      {call: 'exists', path: PLACES.userFile},
       {call: 'open', file: PLACES.userFile, opened: {file: PLACES.userFile}},
     ]);
   });
@@ -254,6 +259,7 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
   it('F-2203 AC-10: an existing system file is opened and nothing is created', async () => {
     const world = worldWith({existing: new Set([PLACES.systemFile])});
     deepStrictEqual(await runTaking(world, PLACES.systemFile), [
+      {call: 'exists', path: PLACES.systemFile},
       {
         call: 'open',
         file: PLACES.systemFile,
@@ -268,7 +274,7 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
       (await runTaking(world, PLACES.systemFile))
         .filter(call => call.call !== 'missing')
         .map(call => call.call),
-      ['file', 'open', 'insert'],
+      ['exists', 'file', 'open', 'insert'],
     );
   });
 
@@ -461,6 +467,7 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
     const world = worldWith({existing: new Set([HOME])});
     await runTaking(world, PLACES.userFile);
     deepStrictEqual([...new Set(world.calls.map(call => call.call))].sort(), [
+      'exists',
       'file',
       'folder',
       'insert',
