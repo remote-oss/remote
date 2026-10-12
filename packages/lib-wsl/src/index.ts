@@ -4,3 +4,4 @@
  */
 export {type OnlineResult, type OnlineRow, parseOnline} from './online.ts';
 export {parseStatus, type WslStatus} from './status.ts';
+export {decodeManagementOutput} from './decode.ts';
