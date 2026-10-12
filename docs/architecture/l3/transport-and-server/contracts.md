@@ -135,7 +135,10 @@ The argument rules:
 - `~/` (and `~\` on Windows) in `configFile` expands against the home folder with the platform's separator;
   `C:/x` stays as written (F-2201 Q4, lead's ruling 2026-10-07).
 - `buildOptionsQuery` (target, `configFile`, the accepted `ssh`, home folder, platform) gives the `ssh -G` run of
-  S4's `effectiveOptions`: `-F` when set, `-G`, the host.
+  S4's `effectiveOptions`: `-F` when set, `-G`, then the target exactly as the connection gives it (`-l <user>` and
+  `-p <port>` only when the target carries them, then the host). OpenSSH computes `User`, `Port` and every `Match
+  user` block from those arguments, so a query without them reports options the connection's `ssh` does not apply
+  (ruled on #253, connect-14).
 
 Never: add `ControlMaster`, `ControlPath`, `ControlPersist`, host-key, identity or proxy options; quote for a shell.
 
@@ -725,6 +728,18 @@ Rules:
 - `cancel` is called by B on window teardown or "Close Remote Connection". The SSH progress offers no Cancel
   (F-2304 BR-2), and a running host-side download is not stopped (F-2304 BR-8).
 - Connected carries `tunnelFeatures` from W3 next to the tunnel factory (F-8202).
+- Order before the connection (ruled on #253, connect-14): validate, the pre-connection script, R4's terms (with the
+  platform picker), then S1's check and S4's lookup, then the lease. R4 comes before S1 because no `ssh` process may
+  run before the picker is answered, the `-V` check included (F-2206 AC-2, F-2101 AC-28).
+- The facts the lookup gives (the accepted programs, the effective options) belong to one connect: the connector
+  makes the steps of each connect afresh, and nothing found by one connect is read by another. The probe's and the
+  tunnel's bounds follow the lookup's `ConnectTimeout` (F-2105 BR-1), so the pipeline reads them after the lookup.
+- A lookup that fails is classified by S5 as the connection's own `ssh` run would be (`classify`, purpose
+  `connection`): ssh's complaint goes to the log, and the dialog shows what that complaint gives (F-2201 7.E6 and
+  AC-26: a refused file shows no reason). A lookup past its bound fails as `timeout` with no reason.
+- The login's questions reach B's prompt surface from the moment the connection is acquired until the login ends,
+  with the connection's notices, `answer` and `refuse`; a question nobody can see would be a wait without a bound
+  (R-79).
 - `Connected` is data; the pipeline's internal step result carries a `release` handle beside it, which the
   connector keeps for `cancel` and window teardown (connect-02, accepted 2026-10-08).
 - Every attempt makes a fresh connection when S9 reports the transport lost (F-2505 BR-1).

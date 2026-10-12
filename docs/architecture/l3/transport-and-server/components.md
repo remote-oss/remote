@@ -118,9 +118,10 @@ Blocked: option (a), the shipped tunnel executable, has no client relay mode and
 B's resolver calls R1. R1 runs these steps:
 1. S2 validates the target.
 2. R3 runs the pre-connection script, if one is set.
-3. S1 locates the client.
-4. R1 takes a lease from S9, or opens a direct S3 session in terminal mode. Prompts go S6 → S7 or S8.
-5. R4 decides the platform.
+3. R4 decides the platform from the settings, and asks the user when they do not say (F-2206 AC-2: before any `ssh`
+   process, including S1's check; F-2101 AC-28).
+4. S1 locates the client, and S4 looks up the host's effective options with that client (`ssh -G`).
+5. R1 takes a lease from S9, or opens a direct S3 session in terminal mode. Prompts go S6 → S7 or S8.
 6. V2 probes the host over S10.
 7. V3 plans the install. V6 gates the licence, V5 locks, V4 transfers.
 8. V7 starts or reuses the server.

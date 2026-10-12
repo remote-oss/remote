@@ -64,3 +64,48 @@ pipeline turns a throw into `unknown`.
    answers `undefined` (cancel) meanwhile?
 3. **The lookup's failure kind.** `invalidSetting` with no reason, or a reason id (does F-2202 name the "can't read the
    configuration" text)?
+
+## Design check (athena, 2026-10-12, #253)
+
+Accepted with these rulings; the contract text is in `contracts.md` §2 (S2) and §7 (R1) and `components.md`'s flow.
+
+0. **The step order is wrong on main, and part E fixes it first.** `runSteps` calls `locateClient` before
+   `decideTerms`, so the `-V` check runs before the platform picker. F-2206 AC-2 and F-2101 6.5/AC-28 put the picker
+   before any `ssh` process, the check included. The order is: validate, pre-connection script, `decideTerms`,
+   `locateClient` (with the lookup), `openConnection`. `connect.test.ts`'s order row changes with it, and a test
+   pins that a cancelled pick runs no program.
+1. **The lookup inside `locateClient`: yes.** The state must be per connect by construction: the connector takes a
+   factory and makes the steps of each connect from it, so the state lives in that connect's closure. A state the
+   connector shares between connects, overwritten at each start, is not enough, since a teardown's connect and the
+   next one can overlap. The throw on a missing field stays; it only guards against a defect.
+   - **The bounds follow the lookup.** The probe's and the tunnel's limits come from
+     `stepLimitsFor(effectiveConnectTimeoutSeconds(...))` with the looked-up `ConnectTimeout`, so the pipeline reads
+     them after `locateClient`. Today's fixed `options.limits` cannot carry a per-host value.
+   - **The query carries the target's `-l` and `-p`** exactly as the connection does. Checked on OpenSSH 10.2p1:
+     with `Match user alice` → `ConnectTimeout 7` and `Host h1` → `User bob`, `ConnectTimeout 9`, `ssh -G h1` prints
+     `user bob`, `connecttimeout 9`, but `ssh -G -l alice h1` prints `user alice`, `connecttimeout 7`.
+     `buildOptionsQuery` gets this change in E6a.
+2. **The prompt surface is part E; the platform picker is its own card, and E6c waits for it.**
+   - Prompt surface: a login question nobody sees is a wait with no bound. The connection step's `onNotice`
+     dependency becomes one that attaches the surface (`attachPromptSurface`) to the acquired connection's notices,
+     `answer` and `refuse`, from the acquire until the login ends. Notices alone cannot answer anything.
+   - Platform picker: B's `ssh.connect-flows` owns `pickRemotePlatform` (windows-and-explorer contracts §3.2).
+     daedalus writes its card now: F-2206 5.2 step 2, AC-2, AC-9.
+   - No "cancel" interim. A picker that always answers `undefined` would show F-2206 AC-9's "Connecting was
+     canceled." to a user who cancelled nothing.
+   - The placeholder "Select the platform of the remote host "{0}"" has no string id in the spec. It becomes our own
+     string-table entry (key = the English text, all 15 bundles), as with the #141 brief's ruling 2. "Linux",
+     "Windows" and "macOS" are names and stay as they are.
+3. **No `invalidSetting`.** The file is ssh's, not one of our settings, and the reference shows ssh's own refusal as
+   F-2201 7.E6/AC-26: "Could not establish connection to "<host>"." with no reason, and ssh's complaint in the log.
+   - A failed lookup is classified by lib-ssh's `classify` (purpose `connection`, the connect's mode), exactly as
+     the connection's own run would be, and its error lines go to the log.
+   - A run that exits 0 but whose text does not parse fails as `unknown` with no reason.
+   - A lookup past `CLIENT_CHECK_MILLISECONDS` fails as `timeout` with no reason.
+   - Follow-up, not this card: `classify` matches only `Permission denied (`. F-2201 7.E8's mode-000 row (AC-35)
+     wants the reason "Permission denied." for ssh's "Can't open user config file …: Permission denied". This
+     affects the connection's own run as much as the lookup's. It needs a lib-ssh card.
+
+Units: E6a = the order fix, the steps factory, the state and the lookup (with `buildOptionsQuery`'s `-l`/`-p` and
+the per-connect bounds); E6b = `requestFor`; E6c = `extension.ts`, the prompt surface's attachment, and the picker
+once its card is merged.
