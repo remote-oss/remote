@@ -179,7 +179,9 @@ keep F-2103's observable rows (§5, §6, BR-1 to BR-12) as the CLI path's accept
    - the BR-13 log line for an editor without the field.
    They follow part F's harness rulings (#253: the remote window for success, a local window for failures).
 
-Cards 2 to 5 wait for step 0 and for cli-01's amendment. Card 1 can start at once.
+Card 1 can start at once. Cards 2 and 3 are pure or unwired (no caller passes the CLI mode until cli-04), so they
+merge after cli-01's amendment (#422) without waiting for step 0: they change no behaviour. **Cards 4 and 5, the
+wiring and its acceptance rows, merge only after step 0** (narrowed on #426: the gate is on behaviour, not on code).
 
 ## 11. Where the harness gets a CLI (the user's decision)
 
