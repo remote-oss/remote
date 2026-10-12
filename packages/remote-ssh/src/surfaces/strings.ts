@@ -12,8 +12,8 @@ export function filled(
   template: string,
   values: readonly string[] = [],
 ): string {
-  return values.reduce(
-    (text, value, index) => text.replaceAll(`{${String(index)}}`, value),
-    translate(template),
+  return translate(template).replace(
+    /\{(\d+)\}/g,
+    (place: string, digits: string) => values[Number(digits)] ?? place,
   );
 }
