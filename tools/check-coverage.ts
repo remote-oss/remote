@@ -100,11 +100,11 @@ function unescaped(text: string): string {
 
 const NAME_PATTERN = /\bit\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g;
 
-/** The names of the `it(` rows of a file; a template literal with a placeholder is built at run time and left out. */
+/** The names of the `it(` rows of a file; a template literal with a placeholder is read as the text before the first one. */
 function rowNamesOf(source: string): string[] {
-  return [...source.matchAll(NAME_PATTERN)]
-    .filter(match => !(match[1] === '`' && (match[2] ?? '').includes('${')))
-    .map(match => unescaped(match[2] ?? ''));
+  return [...source.matchAll(NAME_PATTERN)].map(match =>
+    unescaped((match[2] ?? '').split('${')[0] ?? ''),
+  );
 }
 
 /** The `cite` fields of the failure suite's cases file. */

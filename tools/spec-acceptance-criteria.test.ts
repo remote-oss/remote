@@ -31,6 +31,42 @@ describe('acceptanceCriteriaOf', () => {
   });
 });
 
+describe('acceptanceCriteriaOf, a removed criterion', () => {
+  /** The criteria of a body whose second line is `line`. */
+  function removed(line: string): string[] {
+    return acceptanceCriteriaOf(
+      [
+        '- **F-2304.AC-1** Given a host.',
+        line,
+        '- **F-2304.AC-3** Given another.',
+      ].join('\n'),
+      'F-2304',
+    );
+  }
+
+  it('#142: a line that starts with Removed after the id is skipped', () => {
+    deepStrictEqual(removed('- **F-2304.AC-2** Removed: not known.'), [
+      'F-2304.AC-1',
+      'F-2304.AC-3',
+    ]);
+  });
+
+  it('#142: a line with two spaces before Removed is skipped', () => {
+    deepStrictEqual(removed('- **F-2304.AC-2**  Removed: not known.'), [
+      'F-2304.AC-1',
+      'F-2304.AC-3',
+    ]);
+  });
+
+  it('#142: a line that says removed later is kept', () => {
+    deepStrictEqual(removed('- **F-2304.AC-2** Given a host, then removed.'), [
+      'F-2304.AC-1',
+      'F-2304.AC-2',
+      'F-2304.AC-3',
+    ]);
+  });
+});
+
 describe('the features of slice 1', () => {
   it('#142: there are twenty, F-3901 and F-3903 among them', () => {
     deepStrictEqual(

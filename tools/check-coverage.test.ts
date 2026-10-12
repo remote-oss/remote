@@ -277,12 +277,50 @@ describe('check-coverage', () => {
       deepStrictEqual(problems(), []);
     });
 
-    it('#142 2: a name built at run time is left out', () => {
+    it('#142 4: a unit template name is read by the text before its placeholder', () => {
+      workspace.write(
+        'packages/remote-x/test/unit/x.test.ts',
+        'it(`F-2601 AC-12: case ${name}`, () => {});',
+      );
+      tagged('F-2601.AC-12\tunit\t');
+      deepStrictEqual(problems(), []);
+    });
+
+    it('#142 4: an acceptance template name cites its criteria before the placeholder', () => {
       workspace.write(
         'tests/acceptance/server/x.test.ts',
-        'it(`F-2409: for ${name}`, () => {});',
+        'it(`F-2601 AC-1, AC-3: ${text}`, () => {});',
+      );
+      tagged('F-2601.AC-1\tacceptance\t', 'F-2601.AC-3\tacceptance\t');
+      deepStrictEqual(problems(), []);
+    });
+
+    it('#142 4: a template name that starts with a placeholder cites nothing', () => {
+      workspace.write(
+        'packages/remote-x/test/unit/x.test.ts',
+        'it(`${name}: something`, () => {});',
       );
       tagged('F-2601.AC-1\ttodo\t');
+      deepStrictEqual(problems(), []);
+    });
+
+    it('#142 4: an acceptance template name with a placeholder in the number fails', () => {
+      workspace.write(
+        'tests/acceptance/server/x.test.ts',
+        'it(`F-2409.AC-${n}: x`, () => {});',
+      );
+      tagged('F-2409.AC-1\ttodo\t');
+      deepStrictEqual(problems(), [
+        'tests/acceptance/server/x.test.ts: row "F-2409.AC-" names F-2409 without an AC',
+      ]);
+    });
+
+    it('#142 4: a unit template name with a placeholder in the number passes', () => {
+      workspace.write(
+        'packages/remote-x/test/unit/x.test.ts',
+        'it(`F-2409.AC-${n}: x`, () => {});',
+      );
+      tagged('F-2409.AC-1\ttodo\t');
       deepStrictEqual(problems(), []);
     });
 
