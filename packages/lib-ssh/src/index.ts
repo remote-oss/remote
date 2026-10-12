@@ -190,3 +190,7 @@ export {
 } from './terminal/login-terminal.ts';
 export {PlainTextFilter} from './terminal/plain-text.ts';
 export {TerminalStream} from './terminal/terminal-stream.ts';
+export {
+  TerminalSessionRunner,
+  type TerminalRunnerOptions,
+} from './terminal/terminal-runs.ts';
