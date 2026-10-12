@@ -363,6 +363,24 @@ lease list that S9 uses for login ownership. Lifetime, ownership and how it dies
 
 ### S10 ssh-host-channel
 
+**Login shells that are not POSIX** (ruled 2026-10-12, the user's question via hermes; measured in Alpine 3.22 with
+sh/dash, bash, zsh, mksh, tcsh, csh and fish):
+- **A remote command is safe in every shell when it is one fixed text: `sh`, then single-quoted words only**, with no
+  `$`, backquote, `!`, `~` or glob outside the quotes. ssh runs it as `<login shell> -c '<command>'`, and every shell
+  above parses that text identically. Measured: the ssh-32 command `sh -c 'eval "$(dd bs=1 count=<n> 2>/dev/null)"'`
+  with its prelude and input on stdin, and `sh -s` with a script on stdin, both give the right result through all seven.
+  Every remote command S2 builds keeps that form; a row per form runs it through tcsh and fish.
+- **A session with no remote command is not safe today** (the shared session, F-2704 BR-1's local-server mode): the
+  login shell itself reads what `commandsFor` writes. Measured: tcsh and csh reject the assignment prefix
+  (`A=v: Command not found.`, every run fails), and fish rejects `"$?"` (no end marker, so every run waits for its
+  deadline). F-2704 BR-1 records the reference timing out with fish. **Required:** the session's first command hands
+  every later command to POSIX `sh`, after the login profile so F-2704 BR-4's first environment layer holds.
+  - A plain `exec sh` first line is **not** enough: dash, csh and tcsh had already read the rest of stdin into their own
+    buffer (the new `sh` read nothing), and fish parses its whole input before running any of it (the `$?` error came
+    first). The mechanism must not depend on how much stdin the login shell reads ahead: one first line, of the fixed
+    form above, that starts `sh` on a stream of its own. The card writes it and proves it with a real `ssh` login per
+    shell: bash, zsh, a dash-like `sh`, tcsh and fish, with the profile's environment reaching a script.
+
 **No secret in any process's command line** (ruled on #412, daedalus's finding for cli-03b; measured with `ps` on
 OpenSSH hosts): a `ScriptRequest`'s `environment` never appears in an argv, on the host or on the client.
 - **On a session that reads commands on stdin** (the shared session's `ShellRuns`, terminal mode's runner):
