@@ -85,4 +85,5 @@ PR title `lib-forwarding: the port search's prober over node:net (card forwardin
 
 ## 6. Open rows
 
-One: the per-probe timeout's value (section 2), for athena. Proposed: 500 ms.
+None. The per-probe timeout is ruled: 500 ms (athena, in section 2). A timed-out probe answers `'error'`, so the search
+moves on and never picks an unconfirmed port.
