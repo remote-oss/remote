@@ -221,6 +221,33 @@ describe('the window side of the shared connection (S9)', () => {
     });
   });
 
+  it('#253 Q12: a window that waited and then takes over the login is told, once', async () => {
+    await connectFirst();
+    const second = await acquired();
+    const heard = notices(second);
+    void second.connect(new AbortController().signal);
+    await drive();
+    sshRuns.started[0]?.exit(255);
+    await drive();
+    deepStrictEqual(
+      heard.filter(notice =>
+        ['waitingForOtherWindow', 'loginOwned'].includes(notice.type),
+      ),
+      [{type: 'waitingForOtherWindow'}, {type: 'loginOwned'}],
+    );
+  });
+
+  it('#253 Q12: a window that owns the login from its first request is never told it took over', async () => {
+    const connection = await acquired();
+    const heard = notices(connection);
+    void connection.connect(new AbortController().signal);
+    await drive();
+    deepStrictEqual(
+      heard.filter(notice => notice.type === 'loginOwned'),
+      [],
+    );
+  });
+
   it('reports a failed login to the window that asked for it, with the kind and the reason', async () => {
     const {outcome} = await connectFirst();
     sshRuns.started[0]?.error('dev@harness: Permission denied (publickey).\n');

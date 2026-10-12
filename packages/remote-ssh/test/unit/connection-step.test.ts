@@ -12,6 +12,7 @@ import {
   type LoginLease,
   openConnectionStep,
 } from '../../src/pipeline/connection-step.ts';
+import type {PhaseEvent} from '../../src/pipeline/connect.ts';
 import type {ConnectInput, ConnectionTerms} from '../../src/pipeline/steps.ts';
 
 const INPUT: ConnectInput = {
@@ -36,6 +37,8 @@ class FakeLease {
   readonly payload = {socksPort: 41000};
   released = 0;
   readonly asked: PlainData[] = [];
+  /** What the helper answers to the first requests to connect, in order; it accepts after these. */
+  connectReplies: PlainData[] = [];
   private readonly listeners: Array<(event: unknown) => void> = [];
 
   onEvent(listener: (event: unknown) => void): void {
@@ -45,7 +48,10 @@ class FakeLease {
   request(body: PlainData): Promise<unknown> {
     this.asked.push(body);
     const type = (body as {type: string}).type;
-    const reply = type === 'connect' ? {type: 'accepted'} : {type: 'accepted'};
+    const reply =
+      type === 'connect'
+        ? (this.connectReplies.shift() ?? {type: 'accepted'})
+        : {type: 'accepted'};
     return Promise.resolve({kind: 'reply', body: reply});
   }
 
@@ -75,6 +81,7 @@ interface Fixture {
   logins: {attached: number; disposed: number; inputs: ConnectInput[]};
   login: LoginLease | undefined;
   logged: () => string[];
+  phases: PhaseEvent[];
   channelsFor: unknown[];
   termsAsked: ConnectionTerms[];
   connecting: (
@@ -98,7 +105,11 @@ function fixture(
   const sink = new MemorySink();
   const channelsFor: unknown[] = [];
   const termsAsked: ConnectionTerms[] = [];
+  const phases: PhaseEvent[] = [];
   const step = openConnectionStep({
+    onPhase: event => {
+      phases.push(event);
+    },
     acquire: request => {
       requests.push(request);
       return Promise.resolve(
@@ -161,6 +172,7 @@ function fixture(
     notices,
     logins,
     logged: () => sink.lines.map(line => line.message),
+    phases,
     get login() {
       return held.login;
     },
@@ -280,6 +292,40 @@ describe('the connection step', () => {
     const {lease, notices} = await loggedIn();
     lease.emit({type: 'waitingForOtherWindow'});
     deepStrictEqual(notices, []);
+  });
+
+  it('F-2102 5.2 step 3: a login another window holds is shown as the waiting stage', async () => {
+    const {lease, connecting, phases} = fixture();
+    void connecting();
+    await settled();
+    lease.emit({type: 'waitingForOtherWindow'});
+    deepStrictEqual(phases, [{kind: 'waitingForOtherWindow'}]);
+  });
+
+  it('F-2102 5.3 step 4: when the login falls to this window the stage is initializing again', async () => {
+    const ready = fixture();
+    ready.lease.connectReplies = [
+      {type: 'refused', reason: 'alreadyConnecting'},
+    ];
+    void ready.connecting();
+    await settled();
+    ready.lease.emit({type: 'ownerChanged', owner: ready.lease.leaseId});
+    await settled();
+    deepStrictEqual(ready.phases, [
+      {kind: 'waitingForOtherWindow'},
+      {kind: 'initializing'},
+    ]);
+  });
+
+  it('contracts: a notice after the login ended reports no stage', async () => {
+    const {lease, phases} = await loggedIn();
+    lease.emit({type: 'waitingForOtherWindow'});
+    deepStrictEqual(phases, []);
+  });
+
+  it('F-2102 5.2 step 3: a window that owns the login from the start reports no stage', async () => {
+    const {phases} = await loggedIn();
+    deepStrictEqual(phases, []);
   });
 
   it('connect-14: shows the questions from the acquire, once, for this connect', async () => {

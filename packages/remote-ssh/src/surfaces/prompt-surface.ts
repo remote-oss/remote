@@ -8,7 +8,7 @@
 
 import {classifyPrompt, type PromptSurface, type PromptText} from 'lib-ssh';
 import type {LoginLease} from '../pipeline/connection-step.ts';
-import {textOf, WAITING_TEMPLATE} from './prompt-strings.ts';
+import {textOf} from './prompt-strings.ts';
 import type {Translate} from './strings.ts';
 
 /** One pick as the editor shows it. */
@@ -37,8 +37,6 @@ export interface PromptEditor {
     request: {placeholder: string},
     cancellation: AbortSignal,
   ): Promise<string | undefined>;
-  /** Shows that this window waits for another one; the returned handle takes the text down. */
-  showWaiting(text: string): {dispose(): void};
   /** The text for the display language of a template. */
   translate: Translate;
 }
@@ -113,12 +111,6 @@ export function attachPromptSurface(
   options: PromptSurfaceOptions,
 ): AttachedPromptSurface {
   const open = new Map<number, AbortController>();
-  const state: {waiting: {dispose(): void} | undefined} = {waiting: undefined};
-
-  function stopWaiting(): void {
-    state.waiting?.dispose();
-    state.waiting = undefined;
-  }
 
   function settle(promptId: number, answer: string | undefined): void {
     // A lease that has gone takes no answer; the connect then ends by itself.
@@ -153,7 +145,6 @@ export function attachPromptSurface(
   const stopListening = lease.onNotice(notice => {
     switch (notice.type) {
       case 'prompt':
-        stopWaiting();
         void show(notice.promptId, notice.text);
         break;
       case 'promptClosed':
@@ -161,14 +152,10 @@ export function attachPromptSurface(
         open.delete(notice.promptId);
         break;
       case 'waitingForOtherWindow':
-        stopWaiting();
-        state.waiting = editor.showWaiting(editor.translate(WAITING_TEMPLATE));
-        break;
       case 'ownerChanged':
-        stopWaiting();
+      case 'loginOwned':
         break;
       default:
-        stopWaiting();
         takeDownAll();
     }
   });
@@ -176,7 +163,6 @@ export function attachPromptSurface(
   return {
     dispose: () => {
       stopListening();
-      stopWaiting();
       takeDownAll();
     },
   };
