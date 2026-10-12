@@ -88,8 +88,9 @@ resolve).
 
 ### 4a. The control protocol and the window's route (ruled on #412, cli-01 part 1)
 
-daedalus read `[cli]` at `07f806f999`. The CLI listens with `command-shell --on-host 127.0.0.1 --on-port 0
---require-token <t> --cli-data-dir <d>` and prints `Listening on 127.0.0.1:<port>` on stdout once ready. Its port
+daedalus read `[cli]` at `07f806f999`. The CLI listens with `VSCODE_CLI_REQUIRE_TOKEN=<t> command-shell --on-host
+127.0.0.1 --on-port 0 --cli-data-dir <d>` (the token in the environment, never on the command line where `ps` shows
+it, and never omitted, since a CLI without a token accepts any caller; themis on #422) and prints `Listening on 127.0.0.1:<port>` on stdout once ready. Its port
 speaks **msgpack-RPC**, not the server protocol: `challenge_issue` and `challenge_verify`, then `serve`, which installs
 and starts the server and streams `serverlog {line, level}` notifications, then `servermsg {i, body}` frames carrying
 the editor's connection in both directions. S045 is not in the editor core (`[oss]`: the text appears only in the
