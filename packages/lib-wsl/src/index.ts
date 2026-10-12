@@ -18,3 +18,11 @@ export {
   sortOnlineCatalogue,
 } from './install.ts';
 export {multiDistroAllowed, windowsBuildFromRelease} from './windows-build.ts';
+export {
+  distroToShare,
+  isWindowsMountShape,
+  parseWslpathOutput,
+  shareToDistro,
+  type ShareResult,
+  type WslpathResult,
+} from './share-path.ts';
