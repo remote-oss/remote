@@ -9,7 +9,7 @@
 
 import type {Connected, Failed} from 'lib-authority';
 import type {Logger} from 'lib-log';
-import type {TransferPhase} from 'lib-server';
+import type {StartedServer, TransferPhase} from 'lib-server';
 import {
   type FailureContext,
   type FailureDetail,
@@ -53,6 +53,14 @@ export interface ConnectOptions {
 type Interrupted = 'cancelled' | 'timeout';
 
 /** Whether the signal has been aborted by now; read through a call because it changes while a step runs. */
+/** The port of a server that listens on one; a server on a socket must not reach a path that needs a port. */
+export function portOf(server: StartedServer): number {
+  if (server.endpoint.kind !== 'port') {
+    throw new Error('a socket-mode server reached the port path');
+  }
+  return server.endpoint.port;
+}
+
 function isAborted(signal: AbortSignal): boolean {
   return signal.aborted;
 }
@@ -346,7 +354,7 @@ async function runSteps(
   }
   await quietly('the shared record', () =>
     lease.storeSharedRecord({
-      remotePort: started.server.port,
+      remotePort: portOf(started.server),
       operatingSystem: host.operatingSystem,
       architecture: host.architecture,
       temporaryFolder: host.temporaryFolder,
@@ -363,7 +371,7 @@ async function runSteps(
       connectionToken: started.server.connectionToken,
       trusted: false,
     },
-    serverPort: started.server.port,
+    serverPort: portOf(started.server),
     release: () => {
       tunnel.value.close();
       lease.release();

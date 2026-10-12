@@ -70,7 +70,7 @@ export const REUSE: Plan = {
 export const STARTED = {
   kind: 'started',
   server: {
-    port: 4321,
+    endpoint: {kind: 'port', port: 4321},
     processId: 77,
     connectionToken: 'secret-token',
     reused: false,

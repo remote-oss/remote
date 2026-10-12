@@ -15,6 +15,7 @@ import {
   lockLoop,
   parametersFor,
   placeStandInArchive,
+  portOfStarted,
 } from './support.ts';
 
 const SILENT = createLogger(undefined, {minimumLevel: () => 'info'});
@@ -27,6 +28,7 @@ const OPTIONS: RuntimeOptions = {
   defaultExtensions: [],
   fileWatcherPollingMilliseconds: 0,
   readySeconds: 10,
+  socketMode: false,
 };
 
 /** The outcome of a start that found the server of `outcome` already running. */
@@ -86,7 +88,7 @@ describe('F-2409 the start of the server', function () {
   it('F-2409: starts the server and reads its port from the ready line', async () => {
     const outcome = await start(await installed(), {portRange: '30000-30010'});
     deepStrictEqual(
-      outcome.kind === 'started' ? outcome.server.port : outcome,
+      outcome.kind === 'started' ? portOfStarted(outcome.server) : outcome,
       30000,
     );
   });
@@ -95,8 +97,8 @@ describe('F-2409 the start of the server', function () {
     const outcome = await start(await installed());
     deepStrictEqual(
       outcome.kind === 'started' &&
-        outcome.server.port >= 20000 &&
-        outcome.server.port < 40000,
+        portOfStarted(outcome.server) >= 20000 &&
+        portOfStarted(outcome.server) < 40000,
       true,
     );
   });

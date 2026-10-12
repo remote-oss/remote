@@ -101,7 +101,7 @@ describe('the step that opens the window tunnel', () => {
     await open();
     deepStrictEqual(
       [socksPorts, dialer.dialed[0]],
-      [[1080], {kind: 'port', port: STARTED.server.port}],
+      [[1080], {kind: 'port', port: 4321}],
     );
   });
 

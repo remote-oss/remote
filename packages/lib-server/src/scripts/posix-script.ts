@@ -266,7 +266,7 @@ export const FOLDER_KIND_FUNCTIONS: readonly string[] = [
   '}',
   'remove_install() {',
   '  if lock_take "$1"; then',
-  '    rm -rf "${DATA_DIR:?}/bin/$1" "$DATA_DIR/.$1.log" "$DATA_DIR/.$1.pid" "$DATA_DIR/.$1.token"',
+  '    rm -rf "${DATA_DIR:?}/bin/$1" "$DATA_DIR/.$1.log" "$DATA_DIR/.$1.pid" "$DATA_DIR/.$1.token" "$DATA_DIR/.$1.socket.log" "$DATA_DIR/.$1.socket.pid" "$DATA_DIR/.$1.socket.token"',
   '    lock_release',
   '  fi',
   '}',

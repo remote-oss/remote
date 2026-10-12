@@ -34,12 +34,14 @@ export interface RuntimeOptions {
   fileWatcherPollingMilliseconds: number;
   /** How many seconds the start waits for the server to report its port. */
   readySeconds: number;
+  /** Whether the server listens on a socket in the host's temporary folder instead of a TCP port. */
+  socketMode: boolean;
 }
 
 /** The server a start gave: where it listens, its process and its secret. */
 export interface StartedServer {
-  /** The TCP port the server listens on at the host's loopback. */
-  port: number;
+  /** Where the server listens: a TCP port on the host's loopback, or a socket in the host's temporary folder. */
+  endpoint: {kind: 'port'; port: number} | {kind: 'socket'; path: string};
   processId: number;
   /** The connection token. A secret: it must not reach a log. */
   connectionToken: string;
@@ -107,6 +109,22 @@ function failed(failure: StartFailure): StartOutcome {
   return {kind: 'failed', failure};
 }
 
+/** Where a server listens, from the facts of its start: a socket path decides, else a usable port; else nothing. */
+function endpointOf(
+  serverFacts: Readonly<Record<string, string>>,
+): StartedServer['endpoint'] | undefined {
+  const {socketPath} = serverFacts;
+  if (socketPath !== undefined) {
+    return socketPath.startsWith('/')
+      ? {kind: 'socket', path: socketPath}
+      : undefined;
+  }
+  const port = Number(serverFacts.port);
+  return Number.isInteger(port) && port >= 1 && port <= MAXIMUM_PORT
+    ? {kind: 'port', port}
+    : undefined;
+}
+
 /** The start outcome of a finished step run. */
 function outcomeOf(
   stepRun: StepRun | 'retriesExhausted',
@@ -123,13 +141,11 @@ function outcomeOf(
   }
   const {block} = stepRun;
   if (block.status === 'Ok') {
-    const port = Number(block.serverFacts.port);
+    const endpoint = endpointOf(block.serverFacts);
     const processId = Number(block.serverFacts.pid);
     const connectionToken = block.serverFacts.token ?? '';
     const usable =
-      Number.isInteger(port) &&
-      port >= 1 &&
-      port <= MAXIMUM_PORT &&
+      endpoint !== undefined &&
       Number.isInteger(processId) &&
       processId > 1 &&
       connectionToken !== '';
@@ -137,7 +153,7 @@ function outcomeOf(
       ? {
           kind: 'started',
           server: {
-            port,
+            endpoint,
             processId,
             connectionToken,
             reused: block.serverFacts.reused === 'yes',
@@ -197,6 +213,7 @@ export async function startOrReuse(
         ? options.fileWatcherPollingMilliseconds
         : 0,
       readySeconds: options.readySeconds,
+      socketMode: options.socketMode,
     },
   };
   const stepRun = await dependencies.lockLoop(
@@ -213,11 +230,11 @@ export async function startOrReuse(
 }
 
 /**
- * The TCP port the running server listens on, from what the start recorded; `none` when no server runs. It never
- * contacts the host.
+ * The TCP port the running server listens on, from what the start recorded; `none` when no server runs or when it
+ * listens on a socket, which opens no URL. It never contacts the host.
  */
 export function serverPort(
   started: StartedServer | undefined,
 ): number | 'none' {
-  return started === undefined ? 'none' : started.port;
+  return started?.endpoint.kind === 'port' ? started.endpoint.port : 'none';
 }

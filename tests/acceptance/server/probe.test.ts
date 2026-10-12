@@ -29,6 +29,7 @@ const PARAMETERS: ScriptParameters = {
     extensions: [],
     fileWatcherPollingMilliseconds: 0,
     readySeconds: 10,
+    socketMode: false,
   },
 };
 
