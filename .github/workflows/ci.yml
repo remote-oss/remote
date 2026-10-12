@@ -1,9 +1,14 @@
 # Layout, typecheck, lint, format and unit tests (ADR-0002); duplicated code, dead code and coverage (ADR-0003).
-# Manual trigger, and the tags of a release (`<package>-v<semver>`), until the testing ADR states the CI cost, so the
-# private repository uses no Actions minutes by default.
+# Triggers (athena on #142, ruling 4): every pull request from this repository runs the checks and the cheap acceptance
+# jobs (slice 1, server lifecycle) at its head, so that "passing in CI" means the head, not the last dispatch. The
+# costly jobs (real server, VSCodium, host variants) stay opt-in on a manual dispatch, and always run on the tag of a
+# release (`<package>-v<semver>`). The jobs run on the self-hosted runners, so they use no Actions minutes.
 name: ci
 
 on:
+  # a fork's pull request never runs: its code would run on the self-hosted runners (each job checks the head's repo)
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       real-server:
@@ -24,16 +29,17 @@ on:
 permissions:
   contents: read
 
-# One run per branch and kind: a new dispatch on a branch cancels that branch's older run of the same kind, so two
-# runners do not spend their time on superseded heads. The kind (the real-server, vscodium and variants inputs) is part of
-# the key, so a plain and an opt-in dispatch on one branch run side by side. The tag of a release is its own group and is never
-# cancelled.
+# One run per ref (a branch, or a pull request's refs/pull/<n>/merge) and kind: a new dispatch or push cancels the
+# ref's older run of the same kind, so the runners do not spend their time on superseded heads. The kind (the
+# real-server, vscodium and variants inputs) is part of the key, so a plain and an opt-in dispatch on one branch run side
+# by side. The tag of a release is its own group and is never cancelled.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}-${{ inputs.real-server && 'real-server' || 'plain' }}-${{ inputs.vscodium && 'vscodium' || 'vscode' }}-${{ inputs.variants && 'variants' || 'one-host' }}
-  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   checks:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
@@ -64,6 +70,7 @@ jobs:
   # dupes: jscpd; dead: knip; coverage: c8 with the gates and the ratchet.
   quality:
     name: ${{ matrix.check }}
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:
@@ -87,6 +94,7 @@ jobs:
   # and OpenSSH client are preinstalled, and xvfb or a display of its own.
   acceptance-slice-1:
     name: acceptance (slice 1)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
@@ -121,6 +129,7 @@ jobs:
   # SSH host container, with no editor and no download.
   acceptance-server:
     name: acceptance (server lifecycle)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
