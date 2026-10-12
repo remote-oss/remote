@@ -9,8 +9,6 @@ connection keeps -T and runs the program"). Reviewing coder: `remote-coding-work
 All the behaviour below was checked against a real OpenSSH sshd (OpenSSH 10.2p1, 2026-10-12, daedalus):
 - the tunnel command prints `Connected to SSH Host - Please do not close this terminal` and its `-L` forward carries
   traffic;
-- with `ExitOnForwardFailure=yes` and the local port busy, ssh prints "Could not request local forwarding." and exits
-  255;
 - `ClearAllForwardings=yes` drops a host block's `LocalForward`, **and also a `-L` given on the command line**. So it
   may only go on a run that carries no forward of ours (section 2.2).
 
@@ -37,8 +35,11 @@ export const TUNNEL_COMMAND =
   "echo 'Connected to SSH Host - Please do not close this terminal'; exec sleep 2147483647";
 ```
 
-- A `tunnel` run adds `-o ExitOnForwardFailure=yes` (F-2104 BR-12, 7.E7): a forward that can't be set up ends the
-  run, and T7 fails the connect.
+- A `tunnel` run adds **no** `ExitOnForwardFailure` (amended 2026-10-12, athena; brief a5b7917). F-2104 BR-11
+  applies the user's own forwards to the tunnel ssh, and BR-12 ends that ssh on a failing user forward only when the
+  user's host entry sets `ExitOnForwardFailure` itself. Forcing it would fail the connect for every user with a
+  forward of their own that can't bind, where ssh otherwise only warns. Our own `-L` doesn't need it: W1 checked the
+  port, and T7's 10 s readiness wait catches a tunnel that never carries traffic.
 - It ends with `TUNNEL_COMMAND` after the host, whatever `remoteProgram` says (a caller's `remoteProgram` is still
   ignored for a tunnel, as today).
 - No `-N`. (The brief's component text still says "`-N` (card adds it)"; that line predates the ruling below it that
@@ -75,11 +76,11 @@ One assertion per `it`; the cite starts the name. Rows use the file's `makeReque
 ### 3.1 The option sweep
 
 `forbiddenOf` allows, after `-o`, `RemoteCommand=none` and `ConnectTimeout=…` today. It now also allows exactly
-`ExitOnForwardFailure=yes` and `ClearAllForwardings=yes` (two more literal values, not prefixes). The sweep row
-("ADR-0004.2: no option beyond the listed ones, in every purpose and setting") is the one existing row that changes:
-it fails on the new options until the allowed list has them. `forbiddenSweep` also gains one extra build per purpose,
-`makeRequest({purpose, forwards: [], clearUserForwards: true})`, after its loop over `SETTING_VARIANTS` (it can't be a
-variant: the loop adds `ALL_FORWARDS`, which would make it throw).
+`ClearAllForwardings=yes` (one more literal value, not a prefix). The sweep row ("ADR-0004.2: no option beyond the
+listed ones, in every purpose and setting") is the one existing row that changes: it fails on the new option until
+the allowed list has it. The sweep thereby also keeps `ExitOnForwardFailure` out of every run. `forbiddenSweep` also
+gains one extra build per purpose, `makeRequest({purpose, forwards: [], clearUserForwards: true})`, after its loop over
+`SETTING_VARIANTS` (it can't be a variant: the loop adds `ALL_FORWARDS`, which would make it throw).
 
 ### 3.2 Rows added
 
@@ -89,8 +90,7 @@ variant: the loop adds `ALL_FORWARDS`, which would make it throw).
 | F-2308 BR-10 | the same | `slice(-3)` is `['--', 'alias', TUNNEL_COMMAND]` |
 | brief, #299 | `purpose: 'tunnel'`, `remoteProgram: 'uname -s'` | the last argument is `TUNNEL_COMMAND` (the program is ignored) |
 | brief, #299 | `purpose: 'tunnel'` | `-N` is not among the arguments |
-| F-2104 BR-12 | `purpose: 'tunnel'` | `-o ExitOnForwardFailure=yes` present once (the pair) |
-| F-2104 BR-12 | `purpose: 'connection'` and `purpose: 'oneShot'` | no `ExitOnForwardFailure` (one `it` each) |
+| F-2104 BR-11, BR-12 | `purpose: 'tunnel'` | no argument contains `ExitOnForwardFailure` (the user's own setting decides) |
 | F-2104 6.2 | `purpose: 'tunnel'` with a `local` forward to port 8080 | `-L 51001:127.0.0.1:8080` present, then `--` and the host |
 | F-2410 5.0 | `purpose: 'tunnel'` with a `socket` forward | `-L 51002:/tmp/code-x.sock` present |
 | F-2104 6.2 step 1 | `purpose: 'connection'`, `remoteProgram: 'sh'`, `clearUserForwards: true` | `-o ClearAllForwardings=yes` present once |
