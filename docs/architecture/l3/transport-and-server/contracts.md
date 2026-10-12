@@ -131,6 +131,9 @@ The argument rules:
 - `-D 127.0.0.1:<port>`, `-L <port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (F-2104 BR-1, F-2410).
 - The host goes in as its own argument; a user carried by the target as `-l <user>`, and a port carried by the
   target as `-p <port>`, only then and never from the configuration (F-2501 BR-2, AC-9).
+- `--` comes right before the host in every invocation and in the options query (ruled on #253 Q9): defence in depth
+  behind `validateTarget`, so a host starting with `-` is never read as an option by any caller. Checked on OpenSSH
+  10.2p1: the options and the connection are unchanged with it.
 - `scp` gets the same `-F` and the alias (F-2405 BR-6); an IPv6 host is bracketed.
 - `~/` (and `~\` on Windows) in `configFile` expands against the home folder with the platform's separator;
   `C:/x` stays as written (F-2201 Q4, lead's ruling 2026-10-07).
@@ -742,6 +745,11 @@ Rules:
 - `cancel` is called by B on window teardown or "Close Remote Connection". The SSH progress offers no Cancel
   (F-2304 BR-2), and a running host-side download is not stopped (F-2304 BR-8).
 - Connected carries `tunnelFeatures` from W3 next to the tunnel factory (F-8202).
+- R1's validate step runs S2's `validateTarget` first (ruled on #253 Q9, 2026-10-12; F-2205 POST-1: no `ssh` process,
+  no pre-connection script and no platform question for a rejected name). A problem fails as `invalidSetting`, which is
+  permanent (F-2205 PRE-2: nothing can change between attempts), with the reason `{id: 'S119' | 'S120' | 'S121' |
+  'S122', values: [character]}`. The dialog shows S031 with that reason (F-2205 7.E1 to 7.E6); the kind is shown
+  nowhere, so no new kind is added to the closed list.
 - Order before the connection (ruled on #253, connect-14): validate, the pre-connection script, R4's terms (with the
   platform picker), then S1's check and S4's lookup, then the lease. R4 comes before S1 because no `ssh` process may
   run before the picker is answered, the `-V` check included (F-2206 AC-2, F-2101 AC-28).
