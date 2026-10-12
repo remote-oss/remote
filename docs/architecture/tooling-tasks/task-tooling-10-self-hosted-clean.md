@@ -70,7 +70,10 @@ export function cleanRun(command: CommandRunner, runId: string): void;
   after the container is up (ssh_config, the wait for sshd, settings, the channel) is unchanged.
 - `cleanRun`: `docker ps --all --quiet --filter label=${RUN_LABEL}=${runId}`, then `docker rm --force` for each id;
   then `docker image rm --force hostImageOf(runId)`. A non-zero status of the image removal (the image is gone) is
-  ignored. It never runs `docker system prune`, `docker container prune`, `docker volume prune` or a filter that is
+  ignored. Then it lists the label once more: a container still carrying the run's label after the removals makes
+  `cleanRun` throw, naming the ids (amended by athena 2026-10-12: this is the check that a later run on the same
+  runner starts from the same state, which the ruling asks for; a silent `rm` failure must fail the job, not leave
+  state behind). It never runs `docker system prune`, `docker container prune`, `docker volume prune` or a filter that is
   not this run's label: the machine is shared.
 - `package.json`: `"acceptance:clean": "node tools/acceptance-run.ts --clean"`, which runs `cleanRun(runCommand,
   acceptanceRunId(process.env, process.pid))` and exits 0.
@@ -93,6 +96,7 @@ script, except the last.
 | `startHostContainer(fake, root, '77-2', folder)` | the `build` call has `--tag remote-oss-acceptance-host:77-2`; the `run` call has `--label remote-oss.acceptance.run=77-2` and the same tag; the result's port is the fake `docker port` answer's |
 | `cleanRun(fake, '77-2')` with the fake listing two containers | the fake saw `ps` with the label filter, two `rm --force`, one `image rm --force` of the run's tag, in that order |
 | `cleanRun` when the image removal fails | no throw |
+| `cleanRun` when the second label listing still returns a container | throws, naming that container's id |
 | any `cleanRun` | no call contains `prune`, and every `ps` filter is `label=remote-oss.acceptance.run=<the run id>` |
 | `tools/acceptance.test.ts` and the server acceptance tests | pass unchanged |
 | a second run on the same runner | starts from the same state. Run locally, output in the PR: run `pnpm test:acceptance:server` and kill it with `SIGKILL` once its container is up; `docker ps --all --filter label=remote-oss.acceptance.run` lists that run's container only; `pnpm acceptance:clean` with that run's id leaves none; a second `pnpm test:acceptance:server` then passes |
