@@ -272,16 +272,26 @@ export interface FailureCase {
   dialog: string;
 }
 
+/** The form of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
+const ALIAS_FORM = /^[a-z][a-z0-9-]*$/;
+
 /** The failing connects, from tests/acceptance/suite-failure/cases.json, which the failure suite also reads. */
 export function failureCases(root: string): FailureCase[] {
-  return (
-    JSON.parse(
-      readFileSync(
-        path.join(root, 'tests', 'acceptance', 'suite-failure', 'cases.json'),
-        'utf8',
-      ),
-    ) as {cases: FailureCase[]}
-  ).cases;
+  const {cases} = JSON.parse(
+    readFileSync(
+      path.join(root, 'tests', 'acceptance', 'suite-failure', 'cases.json'),
+      'utf8',
+    ),
+  ) as {cases: FailureCase[]};
+  for (const failure of cases) {
+    // The alias becomes part of a file name, a test-cli label and a URI authority.
+    if (!ALIAS_FORM.test(failure.alias)) {
+      throw new Error(
+        `a failing connect's alias must match ${String(ALIAS_FORM)}: "${failure.alias}"`,
+      );
+    }
+  }
+  return cases;
 }
 
 /** The label of the launch of a failing connect. */

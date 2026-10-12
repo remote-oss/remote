@@ -620,6 +620,22 @@ describe('acceptance', () => {
       deepStrictEqual(failureCases(workspace.root), [FAILURE]);
     });
 
+    it('triton on #439: an alias with a character outside its form is refused', () => {
+      workspace.write(
+        'tests/acceptance/suite-failure/cases.json',
+        JSON.stringify({cases: [{...FAILURE, alias: '../x'}]}),
+      );
+      throws(() => failureCases(workspace.root), /alias must match/);
+    });
+
+    it('triton on #439: an alias that starts with a digit is refused', () => {
+      workspace.write(
+        'tests/acceptance/suite-failure/cases.json',
+        JSON.stringify({cases: [{...FAILURE, alias: '9x'}]}),
+      );
+      throws(() => failureCases(workspace.root), /alias must match/);
+    });
+
     it('#253 Q14: the harness variables name the editor and its executable', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
       deepStrictEqual(
