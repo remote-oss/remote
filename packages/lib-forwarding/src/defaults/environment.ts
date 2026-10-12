@@ -39,6 +39,9 @@ type Part =
   | {kind: 'address'; host: string; port: string; bracketedIpv6: boolean};
 
 const BLANKS = /[ \t]+/;
+
+/** The listen hosts the editor reaches on `localhost`: no bind, the loopback name and the wildcard binds. */
+const LOCAL_BINDS = ['', 'localhost', '*', '0.0.0.0'];
 const BRACKETED = /^\[[^\]]+\]:/;
 const BAD_PART: Part = {kind: 'bad'};
 const SOCKET_PART: Part = {kind: 'socket'};
@@ -66,7 +69,8 @@ function readPart(text: string, hostRequired: boolean): Part {
     };
   }
   const colon = text.lastIndexOf(':');
-  if (colon === 0 || (hostRequired && colon === -1)) {
+  // A target must name a host, so a leading or missing colon is bad; the listen side may have none.
+  if (hostRequired && (colon === -1 || colon === 0)) {
     return BAD_PART;
   }
   return {
@@ -105,7 +109,7 @@ function tunnelOf(text: string): EnvironmentTunnel | ForwardSkipReason {
   return {
     remoteAddress: {host: target.host, port: Number(target.port)},
     localAddress: {
-      host: ['', 'localhost'].includes(listen.host) ? 'localhost' : listen.host,
+      host: LOCAL_BINDS.includes(listen.host) ? 'localhost' : listen.host,
       port: Number(listen.port),
     },
   };

@@ -39,6 +39,51 @@ describe('environmentTunnels (card forwarding-02 table)', () => {
     );
   });
 
+  it('F-2507.BR-10 (ruling 6): a wildcard bind is on localhost', () => {
+    deepStrictEqual(environmentTunnels(['*:13000 h:80']).tunnels, [
+      {
+        remoteAddress: address('h', 80),
+        localAddress: address('localhost', 13000),
+      },
+    ]);
+  });
+
+  it('F-2507.BR-10 (ruling 6): an empty bind is on localhost', () => {
+    deepStrictEqual(environmentTunnels([':13000 h:80']).tunnels, [
+      {
+        remoteAddress: address('h', 80),
+        localAddress: address('localhost', 13000),
+      },
+    ]);
+  });
+
+  it('F-2507.BR-10 (ruling 6): the wildcard address is on localhost', () => {
+    deepStrictEqual(environmentTunnels(['0.0.0.0:13000 h:80']).tunnels, [
+      {
+        remoteAddress: address('h', 80),
+        localAddress: address('localhost', 13000),
+      },
+    ]);
+  });
+
+  it('F-2507.BR-10: a loopback bind is kept as written', () => {
+    deepStrictEqual(environmentTunnels(['127.0.0.1:13000 h:80']).tunnels, [
+      {
+        remoteAddress: address('h', 80),
+        localAddress: address('127.0.0.1', 13000),
+      },
+    ]);
+  });
+
+  it('F-2507.BR-10: a named bind is kept as written', () => {
+    deepStrictEqual(environmentTunnels(['10.0.0.5:13000 h:80']).tunnels, [
+      {
+        remoteAddress: address('h', 80),
+        localAddress: address('10.0.0.5', 13000),
+      },
+    ]);
+  });
+
   it('F-2507.AC-24: a named target host is kept', () => {
     deepStrictEqual(environmentTunnels(['13004 db.invalid:22']).tunnels, [
       {
@@ -131,6 +176,8 @@ describe('environmentTunnels (card forwarding-02 table)', () => {
     '13000 h:0',
     '13000 h:',
     '-5 h:80',
+    ': h:80',
+    '*: h:80',
   ];
   for (const text of badPorts) {
     it(`F-2507.BR-10 (provisional): ${JSON.stringify(text)} has a bad port`, () => {
@@ -145,7 +192,6 @@ describe('environmentTunnels (card forwarding-02 table)', () => {
     '13000',
     '13000 h:80 extra',
     '13000 h80',
-    ':13000 h:80',
     '13000 :80',
     '[h 13000',
   ];
