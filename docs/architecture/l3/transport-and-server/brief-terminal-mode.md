@@ -169,6 +169,12 @@ connect in validate; this brief replaces that interim.
      setting, as F-2105 BR-1): after the handshake, output silent for that long with a partial line pending and no
      input open fails the attempt with F-2601. Before the handshake, ssh's own timeout already ends it (F-2308 BR-5).
      No new number.
+   - **"After the handshake" is the `-v` line `debug1: SSH2_MSG_NEWKEYS received`** (daedalus, ruled on #299), a second
+     marker beside `setupMarkerOf`'s. Measured against a real OpenSSH sshd (password login, first contact): the
+     host-key question, then `NEWKEYS sent`, then `NEWKEYS received`, then `password:`, then `Authenticated to`. So the
+     first-contact question stays under ssh's own timeout, and every later prompt falls under ours. `Authenticated
+     to` would be too late, since the password prompt comes before it. S2 always passes `-v`, which overrides a user's
+     `LogLevel`.
 4. **The connect wait ends at the first output** in terminal mode (F-2105 BR-3), not at `authenticated`. The `-v`
    banner arriving first is what the spec observed (F-2308 5.0 step 4).
 5. **A late trust answer** (after the attempt failed): nothing runs. The terminal isn't created after the attempt's
