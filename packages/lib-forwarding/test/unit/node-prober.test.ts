@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {createServer, Socket, type Server} from 'node:net';
+import {createConnection, createServer, Socket, type Server} from 'node:net';
 import {
   findFreePort,
   nodePortProber,
@@ -126,7 +126,6 @@ describe('the port prober over node:net', () => {
 
   it('§W1: a refusal answers once, and a later error changes nothing', async () => {
     const socket = new Socket();
-    socket.on('error', () => undefined);
     const answer = await proberOver(() => {
       queueMicrotask(() => {
         socket.emit('error', errorWith('ECONNREFUSED'));
@@ -137,6 +136,36 @@ describe('the port prober over node:net', () => {
       return socket;
     }, 5000).probe(1025);
     deepStrictEqual(answer, 'refused');
+  });
+
+  it('§W1: errors before and after the timer are both heard', async () => {
+    const socket = new Socket();
+    const answer = await proberOver(() => {
+      setTimeout(() => {
+        socket.emit('error', errorWith('EACCES'));
+      }, 10);
+      setTimeout(() => {
+        socket.emit('error', errorWith('ECONNRESET'));
+      }, 30);
+      return socket;
+    }, 20).probe(1025);
+    deepStrictEqual(answer, 'error');
+  });
+
+  it('§W1: an error after an open answer is heard', async () => {
+    const port = await listeningServer();
+    const sockets: Socket[] = [];
+    const answer = await proberOver(rawPort => {
+      const socket = createConnection({host: '127.0.0.1', port: rawPort});
+      sockets.push(socket);
+      return socket;
+    }, 5000).probe(port);
+    const socket = sockets[0];
+    if (socket === undefined) {
+      throw new Error('the probe socket is missing');
+    }
+    socket.emit('error', errorWith('EACCES'));
+    deepStrictEqual(answer, 'open');
   });
 
   it('§W1, F-2104 BR-7: the search over the real prober skips the taken port', async () => {

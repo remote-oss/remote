@@ -23,9 +23,11 @@ describe('the texts of the failure dialog and the progress', () => {
       'S031',
       'S032',
       'S041',
+      'S043',
       'S044',
       'S067',
       'S073',
+      'S075',
       'S079',
       'S082',
       'S084',
@@ -47,7 +49,24 @@ describe('the texts of the failure dialog and the progress', () => {
       'S140',
       'S142',
       'S158',
+      'installPathProvided',
+      'templateNotHttp',
+      'templateUnknownPlaceholder',
     ]);
+  });
+
+  it("F-2403: the download failure text is the extension's own", () => {
+    deepStrictEqual(
+      FAILURE_TEMPLATES.S043,
+      'Downloading VS Code Server failed. Please try again later.',
+    );
+  });
+
+  it("F-2403: the install failure text is the extension's own", () => {
+    deepStrictEqual(
+      FAILURE_TEMPLATES.S075,
+      'Failed to install the VS Code Server',
+    );
   });
 
   it('F-2603 S094: a classifier reason has its text', () => {

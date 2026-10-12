@@ -102,6 +102,13 @@ spec fixes. A property test per family checks both directions.
 
 Phases: the host subscribes to the connector's phase events and renders core progress with the extension's titles
 (F-2304). "(details)" calls `connector.revealDetails`. Area A owns the phases and their names (agreed with worker-1).
+**Which phases carry "(details)"** (ruled 2026-10-12, #379): the link is decided **by phase, not by position**. It goes
+with `initializing` (STR:S082, F-2304 3.4) and, in terminal mode, with `settingUpTunnel` (F-2308 6.1 step 4, 6.2 step 1,
+with S132's tooltip); never with `waitingForOtherWindow` (F-2102 5.2 step 3: S157, "no details link") or any later
+phase. The earlier rule, "the link on the first phase", only held while `initializing` was always first. A waiting
+window's first phase is now S157, and its later `initializing` after the takeover must carry the link (F-2102 5.3 step
+4). So the connector's phase events say which carry it (a `details` flag set by area A), and the host's progress
+renders the link on every phase that has it, whatever its position.
 
 Cancellation: core's resolve carries no cancellation. Progress offers Cancel only when the resolver registered as
 `cancellable` (never for `ssh-remote`, F-2304 BR-2). Otherwise the host calls `connector.cancel` only when the window

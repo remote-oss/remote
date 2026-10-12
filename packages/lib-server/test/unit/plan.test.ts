@@ -193,8 +193,20 @@ describe('install planner (card server-04 table)', () => {
 
   it("no layout and source invalidOverride {problem: 'notHttpUrl'} -> failure invalidOverride with the problem", () => {
     deepStrictEqual(
-      plan(input({source: {kind: 'invalidOverride', problem: 'notHttpUrl'}})),
-      {failure: {kind: 'invalidOverride', problem: 'notHttpUrl'}},
+      plan(
+        input({
+          source: {
+            kind: 'invalidOverride',
+            problem: {kind: 'notHttpUrl', value: 'x'},
+          },
+        }),
+      ),
+      {
+        failure: {
+          kind: 'invalidOverride',
+          problem: {kind: 'notHttpUrl', value: 'x'},
+        },
+      },
     );
   });
 

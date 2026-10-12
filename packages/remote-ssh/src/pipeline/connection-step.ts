@@ -96,7 +96,7 @@ export function openConnectionStep(
       end();
       return {
         kind: 'failed',
-        failure: {kind: 'unknown', reason: {text: String(caught)}},
+        failure: {kind: 'unknown', logDetail: String(caught)},
       };
     }
     return {

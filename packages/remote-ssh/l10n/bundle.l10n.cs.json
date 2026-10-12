@@ -48,5 +48,10 @@
   "SSH host name cannot include the character {0}": "SSH host name cannot include the character {0}",
   "SSH user name cannot begin with {0}": "SSH user name cannot begin with {0}",
   "SSH user name cannot include the character {0}": "SSH user name cannot include the character {0}",
-  "SSH: {0}": "SSH: {0}"
+  "SSH: {0}": "SSH: {0}",
+  "Downloading VS Code Server failed. Please try again later.": "Downloading VS Code Server failed. Please try again later.",
+  "Failed to install the VS Code Server": "Failed to install the VS Code Server",
+  "Provided: \"{0}\"": "Provided: \"{0}\"",
+  "it does not give an http or https address": "it does not give an http or https address",
+  "the placeholder {0} is not known": "the placeholder {0} is not known"
 }

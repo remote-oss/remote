@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   type FailedKind,
+  type FailureDetail,
   type FailureContext,
   failedWith,
   KIND_MAY_RECOVER,
@@ -143,36 +144,218 @@ describe('the reconnection limit', () => {
   });
 });
 
-describe('the reading of each library failure', () => {
-  it('a host channel: closed, timeout, cancel, copy tool missing, copy failed, spawn failed', () => {
+/** Every case of every mapper, to sweep for a reason that carries library text. */
+const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
+  ['channel closed', ofChannel({kind: 'channelClosed', detail: 'gone'})],
+  ['channel timeout', ofChannel({kind: 'timeout', detail: 'slow'})],
+  ['channel cancelled', ofChannel({kind: 'cancelled', detail: 'stopped'})],
+  ['copy tool missing', ofChannel({kind: 'copyToolMissing', detail: 'no scp'})],
+  ['copy failed', ofChannel({kind: 'copyFailed', detail: 'denied'})],
+  ['channel spawn failed', ofChannel({kind: 'spawnFailed', detail: 'EAGAIN'})],
+  ['platform', ofProbe({kind: 'unsupportedPlatform', reported: 'FreeBSD'})],
+  ['architecture', ofProbe({kind: 'unsupportedArch', reported: 'sparc'})],
+  ['tools', ofProbe({kind: 'prerequisiteMissing', missing: ['tar', 'gzip']})],
+  ['probe status', ofProbe({kind: 'probeFailed', status: 'NoBash'})],
+  ['probe new status', ofProbe({kind: 'probeFailed', status: 'SomethingNew'})],
+  ['unreadable facts', ofProbe({kind: 'unreadableFacts', field: 'os'})],
+  ['probe no block', ofProbe({kind: 'noResultBlock'})],
+  [
+    'probe channel',
+    ofProbe({kind: 'channelFailed', failure: {kind: 'timeout', detail: 'x'}}),
+  ],
+  ['no source', ofPlan({kind: 'noSource'})],
+  [
+    'placeholder',
+    ofPlan({
+      kind: 'invalidOverride',
+      problem: {kind: 'unknownPlaceholder', name: 'foo'},
+    }),
+  ],
+  [
+    'not http',
+    ofPlan({
+      kind: 'invalidOverride',
+      problem: {kind: 'notHttpUrl', value: 'ftp://h/x'},
+    }),
+  ],
+  [
+    'unsupported template',
+    ofPlan({
+      kind: 'invalidOverride',
+      problem: {
+        kind: 'unsupportedPlatform',
+        operatingSystem: 'aix',
+        architecture: 'ppc',
+      },
+    }),
+  ],
+  ['install path', ofPlan({kind: 'invalidInstallPath', reason: 'relative'})],
+  ['download', ofTransfer({kind: 'serverDownload', cause: 'downloadFailed'})],
+  ['local download', ofTransfer({kind: 'localDownload', detail: '404'})],
+  [
+    'download timeout',
+    ofTransfer({kind: 'downloadTimeout', reason: 'stalled'}),
+  ],
+  ['verification', ofTransfer({kind: 'verification', mismatch: 'checksum'})],
+  ['unpack', ofTransfer({kind: 'unpack'})],
+  [
+    'copy',
+    ofTransfer({kind: 'copy', failure: {kind: 'copyFailed', detail: 'full'}}),
+  ],
+  [
+    'transfer script',
+    ofTransfer({kind: 'scriptFailed', status: 'UnpackFailed'}),
+  ],
+  [
+    'spawn vanished',
+    ofConnection({
+      kind: 'spawnFailed',
+      cause: 'clientVanished',
+      detail: 'gone',
+    }),
+  ],
+  [
+    'spawn other',
+    ofConnection({kind: 'spawnFailed', cause: 'spawnFailed', detail: 'EAGAIN'}),
+  ],
+  [
+    'helper refused',
+    ofConnection({kind: 'helperRefused', reason: 'unreadable reply'}),
+  ],
+  [
+    'start script',
+    ofStart({kind: 'scriptFailed', status: 'ServerDownloadFailed'}),
+  ],
+];
+
+describe('the reading of each library failure (no library text is shown)', () => {
+  it('contracts R1: a closed channel gives no reason and logs what the library said', () => {
     deepStrictEqual(
-      [
-        ofChannel({kind: 'channelClosed', detail: 'gone'}),
-        ofChannel({kind: 'timeout', detail: 'slow'}),
-        ofChannel({kind: 'cancelled', detail: 'stopped'}),
-        ofChannel({kind: 'copyToolMissing', detail: 'no scp'}),
-        ofChannel({kind: 'copyFailed', detail: 'denied'}),
-        ofChannel({kind: 'spawnFailed', detail: ''}),
-      ],
-      [
-        {kind: 'channelClosed', reason: {text: 'gone'}},
-        {kind: 'timeout', reason: {text: 'slow'}},
-        {kind: 'cancelled'},
-        {kind: 'prerequisiteMissing', reason: {text: 'no scp'}},
-        {kind: 'serverInstall', reason: {text: 'denied'}},
-        {kind: 'unknown'},
-      ],
+      ofChannel({kind: 'channelClosed', detail: 'the session ended'}),
+      {
+        kind: 'channelClosed',
+        logDetail: 'the session ended',
+      },
     );
   });
 
-  it('a probe: platform, architecture, missing tools, script status, unreadable facts, no block, channel', () => {
+  it('contracts R1: a timed out channel gives no reason', () => {
+    deepStrictEqual(ofChannel({kind: 'timeout', detail: 'no end in time'}), {
+      kind: 'timeout',
+      logDetail: 'no end in time',
+    });
+  });
+
+  it('contracts R1: a cancelled channel gives neither reason nor log detail', () => {
+    deepStrictEqual(ofChannel({kind: 'cancelled', detail: 'stopped'}), {
+      kind: 'cancelled',
+    });
+  });
+
+  it('contracts R1: a missing copy tool gives no reason and logs the detail', () => {
+    deepStrictEqual(ofChannel({kind: 'copyToolMissing', detail: 'no scp'}), {
+      kind: 'prerequisiteMissing',
+      logDetail: 'no scp',
+    });
+  });
+
+  it('F-2403 7.E2: a failed copy gives the install reason S075 and logs the detail', () => {
+    deepStrictEqual(ofChannel({kind: 'copyFailed', detail: 'x'}), {
+      kind: 'serverInstall',
+      reason: {id: 'S075'},
+      logDetail: 'x',
+    });
+  });
+
+  it('contracts R1: any other channel failure is unknown, with the detail in the log', () => {
+    deepStrictEqual(ofChannel({kind: 'spawnFailed', detail: 'EAGAIN'}), {
+      kind: 'unknown',
+      logDetail: 'EAGAIN',
+    });
+  });
+
+  it('contracts R1: an empty detail leaves no log detail', () => {
+    deepStrictEqual(ofChannel({kind: 'spawnFailed', detail: ''}), {
+      kind: 'unknown',
+    });
+  });
+
+  it('contracts R1: an unsupported platform gives no reason and logs what the host reported', () => {
+    deepStrictEqual(ofProbe({kind: 'unsupportedPlatform', reported: 'aix'}), {
+      kind: 'unsupportedPlatform',
+      logDetail: 'reported: aix',
+    });
+  });
+
+  it('contracts R1: an unsupported architecture logs what the host reported', () => {
+    deepStrictEqual(ofProbe({kind: 'unsupportedArch', reported: 'sparc'}), {
+      kind: 'unsupportedPlatform',
+      logDetail: 'reported: sparc',
+    });
+  });
+
+  it('contracts R1: missing tools give no reason and log the list', () => {
+    deepStrictEqual(
+      ofProbe({kind: 'prerequisiteMissing', missing: ['tar', 'gzip']}),
+      {kind: 'prerequisiteMissing', logDetail: 'missing: tar, gzip'},
+    );
+  });
+
+  it('F-2403 7.E1: a script status of ServerDownloadFailed gives the download reason S043', () => {
+    deepStrictEqual(
+      ofTransfer({kind: 'scriptFailed', status: 'ServerDownloadFailed'}),
+      {
+        kind: 'serverDownload',
+        reason: {id: 'S043'},
+      },
+    );
+  });
+
+  it('F-2403 7.E1: a script status of NoDownloaderAvailable gives the download reason S043', () => {
+    deepStrictEqual(
+      ofProbe({kind: 'probeFailed', status: 'NoDownloaderAvailable'}),
+      {
+        kind: 'serverDownload',
+        reason: {id: 'S043'},
+      },
+    );
+  });
+
+  it('F-2403 7.E3: a script status of UnpackFailed gives the install reason S075', () => {
+    deepStrictEqual(
+      ofTransfer({kind: 'scriptFailed', status: 'UnpackFailed'}),
+      {
+        kind: 'serverInstall',
+        reason: {id: 'S075'},
+      },
+    );
+  });
+
+  it('F-2403 7.E3: a script status of CreateInstallDirFailed gives the install reason S075', () => {
+    deepStrictEqual(
+      ofStart({kind: 'scriptFailed', status: 'CreateInstallDirFailed'}),
+      {
+        kind: 'serverInstall',
+        reason: {id: 'S075'},
+      },
+    );
+  });
+
+  it('contracts R1: a script status of NoBash stays a missing prerequisite with no reason', () => {
+    deepStrictEqual(ofProbe({kind: 'probeFailed', status: 'NoBash'}), {
+      kind: 'prerequisiteMissing',
+    });
+  });
+
+  it('contracts R1: a status word outside the list is unknown', () => {
+    deepStrictEqual(ofProbe({kind: 'probeFailed', status: 'SomethingNew'}), {
+      kind: 'unknown',
+    });
+  });
+
+  it('a probe with unreadable facts, no block or a channel failure maps unchanged', () => {
     deepStrictEqual(
       [
-        ofProbe({kind: 'unsupportedPlatform', reported: 'FreeBSD'}),
-        ofProbe({kind: 'unsupportedArch', reported: 'sparc'}),
-        ofProbe({kind: 'prerequisiteMissing', missing: ['tar', 'gzip']}),
-        ofProbe({kind: 'probeFailed', status: 'NoBash'}),
-        ofProbe({kind: 'probeFailed', status: 'SomethingNew'}),
         ofProbe({kind: 'unreadableFacts', field: 'os'}),
         ofProbe({kind: 'noResultBlock'}),
         ofProbe({
@@ -180,49 +363,116 @@ describe('the reading of each library failure', () => {
           failure: {kind: 'timeout', detail: ''},
         }),
       ],
-      [
-        {kind: 'unsupportedPlatform', reason: {text: 'FreeBSD'}},
-        {kind: 'unsupportedPlatform', reason: {text: 'sparc'}},
-        {kind: 'prerequisiteMissing', reason: {text: 'tar, gzip'}},
-        {kind: 'prerequisiteMissing'},
-        {kind: 'unknown'},
-        {kind: 'unknown'},
-        {kind: 'channelClosed'},
-        {kind: 'timeout'},
-      ],
+      [{kind: 'unknown'}, {kind: 'channelClosed'}, {kind: 'timeout'}],
     );
   });
 
-  it('a plan: no source, a template that does not work, an install path that does not work', () => {
+  it('a plan with no source maps to no server source', () => {
+    deepStrictEqual(ofPlan({kind: 'noSource'}), {kind: 'noServerSource'});
+  });
+
+  it('#299 (athena): an unknown placeholder is named as the user wrote it, braces included', () => {
     deepStrictEqual(
-      [
-        ofPlan({kind: 'noSource'}),
-        ofPlan({kind: 'invalidOverride', problem: 'no ${commit}'}),
-        ofPlan({kind: 'invalidInstallPath', reason: 'relative'}),
-      ],
-      [
-        {kind: 'noServerSource'},
-        {kind: 'invalidServerTemplate', reason: {text: 'no ${commit}'}},
-        {kind: 'invalidSetting', reason: {text: 'relative'}},
-      ],
+      ofPlan({
+        kind: 'invalidOverride',
+        problem: {kind: 'unknownPlaceholder', name: 'foo'},
+      }).reason,
+      {id: 'templateUnknownPlaceholder', values: ['${foo}']},
     );
   });
 
-  it('a transfer: download, local download, unpack, copy, cancel, retries, script status, no block, channel', () => {
+  it('#299: a template that is not an http address gives its own reason and keeps the value out of it', () => {
+    deepStrictEqual(
+      ofPlan({
+        kind: 'invalidOverride',
+        problem: {kind: 'notHttpUrl', value: 'ftp://h/x'},
+      }).reason,
+      {id: 'templateNotHttp', values: []},
+    );
+  });
+
+  it('#299: the value of a template that is not an http address reaches only the log', () => {
+    deepStrictEqual(
+      ofPlan({
+        kind: 'invalidOverride',
+        problem: {kind: 'notHttpUrl', value: 'ftp://h/x'},
+      }).logDetail?.includes('ftp://h/x'),
+      true,
+    );
+  });
+
+  it('#299: a template problem of the base-URL form has no reason', () => {
+    deepStrictEqual(
+      ofPlan({
+        kind: 'invalidOverride',
+        problem: {
+          kind: 'unsupportedPlatform',
+          operatingSystem: 'aix',
+          architecture: 'ppc',
+        },
+      }).reason,
+      undefined,
+    );
+  });
+
+  it('contracts R1: an install path that does not work gives no reason and logs why', () => {
+    deepStrictEqual(ofPlan({kind: 'invalidInstallPath', reason: 'relative'}), {
+      kind: 'invalidSetting',
+      logDetail: 'relative',
+    });
+  });
+
+  it('F-2403 7.E1: a server download that failed gives S043 and logs the cause', () => {
+    deepStrictEqual(ofTransfer({kind: 'serverDownload', cause: 'tooLarge'}), {
+      kind: 'serverDownload',
+      reason: {id: 'S043'},
+      logDetail: 'tooLarge',
+    });
+  });
+
+  it('F-2403 7.E1: a local download that failed gives S043 and logs the detail', () => {
+    deepStrictEqual(ofTransfer({kind: 'localDownload', detail: '404'}), {
+      kind: 'serverDownload',
+      reason: {id: 'S043'},
+      logDetail: '404',
+    });
+  });
+
+  it('F-2403 7.E1: a download that timed out gives S043 and logs the reason', () => {
+    deepStrictEqual(ofTransfer({kind: 'downloadTimeout', reason: 'stalled'}), {
+      kind: 'serverDownload',
+      reason: {id: 'S043'},
+      logDetail: 'stalled',
+    });
+  });
+
+  it('F-2403 7.E1: a download that failed verification gives S043 and logs the mismatch', () => {
+    deepStrictEqual(ofTransfer({kind: 'verification', mismatch: 'checksum'}), {
+      kind: 'serverDownload',
+      reason: {id: 'S043'},
+      logDetail: 'checksum',
+    });
+  });
+
+  it('F-2403 7.E2: an unpack that failed gives the install reason S075', () => {
+    deepStrictEqual(ofTransfer({kind: 'unpack'}), {
+      kind: 'serverInstall',
+      reason: {id: 'S075'},
+    });
+  });
+
+  it('F-2403 7.E2: a copy that failed during the transfer gives S075 and logs the detail', () => {
+    deepStrictEqual(
+      ofTransfer({kind: 'copy', failure: {kind: 'copyFailed', detail: 'full'}}),
+      {kind: 'serverInstall', reason: {id: 'S075'}, logDetail: 'full'},
+    );
+  });
+
+  it('a transfer that is cancelled, out of retries or without a result block maps unchanged', () => {
     deepStrictEqual(
       [
-        ofTransfer({kind: 'serverDownload', cause: 'downloadFailed'}),
-        ofTransfer({kind: 'localDownload', detail: '404'}),
-        ofTransfer({kind: 'downloadTimeout', reason: 'stalled'}),
-        ofTransfer({kind: 'verification', mismatch: 'checksum'}),
-        ofTransfer({kind: 'unpack'}),
-        ofTransfer({
-          kind: 'copy',
-          failure: {kind: 'copyFailed', detail: 'full'},
-        }),
         ofTransfer({kind: 'cancelled'}),
         ofTransfer({kind: 'retriesExhausted'}),
-        ofTransfer({kind: 'scriptFailed', status: 'UnpackFailed'}),
         ofTransfer({kind: 'noResultBlock'}),
         ofTransfer({
           kind: 'channelFailed',
@@ -230,15 +480,8 @@ describe('the reading of each library failure', () => {
         }),
       ],
       [
-        {kind: 'serverDownload', reason: {text: 'downloadFailed'}},
-        {kind: 'serverDownload', reason: {text: '404'}},
-        {kind: 'serverDownload', reason: {text: 'stalled'}},
-        {kind: 'serverDownload', reason: {text: 'checksum'}},
-        {kind: 'serverInstall'},
-        {kind: 'serverInstall', reason: {text: 'full'}},
         {kind: 'cancelled'},
         {kind: 'retriesExhausted'},
-        {kind: 'serverInstall'},
         {kind: 'channelClosed'},
         {kind: 'channelClosed'},
       ],
@@ -284,42 +527,63 @@ describe('the reading of each library failure', () => {
     );
   });
 
-  it('a shared connection: login failure with hints, ssh missing, ssh not started, helper trouble, timeout, cancel', () => {
+  it("contracts R1: a login failure keeps the reason ssh gave, which is ssh's own words", () => {
+    deepStrictEqual(
+      ofConnection({
+        kind: 'loginFailed',
+        failure: 'authentication',
+        reason: {text: 'denied'},
+        hints: [],
+      }),
+      {kind: 'authentication', reason: {text: 'denied'}, hints: []},
+    );
+  });
+
+  it('a login failure with no reason has none', () => {
+    deepStrictEqual(
+      ofConnection({kind: 'loginFailed', failure: 'unreachable', hints: []}),
+      {kind: 'unreachable', hints: []},
+    );
+  });
+
+  it('contracts R1: an ssh that vanished is a missing prerequisite with the detail in the log only', () => {
+    deepStrictEqual(
+      ofConnection({
+        kind: 'spawnFailed',
+        cause: 'clientVanished',
+        detail: 'ssh is gone',
+      }),
+      {kind: 'prerequisiteMissing', logDetail: 'ssh is gone'},
+    );
+  });
+
+  it('contracts R1: an ssh that could not be started is unknown with the detail in the log only', () => {
+    deepStrictEqual(
+      ofConnection({
+        kind: 'spawnFailed',
+        cause: 'spawnFailed',
+        detail: 'EAGAIN',
+      }),
+      {kind: 'unknown', logDetail: 'EAGAIN'},
+    );
+  });
+
+  it('contracts R1: a refused helper is unknown with the reason in the log only', () => {
+    deepStrictEqual(
+      ofConnection({kind: 'helperRefused', reason: 'unreadable reply'}),
+      {kind: 'unknown', logDetail: 'unreadable reply'},
+    );
+  });
+
+  it('a lost transport, a gone helper, a timeout and a cancel map unchanged', () => {
     deepStrictEqual(
       [
-        ofConnection({
-          kind: 'loginFailed',
-          failure: 'authentication',
-          reason: {text: 'denied'},
-          hints: [],
-        }),
-        ofConnection({
-          kind: 'loginFailed',
-          failure: 'unreachable',
-          hints: [],
-        }),
-        ofConnection({
-          kind: 'spawnFailed',
-          cause: 'clientVanished',
-          detail: 'ssh is gone',
-        }),
-        ofConnection({
-          kind: 'spawnFailed',
-          cause: 'spawnFailed',
-          detail: 'EAGAIN',
-        }),
-        ofConnection({kind: 'helperRefused', reason: 'unreadable reply'}),
         ofConnection({kind: 'transportLost'}),
         ofConnection({kind: 'helperGone'}),
         ofConnection({kind: 'timeout'}),
         ofConnection({kind: 'cancelled'}),
       ],
       [
-        {kind: 'authentication', reason: {text: 'denied'}, hints: []},
-        {kind: 'unreachable', hints: []},
-        {kind: 'prerequisiteMissing', reason: {text: 'ssh is gone'}},
-        {kind: 'unknown', reason: {text: 'EAGAIN'}},
-        {kind: 'unknown', reason: {text: 'unreadable reply'}},
         {kind: 'channelClosed'},
         {kind: 'channelClosed'},
         {kind: 'timeout'},
@@ -327,4 +591,13 @@ describe('the reading of each library failure', () => {
       ],
     );
   });
+
+  for (const [name, detail] of EVERY_CASE) {
+    it(`R-29: ${name} has no reason that carries text`, () => {
+      deepStrictEqual(
+        detail.reason !== undefined && 'text' in detail.reason,
+        false,
+      );
+    });
+  }
 });

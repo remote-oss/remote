@@ -210,6 +210,61 @@ describe('the failure presenter', () => {
     );
   });
 
+  it('F-3902 rule 8: the dialog for an unknown placeholder names it as the user wrote it', async () => {
+    const {presenter, seen} = surroundings(() => Promise.resolve(undefined));
+    await presenter.present(
+      failedWith({
+        kind: 'invalidServerTemplate',
+        reason: {id: 'templateUnknownPlaceholder', values: ['${foo}']},
+      }),
+    );
+    deepStrictEqual(
+      seen.dialogs[0]?.text,
+      'The value of remote.SSH.serverDownloadUrlTemplate is not a usable server download URL template: the placeholder ${foo} is not known.',
+    );
+  });
+
+  it('F-3902 rule 8: the dialog for a template that is not an http address says so', async () => {
+    const {presenter, seen} = surroundings(() => Promise.resolve(undefined));
+    await presenter.present(
+      failedWith({
+        kind: 'invalidServerTemplate',
+        reason: {id: 'templateNotHttp', values: []},
+      }),
+    );
+    deepStrictEqual(
+      seen.dialogs[0]?.text,
+      'The value of remote.SSH.serverDownloadUrlTemplate is not a usable server download URL template: it does not give an http or https address.',
+    );
+  });
+
+  it('F-2407 7.E1: the dialog for an invalid install folder shows the value as stored', async () => {
+    deepStrictEqual(
+      await textFor({
+        kind: 'invalidSetting',
+        reason: {id: 'installPathProvided', values: ['relative/inst']},
+      }),
+      'Could not establish connection to "box": Provided: "relative/inst".',
+    );
+  });
+
+  it('F-2407 7.E1: a value holding quotes is shown as it is stored', async () => {
+    deepStrictEqual(
+      await textFor({
+        kind: 'invalidSetting',
+        reason: {id: 'installPathProvided', values: ['"/x/q"']},
+      }),
+      'Could not establish connection to "box": Provided: ""/x/q"".',
+    );
+  });
+
+  it('F-2601: the dialog for a failed download ends with one full stop', async () => {
+    deepStrictEqual(
+      await textFor({kind: 'serverDownload', reason: {id: 'S043'}}),
+      'Could not establish connection to "box": Downloading VS Code Server failed. Please try again later.',
+    );
+  });
+
   it('F-3902 rule 8: an invalid template without a reason leaves its place empty', async () => {
     const {presenter, seen} = surroundings(() => Promise.resolve(undefined));
     await presenter.present(failedWith({kind: 'invalidServerTemplate'}));

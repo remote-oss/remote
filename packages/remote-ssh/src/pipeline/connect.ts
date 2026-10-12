@@ -155,13 +155,16 @@ export async function connect(
       diagnostics: step.diagnostics ?? [],
     };
     options.logger.warn(`connect failed: ${step.kind}`);
+    if (step.logDetail !== undefined) {
+      options.logger.warn(`the ${step.kind} failure: ${step.logDetail}`);
+    }
     return failedWith(step, context);
   }
 
   try {
     return await runSteps(input, steps, options, held, failure);
   } catch (caught) {
-    return failure({kind: 'unknown', reason: {text: messageOf(caught)}});
+    return failure({kind: 'unknown', logDetail: messageOf(caught)});
   }
 }
 

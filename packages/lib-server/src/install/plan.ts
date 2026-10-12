@@ -1,3 +1,4 @@
+import type {TemplateProblem} from 'lib-product';
 import type {DownloadPlacement} from '../policy/record.ts';
 
 /** What the planner knows about the host before any channel is used. */
@@ -26,7 +27,7 @@ export interface PlanInput {
   source:
     | {kind: 'resolved'; address: string}
     | {kind: 'noSource'}
-    | {kind: 'invalidOverride'; problem: string};
+    | {kind: 'invalidOverride'; problem: TemplateProblem};
 }
 
 /** The reuse and download shapes the caller acts on. */
@@ -54,7 +55,7 @@ export type Plan =
 /** Why the plan could not be made, before any channel is used. */
 export type PlanFailure =
   | {kind: 'noSource'}
-  | {kind: 'invalidOverride'; problem: string}
+  | {kind: 'invalidOverride'; problem: TemplateProblem}
   | {
       kind: 'invalidInstallPath';
       reason: 'relative' | 'empty' | 'containsNewline';
