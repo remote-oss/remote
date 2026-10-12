@@ -11,6 +11,10 @@ export type {
   ProbeAnswer,
 } from './port-search/find.ts';
 export {findFreePort} from './port-search/find.ts';
+export {
+  nodePortProber,
+  PROBE_TIMEOUT_MILLISECONDS,
+} from './port-search/node-prober.ts';
 export type {
   Dialer,
   Duplex,
