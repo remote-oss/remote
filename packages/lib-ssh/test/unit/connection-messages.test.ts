@@ -117,39 +117,17 @@ describe('connection requests (contracts §4 S9)', () => {
   });
 
   it('reads a script to run on the session', () => {
+    const bodies = [
+      {runId: 1, script: 'echo x', environment: {}, inputBase64: null},
+      {runId: 2, script: 'cat', environment: {NAME: 'b'}, inputBase64: 'AQID'},
+    ].map(fields => ({
+      type: 'runScript',
+      ...fields,
+      deadlineMilliseconds: 1000,
+    }));
     deepStrictEqual(
-      [
-        {
-          type: 'runScript',
-          runId: 1,
-          script: 'echo x',
-          inputBase64: null,
-          deadlineMilliseconds: 1000,
-        },
-        {
-          type: 'runScript',
-          runId: 2,
-          script: 'cat',
-          inputBase64: 'AQID',
-          deadlineMilliseconds: 5,
-        },
-      ].map(body => readConnectionRequest(body)),
-      [
-        {
-          type: 'runScript',
-          runId: 1,
-          script: 'echo x',
-          inputBase64: null,
-          deadlineMilliseconds: 1000,
-        },
-        {
-          type: 'runScript',
-          runId: 2,
-          script: 'cat',
-          inputBase64: 'AQID',
-          deadlineMilliseconds: 5,
-        },
-      ],
+      bodies.map(body => readConnectionRequest(body)),
+      bodies,
     );
   });
 
@@ -158,6 +136,7 @@ describe('connection requests (contracts §4 S9)', () => {
       type: 'runScript',
       runId: 1,
       script: 'x',
+      environment: {},
       inputBase64: null,
       deadlineMilliseconds: 1000,
     };
@@ -166,10 +145,22 @@ describe('connection requests (contracts §4 S9)', () => {
         {...complete, runId: '1'},
         {...complete, script: 1},
         {...complete, inputBase64: 5},
+        {...complete, environment: {NAME: 1}},
+        {...complete, environment: 'A=1'},
+        {...complete, environment: null},
         {...complete, deadlineMilliseconds: '1'},
         {...complete, deadlineMilliseconds: 0},
       ].map(body => readConnectionRequest(body)),
-      [undefined, undefined, undefined, undefined, undefined],
+      [
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ],
     );
   });
 });

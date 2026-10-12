@@ -107,7 +107,7 @@ describe('the host channel over the shared session', () => {
     );
   });
 
-  it('counts the limit in bytes of the text that is sent, the added environment included', async () => {
+  it('counts the limit in bytes of the script text; the environment is not part of it', async () => {
     const outcome = await channel().runScript(
       {
         ...REQUEST,
@@ -116,17 +116,17 @@ describe('the host channel over the shared session', () => {
       },
       () => undefined,
     );
-    deepStrictEqual(outcome.kind, 'failed');
+    deepStrictEqual(outcome.kind, 'exited');
   });
 
-  it('puts the added environment variables in front of the script', async () => {
+  it('§S10: gives the added environment to the run beside the script, not inside it', async () => {
     await channel().runScript(
       {...REQUEST, environment: {NAME: "it's"}},
       () => undefined,
     );
     deepStrictEqual(
-      runs[0]?.script,
-      "NAME='it'\\''s'\nexport NAME\necho hello",
+      [runs[0]?.script, runs[0]?.environment],
+      ['echo hello', {NAME: "it's"}],
     );
   });
 

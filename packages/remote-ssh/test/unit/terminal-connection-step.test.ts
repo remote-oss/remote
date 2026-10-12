@@ -430,7 +430,12 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     await result;
     const [runner] = made.runners;
     void runner?.runOnSession(
-      {script: 'echo hi', inputBase64: null, deadlineMilliseconds: 1000},
+      {
+        script: 'echo hi',
+        environment: {},
+        inputBase64: null,
+        deadlineMilliseconds: 1000,
+      },
       () => undefined,
       5000,
     );

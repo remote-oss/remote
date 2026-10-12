@@ -29,6 +29,8 @@ export type ConnectionRequest =
       type: 'runScript';
       runId: number;
       script: string;
+      /** Variables added to the script's environment. */
+      environment: Readonly<Record<string, string>>;
       /** What the script reads on its standard input, as base64; null for none. */
       inputBase64: string | null;
       /** How long the run may take once it has started, in milliseconds. */
@@ -82,6 +84,13 @@ type Fields = Record<string, unknown>;
 
 function isFields(value: unknown): value is Fields {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    isFields(value) &&
+    Object.values(value).every(item => typeof item === 'string')
+  );
 }
 
 function readSharedRecord(value: unknown): SharedRecord | undefined {
@@ -139,6 +148,7 @@ export function readConnectionRequest(
     case 'runScript':
       return typeof body.runId === 'number' &&
         typeof body.script === 'string' &&
+        isStringRecord(body.environment) &&
         (body.inputBase64 === null || typeof body.inputBase64 === 'string') &&
         typeof body.deadlineMilliseconds === 'number' &&
         body.deadlineMilliseconds > 0
@@ -146,6 +156,7 @@ export function readConnectionRequest(
             type: 'runScript',
             runId: body.runId,
             script: body.script,
+            environment: body.environment,
             inputBase64: body.inputBase64,
             deadlineMilliseconds: body.deadlineMilliseconds,
           }

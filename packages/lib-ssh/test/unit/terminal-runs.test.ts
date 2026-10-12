@@ -7,12 +7,14 @@ import {TerminalSessionRunner} from '../../src/terminal/terminal-runs.ts';
 
 const SCRIPT: SessionRun = {
   script: 'echo hello',
+  environment: {},
   inputBase64: null,
   deadlineMilliseconds: 1000,
 };
 
 const OTHER: SessionRun = {
   script: 'echo other',
+  environment: {},
   inputBase64: null,
   deadlineMilliseconds: 1000,
 };

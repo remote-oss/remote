@@ -18,6 +18,10 @@ import {
   SshHostChannel,
 } from '../../src/index.ts';
 import {
+  environmentPrefix,
+  scriptText,
+} from '../../src/process/remote-program.ts';
+import {
   type ClientScript,
   FakeClientProcess,
   ScriptedSpawner,
@@ -97,7 +101,7 @@ describe('SSH host channel', () => {
       });
     });
 
-    it('sets the added environment variables before the script, each quoted and exported', () => {
+    it('sets the added environment variables before the script on the input of sh -s, each quoted and exported', () => {
       deepStrictEqual(
         planScript(
           request({environment: {GREETING: "it's"}, script: 'echo $GREETING'}),
@@ -110,6 +114,66 @@ describe('SSH host channel', () => {
             text: "GREETING='it'\\''s'\nexport GREETING\necho $GREETING",
           },
         },
+      );
+    });
+
+    it('§S10: with input and an environment, the prelude leads the input and only its byte count is on the command line', () => {
+      const prelude = "FIRST='é'\nexport FIRST\ncat\n";
+      deepStrictEqual(
+        planScript(
+          request({
+            environment: {FIRST: 'é'},
+            script: 'cat',
+            input: {kind: 'text', text: 'data'},
+          }),
+        ),
+        {
+          kind: 'planned',
+          remoteProgram: `sh -c 'eval "$(dd bs=1 count=${String(Buffer.byteLength(prelude))} 2>/dev/null)"'`,
+          input: {kind: 'text', text: `${prelude}data`},
+        },
+      );
+    });
+
+    it('§S10: with a streamed file and an environment, the prelude is the prefix of the file', () => {
+      deepStrictEqual(
+        planScript(
+          request({
+            environment: {FIRST: 'x'},
+            script: 'cat',
+            input: {kind: 'file', localFile: '/a'},
+          }),
+        ),
+        {
+          kind: 'planned',
+          remoteProgram: `sh -c 'eval "$(dd bs=1 count=27 2>/dev/null)"'`,
+          input: {
+            kind: 'prefixedFile',
+            prefix: "FIRST='x'\nexport FIRST\ncat\n",
+            localFile: '/a',
+          },
+        },
+      );
+    });
+
+    it('§S10: environmentPrefix quotes each value in order and is empty for none', () => {
+      deepStrictEqual(
+        [
+          environmentPrefix({FIRST: 'x y', SECOND: "it's"}),
+          environmentPrefix({}),
+        ],
+        ["FIRST='x y' SECOND='it'\\''s' ", ''],
+      );
+    });
+
+    it('§S10: the script text has no assignment lines', () => {
+      deepStrictEqual(
+        scriptText({
+          script: 'echo hi',
+          interpreter: 'posixShell',
+          environment: {FIRST: 'secret'},
+        }),
+        {kind: 'text', text: 'echo hi'},
       );
     });
 

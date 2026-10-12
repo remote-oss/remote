@@ -22,7 +22,7 @@ import type {Copier} from '../terminal/terminal-copy.ts';
 import {LineSplitter} from './line-splitter.ts';
 import type {LocalFiles} from './node-files.ts';
 import type {ProcessSpawner} from './ports.ts';
-import {planScript} from './remote-program.ts';
+import {planScript, type PlannedInput} from './remote-program.ts';
 import {type SshSession, spawnSession} from './session.ts';
 
 /** The exit status with which `ssh` and `scp` report that the connection itself failed. */
@@ -234,14 +234,14 @@ export class SshHostChannel implements HostChannel {
   }
 
   /** Sends the script, or the input, to the client's standard input and closes it. Errors show in the exit. */
-  private async feed(
-    session: SshSession,
-    input: ScriptRequest['input'],
-  ): Promise<void> {
+  private async feed(session: SshSession, input: PlannedInput): Promise<void> {
     try {
       if (input.kind === 'text') {
         await session.write(input.text);
       } else {
+        if (input.kind === 'prefixedFile') {
+          await session.write(input.prefix);
+        }
         for await (const piece of this.options.files.read(input.localFile)) {
           await session.write(piece);
         }
