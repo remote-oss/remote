@@ -100,6 +100,18 @@ describe('coverage', () => {
         [],
       );
     });
+
+    it('report a named generated file as covered by the rule', () => {
+      workspace.write('packages/remote-a/src/x.generated.ts', '');
+      deepStrictEqual(
+        exclusionProblems(packageUnit(), {
+          exclude: {'src/x.generated.ts': 'generated'},
+        }),
+        [
+          'remote-a: exclusion src/x.generated.ts is covered by the generated-file rule; remove the entry',
+        ],
+      );
+    });
   });
 
   describe('gates', () => {
@@ -166,6 +178,32 @@ describe('coverage', () => {
         lines: 83.33,
         branches: 66.66,
         functions: 100,
+      });
+    });
+
+    it('does not count a generated file, even when uncovered', function () {
+      this.timeout(30_000);
+      workspace.write(
+        'packages/remote-a/src/x.generated.ts',
+        'export function neverRun(): string {\n  return "generated";\n}\n',
+      );
+      deepStrictEqual(measureUnit(workspace.root, packageUnit(), []), {
+        lines: 83.33,
+        branches: 66.66,
+        functions: 100,
+      });
+    });
+
+    it('still counts an uncovered file that is not generated', function () {
+      this.timeout(30_000);
+      workspace.write(
+        'packages/remote-a/src/plain.ts',
+        'export const one = 1;\nexport function a() {\n  return 1;\n}\nexport function b() {\n  return 2;\n}\n',
+      );
+      deepStrictEqual(measureUnit(workspace.root, packageUnit(), []), {
+        lines: 38.46,
+        branches: 50,
+        functions: 50,
       });
     });
 

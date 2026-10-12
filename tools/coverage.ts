@@ -88,8 +88,8 @@ export function coverageUnits(root: string): CoverageUnit[] {
 }
 
 /**
- * The problems with a unit's exclusions: an exclusion without a reason, one naming a file that no longer exists,
- * and, for a package, one its README does not list.
+ * The problems with a unit's exclusions: a generated file, which is excluded by rule and never named; an exclusion
+ * without a reason; one naming a file that no longer exists; and, for a package, one its README does not list.
  */
 export function exclusionProblems(
   unit: CoverageUnit,
@@ -101,6 +101,12 @@ export function exclusionProblems(
       ? readFileSync(unit.readme, 'utf8')
       : undefined;
   for (const [file, reason] of Object.entries(configuration.exclude ?? {})) {
+    if (file.endsWith('.generated.ts')) {
+      problems.push(
+        `${unit.name}: exclusion ${file} is covered by the generated-file rule; remove the entry`,
+      );
+      continue;
+    }
     if (typeof reason !== 'string' || reason.trim() === '') {
       problems.push(`${unit.name}: exclusion ${file} has no reason`);
     }
@@ -164,6 +170,7 @@ export function measureUnit(
     const relativeDirectory = path.relative(root, unit.directory);
     const exclusions = [
       '**/*.test.ts',
+      '**/*.generated.ts',
       '**/fixtures/**',
       '**/.tsc/**',
       ...excluded.map(file => path.join(relativeDirectory, file)),
