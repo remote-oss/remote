@@ -192,23 +192,59 @@ describe('the login terminal questions: shown to the user', () => {
     );
   });
 
-  it('F-2308 BR-5: a dismissed question sends nothing and closes its input', async () => {
+  it('F-2306 AC-20: a dismissed password prompt sends an empty line and closes its input', async () => {
     const context = setup([{value: undefined}]);
     context.onQuestion(PASSWORD_TEXT);
-    await until(() => context.events.length === 2);
+    await until(() => context.sent.length === 1);
     deepStrictEqual(
       [context.sent, context.events],
-      [[], ['inputOpened', 'inputClosed']],
+      [['\r'], ['inputOpened', 'send \r', 'inputClosed']],
     );
   });
 
-  it('athena on #352: an editor that cannot show the question still closes its input', async () => {
+  it('F-2306 AC-20: questions after a dismissal are answered without an input', async () => {
+    const context = setup([{value: undefined}]);
+    context.onQuestion(PASSWORD_TEXT);
+    context.onQuestion(PASSWORD_TEXT);
+    context.onQuestion(PASSWORD_TEXT);
+    await until(() => context.sent.length === 3);
+    deepStrictEqual(
+      [context.editor.shown.length, context.sent, context.events],
+      [
+        1,
+        ['\r', '\r', '\r'],
+        [
+          'inputOpened',
+          'send \r',
+          'inputClosed',
+          'inputOpened',
+          'send \r',
+          'inputClosed',
+          'inputOpened',
+          'send \r',
+          'inputClosed',
+        ],
+      ],
+    );
+  });
+
+  it('F-2306 AC-20: a dismissed host key question sends no', async () => {
+    const context = setup([{value: undefined}]);
+    context.onQuestion(FIRST_CONTACT_TEXT);
+    await until(() => context.sent.length === 1);
+    deepStrictEqual(
+      [context.sent, context.events],
+      [['no\r'], ['inputOpened', 'send no\r', 'inputClosed']],
+    );
+  });
+
+  it('athena on #352: an editor that cannot show the question sends an empty line and closes its input', async () => {
     const context = setup([], true);
     context.onQuestion(PASSWORD_TEXT);
-    await until(() => context.events.length === 2);
+    await until(() => context.sent.length === 1);
     deepStrictEqual(
       [context.editor.shown, context.sent, context.events],
-      [[], [], ['inputOpened', 'inputClosed']],
+      [[], ['\r'], ['inputOpened', 'send \r', 'inputClosed']],
     );
   });
 
