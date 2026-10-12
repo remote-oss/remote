@@ -751,8 +751,16 @@ else `tar.gz`); the gate's cancellation is card server-11.
 the reconnection flag and the window identity. The outputs are Connected or Failed with kind, reason, retryable,
 userAlreadyNotified, hints and diagnostics.
 
-The step order is in `components.md`. Phase events are `initializing`, `downloading`, `downloadingLocally`,
-`copyingWithScp`, `installing`, `settingUpTunnel`, `waitingForForwarding` and `serverDownloadPercent`.
+The step order is in `components.md`. Phase events are `initializing`, `waitingForOtherWindow`, `downloading`,
+`downloadingLocally`, `copyingWithScp`, `installing`, `settingUpTunnel`, `waitingForForwarding` and
+`serverDownloadPercent`.
+`waitingForOtherWindow` (ruled on #253 Q12, 2026-10-12) is F-2102's STR:S157, "Waiting for other windows to connect",
+shown as the progress's phase text after S129 with no "details" link (F-2102 5.2 step 3, 5.3 step 4): the connection
+step reports it when the lease's `waitingForOtherWindow` notice arrives. It is a phase, not a separate surface, so the
+prompt surface's `showWaiting` leaves the PromptEditor port. The mirrored prompt shows at the same time and is
+independent of it (5.2 step 3: the phase **and** the mirrored input together). When the login falls to this window
+(the owner gave up), the step reports `initializing` again, so the phase moves from waiting to this window's own login
+(F-2102 5.3 step 4, "(details) Initializing VS Code Server").
 
 Rules:
 - `Failed.kind` is one of the closed list: `unreachable`, `timeout`, `authentication`, `hostKeyChanged`,
