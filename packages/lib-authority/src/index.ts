@@ -99,3 +99,17 @@ export {
   type ResolverHandle,
   type ResolverOptions,
 } from './resolver/host.ts';
+export {
+  argvPath,
+  type ArgvLocation,
+  enabledProposedApiIds,
+  isArgvFile,
+} from './gate/argv.ts';
+export {type DocumentEvents, savedAndClosed} from './gate/save-watch.ts';
+export {
+  type GateEditor,
+  type GateIdentity,
+  type SetupTexts,
+  setupPortsOf,
+} from './gate/setup-ports.ts';
+export {gateEditorOf} from './gate/vscode-setup.ts';

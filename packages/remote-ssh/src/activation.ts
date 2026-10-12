@@ -12,6 +12,13 @@ import {
   type SettingEntry,
   type SettingHost,
 } from 'lib-identifiers';
+import {
+  type ProposalName,
+  type ProposalProbe,
+  runSetup,
+  type SetupPorts,
+  type SetupRun,
+} from 'lib-authority';
 import type {Logger} from 'lib-log';
 import {standDownIfPresent, type StandDownHost} from 'lib-standdown';
 import {
@@ -59,15 +66,60 @@ export interface ActivationInputs {
   help: HelpEditor;
   channels: ChannelPort;
   clock: () => number;
+  /** The ports of the proposed-API setup, made once the log channel is open; `logFailure` writes to it. */
+  gate: (logFailure: (message: string) => void) => SetupPorts;
 }
 
-/** How activation ended: the package stands down, or it serves with its logger and an end for what it opened. */
-export type ActivationResult =
-  {kind: 'standing'} | {kind: 'serving'; logger: Logger; dispose(): void};
+/** The proposals the editor granted and the ones it did not, as the probe found them. */
+interface ProposalGrants {
+  granted: readonly ProposalName[];
+  missing: readonly ProposalName[];
+}
+
+/** Runs the setup over `ports` and reports what its probe found, which the decision alone does not carry. */
+async function probedSetup(
+  ports: SetupPorts,
+): Promise<{setupRun: SetupRun; proposals: ProposalGrants}> {
+  let probes: readonly ProposalProbe[] = [];
+  const setupRun = await runSetup(
+    {
+      ...ports,
+      probe: async () => {
+        probes = await ports.probe();
+        return probes;
+      },
+    },
+    true,
+  );
+  function named(state: ProposalProbe['state']): ProposalName[] {
+    return probes
+      .filter(probe => probe.state === state)
+      .map(probe => probe.proposal);
+  }
+  return {
+    setupRun,
+    proposals: {granted: named('granted'), missing: named('missing')},
+  };
+}
 
 /**
- * Runs the activation. On `standing` nothing has been opened or registered. On `serving` the log channel is open and
- * the commands are registered; `dispose` undoes both.
+ * How activation ended: the package stands down, or it serves with its logger, the run of the proposed-API setup
+ * (whose `interaction` the activation does not wait for) and an end for what it opened.
+ */
+export type ActivationResult =
+  | {kind: 'standing'}
+  | {
+      kind: 'serving';
+      logger: Logger;
+      proposals: ProposalGrants;
+      setup: SetupRun['interaction'];
+      dispose(): void;
+    };
+
+/**
+ * Runs the activation: the stand-down guard, then the log channel, then the proposed-API gate, then the commands.
+ * On `standing` nothing has been opened or registered. On `serving` the log channel is open and the commands are
+ * registered whatever the gate found, since none of them needs a proposal; `dispose` undoes both.
  */
 export async function activateRemoteSsh(
   inputs: ActivationInputs,
@@ -92,6 +144,22 @@ export async function activateRemoteSsh(
     () => levelOfSetting(readSetting(inputs.settings, table.settings.logLevel)),
     inputs.clock,
   );
+  let probed: Awaited<ReturnType<typeof probedSetup>>;
+  try {
+    probed = await probedSetup(
+      inputs.gate(message => {
+        logChannel.logger.error(message);
+      }),
+    );
+  } catch (caught) {
+    logChannel.dispose();
+    throw caught;
+  }
+  if (probed.proposals.missing.length > 0) {
+    logChannel.logger.info(
+      `Missing proposed APIs: ${probed.proposals.missing.join(', ')}`,
+    );
+  }
   // Only the commands this module serves: the table may hold every command of the manifest.
   const served = {
     showLog: table.commands.showLog,
@@ -118,6 +186,8 @@ export async function activateRemoteSsh(
   return {
     kind: 'serving',
     logger: logChannel.logger,
+    proposals: probed.proposals,
+    setup: probed.setupRun.interaction,
     dispose: () => {
       registration.dispose();
       logChannel.dispose();

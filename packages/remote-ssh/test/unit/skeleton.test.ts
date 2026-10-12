@@ -594,6 +594,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
           kind: 'change',
         },
         {id: 'remote-internal.sshHostsChanged', role: 'called', kind: 'change'},
+        {id: 'remote-oss.gate.claim', role: 'called', kind: 'query'},
       ],
       invented: [
         {
@@ -744,7 +745,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
         settingIds: [...manifestSettings].sort(),
         contextKey: {id: 'opensshremotes.standingDown', setter: 'extension'},
         authority: 'ssh-remote',
-        internalCount: 6,
+        internalCount: 7,
         standDown: {
           standsDownFor: 'ms-vscode-remote.remote-ssh',
           contextKey: 'opensshremotes.standingDown',

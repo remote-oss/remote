@@ -5,6 +5,8 @@ import {
   settings,
   standDown,
 } from '../../src/identifiers.generated.ts';
+import type {ProposalName} from 'lib-authority';
+import {recordingSetupPorts} from 'lib-authority/testing/recording-setup-ports';
 import type {StandDownHost} from 'lib-standdown';
 import {
   type ActivationInputs,
@@ -45,7 +47,11 @@ interface Seen {
   channelLines: string[];
 }
 
-function surroundings(options: {otherRuns: boolean; logLevel?: unknown}): {
+function surroundings(options: {
+  otherRuns: boolean;
+  logLevel?: unknown;
+  missing?: readonly ProposalName[];
+}): {
   inputs: ActivationInputs;
   seen: Seen;
 } {
@@ -126,6 +132,15 @@ function surroundings(options: {otherRuns: boolean; logLevel?: unknown}): {
     },
     channels: {createOutputChannel: () => channel},
     clock: () => new Date(2026, 9, 8, 0, 0, 0, 0).getTime(),
+    gate: () =>
+      recordingSetupPorts(
+        {
+          extensionId: 'remote-oss.remote-ssh',
+          missing: options.missing ?? [],
+          probed: ['resolvers', 'tunnels'],
+        },
+        seen.events,
+      ),
   };
   return {inputs, seen};
 }
@@ -156,6 +171,7 @@ describe('the activation', () => {
         'serving',
         [
           'context opensshremotes.standingDown=false',
+          'probe',
           'links read',
           'register opensshremotes.showLog',
           'register opensshremotes.getHelp',
@@ -165,6 +181,103 @@ describe('the activation', () => {
           'register opensshremotes.reportIssue',
         ],
       ],
+    );
+  });
+
+  it('probes the gate after the guard and before anything is registered', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    await activateRemoteSsh(inputs);
+    deepStrictEqual(seen.events.slice(0, 3), [
+      'context opensshremotes.standingDown=false',
+      'probe',
+      'links read',
+    ]);
+  });
+
+  it('does not probe the gate when it stands down', async () => {
+    const {inputs, seen} = surroundings({otherRuns: true});
+    await activateRemoteSsh(inputs);
+    deepStrictEqual(seen.events.includes('probe'), false);
+  });
+
+  it('serves the commands and tells the user once when a proposal is missing', async () => {
+    const {inputs, seen} = surroundings({
+      otherRuns: false,
+      missing: ['resolvers'],
+    });
+    const result = await activateRemoteSsh(inputs);
+    if (result.kind === 'serving') {
+      await result.setup;
+    }
+    deepStrictEqual(
+      [
+        result.kind,
+        seen.events.filter(event => ['claim', 'notice'].includes(event)),
+        seen.registered.size,
+        seen.channelLines.at(-1),
+      ],
+      [
+        'serving',
+        ['claim', 'notice'],
+        6,
+        '[00:00:00.000] Missing proposed APIs: resolvers',
+      ],
+    );
+  });
+
+  it('says which proposals the probe found granted and missing', async () => {
+    const {inputs} = surroundings({otherRuns: false, missing: ['resolvers']});
+    const result = await activateRemoteSsh(inputs);
+    deepStrictEqual(result.kind === 'serving' ? result.proposals : undefined, {
+      granted: ['tunnels'],
+      missing: ['resolvers'],
+    });
+  });
+
+  it('logs no line about proposals when none is missing', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    await activateRemoteSsh(inputs);
+    deepStrictEqual(
+      seen.channelLines.some(line => line.includes('Missing proposed')),
+      false,
+    );
+  });
+
+  it('logs a failure of the setup into the channel', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    const failing: ActivationInputs = {
+      ...inputs,
+      gate: logFailure => {
+        logFailure('the notice broke');
+        return recordingSetupPorts(
+          {extensionId: 'remote-oss.remote-ssh'},
+          seen.events,
+        );
+      },
+    };
+    await activateRemoteSsh(failing);
+    deepStrictEqual(
+      seen.channelLines.includes('[00:00:00.000] the notice broke'),
+      true,
+    );
+  });
+
+  it('closes the log channel and registers nothing when the probe fails', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    const failing: ActivationInputs = {
+      ...inputs,
+      gate: () => ({
+        ...recordingSetupPorts(
+          {extensionId: 'remote-oss.remote-ssh'},
+          seen.events,
+        ),
+        probe: () => Promise.reject(new Error('the editor failed')),
+      }),
+    };
+    await activateRemoteSsh(failing).catch(() => undefined);
+    deepStrictEqual(
+      [seen.events.includes('channel disposed'), seen.registered.size],
+      [true, 0],
     );
   });
 

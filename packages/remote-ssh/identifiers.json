@@ -45,6 +45,11 @@
       "id": "remote-internal.sshHostsChanged",
       "role": "called",
       "kind": "change"
+    },
+    {
+      "id": "remote-oss.gate.claim",
+      "role": "called",
+      "kind": "query"
     }
   ],
   "invented": [
