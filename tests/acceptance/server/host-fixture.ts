@@ -57,6 +57,8 @@ export interface RunningHost {
   onHost(...command: string[]): string;
   /** The output of a command run in the container as root, to change the host before a test. */
   asRoot(...command: string[]): string;
+  /** Starts a command in the container as root and leaves it running. */
+  startDetached(...command: string[]): void;
   /** Copies a local file into the container, owned by the user harness. */
   copyIn(localFile: string, hostFile: string): void;
   /** Removes the container and the run's folder. */
@@ -123,8 +125,16 @@ function channelTo(base: RunBase): SshHostChannel {
   });
 }
 
+/** The variant of the host a test asks for; what it leaves out is the default host. */
+export interface HostVariant {
+  /** The download tool the host keeps (`HOST_FETCH`). */
+  fetch?: string;
+}
+
 /** Starts the host and waits until it accepts SSH; call `stop` when the tests are done, also after a failure. */
-export async function startHost(): Promise<RunningHost> {
+export async function startHost(
+  variant: HostVariant = {},
+): Promise<RunningHost> {
   const runFolder = mkdtempSync(path.join(tmpdir(), 'server-acceptance-'));
   let container = '';
   try {
@@ -134,6 +144,9 @@ export async function startHost(): Promise<RunningHost> {
       REPOSITORY_ROOT,
       runId,
       runFolder,
+      variant.fetch === undefined
+        ? []
+        : ['--env', `HOST_FETCH=${variant.fetch}`],
     );
     container = host.container;
     const port = host.port;
@@ -201,6 +214,16 @@ export async function startHost(): Promise<RunningHost> {
           container,
           ...command,
         ]),
+      startDetached: (...command) => {
+        checked(runCommand, 'docker', [
+          'exec',
+          '--detach',
+          '--user',
+          'root',
+          container,
+          ...command,
+        ]);
+      },
       copyIn: (localFile, hostFile) => {
         checked(runCommand, 'docker', [
           'cp',

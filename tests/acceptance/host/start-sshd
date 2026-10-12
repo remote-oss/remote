@@ -1,8 +1,17 @@
 #!/bin/sh
-# Installs the run's public key, given in AUTHORIZED_KEY, for the user harness, then runs sshd in the foreground.
+# Installs the run's public key, given in AUTHORIZED_KEY, for the user harness, leaves the host with the download tool
+# HOST_FETCH names (busybox-wget, the default; gnu-wget; curl; none), then runs sshd in the foreground.
+# The tools are removed with rm: apk del would put BusyBox's wget link back.
 set -eu
 install -d -m 700 -o harness -g harness /home/harness/.ssh
 printf '%s\n' "$AUTHORIZED_KEY" > /home/harness/.ssh/authorized_keys
 chown harness:harness /home/harness/.ssh/authorized_keys
 chmod 600 /home/harness/.ssh/authorized_keys
+case "${HOST_FETCH:-busybox-wget}" in
+  busybox-wget) rm -f /usr/bin/curl /usr/bin/wget; ln -s /bin/busybox /usr/bin/wget ;;
+  gnu-wget) rm -f /usr/bin/curl ;;
+  curl) rm -f /usr/bin/wget ;;
+  none) rm -f /usr/bin/wget /usr/bin/curl ;;
+  *) echo "unknown HOST_FETCH: ${HOST_FETCH}" >&2; exit 1 ;;
+esac
 exec /usr/sbin/sshd -D -e

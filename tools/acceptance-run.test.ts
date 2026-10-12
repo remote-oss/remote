@@ -184,15 +184,46 @@ describe('checked (card tooling-10)', () => {
   });
 });
 
+/** The scripted commands of a successful start: build, key, run, port. */
+function startingCommands(): ScriptedCommands & CommandRunner {
+  const scripted = scriptedCommands();
+  scripted.passes(); // docker build
+  scripted.passes(); // ssh-keygen
+  scripted.passes('c123\n'); // docker run
+  scripted.passes('127.0.0.1:49153\n'); // docker port
+  return scripted;
+}
+
 describe('startHostContainer (card tooling-10)', () => {
+  it('passes the extra arguments to docker run, before the image (card tooling-14)', () => {
+    const runFolder = mkdtempSync(path.join(tmpdir(), 'acceptance-run-'));
+    try {
+      const scripted = startingCommands();
+      startHostContainer(scripted, '/root', RUN_ID, runFolder, [
+        '--env',
+        'HOST_FETCH=curl',
+      ]);
+      deepStrictEqual(
+        scripted
+          .callsOf('docker')
+          .find(argv => argv[0] === 'run')
+          ?.slice(-4),
+        [
+          '127.0.0.1::22',
+          '--env',
+          'HOST_FETCH=curl',
+          'remote-oss-acceptance-host:77-2',
+        ],
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
   it("builds the run's image, makes the run's key and runs the labelled container", () => {
     const runFolder = mkdtempSync(path.join(tmpdir(), 'acceptance-run-'));
     try {
-      const scripted = scriptedCommands();
-      scripted.passes(); // docker build
-      scripted.passes(); // ssh-keygen
-      scripted.passes('c123\n'); // docker run
-      scripted.passes('127.0.0.1:49153\n'); // docker port
+      const scripted = startingCommands();
 
       const host: HostContainer = startHostContainer(
         scripted,

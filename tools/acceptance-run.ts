@@ -109,13 +109,15 @@ export function mappedPort(dockerPortOutput: string): number {
 
 /**
  * Builds the run's image, makes the run's key in `runFolder`, and runs the labelled container: the one start of
- * the host both acceptance harnesses share.
+ * the host both acceptance harnesses share. `extraArguments` go to `docker run` before the image, such as the
+ * `--env` of a host variant.
  */
 export function startHostContainer(
   command: CommandRunner,
   root: string,
   runId: string,
   runFolder: string,
+  extraArguments: readonly string[] = [],
 ): HostContainer {
   checked(command, 'docker', [
     'build',
@@ -148,6 +150,7 @@ export function startHostContainer(
     `AUTHORIZED_KEY=${publicKey}`,
     '--publish',
     '127.0.0.1::22',
+    ...extraArguments,
     hostImageOf(runId),
   ]).trim();
   const port = mappedPort(
