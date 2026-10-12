@@ -42,9 +42,11 @@ mode turns the shared connection off whatever `useLocalServer` says, F-2104 6.8 
   line names the cause (F-2003).
 - The pipeline runs `validate` first, so the failure comes before the pre-connection script, the platform question,
   the client check and any lease. No `ssh` runs and nothing waits (R-79).
-- Not retried on a first connect (only a reconnection is ever retryable). On a reconnection `unknown` is retryable by
-  the kind table, and each attempt fails the same way at once, running nothing, until the reconnection limit; athena's
-  ruling allows this, since the settings cannot change between attempts and nothing hangs.
+- Not retried on a first connect (only a reconnection is ever retryable). On a reconnection `unknown` stays
+  retryable, and that is wanted (athena, #331; contracts 498cc6e): F-2102 BR-9 reads the setting live, so turning it
+  back on during a reconnection lets the next attempt connect. Each attempt with the setting still off fails at once
+  and runs nothing, so nothing hangs. The last row of section 3 pins the live read. (The target check stays
+  permanent: nothing can change between attempts there.)
 - Order inside `validate`: target check, then this check, then the install folder. A bad host is reported even with
   the setting off (it is the user's real error).
 
