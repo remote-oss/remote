@@ -112,6 +112,26 @@ describe('connection helper', () => {
     return connection;
   }
 
+  /**
+   * Asks for the connect, and at the two instants around the wait's end, one millisecond before and one after,
+   * reports whether the run had been killed.
+   */
+  async function killedAt(
+    connection: EndpointConnection,
+    milliseconds: number,
+    ended: Promise<unknown>,
+  ): Promise<boolean[]> {
+    connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
+    await settled();
+    clock.advance(milliseconds - 1);
+    const early = wasKilled();
+    clock.advance(1);
+    const late = wasKilled();
+    connection.send({type: 'stop'});
+    await ended;
+    return [early, late];
+  }
+
   beforeEach(() => {
     port = new FakeEndpointPort();
     clock = new FakeClock();
@@ -156,21 +176,22 @@ describe('connection helper', () => {
     await ended;
   });
 
+  it('F-2105 BR-4: with no looked-up timeout and the setting 0, the wait is the margin alone', async () => {
+    const ended = start({
+      ...REQUEST,
+      settings: {...REQUEST.settings, connectTimeout: 0},
+    });
+    const connection = await join();
+    deepStrictEqual(await killedAt(connection, 2000, ended), [false, true]);
+  });
+
   it('ends the connect wait at the configured timeout of the host', async () => {
     const ended = start({
       ...REQUEST,
       effective: {...REQUEST.effective, connectTimeout: '5'},
     });
     const connection = await join();
-    connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
-    await settled();
-    clock.advance(6999);
-    const early = wasKilled();
-    clock.advance(1);
-    const late = wasKilled();
-    connection.send({type: 'stop'});
-    await ended;
-    deepStrictEqual([early, late], [false, true]);
+    deepStrictEqual(await killedAt(connection, 7000, ended), [false, true]);
   });
 
   it('removes its registry record when a stop ends it', async () => {

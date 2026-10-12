@@ -48,7 +48,11 @@ describe('connection handler (contracts §4 S9)', () => {
       spawner: spawner.spawn,
       askpassEnvironment: {},
       editorEnvironment: {},
-      waitSettings: {connectTimeoutSeconds: 10, unboundedWaitSeconds: 120},
+      waitSettings: {
+        connectTimeoutSeconds: 10,
+        fromHost: false,
+        unboundedWaitSeconds: 120,
+      },
       scheduler: clock.scheduler(),
       askpass: {
         nonce: ASKPASS_NONCE,
