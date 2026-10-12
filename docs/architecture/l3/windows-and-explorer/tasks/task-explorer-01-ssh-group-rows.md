@@ -116,5 +116,7 @@ answers R1 to R4 and R6, maps each cite to its test name (R5), and lists the sec
 3. Characters outside the Basic Multilingual Plane in the alphabetical sort: the spec says "character codes". Code
    unit or code point comparison? Not tested.
 4. A workspace path with an empty name (`/w/.code-workspace`): the label ` (Workspace)` or something else? Not tested.
+   F-5104 BR-14 has no row for it; the literal rule of F-5104 §3 gives ` (Workspace)`, which the code does. Asked on
+   remote-oss/remote-explorer#18 (2026-10-12); a follow-up row lands when it is answered.
 5. Description and tooltip text of a row (platform dependent for Windows-form paths) and the expansion state under
    `collapseRecentFolders` are not in this card.
