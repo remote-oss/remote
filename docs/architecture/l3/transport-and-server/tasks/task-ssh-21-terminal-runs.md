@@ -85,7 +85,7 @@ sent from `sent`. The scheduler is the fake of the existing `shell-runs.test.ts`
 | F-2308 BR-7 | the same | the run answers `{kind: 'failed', reason: 'timeout', …}` |
 | contracts §S10 | `waitMilliseconds` passes while an earlier run still holds the session | the waiting run answers `{kind: 'failed', reason: 'timeout', detail: 'no end in time'}` |
 | contracts §S10 | the same, and the earlier run then ends and the waiting one's lines arrive | the timed-out run's `onLine` got nothing after its answer |
-| #299 | the terminal's output carries ssh's own lines (`debug1: …`) before and between runs | they reach no run's `onLine` |
+| #299 | the terminal's output carries ssh's own lines (`debug1: …`) outside a run's markers (before a run's start line, and between one run's end line and the next run's start line) | they reach no run's `onLine`. A line between a run's own markers goes to that run, whatever it says (athena on #351: a script may print a line beginning `debug1:`, and the result parser ignores lines it doesn't know) |
 
 ## 4. Rule for the worker
 
