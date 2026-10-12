@@ -227,6 +227,13 @@ describe('the payload codecs (card companion-02)', () => {
     });
   });
 
+  it('F-5902.5.rules: a disconnected remote with a host key that is a number is refused as foreign', () => {
+    deepStrictEqual(readActiveRemote(payload({connected: false, hostKey: 5})), {
+      status: 'refused',
+      reason: 'foreign',
+    });
+  });
+
   it('F-5902.5.table: hostnames keep their order and their repeats', () => {
     deepStrictEqual(readHostnames(payload({hostnames: ['b', 'A', 'b']})), {
       status: 'valid',
@@ -291,6 +298,13 @@ describe('the payload codecs (card companion-02)', () => {
       readFoldersHistory(
         payload({hosts: [{hostKey: 'h1', entries: [{kind: 'folder'}]}]}),
       ),
+      {status: 'refused', reason: 'foreign'},
+    );
+  });
+
+  it('F-5902.5.table: a host key that is null is refused as foreign', () => {
+    deepStrictEqual(
+      readFoldersHistory(payload({hosts: [{hostKey: null, entries: []}]})),
       {status: 'refused', reason: 'foreign'},
     );
   });
@@ -408,6 +422,20 @@ describe('the payload codecs (card companion-02)', () => {
     );
   });
 
+  it('F-5902.5.rules: a present path that is not a string is refused as foreign', () => {
+    deepStrictEqual(
+      readOpenRequest(payload({hostKey: 'Alias', window: 'new', path: 1})),
+      {status: 'refused', reason: 'foreign'},
+    );
+  });
+
+  it('F-5902.5.rules: a present kind that is not folder or workspace is refused as foreign', () => {
+    deepStrictEqual(
+      readOpenRequest(payload({hostKey: 'Alias', window: 'new', kind: 'file'})),
+      {status: 'refused', reason: 'foreign'},
+    );
+  });
+
   it('F-5902.5.push: a failed push with a host key is valid', () => {
     deepStrictEqual(
       readActiveFoldersPush(payload({outcome: 'failed', hostKey: 'h'})),
@@ -456,6 +484,13 @@ describe('the payload codecs (card companion-02)', () => {
   it('F-5902.5.push: a folder that is a number is refused as foreign', () => {
     deepStrictEqual(
       readActiveFoldersPush(payload({outcome: 'connected', folders: [1]})),
+      {status: 'refused', reason: 'foreign'},
+    );
+  });
+
+  it('F-5902.5.rules: a push with a host key that is a number is refused as foreign', () => {
+    deepStrictEqual(
+      readActiveFoldersPush(payload({outcome: 'failed', hostKey: 5})),
       {status: 'refused', reason: 'foreign'},
     );
   });

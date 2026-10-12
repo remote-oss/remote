@@ -198,6 +198,10 @@ function activeRemoteOf(
     }
     return {interfaceVersion: version, connected: true, hostKey};
   }
+  // A host key that is present but does not fit is a malformed field, not an absent one.
+  if (record.hostKey !== undefined && typeof record.hostKey !== 'string') {
+    return undefined;
+  }
   return {interfaceVersion: version, connected: false};
 }
 
@@ -297,7 +301,13 @@ function openRequestOf(
     return undefined;
   }
   const path = stringField(record, 'path');
+  if (path === undefined && record.path !== undefined) {
+    return undefined;
+  }
   const kind = pathKindOf(record.kind);
+  if (kind === undefined && record.kind !== undefined) {
+    return undefined;
+  }
   return {
     interfaceVersion: version,
     hostKey,
@@ -325,6 +335,9 @@ function activeFoldersPushOf(
     return undefined;
   }
   const hostKey = stringField(record, 'hostKey');
+  if (hostKey === undefined && record.hostKey !== undefined) {
+    return undefined;
+  }
   const rawFolders = record.folders;
   const folders = rawFolders === undefined ? undefined : stringList(rawFolders);
   if (rawFolders !== undefined && folders === undefined) {
