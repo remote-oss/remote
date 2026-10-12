@@ -11,7 +11,7 @@ Reviewing coder: `remote-coding-worker-1`.
 |---|---|
 | `packages/lib-server/src/policy/bounds.ts` | new: `CLIENT_DOWNLOAD_BOUNDS` |
 | `packages/lib-forwarding/src/window-tunnel/bounds.ts` | new: `TUNNEL_WAIT_LIMITS`, `SOCKS_HANDSHAKE_MILLISECONDS` |
-| `packages/remote-ssh/src/pipeline/bounds.ts` | new: `SERVER_BOUNDS`, `PRECONNECT_MILLISECONDS`, `CLIENT_CHECK_MILLISECONDS`, `effectiveConnectTimeoutSeconds`, `stepLimitsFor` |
+| `packages/remote-ssh/src/pipeline/bounds.ts` | new: `SERVER_BOUNDS`, `PRECONNECT_MILLISECONDS`, `CLIENT_CHECK_MILLISECONDS`, `HOST_ZERO_TIMEOUT_SECONDS`, `effectiveConnectTimeoutSeconds`, `stepLimitsFor` |
 | each package's `src/index.ts` (lib-server, lib-forwarding) | export the new names |
 | `packages/lib-server/test/unit/bounds.test.ts`, `packages/lib-forwarding/test/unit/bounds.test.ts`, `packages/remote-ssh/test/unit/bounds.test.ts` | new |
 
@@ -45,6 +45,7 @@ export const SERVER_BOUNDS: ServerBounds = {
 };
 export const PRECONNECT_MILLISECONDS = 5 * 60 * 1000;   // ruled on #253 Q7: F-2108 AC-5 and AC-8
 export const CLIENT_CHECK_MILLISECONDS = 30 * 1000;     // F-2101 AC-20
+export const HOST_ZERO_TIMEOUT_SECONDS = 600;          // ruled on #253 Q7: a host's ConnectTimeout 0; provisional on F-2105 Q3
 
 /** The connect timeout in seconds (F-2105 BR-1, BR-4). */
 export function effectiveConnectTimeoutSeconds(hostValue: string | undefined, settingValue: unknown): number;
@@ -58,7 +59,9 @@ export function stepLimitsFor(seconds: number): StepLimits;
 - The setting's value `0` gives **0** (F-2105 BR-4: ssh gets no limit, and the extension's own wait becomes 2 s,
   which `stepLimitsFor(0)` adds).
 - Anything else (absent, not a number, negative, fractional): **15** (F-2105 BR-1).
-- A host value of `0`: see section 6, row 1.
+- A host value of `0`: **`HOST_ZERO_TIMEOUT_SECONDS`** (600). In OpenSSH, 0 waits on the system's TCP limit and
+  doesn't fail fast, so a short wait would contradict the user (athena, #253 Q7). The **setting's** own 0 stays 0
+  (2 s waits).
 
 `stepLimitsFor(seconds)`:
 - `probeMilliseconds`: `(seconds + 2) * 1000` (F-2401 7.E6 and AC-18; F-2105 BR-3).
@@ -84,6 +87,8 @@ One assertion per `it`; the cite starts the name.
 | F-2105 BR-1 | host `undefined`, setting `30` | `30` |
 | F-2105 BR-1 | host `'45'`, setting `30` | `45` (the host's value wins) |
 | F-2105 BR-4 | host `undefined`, setting `0` | `0` |
+| F-2105 BR-4 | host `'0'`, setting `30` | `600` (the host's 0 gets the named ceiling) |
+| F-2105 BR-4 | `stepLimitsFor(600)` | `{preconnectMilliseconds: 300000, probeMilliseconds: 602000, tunnelMilliseconds: 600000}` |
 | F-2105 BR-1 | host `undefined`, setting `-3` / `'x'` / `1.5` | `15` (one `it` each) |
 | F-2105 BR-1 | host `'none'`-like text such as `'abc'`, setting `20` | `20` (a host value that's not a whole number is ignored) |
 | F-2401 AC-18 | `stepLimitsFor(15)` | `{preconnectMilliseconds: 300000, probeMilliseconds: 17000, tunnelMilliseconds: 15000}` |
@@ -100,7 +105,4 @@ PR title `lib-server, lib-forwarding, remote-ssh: the connect's named defaults (
 
 ## 6. Open rows
 
-1. A **host** `ConnectTimeout 0` (F-2105 BR-4, Q3): athena's ruling says it "gets this table's ceilings, never an
-   infinite wait". The table has no probe or tunnel ceiling, though: those two derive from the timeout. Until athena
-   names the ceiling, `effectiveConnectTimeoutSeconds` treats a host value of `0` like the setting's `0` (it returns
-   `0`, so the waits are 2 s). Test it as such, and report this row in the PR.
+None. A host `ConnectTimeout 0` was ruled on #253 Q7 (600 s, provisional on F-2105 Q3).
