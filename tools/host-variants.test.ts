@@ -3,6 +3,9 @@ import {
   FETCH_VARIANTS,
   fetchVariantOf,
   fetchVariantsToRun,
+  SHELL_VARIANTS,
+  shellVariantOf,
+  shellVariantsToRun,
 } from './host-variants.ts';
 
 describe('the host variants of a run', () => {
@@ -44,6 +47,53 @@ describe('the host variants of a run', () => {
       'gnu-wget',
       'curl',
       'none',
+    ]);
+  });
+
+  it('tooling-14: with no shell named the run goes through every login shell', () => {
+    deepStrictEqual(shellVariantsToRun({}), SHELL_VARIANTS);
+  });
+
+  it('tooling-14: with an empty shell name the run goes through every login shell', () => {
+    deepStrictEqual(
+      shellVariantsToRun({HARNESS_HOST_SHELL: ''}),
+      SHELL_VARIANTS,
+    );
+  });
+
+  it('tooling-14: a named login shell is the only one the run goes through', () => {
+    deepStrictEqual(shellVariantsToRun({HARNESS_HOST_SHELL: '/bin/zsh'}), [
+      '/bin/zsh',
+    ]);
+  });
+
+  it('tooling-14: the named login shell is the shell variant of the process', () => {
+    deepStrictEqual(
+      shellVariantOf({HARNESS_HOST_SHELL: '/bin/bash'}),
+      '/bin/bash',
+    );
+  });
+
+  it('tooling-14: with no shell named there is no single shell variant', () => {
+    deepStrictEqual(shellVariantOf({}), undefined);
+  });
+
+  it('tooling-14: a name that is no login shell throws', () => {
+    throws(() => shellVariantOf({HARNESS_HOST_SHELL: '/bin/ksh'}), {
+      message: 'HARNESS_HOST_SHELL names no login shell: /bin/ksh',
+    });
+  });
+
+  it('tooling-14: the login shells are the eight of the card, in order', () => {
+    deepStrictEqual(SHELL_VARIANTS, [
+      '/bin/sh',
+      '/bin/bash',
+      '/bin/zsh',
+      '/usr/bin/dash',
+      '/usr/bin/fish',
+      '/bin/tcsh',
+      '/bin/csh',
+      '/bin/mksh',
     ]);
   });
 });
