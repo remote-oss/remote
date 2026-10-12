@@ -100,7 +100,7 @@ gains one extra build per purpose, `makeRequest({purpose, forwards: [], clearUse
 | F-2104 BR-12 | the constant `TUNNEL_COMMAND` | equals `"echo 'Connected to SSH Host - Please do not close this terminal'; exec sleep 2147483647"` |
 
 Checked on a prototype over main (2026-10-12): with section 2 in place, the sweep is the only existing row that
-fails, and it passes once its allowed list has the two values; every expectation in 3.2 holds.
+fails, and it passes once its allowed list has the one value; every expectation in 3.2 holds.
 
 ## 4. Rule for the worker
 
