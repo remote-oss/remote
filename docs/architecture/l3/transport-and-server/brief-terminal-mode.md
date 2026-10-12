@@ -127,6 +127,10 @@ connect in validate; this brief replaces that interim.
   forwarding.` (printed at every log level). And the readiness probe would then connect to **whoever holds the port**.
   So T7 fails the tunnel when the tunnel terminal shows `Could not request local forwarding.` or `cannot listen to
   port: <our port>` before the probe succeeds, and only then trusts the probe. The success line alone never means up.
+- **Our forward names its bind address** (contracts §S2, corrected on #353 from themis's finding): `-L 127.0.0.1:<port>:…`.
+  The gate's two failure lines then cover a busy 127.0.0.1. With S2's earlier `-L <port>:…`, ssh fell back to ::1 and
+  printed only a `bind [127.0.0.1]` warning, which the gate missed. The fix is at the source (S2), not a third failure
+  pattern in the gate.
 - **The success line is a gate, then the probe** (daedalus, ruled on #299: the rule above raced, since with a foreign
   process on our port the probe connects to it at once, before ssh prints its failure). ssh sets up local forwards in
   its session setup before it sends the remote command, so its forward-failure lines always precede the success line:

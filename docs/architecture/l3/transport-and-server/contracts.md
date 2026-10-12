@@ -128,7 +128,14 @@ The argument rules:
 - `-o RemoteCommand=none` when the effective options carry a `RemoteCommand` and `remoteCommandInEffect` is false
   (F-2107). S2 does not decide whether the feature is in effect; R1 does (F-2107 BR-1).
 - `-v` at the level S5 needs (F-2109 BR-3).
-- `-D 127.0.0.1:<port>`, `-L <port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (F-2104 BR-1, F-2410).
+- `-D 127.0.0.1:<port>`, `-L 127.0.0.1:<port>:127.0.0.1:<remote port>` or `-L 127.0.0.1:<port>:<socket path>` (F-2104
+  BR-1, BR-4, F-2410). **Every local listener names `127.0.0.1` as its bind address** (corrected 2026-10-12 on #353,
+  from themis's finding; the contract said `-L <port>:…` before). Without one, ssh binds `localhost`, both loopbacks.
+  With a squatter on 127.0.0.1 alone, ssh then binds ::1, prints only `bind [127.0.0.1]:<port>: Address already in
+  use`, and carries on, so the window, which dials 127.0.0.1 (F-2104 BR-4, BR-13), reaches the squatter. With the
+  address named, a busy 127.0.0.1 is a real failure (`cannot listen to port` and `Could not request local
+  forwarding.`, checked against a real sshd), and no ::1 listener is left that nobody asked for. `-D` was already
+  explicit.
 - The host goes in as its own argument; a user carried by the target as `-l <user>`, and a port carried by the
   target as `-p <port>`, only then and never from the configuration (F-2501 BR-2, AC-9).
 - `--` comes right before the host in every invocation and in the options query (ruled on #253 Q9): defence in depth
