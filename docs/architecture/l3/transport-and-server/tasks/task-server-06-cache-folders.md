@@ -5,7 +5,10 @@ commit for every product but genuine VS Code). Depends on server-01 merged. Revi
 
 ## 1. Package and file boundary
 
-Files: `src/cache/folders.ts`, `src/index.ts` (exports only), test `test/unit/cache-folders.test.ts`.
+Files: `src/cache/folders.ts`, `src/index.ts` (exports only), test `test/unit/cache-folders.test.ts`; and in lib-product
+(amended 2026-10-12, #279): `src/product-table.ts` gains `volumeServerFolder(applicationName)`, `src/index.ts` its
+export line, and its test one row per case below. The server folder's name is the product table's data (ADR-0006: a
+server folder name appears in package code only in the product table); lib-server never spells it, whole or in parts.
 
 ## 2. Contract
 
@@ -13,7 +16,9 @@ Files: `src/cache/folders.ts`, `src/index.ts` (exports only), test `test/unit/ca
 export interface ProductKeys { applicationName: string; quality: 'stable' | 'insider' | string }
 export function cacheFolders(product: ProductKeys, commit: string, platform: string, volumeMounted: boolean):
   { serverTree: string | undefined; extensionsCache: string };
-// serverTree: `/vscode/vscode-server/bin/${platform}/${commit}` when volumeMounted, else undefined;
+// serverTree: `/vscode/${volumeServerFolder(applicationName)}/bin/${platform}/${commit}` when volumeMounted, else undefined;
+// lib-product's volumeServerFolder: the reference folder for code/code-insiders (keepsReferenceLayout), `${applicationName}-server` otherwise
+// (ADR-0006 decision 4, R-58: products share commit ids, so the server tree is per product like the extension cache; ruled 2026-10-12, #279)
 // extensionsCache: `/vscode/extensionsCache` when lib-product's keepsReferenceLayout(applicationName), `/vscode/extensionsCache-${applicationName}` otherwise (unchanged by volumeMounted)
 export function clientArchiveFolder(cacheRoot: string, product: ProductKeys, commit: string): string;
 // code/code-insiders: `${cacheRoot}/${quality}/${commit}`; every other product: `${cacheRoot}/${applicationName}/${quality}/${commit}`
@@ -26,6 +31,8 @@ export function isFromSameGallery(entryGallery: string, productGallery: string):
 |---|---|
 | `cacheFolders({code, stable}, 'abc', 'linux-x64', true)` | serverTree `/vscode/vscode-server/bin/linux-x64/abc`; extensionsCache `/vscode/extensionsCache` |
 | same, `volumeMounted false` | serverTree `undefined`; extensionsCache unchanged |
+| `cacheFolders({codium, stable}, 'abc', 'linux-x64', true)` | serverTree `/vscode/codium-server/bin/linux-x64/abc` (not the reference folder) |
+| `cacheFolders({synthetic-editor, stable}, 'abc', 'linux-x64', true)` | serverTree `/vscode/synthetic-editor-server/bin/linux-x64/abc` |
 | `{code-insiders, insider}` | extensionsCache `/vscode/extensionsCache` |
 | `{codium, stable}` | extensionsCache `/vscode/extensionsCache-codium` |
 | `{codium-insiders, insider}` | `/vscode/extensionsCache-codium-insiders` |

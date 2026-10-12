@@ -605,7 +605,7 @@ Rules:
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `cacheFolders` | product, commit, platform, whether a volume is mounted at `/vscode` (area C decides the mount, F-0419) | a pure function giving the volume tree for servers, and the extension cache folder: `extensionsCache/` for `code` and `code-insiders`, `extensionsCache-<applicationName>/` for every other product | none |
+| `cacheFolders` | product, commit, platform, whether a volume is mounted at `/vscode` (area C decides the mount, F-0419) | a pure function giving the volume tree for servers, `<serverFolder>/bin/<platform>/<commit>`, and the extension cache folder: `extensionsCache/` for `code` and `code-insiders`, `extensionsCache-<applicationName>/` for every other product. `<serverFolder>` follows the same rule (ruled 2026-10-12, #279; ADR-0006 decision 4, R-58: products share commit ids, so a server tree keyed by commit alone would hand one product's server to another): the reference folder for `code` and `code-insiders`, `<applicationName>-server` for every other product. The name comes from lib-product's product table (`volumeServerFolder(applicationName)`), never a literal in lib-server | none |
 | `clientArchiveFolder` | profile, quality, commit, the extension's cache root | the kept client archive folder: the reference layout for `code` and `code-insiders`, with an `<applicationName>` level for every other product, so two products never share a name | none |
 
 Rule: an entry downloaded from another gallery is never reused (R-58, F-0419 BR-18). The container transport's
