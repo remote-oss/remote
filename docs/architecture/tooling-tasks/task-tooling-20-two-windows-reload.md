@@ -94,7 +94,7 @@ One assertion per `it`, in this order (they build on each other):
 
 | Name | Expected |
 |---|---|
-| `D-85: with the second window closed, the third is still connected` | A opens B, then C, on `harness` (folders `b`, `c`), then closes B; `inWindow('c', 'acceptance.agent.writeFile', 'still-here.txt', 'c')` is `done`, and `/home/harness/c/still-here.txt` holds `c` |
+| `D-85: with the second window closed, the third is still connected` | A opens B, then C, on `harness` (folders `b`, `c`), then closes B; `inWindow('c', 'acceptance.agent.writeFile', 'still-here.txt', 'c')`, then a wait for that command's `done` event (not `inWindow`'s `accepted`), and `/home/harness/c/still-here.txt` holds `c` |
 
 ## 4. What follows
 
