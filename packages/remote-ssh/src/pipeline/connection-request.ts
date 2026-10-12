@@ -10,6 +10,7 @@ import {
   type ConnectionAcquireRequest,
   DEFAULT_FIRST_MESSAGE_MILLISECONDS,
   type RunBase,
+  type SshRequest,
 } from 'lib-ssh';
 import {
   effectiveConnectTimeoutSeconds,
@@ -113,5 +114,27 @@ export function connectionRequestOf(
       askpassFirstMessageMilliseconds: DEFAULT_FIRST_MESSAGE_MILLISECONDS,
     },
     policy: HELPER_POLICY,
+  };
+}
+
+/**
+ * The `ssh` request of the install connection in terminal mode: the host's shell as the remote program, and either our
+ * `-D` port when the window tunnel rides it, or, with no `-D`, the user's own forwards cleared so the run holds none.
+ */
+export function installRequestOf(
+  input: ConnectInput,
+  terms: ConnectionTerms,
+  state: ConnectState,
+  settings: ConnectionRequestSettings,
+  environment: ConnectionRequestEnvironment,
+  socksPort: number | undefined,
+): SshRequest {
+  return {
+    ...runBaseOf(input, terms, state, settings, environment),
+    purpose: 'connection',
+    remoteProgram: 'sh',
+    ...(socksPort === undefined
+      ? {clearUserForwards: true}
+      : {forwards: [{kind: 'dynamic' as const, localPort: socksPort}]}),
   };
 }

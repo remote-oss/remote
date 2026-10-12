@@ -1,0 +1,247 @@
+/**
+ * @fileoverview The connection step of a connect without the shared connection: the install terminal runs the window's
+ * own `ssh`, the login's questions are shown from its output, and the login ends at the line that says the user is
+ * authenticated. The server steps then run their scripts over that terminal. Its end ends the window's connection.
+ */
+
+import type {Logger} from 'lib-log';
+import type {HostChannel} from 'lib-host';
+import type {Scheduler} from 'lib-helper';
+import {
+  buildInvocation,
+  classify,
+  ConnectWait,
+  type ConnectWaitSettings,
+  type ConnectionNotice,
+  LineSplitter,
+  type LoginTerminals,
+  type LoginTerminalSession,
+  PromptReader,
+  type SessionRunner,
+  setupMarkerOf,
+  type SshRequest,
+  type TerminalEnd,
+  TerminalSessionRunner,
+} from 'lib-ssh';
+import type {
+  ConnectInput,
+  ConnectionLease,
+  ConnectionTerms,
+  ConnectSteps,
+  StepFailure,
+  StepResult,
+} from './steps.ts';
+
+/** The terminal and the reader one login's questions come from. */
+interface TerminalLogin {
+  terminal: Pick<LoginTerminalSession, 'send'>;
+  reader: Pick<PromptReader, 'inputOpened' | 'inputClosed'>;
+}
+
+/** What the terminal connection step is made from. */
+export interface TerminalConnectionDependencies {
+  terminals: LoginTerminals;
+  /**
+   * The install connection's request for this connect: the remote program `sh`, and with dynamic forwarding on our `-D`
+   * port; with it off, the user's own forwards are cleared.
+   */
+  installRequest(
+    input: ConnectInput,
+    terms: ConnectionTerms,
+    socksPort: number | undefined,
+  ): SshRequest;
+  /** Whether the window tunnel takes the SOCKS path, so the install `ssh` holds the `-D`. */
+  dynamicForwarding(): boolean;
+  /** A free loopback port for the `-D`, bound and released. */
+  freePort(): Promise<number>;
+  scheduler: Scheduler;
+  newMarker(): string;
+  /** The channel over the install terminal's runner for the server steps. */
+  channelFor(
+    runner: SessionRunner,
+    terms: ConnectionTerms,
+    input: ConnectInput,
+  ): HostChannel;
+  /** Shows the login's questions for this connect; the returned handle takes an open input down. */
+  attachQuestions(
+    login: TerminalLogin,
+    input: ConnectInput,
+  ): {onQuestion(text: string): void; dispose(): void};
+  /** `remote.SSH.showLoginTerminal`, read once per attempt. */
+  revealLoginTerminals(): boolean;
+  /** What decides the length of the connect wait: the timeout, whether the host set it, and the ceiling. */
+  connectWait(): ConnectWaitSettings;
+  logger: Logger;
+}
+
+const MILLISECONDS_PER_SECOND = 1000;
+
+/**
+ * The failure of a login that did not reach the handover, as the pipeline reads it. A terminal that ended with no exit
+ * code and no output, and that the user did not close, never started: the editor's trust question was cancelled.
+ */
+function failureOf(end: TerminalEnd, lines: readonly string[]): StepFailure {
+  if (end.code === undefined && !end.hadOutput && end.reason !== 'user') {
+    return {kind: 'cancelled', reason: {id: 'trustRefused'}};
+  }
+  const classification = classify(lines, end.code, 'connection', 'terminal');
+  return {
+    kind: classification.kind,
+    ...(classification.reason === undefined
+      ? {}
+      : {reason: classification.reason}),
+    hints: classification.hints,
+  };
+}
+
+/** The step that opens the connection of a connect in terminal mode. */
+export function openTerminalConnectionStep(
+  dependencies: TerminalConnectionDependencies,
+): ConnectSteps['openConnection'] {
+  return async (input, terms, cancellation) => {
+    const socksPort = dependencies.dynamicForwarding()
+      ? await dependencies.freePort()
+      : undefined;
+    if (cancellation.aborted) {
+      return {kind: 'failed', failure: {kind: 'cancelled'}};
+    }
+    const terminal = dependencies.terminals.open(
+      buildInvocation(dependencies.installRequest(input, terms, socksPort)),
+      'install',
+      dependencies.revealLoginTerminals(),
+    );
+    return new Promise<StepResult<ConnectionLease>>(settle => {
+      const lines: string[] = [];
+      const waitSettings = dependencies.connectWait();
+      let handedOver = false;
+      let finished = false;
+      const asking: {
+        questions?: {onQuestion(text: string): void; dispose(): void};
+      } = {};
+      const noticeListeners: Array<(notice: ConnectionNotice) => void> = [];
+      let disposed = false;
+
+      function disposeTerminal(): void {
+        if (!disposed) {
+          disposed = true;
+          terminal.dispose();
+        }
+      }
+
+      function takeDown(): void {
+        wait.stop();
+        reader.stop();
+        asking.questions?.dispose();
+        cancellation.removeEventListener('abort', onAbort);
+      }
+
+      function fail(failure: StepFailure): void {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        takeDown();
+        disposeTerminal();
+        settle({kind: 'failed', failure});
+      }
+
+      function onAbort(): void {
+        fail({kind: 'cancelled'});
+      }
+
+      const wait = new ConnectWait(waitSettings, dependencies.scheduler, () => {
+        fail({kind: 'timeout'});
+      });
+      const reader = new PromptReader(
+        dependencies.scheduler,
+        waitSettings.connectTimeoutSeconds * MILLISECONDS_PER_SECOND,
+        {
+          onQuestion: text => {
+            asking.questions?.onQuestion(text);
+          },
+          onUnreachable: () => {
+            fail({kind: 'timeout'});
+          },
+        },
+      );
+      asking.questions = dependencies.attachQuestions(
+        {terminal, reader},
+        input,
+      );
+
+      function handOver(): void {
+        handedOver = true;
+        finished = true;
+        takeDown();
+        const runner = new TerminalSessionRunner({
+          terminal,
+          scheduler: dependencies.scheduler,
+          newMarker: () => dependencies.newMarker(),
+        });
+        let channel: HostChannel;
+        try {
+          channel = dependencies.channelFor(runner, terms, input);
+        } catch (caught) {
+          disposeTerminal();
+          settle({
+            kind: 'failed',
+            failure: {kind: 'unknown', logDetail: String(caught)},
+          });
+          return;
+        }
+        settle({
+          kind: 'done',
+          value: {
+            channel,
+            socksPort: socksPort ?? 0,
+            storeSharedRecord: () => Promise.resolve(false),
+            onNotice: listener => {
+              noticeListeners.push(listener);
+              return () => {
+                noticeListeners.splice(noticeListeners.indexOf(listener), 1);
+              };
+            },
+            answer: () => Promise.resolve(false),
+            refuse: () => Promise.resolve(false),
+            release: disposeTerminal,
+          },
+        });
+      }
+
+      const splitter = new LineSplitter(line => {
+        lines.push(line);
+        if (
+          !handedOver &&
+          !finished &&
+          setupMarkerOf(line) === 'authenticated'
+        ) {
+          handOver();
+        }
+      });
+      let heardOutput = false;
+      terminal.onOutput(text => {
+        if (finished) {
+          return;
+        }
+        if (!heardOutput) {
+          heardOutput = true;
+          wait.stop();
+        }
+        reader.push(text);
+        splitter.push(text);
+      });
+      terminal.onEnd(end => {
+        if (handedOver) {
+          for (const listener of [...noticeListeners]) {
+            listener({type: 'transportLost'});
+          }
+          return;
+        }
+        splitter.flush();
+        fail(failureOf(end, lines));
+      });
+      cancellation.addEventListener('abort', onAbort);
+      wait.start();
+    });
+  };
+}

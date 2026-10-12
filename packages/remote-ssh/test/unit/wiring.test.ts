@@ -2,12 +2,14 @@ import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
+import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
   ConnectionLimits,
+  ConnectionMode,
   SharedConnection,
 } from 'lib-ssh';
 import type {LoginLease} from '../../src/pipeline/connection-step.ts';
@@ -16,6 +18,7 @@ import type {ConnectInput} from '../../src/pipeline/steps.ts';
 import {
   type ChannelRun,
   stepsOf,
+  terminalWaitOf,
   type WiringPorts,
 } from '../../src/pipeline/wiring.ts';
 import {
@@ -64,6 +67,7 @@ interface WiringSeen {
   logins: string[];
   channels: ChannelRun[];
   sink: MemorySink;
+  terminals: RecordingTerminals;
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -74,6 +78,7 @@ function portsOf(
     preconnect?: unknown;
     connectTimeout?: unknown;
     connection?: SharedConnection;
+    mode?: ConnectionMode;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
@@ -82,6 +87,7 @@ function portsOf(
     logins: [],
     channels: [],
     sink: new MemorySink(),
+    terminals: new RecordingTerminals(),
   };
   const logger = createLogger(seen.sink, {
     minimumLevel: (): Level => 'info',
@@ -114,7 +120,7 @@ function portsOf(
     },
     locate: {
       settingValue: () => '',
-      mode: () => 'shared',
+      mode: () => changes.mode ?? 'shared',
       environment: {searchPath: '/usr/bin', programFilesFolder: ''},
       platform: 'linux',
       homeFolder: '/home/a',
@@ -152,6 +158,18 @@ function portsOf(
     attachLogin: (login: LoginLease, alias: string) => {
       seen.logins.push(alias);
       return {dispose: () => undefined};
+    },
+    terminal: {
+      terminals: seen.terminals,
+      scheduler: new FakeClock().scheduler(),
+      dynamicForwarding: () => false,
+      freePort: () => Promise.resolve(41000),
+      newMarker: () => 'marker',
+      attachQuestions: () => ({
+        onQuestion: () => undefined,
+        dispose: () => undefined,
+      }),
+      revealLoginTerminals: () => false,
     },
     server: dependencies(),
     tunnel: {
@@ -411,6 +429,60 @@ describe("the composition's forwarding of the later server steps", () => {
   });
 });
 
+describe('the connection step by mode (card connect-17)', () => {
+  /** Opens the connection of a connect in `mode`, and what the shared and the terminal steps were asked for. */
+  async function connectIn(mode: ConnectionMode) {
+    const {ports, seen} = portsOf({mode});
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    void steps
+      .openConnection(inputFor('dev'), TERMS, new AbortController().signal)
+      .catch(() => undefined);
+    await Promise.resolve();
+    return seen;
+  }
+
+  it('F-2102 BR-9: the shared connection on uses the shared step', async () => {
+    const seen = await connectIn('shared');
+    deepStrictEqual(
+      [seen.acquires.length, seen.terminals.opened.length],
+      [1, 0],
+    );
+  });
+
+  it('F-2102 BR-10: the shared connection off uses the terminal step', async () => {
+    const seen = await connectIn('terminal');
+    deepStrictEqual(
+      [seen.acquires.length, seen.terminals.opened.length],
+      [0, 1],
+    );
+  });
+
+  it('F-2410 BR-2: socket mode, which is the terminal mode, opens the install terminal', async () => {
+    const seen = await connectIn('terminal');
+    deepStrictEqual(seen.terminals.opened[0]?.name, 'install');
+  });
+
+  it('F-2102 BR-9: the mode is read when the step runs', async () => {
+    let mode: ConnectionMode = 'shared';
+    const {ports, seen} = portsOf();
+    const steps = stepsOf({
+      ...ports,
+      locate: {...ports.locate, mode: () => mode},
+    });
+    await steps.locateClient(inputFor('dev'));
+    mode = 'terminal';
+    void steps
+      .openConnection(inputFor('dev'), TERMS, new AbortController().signal)
+      .catch(() => undefined);
+    await Promise.resolve();
+    deepStrictEqual(
+      [seen.acquires.length, seen.terminals.opened.length],
+      [0, 1],
+    );
+  });
+});
+
 describe("the composition's server steps", () => {
   it('connect-14: a probe before the client step is a defect, and throws', () => {
     const {ports} = portsOf();
@@ -572,5 +644,57 @@ describe("the composition's channel and window environment", () => {
       new AbortController().signal,
     );
     deepStrictEqual(reads, 1);
+  });
+});
+
+describe("a terminal-mode login's wait", () => {
+  it("F-2105 BR-2: the host's own timeout wins over the setting", () => {
+    deepStrictEqual(terminalWaitOf('7', 30), {
+      connectTimeoutSeconds: 7,
+      fromHost: true,
+      unboundedWaitSeconds: 600,
+    });
+  });
+
+  it('F-2105 BR-1: with no host timeout the setting applies', () => {
+    deepStrictEqual(terminalWaitOf(undefined, 30), {
+      connectTimeoutSeconds: 30,
+      fromHost: false,
+      unboundedWaitSeconds: 600,
+    });
+  });
+
+  it("ruled on #253 Q8: a host's own 0 waits the 600 s ceiling with no margin", () => {
+    deepStrictEqual(terminalWaitOf('0', 30), {
+      connectTimeoutSeconds: 0,
+      fromHost: true,
+      unboundedWaitSeconds: 600,
+    });
+  });
+
+  it("F-2105 AC-9: the setting's 0 stays 0, which the wait reads as the extra wait alone", () => {
+    deepStrictEqual(terminalWaitOf(undefined, 0).connectTimeoutSeconds, 0);
+  });
+});
+
+describe("a terminal-mode connect's channel", () => {
+  it("connect-17: the install terminal's channel gets this connect's host and runs", async () => {
+    const {ports, seen} = portsOf({mode: 'terminal'});
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('alex@dev:22'));
+    const result = steps.openConnection(
+      inputFor('alex@dev:22'),
+      TERMS,
+      new AbortController().signal,
+    );
+    await Promise.resolve();
+    seen.terminals.opened[0]?.write(
+      'Authenticated to dev ([192.0.2.1]:22) using "publickey".\n',
+    );
+    await result;
+    deepStrictEqual(
+      [seen.channels[0]?.hostString, seen.channels[0]?.base.effective.user],
+      ['alex@dev:22', 'alex'],
+    );
   });
 });

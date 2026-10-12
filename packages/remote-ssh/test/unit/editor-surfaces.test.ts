@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
+import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {
   type EditorAdapters,
   type EditorOperations,
@@ -35,6 +36,7 @@ function surfacesWith(
   }
   const adapters: EditorAdapters = {
     prompts: SILENT_PROMPTS,
+    terminals: new RecordingTerminals(),
     failureDialog: {showError: () => Promise.resolve(changes.dialogAnswer)},
     licenceDialog: {showModal: () => Promise.resolve(undefined)},
     platformPick: {pick: () => Promise.resolve(changes.platform)},

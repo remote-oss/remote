@@ -1,9 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {editorOperationsOf} from '../../src/editor-operations.ts';
 
-/** The editor's name of its address type. */
-const ADDRESS_TYPE = 'Uri';
-
 /** The fake editor's user-settings target. */
 const GLOBAL_TARGET = 1;
 
@@ -27,7 +24,6 @@ function operationsOver(): {
         return Promise.resolve();
       },
     },
-    [ADDRESS_TYPE]: {from: (parts: unknown) => parts},
     workspace: {
       getConfiguration: () => ({
         update: (...given: unknown[]) => {

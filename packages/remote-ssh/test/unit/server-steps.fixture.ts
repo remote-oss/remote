@@ -118,7 +118,6 @@ export function dependencies(
       acceptsBaseUrl: false,
       placeholders: BASE_PLACEHOLDERS,
     },
-    connectionSettings: () => ({listenOnSocket: false, useLocalServer: true}),
     remoteUser: () => 'alex',
     clock: () => 1700000000000,
     bounds: {downloadSeconds: 60, readySeconds: 20},

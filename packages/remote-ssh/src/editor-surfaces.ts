@@ -5,6 +5,7 @@
  */
 
 import type {AcceptanceStore} from 'lib-server';
+import type {LoginTerminals} from 'lib-ssh';
 import {
   pickRemotePlatform,
   type PlatformPickPort,
@@ -36,6 +37,7 @@ import type {SettingHost} from 'lib-identifiers';
 /** The editor's adapters of the connect's surfaces. */
 export interface EditorAdapters {
   prompts: PromptEditor;
+  terminals: LoginTerminals;
   failureDialog: FailureDialogPort;
   licenceDialog: LicenceDialogPort;
   platformPick: PlatformPickPort;
@@ -107,6 +109,7 @@ export function editorSurfacesOf(
     settings: context.settings,
     translate,
     prompts: adapters.prompts,
+    terminals: adapters.terminals,
     pickPlatform: async (alias, cancellation) => {
       const picked = await pickRemotePlatform(
         adapters.platformPick,
