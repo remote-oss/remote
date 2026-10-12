@@ -13,12 +13,15 @@ F-2601 shows). Needed before F-2403 is recorded (a D-65 row). Reviewing coder: `
 | File | Change |
 |---|---|
 | `packages/remote-ssh/src/pipeline/failure.ts` | every mapper of section 2.1; `detailOf` goes |
-| `packages/remote-ssh/src/pipeline/server-steps.ts` | `sourceOf` passes the template problem whole (section 2.3) |
+| `packages/remote-ssh/src/pipeline/server-steps.ts` | `sourceOf` passes the template problem whole (section 2.3); the install folder's reason (section 2.4) |
+| `packages/remote-ssh/src/pipeline/connection-step.ts` | a `channelFor` that throws gives no reason (section 2.4) |
+| `packages/remote-ssh/src/pipeline/host-settings.ts` | `InstallFolder`'s `invalid` keeps the value (section 2.4) |
+| `packages/remote-ssh/test/unit/host-settings.test.ts`, `connection-step.test.ts`, `server-steps.test.ts` | rows (section 3) |
 | `packages/lib-server/src/install/plan.ts` | `invalidOverride`'s `problem` is lib-product's `TemplateProblem` (section 2.3) |
 | `packages/lib-server/test/unit/plan.test.ts` | the `invalidOverride` row passes a `TemplateProblem` (`{kind: 'notHttpUrl', value: 'x'}`) |
 | `packages/remote-ssh/src/pipeline/connect.ts` | logs the library detail of a failure (section 2.2) |
-| `packages/remote-ssh/src/surfaces/failure-strings.ts` | S043, S075, `templateUnknownPlaceholder` and `templateNotHttp` in `FailureStringId` and `FAILURE_TEMPLATES` |
-| `packages/remote-ssh/l10n/bundle.l10n.json` and the 14 locale bundles | the four templates as keys |
+| `packages/remote-ssh/src/surfaces/failure-strings.ts` | S043, S075, `templateUnknownPlaceholder`, `templateNotHttp` and `installPathProvided` in `FailureStringId` and `FAILURE_TEMPLATES` |
+| `packages/remote-ssh/l10n/bundle.l10n.json` and the 14 locale bundles | the five templates as keys |
 | `packages/remote-ssh/test/unit/failure.test.ts`, `connect.test.ts`, `failure-strings.test.ts`, `strings.test.ts` | rows (section 3) |
 
 ## 2. Contract
@@ -93,6 +96,24 @@ and `sourceOf` passes `resolution.problem` itself. `ofPlan` maps it:
   base-URL form (`acceptsBaseUrl`, false for remote-ssh) gives it, but the type allows it, so the mapping is total.
 The problem's own values go to `logDetail` as before.
 
+### 2.4 The other text reasons (amended 2026-10-12, iris on #367)
+
+iris's sweep of the whole pipeline found three more `{text}` reasons outside the mappers. `git grep "{text:"` over
+`packages/remote-ssh/src/pipeline` then finds none but `failure.ts`'s `detailOf`, which this card deletes.
+
+- **`connect.ts`, a step that throws:** `failure({kind: 'unknown', reason: {text: messageOf(caught)}})` gives no
+  reason; the message is its `logDetail` (logged by 2.2).
+- **`connection-step.ts`, `channelFor` throwing:** `{kind: 'unknown', reason: {text: String(caught)}}` gives no reason;
+  the message is its `logDetail`.
+- **`server-steps.ts`, an invalid install folder:** today it shows the setting key (`{text:
+  'remote.SSH.serverInstallPath'}`). F-2407 7.E1 says the dialog reads `Could not establish connection to "<alias>":
+  Provided: "<value>".`, the user's value as stored, and calls `Provided: "<value>"` the extension's own unlocalized
+  literal with no string id. So it becomes a named entry of ours in `FAILURE_TEMPLATES`, `installPathProvided`, with
+  the template `Provided: "{0}"`, and the reason `{id: 'installPathProvided', values: [<value>]}`; the key goes in all
+  15 bundles. (That's athena's rule: "our own named entry, set per kind where the spec places it".) For the value,
+  `host-settings.ts`'s `InstallFolder` variant `{kind: 'invalid'}` becomes `{kind: 'invalid'; value: string}`, the
+  entry exactly as stored.
+
 ## 3. Test table
 
 One assertion per `it`; the cite starts the name.
@@ -115,6 +136,12 @@ One assertion per `it`; the cite starts the name.
 | #299 | `ofPlan` of `invalidOverride` with `{kind: 'notHttpUrl', value: 'ftp://h/x'}` | `reason` `{id: 'templateNotHttp', values: []}`; `ftp://h/x` only in `logDetail` |
 | #299 | `ofPlan` of `invalidOverride` with `{kind: 'unsupportedPlatform', …}` | no `reason` |
 | F-3902 rule 8 | the dialog for the `unknownPlaceholder` case | `The value of remote.SSH.serverDownloadUrlTemplate is not a usable server download URL template: the placeholder ${foo} is not known.` |
+| contracts R1 (iris) | a connect whose step throws `new Error('boom')` | `Failed` has no `reason`; the log has `boom` |
+| contracts R1 (iris) | the connection step whose `channelFor` throws `new Error('gone')` | `{kind: 'unknown'}` with no `reason`, and `logDetail` `Error: gone` |
+| F-2407 7.E1 | `validate` with `serverInstallPath` `{devbox: 'relative/inst'}` | `reason` `{id: 'installPathProvided', values: ['relative/inst']}` |
+| F-2407 7.E1 | the dialog for it | `Could not establish connection to "devbox": Provided: "relative/inst".` |
+| F-2407 7.E1 | a value holding quotes, `"/x/q"` | the dialog shows `Provided: ""/x/q"".` (the value as stored, F-2407 7.E1) |
+| F-2407 | `installFolderFor` of an invalid entry | `{kind: 'invalid', value: <the entry>}` (the existing rows gain the value) |
 | R-29 | every mapper's every case | no result has a `reason` with a `text` field (one sweep row over a table of every case) |
 | F-2403 | `FAILURE_TEMPLATES.S043` / `.S075` | `Downloading VS Code Server failed. Please try again later.` / `Failed to install the VS Code Server` |
 | F-2601 | the dialog for `serverDownload` with S043 | ends with one full stop (`…later.`), not two (the presenter's existing stop rule) |

@@ -74,8 +74,16 @@ For each `onQuestion(text)`:
    pick, the answer is the item's `'yes'` or `'no'`, the words `ssh`'s host-key question takes (checked through a real
    pty against OpenSSH 10.2: `yes\r` at `Are you sure you want to continue connecting (yes/no/[fingerprint])?` is
    accepted and the session continues).
-4. Dismissed (`undefined`): nothing is sent. The question stays in the terminal (F-2308 BR-5; the user can reveal it
-   through "details" and answer there).
+4. **Dismissed (`undefined`), or the editor failed:** the owner enters a **refusing state for the rest of this
+   attempt** (amended 2026-10-12, athena on #375; F-2306 7.E2 and AC-20 apply in every mode: on Escape, "the extension
+   answers ssh's remaining questions for this attempt without showing them, until ssh runs out of attempts"). It answers
+   the dismissed question, and every later question the reader reports, **without showing an input**: a host-key question
+   (`classifyPrompt(text, displayHost).surface` is `fingerprintPick` or `continuationPick`) gets `no\r`, any other an empty line
+   (`\r`). Measured by athena on a real sshd: an empty line to every password prompt ends `ssh` after its tries in
+   0.02 s (exit 255, `Permission denied`), and `no\r` ends the host-key question (`Host key verification failed.`);
+   neither Ctrl-D nor a single empty line would. It still calls `inputOpened`/`inputClosed` around each, so the reader's
+   held output and bound stay consistent. The state belongs to the owner, which `attachQuestions` makes per attempt, so
+   the next attempt (a reconnection) asks again.
 5. **`reader.inputClosed()` last, always**, also after a dismissal or an editor failure, so the held output is read.
 
 - One input at a time: a question reported while an input is open is shown after it (queued, in order). The reader
@@ -97,11 +105,13 @@ with the sends, so order can be checked.
 | F-2308 BR-6 | the same | the log is `['inputOpened', "send secret\r", 'inputClosed']` |
 | F-2305 BR-2 | `onQuestion` with the 4-line first-contact block, the editor picks yes | a pick was shown, and `'yes\r'` was sent |
 | F-2305 BR-2 | the same, the editor picks no | `'no\r'` was sent |
-| F-2308 BR-5 | the editor dismisses (`undefined`) | nothing sent; the log is `['inputOpened', 'inputClosed']` |
-| athena on #352 | the editor throws | nothing sent; `inputClosed` was called |
+| F-2306 AC-20 | a password question, the editor dismisses (`undefined`) | `'\r'` sent; the log is `['inputOpened', 'send \r', 'inputClosed']` |
+| F-2306 7.E2 | then two more password questions | each gets `'\r'` with **no input shown** (the editor isn't called again) |
+| F-2306 7.E2 | a dismissed `fingerprintPick` question, then a `continuationPick` one | `'no\r'` sent to each, the second with no input shown |
+| athena on #352, #375 | the editor throws on a password question | `'\r'` sent; `inputClosed` was called; the next question gets `'\r'` with no input shown |
 | athena on #352 | two questions reported back to back | two inputs shown, one after the other; the log has two `inputOpened`/`inputClosed` pairs, never two opens in a row |
 | contracts | `dispose()` while an input is open | the editor's signal was aborted; `inputClosed` called; nothing sent |
-| contracts | `onQuestion` after `dispose()` | no input shown |
+| contracts, athena on #375 | `onQuestion` after `dispose()`, also in the refusing state | no input shown, and nothing sent |
 | contracts §S7 | any answer | no log line contains the answer |
 | refactor | every existing `prompt-surface.test.ts` row | passes unchanged |
 
