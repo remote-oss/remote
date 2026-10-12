@@ -136,3 +136,6 @@ export {
   decideCliPath,
 } from './cli-path/decision.ts';
 export {type CliServeError, parseCliServeError} from './cli-path/cli-output.ts';
+export {downloadPortOf, type HttpGet} from './transfer/http-download.ts';
+export {nodeClientFiles, sha256Of} from './transfer/node-files.ts';
+export {hostLockLoopOf} from './transfer/lock-loop.ts';

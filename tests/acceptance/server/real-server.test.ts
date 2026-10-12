@@ -12,12 +12,15 @@ import {
   serverDataFolderNameOrDefault,
 } from 'lib-product';
 import {
+  downloadPortOf,
   kill,
+  nodeClientFiles,
   plan,
   type Plan,
   probe,
   type ProbedHost,
   type ScriptParameters,
+  sha256Of,
   SSH_POLICY,
   startOrReuse,
   type StartOutcome,
@@ -26,7 +29,6 @@ import {
   type TransferPhase,
 } from 'lib-server';
 import {startHost, type RunningHost} from './host-fixture.ts';
-import {fetchDownloadPort, nodeClientFiles, sha256Of} from './real-download.ts';
 import {lockLoop, parametersFor} from './support.ts';
 
 const ENABLED = process.env.REMOTE_OSS_REAL_SERVER === '1';
@@ -179,7 +181,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       },
       {
         channel: host.channel,
-        download: fetchDownloadPort,
+        download: downloadPortOf(fetch),
         files: nodeClientFiles,
         lockLoop: lockLoop(),
         logger: createLogger(undefined, {minimumLevel: () => 'info'}),

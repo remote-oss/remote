@@ -48,6 +48,12 @@ const FAILURE_TEXTS = [
   'Open Setting',
 ];
 
+const LICENCE_TEXTS = [
+  '{0} needs you to accept the license terms of the {1} server before installing it.',
+  'Read the terms at {0}.',
+  'Accept and Continue',
+];
+
 function bundle(file: string): Record<string, string> {
   return JSON.parse(readFileSync(path.join(BUNDLES, file), 'utf8')) as Record<
     string,
@@ -56,14 +62,17 @@ function bundle(file: string): Record<string, string> {
 }
 
 describe('the runtime strings of the extension', () => {
-  it('the stand-down warning, its button, the out-of-context line, the setup texts and the failure texts are in the default bundle, as written', () => {
+  it('the stand-down warning, its button, the out-of-context line, the setup, failure and licence texts are in the default bundle, as written', () => {
     deepStrictEqual(bundle('bundle.l10n.json'), {
       [WARNING]: WARNING,
       [BUTTON]: BUTTON,
       "'{0}' is not possible in the current context.":
         "'{0}' is not possible in the current context.",
       ...Object.fromEntries(
-        [...SETUP_TEXTS, ...FAILURE_TEXTS].map(text => [text, text]),
+        [...SETUP_TEXTS, ...FAILURE_TEXTS, ...LICENCE_TEXTS].map(text => [
+          text,
+          text,
+        ]),
       ),
     });
   });
