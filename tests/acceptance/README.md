@@ -104,6 +104,21 @@ them: the labels, the configurations and the bundled suites all read it. A launc
 To add a launch: add a row to `launchesOf`, put its tests in the suite folder it names, and add that folder to
 `tests/acceptance/tsconfig.json` and to the entries of `knip.jsonc`.
 
+## Cutting the host's network
+
+`cutNetwork` and `restoreNetwork` of `tools/acceptance-network.ts` (each takes a command runner and the container id) make the host's network fail the way a lost network does. The host container runs with
+`NET_ADMIN`, and the image has `iptables`: a cut inserts two rules inside the container, as root through `docker exec`,
+that drop the packets of port 22 that arrive and those that leave, and a restore deletes them. An `ssh` session open
+across the cut sees no reset and stalls until its own keep-alive gives up; a new connection is accepted by Docker's
+port and then gets no answer (`Connection timed out during banner exchange`); after the restore the same local port
+works again. Both are idempotent. A test that cuts restores in a `finally` or an `afterEach`; the container's removal
+at the end of the run drops the rules too.
+
+The mechanism was chosen by measurement. Cutting by `docker network disconnect` on a network of the run's own gave a
+closed port (`Connection refused`) during the cut and a different published port after `docker network connect`, so it
+was dropped. `docker pause` is no cut, since it freezes the server's processes as well.
+`server/network-cut.test.ts` holds the rows that prove the capability.
+
 ## Host variants
 
 The default host has the login shell BusyBox `sh` and BusyBox `wget`. One image carries every variant, and the variant

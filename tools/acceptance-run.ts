@@ -174,6 +174,8 @@ export function startHostContainer(
     `AUTHORIZED_KEY=${publicKey}`,
     '--env-file',
     environmentFile,
+    '--cap-add',
+    'NET_ADMIN',
     '--publish',
     '127.0.0.1::22',
     ...extraArguments,

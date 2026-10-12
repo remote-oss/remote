@@ -48,6 +48,8 @@ export interface RunningHost {
   generateKey(keyFile: string, passphrase: string): void;
   /** Lets the user `harness` log in with the public key in the local file. */
   authorize(publicKeyFile: string): void;
+  /** The id of the host's container. */
+  container: string;
   /** The port on this machine that reaches the host's `sshd`. */
   port: number;
   /** The run's folder: its keys and known hosts. */
@@ -178,6 +180,7 @@ export async function startHost(
       appendConfig: text => {
         appendFileSync(configFile, text);
       },
+      container,
       port,
       runFolder,
       generateKey: (keyFile, passphrase) => {
