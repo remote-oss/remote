@@ -645,6 +645,12 @@ Never: probe by binding.
 
 Rule: the target is always the host's IPv4 loopback in TCP mode, whatever `bindHost` says (F-2104 BR-13).
 
+Rule (ruled 2026-10-12, #253 Q1): a tunnel can end after `open` without being asked to. `LocalPort.listen` takes
+`onFailure(detail)`, which fires at most once, for an error after listening. The adapter then closes the server. The
+`open` outcome carries `onClosed(listener)`. When the listener fails, the tunnel closes its active connections and
+tells every listener once with the detail. A listener registered after the end hears it at once. `close()` that the
+caller asked for does not fire it. An error after listening is never left without a handler.
+
 ### W3 tunnel-factory
 
 | Operation | Inputs | Output | Failures |
@@ -653,6 +659,9 @@ Rule: the target is always the host's IPv4 loopback in TCP mode, whatever `bindH
 | `environmentTunnels` | `LocalForward` entries from S4 | the resolver's environment tunnels (F-2507) | none |
 
 Rule: ports forwarded before a reconnection are revived over the new dialer (F-2104 Q4 and F-2507 Q1, recommended).
+
+Rule (ruled 2026-10-12, #253 Q1): when an entry's tunnel reports closed (W2), the entry leaves `forwarded()` and is
+not revived. Telling the editor (the resolver's `Tunnel.onDidDispose`) belongs to area B's adapter.
 
 ### W4 default-forwards
 
