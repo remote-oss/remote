@@ -333,22 +333,26 @@ describe("the window's scp in a hidden login terminal (card ssh-29 table)", () =
   });
 
   it('#402: a long output is cut to its latest lines, and the cause at its end is still told', async () => {
-    const {result, terminal} = await started(fixture());
-    terminal.write(
-      Array.from(
-        {length: 300},
-        (unusedItem, index) => `scp: error ${String(index)}\n`,
-      ).join(''),
-    );
-    terminal.end(1);
-    const outcome = await result;
-    const told =
-      outcome.kind === 'failed' ? outcome.failure.detail.split('\n') : [];
+    const told = await errorLines(300);
     deepStrictEqual(
       [told.length, told[0], told.at(-1)],
       [20, 'scp failed: scp: error 280', 'scp: error 299'],
     );
   });
+
+  /** The lines a failed copy tells, whose output is `count` error lines. */
+  async function errorLines(count: number): Promise<string[]> {
+    const {result, terminal} = await started(fixture());
+    terminal.write(
+      Array.from(
+        {length: count},
+        (unusedItem, index) => `scp: error ${String(index)}\n`,
+      ).join(''),
+    );
+    terminal.end(1);
+    const outcome = await result;
+    return outcome.kind === 'failed' ? outcome.failure.detail.split('\n') : [];
+  }
 
   /** A failed copy whose cause `after` debug lines follow, and the cause it tells. */
   async function causeAfter(after: number): Promise<string> {
@@ -388,6 +392,14 @@ describe("the window's scp in a hidden login terminal (card ssh-29 table)", () =
       'scp failed: scp: dest open "/x/f": No such file',
     );
   });
+  it('daedalus on #434: of 21 error lines, the first is dropped and the 20 latest are told', async () => {
+    const told = await errorLines(21);
+    deepStrictEqual(
+      [told.length, told[0], told.at(-1)],
+      [20, 'scp failed: scp: error 1', 'scp: error 20'],
+    );
+  });
+
   it('#434: a blank line between two error lines is not told', async () => {
     const {result, terminal} = await started(fixture());
     terminal.write(

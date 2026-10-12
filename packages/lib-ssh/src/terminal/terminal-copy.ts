@@ -25,8 +25,7 @@ import {PromptReader} from './prompt-reader.ts';
 /** The exit status `scp` gives when it could not keep its connection. */
 const CONNECTION_FAILED_STATUS = 255;
 
-/** How many of the kept lines are held for a failure's cause, and how many of those are told. */
-const KEPT_LINES = 200;
+/** How many kept lines are held for a failure's cause, and told. */
 const TOLD_LINES = 20;
 
 /** Copies one file to the host. */
@@ -139,7 +138,7 @@ export function terminalCopierOf(options: TerminalCopierOptions): Copier {
       const splitter = new LineSplitter(line => {
         if (line.trim() !== '' && !isDebugLine(line)) {
           lines.push(line);
-          if (lines.length > KEPT_LINES) {
+          if (lines.length > TOLD_LINES) {
             lines.shift();
           }
         }
@@ -155,7 +154,7 @@ export function terminalCopierOf(options: TerminalCopierOptions): Copier {
       terminal.onEnd(end => {
         ended = true;
         splitter.flush();
-        const told = lines.slice(-TOLD_LINES).join('\n');
+        const told = lines.join('\n');
         settle(endOutcome(end, told === '' ? '' : `: ${told}`));
       });
       cancellation.addEventListener('abort', onAbort);
