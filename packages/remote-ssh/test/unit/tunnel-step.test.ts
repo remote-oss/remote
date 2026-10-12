@@ -197,4 +197,32 @@ describe('the step that opens the window tunnel', () => {
       ["the window tunnel's secondSsh path is not built yet"],
     );
   });
+
+  /** An open tunnel with the onClosed listener it heard, for the rows of the end's contract. */
+  async function openedWithHeard() {
+    const {open, local} = stepWith();
+    const result = await open();
+    if (result.kind !== 'done') {
+      throw new Error('the tunnel did not open');
+    }
+    const heard: string[] = [];
+    result.value.onClosed(detail => {
+      heard.push(detail);
+    });
+    return {tunnel: result.value, heard, local};
+  }
+
+  it('contracts §W2: a failed relay listener ends the tunnel, and its onClosed listener hears the reason once', async () => {
+    const {heard, local} = await openedWithHeard();
+    local.fail(50000, 'the relay listener failed');
+    local.fail(50000, 'the relay listener failed');
+    deepStrictEqual(heard, ['the relay listener failed']);
+  });
+
+  it('contracts §W2: a close the caller asked for never calls its onClosed listener', async () => {
+    const {tunnel, heard, local} = await openedWithHeard();
+    tunnel.close();
+    local.fail(50000, 'the relay listener failed');
+    deepStrictEqual(heard, []);
+  });
 });

@@ -82,6 +82,8 @@ export const STARTED = {
 export interface Recording {
   /** The listener the lease's `onNotice` was given last, for a test to send notices through. */
   notice?: (notice: ConnectionNotice) => void;
+  /** The listener the tunnel's `onClosed` was given last, for a test to end the tunnel through. */
+  tunnelClosed?: (detail: string) => void;
   calls: string[];
   releases: number;
   tunnelCloses: number;
@@ -114,7 +116,7 @@ export const OPENED = {
   tunnelFeatures: {elevation: false},
 };
 
-/** The tunnel a step opens, counting its close in the recording. */
+/** The tunnel a step opens, counting its close in the recording, with its end kept for a test. */
 export function tunnelOf(
   recording: Recording,
   opened: TunnelOpening['opened'] = OPENED,
@@ -124,7 +126,15 @@ export function tunnelOf(
     close: () => {
       recording.tunnelCloses += 1;
     },
+    onClosed: listener => {
+      recording.tunnelClosed = listener;
+    },
   };
+}
+
+/** Ends the fixture tunnel without being asked to, the way a failed listener would. */
+export function endTunnel(recording: Recording, detail: string): void {
+  recording.tunnelClosed?.(detail);
 }
 
 /** The lease a step hands out, counting its release and the records it stores in the recording. */
@@ -204,7 +214,7 @@ export function steps(
   };
 }
 
-/** An empty recording and the options of one connect that record its phases. */
+/** An empty recording and the options of one connect that record its phases, with the sink its log writes to. */
 export function setup(): {
   recording: Recording;
   options: ConnectOptions;

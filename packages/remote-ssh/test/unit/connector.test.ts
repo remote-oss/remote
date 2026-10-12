@@ -4,6 +4,7 @@ import type {TransferPhase} from 'lib-server';
 import {connectorOf, type SshConnector} from '../../src/pipeline/connector.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
+  endTunnel,
   INPUT,
   type Recording,
   setup,
@@ -212,6 +213,30 @@ describe('the connector over the connect pipeline', () => {
     connector.cancel();
     send?.({type: 'transportLost'});
     deepStrictEqual([heard, recording.notice], [[], undefined]);
+  });
+
+  /** A connector holding a connection that worked, with what its lost listeners hear. */
+  async function heldConnector() {
+    const {connector, recording} = connectorFor();
+    const heard: string[] = [];
+    connector.onTransportLost(() => {
+      heard.push('lost');
+    });
+    await connector.connect(HOST_INPUT);
+    return {connector, recording, heard};
+  }
+
+  it('F-2505 BR-1: a held connection whose tunnel ends reaches the lost listeners', async () => {
+    const {recording, heard} = await heldConnector();
+    endTunnel(recording, 'listener failed');
+    deepStrictEqual(heard, ['lost']);
+  });
+
+  it('contracts §3.2: a tunnel end after a cancel is not heard any more', async () => {
+    const {connector, recording, heard} = await heldConnector();
+    connector.cancel();
+    endTunnel(recording, 'listener failed');
+    deepStrictEqual(heard, []);
   });
 
   it('connect-14: each connect makes its own steps', async () => {

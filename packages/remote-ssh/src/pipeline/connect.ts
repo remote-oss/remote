@@ -379,13 +379,26 @@ async function runSteps(
       tunnel.value.close();
       lease.release();
     },
-    onTransport: listener =>
-      lease.onNotice(notice => {
+    onTransport: listener => {
+      let tunnelEndActive = true;
+      const stopLease = lease.onNotice(notice => {
         if (notice.type === 'transportLost') {
           listener('lost');
         } else if (notice.type === 'helperGone') {
           listener('closed');
         }
-      }),
+      });
+      tunnel.value.onClosed(detail => {
+        if (!tunnelEndActive) {
+          return;
+        }
+        options.logger.warn(`the window tunnel ended: ${detail}`);
+        listener('lost');
+      });
+      return () => {
+        tunnelEndActive = false;
+        stopLease();
+      };
+    },
   };
 }
