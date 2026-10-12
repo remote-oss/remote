@@ -3,9 +3,6 @@
  */
 
 /** Whether the default forwards are applied to this resolve; a retry of the first connection counts as one. */
-export function shouldApplyDefaults(
-  attempt: number,
-  isReconnection: boolean,
-): boolean {
+export function shouldApplyDefaults(isReconnection: boolean): boolean {
   return !isReconnection;
 }
