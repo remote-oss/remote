@@ -51,3 +51,22 @@ file that installs and starts the real VSCodium server for musl (about 125 MB, f
 template into a folder of the temporary directory that the run removes): once downloaded by the host, once with the
 host's download hosts made unreachable so that the client downloads and copies, and once from the archive the client
 kept. It is skipped unless `REMOTE_OSS_REAL_SERVER=1`, which that script sets. In CI it runs when the workflow is dispatched with the `real-server` input set to true, and on the tag of a release.
+
+## The run in VSCodium
+
+`pnpm test:acceptance:vscodium` (on Linux without a display, under `xvfb-run --auto-servernum`) runs the harness in the
+pinned VSCodium Insiders build named by `VSCODIUM_RELEASE` in `tools/acceptance.ts`: an exact tag, never "latest",
+checked against the release's sha256 before it is unpacked into `.vscode-test/`. The stable VSCodium is below the
+engines floor of ADR-0007. A mismatch fails the run with `the VSCodium download does not match its checksum`; bumping
+the tag is a reviewed change that also updates both checksums.
+
+The VSIX files are installed with the command-line wrapper in the build's `bin/` folder; the tests run in the build's
+own executable, which test-cli starts. test-cli runs twice, by label:
+
+- `local`: `runner/` in a plain window, with the tests of `suite-local/` bundled into `dist-local/`;
+- `remote`: `runner-remote/`, an extension of the workspace kind, in a window on
+  `vscode-remote://ssh-remote+harness/home/harness`, with the tests of `suite-remote/` bundled into `dist-remote/`.
+
+Both run even when the first fails, and the run fails when either does. `HARNESS_EDITOR` (`vscode` or `vscodium`)
+and, for VSCodium, `HARNESS_VSCODIUM_EXECUTABLE` join the harness variables. In CI the job `acceptance (VSCodium)` runs
+when the workflow is dispatched with the `vscodium` input set to true, and on the tag of a release.

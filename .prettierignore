@@ -4,6 +4,8 @@ docs/
 tests/conformance/runner/
 pnpm-lock.yaml
 dist/
+dist-local/
+dist-remote/
 .vscode-test/
 # The editor's own declaration files, kept as published.
 vscode-dts/
