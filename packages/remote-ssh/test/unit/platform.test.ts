@@ -259,3 +259,55 @@ describe('what is written to the remote platform setting', () => {
     );
   });
 });
+
+describe('the platform rows of F-2206', () => {
+  it('F-2206 AC-18: an exact key wins over a wildcard, in either order', () => {
+    deepStrictEqual(
+      [
+        platformEntry({'*': 'windows', devbox: 'linux'}, 'devbox'),
+        platformEntry({devbox: 'linux', '*': 'windows'}, 'devbox'),
+      ],
+      ['linux', 'linux'],
+    );
+  });
+
+  it('F-2206 AC-19: of two matching wildcards the first wins, so the swapped order connects', () => {
+    deepStrictEqual(
+      [
+        decidePlatform(
+          settings({remotePlatform: {'lab-*': 'windows', 'lab-one*': 'linux'}}),
+          'lab-one-x',
+        ),
+        decidePlatform(
+          settings({remotePlatform: {'lab-one*': 'linux', 'lab-*': 'windows'}}),
+          'lab-one-x',
+        ),
+      ],
+      [{kind: 'decided', platform: 'windows'}, {kind: 'probe'}],
+    );
+  });
+
+  it('F-2206 AC-20: an upper-case key, an address key and a key with ? never match; a *<suffix> key does', () => {
+    deepStrictEqual(
+      ['DEVBOX', '192.0.2.10', 'devb?x', '*box'].map(key =>
+        decidePlatform(
+          settings({remotePlatform: {[key]: 'windows'}}),
+          'devbox',
+        ),
+      ),
+      [
+        {kind: 'probe'},
+        {kind: 'probe'},
+        {kind: 'probe'},
+        {kind: 'decided', platform: 'windows'},
+      ],
+    );
+  });
+
+  it('F-2206 AC-22: a wildcard in remote.SSH.windowsRemotes has no effect in default mode', () => {
+    deepStrictEqual(
+      decidePlatform(settings({windowsRemotes: ['lab-*']}), 'lab-one'),
+      {kind: 'probe'},
+    );
+  });
+});
