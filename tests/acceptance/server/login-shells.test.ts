@@ -220,14 +220,16 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
         ]);
       });
       it('#443: the two-line script with a bang prints the backslashed input line as written', async () => {
-        const lines = await inSession(
-          [],
-          async session =>
-            (
-              await runOn(session, 'read -r line\nprintf \'%s!\\n\' "$line"', {
-                text: 'a\\b\n',
-              })
-            ).lines,
+        const lines: string[] = [];
+        await host.channel.runScript(
+          {
+            script: 'read -r line\nprintf \'%s!\\n\' "$line"',
+            interpreter: 'posixShell',
+            environment: {},
+            input: {kind: 'text', text: 'a\\b\n'},
+            cancellation: new AbortController().signal,
+          },
+          line => lines.push(line),
         );
         deepStrictEqual(lines, ['a\\b!']);
       });
