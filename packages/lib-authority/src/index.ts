@@ -113,3 +113,8 @@ export {
   setupPortsOf,
 } from './gate/setup-ports.ts';
 export {gateEditorOf} from './gate/vscode-setup.ts';
+export {phaseMessage} from './resolver/progress-message.ts';
+export {
+  resolverEditorOf,
+  type ResolverEditorOptions,
+} from './resolver/vscode-resolver.ts';
