@@ -28,6 +28,6 @@ export function markedRowIds(
   if (pull === undefined || !pull.connected || pull.hostKey === undefined) {
     return [];
   }
-  const marked = rows.find(row => row.alias === pull.hostKey);
+  const marked = rows.find(candidate => candidate.alias === pull.hostKey);
   return marked === undefined ? [] : [marked.rowId];
 }
