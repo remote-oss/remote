@@ -9,11 +9,13 @@ Reviewers: `themis`; runtime review `daedalus`; design check `athena`.
 
 | File | Role |
 |---|---|
-| `packages/lib-server/src/transfer/node-download.ts` | new: `fetchDownloadPort` and `nodeClientFiles`, moved from `tests/acceptance/server/real-download.ts` |
+| `packages/lib-server/src/transfer/node-files.ts` | new: `nodeClientFiles` (file system only), moved from `tests/acceptance/server/real-download.ts` |
+| `packages/remote-ssh/src/transfer/node-download.ts` | new: `fetchDownloadPort` (the one `fetch` call), moved from the same file |
 | `packages/lib-server/src/transfer/lock-loop.ts` | new: `hostLockLoopOf(clock, attempts, intervalMilliseconds)`, the host lock loop over lib-server's `hostLockLoop`, moved from `tests/acceptance/server/support.ts` `lockLoop` |
 | `packages/lib-server/src/index.ts` | export lines |
-| `packages/lib-server/test/unit/node-download.test.ts`, `lock-loop.test.ts`, `network-rule.test.ts` | new |
-| `tests/acceptance/server/real-download.ts` | deleted; its importers import from `lib-server` |
+| `packages/lib-server/test/unit/node-files.test.ts`, `lock-loop.test.ts`, `network-rule.test.ts` | new |
+| `packages/remote-ssh/test/unit/node-download.test.ts` | new |
+| `tests/acceptance/server/real-download.ts` | deleted; its importers take `nodeClientFiles` from `lib-server` and `fetchDownloadPort` from remote-ssh's `src/transfer/node-download.ts` |
 | `tests/acceptance/server/support.ts` | `lockLoop` calls `hostLockLoopOf` with its short test waits (no copy of the loop) |
 | `packages/remote-ssh/src/surfaces/licence-modal.ts` | new: `licenceModalOf` |
 | `packages/remote-ssh/src/surfaces/acceptance-store.ts` | new: `acceptanceStoreOf` |
@@ -25,7 +27,14 @@ imports it."
 
 ## 2. Contract
 
-### Download and client files (lib-server)
+### Download (remote-ssh) and client files (lib-server)
+
+Amended 2026-10-12 (from iris's report): lib-server's `test/unit/own-network.test.ts`, the contract §5 test written
+with V4, forbids any `fetch(` in lib-server's source. That's right: lib-server makes no request of its own; it takes
+an injected HTTP port, which "the extension wires to the editor's path". So `fetchDownloadPort` lives in remote-ssh
+(the extension), and `nodeClientFiles`, which only touches files, in lib-server. `own-network.test.ts` stays as it is
+and stays green.
+
 
 The behaviour is unchanged from the moved code (redirects at most 10, each through `request.allowedHosts`, a refused
 host is a failure with its text, the body streamed to the file, the bounds of the request). It uses the global `fetch`
@@ -80,7 +89,8 @@ passes its `globalState`: per profile, never synced (no `setKeysForSync`). The k
 
 | Cite | Given | Expected |
 |---|---|---|
-| contracts §5 V4 | the moved `fetchDownloadPort` and `nodeClientFiles` | their existing acceptance tests pass, importing from `lib-server` |
+| contracts §5 V4 | the moved `fetchDownloadPort` and `nodeClientFiles` | their existing acceptance tests pass, importing from their new places |
+| contracts §5 network rule | lib-server's existing `own-network.test.ts` | still passes, unchanged |
 | contracts §5 network rule | `network-rule.test.ts` on the tree | passes; a fixture file importing `node:https` fails it |
 | V5 | `hostLockLoopOf` with a fake clock, a step busy twice then a result | three attempts, two waits of the interval, the result |
 | V5 | `hostLockLoopOf` with every attempt busy | the loop's lock-timeout outcome after `attempts` |
@@ -96,7 +106,7 @@ passes its `globalState`: per profile, never synced (no `setKeysForSync`). The k
 
 ## 4. Rule for the worker
 
-As card log-01; coverage at both packages' 100/100/100 ratchets. `node-download.ts` uses real `fs` and `fetch`: its
+As card log-01; coverage at both packages' 100/100/100 ratchets. remote-ssh's `node-download.ts` uses real `fs` and `fetch`: its
 unit tests run against a local HTTP server on 127.0.0.1 (node:http in the **test** only, which the network-rule test
 does not scan), as the acceptance tests do today.
 
