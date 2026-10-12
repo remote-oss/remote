@@ -2,7 +2,7 @@
 
 Why: #464; athena's ruling on #142, item 2. Every acceptance row's name starts with the AC id(s) it proves, so that
 `tools/check-coverage` (card coverage-01) can count coverage mechanically. A feature-level cite such as `F-2409:` no
-longer counts. This card renames the 42 acceptance rows that cite a feature, a BR or a section but no AC. The mapping is
+longer counts. This card renames the 54 acceptance rows that cite a feature, a BR or a section but no AC. The mapping is
 decided below, row by row (daedalus, from the spec issues). The worker applies it and decides nothing. Reviewing
 coder: `remote-coding-worker-1`.
 
@@ -17,7 +17,7 @@ coder: `remote-coding-worker-1`.
 
 ## 2. The mapping
 
-`file:line` is at main 78e461f. Find the row by its name if lines moved.
+`file:line` is at main de9e480. Find the row by its name if lines moved.
 
 **`tests/acceptance/server/connection.test.ts`**
 
@@ -95,6 +95,25 @@ The other `F-2407:` rows of this file are F-2407's (not in slice 1) and keep the
 | 384 | `F-3902.6: the copy on the host is gone after the install` | `contracts V4:` |
 | 391 | `F-2409: the server installed from the copy starts and answers with its commit` | `F-2403 AC-11:` |
 
+**`tests/acceptance/server/fetch-tools.test.ts`** (landed after the first mapping; themis on #465)
+
+| Line | Today's name (start) | New prefix |
+|---|---|---|
+| 192 | `F-2403: the host has the wget this variant names` | `contracts harness:` (it checks the fixture) |
+| 199 | `F-2403: the host has the curl this variant names` | `contracts harness:` |
+| 203 | `F-2401: the probe lists exactly the downloaders of this variant` | `contracts V2:` |
+| 217 | `F-2401: the probe tells a BusyBox wget from a GNU one` | `contracts V2:` |
+| 225 | `F-2403: the host downloads the archive and installs it` | `F-2403 AC-23:` |
+| 233 | `F-2403: the install folder holds the launcher of the stand-in` | `contracts V4:` |
+| 246 | `F-2403 BR-8: a wgetrc with an unreachable proxy is kept out with --no-config` | `F-2403 AC-15:` |
+| 255 | `F-2403 BR-8: the same wgetrc is read when the configuration files are used` | `F-2403 AC-16:` |
+| 269 | `F-2403 BR-8: a curlrc with an unreachable proxy is kept out with -q` | `F-2403 AC-15:` |
+| 278 | `F-2403 BR-8: the same curlrc is read when the configuration files are used` | `F-2403 AC-16:` |
+| 292 | `F-2403: with no downloader and the client as a fallback the client downloads and copies` | `F-2403 AC-11:` |
+| 309 | `F-2403, S043: with no downloader and no fallback the install fails as no downloader` | `F-2403 AC-9:` |
+
+Also rename that file's `describe` title `F-2403 the download with the tool …` to `the download with the tool …`.
+
 **`tests/acceptance/suite-failure/failure-window.test.ts`**
 
 | Line | Today's name (start) | New prefix |
@@ -106,9 +125,17 @@ The other `F-2407:` rows of this file are F-2407's (not in slice 1) and keep the
 No new rows. The gates:
 - `pnpm test:acceptance:server` passes, with the same number of passing rows as on main;
 - the VSCodium run isn't needed (one name changes there, and `tsc` checks it);
-- `grep -rnE "it\\(['\"\`](F-[0-9]{4})(\\.BR-[0-9]+| [0-9]\\.[0-9]|\\.[0-9]|:)" tests/acceptance` finds no slice-1 feature
-  (F-2001, F-2101, F-2102, F-2201, F-2202, F-2206, F-2301, F-2304 to F-2307, F-2401, F-2403, F-2409, F-2501, F-2502,
-  F-2601, F-3902). Paste its output in the PR.
+- this command, which applies coverage-01's rule 6 (an acceptance row or cite that starts with a slice-1 feature id
+  followed by anything but ` AC-` or `.AC-`), prints nothing. Paste its output (empty) in the PR:
+
+  ```sh
+  F='F-(2001|2101|2102|2201|2202|2206|2301|2304|2305|2306|2307|2401|2403|2409|2501|2502|2601|3902)'
+  grep -rhoE "\\bit\\(\\s*['\"\`]$F[^'\"\`]*" tests/acceptance --include=*.test.ts | grep -vE "^it\\(\\s*['\"\`]$F[ .]AC-"
+  grep -hoE "\"cite\": *\"[^\"]*\"" tests/acceptance/suite-failure/cases.json | grep -vE "$F[ .]AC-"
+  ```
+
+  At main de9e480 (before this card), the first line finds 54 rows (themis on #465): the 42 of the first mapping and
+  the 12 of `fetch-tools.test.ts`.
 
 ## 4. Gates and review
 
