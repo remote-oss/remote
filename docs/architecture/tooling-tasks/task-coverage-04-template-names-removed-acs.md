@@ -23,10 +23,17 @@ Issue: #478. Why: two gaps hestia found while tagging (coverage-03a, #473), both
 ## 2. A template name's cite
 
 Today `rowNamesOf` drops a template literal that holds `${`. Change it so such a name is kept as its **static prefix**,
-the text before the first `${`. The cite parser then reads that prefix as it reads any name:
+the text before the first `${`. The cite parser then reads that prefix as it reads any name.
+
+`NAME_PATTERN` must find the prefix even when the placeholder spans lines (triton on #475): today it needs the closing
+backtick on the name's line (`[^\\\n]`), so it never matches `F-2202.AC-9` (hosts.test.ts line 255) or `F-2202.AC-10`
+(line 275), whose `${` is followed by a newline. A template name is matched up to its first `${` or its closing
+backtick, whichever comes first, with no newline needed before either. Examples:
 - `` `F-2202.AC-9: an Include after ${kind}` `` gives the prefix `F-2202.AC-9: an Include after `, which cites
   `F-2202.AC-9`;
 - `` `${name}: …` `` gives the empty prefix, which cites nothing (as today);
+- `` `F-2601 AC-1${n}: …` `` gives `F-2601 AC-1`, which ends in a digit right before the placeholder. It cites
+  **nothing**, never AC-1: the number may continue in the placeholder;
 - `` `F-2202.AC-${number}: …` `` gives `F-2202.AC-`, which doesn't match the cite pattern, so it cites nothing. For an
   acceptance row, rule 6 then applies to it like any name: a slice-1 feature id followed by anything but ` AC-<n>` or
   `.AC-<n>` fails.
@@ -38,8 +45,9 @@ A template without a placeholder is read whole, as today. The cases file's `cite
 `acceptanceCriteriaOf(body, feature)` skips a line whose text after the bold id starts with `Removed` (after optional
 spaces), for example `- **F-2304.AC-26** Removed: …`. Then:
 - run `tools/seed-coverage.ts` once more;
-- check that the only difference in `coverage-slice1.tsv` is the two lines `F-2304.AC-26` and `F-2403.AC-20` gone, with
-  every other line, its tag and its reason unchanged (tags written by #473 and #474 kept);
+- check that the only differences in `coverage-slice1.tsv` are the two lines `F-2304.AC-26` and `F-2403.AC-20` gone and
+  the two lines `F-3902.AC-24` and `F-3902.AC-25` added (`todo`; the spec added them on 2026-10-12, so main's TSV, at 602
+  lines, lacks them), with every other line, its tag and its reason unchanged (tags written by #473 and #474 kept);
 - if the tool would change anything else, delete the two lines by hand instead, and say so in the PR.
 
 A row that cites a removed AC fails rule 5 ("cites …, which the slice's file doesn't have"). This is intended: it names a
@@ -59,6 +67,8 @@ One assertion per `it`.
 | #473 | an acceptance test `` `F-2409.AC-${n}: …` `` | it fails, `names F-2409 without an AC` |
 | #473 | a unit test `` `F-2409.AC-${n}: …` `` | it passes (rule 6 covers acceptance rows only) |
 | #473 | a template with no placeholder `` `F-2601 AC-6: plain` `` | it cites AC-6 |
+| triton on #475 | a unit test whose name is `` `F-2601 AC-12: case ${`` then a newline, then `` name}` `` | it cites AC-12 |
+| triton on #475 | a unit test `` `F-2601 AC-1${n}: …` `` and the TSV tagging AC-1 `unit` | it fails: AC-1 has no row (the name cites nothing) |
 
 **spec-acceptance-criteria.test.ts**
 

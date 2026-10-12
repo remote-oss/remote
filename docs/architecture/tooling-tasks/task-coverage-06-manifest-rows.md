@@ -2,7 +2,8 @@
 
 Issue: #484. Why: coverage-03a's list (#473, draft PR #481, "Needs a unit row") names six ACs that only the manifest decides. The
 manifest is already checked against the inventory by `skeleton.test.ts`'s "manifest (card remote-ssh-01 table)" rows,
-but no row cites these ACs one by one. This card adds one row per AC. The whole block below was written and run on
+but no row cites these ACs one by one. This card adds one row per AC: five cite their AC, and F-2001 AC-19's cites the
+BRs it checks (section 3). The whole block below was written and run on
 main f6b82ed (2026-10-12): all six pass, and lint, typecheck and dupes are clean. Builder: selene.
 
 ## 1. Files
@@ -58,7 +59,7 @@ describe('the manifest rows of slice 1', () => {
     ];
   }
 
-  it('F-2001 AC-19: extensionKind ui, untrusted workspaces supported, no virtual-workspace limit, no * or onStartupFinished (engines per ADR-0007)', () => {
+  it('F-2001 BR-1, BR-2, BR-7: extensionKind ui, untrusted workspaces supported, no virtual-workspace limit, no * or onStartupFinished', () => {
     deepStrictEqual(
       [
         manifest.extensionKind,
@@ -151,7 +152,8 @@ describe('the manifest rows of slice 1', () => {
 ## 3. Notes for the review
 
 - F-2001 AC-19 says `engines.vscode` is `^1.133.0`. Ours is `^1.139.0` by ADR-0007 (the editor floor), already pinned
-  by the row `manifest top-level fields: the card values, one by one`. The row checks the rest and says so in its name.
+  by the row `manifest top-level fields: the card values, one by one`. So the row cites the BRs it checks, not AC-19
+  (triton on #475), and AC-19 stays `todo` until the spec answers the question on `remote-oss/remote-ssh#11`.
 - The Settings editor's display (the "checked" box, the all-profiles marker) is core's. These rows check the manifest
   values core shows.
 

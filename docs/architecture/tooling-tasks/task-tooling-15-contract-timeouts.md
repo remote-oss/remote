@@ -41,3 +41,17 @@ Keep everything else in the body as it is. The recording-channel suite in lib-ho
 
 PR title `lib-ssh: a 20 s timeout for the channel contract suites that run real processes (card tooling-15)`. themis or
 triton reviews.
+
+## 5. Correction after the merge (triton on #475)
+
+#483 built this card. Two things in it were wrong:
+- **Only `shared-channel-contract.test.ts` runs real processes** (`localShell()`, a real `/bin/sh`).
+  `host-channel-contract.test.ts` uses the in-memory `ScriptedSpawner`, and its rows take milliseconds. Main sets the
+  timeout only in the shared suite, which is right.
+- **Not every other process-spawning suite sets a timeout.** `lib-ssh`'s `shell-runs.test.ts` and
+  `askpass-launcher.test.ts`, and `lib-server`'s `cli-script.test.ts`, spawn real processes under the 2 s default.
+  Card tooling-21 (#494) gives them the same timeout.
+
+The run cited above is attempt 1 of 38312314819. GitHub shows the run's latest attempt, the re-run, which was
+cancelled.
+

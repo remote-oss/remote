@@ -16,7 +16,7 @@ The counts are the TSV's on 2026-10-12, after `remote-oss/remote-ssh#79` added F
 all. coverage-04 (#478) removes the two ACs the spec withdrew, F-2304.AC-26 (half A) and F-2403.AC-20 (half B). The spec
 can change again: a half covers every line of its features that the TSV holds when its PR opens, whatever the count.
 
-**Depends on coverage-01 (PR #467).** Start on its branch `feature/coverage-01`; rebase on main once it merges, and open
+**Depends on coverage-01 (PR #467).** Merged (dddb4d5): start on main, and open
 the PR after that.
 
 ## 1. Files

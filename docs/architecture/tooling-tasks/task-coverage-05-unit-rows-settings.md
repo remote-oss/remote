@@ -45,6 +45,21 @@ this helper as its first statement:
   };
 ```
 
+Row 5b (triton on #475: row 5 alone proves only the half of AC-13 that ignores the workspace) needs a second host,
+right after `WORKSPACE_ONLY`:
+
+```ts
+  /** A setting host whose remote.SSH.path is set in the user settings, the workspace and the folder. */
+  const USER_AND_WORKSPACE: SettingHost = {
+    inspectSetting: () => ({
+      defaultValue: '',
+      globalValue: '/u/ssh',
+      workspaceValue: '/w/ssh',
+      workspaceFolderValue: '/f/ssh',
+    }),
+  };
+```
+
 Imports, exactly as tried on main: change `import type {SettingInspection} from 'lib-identifiers';` to
 `import type {SettingHost, SettingInspection} from 'lib-identifiers';`, and add, just before the import of
 `../../src/surfaces/prompt-surface.ts`:
@@ -63,6 +78,7 @@ import {decidePlatform} from '../../src/pipeline/platform.ts';
 | # | `it` name | Assertion |
 |---|---|---|
 | 5 | `F-2101 AC-13: a remote.SSH.path set only in workspace settings is never used` | `deepStrictEqual(settingTextOf(WORKSPACE_ONLY, 'path'), '')` |
+| 5b | `F-2101 AC-13: a remote.SSH.path in the user settings is used, whatever the workspace sets` | `deepStrictEqual(settingTextOf(USER_AND_WORKSPACE, 'path'), '/u/ssh')` |
 | 6 | `F-2201 AC-14: a remote.SSH.configFile set only in workspace settings is ignored` | `deepStrictEqual(connectionSettingsOf(WORKSPACE_ONLY).configFile, '')` |
 | 7 | `F-2206 AC-23: a workspace remotePlatform entry is ignored, so non-local mode asks` | `deepStrictEqual(decidePlatform({...termsSettingsOf(WORKSPACE_ONLY), useLocalServer: false}, 'devbox'), {kind: 'ask'})` |
 
