@@ -1,7 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {createServer} from 'node:net';
 import {
-  type Duplex,
   nodeLocalPort,
   openRelayTunnel,
   socksDialer,
@@ -9,68 +7,17 @@ import {
   type WindowTunnelOutcome,
 } from 'lib-forwarding';
 import {startHost, type RunningHost} from './host-fixture.ts';
+import {
+  ECHO_PORT,
+  freePort,
+  LIMITS,
+  receivedBytes,
+  scheduler,
+} from './support.ts';
 import {openSharedSession, type SharedSession} from './shared-session.ts';
-
-/** The port on the host where a stand-in echo service listens. */
-const ECHO_PORT = 7777;
 
 /** A port on the host where nothing listens. */
 const SILENT_PORT = 7778;
-
-/** The longest a test waits for bytes to come back. */
-const RECEIVE_BOUND_MILLISECONDS = 30000;
-
-const LIMITS: WaitLimits = {
-  readyMilliseconds: 10000,
-  retryMilliseconds: 100,
-  heldBytesMaximum: 10_000_000,
-};
-
-const scheduler = {
-  setTimer: (milliseconds: number, callback: () => void) => {
-    const timer = setTimeout(callback, milliseconds);
-    return () => {
-      clearTimeout(timer);
-    };
-  },
-};
-
-/** A free loopback port: bound and released at once. */
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      server.close(() => {
-        resolve(
-          typeof address === 'object' && address !== null ? address.port : 0,
-        );
-      });
-    });
-  });
-}
-
-/** The first `length` bytes the connection delivers; rejects when they have not arrived within the bound. */
-function receivedBytes(connection: Duplex, length: number): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  let total = 0;
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(
-        new Error(`only ${String(total)} of ${String(length)} bytes came`),
-      );
-    }, RECEIVE_BOUND_MILLISECONDS);
-    connection.onData(chunk => {
-      chunks.push(Buffer.from(chunk));
-      total += chunk.length;
-      if (total >= length) {
-        clearTimeout(timer);
-        resolve(Buffer.concat(chunks));
-      }
-    });
-  });
-}
 
 /** The bytes of `length` bytes that a reader checks, none equal to its neighbour. */
 function pattern(length: number): Buffer {

@@ -5,7 +5,9 @@
 
 import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
+import {createServer} from 'node:net';
 import path from 'node:path';
+import {type Duplex, type WaitLimits} from 'lib-forwarding';
 import {
   type HostLockLoop,
   hostLockLoopOf,
@@ -118,6 +120,69 @@ export async function installStatus(
     {cancellation: new AbortController().signal},
   );
   return stepRun.kind === 'result' ? stepRun.block.status : stepRun.kind;
+}
+
+/** The port on the host where a stand-in echo service listens. */
+export const ECHO_PORT = 7777;
+
+/** The longest a test waits for bytes to come back. */
+const RECEIVE_BOUND_MILLISECONDS = 30000;
+
+/** How long a forward waits for its tunnel, and how many bytes it may hold meanwhile. */
+export const LIMITS: WaitLimits = {
+  readyMilliseconds: 10000,
+  retryMilliseconds: 100,
+  heldBytesMaximum: 10_000_000,
+};
+
+/** The timers of the tests, over the real clock. */
+export const scheduler = {
+  setTimer: (milliseconds: number, callback: () => void) => {
+    const timer = setTimeout(callback, milliseconds);
+    return () => {
+      clearTimeout(timer);
+    };
+  },
+};
+
+/** A free loopback port: bound and released at once. */
+export function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      server.close(() => {
+        resolve(
+          typeof address === 'object' && address !== null ? address.port : 0,
+        );
+      });
+    });
+  });
+}
+
+/** The first `length` bytes the connection delivers; rejects when they have not arrived within the bound. */
+export function receivedBytes(
+  connection: Duplex,
+  length: number,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new Error(`only ${String(total)} of ${String(length)} bytes came`),
+      );
+    }, RECEIVE_BOUND_MILLISECONDS);
+    connection.onData(chunk => {
+      chunks.push(Buffer.from(chunk));
+      total += chunk.length;
+      if (total >= length) {
+        clearTimeout(timer);
+        resolve(Buffer.concat(chunks));
+      }
+    });
+  });
 }
 
 /** The real clock, for the host lock loop. */
