@@ -41,8 +41,11 @@ For `path === 'secondSsh'` or `'socket'`:
    endpoint. An endpoint of the other kind is a defect: it throws (the pipeline turns it into `unknown`).
 3. `openTunnelSession(terminals, tunnelInvocation(localPort, target), localPort, revealLoginTerminals())`.
 4. A `PromptReader` over the session's output (`onOutput` → `reader.push`), with `connectTimeoutMilliseconds()`, wired
-   to `attachQuestions({terminal: session, reader})`: every reported question gets an input. The reader and the
-   questions are disposed when the gate settles.
+   to `attachQuestions({terminal: session, reader})`: every reported question gets an input. The reader's
+   `onUnreachable` (a question nobody can see, after the bound of ruling 1b) **stops the session and fails the step as
+   `{kind: 'timeout'}`**, as connect-17 does for the install terminal: both terminals end an unreachable login the same
+   way, and a stall is retryable on a reconnection. (Amended 2026-10-12, iris's question on #357.) The reader and the
+   questions are disposed when the gate settles or the step fails.
 5. Await `session.gate` (no bound of its own; ruled on #299):
    - `ended` → fail: `{kind: 'unknown'}` (the tunnel login failed or was cancelled, F-2104 7.E10; F-2601's dialog).
    - `forwardFailed` → stop the session; fail `{kind: 'unknown'}`, and log the failure line (F-2003).
@@ -78,6 +81,7 @@ existing tunnel-step tests; `LocalPort` is the existing fake, which accepts a co
 | F-2308 BR-3 | `revealLoginTerminals` true | the terminal was revealed at open |
 | athena on #352 | the tunnel terminal prints `"alex@dev's password: "` and pauses 100 ms | `attachQuestions`' `onQuestion` got it |
 | F-2104 7.E10 | the terminal ends before the success line | fails `{kind: 'unknown'}` |
+| #299 ruling 1b | the tunnel terminal prints the handshake line, then an unrecognised question, then nothing for `connectTimeoutMilliseconds()` | fails `{kind: 'timeout'}`, and the session was stopped |
 | #299 | a forward-failure line then the success line | fails `{kind: 'unknown'}`, the session was stopped, and the log names the line |
 | F-2104 6.2 step 5 | the success line | `onWaiting` was called once |
 | F-2104 BR-10 | the success line, then the port never accepts | after 10 s (fake clock), fails with `{id: 'S067', values: [{id: 'S089', values: []}]}` |
