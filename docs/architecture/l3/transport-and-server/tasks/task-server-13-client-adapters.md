@@ -58,9 +58,11 @@ shows the modal and gives `'accept'` only for the "Accept and Continue" button, 
 F-3902 rule 11). An abort while the modal is open gives `'cancel'` at once (the modal may stay; the gate stops).
 
 Texts, provisional keys until remote-oss/remote-ssh#89 answers (the message and the labels are ours, R-68):
-- message: `{0} needs your acceptance of the license terms of the server it is about to install.`, where {0} is the
-  display name;
-- detail: `The terms are at {0}.`, where {0} is `termsUrl` (a modal has no inline link; #89 question 3);
+- message: `{0} needs you to accept the license terms of the {1} server before installing it.`, where {0} is the
+  extension's display name and {1} the client's `applicationName` (the server named by the editor it serves, as in
+  rule 8's dialogs; the licensor is never named, the terms URL tells the user; ADR-0008, D-59; worded by athena
+  2026-10-12);
+- detail: `Read the terms at {0}.`, where {0} is `termsUrl` (a modal has no inline link; #89 question 3);
 - buttons: `Accept and Continue`, then S015 `Cancel`.
 
 ### Acceptance store (remote-ssh), F-3902 rule 11
@@ -84,7 +86,8 @@ passes its `globalState`: per profile, never synced (no `setKeysForSync`). The k
 | F-3902 rule 11 | Cancel / Escape (undefined) | `'cancel'` / `'cancel'` |
 | F-3902 rule 11 | an already-aborted signal | `'cancel'`, no modal shown |
 | F-3902 rule 11 | aborted while the modal is open | `'cancel'` without waiting for it |
-| F-3902 rule 11 | the modal's detail for `https://aka.ms/vscode-server-license` | `The terms are at https://aka.ms/vscode-server-license.` |
+| F-3902 rule 11 | the modal's detail for `https://aka.ms/vscode-server-license` | `Read the terms at https://aka.ms/vscode-server-license.` |
+| F-3902 rule 11 | the modal's message, display name `Remote - SSH`, application name `VSCodium` | `Remote - SSH needs you to accept the license terms of the VSCodium server before installing it.` |
 | F-3902 rule 11 | store: nothing stored / `true` / `'yes'` | `false` / `true` / `false` |
 | F-3902 rule 11 | `accept(key)` then `isAccepted(key)` | `true`, with `update(key, true)` called once |
 | string tables | the new keys | `pnpm check-layout` green in all 15 bundles |
