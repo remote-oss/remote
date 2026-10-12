@@ -49,8 +49,7 @@ function csiEnd(text: string): number {
 /**
  * The end of a string sequence: up to the string terminator, or the bell when `bellEnds`. A string is cancelled where it
  * meets another escape, a cancel or a substitute character (that character ends it, and an escape starts the next
- * sequence), and one that is still open after `STRING_LIMIT` characters is dropped, so a stray start cannot swallow what
- * follows. Gives -1 while the string is open.
+ * sequence). Gives -1 while the string is open.
  */
 function stringEnd(text: string, bellEnds: boolean): number {
   for (let index = 2; index < text.length; index++) {
@@ -68,7 +67,7 @@ function stringEnd(text: string, bellEnds: boolean): number {
       return index + 1;
     }
   }
-  return text.length >= STRING_LIMIT ? text.length : -1;
+  return -1;
 }
 
 /** The end of an escape with intermediate bytes: the intermediates and one final byte. */
@@ -85,35 +84,57 @@ function intermediateEnd(text: string): number {
   return -1;
 }
 
-/** Removes terminal escape sequences from a stream given in pieces; a sequence split across pieces is held. */
+/** The index after the first line end in `text` (a line feed or a carriage return), or -1. */
+function afterLineEnd(text: string): number {
+  const found = text.search(/[\r\n]/);
+  return found === -1 ? -1 : found + 1;
+}
+
+/**
+ * Removes terminal escape sequences from a stream given in pieces; a sequence split across pieces is held. A string
+ * sequence still open after `STRING_LIMIT` characters is dropped through the next line end, so the rest of an endless
+ * string never reaches the text and a stray start cannot swallow what follows.
+ */
 export class PlainTextFilter {
   private held = '';
+  private dropping = false;
 
   /** The plain text of `piece`, with any escape sequence it completes removed. */
   push(piece: string): string {
     let text = this.held + piece;
     this.held = '';
     let plain = '';
-    for (
-      let start = text.indexOf(ESCAPE);
-      start !== -1;
-      start = text.indexOf(ESCAPE)
-    ) {
+    for (;;) {
+      if (this.dropping) {
+        const resume = afterLineEnd(text);
+        if (resume === -1) {
+          return plain;
+        }
+        this.dropping = false;
+        text = text.slice(resume);
+      }
+      const start = text.indexOf(ESCAPE);
+      if (start === -1) {
+        return plain + text;
+      }
       plain += text.slice(0, start);
       text = text.slice(start);
       const end = sequenceEnd(text);
-      if (end === -1) {
+      if (end !== -1) {
+        text = text.slice(end);
+      } else if (text.length < STRING_LIMIT) {
         this.held = text;
         return plain;
+      } else {
+        this.dropping = true;
       }
-      text = text.slice(end);
     }
-    return plain + text;
   }
 
   /** What is held at the end of the stream: an unfinished sequence is dropped, so this gives ''. */
   flush(): string {
     this.held = '';
+    this.dropping = false;
     return '';
   }
 }

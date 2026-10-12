@@ -109,14 +109,40 @@ describe('PlainTextFilter (card ssh-18 table)', () => {
       deepStrictEqual(filtered('a\x1b]0;x', '\x18b'), ['a', 'b', '']);
     });
 
-    it('#341: a string still open after 4 KiB is dropped and the text after it flows', () => {
-      const filter = new PlainTextFilter();
-      const pieces = [
-        filter.push('a\x1b]0;'),
-        filter.push('x'.repeat(4096)),
-        filter.push('tail'),
-      ];
-      deepStrictEqual(pieces, ['a', '', 'tail']);
+    it('#341: a string open past 4 KiB is dropped through the next line end, in one piece', () => {
+      deepStrictEqual(filtered(`a\x1b]0;${'z'.repeat(5000)}\nnext line`), [
+        'anext line',
+        '',
+      ]);
+    });
+
+    it('#341: a string open past 4 KiB is dropped through a line end in a later piece', () => {
+      deepStrictEqual(
+        filtered('a\x1b]0;', 'z'.repeat(3000), `${'z'.repeat(3000)}\nafter`),
+        ['a', '', 'after', ''],
+      );
+    });
+
+    it('#341: a cap reached with no line end drops the next piece up to its first line end', () => {
+      deepStrictEqual(filtered(`a\x1b]0;${'z'.repeat(5000)}`, 'zz\nok'), [
+        'a',
+        'ok',
+        '',
+      ]);
+    });
+
+    it('#341: a carriage return alone ends the dropped line too', () => {
+      deepStrictEqual(filtered(`a\x1b]0;${'z'.repeat(5000)}\rnext`), [
+        'anext',
+        '',
+      ]);
+    });
+
+    it('#341: a string whose terminator comes in the piece that crosses the cap ends normally', () => {
+      deepStrictEqual(
+        filtered(`a\x1b]0;${'x'.repeat(3000)}`, `${'y'.repeat(2000)}\x07z`),
+        ['a', 'z', ''],
+      );
     });
 
     it('#341: an escape that ends a piece inside a string waits for the next piece', () => {
