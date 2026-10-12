@@ -363,6 +363,22 @@ lease list that S9 uses for login ownership. Lifetime, ownership and how it dies
 
 ### S10 ssh-host-channel
 
+**No secret in any process's command line** (ruled on #412, daedalus's finding for cli-03b; measured with `ps` on
+OpenSSH hosts): a `ScriptRequest`'s `environment` never appears in an argv, on the host or on the client.
+- **On a session that reads commands on stdin** (the shared session's `ShellRuns`, terminal mode's runner):
+  `commandsFor` writes the environment as an **assignment prefix** on the inner `sh`, each value `posixQuote`d:
+  `NAME='value' … sh -c '<script>'`. The session shell reads that line from its stdin and puts the values in the
+  child's environment, so no `ps` shows them. Never inside the `sh -c` text.
+- **On the direct channel** (`planScript`), the remote command is `ssh`'s own argument on the client and `sh -c`'s on
+  the host, so neither an assignment line nor a prefix may be in it. A script **without** input already goes on stdin
+  (`sh -s`) and keeps its assignment lines there. A script **with** input and a non-empty environment sends the
+  environment on stdin first: the remote command is the fixed `sh -c 'IFS= read -r … ; <read the assignments>; exec sh
+  -c "$0"' '<script>'` form that reads one assignment line per variable from stdin before the input. The card writes it
+  out with a row against a real `sh`. A script with input and an empty environment is unchanged.
+- Rows: for each of the three paths, a script whose environment holds a marker value runs, and the marker is in no
+  process's `args` (`ps -eo args`, on the host and the client) while it runs; and the value reaches the script.
+
+
 "Over this connection" (ruled 2026-10-08): the helper's shared `ssh` runs with `-T` and no command, so the remote
 login shell reads standard input; S10's `runScript` writes the script to that session's stdin (the two-mode
 bootstrap) and reads its result block from stdout, one run at a time (the helper serialises; probe, install, start
