@@ -110,6 +110,8 @@ export type TransportEvent = 'lost' | 'closed';
 /** A connect that worked: what the window gets, and the end of the connection when the window ends. */
 export interface Connection {
   connected: Connected;
+  /** The TCP port the server listens on at the host's loopback. */
+  serverPort: number;
   /** Closes the tunnel and gives the lease on the connection back; the connector calls it when the window ends. */
   release(): void;
   /** Hears what happens to the connection's transport; the returned function stops it. */
@@ -361,6 +363,7 @@ async function runSteps(
       connectionToken: started.server.connectionToken,
       trusted: false,
     },
+    serverPort: started.server.port,
     release: () => {
       tunnel.value.close();
       lease.release();

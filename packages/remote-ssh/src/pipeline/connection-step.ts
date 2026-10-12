@@ -33,8 +33,24 @@ export interface ConnectionStepDependencies {
     connection: SharedConnection,
     terms: ConnectionTerms,
   ) => HostChannel;
-  /** Hears the questions and the other notices of the login while the connect waits for it. */
-  onNotice: (notice: ConnectionNotice) => void;
+  /**
+   * Shows the login's questions to the user and passes the answers on, from the acquire until the login ends; the
+   * returned handle takes the questions down.
+   */
+  attachLogin: (login: LoginLease, input: ConnectInput) => {dispose(): void};
+}
+
+/** What the window's questions need of the connection: its notices, and the answer or the refusal of each. */
+export interface LoginLease {
+  /** Calls `listener` for each notice until the returned function is called. */
+  onNotice(listener: (notice: ConnectionNotice) => void): () => void;
+  /** Gives the answer to a question; false when another answer was first or the question is gone. */
+  answer(promptId: number, text: string): Promise<boolean>;
+  /**
+   * Refuses a question the user dismissed. The helper closes it unanswered, marks the attempt cancelled and refuses
+   * every later question of that ssh run without telling the windows.
+   */
+  refuse(promptId: number): Promise<boolean>;
 }
 
 /** The step that opens the connection of a connect. */
@@ -51,12 +67,16 @@ export function openConnectionStep(
       return {kind: 'failed', failure: ofAcquire(acquired.failure)};
     }
     const {connection} = acquired;
-    const stopListening = connection.onNotice(dependencies.onNotice);
     function end(): void {
-      stopListening();
       connection.release();
     }
-    const outcome = await connection.connect(cancellation);
+    const login = dependencies.attachLogin(connection, input);
+    let outcome: Awaited<ReturnType<SharedConnection['connect']>>;
+    try {
+      outcome = await connection.connect(cancellation);
+    } finally {
+      login.dispose();
+    }
     if (outcome.kind === 'failed') {
       end();
       return {kind: 'failed', failure: ofConnection(outcome.failure)};

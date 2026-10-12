@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
-import type {ConnectInput, ConnectPhase, Connector} from 'lib-authority';
+import type {ConnectInput, ConnectPhase} from 'lib-authority';
 import type {TransferPhase} from 'lib-server';
-import {connectorOf} from '../../src/pipeline/connector.ts';
+import {connectorOf, type SshConnector} from '../../src/pipeline/connector.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
   INPUT,
@@ -16,7 +16,7 @@ const HOST_INPUT: ConnectInput = {...INPUT, target: INPUT.target};
 
 /** A connector over the fixture's steps, with the recording, and a log the details reveal counts in. */
 function connectorFor(changes: Partial<ConnectSteps> = {}): {
-  connector: Connector;
+  connector: SshConnector;
   recording: Recording;
   revealed: string[];
 } {
@@ -152,7 +152,7 @@ describe('the connector over the connect pipeline', () => {
   });
 
   it('contracts §3.2: a connection that completes after a cancel is given back, not held', async () => {
-    const window: {connector?: Connector} = {};
+    const window: {connector?: SshConnector} = {};
     const {connector, recording} = connectorFor({
       rememberPlatform: () => {
         // The window is torn down after the tunnel opened, before the connect returns.
@@ -230,6 +230,52 @@ describe('the connector over the connect pipeline', () => {
     await connector.connect(HOST_INPUT);
     await connector.connect({...HOST_INPUT, attempt: 2, isReconnection: true});
     deepStrictEqual(made, 2);
+  });
+
+  it('F-2509 BR-5: the held connection gives its server port', async () => {
+    const {connector} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(connector.serverPort(), 4321);
+  });
+
+  it('F-2509 AC-13: before any connect there is no server port, and no throw', () => {
+    const {connector} = connectorFor();
+    deepStrictEqual(connector.serverPort(), 'none');
+  });
+
+  it('F-2509 AC-13: a connect that failed leaves no server port', async () => {
+    const {connector} = connectorFor({openTunnel: tunnelFails});
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(connector.serverPort(), 'none');
+  });
+
+  it('F-2509 AC-13: once the transport is lost there is no server port until a connect works again', async () => {
+    const {connector, recording} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    recording.notice?.({type: 'transportLost'});
+    deepStrictEqual(connector.serverPort(), 'none');
+  });
+
+  it('F-2509 AC-20: a connect after a lost transport gives the new server port', async () => {
+    const {connector, recording} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    recording.notice?.({type: 'transportLost'});
+    await connector.connect({...HOST_INPUT, attempt: 2, isReconnection: true});
+    deepStrictEqual(connector.serverPort(), 4321);
+  });
+
+  it('F-2509 AC-13: after a cancel there is no server port', async () => {
+    const {connector} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    connector.cancel();
+    deepStrictEqual(connector.serverPort(), 'none');
+  });
+
+  it('F-2509: the end of the connection server keeps the port until the window connects again', async () => {
+    const {connector, recording} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    recording.notice?.({type: 'helperGone'});
+    deepStrictEqual(connector.serverPort(), 4321);
   });
 
   it('F-2304 BR-12: the details reveal the log', () => {

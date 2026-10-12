@@ -6,27 +6,10 @@
  * holds the login it shows that it waits.
  */
 
-import {
-  classifyPrompt,
-  type ConnectionNotice,
-  type PromptSurface,
-  type PromptText,
-} from 'lib-ssh';
+import {classifyPrompt, type PromptSurface, type PromptText} from 'lib-ssh';
+import type {LoginLease} from '../pipeline/connection-step.ts';
 import {textOf, WAITING_TEMPLATE} from './prompt-strings.ts';
 import type {Translate} from './strings.ts';
-
-/** What the surface needs of the lease: its notices, and giving an answer. */
-export interface PromptLease {
-  /** Calls `listener` for each notice until the returned function is called. */
-  onNotice(listener: (notice: ConnectionNotice) => void): () => void;
-  /** Gives the answer to a question; false when another answer was first or the question is gone. */
-  answer(promptId: number, text: string): Promise<boolean>;
-  /**
-   * Refuses a question the user dismissed. The helper closes it unanswered, marks the attempt cancelled and refuses
-   * every later question of that ssh run without telling the windows.
-   */
-  refuse(promptId: number): Promise<boolean>;
-}
 
 /** One pick as the editor shows it. */
 export interface PickRequest {
@@ -73,7 +56,7 @@ export interface AttachedPromptSurface {
 
 /** Starts showing the lease's questions. */
 export function attachPromptSurface(
-  lease: PromptLease,
+  lease: LoginLease,
   editor: PromptEditor,
   options: PromptSurfaceOptions,
 ): AttachedPromptSurface {
