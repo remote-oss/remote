@@ -117,8 +117,22 @@ connect in validate; this brief replaces that interim.
 ### V7 socket path
 
 - The bootstrap passes `--socket-path` when socket mode is on. `StartedServer` gains `socketPath`, read from the
-  server's report (`/tmp/code-<uuid>`, F-2410 5.0 step 5). Each connect gets a new socket; nothing is persisted, and an
-  earlier port-mode shared record is discarded (F-2410 BR-5).
+  server's ready line, which prints the path in place of the port (`Extension host agent listening on <path>`;
+  `[oss]` `src/server-main.ts`); the start script's port reader becomes "a port or an absolute path".
+- **One server per endpoint kind, each reused (ruled on #299, daedalus's option b).** The `[oss]` server listens on a
+  path *or* on host/port, never both (one `listen` call). The reference's server proper serves both because a per-connect
+  CLI layer sits in front of it (F-2410 BR-6, BR-9); we have no such layer. So the start records its endpoint kind
+  beside the PID file, and a running server is reused only when its kind matches the connect's mode. A mismatch starts
+  a server for the other kind and leaves the first running. That keeps F-2410 BR-7 (a mode switch takes effect on the
+  next resolve **without killing the server**, so the other mode's open windows stay connected) and BR-6 (the server
+  is shared and reused in both modes).
+  - Rejected: (a) restarting on a mode change, which kills the other mode's windows against BR-7; and (c) never
+    reusing in socket mode, a full server start per connect that F-2410 doesn't describe.
+  - BR-5's "a new socket path per connect" is the reference's per-connect CLI socket, an artefact of the layer we don't
+    have. What a user observes is held: a socket-mode connect uses a socket and opens no TCP listener (AC-9), and a
+    port-mode record is discarded (BR-5's "no persisted connection data").
+  - Cost: a host where the user switched modes runs two servers until one is killed, as BR-6 observes for the
+    reference's leftover CLIs. "Kill VS Code Server on Host..." stops both kinds (F-2411).
 
 ## Rulings in this brief
 
@@ -158,7 +172,7 @@ needs a decision; it's taken when the lab result is in.
 | T3 | S2/S3: terminal invocation (`sh`, `-T`), the wait's first-output end, the tunnel invocation with its remote command (no `-N`), `ClearAllForwardings` on a forward-free install run only | lib-ssh | — |
 | T4 | S10 over the terminal: `ShellRuns` with S8 as writer and reader, markers printed from two pieces, the test with echoed input | lib-ssh | T1 |
 | T5 | R1's terminal branch replacing connect-15's interim: the mode decision, the install terminal, the wait, login through T2, the server steps through T4 | remote-ssh | T1–T4 |
-| T6 | V7 socket path: `--socket-path`, `StartedServer.socketPath`, the discarded port record | lib-server | — |
+| T6 | V7 socket path: `--socket-path`, the ready line's path, `StartedServer.socketPath`, the endpoint kind beside the PID file (reuse only on a match), Kill stops both kinds, the discarded port record | lib-server | — |
 | T7 | W2's secondSsh and socket branches: the tunnel terminal, the success line, the 10 s wait, failures after the bound | lib-forwarding, remote-ssh | T1–T3, T6 |
 
 T1, T3 and T6 can start at once. Closing #299 needs T5 and T7 merged and F-2104 6.2/6.8 and F-2410's resolver rows
