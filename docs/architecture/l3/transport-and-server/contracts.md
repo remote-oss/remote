@@ -245,6 +245,20 @@ Rules:
   askpass, and stops at the first setup report (F-2105, F-2308 BR-5). The maximum for `ConnectTimeout 0` is an R-79
   bound: `unboundedWaitSeconds`, a policy value the package passes in, and it is the final limit (no +2 s margin;
   ruled 2026-10-08).
+- Remote - SSH's start values (ruled on #253 Q8, 2026-10-12):
+  - `settings.connectTimeout` is the setting through F-2105 BR-1's fallback (absent, not a number, negative or
+    fractional → 15); the setting's own 0 stays 0 (F-2105 BR-4, AC-9: ssh gets 0, the extension waits 2 s).
+  - `unboundedWaitSeconds` is `HOST_ZERO_TIMEOUT_SECONDS` (600), so a host's `ConnectTimeout 0` has one ceiling in the
+    helper, the probe and the tunnel. It applies only to a host's 0: the setting's 0 gives the 2 s wait, never 600 s.
+    Today's `ConnectWait` cannot tell the two apart (the helper passes `Number(effective ?? setting)`, and any 0 takes
+    the ceiling), so `ConnectWaitSettings` gains the source: the ceiling when the looked-up value is 0, the timeout
+    plus 2 s otherwise, the setting's 0 included (card ssh-16).
+  - The client's `requestMilliseconds` is 10 s (one reply over a local socket). `loginMilliseconds` is the helper's
+    connect wait plus 10 s, computed per connect from the looked-up timeout, so the helper's classified timeout always
+    arrives before the client's backstop.
+  - `displayHost` is the host as the user chose it, without user and port: the alias (`hostAlias`). STR:S001's {0}
+    is that host (F-2305 3.4: the alias, or a typed host without its user, never a `HostKeyAlias`). S066's {0} is
+    not `displayHost`: it is the word ssh's own prompt carries (`<user>@<HostName>`, F-2306 3.4).
 
 ### S7 prompt-ui
 

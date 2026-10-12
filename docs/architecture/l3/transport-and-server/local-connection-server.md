@@ -58,8 +58,9 @@ owner's server instance. That is option (b) of F-2102 Q3 and removes the "Cannot
 A helper is never orphaned by a crashed extension host, because a crash closes the lease socket as well.
 
 **Open points.**
-1. **Grace length.** The value must carry a reload without exceeding F-2102 BR-3. It needs a timing case in the
-   SSH suite.
+1. **Grace length: 3 s** (ruled on #253 Q8, 2026-10-12): the middle of F-2102 BR-3's observed 2 to 4 s, a named
+   constant in remote-ssh's bounds. Provisional until the SSH suite's timing case: a window reload (F-2103 BR-9,
+   F-2306 BR-11) asks for no new login, and the helper is gone within 4 s of the last window.
 2. **Windows clients (F-2102 Q1), provisional (lab) under D-60.** Unix sockets in a runtime folder do not exist there. The control and askpass
    endpoints become named pipes restricted to the current user. Several things need a Windows lab run before this
    contract is final:
