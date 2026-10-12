@@ -1,0 +1,155 @@
+# Coding brief: terminal mode, the login terminal (S8) and the two non-default window tunnels
+
+> Issued by `athena` 2026-10-12 for daedalus, who turns it into cards. Answers #299 (1): terminal mode is in 0.2
+> (slice 2 is in 0.2, build-order.md; #253 Q5 made the secondSsh and socket tunnel paths 0.2 release blockers), and it
+> is on the critical path to the 0.2 tag. Contracts: `contracts.md` §S2, §S3, §S7, §S8, §S9, §S10, §R1, §W1–W3, §V7.
+> Spec: remote-oss/remote-ssh F-2308 (#41), F-2102 BR-10, F-2104 6.2/6.8/BR-1/BR-2/BR-9–BR-11, F-2410, F-2306,
+> F-2305 6.6, F-2307 AC-23, F-2105 BR-3, F-2704 6.4/BR-1/BR-6, F-2206, F-2311 BR-8. Binding: ADR-0003, 0007, 0008;
+> R-29, R-79, R-26.
+
+## What terminal mode is
+
+The connection without the shared local connection server: `remote.SSH.useLocalServer` false, or socket mode on
+(`remote.SSH.remoteServerListenOnSocket`, which forces the shared connection off whatever `useLocalServer` says:
+F-2410 BR-2; lib-forwarding's `effectiveUseLocalServer`). Each window runs its own `ssh` in a hidden terminal. No
+helper, no lease, no prompt mirroring, no S157 (F-2102 BR-10). Today card connect-15's interim fails every such
+connect in validate; this brief replaces that interim.
+
+## The flow (R1's terminal branch)
+
+1. validate, then the platform question (F-2206 5.2: always asked in this mode when no entry decides), then the client
+   check and `ssh -G` (connect-14 order, unchanged).
+2. The connect wait starts right after the platform choice (F-2704 BR-6) and ends at the **first output of the
+   install terminal** (F-2105 BR-3, F-2308 BR-5). After that only ssh's own timeouts apply, and a recognised prompt
+   never times out (F-2306 BR-7).
+3. The install connection: `ssh` with remote command `sh` and no pty (F-2704 BR-1, 6.4 step 2), in a terminal named
+   `install`, working folder the local home, no askpass variables (F-2101 AC-30). One terminal per attempt, never
+   reused (F-2308 BR-9). It carries the live connection: its end ends the window's connection (BR-7, 7.E5).
+4. Prompts while it logs in (S7 over S8, below).
+5. The probe, install and start run through S10 **over that terminal** (below).
+6. The window tunnel by path: `socks` (dynamic forwarding on: the install `ssh` holds the `-D`, F-2104 6.3, BR-11),
+   `secondSsh` (`ssh -N -L` in an `SSH Tunnel` terminal, F-2104 6.2), or `socket` (always two logins, `-L
+   <port>:<socket path>`, F-2104 BR-2, F-2410 5.0 steps 5–6).
+
+## Components
+
+### S8 login-terminal (new; lib-ssh port, remote-ssh adapter)
+
+| Operation | Contract |
+|---|---|
+| `open(invocation, name, reveal)` | creates the terminal (`window.createTerminal` with `hideFromUser: !reveal`, the local home as cwd, never trust-exempt: F-2308 §16, F-3903 rule 1), starts the invocation, and returns a session: `onOutput(chunk)`, `send(text)`, `reveal()`, `onEnd(status)`, `dispose()` |
+| output | read through the proposed `terminalDataWriteEvent` (`window.onDidWriteTerminalData`), filtered to this terminal, chunked as the editor delivers it |
+| `reveal` | `Terminal.show(false)`: reveals and focuses (F-2308 BR-2, 6.1 step 4) |
+| trust | the editor's workspace-trust dialog gates the terminal. Cancel → the attempt fails at once and no `ssh` runs (F-2308 7.E7, AC-24); an answer later than the connect wait → the wait's timeout (F-2306 AC-28) |
+
+- `remote.SSH.showLoginTerminal` is read once at the start of each attempt (F-2308 BR-3).
+- With it on, every login terminal is revealed at creation and no question becomes an input (BR-2, BR-4).
+- With it off, terminals are hidden (`hideFromUser`) and only recognised prompts become inputs (BR-4).
+- The adapter is the only file that imports `vscode` for S8. The port is in lib-ssh, with a recording fake in
+  `testing/`.
+
+### Prompt recognition over terminal output (S7 terminal list)
+
+- A line splitter over the chunked output (LineSplitter, which already strips a trailing `\r`), plus a **partial-line
+  check**: a prompt has no newline, so the current partial line is also matched once the output pauses.
+- The recognised set in terminal mode, with the setting off:
+  - F-2306's three: `<user>@<host>'s password:`, `Password:` and `Verification code:` (F-2308 BR-4).
+  - The host-key question by F-2305 BR-2's patterns (ruled below).
+  - The key passphrase (F-2307 AC-23, ruled below).
+  - `classifyPrompt`'s raw fallback (rule 5) does **not** apply in terminal mode: anything else stays in the terminal
+    (F-2308 6.3).
+- The answer goes back with `send(text + '\r')`. While an input is open, further output is held, not acted on
+  (F-2308 BR-6); the wait on the open input is bounded under R-79 (BR-6's adaptation).
+- A re-prompt carries no "Permission denied" line in terminal mode (F-2306 BR-4, AC-9).
+
+### S10 over the install terminal (reuse, not a new channel)
+
+- lib-ssh's `ShellRuns` and `SharedSessionChannel` already run scripts over one long-lived `sh` session, framed by
+  markers. In shared mode the helper writes to ssh's stdin. In terminal mode the **same classes** take S8's `send` as
+  their writer and S8's output lines as their reader. The marker framing, base64 input and deadlines are unchanged.
+- **Constraint:** the remote side has no pty (`sh` as a command, `-T`; checked against a real sshd: `sh` echoes
+  nothing back), but the local terminal echoes what `send` writes into
+  its own output. So the reader must match a marker as an **exact whole line**: an echoed command line
+  (`printf '%s\n' '<marker>:start'`) never equals the bare marker line. `ShellRuns` already matches whole lines; the
+  card adds a test with echoed input.
+- The terminal also merges ssh's stderr (the `-v` lines, F-2308 BR-8) into the same stream. The reader ignores lines
+  outside a run's markers, as it does today.
+
+### S3 / S2 changes
+
+- Terminal mode's invocation: purpose `connection`, remote program `sh`, `-T`. It keeps `-v` (F-2308 BR-8 shows ssh's
+  output unfiltered), and keeps S5's classification of ssh's own failure lines.
+- The connect wait (`ConnectWait`) is started after the platform choice, and stopped at the first output chunk instead
+  of the `authenticated` marker. A `mode` input to the wait's owner decides which.
+- secondSsh and socket: purpose `tunnel`, `-N` (S2 doesn't emit it today; card adds it), `-L
+  127.0.0.1:<port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (already built), and `ExitOnForwardFailure
+  yes`.
+- With dynamic forwarding off, the install `ssh` must not act on the user's own forwards (F-2104 6.2 step 1):
+  `ClearAllForwardings yes` on that run only. S2's "never add" list gains this one exception, scoped to that run.
+  Checked against a real sshd: a host block's `LocalForward` opens without it and doesn't open with it.
+
+### W2 second-login and socket paths
+
+- lib-forwarding's `openForwardedTunnel` is the wait (10 s, S158, "Max wait time exhausted": F-2104 BR-10, 7.E5).
+- The tunnel step's two branches start the tunnel `ssh` in an `SSH Tunnel` terminal through S8, with prompts as above.
+  The progress shows "(details) Setting up SSH tunnel" with the tooltip S132 (F-2308 6.2, F-2104 AC-7).
+- The success line "Connected to SSH Host - Please do not close this terminal" (F-2308 BR-10) is printed by the tunnel
+  `ssh`'s remote command. That needs a remote command on the host, which `-N` doesn't run. **Ruled:** the tunnel `ssh`
+  runs `echo 'Connected to SSH Host - Please do not close this terminal'; exec sleep 2147483647` in place of `-N`
+  (POSIX `sh`, the remote login shell), so the line is the host's own output, as the spec says. It's still bounded by
+  the 10 s readiness wait. Checked against a real OpenSSH sshd (2026-10-12): the line arrives, the forward carries
+  traffic, and it ends with the process.
+- A tunnel login that is cancelled, fails, or exits through `ExitOnForwardFailure` fails the connect with F-2601's
+  dialog after the bound, never a hang (F-2104 7.E7/7.E10, F-2308 7.E2/BR-11, R-79).
+- W3 in these two paths: the user's forwarded ports open one `-L` each on the tunnel session. F-2104 Q4 and BR-11's
+  socket-mode lab item stay open; until answered, W3 there reports a port it can't forward instead of guessing.
+
+### V7 socket path
+
+- The bootstrap passes `--socket-path` when socket mode is on. `StartedServer` gains `socketPath`, read from the
+  server's report (`/tmp/code-<uuid>`, F-2410 5.0 step 5). Each connect gets a new socket; nothing is persisted, and an
+  earlier port-mode shared record is discarded (F-2410 BR-5).
+
+## Rulings in this brief
+
+1. **Host-key question in terminal mode: F-2305 BR-2's adaptation applies in both modes.** Asked on F-2305 (#38). The
+   adaptation's reason (the surface shouldn't depend on the client's OpenSSH version) holds in terminal mode too, and
+   AC-30 already gives the pick there for the classic wording. AC-31 and AC-38 (the 10.x wording left in the terminal)
+   are marked pending the spec's answer.
+2. **Passphrase in terminal mode: recognised from the terminal output (option a), keeping F-2307 AC-23.** Asked on
+   F-2307 (#40). If the spec answers (b), the recognition is dropped and an askpass set up for it instead.
+3. **An unanswered question after the handshake is bounded when nobody can reach it** (F-2308 7.E3, F-2305 BR-7;
+   R-79). A recognised prompt shown as an input waits without limit (F-2306 BR-7). An unrecognised question in a
+   hidden terminal is reachable only through "details" in a phase that carries the link (F-2308 6.1 step 4). In a
+   phase without the link, or once the output has been silent for the connect timeout with a partial line
+   pending, the attempt fails with F-2601 after the bound. The bound is R-79's family default, not a new number.
+4. **The connect wait ends at the first output** in terminal mode (F-2105 BR-3), not at `authenticated`. The `-v`
+   banner arriving first is what the spec observed (F-2308 5.0 step 4).
+5. **A late trust answer** (after the attempt failed): nothing runs. The terminal isn't created after the attempt's
+   end, and no stale input appears (F-2306 7.E7 says it should not; the reference's late install is a defect, not
+   reproduced).
+6. **The `ClearAllForwardings` pre-check** (F-2105 AC-29) applies to terminal mode's dynamic-forwarding path too,
+   since it hangs the same way (the 2026-10-09 ruling said "shared connection on" only because terminal mode wasn't
+   built).
+7. **Stale citation:** contracts R1's "F-2308 Q3 and Q4" becomes "F-2308 7.E2, 7.E8, BR-6, BR-11" (the adaptations
+   are now inline). Fixed in the same commit as this brief.
+
+## Lab items left open (not blockers for the cards)
+
+F-2308 Q1/Q2, F-2102 Q1 and F-2410 Q1/Q2 need Windows or macOS runs (D-60: provisional on Linux). F-2410 Q2 also
+needs a decision; it's taken when the lab result is in.
+
+## Cards, in order
+
+| # | Card | Package | Depends on |
+|---|---|---|---|
+| T1 | S8 port, recording fake, adapter over `createTerminal`/`onDidWriteTerminalData`/`sendText`/`show`; trust outcomes | lib-ssh, remote-ssh | — |
+| T2 | Prompt recognition over terminal output: splitter plus partial line, the terminal list, held output while an input is open, the R-79 bound for unreachable questions | lib-ssh | T1 |
+| T3 | S2/S3: terminal invocation (`sh`, `-T`), the wait's first-output end, `-N`/remote-command tunnel invocation, `ClearAllForwardings` on the install run | lib-ssh | — |
+| T4 | S10 over the terminal: `ShellRuns` with S8 as writer and reader, the exact-line marker test with echoed input | lib-ssh | T1 |
+| T5 | R1's terminal branch replacing connect-15's interim: the mode decision, the install terminal, the wait, login through T2, the server steps through T4 | remote-ssh | T1–T4 |
+| T6 | V7 socket path: `--socket-path`, `StartedServer.socketPath`, the discarded port record | lib-server | — |
+| T7 | W2's secondSsh and socket branches: the tunnel terminal, the success line, the 10 s wait, failures after the bound | lib-forwarding, remote-ssh | T1–T3, T6 |
+
+T1, T3 and T6 can start at once. Closing #299 needs T5 and T7 merged and F-2104 6.2/6.8 and F-2410's resolver rows
+passing in the SSH suite.

@@ -284,6 +284,8 @@ Never: store or log an answer or its length.
 
 ### S8 login-terminal
 
+The design of terminal mode, S8 included, is `brief-terminal-mode.md` (2026-10-12, #299). It refines the row below.
+
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
 | `runInTerminal` | invocation, name (`install`, `SSH Tunnel`, `Uninstall VS Code Server`), `remote.SSH.showLoginTerminal` | a session over the terminal: output events, input, end | trust refused (core) |
@@ -774,7 +776,7 @@ Rules:
   connector keeps for `cancel` and window teardown (connect-02, accepted 2026-10-08).
 - Every attempt makes a fresh connection when S9 reports the transport lost (F-2505 BR-1).
 - Every recorded hang becomes a bound wait followed by F-2601's dialog (R-79). This covers:
-  - F-2103 Q1, F-2104 Q1, F-2304 Q2, F-2308 Q3 and Q4, F-2405 Q3;
+  - F-2103 Q1, F-2104 Q1, F-2304 Q2, F-2308 7.E2, 7.E8, BR-6 and BR-11 (the former Q3 and Q4), F-2405 Q3;
   - after the revisions of 2026-10-06: F-2105 (a `ProxyCommand` that never answers, `ConnectTimeout 0`), F-2108
     7.E8, F-2311 7.E8 (through F-2104 and F-2304), the declined scp trust of F-2405, F-2406 7.E6 and F-2703 7.E5,
     and F-2701 Q6.
