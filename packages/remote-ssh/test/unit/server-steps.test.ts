@@ -331,7 +331,7 @@ describe('the server steps: validate and the names', () => {
       kind: 'failed',
       failure: {
         kind: 'invalidSetting',
-        reason: {text: 'remote.SSH.serverInstallPath'},
+        reason: {id: 'installPathProvided', values: ['/data/$HOME']},
       },
     });
   });

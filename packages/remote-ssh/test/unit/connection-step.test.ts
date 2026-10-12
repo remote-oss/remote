@@ -426,7 +426,7 @@ describe('the connection step', () => {
           kind: 'failed',
           failure: {
             kind: 'unknown',
-            reason: {text: 'Error: the channel is gone'},
+            logDetail: 'Error: the channel is gone',
           },
         },
         1,

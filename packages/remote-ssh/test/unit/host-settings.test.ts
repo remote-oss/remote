@@ -117,24 +117,14 @@ describe('the install folder setting', () => {
     );
   });
 
-  it('refuses a folder that is not absolute or holds another character', () => {
-    deepStrictEqual(
-      [
-        installFolderFor({devbox: 'relative'}, 'devbox'),
-        installFolderFor({devbox: '/a(b)'}, 'devbox'),
-        installFolderFor({devbox: '/a\\b'}, 'devbox'),
-        installFolderFor({devbox: '/a\tb'}, 'devbox'),
-        installFolderFor({devbox: '/ä'}, 'devbox'),
-      ],
-      [
-        {kind: 'invalid'},
-        {kind: 'invalid'},
-        {kind: 'invalid'},
-        {kind: 'invalid'},
-        {kind: 'invalid'},
-      ],
-    );
-  });
+  for (const entry of ['relative', '/a(b)', '/a\\b', '/a\tb', '/ä']) {
+    it(`F-2407: ${JSON.stringify(entry)} is refused and keeps its value as it is stored`, () => {
+      deepStrictEqual(installFolderFor({devbox: entry}, 'devbox'), {
+        kind: 'invalid',
+        value: entry,
+      });
+    });
+  }
 
   it('does not use the entry of another alias, a glob or a user-prefixed key', () => {
     deepStrictEqual(

@@ -155,7 +155,7 @@ describe("the composition of a connect's steps", () => {
       kind: 'failed',
       failure: {
         kind: 'invalidSetting',
-        reason: {text: 'remote.SSH.serverInstallPath'},
+        reason: {id: 'installPathProvided', values: ['/$bad']},
       },
     });
   });

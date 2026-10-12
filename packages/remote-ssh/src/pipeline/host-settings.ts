@@ -44,7 +44,9 @@ const INSTALL_FOLDER = /^\/[A-Za-z0-9/_. -]*$/;
 
 /** The install folder setting for the alias: none, a usable folder, or a value that is not allowed. */
 export type InstallFolder =
-  {kind: 'default'} | {kind: 'folder'; folder: string} | {kind: 'invalid'};
+  | {kind: 'default'}
+  | {kind: 'folder'; folder: string}
+  | {kind: 'invalid'; value: string};
 
 /**
  * Reads `remote.SSH.serverInstallPath` for the alias. An entry that is not text counts as none, an empty text means
@@ -61,7 +63,7 @@ export function installFolderFor(
   }
   return INSTALL_FOLDER.test(entry)
     ? {kind: 'folder', folder: entry}
-    : {kind: 'invalid'};
+    : {kind: 'invalid', value: entry};
 }
 
 /**

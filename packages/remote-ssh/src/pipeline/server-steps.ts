@@ -96,7 +96,7 @@ function sourceOf(resolution: ArchiveResolution): PlanInput['source'] {
     case 'noSource':
       return {kind: 'noSource'};
     default:
-      return {kind: 'invalidOverride', problem: resolution.problem.kind};
+      return {kind: 'invalidOverride', problem: resolution.problem};
   }
 }
 
@@ -151,7 +151,10 @@ export function createServerSteps(
             kind: 'failed',
             failure: {
               kind: 'invalidSetting',
-              reason: {text: 'remote.SSH.serverInstallPath'},
+              reason: {
+                id: 'installPathProvided',
+                values: [settings.installFolder.value],
+              },
             },
           }
         : {kind: 'done', value: undefined};
