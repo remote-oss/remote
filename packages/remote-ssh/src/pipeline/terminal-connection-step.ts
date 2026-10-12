@@ -72,9 +72,12 @@ export interface TerminalConnectionDependencies {
 
 const MILLISECONDS_PER_SECOND = 1000;
 
-/** The failure of a login that did not reach the handover, as the pipeline reads it. */
+/**
+ * The failure of a login that did not reach the handover, as the pipeline reads it. A terminal that ended with no exit
+ * code and no output, and that the user did not close, never started: the editor's trust question was cancelled.
+ */
 function failureOf(end: TerminalEnd, lines: readonly string[]): StepFailure {
-  if (end.code === undefined && !end.hadOutput) {
+  if (end.code === undefined && !end.hadOutput && end.reason !== 'user') {
     return {kind: 'cancelled', reason: {id: 'trustRefused'}};
   }
   const classification = classify(lines, end.code, 'connection', 'terminal');
@@ -178,7 +181,7 @@ export function openTerminalConnectionStep(
           disposeTerminal();
           settle({
             kind: 'failed',
-            failure: {kind: 'unknown', reason: {text: String(caught)}},
+            failure: {kind: 'unknown', logDetail: String(caught)},
           });
           return;
         }

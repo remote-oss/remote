@@ -235,6 +235,17 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     });
   });
 
+  it('F-2308 7.E7: a terminal the user closed before any output was not a refused trust', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.end(undefined, 'user');
+    const outcome = await result;
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure.reason : outcome,
+      classify([], undefined, 'connection', 'terminal').reason,
+    );
+  });
+
   it('#299: another end is classified in terminal mode', async () => {
     const made = fixture();
     const {result, terminal} = await started(made);
@@ -414,7 +425,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
       [
         {
           kind: 'failed',
-          failure: {kind: 'unknown', reason: {text: 'Error: no channel'}},
+          failure: {kind: 'unknown', logDetail: 'Error: no channel'},
         },
         true,
       ],
