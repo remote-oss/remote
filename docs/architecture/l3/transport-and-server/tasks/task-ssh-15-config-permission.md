@@ -31,8 +31,8 @@ Nothing else.
 
 ## 3. Test table
 
-One assertion per `it`; the cite starts the name. Each row calls `classify(lines, 255, 'connection')` (the error
-lines, ssh's exit status 255, the purpose), as the existing rows of the file do.
+One assertion per `it`; the cite starts the name. Each row calls the file's own helper, `classifyRun(lines, 255,
+'connection', 'shared')` (the error lines, ssh's exit status 255, the purpose, and the mode), as the existing rows do.
 
 | Cite | Given (error lines) | Expected |
 |---|---|---|
