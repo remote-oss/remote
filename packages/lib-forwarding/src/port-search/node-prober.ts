@@ -1,7 +1,7 @@
 /**
  * @fileoverview The real port prober: one TCP connect to the loopback port answers whether the port is free — a
- * refusal means free, a connection means taken, and any other error or no answer in time is an error. It never
- * binds a port (§W1).
+ * refusal means free, a connection means taken, and any other error or no answer in time is an error. The socket
+ * keeps its error listener for its whole life, so no error of the probe is unheard. It never binds a port (§W1).
  */
 
 import {createConnection, type Socket} from 'node:net';
@@ -36,7 +36,7 @@ export function proberOver(
         socket.once('connect', () => {
           finish('open');
         });
-        socket.once('error', error => {
+        socket.on('error', error => {
           const code = (error as NodeJS.ErrnoException).code;
           finish(code === 'ECONNREFUSED' ? 'refused' : 'error');
         });
