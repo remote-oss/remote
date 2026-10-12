@@ -181,10 +181,13 @@ connect in validate; this brief replaces that interim.
    is a named, ruled one. So:
    - **A recognised prompt shown as an input has no bound** (F-2306 BR-7): the user sees it and can answer or cancel,
      so it's not a hidden hang. F-2308 BR-6's held output ends with that input.
-   - **The unreachable-question bound is the effective connect timeout** (the looked-up `ConnectTimeout`, else the
-     setting, as F-2105 BR-1): after the handshake, output silent for that long with a partial line pending and no
-     input open fails the attempt with F-2601. Before the handshake, ssh's own timeout already ends it (F-2308 BR-5).
-     No new number.
+   - **The unreachable-question bound is the length of the connect wait** (F-2105 BR-3/BR-4: the effective connect
+     timeout of BR-1 plus 2 s, and a host's own `ConnectTimeout 0` the 600 s maximum): after the handshake, output
+     silent for that long with a partial line pending and no input open fails the attempt with F-2601. Before the
+     handshake, ssh's own timeout already ends it (F-2308 BR-5). No new number. Corrected on #385 (athena): the bound
+     was taken from `ConnectWaitSettings.connectTimeoutSeconds`, which is 0 for a host's 0 and for the setting 0, so
+     the reader got a 0 ms bound and failed any non-prompt partial line at once. One pure function in lib-ssh gives
+     the wait's length from `ConnectWaitSettings`, and both `ConnectWait` and the reader's bound use it.
    - **"After the handshake" is the `-v` line `debug1: SSH2_MSG_NEWKEYS received`** (daedalus, ruled on #299), a second
      marker beside `setupMarkerOf`'s. Measured against a real OpenSSH sshd (password login, first contact): the
      host-key question, then `NEWKEYS sent`, then `NEWKEYS received`, then `password:`, then `Authenticated to`. So the

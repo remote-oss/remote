@@ -30,6 +30,7 @@ import type {
 /** What the window is told while the connect runs, in the order the steps happen. */
 export type PhaseEvent =
   | {kind: 'initializing'}
+  | {kind: 'waitingForOtherWindow'}
   | {kind: 'downloading'}
   | {kind: 'downloadingLocally'}
   | {kind: 'copyingWithScp'}
@@ -52,7 +53,6 @@ export interface ConnectOptions {
 /** How a bounded step ended when it did not give its value. */
 type Interrupted = 'cancelled' | 'timeout';
 
-/** Whether the signal has been aborted by now; read through a call because it changes while a step runs. */
 /** The port of a server that listens on one; a server on a socket must not reach a path that needs a port. */
 export function portOf(server: StartedServer): number {
   if (server.endpoint.kind !== 'port') {
@@ -61,6 +61,7 @@ export function portOf(server: StartedServer): number {
   return server.endpoint.port;
 }
 
+/** Whether the signal has been aborted by now; read through a call because it changes while a step runs. */
 function isAborted(signal: AbortSignal): boolean {
   return signal.aborted;
 }

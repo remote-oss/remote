@@ -65,6 +65,7 @@ const CONNECT_TEXTS = [
   'it does not give an http or https address',
   'the placeholder {0} is not known',
 ];
+const WAITING_TEXTS = ['Waiting for other windows to connect'];
 
 const PICKER_TEXTS = ['Select the platform of the remote host "{0}"'];
 
@@ -105,6 +106,7 @@ describe('the runtime strings of the extension', () => {
           ...PICKER_TEXTS,
           ...CONNECT_TEXTS,
           ...MITIGATION_TEXTS,
+          ...WAITING_TEXTS,
           'SSH: {0}',
         ].map(text => [text, text]),
       ),

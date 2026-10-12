@@ -322,7 +322,7 @@ export function connectAssemblyOf(
 ): ConnectAssembly {
   const ports = wiringPortsOf(surfaces, machine, logger);
   const connector = connectorFrom({
-    stepsFor: () => stepsOf(ports),
+    stepsFor: onPhase => stepsOf(ports, onPhase),
     options: {
       // A getter, so each connect reads the setting as it is then.
       get maximumReconnectionAttempts() {

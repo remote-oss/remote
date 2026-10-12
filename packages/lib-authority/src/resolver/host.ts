@@ -15,6 +15,7 @@ import {mapFailure} from './failure-mapping.ts';
 /** The stages of a connect the user is shown, named by the connector. */
 export type PhaseName =
   | 'initializing'
+  | 'waitingForOtherWindow'
   | 'downloading'
   | 'downloadingLocally'
   | 'copyingWithScp'

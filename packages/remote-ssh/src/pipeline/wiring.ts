@@ -21,6 +21,7 @@ import {
   effectiveConnectTimeoutSeconds,
   HOST_ZERO_TIMEOUT_SECONDS,
 } from './bounds.ts';
+import type {PhaseEvent} from './connect.ts';
 import {
   type ConnectionRequestEnvironment,
   type ConnectionRequestSettings,
@@ -154,7 +155,10 @@ export function terminalWaitOf(
 }
 
 /** The steps of one connect, sharing a state that lives for that connect alone. */
-export function stepsOf(ports: WiringPorts): ConnectSteps {
+export function stepsOf(
+  ports: WiringPorts,
+  onPhase: (event: PhaseEvent) => void,
+): ConnectSteps {
   const state: ConnectState = {};
   const held: {
     server?: ReturnType<typeof createServerSteps>;
@@ -224,6 +228,7 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
     channelFor: channelOf,
     attachLogin: (login, input) =>
       ports.attachLogin(login, hostAlias(input.target)),
+    onPhase,
     logger: ports.logger,
   });
   const terminalConnection = openTerminalConnectionStep({

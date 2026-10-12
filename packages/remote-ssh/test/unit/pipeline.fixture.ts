@@ -267,6 +267,5 @@ export const CHANNEL_CLOSED: ChannelFailure = {
 export const SILENT_PROMPTS: PromptEditor = {
   pick: () => Promise.resolve(undefined),
   maskedInput: () => Promise.resolve(undefined),
-  showWaiting: () => ({dispose: () => undefined}),
   translate: template => template,
 };

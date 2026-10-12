@@ -19,9 +19,6 @@ const PROMPT_TEMPLATES: Readonly<Record<PromptStringId, string>> = {
   S066: 'Enter password for {0}',
 };
 
-/** What the window shows while another window holds the login. */
-export const WAITING_TEMPLATE = 'Waiting for other windows to connect';
-
 /** The text on a surface: a string of the table in the display language with its values, or text as it is. */
 export function textOf(text: PromptText, translate: Translate): string {
   return 'text' in text

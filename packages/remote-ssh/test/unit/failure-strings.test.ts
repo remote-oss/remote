@@ -53,6 +53,7 @@ describe('the texts of the failure dialog and the progress', () => {
       'S137',
       'S140',
       'S142',
+      'S157',
       'S158',
       'installPathProvided',
       'templateNotHttp',
@@ -79,6 +80,13 @@ describe('the texts of the failure dialog and the progress', () => {
     deepStrictEqual(
       reasonText({id: 'trustRefused'}, text => text),
       'Got bad result from install script',
+    );
+  });
+
+  it('F-2102: the waiting stage text is the one the spec gives', () => {
+    deepStrictEqual(
+      FAILURE_TEMPLATES.S157,
+      'Waiting for other windows to connect',
     );
   });
 

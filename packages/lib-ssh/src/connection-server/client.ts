@@ -74,6 +74,8 @@ export type ConnectionNotice =
   | {type: 'promptClosed'; promptId: number}
   | {type: 'ownerChanged'; owner: number}
   | {type: 'waitingForOtherWindow'}
+  /** The login fell to this window after it had been told to wait: the owner gave up. */
+  | {type: 'loginOwned'}
   | {type: 'transportLost'}
   | {type: 'helperGone'};
 
@@ -114,6 +116,8 @@ interface LoginSteps {
   setUp(announced: number | undefined): Promise<ConnectOutcome>;
   /** Another window owns the login. */
   waiting(): void;
+  /** The login fell to this window after it was told to wait. */
+  owned(): void;
 }
 
 /**
@@ -128,6 +132,7 @@ class LoginWait {
   private readonly openPrompts = new Set<number>();
   private cancelTimer: (() => void) | undefined;
   private owner = false;
+  private waited = false;
   private asking = false;
   private finished = false;
 
@@ -184,6 +189,9 @@ class LoginWait {
       this.end({kind: 'failed', failure: asked.failure});
     } else if (asked.reply.type === 'accepted') {
       this.owner = true;
+      if (this.waited) {
+        this.steps.owned();
+      }
     } else if (asked.reply.type === 'refused') {
       await this.refused(asked.reply.reason);
     } else {
@@ -201,6 +209,7 @@ class LoginWait {
     if (reason === 'alreadyConnected') {
       this.end(await this.steps.setUp(undefined));
     } else {
+      this.waited = true;
       this.steps.waiting();
     }
   }
@@ -326,6 +335,9 @@ export class SharedConnection {
           setUp: announced => this.connected(announced),
           waiting: () => {
             this.notify({type: 'waitingForOtherWindow'});
+          },
+          owned: () => {
+            this.notify({type: 'loginOwned'});
           },
         },
         outcome => {

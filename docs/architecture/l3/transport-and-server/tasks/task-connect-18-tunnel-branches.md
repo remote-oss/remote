@@ -6,7 +6,7 @@ start the tunnel `ssh` in its `SSH Tunnel` terminal, show its login questions (c
 gate, then wait **10 s** for the forward and probe it. Reviewing coder: `remote-coding-worker-1`.
 
 Depends on #353 (ssh-23), #352 (ssh-22), connect-16 (the questions' owner), #342 (server-14: `StartedServer.endpoint`),
-connect-17 (T5, second part) and connect-19 (the window tunnel's end reported as a lost transport, whose
+connect-17 (T5, second part), ssh-27 (the wait's length) and connect-19 (the window tunnel's end reported as a lost transport, whose
 `TunnelOpening.onClosed` this card fills). **Start after connect-17 and connect-19 are merged.**
 
 ## 1. Package and file boundary
@@ -31,8 +31,8 @@ tunnelInvocation(localPort: number, target: TunnelTarget): Invocation;
 attachQuestions(login: TerminalLogin): {onQuestion(text: string): void; dispose(): void};
 /** `remote.SSH.showLoginTerminal`, read once per attempt (F-2308 BR-3). */
 revealLoginTerminals(): boolean;
-/** The effective connect timeout in milliseconds, for the tunnel login's unreachable-question bound (#299 ruling 1b). */
-connectTimeoutMilliseconds(): number;
+/** The connect wait's settings for this connect, for the tunnel login's unreachable-question bound (#299 ruling 1b). */
+connectWait(): ConnectWaitSettings;
 ```
 
 For `path === 'secondSsh'` or `'socket'`:
@@ -40,7 +40,9 @@ For `path === 'secondSsh'` or `'socket'`:
 2. The target: `secondSsh` → `{kind: 'port', port}` of a port endpoint; `socket` → `{kind: 'socket', path}` of a socket
    endpoint. An endpoint of the other kind is a defect: it throws (the pipeline turns it into `unknown`).
 3. `openTunnelSession(terminals, tunnelInvocation(localPort, target), localPort, revealLoginTerminals())`.
-4. A `PromptReader` over the session's output (`onOutput` → `reader.push`), with `connectTimeoutMilliseconds()`, wired
+4. A `PromptReader` over the session's output (`onOutput` → `reader.push`), with the bound
+   `connectWaitMilliseconds(connectWait())` (card ssh-27; amended 2026-10-12, athena on #385: a timeout of 0 gave a
+   0 ms bound), wired
    to `attachQuestions({terminal: session, reader})`: every reported question gets an input. The reader's
    `onUnreachable` (a question nobody can see, after the bound of ruling 1b) **stops the session and fails the step as
    `{kind: 'timeout'}`**, as connect-17 does for the install terminal: both terminals end an unreachable login the same
@@ -81,7 +83,7 @@ existing tunnel-step tests; `LocalPort` is the existing fake, which accepts a co
 | F-2308 BR-3 | `revealLoginTerminals` true | the terminal was revealed at open |
 | athena on #352 | the tunnel terminal prints `"alex@dev's password: "` and pauses 100 ms | `attachQuestions`' `onQuestion` got it |
 | F-2104 7.E10 | the terminal ends before the success line | fails `{kind: 'unknown'}` |
-| #299 ruling 1b | the tunnel terminal prints the handshake line, then an unrecognised question, then nothing for `connectTimeoutMilliseconds()` | fails `{kind: 'timeout'}`, and the session was stopped |
+| #299 ruling 1b | the tunnel terminal prints the handshake line, then an unrecognised question, then nothing for `connectWaitMilliseconds(connectWait())` | fails `{kind: 'timeout'}`, and the session was stopped |
 | #299 | a forward-failure line then the success line | fails `{kind: 'unknown'}`, the session was stopped, and the log names the line |
 | F-2104 6.2 step 5 | the success line | `onWaiting` was called once |
 | F-2104 BR-10 | the success line, then the port never accepts | after 10 s (fake clock), fails with `{id: 'S067', values: [{id: 'S089', values: []}]}` |

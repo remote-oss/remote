@@ -121,13 +121,15 @@ It is the only place these strings may appear (ADR-0006 Check). P4 has no operat
 The argument rules:
 - `-F <file>` when `configFile` is set, with `~/` expanded against the editor's home (F-2201 BR-4).
 - `-T` on the connection `ssh` unless `permitPtyAllocation` is truthy (F-2106).
-- `-o ConnectTimeout=<n>` on every `ssh` of an attempt, the tunnel `ssh` included, only when the host sets none
-  (F-2105). Never a `ServerAlive*` option.
+- `-o ConnectTimeout=<n>` on every `ssh` of an attempt, the tunnel `ssh` and the window's `scp` included, only when
+  the host sets none (F-2105; `scp` passes `-o` to its `ssh`, ruled on #253 Q13: without it a copy to an unreachable
+  address waits for the system's limit). Never a `ServerAlive*` option.
 - The bootstrap goes in on standard input with no remote command in shared mode; in terminal mode the remote program
   is `sh` (F-2105, F-2704).
 - `-o RemoteCommand=none` when the effective options carry a `RemoteCommand` and `remoteCommandInEffect` is false
   (F-2107). S2 does not decide whether the feature is in effect; R1 does (F-2107 BR-1).
-- `-v` at the level S5 needs (F-2109 BR-3).
+- `-v` at the level S5 needs (F-2109 BR-3), on `scp` too (#253 Q13): the copy terminal's prompt reader arms its
+  unreachable-question bound only at the handshake marker, which `scp` prints only with `-v`.
 - `-D 127.0.0.1:<port>`, `-L 127.0.0.1:<port>:127.0.0.1:<remote port>` or `-L 127.0.0.1:<port>:<socket path>` (F-2104
   BR-1, BR-4, F-2410). **Every local listener names `127.0.0.1` as its bind address** (corrected 2026-10-12 on #353,
   from themis's finding; the contract said `-L <port>:…` before). Without one, ssh binds `localhost`, both loopbacks.
@@ -372,7 +374,7 @@ exception and runs `scp` as its own login (F-2405). **It runs in a hidden S8 log
 and a second login on a password host asks there. The copy terminal's output goes through T2's prompt reader and its
 questions through connect-16's owner, as the install terminal's do; F-2405 AC-10 (no tab, no panel) holds because the
 terminal is hidden. Interim until it's built (on main only, a 0.2 release blocker under #299; daedalus's refinement): `scp` as a process
-with an **empty askpass environment** and no tty, and **no new ssh option** (S2's list stays untouched). scp then
+with an **empty askpass environment** and no tty, and **no option beyond S2's list** (which gives `scp` `-v` and the connect timeout, #253 Q13). scp then
 can't ask, so a password host's copy fails at once as `copyFailed` (OpenSSH 10.2: exit 255 in under 0.1 s, `Permission
 denied (publickey,password,keyboard-interactive).`) instead of hanging. That interim skips the trust gate (AC-9) and
 must not ship. No ControlMaster or ControlPath is ever added (the S2 rule
