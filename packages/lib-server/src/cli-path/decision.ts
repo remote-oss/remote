@@ -4,30 +4,32 @@
  * of the command-line interface's archive.
  */
 
+import {CLI_PLATFORMS} from './platforms.ts';
+
+/** Why the direct install is used instead of the command-line program. */
+export type DirectReason =
+  | 'settingOff'
+  | 'manualBootstrap'
+  | 'noCliSource'
+  | 'noBuildForPlatform'
+  | 'termsToAccept';
+
 /** The facts the decision rests on. */
-export interface CliPathInput {
-  /** The download template of the command-line interface in the product, when it has one. */
-  productCliTemplate: string | undefined;
+export interface CliModeInput {
+  /** Whether the user's `useExecServer` setting allows the command-line path. */
+  useExecServerSetting: boolean;
+  /** Whether the user chose the manual bootstrap for the server download. */
+  manualBootstrap: boolean;
+  /** The product's `cliDownloadUrlTemplate`; empty when it names none. */
+  cliTemplate: string;
   /** The host's operating system (`linux`, `alpine`, `darwin`, `win32`) and architecture (`x64`, `arm64`, `armhf`). */
   hostPlatform: {operatingSystem: string; architecture: string};
-  /** The `<operating system>-<architecture>` tokens the product publishes command-line archives for. */
-  cliBuildsAvailable: readonly string[];
-  /** Whether the user's setting allows the command-line path. */
-  useExecServerSetting: boolean;
-  /** Whether the command-line program is already in the data folder of the host. */
-  cliPresentOnHost: boolean;
-  /** Whether a server that can be reused is already on the host. */
-  serverPresentOnHost: boolean;
+  /** Whether both the command-line program's source and the server's source need no acceptance of terms. */
+  sourcesFree: boolean;
 }
 
-/** The way chosen; `download` says the command-line program is not on the host yet. */
-export type CliPathDecision =
-  | {
-      kind: 'bootstrap';
-      reason:
-        'noTemplate' | 'noBuildForPlatform' | 'settingOff' | 'serverPresent';
-    }
-  | {kind: 'cli'; download: boolean};
+/** The way chosen: the command-line program, or the direct install and why. */
+export type CliMode = {kind: 'direct'; reason: DirectReason} | {kind: 'cli'};
 
 /** The product facts that fill the download template. */
 interface CliProfile {
@@ -36,24 +38,28 @@ interface CliProfile {
   version: string;
 }
 
-/** Chooses the way: a server on the host is reused first, then the setting, the template and the platform decide. */
-export function decideCliPath(input: CliPathInput): CliPathDecision {
-  if (input.serverPresentOnHost) {
-    return {kind: 'bootstrap', reason: 'serverPresent'};
-  }
+/**
+ * The install mode of one connect, judged in this order: the setting, a manual bootstrap, the product's CLI source,
+ * the host's platform, and the terms. What is already installed does not decide it: reuse is judged within the mode.
+ */
+export function decideCliMode(input: CliModeInput): CliMode {
   if (!input.useExecServerSetting) {
-    return {kind: 'bootstrap', reason: 'settingOff'};
+    return {kind: 'direct', reason: 'settingOff'};
   }
-  if (input.productCliTemplate === undefined) {
-    return {kind: 'bootstrap', reason: 'noTemplate'};
+  if (input.manualBootstrap) {
+    return {kind: 'direct', reason: 'manualBootstrap'};
+  }
+  if (input.cliTemplate === '') {
+    return {kind: 'direct', reason: 'noCliSource'};
   }
   const {operatingSystem, architecture} = input.hostPlatform;
-  if (
-    !input.cliBuildsAvailable.includes(`${operatingSystem}-${architecture}`)
-  ) {
-    return {kind: 'bootstrap', reason: 'noBuildForPlatform'};
+  if (!CLI_PLATFORMS.includes(`${operatingSystem}-${architecture}`)) {
+    return {kind: 'direct', reason: 'noBuildForPlatform'};
   }
-  return {kind: 'cli', download: !input.cliPresentOnHost};
+  if (!input.sourcesFree) {
+    return {kind: 'direct', reason: 'termsToAccept'};
+  }
+  return {kind: 'cli'};
 }
 
 /** The variables of the download template for a host; the release is the version. */

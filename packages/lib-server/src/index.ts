@@ -130,11 +130,13 @@ export {
   isFromSameGallery,
 } from './cache/folders.ts';
 export {
-  type CliPathDecision,
-  type CliPathInput,
+  type CliMode,
+  type CliModeInput,
   cliArchiveTemplateVariables,
-  decideCliPath,
+  decideCliMode,
+  type DirectReason,
 } from './cli-path/decision.ts';
+export {CLI_PLATFORMS} from './cli-path/platforms.ts';
 export {type CliServeError, parseCliServeError} from './cli-path/cli-output.ts';
 export {downloadPortOf, type HttpGet} from './transfer/http-download.ts';
 export {CLIENT_DOWNLOAD_BOUNDS} from './policy/bounds.ts';
