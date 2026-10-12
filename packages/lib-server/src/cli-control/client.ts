@@ -61,13 +61,22 @@ export interface CliControl {
   authenticate(
     token: string,
   ): Promise<{kind: 'authenticated'} | CliControlFailure>;
-  /** Runs `serve`; `onLog` gets each `serverlog` line as it arrives, before the reply. */
+  /**
+   * Runs the connect's `serve` on socket 0, which the client keeps for the first editor connection; `onLog` gets each
+   * `serverlog` line as it arrives, before the reply. It is called once per connection.
+   */
   serve(
     params: CliServeParams,
     onLog: (line: ServerLogLine) => void,
-  ): Promise<{kind: 'serving'} | CliControlFailure>;
-  /** Opens the next server socket, numbered from 0. */
-  openSocket(): CliSocket;
+  ): Promise<{kind: 'serving'; socket: CliSocket} | CliControlFailure>;
+  /**
+   * Runs `serve` again, with the next socket id and the first `serve`'s parameters, and opens that socket. The
+   * command-line program attaches one bridge per `serve` socket, so every editor connection needs its own; the later
+   * ones find the server running and only attach. Only one `serve` runs at a time; calls wait in order.
+   */
+  openSocket(
+    onLog: (line: ServerLogLine) => void,
+  ): Promise<{kind: 'serving'; socket: CliSocket} | CliControlFailure>;
   close(): void;
 }
 
@@ -89,12 +98,16 @@ interface SocketState {
 /** Opens the control connection over `stream`. */
 export function openCliControl(stream: ByteStream): CliControl {
   const pending = new Map<number, (reply: Reply | undefined) => void>();
-  const sockets: SocketState[] = [];
+  const sockets = new Map<number, SocketState>();
   let nextId = 1;
   let ended = false;
   let streamClosed = false;
   let logListener: ((line: ServerLogLine) => void) | undefined;
   let errorLine: string | undefined;
+  let firstParams: CliServeParams | undefined;
+  let succeeded = false;
+  let nextSocketId = 0;
+  let running: Promise<unknown> = Promise.resolve();
 
   function finish(): void {
     if (ended) {
@@ -105,7 +118,7 @@ export function openCliControl(stream: ByteStream): CliControl {
       settle(undefined);
     }
     pending.clear();
-    for (const socket of sockets) {
+    for (const socket of sockets.values()) {
       closeSocket(socket);
     }
   }
@@ -124,7 +137,8 @@ export function openCliControl(stream: ByteStream): CliControl {
     method: string,
     params: Readonly<Record<string, unknown>>,
   ): void {
-    const socket = typeof params.i === 'number' ? sockets[params.i] : undefined;
+    const socket =
+      typeof params.i === 'number' ? sockets.get(params.i) : undefined;
     if (method === 'serverlog' && typeof params.line === 'string') {
       const line = {text: params.line, level: Number(params.level)};
       if (line.level === ERROR_LEVEL) {
@@ -192,6 +206,74 @@ export function openCliControl(stream: ByteStream): CliControl {
     return isMap(reply.result) ? {...reply.result} : {};
   }
 
+  /** The socket `state` as the caller holds it. */
+  function socketOf(socketId: number, state: SocketState): CliSocket {
+    return {
+      socketId,
+      send: chunk => {
+        if (!ended && !state.closed) {
+          stream.send(
+            encode({method: 'servermsg', params: {i: socketId, body: chunk}}),
+          );
+        }
+      },
+      onData: listener => {
+        state.dataListeners.push(listener);
+      },
+      onClose: listener => {
+        if (state.closed) {
+          listener();
+        } else {
+          state.closeListeners.push(listener);
+        }
+      },
+    };
+  }
+
+  /** Sends `serve` for `socketId` and tells how it went; the socket is kept only when the reply is a result. */
+  async function serveSocket(
+    socketId: number,
+    params: CliServeParams,
+    onLog: (line: ServerLogLine) => void,
+  ): Promise<{kind: 'serving'; socket: CliSocket} | CliControlFailure> {
+    logListener = onLog;
+    errorLine = undefined;
+    const state: SocketState = {
+      dataListeners: [],
+      closeListeners: [],
+      closed: false,
+    };
+    sockets.set(socketId, state);
+    const reply = await request('serve', {
+      socket_id: socketId,
+      commit_id: params.commit,
+      quality: params.quality,
+      extensions: [],
+      connection_token: params.connectionToken,
+      use_local_download: params.useLocalDownload,
+      compress: false,
+    });
+    logListener = undefined;
+    if (reply?.kind === 'result') {
+      return {kind: 'serving', socket: socketOf(socketId, state)};
+    }
+    return reply === undefined
+      ? {kind: 'closed'}
+      : {
+          kind: 'serveFailed',
+          error: parseCliServeError(reply.message),
+          message: reply.message,
+          errorLine,
+        };
+  }
+
+  /** Runs `work` after every earlier one has finished: `serverlog` lines name no socket, so two must not overlap. */
+  function oneAtATime<Result>(work: () => Promise<Result>): Promise<Result> {
+    const result = running.then(work);
+    running = result.catch(() => undefined);
+    return result;
+  }
+
   return {
     authenticate: async token => {
       const issued = await challengeStep('challenge_issue', {token});
@@ -211,60 +293,26 @@ export function openCliControl(stream: ByteStream): CliControl {
         ? (verified as CliControlFailure)
         : {kind: 'authenticated'};
     },
-    serve: async (params, onLog) => {
-      logListener = onLog;
-      errorLine = undefined;
-      const reply = await request('serve', {
-        socket_id: 0,
-        commit_id: params.commit,
-        quality: params.quality,
-        extensions: [],
-        connection_token: params.connectionToken,
-        use_local_download: params.useLocalDownload,
-        compress: false,
+    serve: (params, onLog) => {
+      if (firstParams !== undefined) {
+        throw new Error('serve was already called');
+      }
+      firstParams = params;
+      nextSocketId = 1;
+      return oneAtATime(async () => {
+        const outcome = await serveSocket(0, params, onLog);
+        succeeded = outcome.kind === 'serving';
+        return outcome;
       });
-      logListener = undefined;
-      if (reply === undefined) {
-        return {kind: 'closed'};
-      }
-      if (reply.kind === 'error') {
-        return {
-          kind: 'serveFailed',
-          error: parseCliServeError(reply.message),
-          message: reply.message,
-          errorLine,
-        };
-      }
-      return {kind: 'serving'};
     },
-    openSocket: () => {
-      const socketId = sockets.length;
-      const state: SocketState = {
-        dataListeners: [],
-        closeListeners: [],
-        closed: ended,
-      };
-      sockets.push(state);
-      return {
-        socketId,
-        send: chunk => {
-          if (!ended) {
-            stream.send(
-              encode({method: 'servermsg', params: {i: socketId, body: chunk}}),
-            );
-          }
-        },
-        onData: listener => {
-          state.dataListeners.push(listener);
-        },
-        onClose: listener => {
-          if (state.closed) {
-            listener();
-          } else {
-            state.closeListeners.push(listener);
-          }
-        },
-      };
+    openSocket: onLog => {
+      if (!succeeded || firstParams === undefined) {
+        throw new Error('serve has not succeeded');
+      }
+      const params = firstParams;
+      const socketId = nextSocketId;
+      nextSocketId += 1;
+      return oneAtATime(() => serveSocket(socketId, params, onLog));
     },
     close: () => {
       if (!streamClosed) {

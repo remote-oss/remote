@@ -18,6 +18,8 @@ export interface FakeCli {
   readonly stream: ByteStream;
   /** Every message the client sent, in order. */
   readonly requests: Request[];
+  /** The socket ids of every `servermsg` the client sent for a socket no `serve` had attached, as the program rejects them. */
+  readonly rejected: number[];
   /** How often the client closed its end. */
   closes(): number;
   /** Sends bytes to the client as one chunk. */
@@ -33,7 +35,37 @@ export function fakeCli(script: CliScript): FakeCli {
   const requests: Request[] = [];
   const dataListeners: Array<(chunk: Uint8Array) => void> = [];
   const closeListeners: Array<() => void> = [];
+  const served = new Set<number>();
+  const rejected: number[] = [];
   let closed = 0;
+
+  /** Notes a `servermsg` for a socket no `serve` has attached yet, which the program rejects. */
+  function noteServermsg(request: Request): void {
+    const {i: socketId} = request.params as {i?: number};
+    if (
+      request.method === 'servermsg' &&
+      socketId !== undefined &&
+      !served.has(socketId)
+    ) {
+      rejected.push(socketId);
+    }
+  }
+
+  /** Attaches the socket of a `serve` that the script answered with a result. */
+  function noteServe(request: Request, answers: readonly unknown[]): void {
+    const {socket_id: socketId} = request.params as {socket_id?: number};
+    if (
+      request.method === 'serve' &&
+      socketId !== undefined &&
+      answers.some(
+        answer =>
+          (answer as {id?: unknown; result?: unknown}).id === request.id &&
+          'result' in (answer as object),
+      )
+    ) {
+      served.add(socketId);
+    }
+  }
 
   function deliver(chunk: Uint8Array): void {
     for (const listener of dataListeners) {
@@ -53,7 +85,10 @@ export function fakeCli(script: CliScript): FakeCli {
         for (const message of decodeMulti(chunk)) {
           const request = message as Request;
           requests.push(request);
-          for (const answer of script(request)) {
+          noteServermsg(request);
+          const answers = script(request);
+          noteServe(request, answers);
+          for (const answer of answers) {
             deliver(encode(answer));
           }
         }
@@ -70,6 +105,7 @@ export function fakeCli(script: CliScript): FakeCli {
       },
     },
     requests,
+    rejected,
     closes: () => closed,
     deliver,
     send: (...messages) => {
