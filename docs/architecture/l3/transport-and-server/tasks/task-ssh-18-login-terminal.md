@@ -100,11 +100,13 @@ DCS, SOS, PM or APC string ends at BEL (OSC only) or ST, and is also **cancelled
 - any other ESC: the string is dropped up to that ESC, and the ESC starts the next sequence;
 - CAN (`\x18`) or SUB (`\x1a`): the string is dropped up to and including that byte.
 
-And a string that is **still unterminated and held** when `push` returns, once more than 4096 characters from its ESC
-are held, is dropped: its first 4096 characters are discarded and parsing resumes as plain text at the 4097th. (The
-rest of an endless string then shows as text; that is the accepted cost, so that a stray `ESC ]` in a host's banner
-can never swallow the password prompt or a marker that follows.) A string whose terminator arrives in the piece that
-takes it past 4096 characters ends normally: the cap applies only to a string still held after a piece.
+And a string still open once more than 4096 characters from its ESC have arrived is **dropped through the next line
+end** (the line end included), and the text after that line end flows as plain text (ruled on #341, option (ii);
+brief c213613). When the piece holds no line end after the cap, the filter keeps dropping the following pieces up to
+and including the first line end. The tail of an endless string is junk, and dropping it keeps it out of the line the
+prompt matcher reads; the next line starts clean, so a stray `ESC ]` in a host's banner can never swallow the password
+prompt or a marker that follows. A string whose terminator (or a cancelling byte) arrives before the cap ends normally,
+also when it arrives in the piece that crosses 4096.
 
 ### 2.3 The recording fake (`lib-ssh/src/testing/recording-terminal.ts`)
 
@@ -190,8 +192,10 @@ One assertion per `it`; the cite starts the name.
 | #341 | `'a\x1b]0;x\x18b'` (CAN) | `'ab'` |
 | #341 | `'a\x1b]0;x\x1ab'` (SUB) | `'ab'` |
 | #341 | `'a\x1b]0;x\x1bPdcs\x1b\\b'` (another string's ESC cancels the first; the DCS then ends at ST) | `'ab'` |
-| #341 | `'a\x1b]0;'` + 5000 × `'x'` + `'tail'` in one piece | `'a'` + 908 × `'x'` + `'tail'` (913 characters: the 5008 from the ESC minus the 4096 dropped) |
-| #341 | `'a\x1b]0;'` + 3000 × `'x'`, then 2000 × `'y'` + `'\x07z'` | `'a'` then `'z'` (the terminator came in the piece that crossed 4096) |
+| #341 | `'a\x1b]0;'` + 5000 × `'z'` + `'\nnext line'` in one piece | `'anext line'` (no `z`; the line end is dropped with the string) |
+| #341 | `'a\x1b]0;'` + 3000 × `'z'`, then 3000 × `'z'` + `'\nafter'` | `'a'` then `'after'` |
+| #341 | `'a\x1b]0;'` + 5000 × `'z'`, then `'zz\nok'` (the cap reached with no line end in the first piece) | `'a'` then `'ok'` |
+| #341 | `'a\x1b]0;'` + 3000 × `'x'`, then 2000 × `'y'` + `'\x07z'` | `'a'` then `'z'` (the terminator arrived before the cap was applied) |
 
 ### 3.2 `recording-terminal.test.ts`
 
