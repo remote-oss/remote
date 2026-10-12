@@ -32,7 +32,6 @@ interface ShownRequest {
 /** An editor whose answers come from a script, one per question, so a test never waits on a person. */
 class ScriptedEditor implements PromptEditor {
   readonly shown: ShownRequest[] = [];
-  readonly waiting: string[] = [];
   private readonly scripts: Scripted[];
   private readonly failsToShow: boolean;
 
@@ -57,11 +56,6 @@ class ScriptedEditor implements PromptEditor {
     cancellation: AbortSignal,
   ): Promise<string | undefined> {
     return this.answer('input', request, cancellation);
-  }
-
-  showWaiting(text: string): {dispose(): void} {
-    this.waiting.push(text);
-    return {dispose: () => undefined};
   }
 
   private answer(

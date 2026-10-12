@@ -17,7 +17,7 @@ import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
 import {
   type ChannelRun,
-  stepsOf,
+  stepsOf as stepsWith,
   terminalWaitOf,
   type WiringPorts,
 } from '../../src/pipeline/wiring.ts';
@@ -203,6 +203,11 @@ const ALIAS = 'dev';
 /** `INPUT` for the plain host text `text`. */
 function inputFor(text: string): ConnectInput {
   return {...INPUT, target: {kind: 'plain', text}, rawHostString: text};
+}
+
+/** The steps of one connect, with a stage listener that nothing here reads. */
+function stepsOf(ports: WiringPorts): ReturnType<typeof stepsWith> {
+  return stepsWith(ports, () => undefined);
 }
 
 describe("the composition of a connect's steps", () => {

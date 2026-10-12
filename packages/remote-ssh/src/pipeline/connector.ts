@@ -23,7 +23,7 @@ import type {ConnectInput, ConnectSteps} from './steps.ts';
 /** What the connector is made of. */
 export interface ConnectorDependencies {
   /** Makes the steps of one connect, so what they share lives for that connect alone. */
-  stepsFor: () => ConnectSteps;
+  stepsFor: (onPhase: (event: PhaseEvent) => void) => ConnectSteps;
   /** Whether a connect runs in terminal mode (each window its own `ssh`); read once when the connect starts. */
   terminalMode: () => boolean;
   /** The options of one connect, except its cancellation and its phase listener, which the connector supplies. */
@@ -138,12 +138,13 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
       running = controller;
       try {
         const terminalMode = dependencies.terminalMode();
-        const result = await connect(input, dependencies.stepsFor(), {
+        function onPhase(event: PhaseEvent): void {
+          phases.tell(phaseOf(event, terminalMode));
+        }
+        const result = await connect(input, dependencies.stepsFor(onPhase), {
           ...dependencies.options,
           cancellation: controller.signal,
-          onPhase: event => {
-            phases.tell(phaseOf(event, terminalMode));
-          },
+          onPhase,
         });
         if (!isConnection(result)) {
           return result;
