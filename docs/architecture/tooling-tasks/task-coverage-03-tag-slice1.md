@@ -37,13 +37,16 @@ Read each AC in its spec issue (`gh issue view <n> -R remote-oss/remote-ssh`). T
    - `D-60: Windows client`;
    - `D-60: macOS client`;
    - `build order slice 1: Linux hosts only` (the AC needs a Windows or macOS host).
+   - `build order slice 1: the Remotes view is remote-explorer's` (the AC needs the `remoteTargets` view, which slice 1
+     doesn't build).
 2. **`core`**: everything the AC requires is shown by VS Code core, and the extension API can't read it: the window
    title, the status-bar remote indicator, Open Recent, a modal's button order or rendering, the progress notification's
    look, core's workspace-trust dialog. Reason: `core: <what core shows>`, for example `core: the remote indicator's text`.
 
    Core means core alone decides what is shown. When our extension supplies the content core shows (a message's text,
-   the buttons we pass, a label, a progress message), that content is in the scripted adapters' record, so the AC takes
-   rule 3 for it, and only the rendering goes in "Core halves".
+   the buttons we pass, a label, a progress message), that content is ours, so the AC takes rule 3 for it, and only the
+   rendering goes in "Core halves". The scripted adapters record questions, dialogs and picks; progress messages aren't
+   recorded yet, so a progress AC goes under "harness capability missing" as `progress record`.
 3. **`acceptance`**: the AC's outcome can be seen by the harness (`tests/acceptance/README.md`):
    - the test extension's view through the API (the resolved authority, workspace folders, the remote file system,
      commands, settings, context keys);
