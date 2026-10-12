@@ -26,6 +26,7 @@
     "check-identifiers": "node tools/identifiers.ts --check",
     "check-public-surface": "node tools/public-surface.ts",
     "check-string-tables": "node tools/string-tables.ts",
+    "check-coverage": "node tools/check-coverage.ts",
     "package": "pnpm build && node tools/package-extensions.ts",
     "acceptance:clean": "node tools/acceptance-run.ts --clean",
     "test:acceptance": "pnpm package && node tools/acceptance.ts",
