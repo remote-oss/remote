@@ -20,10 +20,25 @@ Nothing else.
 ## 2. Contract
 
 The `listening` launcher is the `serving` launcher (its option lines, its port choice from `--port`, a range's lower
-end, or a random port for `0`), with its last part changed: after printing `Extension host agent listening on $PORT`,
-it runs `exec nc -lk -p "$PORT" -s 127.0.0.1 -e /bin/cat` in place of the `while :; do sleep 1; done` loop. So the
-port it reports accepts connections on the host's loopback, each one echoing what it is sent, until the server is
-killed.
+end, or a random port for `0`), with its last part changed. After printing `Extension host agent listening on $PORT`,
+it runs the listener **as a child** and waits for it, in place of the `while :; do sleep 1; done` loop:
+
+```sh
+nc -lk -p "$PORT" -s 127.0.0.1 -e /bin/cat &
+wait
+```
+
+So the port it reports accepts connections on the host's loopback, each one echoing what it is sent, until the server
+is killed.
+
+**Not `exec nc`** (amended 2026-10-12, selene's finding on #140, ruled by daedalus). The lifecycle's `stop_servers`
+kills a recorded PID only when the live process's command line still contains `$DATA_DIR/bin/` (`is_server_process`).
+That guard is right: a `.pid` file can outlive its server and its PID can be reused, and killing by PID alone could end
+an unrelated process of the user. A real server keeps its install path in its command line (the editor's runtime with a
+script under `bin/<commit>/`). A launcher that `exec`s a bare binary does not, so to the guard it looks like a
+recycled PID, and the kill skips it. With the listener as a child, the recorded PID stays the launcher (`/bin/sh
+…/bin/…/stand-in-server`), the guard passes, `pkill -P` ends `nc`, and the kill ends the launcher. Checked on the
+pinned Alpine image: after `pkill -P <launcher>` and `kill <launcher>`, `nc -w1 127.0.0.1 <port>` exits 1.
 
 Share the common lines with `SERVING_LAUNCHER` (build both from one list and a final part), so jscpd stays at 0
 clones. `LAUNCHERS` gains `listening`.
@@ -45,9 +60,8 @@ The existing `serving` rows stay as they are.
 
 ## 4. Rule for the worker
 
-As card log-01. `pnpm test:acceptance:server` is the gate for these rows (it needs Docker). If the kill leaves the `nc`
-listener running, stop and report on #140: the lifecycle's kill must end the server's process group, and that would be
-a lib-server finding.
+As card log-01. `pnpm test:acceptance:server` is the gate for these rows (it needs Docker). The lifecycle is not changed
+(section 2: its guard is right).
 
 ## 5. Gates and review
 
