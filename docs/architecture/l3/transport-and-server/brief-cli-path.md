@@ -22,19 +22,26 @@ direct-install path (D-76's fallback).
 
 ## 2. When the CLI path is taken
 
-The plan decides once per connect, in this order (it extends `decideCliPath`'s card ssh-08 table; the first two rows
-are today's reuse, unchanged):
+The plan decides once per connect: **first the mode, then reuse within that mode** (corrected on #422: reuse first
+would start a server the CLI installed directly, bypassing the CLI, against F-2103 BR-7 and BR-8).
 
-| Order | Condition | Path | Log (F-2003) |
+| Order | Condition | Mode | Log (F-2003) |
 |---|---|---|---|
-| 1 | a server for the client's commit is installed, in `bin/<commit>/` or `cli/servers/<Quality>-<commit>/server/` (F-3902 rule 10, `bin/` first) | reuse, started directly with its own launcher | none |
-| 2 | `remote.SSH.useExecServer` falsy (F-2103 BR-1, BR-2), or `localServerDownload` is `manual-bootstrap` (BR-3, with S088) | direct install | none |
-| 3 | the running editor's product names no `cliDownloadUrlTemplate` | direct install | the CLI path was not used: the editor names no CLI source |
-| 4 | the host platform has no CLI build (riscv64, loong64; section 3) | direct install | …: no CLI build for `<os>-<arch>` |
-| 5 | the CLI source or the server source is not classified `free` by V6 (section 5) | direct install | …: the server's terms must be accepted first |
-| 6 | otherwise | **CLI**, downloading the CLI unless `<data>/<applicationName>-<commit>` is on the host | none |
+| 1 | `remote.SSH.useExecServer` falsy (F-2103 BR-1, BR-2), or `localServerDownload` is `manual-bootstrap` (BR-3, with S088) | direct | none |
+| 2 | the running editor's product names no `cliDownloadUrlTemplate` | direct | the CLI path was not used: the editor names no CLI source |
+| 3 | the host platform has no CLI build (riscv64, loong64; section 3) | direct | …: no CLI build for `<os>-<arch>` |
+| 4 | the CLI source or the server source is not classified `free` by V6 (section 5) | direct | …: the server's terms must be accepted first |
+| 5 | otherwise | **CLI** | none |
 
-Rows 3–5 log once per connect, the reason named (BR-13 as revised). A CLI attempt that fails **before the server is
+Within the mode:
+- **Direct:** today's plan: reuse first (F-3902 rule 10: `bin/<commit>/`, then `cli/servers/<Quality>-<commit>/server/`
+  started directly with its own launcher), else download and install. `<Quality>` is the folder name the CLI gives the
+  product's quality (`Stable`, `Insiders`), read from the profile, never written as a product name.
+- **CLI:** place the CLI (`<applicationName>-<commit>`) unless it's already on the host, start it, and call `serve`.
+  The CLI itself reuses a server that's installed or running (F-2103 BR-8: about 0.1 s and no S045, measured on #412),
+  so the plan does no reuse check of its own in this mode, and it never touches `bin/` (BR-7).
+
+Rows 2–4 log once per connect, the reason named (BR-13 as revised). A CLI attempt that fails **before the server is
 running** in one of the ways of section 6's fallback table falls back to direct install **once in that connect**, logged.
 Nothing persists between connects: the next connect decides again (BR-5: no live switch, a change applies at the next
 resolve).
@@ -69,10 +76,8 @@ resolve).
 - **V7 `start` gains `startCli`**: it starts the CLI under `/bin/sh` (F-2103 §6.7: bash isn't needed), with
   `--cli-data-dir`, the server template variables, and the connection token file, inside the host lock loop (V5) as
   `startOrReuse` is. It returns the same `StartedServer` shape: `endpoint` is the CLI's own listening port on
-  127.0.0.1 (the window's tunnel W2 targets it, as F-2103 5.0 step 5 says), `connectionToken` the CLI's token,
-  `processId` the CLI's, `reused` false. **The CLI's exact command line, its ready line and its reply format are not in
-  the spec.** They come from the `[cli]` crate (R-76), measured against a real CLI build, and card cli-01 (section 10)
-  writes them down with `[cli]` citations before any wiring is carded.
+  127.0.0.1, which the extension's control client reaches through W2's dialer (§4a; the window itself goes through the local bridge), `connectionToken` the CLI's token,
+  `processId` the CLI's, `reused` false. The command line, ready line and protocol are contracts V7a (cli-01).
 - **After the window resolves,** the CLI downloads, verifies and starts the server itself (F-2103 5.0 steps 5–8). That
   is a **second notification**, "Downloading VS Code Server..." (STR:S045), indeterminate and then with a
   percentage, staying at 100% while the server is unpacked and started, then closing (5.0 steps 6–8). It is not a
