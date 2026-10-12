@@ -1,6 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import type {StartOutcome, TransferPhase} from 'lib-server';
-import {connect, type TransportEvent} from '../../src/pipeline/connect.ts';
+import {
+  connect,
+  portOf,
+  type TransportEvent,
+} from '../../src/pipeline/connect.ts';
 import type {
   ConnectSteps,
   StepResult,
@@ -598,6 +602,29 @@ describe('the connect pipeline, steps before the connection opens and the decisi
         'transfer',
       ),
       ['cancelled', false],
+    );
+  });
+});
+
+describe('the port of a started server', () => {
+  it('#299: a server on a port gives the port', () => {
+    deepStrictEqual(portOf(STARTED.server), 4321);
+  });
+
+  it('#299: a server on a socket reaching the port path throws', () => {
+    let thrown: unknown;
+    try {
+      portOf({
+        ...STARTED.server,
+        endpoint: {kind: 'socket', path: '/tmp/code-ab'},
+      });
+    } catch (caught) {
+      thrown = caught;
+    }
+    deepStrictEqual(
+      thrown instanceof Error &&
+        thrown.message.includes('socket-mode server reached the port path'),
+      true,
     );
   });
 });

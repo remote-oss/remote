@@ -117,7 +117,9 @@ const LAUNCHER = [
   'echo started >>"$SERVER_STARTS"',
   '[ -z "$SERVER_EXIT" ] || exit "$SERVER_EXIT"',
   '[ -z "$SERVER_READY_AFTER" ] || sleep "$SERVER_READY_AFTER"',
-  '[ "$SERVER_SILENT" = yes ] || echo "Extension host agent listening on 4321"',
+  'ENDPOINT=4321',
+  'while [ $# -gt 0 ]; do [ "$1" = --socket-path ] && ENDPOINT=$2; shift; done',
+  '[ "$SERVER_SILENT" = yes ] || echo "Extension host agent listening on ${SERVER_READY_TEXT:-$ENDPOINT}"',
   'sleep 20',
 ].join('\n');
 
@@ -245,6 +247,7 @@ export function parametersFor(): ScriptParameters {
       extensions: [],
       fileWatcherPollingMilliseconds: 0,
       readySeconds: 3,
+      socketMode: false,
     },
   };
 }

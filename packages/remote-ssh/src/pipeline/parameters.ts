@@ -71,6 +71,7 @@ export function runtimeOptionsFor(
     defaultExtensions: settings.defaultExtensions,
     fileWatcherPollingMilliseconds: 0,
     readySeconds: bounds.readySeconds,
+    socketMode: false,
   };
 }
 
@@ -117,6 +118,7 @@ export function scriptParametersFor(input: ParameterInput): ScriptParameters {
       extensions: options.defaultExtensions,
       fileWatcherPollingMilliseconds: options.fileWatcherPollingMilliseconds,
       readySeconds: options.readySeconds,
+      socketMode: options.socketMode,
     },
   };
 }

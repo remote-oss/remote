@@ -29,7 +29,7 @@ import {
   type TransferPhase,
 } from 'lib-server';
 import {startHost, type RunningHost} from './host-fixture.ts';
-import {lockLoop, parametersFor} from './support.ts';
+import {lockLoop, parametersFor, portOfStarted} from './support.ts';
 
 const ENABLED = process.env.REMOTE_OSS_REAL_SERVER === '1';
 
@@ -213,6 +213,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
         defaultExtensions: [],
         fileWatcherPollingMilliseconds: 0,
         readySeconds: 120,
+        socketMode: false,
       },
       [],
       {
@@ -288,13 +289,16 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
     });
 
     it('F-2409: the real server starts on musl and reports its port', () => {
-      strictEqual(started.kind === 'started' && started.server.port > 0, true);
+      strictEqual(
+        started.kind === 'started' && portOfStarted(started.server) > 0,
+        true,
+      );
     });
 
     it('F-2409: the server answers with the commit it was built from', () => {
       strictEqual(
         started.kind === 'started'
-          ? versionOf(host, started.server.port)
+          ? versionOf(host, portOfStarted(started.server))
           : started.kind,
         commitOfInstall(host, installation),
       );
@@ -362,7 +366,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
     it('F-2409: the server installed from the copy starts and answers with its commit', () => {
       strictEqual(
         started.kind === 'started'
-          ? versionOf(host, started.server.port)
+          ? versionOf(host, portOfStarted(started.server))
           : started.kind,
         commitOfInstall(host, installation),
       );

@@ -279,7 +279,7 @@ describe('the server steps: transfer and start', () => {
       new AbortController().signal,
     );
     deepStrictEqual(outcome.kind === 'started' ? outcome.server : outcome, {
-      port: 4321,
+      endpoint: {kind: 'port', port: 4321},
       processId: 77,
       connectionToken: 'abcdefghijklmnopqrstuvwxyz012345',
       reused: false,

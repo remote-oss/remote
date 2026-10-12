@@ -36,6 +36,7 @@ const OPTIONS: RuntimeOptions = {
   defaultExtensions: [],
   fileWatcherPollingMilliseconds: 0,
   readySeconds: 3,
+  socketMode: false,
 };
 
 /** The loop that runs the step once. */
@@ -206,7 +207,7 @@ describe('startOrReuse (V7), answers mapped', () => {
     deepStrictEqual(
       outcome.kind === 'started' ? outcome.server : outcome.kind,
       {
-        port: 4321,
+        endpoint: {kind: 'port', port: 4321},
         processId: 77,
         connectionToken: 'abcdefghijklmnopqrstuvwxyz012345',
         reused: false,
@@ -229,6 +230,58 @@ describe('startOrReuse (V7), answers mapped', () => {
     deepStrictEqual(
       outcome.kind === 'started' ? outcome.server.reused : outcome.kind,
       true,
+    );
+  });
+
+  it('F-2410 5.0 step 5: a socket path in the facts is a socket endpoint', async () => {
+    const outcome = await start(
+      recording(
+        lines(
+          'Ok',
+          'server.socketPath=/tmp/code-ab',
+          'server.pid=77',
+          'server.token=t',
+        ),
+      ),
+    );
+    deepStrictEqual(
+      outcome.kind === 'started' ? outcome.server.endpoint : outcome.kind,
+      {kind: 'socket', path: '/tmp/code-ab'},
+    );
+  });
+
+  it('V7: a socket path that is not absolute is unreadable facts', async () => {
+    const outcome = await start(
+      recording(
+        lines(
+          'Ok',
+          'server.socketPath=code-ab',
+          'server.pid=77',
+          'server.token=t',
+        ),
+      ),
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'unreadableServerFacts'},
+    );
+  });
+
+  it('V7: when both a socket path and a port are given the socket decides', async () => {
+    const outcome = await start(
+      recording(
+        lines(
+          'Ok',
+          'server.socketPath=/tmp/code-ab',
+          'server.port=4321',
+          'server.pid=77',
+          'server.token=t',
+        ),
+      ),
+    );
+    deepStrictEqual(
+      outcome.kind === 'started' ? outcome.server.endpoint : outcome.kind,
+      {kind: 'socket', path: '/tmp/code-ab'},
     );
   });
 
@@ -279,9 +332,9 @@ describe('startOrReuse (V7), answers mapped', () => {
     );
     deepStrictEqual(
       outcome.kind === 'started'
-        ? [outcome.server.port, outcome.server.processId]
+        ? [outcome.server.endpoint, outcome.server.processId]
         : outcome.kind,
-      [65535, 2],
+      [{kind: 'port', port: 65535}, 2],
     );
   });
 
@@ -365,8 +418,8 @@ describe('startOrReuse (V7), answers mapped', () => {
     }
     const outcome = await start(channel, {}, [], retryOnce);
     deepStrictEqual(
-      outcome.kind === 'started' ? outcome.server.port : outcome.kind,
-      4321,
+      outcome.kind === 'started' ? outcome.server.endpoint : outcome.kind,
+      {kind: 'port', port: 4321},
     );
   });
 });
@@ -557,6 +610,12 @@ describe('startOrReuse (V7), what is asked of the host', () => {
     );
   });
 
+  it('F-2410: socket mode reaches the start script as a parameter', async () => {
+    const channel = recording(STARTED);
+    await start(channel, {socketMode: true});
+    deepStrictEqual(scriptOf(channel).includes("SOCKET_MODE='yes'"), true);
+  });
+
   it('R-79: the wait for the ready line is the caller bound', async () => {
     const channel = recording(STARTED);
     await start(channel, {readySeconds: 17});
@@ -568,12 +627,24 @@ describe('serverPort (V7)', () => {
   it('F-2509: the port of a started server', () => {
     deepStrictEqual(
       serverPort({
-        port: 4321,
+        endpoint: {kind: 'port', port: 4321},
         processId: 1,
         connectionToken: 't',
         reused: false,
       }),
       4321,
+    );
+  });
+
+  it('F-2509 AC-19: none for a server that listens on a socket', () => {
+    deepStrictEqual(
+      serverPort({
+        endpoint: {kind: 'socket', path: '/tmp/code-ab'},
+        processId: 1,
+        connectionToken: 't',
+        reused: false,
+      }),
+      'none',
     );
   });
 
@@ -604,8 +675,23 @@ describe('startOrReuse (V7) over a real shell', () => {
       NEVER_CANCELLED,
     );
     deepStrictEqual(
-      outcome.kind === 'started' ? outcome.server.port : outcome.kind,
-      4321,
+      outcome.kind === 'started' ? outcome.server.endpoint : outcome.kind,
+      {kind: 'port', port: 4321},
+    );
+  });
+
+  it('F-2410: a start in socket mode over the real shell ends on a socket endpoint', async () => {
+    const outcome = await startOrReuse(
+      shellChannel(host),
+      parametersFor(),
+      {...OPTIONS, socketMode: true},
+      [],
+      dependencies(),
+      NEVER_CANCELLED,
+    );
+    deepStrictEqual(
+      outcome.kind === 'started' ? outcome.server.endpoint.kind : outcome.kind,
+      'socket',
     );
   });
 

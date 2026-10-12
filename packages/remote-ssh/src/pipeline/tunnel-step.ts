@@ -15,6 +15,7 @@ import {
   type WaitLimits,
 } from 'lib-forwarding';
 import type {Logger} from 'lib-log';
+import {portOf} from './connect.ts';
 import type {ConnectSteps} from './steps.ts';
 
 /** What the window gets besides the tunnel: the variables of its extension host and its environment tunnels. */
@@ -70,7 +71,7 @@ export function openTunnelStep(
       dialer,
       local: dependencies.local,
       scheduler: dependencies.scheduler,
-      target: {kind: 'port', port: server.port},
+      target: {kind: 'port', port: portOf(server)},
       localPort,
       limits: dependencies.limits,
       onWaiting,

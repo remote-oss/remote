@@ -48,6 +48,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
         defaultExtensions: [],
         fileWatcherPollingMilliseconds: 0,
         readySeconds: 10,
+        socketMode: false,
       },
       [],
       {

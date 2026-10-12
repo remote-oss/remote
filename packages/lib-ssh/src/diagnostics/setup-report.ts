@@ -1,10 +1,13 @@
 /**
- * @fileoverview The line of an `ssh -v` run that says the connection is set up: the first setup report that ends
- * the connect wait.
+ * @fileoverview The lines of an `ssh -v` run that say the connection has reached a stage: the handshake, and the
+ * login line that ends the connect wait.
  */
 
 /** A report in the client's output that the connection has reached a stage. */
-export type SetupMarker = 'authenticated';
+export type SetupMarker = 'handshake' | 'authenticated';
+
+/** The line `ssh -v` prints when the key exchange ends: the connection is set up and questions may follow. */
+const HANDSHAKE_LINE = 'debug1: SSH2_MSG_NEWKEYS received';
 
 /** The start of the line `ssh` prints, without the debug prefix, when login succeeded. */
 const AUTHENTICATED_START = 'Authenticated to ';
@@ -14,6 +17,9 @@ const AUTHENTICATED_METHOD = ' using "';
 
 /** The marker a line of the client's error output carries, or undefined when it carries none. */
 export function setupMarkerOf(line: string): SetupMarker | undefined {
+  if (line.replace(/\r$/, '') === HANDSHAKE_LINE) {
+    return 'handshake';
+  }
   return line.startsWith(AUTHENTICATED_START) &&
     line.includes(AUTHENTICATED_METHOD)
     ? 'authenticated'

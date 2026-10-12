@@ -128,7 +128,14 @@ The argument rules:
 - `-o RemoteCommand=none` when the effective options carry a `RemoteCommand` and `remoteCommandInEffect` is false
   (F-2107). S2 does not decide whether the feature is in effect; R1 does (F-2107 BR-1).
 - `-v` at the level S5 needs (F-2109 BR-3).
-- `-D 127.0.0.1:<port>`, `-L <port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (F-2104 BR-1, F-2410).
+- `-D 127.0.0.1:<port>`, `-L 127.0.0.1:<port>:127.0.0.1:<remote port>` or `-L 127.0.0.1:<port>:<socket path>` (F-2104
+  BR-1, BR-4, F-2410). **Every local listener names `127.0.0.1` as its bind address** (corrected 2026-10-12 on #353,
+  from themis's finding; the contract said `-L <port>:…` before). Without one, ssh binds `localhost`, both loopbacks.
+  With a squatter on 127.0.0.1 alone, ssh then binds ::1, prints only `bind [127.0.0.1]:<port>: Address already in
+  use`, and carries on, so the window, which dials 127.0.0.1 (F-2104 BR-4, BR-13), reaches the squatter. With the
+  address named, a busy 127.0.0.1 is a real failure (`cannot listen to port` and `Could not request local
+  forwarding.`, checked against a real sshd), and no ::1 listener is left that nobody asked for. `-D` was already
+  explicit.
 - The host goes in as its own argument; a user carried by the target as `-l <user>`, and a port carried by the
   target as `-p <port>`, only then and never from the configuration (F-2501 BR-2, AC-9).
 - `--` comes right before the host in every invocation and in the options query (ruled on #253 Q9): defence in depth
@@ -360,7 +367,15 @@ lease list that S9 uses for login ownership. Lifetime, ownership and how it dies
 login shell reads standard input; S10's `runScript` writes the script to that session's stdin (the two-mode
 bootstrap) and reads its result block from stdout, one run at a time (the helper serialises; probe, install, start
 sequentially), while the `-D` SOCKS forward rides the same session: one login, prompts once. `copyToHost` is the one
-exception and runs `scp` as its own login (F-2405). No ControlMaster or ControlPath is ever added (the S2 rule
+exception and runs `scp` as its own login (F-2405). **It runs in a hidden S8 login terminal** (ruled on #253 Q11,
+2026-10-12): F-2405 BR-8 makes the copy a hidden terminal task, so the editor's workspace-trust gate applies (AC-9),
+and a second login on a password host asks there. The copy terminal's output goes through T2's prompt reader and its
+questions through connect-16's owner, as the install terminal's do; F-2405 AC-10 (no tab, no panel) holds because the
+terminal is hidden. Interim until it's built (on main only, a 0.2 release blocker under #299; daedalus's refinement): `scp` as a process
+with an **empty askpass environment** and no tty, and **no new ssh option** (S2's list stays untouched). scp then
+can't ask, so a password host's copy fails at once as `copyFailed` (OpenSSH 10.2: exit 255 in under 0.1 s, `Permission
+denied (publickey,password,keyboard-interactive).`) instead of hanging. That interim skips the trust gate (AC-9) and
+must not ship. No ControlMaster or ControlPath is ever added (the S2 rule
 stands, POSIX and Windows alike). The lease exposes the session through the helper's request channel (a
 `runScript` request whose reply streams lines and ends with the result block) beside the SOCKS port and the shared
 record; after `start` the session stays as the forward's carrier and later runs (kill, cleanup) use it when idle.
@@ -372,10 +387,10 @@ marker are login noise and dropped; the script's lines go to the asking lease on
 The shared channel's three policy values (ruled on #253 Q10 part 2, 2026-10-12), named constants in remote-ssh's
 bounds:
 - `runDeadlineMilliseconds` is **derived, not stated**: `SERVER_BOUNDS.downloadSeconds + SERVER_BOUNDS.readySeconds`
-  plus a 5-minute margin for unpacking (35 min with today's Q7 values). The deadline must never be shorter than the
+  plus a 5-minute margin for unpacking (36 min with today's Q7 values: 30 + 1 + 5). The deadline must never be shorter than the
   longest step a run may legitimately take, and deriving it keeps that true if Q7's bounds change. Every run (probe,
   install, start, extensions install, kill) gets its own deadline from its start.
-- `runWaitMilliseconds` is the deadline plus 5 minutes (40 min today): one run's deadline plus a margin for the run
+- `runWaitMilliseconds` is the deadline plus 5 minutes (41 min today): one run's deadline plus a margin for the run
   queued ahead, since the helper serialises and the steps run one after another.
 - `maximumInputBytes` is **1 MiB**. It guards the session against an unexpectedly large input, which would be written
   through the shell as base64 while every other run waits. It's not a path switch: nothing falls back automatically.
@@ -788,6 +803,14 @@ Rules:
 - `Connected` is data; the pipeline's internal step result carries a `release` handle beside it, which the
   connector keeps for `cancel` and window teardown (connect-02, accepted 2026-10-08).
 - Every attempt makes a fresh connection when S9 reports the transport lost (F-2505 BR-1).
+- **A dialog reason is never a library's internal text** (ruled 2026-10-12, found via connect-18; the same class as
+  #253 Q10's `ofAcquire` fix). A `detail`, `cause`, `reason` or `mismatch` string from a library failure (lib-host's
+  `failFrom` details such as `no end in time` or `the session ended`, a transfer's cause) goes to the connect log
+  (F-2003), never into `Failed.reason`. A reason is an id: one from the spec's string table, or our own named entry,
+  set per kind where the spec places it. `serverDownload` carries **S043** (`Downloading VS Code Server failed. Please
+  try again later.`, F-2403 7.E1, POST-4), `serverInstall` carries **S075** (`Failed to install the VS Code Server`,
+  F-2403 7.E2/7.E3), and a kind with no placement in the spec has no reason (S030). ssh's own failure lines still
+  reach the dialog through S5's `classify`: they are ssh's words, which F-2601 shows.
 - Every recorded hang becomes a bound wait followed by F-2601's dialog (R-79). This covers:
   - F-2103 Q1, F-2104 Q1, F-2304 Q2, F-2308 7.E2, 7.E8, BR-6 and BR-11 (the former Q3 and Q4), F-2405 Q3;
   - after the revisions of 2026-10-06: F-2105 (a `ProxyCommand` that never answers, `ConnectTimeout 0`), F-2108

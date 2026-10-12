@@ -39,6 +39,7 @@ connect in validate; this brief replaces that interim.
 |---|---|
 | `open(invocation, name, reveal)` | creates the terminal (`window.createTerminal` with `hideFromUser: !reveal`, the local home as cwd, never trust-exempt: F-2308 §16, F-3903 rule 1), starts the invocation, and returns a session: `onOutput(chunk)`, `send(text)`, `reveal()`, `onEnd(status)`, `dispose()` |
 | output | read through the proposed `terminalDataWriteEvent` (`window.onDidWriteTerminalData`), filtered to this terminal, chunked as the editor delivers it. The event delivers raw data including VT escape sequences (the proposal's own doc), so **the adapter strips them and the port promises plain text** (ruled on #299): CSI, OSC and the other ESC sequences are removed, `\r\n` and `\r` are kept for the line splitter. Prompt and marker matching are then pure functions of plain lines, testable without a terminal. A sequence split across two chunks is held until it completes. **A held string sequence is bounded** (ruled on #341, after the DEC VT500 parser, vt100.net): an OSC/DCS/SOS/PM/APC string ends at BEL (OSC) or ST, **and is cancelled by any other ESC, by CAN (0x18) or by SUB (0x1A)**; the cancelling ESC starts the next sequence. A string still open after 4 KiB is dropped **through the next line end** (the line end too), and the text after that flows; with no line end yet, the following pieces are dropped up to the first one (ruled on #341: option ii, so the tail of an endless string never leaks into the line the prompt matcher reads). Otherwise one stray `ESC ]` in a host's banner would swallow the password prompt and every marker after it |
+| line ends | **the port also promises normalised line ends** (ruled on #352/#353, themis's finding, 2026-10-12): a pty's output post-processing (ONLCR) turns `\n` into `\r\n`, so ssh's own `\r\n` lines arrive as `\r\r\n` (measured: `printf 'x\r\n'` on a pty gives `x\r\r\n`). `LineSplitter` strips one `\r`, and every exact line match (the tunnel's success and failure lines, markers, prompt lookbacks) failed. The terminal layer (`TerminalStream`, after `PlainTextFilter`) turns every `\r+\n` into `\n`; **a lone `\r` stays** (progress output redraws a line with it). A run of `\r` at the end of a piece is held until the next piece decides it. `LineSplitter` is unchanged: pipes never carry `\r\r\n`, and the shared path doesn't need it |
 | `reveal` | `Terminal.show(false)`: reveals and focuses (F-2308 BR-2, 6.1 step 4) |
 | trust | the editor's workspace-trust dialog gates the terminal. Cancel → the attempt fails at once and no `ssh` runs (F-2308 7.E7, AC-24); an answer later than the connect wait → the wait's timeout (F-2306 AC-28) |
 
@@ -127,6 +128,10 @@ connect in validate; this brief replaces that interim.
   forwarding.` (printed at every log level). And the readiness probe would then connect to **whoever holds the port**.
   So T7 fails the tunnel when the tunnel terminal shows `Could not request local forwarding.` or `cannot listen to
   port: <our port>` before the probe succeeds, and only then trusts the probe. The success line alone never means up.
+- **Our forward names its bind address** (contracts §S2, corrected on #353 from themis's finding): `-L 127.0.0.1:<port>:…`.
+  The gate's two failure lines then cover a busy 127.0.0.1. With S2's earlier `-L <port>:…`, ssh fell back to ::1 and
+  printed only a `bind [127.0.0.1]` warning, which the gate missed. The fix is at the source (S2), not a third failure
+  pattern in the gate.
 - **The success line is a gate, then the probe** (daedalus, ruled on #299: the rule above raced, since with a foreign
   process on our port the probe connects to it at once, before ssh prints its failure). ssh sets up local forwards in
   its session setup before it sends the remote command, so its forward-failure lines always precede the success line:
@@ -188,6 +193,18 @@ connect in validate; this brief replaces that interim.
      `LogLevel`.
 4. **The connect wait ends at the first output** in terminal mode (F-2105 BR-3), not at `authenticated`. The `-v`
    banner arriving first is what the spec observed (F-2308 5.0 step 4).
+5a. **When the terminal connection step hands over** (ruled on #299, connect-17): at the install terminal's `Authenticated
+   to … using` line (`setupMarkerOf`'s `authenticated`, as in shared mode); from then on the remote `sh` reads the
+   runs. This is a different event from the connect wait's end (ruling 4: the first output), and the two are
+   consistent: the wait stops at the first output, and between it and `Authenticated to` only ssh's own timeouts and
+   T2's prompt rules apply (F-2308 BR-5). A terminal that ends before the handover is classified by S5 as the
+   connection's own run, `classify(lines, code, 'connection', 'terminal')`.
+5b. **The trust-Cancel failure** (F-2308 7.E7/AC-24, F-2410 7.E7/AC-30): the reason text `Got bad result from install
+   script` has **no STR id** (F-2410 3.4: "extension error text (unmapped)"), so it's our own entry in remote-ssh's
+   failure table (`FAILURE_TEMPLATES`, where `reasonText` resolves dialog reasons; not own-strings.ts, which has no
+   path into the dialog). It gets a named id (`trustRefused`), the spec's English verbatim without the final period
+   (the presenter adds one), and a key in all 15 bundles. Kind **`cancelled`**: the user refused trust, so it's
+   permanent (no automatic reconnection re-asks; Retry is the user's), and the reason gives the dialog's text.
 5. **A late trust answer** (after the attempt failed): nothing runs. The terminal isn't created after the attempt's
    end, and no stale input appears (F-2306 7.E7 says it should not; the reference's late install is a defect, not
    reproduced).

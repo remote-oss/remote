@@ -34,7 +34,7 @@ export type PromptSurface =
 const VERIFICATION_CODE_PLACEHOLDER = 'Enter verification code';
 
 /** The question line that closes a host-key question, with any choice list in parentheses. */
-const CONTINUE_QUESTION =
+export const CONTINUE_QUESTION =
   /^Are you sure you want to continue connecting( \(.*\))?\?$/;
 
 /**
@@ -50,7 +50,7 @@ const OFFENDING_LINE = /^Offending key for IP in .+:\d+$/;
 const MATCHING_LINE = /^Matching host key in .+:\d+$/;
 
 /** The passphrase question for a private key. */
-const PASSPHRASE_QUESTION = /Enter passphrase for key '(.*)':/;
+export const PASSPHRASE_QUESTION = /Enter passphrase for key '(.*)':/;
 
 /** The password-method question, with the word before it. */
 const PASSWORD_FOR = "'s password:";
