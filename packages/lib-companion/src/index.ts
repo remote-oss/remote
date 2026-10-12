@@ -5,3 +5,5 @@
  */
 
 export * from './payloads.ts';
+export {hostKeyOfAuthority, isConfiguredAlias} from './host-key.ts';
+export {removeFolderCopies, type RemovalOutcome} from './history.ts';
