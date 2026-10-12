@@ -11,6 +11,10 @@ section 4.1). Reviewing coder: `remote-coding-worker-1`. Depends on card compani
 | `packages/lib-companion/src/payloads.ts` | new: the types, `INTERFACE_VERSION`, the `read*` and `write*` functions |
 | `packages/lib-companion/test/unit/payloads.test.ts` | new |
 | `packages/lib-companion/src/index.ts` | add one export line for `payloads.ts` (the only shared file) |
+| `packages/lib-companion/test/unit/skeleton.test.ts` | remove the one `it` of card companion-01's last row, named `F-5902.5.table: the entry module resolves and exports nothing` on main; leave the other eight `it`s untouched |
+
+That `it` asserts that `src/index.ts` exports nothing, which this card's export line ends; `payloads.test.ts` loads the
+entry module from here on. If the `it` is absent on main, there is nothing to remove. (Amended 2026-10-12.)
 
 Nothing else may change. No fixtures. The payload field names below are this card's decision; the companion
 interface document is not on main, so any later difference is an open row of the card that lands the document.

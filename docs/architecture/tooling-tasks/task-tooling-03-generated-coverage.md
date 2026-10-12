@@ -5,7 +5,14 @@ exclusions by name repeat. Reviewing coder: `remote-coding-worker-1`.
 
 ## 1. File boundary
 
-`tools/coverage.ts` and its tests; the README's coverage section (one sentence).
+`tools/coverage.ts` and `tools/coverage.test.ts`; `packages/remote-ssh/coverage.json` (remove the
+`src/identifiers.generated.ts` entry, which the new rule reports); `packages/remote-ssh/README.md` (remove the
+sentence about that file from the "Coverage exclusions" row). Nothing else.
+
+Precondition (amended 2026-10-12): ADR-0003 "Coverage" says "A file is excluded only by name". This card changes that
+rule, so the ADR line that admits the generated-file rule lands on main first, written by the architect. If ADR-0003
+still says "only by name" when the worker starts, stop and report; do not edit the ADR. (The earlier boundary named
+"the README's coverage section", which does not exist; the rule lives in ADR-0003.)
 
 ## 2. Contract
 

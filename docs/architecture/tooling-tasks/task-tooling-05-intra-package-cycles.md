@@ -5,8 +5,11 @@ modules of one package (found in #153) passes today. Reviewing coder: `remote-co
 
 ## 1. File boundary
 
-`tools/eslint-layout/` (a new rule or an option of `layout/package-imports`), its RuleTester tests,
-`eslint.config.ts` (enable it), `docs/adr/0003` one line under "No dead code" or the layout check row.
+`tools/eslint-plugins/layout.ts` (the new rule `no-intra-package-cycles`, added to `layoutPlugin.rules` beside
+`package-imports`), its RuleTester tests in `tools/eslint-plugins/layout.test.ts`, `eslint.config.ts` (enable
+`layout/no-intra-package-cycles`), and one line in `docs/adr/0003-coding-standards.md` under "No dead code".
+(Amended 2026-10-12: `tools/eslint-layout/` was removed on 2026-10-05; the plugin now lives in
+`tools/eslint-plugins/layout.ts`.)
 
 ## 2. Contract
 

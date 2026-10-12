@@ -1,3 +1,11 @@
+> **Retired 2026-10-12 (daedalus): superseded, do not start.** V4's verification is on main as `verifyArchive` in
+> `packages/lib-server/src/transfer/verify.ts` (24337b8, "V4 part 2"): the first rule whose facts are present, in the
+> record's order. This card's "no rule applies → unverifiable, not ok" predates the ruling of #158 (contracts.md §5
+> V4: "A response that gives the facts of no rule … counts as verified"), which `verifyArchive` follows. Its
+> `export type Verification` would also collide with the one `src/index.ts` already exports from `policy/record.ts`.
+> The one detail it adds, a `sha256-` prefix on the digest header, has no case yet: no product's policy table names a
+> digest header, and nothing sets `announcedSha256`. It belongs to the card of the first product that names one.
+
 # Task card server-09: V4's verification decision (pure)
 
 Contract: `../contracts.md` §5 V4 ("Verification follows the record: the download port reports the redirect chain's

@@ -9,8 +9,6 @@
 
 Base: main, after card remote-ssh-00 (the `packages/remote-ssh` skeleton) has merged. Brief: `../brief-remote-ssh-connect.md`, task connect-04. Neither module exists yet; this card writes both, tests first.
 
-## 1. Dependencies added by this card: `lib-ssh` and `lib-log` as `workspace:*` in packages/remote-ssh/package.json (the first import adds the dependency; knip).
-
 ## 1. Package and file boundary
 
 | File | Role |
@@ -20,7 +18,7 @@ Base: main, after card remote-ssh-00 (the `packages/remote-ssh` skeleton) has me
 | `packages/remote-ssh/test/unit/log-content.test.ts` | new |
 | `packages/remote-ssh/test/unit/hint-store.test.ts` | new |
 
-Nothing else may change: no `package.json`, no `tsconfig*`, no `coverage.json`, no `knip.jsonc`, no `src/index.ts`. The skeleton card declares the dependency on `lib-ssh`; `log-content.ts` imports `logLinesOf` from `lib-ssh`. No fixtures: every input is a literal in the test, built by one helper per test file that returns the canonical record below with the named fields overridden.
+Nothing else may change: no `package.json`, no `tsconfig*`, no `coverage.json`, no `knip.jsonc`, no `src/index.ts`. `packages/remote-ssh` already declares `lib-ssh` (`workspace:*`) and references `../lib-ssh` on main (checked 2026-10-12); `log-content.ts` imports `logLinesOf` from `lib-ssh`. No fixtures: every input is a literal in the test, built by one helper per test file that returns the canonical record below with the named fields overridden.
 
 Neither module imports `vscode`, `lib-log` or the file system. Both are pure: no clock, no randomness, no input mutated.
 
@@ -181,7 +179,7 @@ Records are built by one helper `recordAt(started, hints)` with a default hint l
 - Never change a signature or a format of section 2. Do not add behaviour or tests for anything in section 6. Do not add `hintsFor` or any export beyond section 2.
 - `resolveLogLines` calls `logLinesOf` from `lib-ssh` for the `debug` filter; it does not copy that logic. No other code of `lib-ssh` or `lib-log` is imported.
 - Comments only where the Google TypeScript guide requires them; no F-/R-/D- ids or origin framing in code comments or JSDoc (ids may appear in test names). Every identifier at least four characters, properties included. No duplicated code (one helper builds the lines of each channel; one table loop for the (each) rows); no unused exports; no `const` arrow helpers.
-- Coverage for both files at least 90 % lines, 85 % branches, 90 % functions; report unreached branches, do not delete them.
+- Coverage of both files: 100 % lines, branches and functions (remote-ssh's ratchet is 100/100/100, and `pnpm coverage` fails on a drop of more than half a point); report an unreachable branch, do not delete it.
 - Full gate list: `pnpm identifiers`, `pnpm check-layout`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test:unit`, `pnpm dupes`, `pnpm dead`, `pnpm coverage`, `pnpm check-licences`.
 
 ## 5. Gates and review
@@ -199,4 +197,4 @@ The worker stops at a case below and reports; it neither tests nor implements it
 | O3 | A prompt that was cancelled (Escape on the host-key prompt, F-2605 7.E3): there is no answer | What does the log show? The record type has `answer: string` | `answer?: string`; absent gives the line `Answer: (none)` instead of `Answer: ***` |
 | O4 | A secret that is not the token appears inside free text: a typed answer echoed in an ssh or remote line, or credentials in a proxy URL setting (`httpProxy`, `httpsProxy`) | F-2003 BR-14 bans answers and tokens from the channel; only the token has a stated mask (7.E6) | Replace every occurrence of a non-empty answer by `***` in all free-text lines; remove the `user:password@` part of a URL in a setting value |
 | O5 | An element of `sshLines`, `remoteOutput` or `serverOutput` that holds line breaks | One entry with continuation lines, or several lines each marked? BR-4 says continuation lines carry no time | Split on `\r?\n`, mark every part, so each line of the log carries its source |
-| O6 | The skeleton does not declare `lib-ssh` as a dependency of `packages/remote-ssh` when the worker starts | The card may not touch `package.json` | Stop and report; the integrator adds the dependency before this card runs |
+| O6 | Resolved: `lib-ssh` is declared and referenced by `packages/remote-ssh` on main (checked 2026-10-12) | — | — |
