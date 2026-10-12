@@ -4,6 +4,7 @@ import {
   type RuntimeOptions,
   type ScriptParameters,
   type StartOutcome,
+  runStep,
   startOrReuse,
 } from 'lib-server';
 import {startHost, type RunningHost} from './host-fixture.ts';
@@ -45,6 +46,7 @@ describe('F-2409 the start of the server', function () {
   before(async () => {
     host = await startHost();
     placeStandInArchive(host);
+    placeStandInArchive(host, 'listening');
     placeStandInArchive(host, 'crashing');
     placeStandInArchive(host, 'missingLibraries');
     placeStandInArchive(host, 'silent');
@@ -74,6 +76,19 @@ describe('F-2409 the start of the server', function () {
       {lockLoop: lockLoop(), logger: SILENT},
       new AbortController().signal,
     );
+  }
+
+  /** The parameters and port of a started `listening` stand-in, each row with its own. */
+  async function listening(): Promise<{
+    parameters: ScriptParameters;
+    port: number;
+  }> {
+    const parameters = await installed('listening');
+    const outcome = await start(parameters);
+    if (outcome.kind !== 'started') {
+      throw new Error('the listening stand-in did not start');
+    }
+    return {parameters, port: portOfStarted(outcome.server)};
   }
 
   /** The options the stand-in server was started with, from its log. */
@@ -200,5 +215,58 @@ describe('F-2409 the start of the server', function () {
       kind: 'failed',
       failure: {kind: 'serverStart'},
     });
+  });
+
+  it('#140 part F: the listening stand-in reports a port from the free range', async () => {
+    const {port} = await listening();
+    deepStrictEqual(port >= 20000 && port < 40000, true);
+  });
+
+  it('#140 part F: a connection to its port echoes what it sends', async () => {
+    const {port} = await listening();
+    deepStrictEqual(
+      host
+        .onHost(
+          'sh',
+          '-c',
+          `printf 'ping\\n' | nc -w 2 127.0.0.1 ${String(port)}`,
+        )
+        .trim(),
+      'ping',
+    );
+  });
+
+  it('#140 part F: the listener still echoes after a connection closed', async () => {
+    const {port} = await listening();
+    function echo(): string {
+      return host
+        .onHost(
+          'sh',
+          '-c',
+          `printf 'ping\\n' | nc -w 2 127.0.0.1 ${String(port)}`,
+        )
+        .trim();
+    }
+    deepStrictEqual([echo(), echo()], ['ping', 'ping']);
+  });
+
+  it('contracts §S9: a kill leaves nothing listening on the stand-in port', async () => {
+    const {parameters, port} = await listening();
+    await runStep(
+      host.channel,
+      {installMode: 'singleScript', step: 'kill'},
+      parameters,
+      {cancellation: new AbortController().signal},
+    );
+    deepStrictEqual(
+      host
+        .onHost(
+          'sh',
+          '-c',
+          `nc -w 1 127.0.0.1 ${String(port)} </dev/null; echo $?`,
+        )
+        .trim() !== '0',
+      true,
+    );
   });
 });
