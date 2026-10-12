@@ -215,6 +215,11 @@ export function steps(
   };
 }
 
+/** A recording with nothing in it yet. */
+export function emptyRecording(): Recording {
+  return {calls: [], releases: 0, tunnelCloses: 0, records: [], phases: []};
+}
+
 /** An empty recording and the options of one connect that record its phases, with the sink its log writes to. */
 export function setup(): {
   recording: Recording;
@@ -222,13 +227,7 @@ export function setup(): {
   logSink: MemorySink;
 } {
   const logSink = new MemorySink();
-  const recording: Recording = {
-    calls: [],
-    releases: 0,
-    tunnelCloses: 0,
-    records: [],
-    phases: [],
-  };
+  const recording = emptyRecording();
   return {
     recording,
     logSink,

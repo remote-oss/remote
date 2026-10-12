@@ -8,8 +8,9 @@ import {
 } from 'lib-forwarding/testing/fake-network';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
+import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {openTunnelStep} from '../../src/pipeline/tunnel-step.ts';
-import {INPUT, leaseOf, STARTED} from './pipeline.fixture.ts';
+import {emptyRecording, INPUT, leaseOf, STARTED} from './pipeline.fixture.ts';
 
 const SOCKS_SETTINGS: TunnelSettings = {
   listenOnSocket: false,
@@ -26,6 +27,21 @@ const LIMITS = {
 const ENVIRONMENT = {
   extensionHostEnv: {SSH_AUTH_SOCK: '/tmp/agent'},
   environmentTunnels: [],
+};
+
+/** What only the terminal paths use; the SOCKS path must not touch any of it. */
+const TERMINAL_NOT_USED = {
+  terminals: new RecordingTerminals(),
+  tunnelInvocation: (): never => {
+    throw new Error('the SOCKS path starts no ssh');
+  },
+  attachQuestions: (): never => {
+    throw new Error('the SOCKS path asks no question');
+  },
+  revealLoginTerminals: (): boolean => false,
+  connectWait: (): never => {
+    throw new Error('the SOCKS path has no connect wait');
+  },
 };
 
 /** A tunnel step over fakes; `dialScript` answers the probes through the relay, `port` is the local port offered. */
@@ -61,15 +77,10 @@ function stepWith(
     },
     chooseLocalPort: () => Promise.resolve(port),
     environment: () => ENVIRONMENT,
+    ...TERMINAL_NOT_USED,
     logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
   });
-  const lease = leaseOf({
-    calls: [],
-    releases: 0,
-    tunnelCloses: 0,
-    records: [],
-    phases: [],
-  });
+  const lease = leaseOf(emptyRecording());
   return {
     open: () =>
       step(
@@ -174,28 +185,6 @@ describe('the step that opens the window tunnel', () => {
       kind: 'failed',
       failure: {kind: 'unknown'},
     });
-  });
-
-  it('#253 Q5: the socket path is not built yet: it fails without a reason', async () => {
-    const result = await stepWith({
-      settings: {...SOCKS_SETTINGS, listenOnSocket: true},
-    }).open();
-    deepStrictEqual(result, {kind: 'failed', failure: {kind: 'unknown'}});
-  });
-
-  it('#253 Q5: the second-ssh path is not built yet: the log names it', async () => {
-    const {open, sink} = stepWith({
-      settings: {
-        listenOnSocket: false,
-        useLocalServer: false,
-        enableDynamicForwarding: false,
-      },
-    });
-    await open();
-    deepStrictEqual(
-      sink.lines.map(line => line.message),
-      ["the window tunnel's secondSsh path is not built yet"],
-    );
   });
 
   /** An open tunnel with the onClosed listener it heard, for the rows of the end's contract. */
