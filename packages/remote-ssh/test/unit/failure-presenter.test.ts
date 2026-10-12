@@ -114,6 +114,13 @@ describe('the failure presenter', () => {
     );
   });
 
+  it('F-2601 S030: a reason that is empty text shows the text of a failure without reason', async () => {
+    deepStrictEqual(
+      await textFor({reason: {text: ''}}),
+      'Could not establish connection to "box".',
+    );
+  });
+
   it('F-2601: the buttons are Close Remote, Retry and More Actions', async () => {
     const {presenter, seen} = surroundings(() => Promise.resolve(undefined));
     await presenter.present(failedWith());

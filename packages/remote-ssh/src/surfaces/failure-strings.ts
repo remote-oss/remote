@@ -98,14 +98,14 @@ function isKnownId(stringId: string): stringId is FailureStringId {
 
 /**
  * The text a reason gives: the translated template of a known id, the text as it is, or nothing for an id this table
- * does not hold.
+ * does not hold or a text that is empty.
  */
 export function reasonText(
   reason: FailureReason,
   translate: Translate,
 ): string | undefined {
   if ('text' in reason) {
-    return reason.text;
+    return reason.text === '' ? undefined : reason.text;
   }
   return isKnownId(reason.id) ? textOfId(reason.id, translate) : undefined;
 }

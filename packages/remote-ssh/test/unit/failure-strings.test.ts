@@ -75,6 +75,10 @@ describe('the texts of the failure dialog and the progress', () => {
     );
   });
 
+  it('F-2601: a reason that is empty text gives nothing', () => {
+    deepStrictEqual(reasonText({text: ''}, marked), undefined);
+  });
+
   it('F-2601: a reason that is a known id gives its translated template', () => {
     deepStrictEqual(
       reasonText({id: 'S027'}, marked),
