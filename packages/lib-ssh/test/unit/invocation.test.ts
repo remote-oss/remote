@@ -380,7 +380,10 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
         forwards: [{kind: 'local', localPort: 51001, remotePort: 8080}],
       }),
     );
-    strictEqual(hasPair(invocation, '-L', '51001:127.0.0.1:8080'), true);
+    strictEqual(
+      hasPair(invocation, '-L', '127.0.0.1:51001:127.0.0.1:8080'),
+      true,
+    );
   });
 
   it('F-2410: a socket forward is a -L pair to the path', () => {
@@ -391,7 +394,10 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
         ],
       }),
     );
-    strictEqual(hasPair(invocation, '-L', '51002:/tmp/code-x.sock'), true);
+    strictEqual(
+      hasPair(invocation, '-L', '127.0.0.1:51002:/tmp/code-x.sock'),
+      true,
+    );
   });
 
   it('F-2104.BR-1: both forwards stand in the given order', () => {
@@ -408,7 +414,7 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
         invocation.arguments.indexOf('-D'),
         invocation.arguments.indexOf('--'),
       ),
-      ['-D', '127.0.0.1:51000', '-L', '51001:127.0.0.1:8080'],
+      ['-D', '127.0.0.1:51000', '-L', '127.0.0.1:51001:127.0.0.1:8080'],
     );
   });
 
@@ -419,6 +425,44 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
         argument => argument === '-D' || argument === '-L',
       ),
       false,
+    );
+  });
+
+  it('#353 (themis, athena): a local forward names 127.0.0.1 as its bind address', () => {
+    const invocation = buildInvocation(
+      makeRequest({
+        forwards: [{kind: 'local', localPort: 51001, remotePort: 8080}],
+      }),
+    );
+    strictEqual(flagPair(invocation, '-L')[1]?.startsWith('127.0.0.1:'), true);
+  });
+
+  it('#353 (themis, athena): a socket forward names 127.0.0.1 as its bind address', () => {
+    const invocation = buildInvocation(
+      makeRequest({
+        forwards: [
+          {kind: 'socket', localPort: 51002, socketPath: '/tmp/code-x.sock'},
+        ],
+      }),
+    );
+    strictEqual(flagPair(invocation, '-L')[1]?.startsWith('127.0.0.1:'), true);
+  });
+
+  it('F-2104 6.2 step 4: a run of all three forwards names 127.0.0.1 on every -L value', () => {
+    const invocation = buildInvocation(makeRequest({forwards: ALL_FORWARDS}));
+    const localValues: string[] = [];
+    for (let index = 1; index < invocation.arguments.length; index += 1) {
+      const previous = invocation.arguments[index - 1];
+      if (previous === '-L') {
+        localValues.push(invocation.arguments[index] ?? '');
+      }
+    }
+    deepStrictEqual(
+      [
+        localValues.length,
+        localValues.every(each => each.startsWith('127.0.0.1:')),
+      ],
+      [2, true],
     );
   });
 
@@ -648,7 +692,7 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     );
     deepStrictEqual(
       invocation.arguments.slice(invocation.arguments.indexOf('-L')),
-      ['-L', '51001:127.0.0.1:8080', '--', 'alias', TUNNEL_COMMAND],
+      ['-L', '127.0.0.1:51001:127.0.0.1:8080', '--', 'alias', TUNNEL_COMMAND],
     );
   });
 
@@ -663,7 +707,7 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     );
     deepStrictEqual(
       invocation.arguments.slice(invocation.arguments.indexOf('-L')),
-      ['-L', '51002:/tmp/code-x.sock', '--', 'alias', TUNNEL_COMMAND],
+      ['-L', '127.0.0.1:51002:/tmp/code-x.sock', '--', 'alias', TUNNEL_COMMAND],
     );
   });
 
