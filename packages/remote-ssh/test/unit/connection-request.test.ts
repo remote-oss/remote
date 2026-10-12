@@ -1,5 +1,10 @@
 import {deepStrictEqual, throws} from 'node:assert';
-import type {EffectiveOptions, SshRequest} from 'lib-ssh';
+import {
+  type ConnectWaitSettings,
+  type EffectiveOptions,
+  sessionStartFor,
+  type SshRequest,
+} from 'lib-ssh';
 import {
   type ConnectionRequestEnvironment,
   type ConnectionRequestSettings,
@@ -21,6 +26,12 @@ const EFFECTIVE: EffectiveOptions = {
 const STATE: ConnectState = {
   programs: {sshProgram: '/usr/bin/ssh', scpProgram: '/usr/bin/scp'},
   effective: EFFECTIVE,
+};
+
+const WAIT: ConnectWaitSettings = {
+  connectTimeoutSeconds: 20,
+  fromHost: false,
+  unboundedWaitSeconds: 600,
 };
 
 const SETTINGS: ConnectionRequestSettings = {
@@ -227,11 +238,15 @@ describe("the install connection's request in terminal mode (card connect-17)", 
       SETTINGS,
       ENVIRONMENT,
       socksPort,
+      WAIT,
     );
   }
 
-  it('F-2704 BR-1: it runs the host shell as the remote program', () => {
-    deepStrictEqual(installWith(undefined).remoteProgram, 'sh');
+  it('#443: the remote program is the session start of the connect wait', () => {
+    deepStrictEqual(
+      installWith(undefined).remoteProgram,
+      sessionStartFor(WAIT).remoteProgram,
+    );
   });
 
   it('F-2104 6.3: with a SOCKS port it holds the dynamic forward and keeps the user forwards', () => {
@@ -254,7 +269,11 @@ describe("the install connection's request in terminal mode (card connect-17)", 
     const {remoteProgram, clearUserForwards, ...base} = installWith(undefined);
     deepStrictEqual(
       [base, remoteProgram, clearUserForwards],
-      [sshRequestOf(requestWith({text: 'alex@dev:2222'})), 'sh', true],
+      [
+        sshRequestOf(requestWith({text: 'alex@dev:2222'})),
+        sessionStartFor(WAIT).remoteProgram,
+        true,
+      ],
     );
   });
 

@@ -131,6 +131,8 @@ function channelTo(base: RunBase): SshHostChannel {
 export interface HostVariant {
   /** The download tool the host keeps (`HOST_FETCH`). */
   fetch?: string;
+  /** The login shell of the user harness, a path the host image lists in `/etc/shells` (`HOST_SHELL`); `/bin/sh` when absent. */
+  shell?: string;
 }
 
 /** Starts the host and waits until it accepts SSH; call `stop` when the tests are done, also after a failure. */
@@ -146,9 +148,14 @@ export async function startHost(
       REPOSITORY_ROOT,
       runId,
       runFolder,
-      variant.fetch === undefined
-        ? []
-        : ['--env', `HOST_FETCH=${variant.fetch}`],
+      [
+        ...(variant.fetch === undefined
+          ? []
+          : ['--env', `HOST_FETCH=${variant.fetch}`]),
+        ...(variant.shell === undefined
+          ? []
+          : ['--env', `HOST_SHELL=${variant.shell}`]),
+      ],
     );
     container = host.container;
     const port = host.port;

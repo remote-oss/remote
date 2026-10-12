@@ -17,6 +17,7 @@ import {askpassEndpointPath} from '../askpass/paths.ts';
 import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {ConnectionHandler} from './handler.ts';
+import {sessionStartFor} from './session-bootstrap.ts';
 
 /** The start values a client gives the helper in `HelperParameters.options`. */
 export interface ConnectionHelperOptions {
@@ -79,11 +80,21 @@ export async function runConnectionHelper(
       options.runtime,
       options.askpassProgram,
     );
+    const waitSettings = {
+      connectTimeoutSeconds: Number(
+        request.effective.connectTimeout ?? request.settings.connectTimeout,
+      ),
+      fromHost: request.effective.connectTimeout !== undefined,
+      unboundedWaitSeconds: options.unboundedWaitSeconds,
+    };
+    const start = sessionStartFor(waitSettings);
     const handler = new ConnectionHandler({
       invocation: buildInvocation({
         ...request,
+        remoteProgram: start.remoteProgram,
         forwards: [{kind: 'dynamic', localPort: options.socksPort}],
       }),
+      sessionPrelude: start.prelude,
       socksPort: options.socksPort,
       spawner: environment.spawner,
       askpassEnvironment: askpassEnvironment({
@@ -93,13 +104,7 @@ export async function runConnectionHelper(
         external: options.externalAskpass,
       }),
       editorEnvironment: environment.editorEnvironment,
-      waitSettings: {
-        connectTimeoutSeconds: Number(
-          request.effective.connectTimeout ?? request.settings.connectTimeout,
-        ),
-        fromHost: request.effective.connectTimeout !== undefined,
-        unboundedWaitSeconds: options.unboundedWaitSeconds,
-      },
+      waitSettings,
       scheduler: environment.scheduler,
       askpass: {
         nonce: askpassNonce,

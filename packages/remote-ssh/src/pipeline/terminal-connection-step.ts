@@ -19,6 +19,7 @@ import {
   followLoginOutput,
   PromptReader,
   type SessionRunner,
+  sessionStartFor,
   setupMarkerOf,
   type SshRequest,
   type TerminalEnd,
@@ -170,6 +171,7 @@ export function openTerminalConnectionStep(
         const runner = new TerminalSessionRunner({
           terminal,
           scheduler: dependencies.scheduler,
+          prelude: sessionStartFor(waitSettings).prelude,
           newMarker: () => dependencies.newMarker(),
         });
         let channel: HostChannel;
