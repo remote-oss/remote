@@ -214,7 +214,7 @@ export async function runAcceptance(
       console.log.bind(console),
     );
   } catch (error) {
-    console.error(`acceptance: ${messageOf(error)}`);
+    console.error(`acceptance: ${describedError(error)}`);
     return 1;
   } finally {
     for (const container of started) {
@@ -275,12 +275,55 @@ export async function bundleSuite(root: string): Promise<void> {
   });
 }
 
+/** How long the run waits before its one retry of the editor download, in milliseconds. */
+const DOWNLOAD_RETRY_DELAY = 5000;
+
+/**
+ * Runs the download; when it throws, it logs the failure, waits and runs it once more. The second failure is the
+ * run's. A transient answer of the update service failed a CI run before any test (remote#317, 2026-10-12).
+ */
+export async function downloadWithRetry(
+  download: () => Promise<string>,
+  sleep: Sleeper,
+  report: (line: string) => void,
+): Promise<string> {
+  try {
+    return await download();
+  } catch (error) {
+    report(
+      `acceptance: editor download failed (${describedError(error)}); retrying once`,
+    );
+    await sleep(DOWNLOAD_RETRY_DELAY);
+    return download();
+  }
+}
+
+/**
+ * The text of a failure for the job's log: its message, or when that is empty its cause, or else the first lines
+ * of its stack (an empty message left the job's log with a bare `acceptance:`).
+ */
+export function describedError(error: unknown): string {
+  const message = messageOf(error);
+  if (message !== '' || !(error instanceof Error)) {
+    return message;
+  }
+  if (error.cause !== undefined) {
+    return `cause: ${describedError(error.cause)}`;
+  }
+  const stack = (error.stack ?? '').split('\n').slice(0, 3).join(' | ');
+  return stack === '' ? error.name : stack;
+}
+
 /**
  * The editor's CLI at the version under test. The harness installs the VSIX files with it into the run's own
  * extensions folder, the one the editor is started with; test-cli's own install would use its default folder.
  */
 async function editorCli(): Promise<string> {
-  const executable = await downloadAndUnzipVSCode(EDITOR_VERSION);
+  const executable = await downloadWithRetry(
+    () => downloadAndUnzipVSCode(EDITOR_VERSION),
+    delay,
+    console.error.bind(console),
+  );
   return resolveCliPathFromVSCodeExecutablePath(executable);
 }
 
