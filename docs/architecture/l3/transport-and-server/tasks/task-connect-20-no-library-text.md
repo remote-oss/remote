@@ -13,9 +13,12 @@ F-2601 shows). Needed before F-2403 is recorded (a D-65 row). Reviewing coder: `
 | File | Change |
 |---|---|
 | `packages/remote-ssh/src/pipeline/failure.ts` | every mapper of section 2.1; `detailOf` goes |
+| `packages/remote-ssh/src/pipeline/server-steps.ts` | `sourceOf` passes the template problem whole (section 2.3) |
+| `packages/lib-server/src/install/plan.ts` | `invalidOverride`'s `problem` is lib-product's `TemplateProblem` (section 2.3) |
+| `packages/lib-server/test/unit/plan.test.ts` | the `invalidOverride` row passes a `TemplateProblem` (`{kind: 'notHttpUrl', value: 'x'}`) |
 | `packages/remote-ssh/src/pipeline/connect.ts` | logs the library detail of a failure (section 2.2) |
-| `packages/remote-ssh/src/surfaces/failure-strings.ts` | S043 and S075 in `FailureStringId` and `FAILURE_TEMPLATES` |
-| `packages/remote-ssh/l10n/bundle.l10n.json` and the 14 locale bundles | the two templates as keys |
+| `packages/remote-ssh/src/surfaces/failure-strings.ts` | S043, S075, `templateUnknownPlaceholder` and `templateNotHttp` in `FailureStringId` and `FAILURE_TEMPLATES` |
+| `packages/remote-ssh/l10n/bundle.l10n.json` and the 14 locale bundles | the four templates as keys |
 | `packages/remote-ssh/test/unit/failure.test.ts`, `connect.test.ts`, `failure-strings.test.ts`, `strings.test.ts` | rows (section 3) |
 
 ## 2. Contract
@@ -56,7 +59,7 @@ string`.
 In `connect.ts`, where a step's failure becomes the connect's `Failed`, a `logDetail` present on it is written to the
 connect log as `the <kind> failure: <logDetail>` (F-2003). `failedWith` never copies it into `Failed`.
 
-### 2.3 The template dialog's `{3}` (open row, athena)
+### 2.3 The template dialog's `{3}` (ruled)
 
 `invalidServerTemplate` shows remote-ssh's own dialog, "The value of {1} is not a usable server download URL template:
 {3}." (contracts §3.2, ruled 2026-10-09). Today `{3}` is filled with `resolution.problem.kind`, a raw identifier
@@ -78,6 +81,18 @@ reference counterpart; remote-ssh#87 fixes only the template and calls `{3}` "th
   `The value of remote.SSH.serverDownloadUrlTemplate is not a usable server download URL template: the placeholder
   ${foo} is not known.`
 
+**Carrying the problem whole.** Today `server-steps.ts`'s `sourceOf` flattens the problem to its `kind`
+(`problem: resolution.problem.kind`), and lib-server's `PlanInput.source` and `PlanFailure` carry it as a `string`, so
+the placeholder's name is lost before `ofPlan`. They carry lib-product's `TemplateProblem` instead:
+`packages/lib-server/src/install/plan.ts`'s `{kind: 'invalidOverride'; problem: string}` (in both `PlanInput.source`
+and `PlanFailure`) becomes `problem: TemplateProblem` (imported from lib-product, which lib-server already depends on),
+and `sourceOf` passes `resolution.problem` itself. `ofPlan` maps it:
+- `unknownPlaceholder` → `{id: 'templateUnknownPlaceholder', values: ['${' + name + '}']}`;
+- `notHttpUrl` → `{id: 'templateNotHttp', values: []}`;
+- `unsupportedPlatform` → no reason (S030's rule: unplaced). It can't reach remote-ssh's override, since only the
+  base-URL form (`acceptsBaseUrl`, false for remote-ssh) gives it, but the type allows it, so the mapping is total.
+The problem's own values go to `logDetail` as before.
+
 ## 3. Test table
 
 One assertion per `it`; the cite starts the name.
@@ -96,6 +111,10 @@ One assertion per `it`; the cite starts the name.
 | contracts R1 | `ofConnection` `loginFailed` with classify's reason | the reason is kept (ssh's words) |
 | F-2003 | a connect whose transfer fails with a cause `boom` | the log has `the serverDownload failure: boom` |
 | contracts R1 | the same | `Failed.reason` is `{id: 'S043'}`, and no `Failed` field contains `boom` |
+| #299 (athena) | `ofPlan` of `invalidOverride` with `{kind: 'unknownPlaceholder', name: 'foo'}` | `reason` `{id: 'templateUnknownPlaceholder', values: ['${foo}']}` |
+| #299 | `ofPlan` of `invalidOverride` with `{kind: 'notHttpUrl', value: 'ftp://h/x'}` | `reason` `{id: 'templateNotHttp', values: []}`; `ftp://h/x` only in `logDetail` |
+| #299 | `ofPlan` of `invalidOverride` with `{kind: 'unsupportedPlatform', …}` | no `reason` |
+| F-3902 rule 8 | the dialog for the `unknownPlaceholder` case | `The value of remote.SSH.serverDownloadUrlTemplate is not a usable server download URL template: the placeholder ${foo} is not known.` |
 | R-29 | every mapper's every case | no result has a `reason` with a `text` field (one sweep row over a table of every case) |
 | F-2403 | `FAILURE_TEMPLATES.S043` / `.S075` | `Downloading VS Code Server failed. Please try again later.` / `Failed to install the VS Code Server` |
 | F-2601 | the dialog for `serverDownload` with S043 | ends with one full stop (`…later.`), not two (the presenter's existing stop rule) |
