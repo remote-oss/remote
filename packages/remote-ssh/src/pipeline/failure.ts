@@ -4,7 +4,7 @@
  * should try again.
  */
 
-import type {Failed} from 'lib-authority';
+import type {Failed, FailureReason} from 'lib-authority';
 import type {ChannelFailure} from 'lib-host';
 import type {
   PlanFailure,
@@ -14,12 +14,7 @@ import type {
   TransferFailure,
 } from 'lib-server';
 import type {AcquireFailure} from 'lib-helper';
-import type {
-  ConnectionFailure,
-  FailureHint,
-  FailureKind,
-  FailureReason,
-} from 'lib-ssh';
+import type {ConnectionFailure, FailureHint, FailureKind} from 'lib-ssh';
 
 /** The kinds of a failed connect: the failures of `ssh` itself and those of the server install and start. */
 export type FailedKind =
