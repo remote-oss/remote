@@ -27,11 +27,16 @@ The socket's folder is `$TMPDIR` only when it is an absolute path containing no 
 TAB=$(printf '\t')
 NEWLINE='
 '
-case $TMPDIR in
-  *" "*|*"$TAB"*|*"$NEWLINE"*|'') SOCKET_FOLDER=/tmp ;;
-  /*) SOCKET_FOLDER=$TMPDIR ;;
-  *) SOCKET_FOLDER=/tmp ;;
-esac
+if [ -z "${TMPDIR+set}" ]; then
+  SOCKET_FOLDER=/tmp
+else
+  case $TMPDIR in
+    '') SOCKET_FOLDER=/tmp; fact server.socketFolderFallback empty ;;
+    *" "*|*"$TAB"*|*"$NEWLINE"*) SOCKET_FOLDER=/tmp; fact server.socketFolderFallback whiteSpace ;;
+    /*) SOCKET_FOLDER=$TMPDIR ;;
+    *) SOCKET_FOLDER=/tmp; fact server.socketFolderFallback relative ;;
+  esac
+fi
 SOCKET_FILE="$SOCKET_FOLDER/code-$SOCKET_NAME"
 ```
 
@@ -51,15 +56,15 @@ the folder chosen this way, the first word is always the whole path.
 One assertion per `it`; the cite starts the name. Each row is a socket-mode start (server-14's `socket()` parameters)
 over the real shell, with `TMPDIR` set in the run's environment.
 
-| Cite | `TMPDIR` | Expected `server.socketPath` |
-|---|---|---|
-| F-2410 BR-4 | a folder of the test, absolute, no space | starts with that folder |
-| #342 (themis) | an absolute folder with a space (created by the test) | starts with `/tmp/code-` |
-| #342 (themis) | `tmp` (relative) | starts with `/tmp/code-`, and the start is `Ok` |
-| F-2410 BR-4 | unset | starts with `/tmp/code-` |
-| F-2410 BR-4 | empty | starts with `/tmp/code-` |
-| F-2703 BR-9 | an absolute folder with a space, the script run under **dash** | starts with `/tmp/code-` (the row that a `[[:space:]]` pattern would fail) |
-| #342 | an absolute folder with a tab | starts with `/tmp/code-` |
+| Cite | `TMPDIR` | Expected `server.socketPath` | Expected `server.socketFolderFallback` |
+|---|---|---|---|
+| F-2410 BR-4 | a folder of the test, absolute, no space | starts with that folder | absent |
+| #342 (themis) | an absolute folder with a space (created by the test) | starts with `/tmp/code-` | `whiteSpace` |
+| #342 (themis) | `tmp` (relative) | starts with `/tmp/code-`, and the start is `Ok` | `relative` |
+| F-2410 BR-4 | unset | starts with `/tmp/code-` | absent (the default, not a fallback) |
+| F-2410 BR-4 | empty (set to `''`) | starts with `/tmp/code-` | `empty` |
+| F-2703 BR-9 | an absolute folder with a space, the script run under **dash** | starts with `/tmp/code-` (the row that a `[[:space:]]` pattern would fail) | `whiteSpace` |
+| #342 | an absolute folder with a tab | starts with `/tmp/code-` | `whiteSpace` |
 | #342 | any of the above | the reported path is a socket the server listens on (the stand-in prints it back whole) |
 
 ## 4. Rule for the worker
@@ -72,4 +77,6 @@ PR title `lib-server: the socket's folder is always one the start can report (ca
 
 ## 6. Open rows
 
-One: the fallback to `/tmp` versus a named failure (section 2), for athena.
+None. The fallback and its fact are ruled (section 2, athena). An unset `TMPDIR` takes `/tmp` as the default and
+reports no fact; an empty, a relative and a white-space one fall back and report `empty`, `relative` and `whiteSpace`.
+`${TMPDIR+set}` tells unset from empty under dash (checked).
