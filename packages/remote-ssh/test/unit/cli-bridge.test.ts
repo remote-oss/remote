@@ -1,5 +1,8 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import {FakeLocalPort} from 'lib-forwarding/testing/fake-network';
+import {
+  type FakeConnection,
+  FakeLocalPort,
+} from 'lib-forwarding/testing/fake-network';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {openCliControl} from 'lib-server';
 import {fakeCli, type Request} from 'lib-server/testing/fake-cli';
@@ -51,12 +54,18 @@ async function bridgeOver(
   const clock = new FakeClock();
   const losses: CliBridgeLoss[] = [];
   const logLines: string[] = [];
+  const firstLines: string[] = [];
+  let firstEnds = 0;
   const controlEnded: Array<() => void> = [];
   const bridge: CliBridge = await openCliBridge(
     control,
     SERVE_PARAMS,
     {
       onServeLog: line => logLines.push(line.text),
+      onFirstServeLog: line => firstLines.push(line.text),
+      onFirstServeEnded: () => {
+        firstEnds += 1;
+      },
       onControlEnded: listener => controlEnded.push(listener),
     },
     {
@@ -68,7 +77,17 @@ async function bridgeOver(
     },
   );
   bridge.onLost(cause => losses.push(cause));
-  return {peer, local, clock, bridge, losses, logLines, controlEnded};
+  return {
+    peer,
+    local,
+    clock,
+    bridge,
+    losses,
+    logLines,
+    firstLines,
+    firstEnds: () => firstEnds,
+    controlEnded,
+  };
 }
 
 /** The `serve` requests the fake CLI got, by socket id. */
@@ -207,28 +226,37 @@ describe("the CLI path's local bridge", () => {
     strictEqual(ended, true);
   });
 
-  it('§4a: a connection closed while its serve runs is not relayed when the serve replies', async () => {
-    const {peer, local} = await bridgeOver({answer: 'held'});
-    const editor = local.accept(PORT);
-    editor?.receive(new TextEncoder().encode('early'));
-    await settled();
-    editor?.close();
-    const serve = peer.requests.find(request => request.method === 'serve');
-    peer.send({id: serve?.id, result: {}});
-    await settled();
-    strictEqual(relayedText(peer.requests, 0), '');
-  });
-
-  it('§4a: a bridge closed while a serve runs relays nothing when the serve replies', async () => {
+  /** What socket 0 relayed when its held `serve` replied after `interrupt` ran on the bridge or the connection. */
+  async function relayedAfter(
+    interrupt: (bridge: CliBridge, editor: FakeConnection | undefined) => void,
+  ): Promise<string> {
     const {peer, local, bridge} = await bridgeOver({answer: 'held'});
     const editor = local.accept(PORT);
     editor?.receive(new TextEncoder().encode('early'));
     await settled();
-    bridge.close();
+    interrupt(bridge, editor);
     const serve = peer.requests.find(request => request.method === 'serve');
     peer.send({id: serve?.id, result: {}});
     await settled();
-    strictEqual(relayedText(peer.requests, 0), '');
+    return relayedText(peer.requests, 0);
+  }
+
+  it('§4a: a connection closed while its serve runs is not relayed when the serve replies', async () => {
+    strictEqual(
+      await relayedAfter((bridge, editor) => {
+        editor?.close();
+      }),
+      '',
+    );
+  });
+
+  it('§4a: a bridge closed while a serve runs relays nothing when the serve replies', async () => {
+    strictEqual(
+      await relayedAfter(bridge => {
+        bridge.close();
+      }),
+      '',
+    );
   });
 
   it('§4a: a connection the editor closed is no longer relayed', async () => {
@@ -250,6 +278,66 @@ describe("the CLI path's local bridge", () => {
     local.accept(PORT);
     await settled();
     deepStrictEqual(logLines, ['Error installing server: cannot expand']);
+  });
+
+  it("F-2103 5.0 step 6: the first serve's lines reach the download notification", async () => {
+    const {local, firstLines} = await bridgeOver({answer: 'templateError'});
+    local.accept(PORT);
+    await settled();
+    deepStrictEqual(firstLines, ['Error installing server: cannot expand']);
+  });
+
+  it('F-2103 5.0 step 8: the end of the first serve is told once', async () => {
+    const {local, firstEnds} = await bridgeOver();
+    local.accept(PORT);
+    await settled();
+    local.accept(PORT);
+    await settled();
+    strictEqual(firstEnds(), 1);
+  });
+
+  it("F-2103 BR-8: a later serve's lines reach the log and not the download notification", async () => {
+    const peer = fakeCli((request: Request) =>
+      request.method === 'serve'
+        ? [
+            ...((request.params as {socket_id: number}).socket_id === 1
+              ? [
+                  {
+                    id: null,
+                    method: 'serverlog',
+                    params: {line: 'later', level: 2},
+                  },
+                ]
+              : []),
+            {id: request.id, result: {}},
+          ]
+        : [],
+    );
+    const firstLines: string[] = [];
+    const logLines: string[] = [];
+    const local = new FakeLocalPort();
+    await openCliBridge(
+      openCliControl(peer.stream),
+      SERVE_PARAMS,
+      {
+        onServeLog: line => logLines.push(line.text),
+        onFirstServeLog: line => firstLines.push(line.text),
+        onFirstServeEnded: () => undefined,
+        onControlEnded: () => undefined,
+      },
+      {
+        local,
+        port: PORT,
+        scheduler: new FakeClock().scheduler(),
+        firstServeMilliseconds: 60_000,
+        laterServeMilliseconds: 5_000,
+      },
+    );
+    local.accept(PORT);
+    await settled();
+    local.accept(PORT);
+    await settled();
+    deepStrictEqual([logLines, firstLines], [['later'], []]);
   });
 
   it('themis on #431: a first serve that outlasts its bound ends the control connection', async () => {
@@ -284,22 +372,23 @@ describe("the CLI path's local bridge", () => {
     deepStrictEqual(losses, [{kind: 'controlClosed'}]);
   });
 
-  it("athena on #458: a failed serve is a serve failure, with the CLI's error read", async () => {
+  /** The first loss of a bridge whose first `serve` failed on its template. */
+  async function templateLoss(): Promise<CliBridgeLoss | undefined> {
     const {local, losses} = await bridgeOver({answer: 'templateError'});
     local.accept(PORT);
     await settled();
-    strictEqual(
-      losses[0]?.kind === 'serveFailed' && losses[0].error.kind,
-      'template',
-    );
+    return losses[0];
+  }
+
+  it("athena on #458: a failed serve is a serve failure, with the CLI's error read", async () => {
+    const loss = await templateLoss();
+    strictEqual(loss?.kind === 'serveFailed' && loss.error.kind, 'template');
   });
 
   it('athena on #458: a failed serve keeps the error line for the detail', async () => {
-    const {local, losses} = await bridgeOver({answer: 'templateError'});
-    local.accept(PORT);
-    await settled();
+    const loss = await templateLoss();
     strictEqual(
-      losses[0]?.kind === 'serveFailed' && losses[0].errorLine,
+      loss?.kind === 'serveFailed' && loss.errorLine,
       'Error installing server: cannot expand',
     );
   });

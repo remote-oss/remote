@@ -34,9 +34,11 @@ import {
   type ProbedHost,
   type PlanInput,
   probe,
+  type ScriptParameters,
   type ServerPolicyRecord,
   startCli,
   startOrReuse,
+  stopCli,
   transfer,
 } from 'lib-server';
 import {validateTarget} from 'lib-ssh';
@@ -90,6 +92,7 @@ type ServerStepNames =
   | 'start'
   | 'installCli'
   | 'startCli'
+  | 'stopCli'
   | 'installExtensions';
 
 /** The archive source the planner reads, from what the resolution found. */
@@ -131,7 +134,7 @@ function templatePlatformOf(host: ProbedHost): {
  * The address of the CLI archive for a host, from the product's `cliDownloadUrlTemplate`, or why it gives none: no
  * template, or one that is unusable for this host.
  */
-export function cliAddressOf(
+function cliAddressOf(
   profile: ProductProfile,
   platform: {operatingSystem: string; architecture: string},
 ): {kind: 'address'; address: string} | {kind: 'none'} | {kind: 'unusable'} {
@@ -197,7 +200,7 @@ export function createServerSteps(
   function cliParametersFor(
     cliPlan: Extract<Plan, {kind: 'cli'}>,
     host: ProbedHost,
-  ): ReturnType<typeof scriptParametersFor> {
+  ): ScriptParameters & {cli: NonNullable<ScriptParameters['cli']>} {
     return {
       ...parametersFor({
         archiveUrl: plannedCliAddress(),
@@ -238,7 +241,7 @@ export function createServerSteps(
     },
     probe: (input, lease, cancellation) =>
       probe(lease.channel, parametersFor({}), cancellation),
-    plan: (input, host) => {
+    plan: (input, host, options) => {
       const platform = templatePlatformOf(host);
       const resolution = resolveServerArchive(
         profile,
@@ -252,7 +255,10 @@ export function createServerSteps(
           'the CLI path was not used: the CLI template is unusable',
         );
       }
-      cliAddress = cliSource.kind === 'address' ? cliSource.address : undefined;
+      cliAddress =
+        cliSource.kind === 'address' && options?.direct !== true
+          ? cliSource.address
+          : undefined;
       const serverFree =
         resolution.kind !== 'resolved' ||
         !classifyLicence({
@@ -404,6 +410,20 @@ export function createServerSteps(
         {lockLoop: dependencies.lockLoop},
         cancellation,
       ),
+    stopCli: async (input, lease, host, cliPlan, processId) => {
+      // The stop runs whatever became of the connect's own cancellation: a CLI left running serves any local user.
+      const stopped = await stopCli(
+        lease.channel,
+        cliParametersFor(cliPlan, host),
+        processId,
+        new AbortController().signal,
+      );
+      if (stopped.kind === 'failed') {
+        dependencies.logger.warn(
+          `the CLI was not stopped: ${stopped.failure.kind}`,
+        );
+      }
+    },
     installExtensions: async (input, lease, cancellation) => {
       await installExtensions(
         lease.channel,

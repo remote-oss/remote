@@ -55,7 +55,11 @@ export async function openCliBridge(
   control: CliControl,
   serveParams: CliServeParams,
   events: {
+    /** Each line the CLI logs during any `serve`. */
     onServeLog(line: ServerLogLine): void;
+    /** Each line of the first `serve`, the one that installs and starts the server; then its end, once. */
+    onFirstServeLog(line: ServerLogLine): void;
+    onFirstServeEnded(): void;
     onControlEnded(listener: () => void): void;
   },
   dependencies: CliBridgeDependencies,
@@ -87,9 +91,15 @@ export async function openCliBridge(
   async function serveOnce(): Promise<Served> {
     if (firstServe === undefined) {
       firstServe = bounded(
-        control.serve(serveParams, onLog),
+        control.serve(serveParams, line => {
+          onLog(line);
+          events.onFirstServeLog(line);
+        }),
         dependencies.firstServeMilliseconds,
       );
+      void firstServe.then(() => {
+        events.onFirstServeEnded();
+      });
       return firstServe;
     }
     const before = await firstServe;

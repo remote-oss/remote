@@ -19,6 +19,7 @@ import {
   ofStart,
   ofTransfer,
 } from './failure.ts';
+import {connectOverCli} from '../cli/cli-connect.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -48,6 +49,8 @@ export interface ConnectOptions {
   /** How long the pre-connection script may take, with its question to the user. */
   preconnectMilliseconds: number;
   logger: Logger;
+  /** The editor's commit and quality, which the CLI path's `serve` names. */
+  serve: {commit: string; quality: string};
 }
 
 /** How a bounded step ended when it did not give its value. */
@@ -138,6 +141,22 @@ function messageOf(caught: unknown): string {
   return String(caught);
 }
 
+/** What the window's failure says around its detail: the attempt, and what the step found. */
+function contextOf(
+  input: ConnectInput,
+  options: ConnectOptions,
+  step: StepFailure,
+): FailureContext {
+  return {
+    attempt: input.attempt,
+    isReconnection: input.isReconnection,
+    maximumReconnectionAttempts: options.maximumReconnectionAttempts,
+    userAlreadyNotified: step.userAlreadyNotified ?? false,
+    hints: step.hints ?? [],
+    diagnostics: step.diagnostics ?? [],
+  };
+}
+
 /** One connect: runs the steps in order and returns the connection, or the failure. */
 export async function connect(
   input: ConnectInput,
@@ -148,14 +167,7 @@ export async function connect(
 
   function failure(step: StepFailure): Failed {
     held.lease?.release();
-    const context: FailureContext = {
-      attempt: input.attempt,
-      isReconnection: input.isReconnection,
-      maximumReconnectionAttempts: options.maximumReconnectionAttempts,
-      userAlreadyNotified: step.userAlreadyNotified ?? false,
-      hints: step.hints ?? [],
-      diagnostics: step.diagnostics ?? [],
-    };
+    const context = contextOf(input, options, step);
     options.logger.warn(`connect failed: ${step.kind}`);
     if (step.logDetail !== undefined) {
       options.logger.warn(`the ${step.kind} failure: ${step.logDetail}`);
@@ -284,7 +296,7 @@ async function runSteps(
     return failure(ofProbe(probed.value.failure));
   }
   const {host} = probed.value;
-  const planned = steps.plan(input, host);
+  let planned = steps.plan(input, host);
   if ('failure' in planned) {
     return failure(ofPlan(planned.failure));
   }
@@ -298,6 +310,46 @@ async function runSteps(
   }
   if (gate.kind === 'cancelled') {
     return failure({kind: 'cancelled'});
+  }
+  if (planned.plan.kind === 'cli') {
+    const overCli = await connectOverCli({
+      input,
+      lease,
+      host,
+      plan: planned.plan,
+      steps,
+      logger: options.logger,
+      serve: options.serve,
+      failedOf: detail => failedWith(detail, contextOf(input, options, detail)),
+      cancellation,
+    });
+    if (overCli.kind === 'connected') {
+      await quietly('the platform setting', () =>
+        steps.rememberPlatform(input, host.operatingSystem),
+      );
+      return {
+        connected: overCli.connected,
+        serverPort: 0,
+        release: () => {
+          overCli.release();
+        },
+        onTransport: listener => overCli.onTransport(listener),
+      };
+    }
+    if (overCli.kind === 'failed') {
+      return failure(overCli.failure);
+    }
+    const dropped = cancelled();
+    if (dropped !== undefined) {
+      return dropped;
+    }
+    options.logger.warn(
+      `the CLI path failed (${overCli.cause}); installing the server directly`,
+    );
+    planned = steps.plan(input, host, {direct: true});
+    if ('failure' in planned) {
+      return failure(ofPlan(planned.failure));
+    }
   }
   if (planned.plan.kind === 'download') {
     const transferred = await steps.transfer(

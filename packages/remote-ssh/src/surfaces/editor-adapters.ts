@@ -1,10 +1,11 @@
 /**
- * @fileoverview The editor adapters of the connect's surfaces: the failure dialog, the licence modal, the platform pick
- * and the "More Actions..." pick, each a small function over the editor it is given. `vscode` is imported for its types
+ * @fileoverview The editor adapters of the connect's surfaces: the failure dialog, the licence modal, the platform pick,
+ * the "More Actions..." pick and the server download's notification, each a small function over the editor it is given. `vscode` is imported for its types
  * only, so every adapter is tested with a fake editor.
  */
 
 import type * as vscode from 'vscode';
+import type {DownloadProgressPort} from '../cli/server-download-progress.ts';
 import type {PlatformPickPort} from '../connect/platform-picker.ts';
 import type {FailureDialogPort} from './failure-presenter.ts';
 import type {LicenceDialogPort} from './licence-modal.ts';
@@ -221,5 +222,52 @@ export function promptEditorOf(
     maskedInput: (request, cancellation) =>
       askText(editor, request.placeholder, cancellation),
     translate,
+  };
+}
+
+/**
+ * The server download's notification: a progress notification that can't be cancelled, whose bar follows the
+ * percentages reported, and which stays until it is closed. A percentage lower than one shown before moves nothing.
+ */
+export function downloadProgressOf(
+  editor: Pick<typeof vscode, 'window' | 'ProgressLocation'>,
+): DownloadProgressPort {
+  return {
+    show: title => {
+      let shown = 0;
+      let wanted = 0;
+      let target: vscode.Progress<{increment: number}> | undefined;
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      function forward(): void {
+        if (target !== undefined && wanted > shown) {
+          target.report({increment: wanted - shown});
+          shown = wanted;
+        }
+      }
+      void editor.window.withProgress(
+        {
+          location: editor.ProgressLocation.Notification,
+          title,
+          cancellable: false,
+        },
+        progress => {
+          target = progress;
+          forward();
+          return finished;
+        },
+      );
+      return {
+        report: percent => {
+          wanted = percent;
+          forward();
+        },
+        close: () => {
+          finish();
+        },
+      };
+    },
   };
 }

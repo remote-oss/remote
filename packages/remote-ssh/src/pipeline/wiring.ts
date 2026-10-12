@@ -4,11 +4,13 @@
  * imports the editor; the extension passes the real ports and a test passes fakes.
  */
 
-import {environmentTunnels} from 'lib-forwarding';
+import type {FailurePresenter} from 'lib-authority';
+import {environmentTunnels, type LocalPort} from 'lib-forwarding';
+import type {Scheduler} from 'lib-helper';
 import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {OverrideValue} from 'lib-product';
-import {buildInvocation} from 'lib-ssh';
+import {buildInvocation, connectWaitMilliseconds} from 'lib-ssh';
 import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
@@ -17,9 +19,12 @@ import type {
   RunBase,
   SessionRunner,
 } from 'lib-ssh';
+import {openCliBridge} from '../cli/cli-bridge.ts';
+import type {ServerDownloadProgress} from '../cli/server-download-progress.ts';
 import {
   connectionLimitsFor,
   effectiveConnectTimeoutSeconds,
+  FIRST_SERVE_MILLISECONDS,
   HOST_ZERO_TIMEOUT_SECONDS,
 } from './bounds.ts';
 import type {PhaseEvent} from './connect.ts';
@@ -79,6 +84,18 @@ export interface ChannelRun {
   displayHost: string;
 }
 
+/** What the CLI path needs besides the server steps. */
+interface CliWiring {
+  local: LocalPort;
+  scheduler: Scheduler;
+  /** The bridge's loopback port, chosen as the tunnel's is; nothing when none is free. */
+  chooseLocalPort(): Promise<number | undefined>;
+  newSecret(): string;
+  presenter: FailurePresenter;
+  /** The driver of the server download's notification of one bridge's first `serve`. */
+  downloadProgress(): ServerDownloadProgress;
+}
+
 /** What the steps of every connect are made from. */
 export interface WiringPorts {
   settings: WiringSettings;
@@ -113,7 +130,13 @@ export interface WiringPorts {
     TunnelStepDependencies,
     'environment' | 'connectWait' | 'tunnelInvocation'
   >;
+  cliPath: CliWiring;
   logger: Logger;
+}
+
+/** What a rejection of the loopback says: Node's sockets and servers reject with an `Error`. */
+function detailOf(caught: unknown): string {
+  return (caught as Error).message;
 }
 
 /** Whatever the connect has found so far, required: a missing value means a step ran out of order, a defect. */
@@ -295,6 +318,58 @@ export function stepsOf(
     installCli: (input, ...rest) =>
       serverSteps(input).installCli(input, ...rest),
     startCli: (input, ...rest) => serverSteps(input).startCli(input, ...rest),
+    stopCli: (input, ...rest) => serverSteps(input).stopCli(input, ...rest),
+    connectControl: async port => {
+      try {
+        return await ports.cliPath.local.connect(port);
+      } catch (caught) {
+        ports.logger.warn(
+          `the CLI's control port refused a connection: ${detailOf(caught)}`,
+        );
+        return undefined;
+      }
+    },
+    openBridge: async (control, serveParams, events) => {
+      const port = await ports.cliPath.chooseLocalPort();
+      if (port === undefined) {
+        return undefined;
+      }
+      const progress = ports.cliPath.downloadProgress();
+      return openCliBridge(
+        control,
+        serveParams,
+        {
+          ...events,
+          onFirstServeLog: line => {
+            progress.onLine(line);
+          },
+          onFirstServeEnded: () => {
+            progress.end();
+          },
+        },
+        {
+          local: ports.cliPath.local,
+          port,
+          scheduler: ports.cliPath.scheduler,
+          firstServeMilliseconds: FIRST_SERVE_MILLISECONDS,
+          laterServeMilliseconds: connectWaitMilliseconds(
+            terminalWaitOf(
+              lookedUp(state).connectTimeout,
+              connectionSettings().connectTimeout,
+            ),
+          ),
+        },
+      ).catch((caught: unknown) => {
+        ports.logger.warn(
+          `the bridge could not listen on ${String(port)}: ${detailOf(caught)}`,
+        );
+        return undefined;
+      });
+    },
+    newSecret: () => ports.cliPath.newSecret(),
+    presentLateFailure: failed => {
+      void ports.cliPath.presenter.present(failed);
+    },
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
     ...openTunnelStep({

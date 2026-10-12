@@ -45,6 +45,7 @@ import {clientPlatformOf, nodeFacts, nodeMachineOf} from './node-machine.ts';
 import {textOf} from './pipeline/connect-settings.ts';
 import {type ConnectRegistration, registerConnect} from './register-connect.ts';
 import {
+  downloadProgressOf,
   failureDialogOf,
   licenceDialogOf,
   mitigationPickPortOf,
@@ -251,6 +252,7 @@ async function registerConnectOf(
         licenceDialog: licenceDialogOf(vscode),
         platformPick: platformPickPortOf(vscode, translate),
         mitigationPick: mitigationPickPortOf(vscode),
+        downloadProgress: downloadProgressOf(vscode),
       },
       {
         read: file => readFileSync(file, 'utf8'),

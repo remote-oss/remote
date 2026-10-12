@@ -5,6 +5,7 @@
  */
 
 import type {AcceptanceStore} from 'lib-server';
+import type {DownloadProgressPort} from './cli/server-download-progress.ts';
 import type {LoginTerminals} from 'lib-ssh';
 import {
   pickRemotePlatform,
@@ -42,6 +43,7 @@ export interface EditorAdapters {
   licenceDialog: LicenceDialogPort;
   platformPick: PlatformPickPort;
   mitigationPick: MitigationPickPort;
+  downloadProgress: DownloadProgressPort;
 }
 
 /** The editor's operations the surfaces' buttons and items run. */
@@ -141,6 +143,7 @@ export function editorSurfacesOf(
       translate,
       context.names,
     ),
+    downloadProgress: adapters.downloadProgress,
     revealLog: () => {
       operations.revealLog();
     },

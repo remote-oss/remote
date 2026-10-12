@@ -372,10 +372,15 @@ describe("the CLI's stop (card cli-04, themis on #458)", () => {
     return {outcome, channel};
   }
 
-  it('themis on #458: the stop checks the process is still the CLI, by its first two arguments, before it kills it', async () => {
+  /** The script text of a stop that ran. */
+  async function stopScript(): Promise<string> {
     const {channel} = await stopped(block('Ok', 'cli.stopped=yes'));
     const script = scriptRequests(channel)[0];
-    const text = script?.operation === 'runScript' ? script.request.script : '';
+    return script?.operation === 'runScript' ? script.request.script : '';
+  }
+
+  it('themis on #458: the stop checks the process is still the CLI, by its first two arguments, before it kills it', async () => {
+    const text = await stopScript();
     deepStrictEqual(
       text.indexOf('is_cli_process "$CLI_STOP_PID"') <
         text.indexOf('kill "$CLI_STOP_PID"'),
@@ -384,9 +389,7 @@ describe("the CLI's stop (card cli-04, themis on #458)", () => {
   });
 
   it('themis on #458: the check compares the first argument with the CLI file and the second with command-shell', async () => {
-    const {channel} = await stopped(block('Ok', 'cli.stopped=yes'));
-    const script = scriptRequests(channel)[0];
-    const text = script?.operation === 'runScript' ? script.request.script : '';
+    const text = await stopScript();
     deepStrictEqual(
       text.includes(
         '[ "$CLI_ARGUMENT_0" = "$CLI_FILE" ] && [ "$CLI_ARGUMENT_1" = command-shell ]',

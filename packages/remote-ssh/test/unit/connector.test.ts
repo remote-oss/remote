@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type {ConnectInput, ConnectPhase} from 'lib-authority';
 import type {TransferPhase} from 'lib-server';
+import type {ConnectOptions} from '../../src/pipeline/connect.ts';
 import {connectorOf, type SshConnector} from '../../src/pipeline/connector.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
@@ -15,6 +16,18 @@ import {
 /** The host's input for the fixture's connect: the same target and attempt, as the resolver host passes it. */
 const HOST_INPUT: ConnectInput = {...INPUT, target: INPUT.target};
 
+/** The connector's options from a connect's: all but the cancellation and the phase listener, which each connect has. */
+function connectorOptions(
+  options: ConnectOptions,
+): Omit<ConnectOptions, 'cancellation' | 'onPhase'> {
+  return {
+    maximumReconnectionAttempts: options.maximumReconnectionAttempts,
+    preconnectMilliseconds: options.preconnectMilliseconds,
+    logger: options.logger,
+    serve: options.serve,
+  };
+}
+
 /** A connector over the fixture's steps, with the recording, and a log the details reveal counts in. */
 function connectorFor(
   changes: Partial<ConnectSteps> = {},
@@ -25,13 +38,12 @@ function connectorFor(
   revealed: string[];
 } {
   const {recording, options} = setup();
-  const {maximumReconnectionAttempts, preconnectMilliseconds, logger} = options;
   const revealed: string[] = [];
   return {
     connector: connectorOf({
       stepsFor: () => steps(recording, changes),
       terminalMode,
-      options: {maximumReconnectionAttempts, preconnectMilliseconds, logger},
+      options: connectorOptions(options),
       revealLog: () => {
         revealed.push('log');
       },
@@ -298,8 +310,6 @@ describe('the connector over the connect pipeline', () => {
   /** The phases heard for a connect whose connection step reports that it waits for another window. */
   async function phasesHeardWhileWaiting(): Promise<ConnectPhase[]> {
     const {recording, options} = setup();
-    const {maximumReconnectionAttempts, preconnectMilliseconds, logger} =
-      options;
     const connector = connectorOf({
       stepsFor: onPhase =>
         steps(recording, {
@@ -309,7 +319,7 @@ describe('the connector over the connect pipeline', () => {
           },
         }),
       terminalMode: () => false,
-      options: {maximumReconnectionAttempts, preconnectMilliseconds, logger},
+      options: connectorOptions(options),
       revealLog: () => undefined,
     });
     const heard: ConnectPhase[] = [];
@@ -340,8 +350,6 @@ describe('the connector over the connect pipeline', () => {
 
   it('connect-14: each connect makes its own steps', async () => {
     const {recording, options} = setup();
-    const {maximumReconnectionAttempts, preconnectMilliseconds, logger} =
-      options;
     let made = 0;
     const connector = connectorOf({
       stepsFor: () => {
@@ -349,7 +357,7 @@ describe('the connector over the connect pipeline', () => {
         return steps(recording);
       },
       terminalMode: () => false,
-      options: {maximumReconnectionAttempts, preconnectMilliseconds, logger},
+      options: connectorOptions(options),
       revealLog: () => undefined,
     });
     await connector.connect(HOST_INPUT);

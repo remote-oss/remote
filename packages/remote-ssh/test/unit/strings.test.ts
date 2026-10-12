@@ -29,6 +29,7 @@ const FAILURE_TEXTS = [
   'Could not resolve hostname',
   'Downloading VS Code Server',
   'Downloading VS Code Server locally',
+  'Downloading VS Code Server...',
   'Error establishing tunnel ({0}).',
   'Failed to find a free local port: {0}',
   'Hostname contains invalid characters',

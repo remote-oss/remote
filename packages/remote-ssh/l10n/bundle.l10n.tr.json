@@ -16,6 +16,7 @@
   "Could not establish connection to \"{0}\": {1}": "Could not establish connection to \"{0}\": {1}",
   "Downloading VS Code Server": "Downloading VS Code Server",
   "Downloading VS Code Server locally": "Downloading VS Code Server locally",
+  "Downloading VS Code Server...": "Downloading VS Code Server...",
   "Initializing VS Code Server": "Initializing VS Code Server",
   "Installing VS Code Server": "Installing VS Code Server",
   "More Actions...": "More Actions...",

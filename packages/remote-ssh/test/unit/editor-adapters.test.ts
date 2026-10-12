@@ -4,6 +4,7 @@ import {FakeQuickPick, FakeWidget} from './editor-fakes.fixture.ts';
 import {platformPickOf} from '../../src/connect/platform-picker.ts';
 import {mitigationPickOf} from '../../src/surfaces/mitigation-picker.ts';
 import {
+  downloadProgressOf,
   failureDialogOf,
   licenceDialogOf,
   mitigationPickPortOf,
@@ -501,5 +502,96 @@ describe('promptEditorOf (the login questions, F-2305 and F-2306)', () => {
       promptEditorOf(fake.editor, template => `<${template}>`).translate('x'),
       '<x>',
     );
+  });
+});
+
+describe("the editor's server download notification", () => {
+  /** An editor whose progress notifications are recorded; `late` holds each task until the test runs it. */
+  function progressEditor(late = false) {
+    const events: string[] = [];
+    const tasks: Array<() => void> = [];
+    let done = 0;
+    const editor = {
+      ProgressLocation: {Notification: 15},
+      window: {
+        withProgress: (
+          options: vscode.ProgressOptions,
+          task: (
+            progress: vscode.Progress<{increment?: number}>,
+          ) => Thenable<void>,
+        ) => {
+          events.push(
+            `open ${JSON.stringify(options.location)} ${options.title ?? ''} ${String(options.cancellable)}`,
+          );
+          function start(): void {
+            void task({
+              report: value => events.push(`step ${String(value.increment)}`),
+            }).then(() => {
+              done += 1;
+            });
+          }
+          if (late) {
+            tasks.push(start);
+          } else {
+            start();
+          }
+          return Promise.resolve();
+        },
+      },
+    } as unknown as Pick<typeof vscode, 'window' | 'ProgressLocation'>;
+    return {editor, events, tasks, finished: () => done};
+  }
+
+  /** Lets the task's promise settle. */
+  async function settled(): Promise<void> {
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+  }
+
+  it('F-2103 5.0 step 6: the notification opens with its title and no cancel', () => {
+    const {editor, events} = progressEditor();
+    downloadProgressOf(editor).show('Downloading VS Code Server...');
+    deepStrictEqual(events, ['open 15 Downloading VS Code Server... false']);
+  });
+
+  it('F-2103 5.0 step 6: the bar moves by the difference to each new percentage', () => {
+    const {editor, events} = progressEditor();
+    const shown = downloadProgressOf(editor).show('S045');
+    shown.report(2);
+    shown.report(100);
+    deepStrictEqual(events.slice(1), ['step 2', 'step 98']);
+  });
+
+  it('F-2103 5.0 step 6: a lower percentage moves nothing', () => {
+    const {editor, events} = progressEditor();
+    const shown = downloadProgressOf(editor).show('S045');
+    shown.report(50);
+    shown.report(40);
+    deepStrictEqual(events.slice(1), ['step 50']);
+  });
+
+  it('F-2103 5.0 step 6: a percentage reported before the editor runs the task is shown when it does', () => {
+    const {editor, events, tasks} = progressEditor(true);
+    const shown = downloadProgressOf(editor).show('S045');
+    shown.report(30);
+    for (const start of tasks) {
+      start();
+    }
+    deepStrictEqual(events.slice(1), ['step 30']);
+  });
+
+  it('§6: closing it ends the notification', async () => {
+    const {editor, finished} = progressEditor();
+    downloadProgressOf(editor).show('S045').close();
+    await settled();
+    deepStrictEqual(finished(), 1);
+  });
+
+  it('§6: it stays until it is closed', async () => {
+    const {editor, finished} = progressEditor();
+    downloadProgressOf(editor).show('S045').report(100);
+    await settled();
+    deepStrictEqual(finished(), 0);
   });
 });

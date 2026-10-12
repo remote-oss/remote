@@ -20,6 +20,9 @@ const RUN_MARGIN_MILLISECONDS = 5 * 60 * 1000;
 const LONGEST_STEP_MILLISECONDS =
   (SERVER_BOUNDS.downloadSeconds + SERVER_BOUNDS.readySeconds) * 1000;
 
+/** The bound of the CLI's first `serve`, which downloads, unpacks and starts the server, as a direct install may take. */
+export const FIRST_SERVE_MILLISECONDS = LONGEST_STEP_MILLISECONDS;
+
 /**
  * The limits of the shared session's runs: a run's own deadline, never shorter than the host download and the
  * server's ready wait together; a caller's whole wait, one run more; and the largest input carried through the shell.

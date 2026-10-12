@@ -5,18 +5,23 @@
  */
 
 import type {
+  ByteStream,
+  CliControl,
+  CliInstallOutcome,
+  CliServeParams,
   GateOutcome,
   Plan,
   PlanFailure,
   ProbeOutcome,
   ProbedHost,
+  ServerLogLine,
   StartedServer,
   StartOutcome,
-  CliInstallOutcome,
   TransferOutcome,
   TransferPhase,
 } from 'lib-server';
-import type {Connected} from 'lib-authority';
+import type {Connected, Failed} from 'lib-authority';
+import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {TunnelPath} from 'lib-forwarding';
 import type {HostChannel, PlatformHint} from 'lib-host';
 import type {ConnectionNotice, FailureHint, SharedRecord} from 'lib-ssh';
@@ -132,9 +137,11 @@ export interface ConnectSteps {
     lease: ConnectionLease,
     cancellation: AbortSignal,
   ): Promise<ProbeOutcome>;
+  /** The install plan; `direct` plans without the CLI path, as its fallback does. */
   plan(
     input: ConnectInput,
     host: ProbedHost,
+    options?: {direct: boolean},
   ): {plan: Plan} | {failure: PlanFailure};
   /** Asks for the licence when the server needs it; the wait for the user's answer has no limit. */
   gate(input: ConnectInput, cancellation: AbortSignal): Promise<GateOutcome>;
@@ -171,6 +178,29 @@ export interface ConnectSteps {
     controlToken: string,
     cancellation: AbortSignal,
   ): Promise<StartOutcome>;
+  /** Ends the CLI `startCli` started, while that process is still the CLI. */
+  stopCli(
+    input: ConnectInput,
+    lease: ConnectionLease,
+    host: ProbedHost,
+    plan: Extract<Plan, {kind: 'cli'}>,
+    processId: number,
+  ): Promise<void>;
+  /** Connects to the CLI's control port through a local port the tunnel opened; nothing when it refused. */
+  connectControl(localPort: number): Promise<ByteStream | undefined>;
+  /** Opens the window's bridge over the authenticated control connection; nothing when no local port could be had. */
+  openBridge(
+    control: CliControl,
+    serveParams: CliServeParams,
+    events: {
+      onServeLog(line: ServerLogLine): void;
+      onControlEnded(listener: () => void): void;
+    },
+  ): Promise<CliBridge | undefined>;
+  /** A secret no earlier connect used: a control token, a server's connection token, or a token the CLI must refuse. */
+  newSecret(): string;
+  /** Shows the failure of a connect that had already given the window its connection. */
+  presentLateFailure(failed: Failed): void;
   /** Installs the default extensions on a server that was already running; a failure never fails the connect. */
   installExtensions(
     input: ConnectInput,

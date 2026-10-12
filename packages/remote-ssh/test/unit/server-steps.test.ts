@@ -269,6 +269,16 @@ describe('the server steps: plan, the CLI path', () => {
     );
   });
 
+  it("§6: the fallback's plan, asked for the direct install, never takes the CLI path", () => {
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
+      }),
+    );
+    const result = steps.plan(INPUT, HOST, {direct: true});
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
   it('brief §2 row 5: a server source under the terms keeps the CLI out too', () => {
     const {result} = planned(CLI_TEMPLATE, {
       override: {
@@ -344,7 +354,8 @@ describe("the server steps: the CLI's install and start", () => {
     );
   });
 
-  it('contracts S10: the CLI is started with the control token in its environment', async () => {
+  /** The scripts of a start with the control token `control-token-1`. */
+  async function startScripts() {
     const {steps, cliPlan} = cliSteps();
     const channel = channelAnswering(
       lines('Ok', 'cli.port=5432', 'cli.pid=88'),
@@ -357,26 +368,18 @@ describe("the server steps: the CLI's install and start", () => {
       'control-token-1',
       new AbortController().signal,
     );
-    deepStrictEqual(scriptsOf(channel)[0]?.environment, {
+    return scriptsOf(channel);
+  }
+
+  it('contracts S10: the CLI is started with the control token in its environment', async () => {
+    deepStrictEqual((await startScripts())[0]?.environment, {
       VSCODE_CLI_REQUIRE_TOKEN: 'control-token-1',
     });
   });
 
   it('contracts S10: the control token is in no script text', async () => {
-    const {steps, cliPlan} = cliSteps();
-    const channel = channelAnswering(
-      lines('Ok', 'cli.port=5432', 'cli.pid=88'),
-    );
-    await steps.startCli(
-      INPUT,
-      leaseOn(channel),
-      HOST,
-      cliPlan,
-      'control-token-1',
-      new AbortController().signal,
-    );
     deepStrictEqual(
-      scriptsOf(channel).some(request =>
+      (await startScripts()).some(request =>
         request.script.includes('control-token-1'),
       ),
       false,
@@ -412,6 +415,58 @@ describe("the server steps: the CLI's install and start", () => {
     deepStrictEqual(
       outcome.kind === 'started' ? outcome.server.endpoint : outcome,
       {kind: 'port', port: 5432},
+    );
+  });
+});
+
+describe("the server steps: the CLI's stop", () => {
+  const CLI_TEMPLATE =
+    'https://example.invalid/cli-${os}-${arch}-${version}.tar.gz';
+
+  /** Stops process 88 over a channel that answers `output`, with the log the steps wrote. */
+  async function stopped(output: readonly string[]) {
+    const sink = new MemorySink();
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    if (!('plan' in result) || result.plan.kind !== 'cli') {
+      throw new Error('the plan should take the CLI path');
+    }
+    const channel = channelAnswering(output);
+    await steps.stopCli(INPUT, leaseOn(channel), HOST, result.plan, 88);
+    return {
+      channel,
+      messages: sink.lines.map(line => line.message),
+    };
+  }
+
+  it("themis on #458: the stop names the CLI's process", async () => {
+    const {channel} = await stopped(lines('Ok', 'cli.stopped=yes'));
+    const [call] = channel.calls;
+    deepStrictEqual(
+      call?.operation === 'runScript' &&
+        call.request.script.includes("CLI_STOP_PID='88'"),
+      true,
+    );
+  });
+
+  it('themis on #458: a stop that ran logs nothing', async () => {
+    const {messages} = await stopped(lines('Ok', 'cli.stopped=no'));
+    deepStrictEqual(
+      messages.filter(message => message.includes('not stopped')),
+      [],
+    );
+  });
+
+  it('themis on #458: a stop that failed is logged with its kind', async () => {
+    const {messages} = await stopped([]);
+    deepStrictEqual(
+      messages.filter(message => message.startsWith('the CLI was not stopped')),
+      ['the CLI was not stopped: noResultBlock'],
     );
   });
 });

@@ -27,7 +27,7 @@ import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import type {ConnectSurfaces} from '../../src/connect-ports.ts';
 import type {ServerStepDependencies} from '../../src/pipeline/server-steps.ts';
 import type {ConnectionLease} from '../../src/pipeline/steps.ts';
-import {SILENT_PROMPTS} from './pipeline.fixture.ts';
+import {SILENT_PROGRESS, SILENT_PROMPTS} from './pipeline.fixture.ts';
 
 /** A product whose server is `fixture-server` at commit `abc123`. */
 export const PROFILE: ProductProfile = {
@@ -213,6 +213,7 @@ export function surfacesOf(
     licenceModal: modalAnswering('accept', []),
     acceptances: storeOf(),
     presenter: {present: () => Promise.resolve('handled')},
+    downloadProgress: SILENT_PROGRESS,
     revealLog,
   };
 }

@@ -76,7 +76,7 @@ function entriesOf(scriptFile: string, files: AdapterFiles): ScriptEntry[] {
 export function scriptedAdapters(
   scriptFile: string,
   recordFile: string,
-  real: Pick<EditorAdapters, 'terminals'>,
+  real: Pick<EditorAdapters, 'terminals' | 'downloadProgress'>,
   files: AdapterFiles,
 ): EditorAdapters & {unusedEntries(): number} {
   const entries = entriesOf(scriptFile, files);
@@ -129,6 +129,7 @@ export function scriptedAdapters(
       translate: template => template,
     },
     terminals: real.terminals,
+    downloadProgress: real.downloadProgress,
     failureDialog: {
       showError: (text, buttons) =>
         Promise.resolve(
