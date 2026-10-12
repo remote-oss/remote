@@ -77,7 +77,7 @@ One codec module per authority family. The transport never parses an authority s
 |---|---|---|---|
 | `decode` | the authority string after core split it at the first `+` (family, payload) | `DecodedTarget`: `family`, `target` (the family's own shape, below), `rawHostString` (the payload exactly as written) | `MalformedAuthority {family, payload, reason}`. The resolver host maps it to NotAvailable, not handled. Malformed forms wait for F-2501 Q1 |
 | `encode` | `family` and `target` | the authority string, in the form the family's spec fixes (F-2301 BR-4 for `ssh-remote`, F-0501 for containers) | `UnencodableTarget` (a programming error; never reaches a user) |
-| `label` | `DecodedTarget` | the host label used by the resource label formatter and the indicator (`workspaceSuffix`) | none |
+| `label` | `DecodedTarget` | the picker's text for a target, `user@host:port` (corrected 2026-10-12: the window's host label, which feeds `workspaceSuffix` and the indicator, is each extension's own pure function, for remote-ssh `hostLabel` per F-2502 BR-3; #171, `brief-remote-ssh-window-surfaces.md`) | none |
 
 Target shapes:
 
