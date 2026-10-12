@@ -29,6 +29,16 @@ const CONNECTION_FAILED_STATUS = 255;
 /** How much of the client's standard error is kept for a failure's detail, in characters. */
 const ERROR_TEXT_LIMIT = 2000;
 
+/** Whether a line of the client's standard error is a debug line of `-v`, which a failure's detail leaves out. */
+export function isDebugLine(line: string): boolean {
+  const body = line.startsWith('scp: ') ? line.slice(5) : line;
+  return (
+    body.startsWith('debug1:') ||
+    body.startsWith('debug2:') ||
+    body.startsWith('debug3:')
+  );
+}
+
 /** What every run of this channel shares: the target, the settings and the client programs. */
 export type RunBase = Omit<
   SshRequest,
@@ -202,13 +212,22 @@ export class SshHostChannel implements HostChannel {
         );
   }
 
-  /** Keeps the tail of the client's standard error; the returned function gives it as the end of a message. */
+  /** Keeps the error lines of the client's standard error, its debug lines left out; the returned function gives them as the end of a message. */
   private collectError(session: SshSession): () => string {
-    let kept = '';
-    session.onError(piece => {
-      kept = (kept + piece).slice(-ERROR_TEXT_LIMIT);
+    const kept: string[] = [];
+    const lines = new LineSplitter(line => {
+      if (line.trim() !== '' && !isDebugLine(line)) {
+        kept.push(line);
+      }
     });
-    return () => (kept.trim() === '' ? '' : `: ${kept.trim()}`);
+    session.onError(piece => {
+      lines.push(piece);
+    });
+    return () => {
+      lines.flush();
+      const text = kept.join('\n');
+      return text === '' ? '' : `: ${text.slice(-ERROR_TEXT_LIMIT)}`;
+    };
   }
 
   /** Sends the script, or the input, to the client's standard input and closes it. Errors show in the exit. */

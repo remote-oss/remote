@@ -10,14 +10,17 @@ import {
   type ScriptRequest,
 } from 'lib-host';
 import {
+  isDebugLine,
   LineSplitter,
   nodeLocalFiles,
   planScript,
   posixQuote,
+  type ProcessSpecification,
   SshHostChannel,
 } from '../../src/index.ts';
 import {
   type ClientScript,
+  FakeClientProcess,
   ScriptedSpawner,
   startError,
 } from './fake-client-process.ts';
@@ -243,7 +246,7 @@ describe('SSH host channel', () => {
           failure: {
             kind: 'channelClosed',
             detail:
-              'ssh could not keep the connection: debug1: ...\nConnection reset by peer',
+              'ssh could not keep the connection: Connection reset by peer',
           },
         },
       );
@@ -314,6 +317,31 @@ describe('SSH host channel', () => {
       deepStrictEqual(
         [outcome.kind, lines, spawner.started[0]?.killed],
         ['failed', ['first'], true],
+      );
+    });
+
+    it('S10: a cancellation that lands before the run is watched is cancelled', async () => {
+      const controller = new AbortController();
+      const started: FakeClientProcess[] = [];
+      function spawner(specification: ProcessSpecification) {
+        const fake = new FakeClientProcess(specification);
+        started.push(fake);
+        controller.abort();
+        return Promise.resolve(fake);
+      }
+      const outcome = await new SshHostChannel({
+        ...channelBase(),
+        spawner,
+      }).runScript(
+        {...request(), cancellation: controller.signal},
+        () => undefined,
+      );
+      deepStrictEqual(
+        [
+          outcome.kind === 'failed' ? outcome.failure : outcome,
+          started[0]?.killed,
+        ],
+        [{kind: 'cancelled', detail: 'cancelled by the caller'}, true],
       );
     });
 
@@ -450,6 +478,114 @@ describe('SSH host channel', () => {
       );
     });
 
+    it('#402: a failed copy keeps its error lines when the debug lines would push them out', async () => {
+      deepStrictEqual(
+        await copyBy(process => {
+          process.error(
+            `${Array.from({length: 70}, () => `debug1: ${'x'.repeat(32)}`).join('\n')}\n`,
+          );
+          process.error('scp: dest open "/x/f": No such file or directory\n');
+          process.error(
+            'Transferred: sent 1, received 2 bytes, in 0.1 seconds\n',
+          );
+          process.exit(1);
+        }),
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'copyFailed',
+            detail:
+              'scp failed: scp: dest open "/x/f": No such file or directory\nTransferred: sent 1, received 2 bytes, in 0.1 seconds',
+          },
+        },
+      );
+    });
+
+    it('#402: a debug line of the client itself is left out of the detail', async () => {
+      deepStrictEqual(
+        await copyBy(process => {
+          process.error(
+            'scp: debug1: stat remote: No such file or directory\nscp: failed to upload file f to /x/f\n',
+          );
+          process.exit(1);
+        }),
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'copyFailed',
+            detail: 'scp failed: scp: failed to upload file f to /x/f',
+          },
+        },
+      );
+    });
+
+    it('#402: an error line split over pieces of the error arrives whole', async () => {
+      deepStrictEqual(
+        await copyBy(process => {
+          process.error('scp: dest op');
+          process.error('en "/x/f": No such file\n');
+          process.exit(1);
+        }),
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'copyFailed',
+            detail: 'scp failed: scp: dest open "/x/f": No such file',
+          },
+        },
+      );
+    });
+
+    it('#402: a last error line without a line end is kept', async () => {
+      deepStrictEqual(
+        await copyBy(process => {
+          process.error('scp: /remote: Permission denied');
+          process.exit(1);
+        }),
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'copyFailed',
+            detail: 'scp failed: scp: /remote: Permission denied',
+          },
+        },
+      );
+    });
+
+    it('#402: a copy whose error holds debug lines only keeps no detail', async () => {
+      deepStrictEqual(
+        await copyBy(process => {
+          process.error('debug1: x\n');
+          process.exit(1);
+        }),
+        {
+          kind: 'failed',
+          failure: {kind: 'copyFailed', detail: 'scp failed'},
+        },
+      );
+    });
+
+    it('S10: the detail keeps the last 2000 characters of the kept error lines', async () => {
+      const lines: string[] = [];
+      for (let index = 0; index < 30; index += 1) {
+        lines.push(`${String(index).padStart(2, '0')}: ${'y'.repeat(96)}`);
+      }
+      const joined = lines.join('\n');
+      deepStrictEqual(
+        await copyBy(process => {
+          process.error(`${joined}\n`);
+          process.exit(1);
+        }),
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'copyFailed',
+            detail: `scp failed: ${joined.slice(-2000)}`,
+          },
+        },
+      );
+    });
+
     it('maps status 255 to channelClosed', async () => {
       deepStrictEqual(
         await copyBy(process => {
@@ -504,6 +640,32 @@ describe('LineSplitter', () => {
     splitter.push('a\n');
     splitter.flush();
     deepStrictEqual(lines, ['a']);
+  });
+});
+
+describe('isDebugLine', () => {
+  it('#402: a line that starts with debug1: is one', () => {
+    strictEqual(isDebugLine('debug1: a'), true);
+  });
+
+  it('#402: a line that starts with debug2: is one', () => {
+    strictEqual(isDebugLine('debug2: a'), true);
+  });
+
+  it('#402: a line that starts with debug3: is one', () => {
+    strictEqual(isDebugLine('debug3: a'), true);
+  });
+
+  it('#402: a line that starts with scp: debug1: is one', () => {
+    strictEqual(isDebugLine('scp: debug1: a'), true);
+  });
+
+  it('#402: a line that says scp: dest open is not one', () => {
+    strictEqual(isDebugLine('scp: dest open'), false);
+  });
+
+  it('#402: a line that says Host key verification failed. is not one', () => {
+    strictEqual(isDebugLine('Host key verification failed.'), false);
   });
 });
 
