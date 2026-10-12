@@ -220,7 +220,7 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
         ]);
       });
 
-      it("F-2102: a run's environment reaches the script as written", async () => {
+      it("contracts H1: #443, a run's environment reaches the script as written", async () => {
         const lines = await inSession(
           [],
           async session =>
@@ -233,7 +233,7 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
         deepStrictEqual(lines, ["a!b'c"]);
       });
 
-      it('F-2102: a text input of 70 000 random characters arrives byte for byte', async () => {
+      it('contracts H1: #443, a text input of 70 000 random characters arrives byte for byte', async () => {
         const text = randomBytes(TEXT_BYTES)
           .toString('base64')
           .slice(0, TEXT_BYTES);

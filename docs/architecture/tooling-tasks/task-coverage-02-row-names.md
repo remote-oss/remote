@@ -120,6 +120,15 @@ Also rename that file's `describe` title `F-2403 the download with the tool …`
 |---|---|---|
 | 49 | `F-2601 5.0: the window is one of the failing connects` | `contracts harness:` (it checks the launch, not the product) |
 
+**`tests/acceptance/server/login-shells.test.ts`** (landed after the first mapping; daedalus on #464)
+
+| Line | Today's name (start) | New prefix |
+|---|---|---|
+| 223 | `F-2102: a run's environment reaches the script as written` | `contracts H1: #443, ` |
+| 236 | `F-2102: a text input of 70 000 random characters arrives byte for byte` | `contracts H1: #443, ` |
+
+Both keep their text after the prefix; the full names are `contracts H1: #443, a run's environment reaches the script as written` and `contracts H1: #443, a text input of 70 000 random characters arrives byte for byte`. They check H1's `runScript` contract (environment additions, and a text input sent as UTF-8) over the shared session, on each login shell of #443, so neither proves an F-2102 AC.
+
 ## 3. Test table
 
 No new rows. The gates:
