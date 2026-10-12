@@ -17,6 +17,7 @@ import {
   type ConnectOptions,
   type PhaseEvent,
 } from './connect.ts';
+import {failedWith} from './failure.ts';
 import type {ConnectInput, ConnectSteps} from './steps.ts';
 
 /** What the connector is made of. */
@@ -125,6 +126,22 @@ export function connectorOf(dependencies: ConnectorDependencies): Connector {
         });
         if (!isConnection(result)) {
           return result;
+        }
+        if (controller.signal.aborted) {
+          // The window was torn down while the server started or the tunnel opened: give the connection back.
+          result.release();
+          return failedWith(
+            {kind: 'cancelled'},
+            {
+              attempt: input.attempt,
+              isReconnection: input.isReconnection,
+              maximumReconnectionAttempts:
+                dependencies.options.maximumReconnectionAttempts,
+              userAlreadyNotified: false,
+              hints: [],
+              diagnostics: [],
+            },
+          );
         }
         const stop = result.onTransport(event => {
           // A connection given back may still deliver an event already under way; only the held one counts.

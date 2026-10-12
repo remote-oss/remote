@@ -151,6 +151,24 @@ describe('the connector over the connect pipeline', () => {
     deepStrictEqual(recording.releases, 1);
   });
 
+  it('contracts §3.2: a connection that completes after a cancel is given back, not held', async () => {
+    const window: {connector?: Connector} = {};
+    const {connector, recording} = connectorFor({
+      rememberPlatform: () => {
+        // The window is torn down after the tunnel opened, before the connect returns.
+        window.connector?.cancel();
+        return Promise.resolve();
+      },
+    });
+    window.connector = connector;
+    const result = await connector.connect(HOST_INPUT);
+    connector.cancel();
+    deepStrictEqual(
+      ['kind' in result ? result.kind : result, recording.releases],
+      ['cancelled', 1],
+    );
+  });
+
   it('F-2505: a connect after one that worked releases the first', async () => {
     const {connector, recording} = connectorFor();
     await connector.connect(HOST_INPUT);
