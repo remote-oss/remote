@@ -131,6 +131,12 @@ pre-connection script's own dialog (F-2108). (Area A's review, accepted by the l
 Not in this contract: `resolveExecServer` for nested authorities (F-1302). It waits for the containers room's answer
 (lead, 2026-10-06).
 
+For `ssh-remote` the connector's transport events come from the connection lease (ruled 2026-10-12, card connect-13):
+lib-ssh's `transportLost` (the session to the host ended while the connection server lives; every window hears it)
+is `transportLost`, after which core resolves again; lib-helper's `helperGone` (the connection server itself ended,
+nothing of the lease comes back) is `transportClosed`, which the tracker accepts from `connected` or `transportLost`.
+The pipeline's `Connection` exposes them through `onTransport`, since its lease is otherwise hidden after `connect`.
+
 The host's ports are part of the package's public surface (ruled 2026-10-09, #192): `ResolverEditor`, `ProgressPort` with `ProgressRequest` (title, `cancellable`, `onCancel`, details), `Connector` (`connect`, `cancel`, `revealDetails`, `onPhase`, `onTransportLost`, `onTransportClosed`), `FailurePresenter`, `Readiness` (`guard`, `resolversGranted`), and the results `Registration` (`registered` with a `ResolverHandle`, `standing`, `proposalMissing`); the extensions write the adapters and the test fakes use the same types.
 
 lib-authority declares the connector contract types `Connected` and `Failed` (ruled 2026-10-08; `Failed.kind` is a
