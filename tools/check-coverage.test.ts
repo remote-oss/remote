@@ -311,7 +311,27 @@ describe('check-coverage', () => {
       );
       tagged('F-2409.AC-1\ttodo\t');
       deepStrictEqual(problems(), [
-        'tests/acceptance/server/x.test.ts: row "F-2409.AC-" names F-2409 without an AC',
+        'tests/acceptance/server/x.test.ts: row "F-2409.AC-${" names F-2409 without an AC',
+      ]);
+    });
+
+    it('triton on #475: a template name whose placeholder starts on the next line is read to it', () => {
+      workspace.write(
+        'packages/remote-x/test/unit/x.test.ts',
+        'it(`F-2601 AC-12: case ${\nname}`, () => {});',
+      );
+      tagged('F-2601.AC-12\tunit\t');
+      deepStrictEqual(problems(), []);
+    });
+
+    it('triton on #475: a template name with a placeholder right after a digit cites nothing', () => {
+      workspace.write(
+        'packages/remote-x/test/unit/x.test.ts',
+        'it(`F-2601 AC-1${n}: x`, () => {});',
+      );
+      tagged('F-2601.AC-1\tunit\t');
+      deepStrictEqual(problems(), [
+        `${COVERAGE_FILE}:00002: F-2601.AC-1 is tagged unit and no row cites it`,
       ]);
     });
 
