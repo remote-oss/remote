@@ -133,7 +133,7 @@ describe('the step that opens the window tunnel', () => {
 
   it('F-2104 7.E1: no free local port fails without a reason', async () => {
     const result = await stepWith({port: undefined}).open();
-    deepStrictEqual(result, {kind: 'failed', failure: {kind: 'channelClosed'}});
+    deepStrictEqual(result, {kind: 'failed', failure: {kind: 'unknown'}});
   });
 
   it('F-2104 BR-10: a tunnel that never becomes ready fails without a reason', async () => {
@@ -145,7 +145,7 @@ describe('the step that opens the window tunnel', () => {
     }
     deepStrictEqual(await pending, {
       kind: 'failed',
-      failure: {kind: 'channelClosed'},
+      failure: {kind: 'unknown'},
     });
   });
 

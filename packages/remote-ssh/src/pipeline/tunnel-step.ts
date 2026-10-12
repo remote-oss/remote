@@ -1,7 +1,7 @@
 /**
  * @fileoverview The step that opens the window's tunnel to the server: through the connection's SOCKS relay, the path
- * the default settings select. The socket and second-ssh paths are not built yet; they fail without a reason, and the
- * log names the path.
+ * the default settings select. The socket and second-ssh paths are not built yet: they fail as a tunnel that did not
+ * open does, and the log names the path.
  */
 
 import type {Scheduler} from 'lib-helper';
@@ -15,7 +15,7 @@ import {
   type WaitLimits,
 } from 'lib-forwarding';
 import type {Logger} from 'lib-log';
-import type {ConnectSteps, StepFailure} from './steps.ts';
+import type {ConnectSteps} from './steps.ts';
 
 /** What the window gets besides the tunnel: the variables of its extension host and its environment tunnels. */
 interface WindowEnvironment {
@@ -39,12 +39,14 @@ export interface TunnelStepDependencies {
   logger: Logger;
 }
 
-/** A failure that names no reason of its own: the dialog names only the host. */
-function failedPlainly(
-  kind: StepFailure['kind'],
-): Awaited<ReturnType<ConnectSteps['openTunnel']>> {
-  return {kind: 'failed', failure: {kind}};
-}
+/**
+ * The failure of a tunnel that did not open, on any path: no reason of its own, so the dialog names only the host.
+ * The tunnel's own text (S067) comes with the reason that carries values.
+ */
+const NOT_OPENED: Awaited<ReturnType<ConnectSteps['openTunnel']>> = {
+  kind: 'failed',
+  failure: {kind: 'unknown'},
+};
 
 /** The step over the connection's SOCKS relay. */
 export function openTunnelStep(
@@ -57,11 +59,11 @@ export function openTunnelStep(
       dependencies.logger.warn(
         `the window tunnel's ${path} path is not built yet`,
       );
-      return failedPlainly('unknown');
+      return NOT_OPENED;
     }
     const localPort = await dependencies.chooseLocalPort();
     if (localPort === undefined) {
-      return failedPlainly('channelClosed');
+      return NOT_OPENED;
     }
     const dialer = dependencies.dialerFor(lease.socksPort);
     const outcome = await openRelayTunnel({
@@ -73,7 +75,7 @@ export function openTunnelStep(
       limits: dependencies.limits,
     });
     if (outcome.kind !== 'open') {
-      return failedPlainly('channelClosed');
+      return NOT_OPENED;
     }
     const factory = factoryFor({
       dialer,
