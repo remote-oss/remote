@@ -13,12 +13,11 @@ const MILLISECONDS_PER_SECOND = 1000;
 
 /** What decides the length of the wait. */
 export interface ConnectWaitSettings {
-  /** The connect timeout setting, in seconds; 0 means the client sets no limit of its own. */
+  /** The connect timeout in seconds; 0 means the client sets no limit of its own. */
   connectTimeoutSeconds: number;
-  /**
-   * The whole wait when the connect timeout is 0, in seconds: the bound on an otherwise unbounded wait. The client
-   * has no timeout of its own then, so no margin is added to it.
-   */
+  /** Whether the timeout is the host's own `ConnectTimeout` (from `ssh -G`) rather than the setting. */
+  fromHost: boolean;
+  /** The whole wait for a host's `ConnectTimeout 0`, in seconds: the bound on an otherwise unbounded wait, with no margin added. */
   unboundedWaitSeconds: number;
 }
 
@@ -37,10 +36,10 @@ export class ConnectWait {
     onTimeout: () => void,
   ) {
     this.durationMilliseconds =
-      settings.connectTimeoutSeconds > 0
-        ? settings.connectTimeoutSeconds * MILLISECONDS_PER_SECOND +
-          GRACE_MILLISECONDS
-        : settings.unboundedWaitSeconds * MILLISECONDS_PER_SECOND;
+      settings.connectTimeoutSeconds === 0 && settings.fromHost
+        ? settings.unboundedWaitSeconds * MILLISECONDS_PER_SECOND
+        : settings.connectTimeoutSeconds * MILLISECONDS_PER_SECOND +
+          GRACE_MILLISECONDS;
     this.scheduler = scheduler;
     this.onTimeout = onTimeout;
   }

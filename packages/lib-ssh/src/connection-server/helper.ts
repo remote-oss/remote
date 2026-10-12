@@ -97,6 +97,7 @@ export async function runConnectionHelper(
         connectTimeoutSeconds: Number(
           request.effective.connectTimeout ?? request.settings.connectTimeout,
         ),
+        fromHost: request.effective.connectTimeout !== undefined,
         unboundedWaitSeconds: options.unboundedWaitSeconds,
       },
       scheduler: environment.scheduler,

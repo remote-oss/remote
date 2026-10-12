@@ -2,7 +2,11 @@ import {deepStrictEqual} from 'node:assert';
 import {ConnectWait} from '../../src/index.ts';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 
-const POLICY = {connectTimeoutSeconds: 10, unboundedWaitSeconds: 120};
+const POLICY = {
+  connectTimeoutSeconds: 10,
+  fromHost: false,
+  unboundedWaitSeconds: 120,
+};
 
 describe('connect wait', () => {
   let clock: FakeClock;
@@ -28,8 +32,60 @@ describe('connect wait', () => {
   });
 
   it('F-2105: with ConnectTimeout 0 the wait is exactly the unbounded limit, with no margin', () => {
-    waitFor({connectTimeoutSeconds: 0, unboundedWaitSeconds: 120}).start();
+    waitFor({
+      connectTimeoutSeconds: 0,
+      fromHost: true,
+      unboundedWaitSeconds: 120,
+    }).start();
     clock.advance(119999);
+    const before = timeouts;
+    clock.advance(1);
+    deepStrictEqual([before, timeouts], [0, 1]);
+  });
+
+  it('F-2105 BR-4, AC-9: the setting 0 waits the margin alone', () => {
+    waitFor({
+      connectTimeoutSeconds: 0,
+      fromHost: false,
+      unboundedWaitSeconds: 600,
+    }).start();
+    clock.advance(1999);
+    const before = timeouts;
+    clock.advance(1);
+    deepStrictEqual([before, timeouts], [0, 1]);
+  });
+
+  it('F-2105 BR-4, AC-8: a host 0 waits the whole ceiling', () => {
+    waitFor({
+      connectTimeoutSeconds: 0,
+      fromHost: true,
+      unboundedWaitSeconds: 600,
+    }).start();
+    clock.advance(599_999);
+    const before = timeouts;
+    clock.advance(1);
+    deepStrictEqual([before, timeouts], [0, 1]);
+  });
+
+  it('F-2105 BR-3: the setting 15 waits fifteen seconds plus the margin', () => {
+    waitFor({
+      connectTimeoutSeconds: 15,
+      fromHost: false,
+      unboundedWaitSeconds: 600,
+    }).start();
+    clock.advance(16_999);
+    const before = timeouts;
+    clock.advance(1);
+    deepStrictEqual([before, timeouts], [0, 1]);
+  });
+
+  it('F-2105 BR-1: a host timeout of three waits three seconds plus the margin', () => {
+    waitFor({
+      connectTimeoutSeconds: 3,
+      fromHost: true,
+      unboundedWaitSeconds: 600,
+    }).start();
+    clock.advance(4_999);
     const before = timeouts;
     clock.advance(1);
     deepStrictEqual([before, timeouts], [0, 1]);
