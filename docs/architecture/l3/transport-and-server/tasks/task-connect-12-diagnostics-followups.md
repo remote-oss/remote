@@ -36,8 +36,11 @@ prompts: Array<{text: string; answer?: string}>;   // no `answer` field: the pro
   (`[ssh] `, `[remote] `, `[server] `) and the token masked. An empty part (two breaks in a row, or a break at the
   end) is dropped; an entry that is only breaks gives no line. For `sshLines` at level `debug`, the split comes first
   and `logLinesOf` from `lib-ssh` filters the parts, so a `debug1` part inside a multi-line entry is dropped like any
-  other `debug1` line. At level `trace` all parts are kept. No other line of the log changes: settings, prompts,
-  `failure` and summary texts are written as today.
+  other `debug1` line. At level `trace` all parts are kept.
+- **One-line texts (amended 2026-10-12, athena's optional point, F-2003 BR-4).** In the `failure` text and in each
+  summary issue's `message`, every line break (`\r\n`, `\n`, `\r`) becomes one space, after the token is masked, so
+  the entry stays one line with one time and prefix. Breaks are not collapsed: two breaks give two spaces. No other
+  line of the log changes: settings and prompts are written as today.
 
 ## 3. Test table
 
@@ -59,7 +62,10 @@ Base record: connect-04's R0 with the named fields overridden. One assertion per
 | F-2003.BR-4 (O5) | `remoteOutput ['token ab12-cd34\nagain ab12-cd34']`, token `ab12-cd34` | `[remote] token aa11-aa11`, `[remote] again aa11-aa11` |
 | F-2003.BR-4 (O5) | level `debug`, `sshLines ['real error\ndebug1: noise']` | `[ssh] real error` only |
 | F-2003.BR-4 (O5) | level `trace`, `sshLines ['real error\ndebug1: noise']` | `[ssh] real error`, `[ssh] debug1: noise` |
-| F-2003.BR-4 (O5) | `failure 'first\nsecond'` | `Resolution failed: first\nsecond`, written as today (O5 covers the three output lists only) |
+| F-2003.BR-4 | `failure 'first\nsecond\r\nthird\rfourth'` | `Resolution failed: first second third fourth` |
+| F-2003.BR-4 | `failure 'a\n\nb'` | `Resolution failed: a  b` (two spaces) |
+| F-2003.BR-4 | `failure 'x ab12-cd34\ny'`, token `ab12-cd34` | `Resolution failed: x aa11-aa11 y` |
+| F-2003.BR-4 | summary `{kind 'issues', issues [{status 'E', message 'a\rb'}]}` | `[E]: a b` |
 
 ## 4. Rule for the worker
 
