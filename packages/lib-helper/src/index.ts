@@ -57,7 +57,11 @@ export {
   type RequestOutcome,
   type Timer,
 } from './client/lease.ts';
-export {nodeClientEnvironment, nodeTimer} from './client/node-environment.ts';
+export {
+  type ClientWaits,
+  nodeClientEnvironment,
+  nodeTimer,
+} from './client/node-environment.ts';
 export {
   type HelperParameters,
   type SpawnSpecification,

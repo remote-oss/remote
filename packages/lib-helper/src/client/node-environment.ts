@@ -39,8 +39,17 @@ export function nodeTimer(
   };
 }
 
-/** The client environment of this process, with `runtime` the editor's executable. */
-export function nodeClientEnvironment(runtime: string): ClientEnvironment {
+/** The waits of a client, which the consumer names: they are its policy, not this library's. */
+export type ClientWaits = Pick<
+  ClientEnvironment,
+  'helloLimitMilliseconds' | 'startLimitMilliseconds' | 'retryMilliseconds'
+>;
+
+/** The client environment of this process, with `runtime` the editor's executable and the consumer's `waits`. */
+export function nodeClientEnvironment(
+  runtime: string,
+  waits: ClientWaits,
+): ClientEnvironment {
   return {
     files: nodeFilePort,
     endpoints: nodeEndpointPort(),
@@ -52,8 +61,6 @@ export function nodeClientEnvironment(runtime: string): ClientEnvironment {
     endpointFolder: runtimeFolder(process.platform, process.env, tmpdir()),
     processId: process.pid,
     parentEnvironment: process.env,
-    helloLimitMilliseconds: 2000,
-    startLimitMilliseconds: 10000,
-    retryMilliseconds: 100,
+    ...waits,
   };
 }

@@ -18,6 +18,13 @@ import {
   inheritedEnvironment,
 } from '../../src/runtime/helper-main.ts';
 
+/** The client's waits: a hello, a started helper's listening, the pause between attempts. */
+const WAITS = {
+  helloLimitMilliseconds: 2000,
+  startLimitMilliseconds: 10000,
+  retryMilliseconds: 100,
+};
+
 const SCRIPT = path.join(
   import.meta.dirname,
   '..',
@@ -46,7 +53,7 @@ describe('a helper process', function () {
 
   it('starts once, serves two leases, and ends by its grace after the last release', async () => {
     const environment = {
-      ...nodeClientEnvironment(process.execPath),
+      ...nodeClientEnvironment(process.execPath, WAITS),
       endpointFolder: folder,
     };
     const request = {
