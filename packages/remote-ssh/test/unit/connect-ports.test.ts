@@ -29,7 +29,7 @@ import {
   SSH_PROGRAM,
   spawnerOf,
 } from './locate.fixture.ts';
-import {INPUT, TERMS} from './pipeline.fixture.ts';
+import {INPUT, SILENT_PROMPTS, TERMS} from './pipeline.fixture.ts';
 import {modalAnswering, PROFILE, storeOf} from './server-steps.fixture.ts';
 
 /** The settings the user wrote, by id, at the user level. */
@@ -79,12 +79,7 @@ function assemblyInputs(
   const surfaces: ConnectSurfaces = {
     settings: settingHostOf(written),
     translate: template => `<${template}>`,
-    prompts: {
-      pick: () => Promise.resolve(undefined),
-      maskedInput: () => Promise.resolve(undefined),
-      showWaiting: () => ({dispose: () => undefined}),
-      translate: template => template,
-    },
+    prompts: SILENT_PROMPTS,
     pickPlatform: () => Promise.resolve(undefined),
     writePlatform: () => Promise.resolve(),
     licenceModal: modalAnswering('accept', []),

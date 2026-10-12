@@ -9,6 +9,7 @@ import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {Plan, ProbedHost, StartOutcome, TransferOutcome} from 'lib-server';
 import type {ConnectionNotice, SharedRecord} from 'lib-ssh';
 import type {ConnectOptions, PhaseEvent} from '../../src/pipeline/connect.ts';
+import type {PromptEditor} from '../../src/surfaces/prompt-surface.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -260,4 +261,12 @@ export function tunnelFails(): ReturnType<ConnectSteps['openTunnel']> {
 export const CHANNEL_CLOSED: ChannelFailure = {
   kind: 'channelClosed',
   detail: 'gone',
+};
+
+/** A prompt editor that shows nothing: every question is dismissed at once. */
+export const SILENT_PROMPTS: PromptEditor = {
+  pick: () => Promise.resolve(undefined),
+  maskedInput: () => Promise.resolve(undefined),
+  showWaiting: () => ({dispose: () => undefined}),
+  translate: template => template,
 };
