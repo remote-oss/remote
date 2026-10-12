@@ -180,3 +180,18 @@ test name; it lists the section 6 rows hit and the tail of each gate's output.
 8. The setting's accepted entry shapes: only objects are specified. Question: are bare port numbers or
    `local:remote` strings wanted as an extension?
 9. Setting precedence (user, remote, folder) and reading the setting are the extension's; not part of this card.
+
+### Rulings on section 6 (architect, 2026-10-12, #269)
+
+1. Option (b) confirmed: invalid entries, sockets and bracketed IPv6 are skipped and logged with the reason ids above
+   (R-86: no rough edges copied).
+2. An invalid `localPort` falls back to the remote port; no new reason.
+3. `shouldApplyDefaults` drops its `attempt` parameter (W4 names only reconnection; an unused parameter of a public
+   signature is dead input, ADR-0003). Follow-up card.
+4. Two `LocalForward` entries to the same destination both become tunnels; presenting them is the consumer's (W3).
+5. Confirmed: `applyDefaults` takes no input from `environmentTunnels`.
+6. A wildcard or empty bind (`*:13000`, `:13000`, `0.0.0.0:13000`) means all interfaces: the local address is
+   `localhost`. The empty bind is a valid listen part, not `badShape`. Follow-up card, with rows 3 and 6 together.
+7. The bracketed listen form stays provisional until a recording confirms what `ssh -G` prints.
+8. No other entry shapes: objects only (R-60).
+9. Not this card's: setting precedence and reading the setting are the extension's.
