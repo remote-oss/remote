@@ -51,10 +51,17 @@ if [ -n "$LAYER1_DIR" ] && [ -n "${SHELL:-}" ] && [ -x "$SHELL" ]; then
     "$SHELL" -l <"$LAYER1_DIR/in" >"$LAYER1_DIR/out" 2>/dev/null &
   fi
   LAYER1_PID=$!
-  (sleep "$LAYER1_SECONDS"; kill -9 -"$LAYER1_PID" "$LAYER1_PID" 2>/dev/null) >/dev/null 2>&1 </dev/null &
+  (
+    sleep "$LAYER1_SECONDS" &
+    LAYER1_SLEEP=$!
+    trap 'kill -9 "$LAYER1_SLEEP" 2>/dev/null; exit 0' TERM
+    wait "$LAYER1_SLEEP"
+    kill -9 -"$LAYER1_PID" "$LAYER1_PID" 2>/dev/null
+  ) >/dev/null 2>&1 </dev/null &
   LAYER1_WATCH=$!
   wait "$LAYER1_PID" 2>/dev/null
-  kill -9 "$LAYER1_WATCH" 2>/dev/null
+  kill -TERM "$LAYER1_WATCH" 2>/dev/null
+  wait "$LAYER1_WATCH" 2>/dev/null
   kill -9 -"$LAYER1_PID" 2>/dev/null
   eval "$(sed -n '/^LAYER1-START$/,$p' "$LAYER1_DIR/out" | sed 1d)"
 fi
@@ -72,10 +79,12 @@ Why each part (each was measured, and each first attempt without it failed):
 - **`exec sh -c "echo LAYER1-START; export -p"`** is parsed by every login shell alike (double quotes, no `$`). `sh`
   prints the environment the login shell built, in POSIX's re-readable form. A value with `'`, a newline and `$x`
   round-tripped. Everything before the marker line (the motd, a profile's `echo`) is dropped.
-- **The bound.** A watchdog kills the login shell, and with `setsid`, its whole process group, after
-  `LAYER1_SECONDS`. Measured: a `.bash_profile` of `sleep 30` held the session 3.1 s with a bound of 3, and no
-  `sleep` was left on the host. The watchdog's own output goes away from the session's, or `ssh` would wait for it.
-  When the bound fires, layer 1 is empty and the session goes on.
+- **The bound.** A watchdog subshell owns its own `sleep` and kills the login shell, and with `setsid` its whole
+  process group, after `LAYER1_SECONDS`. When the login shell ends first, the watchdog gets `TERM` and kills its
+  `sleep`, so no process outlives the bootstrap. Measured: a `.bash_profile` of `sleep 30` held the session 3.1 s with
+  a bound of 3, and `ps` showed no `sleep` during or after the session. (A first version killed only the watchdog,
+  which left its `sleep` running under init for the whole bound.) The watchdog's output goes away from the session's,
+  or `ssh` would wait for it. When the bound fires, layer 1 is empty and the session goes on.
 - A profile that exits, fails or is killed loses only its own variables. The session always reaches `exec sh`.
 
 ### 2.2 `sessionStart`
@@ -162,7 +171,8 @@ Bound and failure rows:
 | Cite | Login shell, startup file | Expected |
 |---|---|---|
 | #443 | bash, `.bash_profile` `sleep 30` | both scripts run, the first within 5 s + 2 s of the session's start |
-| #443 | the same | 3 s after the session ends, `ps -o args` on the host shows no `sleep 30` |
+| #443 | the same | right after the session ends, `ps -o args` on the host shows no `sleep` (neither the profile's nor the watchdog's) |
+| #443 | zsh, `.zprofile`, a 5 s bound | while the first script runs, `ps -o args` on the host shows no `sleep` (the watchdog is gone once the login shell ended) |
 | #443 | dash, `.profile` `read x; exit 3` | both scripts run, and `$LAYER1` is empty |
 
 **Before the fix.** Run the "two scripts" rows with `remoteProgram` absent and paste the counts into the PR. tcsh, csh
