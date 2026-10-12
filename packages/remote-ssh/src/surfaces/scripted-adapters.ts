@@ -4,7 +4,9 @@
  * the only file that reads it.
  */
 
+import type {ProgressPort} from 'lib-authority';
 import type {EditorAdapters} from '../editor-surfaces.ts';
+import type {ChannelPort} from '../log-channel.ts';
 import type {MitigationAction} from './mitigation-picker.ts';
 import {ownText} from './own-strings.ts';
 
@@ -12,6 +14,7 @@ import {ownText} from './own-strings.ts';
 const SWITCH = 'REMOTE_OSS_ACCEPTANCE';
 const SCRIPT = 'REMOTE_OSS_ACCEPTANCE_SCRIPT';
 const RECORD = 'REMOTE_OSS_ACCEPTANCE_RECORD';
+const LOG_FILE_VARIABLE = 'REMOTE_OSS_ACCEPTANCE_LOG';
 
 /** One expected question and its answer, in the order the test expects them. */
 export type ScriptEntry =
@@ -36,13 +39,16 @@ export type ScriptEntry =
 
 /** One line of the record: the question as asked, and what the adapter answered. */
 export interface RecordLine {
-  surface: ScriptEntry['surface'];
+  /** A question's surface, or `progress` or `downloadProgress` for a display-only line. */
+  surface: ScriptEntry['surface'] | 'progress' | 'downloadProgress';
   /** The question's text: a pick's title (or its placeholder when it has none), a masked input's placeholder, a dialog's message. */
   question: string;
   /** The answer given: the entry's answer, `'dismiss'` on fail-closed, and `'<supplied>'` for a masked input's text. */
   answer: string;
   /** Whether a script entry matched (false: failed closed). */
   matched: boolean;
+  /** Whether the progress message carried the details link; only the phase lines of a `progress` surface have it. */
+  details?: boolean;
 }
 
 /** The files the adapters use: the script is read, the record is appended to. */
@@ -196,4 +202,90 @@ export function adaptersFor(
     record !== ''
     ? scriptedAdapters(script, record, real, files)
     : real;
+}
+
+/** Whether the harness's switch is on, which every adapter needs before it does anything. */
+function switchedOn(
+  environment: Readonly<Record<string, string | undefined>>,
+): boolean {
+  return environment[SWITCH] === '1';
+}
+
+/** The value of a variable when it is a non-empty text. */
+function namedBy(
+  environment: Readonly<Record<string, string | undefined>>,
+  variable: string,
+): string | undefined {
+  const value = environment[variable];
+  return value === undefined || value === '' ? undefined : value;
+}
+
+/**
+ * The progress the extension uses: the real one, whose every title the record also gets, when the harness's switch is
+ * on and the record file is named; the real one itself in every other case. The first line is the title the progress
+ * starts with, a later one is a phase with its details flag. Nothing is appended when the progress ends.
+ */
+export function progressFor(
+  environment: Readonly<Record<string, string | undefined>>,
+  real: ProgressPort,
+  files: AdapterFiles,
+): ProgressPort {
+  const recordFile = namedBy(environment, RECORD);
+  if (!switchedOn(environment) || recordFile === undefined) {
+    return real;
+  }
+  function shown(question: string, details?: boolean): void {
+    const line: RecordLine = {
+      surface: 'progress',
+      question,
+      answer: 'shown',
+      matched: true,
+      ...(details === undefined ? {} : {details}),
+    };
+    files.append(recordFile ?? '', `${JSON.stringify(line)}\n`);
+  }
+  return {
+    withProgress: (request, task) => {
+      shown(request.title);
+      return real.withProgress(request, update =>
+        task((title, details) => {
+          shown(title, details);
+          update(title, details);
+        }),
+      );
+    },
+  };
+}
+
+/**
+ * The channel port the extension opens its log over: the real one, whose every line the named file also gets, when the
+ * harness's switch is on and `REMOTE_OSS_ACCEPTANCE_LOG` names a file; the real one itself in every other case. The
+ * lines are the ones the logger writes, after its masking of secrets.
+ */
+export function channelPortFor(
+  environment: Readonly<Record<string, string | undefined>>,
+  real: ChannelPort,
+  files: AdapterFiles,
+): ChannelPort {
+  const logFile = namedBy(environment, LOG_FILE_VARIABLE);
+  if (!switchedOn(environment) || logFile === undefined) {
+    return real;
+  }
+  return {
+    createOutputChannel: name => {
+      const channel = real.createOutputChannel(name);
+      return {
+        appendLine: text => {
+          files.append(logFile, `${text}\n`);
+          channel.appendLine(text);
+        },
+        show: preserveFocus => {
+          channel.show(preserveFocus);
+        },
+        dispose: () => {
+          channel.dispose();
+        },
+      };
+    },
+  };
 }
