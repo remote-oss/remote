@@ -9,9 +9,11 @@ coder: `remote-coding-worker-1`.
 every process's command line (contracts §S10). **Start after #429 is merged.** It merges after #422, without waiting
 for step 0 (brief §10: unwired, no behaviour change).
 
-**Not in this card:** any rule for when the CLI ends (contracts V7a's Lifetime is provisional, pending
-`remote-oss/remote-ssh#21`). `--parent-process-id` is **not** passed: tying the CLI to a process is open until metis
-answers. The CLI is started detached (`nohup`), as the server is.
+**The CLI's lifetime** is contracts V7a's (athena, after metis on `remote-oss/remote-ssh#21`): the CLI is started with
+`--parent-process-id` naming the connect's session process on the host, so `command-shell` ends when that session
+ends, after its open connections finish. The server it started outlives it (F-2103 BR-10). The session process is the
+start step's **`$PPID`**. Measured over real `ssh` on Alpine 3.22 with ssh-34's session start: a script run on the
+session sees as `$PPID` the session's `sh`, a child of `sshd-session`, which lives exactly as long as the connection.
 
 ## 1. Package and file boundary
 
@@ -60,7 +62,7 @@ the CLI's `--cli-data-dir`, `<data folder>/cli`. The parameter block writes `CLI
    the way, for example by a helper of the previous extension version that is still in its grace time and doesn't know
    the field (themis on #430). The test names no value, so nothing reaches a command line (§S10).
 2. The log is `$DATA_DIR/.cli.$COMMIT.log` (F-2103's `.cli.<commit>.log`), created with `umask 077`.
-3. `nohup "$CLI_FILE" command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA" </dev/null
+3. `nohup "$CLI_FILE" command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA" --parent-process-id "$PPID" </dev/null
    >"$LOG_FILE" 2>&1 9>&- &`. **No token on the command line:** `VSCODE_CLI_REQUIRE_TOKEN` is in the script's
    environment (section 2.3), and the `nohup` child inherits it. Record `CLI_PID=$!`.
 4. The ready wait, as `start`'s (the same `READY_SECONDS` and ticks): `cli_ready_port` reads the first line matching
@@ -114,7 +116,7 @@ One assertion per `it`; the cite starts the name.
 | Cite | Given | Expected |
 |---|---|---|
 | brief §3 | the `installCli` script with `cli: {name: 'codium-insiders-c1', dataFolder: '/h/.d/cli'}` | the parameter block has `CLI_NAME='codium-insiders-c1'` and `CLI_DATA='/h/.d/cli'` |
-| V7a | the `startCli` script | it contains `command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA"` and no `--require-token` and no `--parent-process-id` |
+| V7a | the `startCli` script | it contains `command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA" --parent-process-id "$PPID"` and no `--require-token` |
 | §S10 | `startCli(channel, base, 'tok-xyz', …)` | the channel's `runScript` request has `environment: {VSCODE_CLI_REQUIRE_TOKEN: 'tok-xyz'}` |
 | §S10 | the same | the request's `script` text does not contain `tok-xyz` |
 | V7a | a recorded result block with `cli.port 41234` and `cli.pid 77` | `started`, endpoint `{kind: 'port', port: 41234}`, `processId` 77, `connectionToken` `'tok-xyz'`, `reused` false |
@@ -141,6 +143,7 @@ tarball. The archive is copied with `copyIn`, and `installCli` runs with `ARCHIV
 | V7a | the CLI's log `<data>/.cli.<commit>.log` holds `Listening on 127.0.0.1:<port>` with the reported port |
 | V7a | a client of the control protocol (cli-03a's `openCliControl` over a forward to the port) authenticates with the token |
 | V7a | the same with a wrong token is `challengeRefused` |
+| V7a | `startCli` over the shared session, then the session is closed | within 10 s, `ps -eo args` on the host shows no `command-shell` (the CLI ended with its session) |
 | themis on #430 | the `startCli` step run with `environment: {}` reports `ServerFailedToStart` with `cli.tokenMissing yes`, and `ps -eo args` on the host shows no `command-shell` |
 
 Stop the CLI after each row with `kill <pid>` (no lifetime rule is built; the test ends what it started).
@@ -156,5 +159,7 @@ PR title `lib-server: the CLI's install and start on the host (card cli-03b, #41
 
 ## 6. Open rows
 
-None for this card. The CLI's lifetime and `--parent-process-id` stay open (`remote-oss/remote-ssh#21`). The CI source
-of a CLI archive is the user's decision (brief §11), so the real-host rows skip without one.
+- Whether the extension also passes the server source to the CLI at start (`VSCODE_CLI_SERVER_DOWNLOAD_URL_TEMPLATE`,
+  `VSCODE_CLI_COMMIT`, `VSCODE_CLI_QUALITY`, metis on `remote-oss/remote-ssh#79` point 1) is asked on #79: in `[cli]`
+  the last two are build-time constants. Until it's answered, `startCli`'s environment holds only the token.
+- The CI source of a CLI archive is the user's decision (brief §11), so the real-host rows skip without one.
