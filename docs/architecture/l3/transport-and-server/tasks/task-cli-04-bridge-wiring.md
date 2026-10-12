@@ -72,7 +72,7 @@ not this card's.
 export interface CliBridge {
   /** The local listener the editor connects to. */
   readonly address: {host: '127.0.0.1'; port: number};
-  /** Called once when the control connection ends without being asked to, or `serve` failed. */
+  /** Called once when the control connection ends without being asked to (`controlClosed`, a loss), or `serve` failed (`serveFailed`, a close). */
   onLost(listener: (cause: CliBridgeLoss) => void): void;
   close(): void;
 }
@@ -117,10 +117,16 @@ or `reuse` kind for the same host, as `useExecServer: false` would give):
 Each fallback logs one line with the cause: `the CLI path failed (<cause>); installing the server directly`. The
 direct path's own failure, if any, is then the one shown. The unsafe-CLI case of step 4 doesn't fall back.
 
-After `Connected` there is no fallback. A `serveFailed` or `controlClosed` from the bridge reaches the window as the
-transport's loss (`onTransport('lost')`), and the failure is logged in full:
-- `serveFailed` logs `the CLI could not serve: <parseCliServeError kind>: <message>`, plus the level-4 line;
-- the presenter's F-2601 dialog follows the editor's reconnection rules (contracts §W2's loss rule).
+After `Connected` there is no fallback, and the two losses differ (athena on #458):
+- **`serveFailed` is `closed`** (`onTransport('closed')`, the resolver host's `transportClosed`). A failed `serve` is
+  deterministic: a missing runtime library (F-2103 7.E2), a bad template or a failed download fails the same way on
+  every retry, so a reconnect would loop, which the spec rules out. The window gets F-2601's dialog with the failure
+  classified from `parseCliServeError`. The kinds map to F-2103's 7.E rows and the S043/S075 reasons as `ofTransfer`
+  and `ofStart` already map them: `download` → S043, `template` and `commitMismatch` → F-3902 rule 8's
+  `invalidServerTemplate`, `other` → S075. The log gets `the CLI could not serve: <kind>: <message>` and the level-4
+  line.
+- **`controlClosed` is `lost`** (`onTransport('lost')`): the control connection or its tunnel ended, which a
+  reconnect can heal, as today's tunnel loss (contracts §W2's loss rule).
 
 ## 6. S045
 
@@ -171,8 +177,11 @@ One assertion per `it`; the cite starts the name. Over cli-03a's `fakeCli` and r
 | §6 | `authenticate` with the control token is refused | the same |
 | §6 | the CLI path fails, then the direct install fails | the connect's failure is the direct install's |
 | §6 | the CLI path fails twice in one connect (fallback then the direct path) | the CLI path was tried once |
-| §6 | after `Connected`, the bridge reports `serveFailed` | the window's `onTransport` got `lost` |
-| §6 | the same | the log holds `the CLI could not serve: template: …` |
+| athena on #458, F-2103 7.E2 | after `Connected`, the bridge reports `serveFailed` | the window's `onTransport` got `closed`, never `lost` |
+| athena on #458 | the same, with `error.kind` `download` | the presenter got the failure with the S043 reason |
+| athena on #458 | the same, with `error.kind` `other` | the presenter got the failure with the S075 reason |
+| §6 | the same, with `error.kind` `template` | the log holds `the CLI could not serve: template: …` |
+| §W2 | after `Connected`, the bridge reports `controlClosed` | the window's `onTransport` got `lost` |
 | — | `release()` | the bridge, the control, the tunnel and the lease were closed in that order |
 
 **S045** (over the progress fake)
