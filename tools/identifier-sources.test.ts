@@ -210,6 +210,7 @@ describe('identifier-sources', () => {
         contextKeys: [],
         infoLineCommands: [],
         internal: [],
+        runtimeCommands: [],
         invented: [],
         settingPairs: [],
         ungated: [],
@@ -225,6 +226,7 @@ describe('identifier-sources', () => {
         contextKeys: [{id: 'remote-x.connected', setter: 'extension'}],
         infoLineCommands: ['remote-x.open'],
         internal: [{id: 'remote-internal.get', role: 'served', kind: 'query'}],
+        runtimeCommands: [{id: 'opensshremotes.showDetails', purpose: 'p'}],
         invented: [
           {
             id: 'remote-x.standingDown',
@@ -257,6 +259,33 @@ describe('identifier-sources', () => {
             contextKeys: [{id: 'k', setter: 'core', note: 'n'}],
           }),
         {message: 'declared.contextKeys[0] has unknown fields: note'},
+      );
+    });
+
+    it('fails on an unknown field of a runtime command', () => {
+      throws(
+        () =>
+          declaredOf({
+            source: 'x',
+            standsDownFor: 'r',
+            runtimeCommands: [{id: 'i', purpose: 'p', note: 'n'}],
+          }),
+        {message: 'declared.runtimeCommands[0] has unknown fields: note'},
+      );
+    });
+
+    it('fails on a runtime command without a purpose', () => {
+      throws(
+        () =>
+          declaredOf({
+            source: 'x',
+            standsDownFor: 'r',
+            runtimeCommands: [{id: 'i', purpose: ''}],
+          }),
+        {
+          message:
+            'declared.runtimeCommands[0].purpose must be a non-empty string',
+        },
       );
     });
 

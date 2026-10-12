@@ -72,6 +72,12 @@ interface InternalCommand {
   kind: 'query' | 'change' | 'push';
 }
 
+/** A command id the extension registers at runtime only, never contributed. */
+interface RuntimeCommand {
+  id: string;
+  purpose: string;
+}
+
 /** A row of the ledger of invented identifiers. */
 interface InventedIdentifier {
   id: string;
@@ -109,6 +115,7 @@ export interface DeclaredIdentifiers {
   contextKeys: DeclaredContextKey[];
   infoLineCommands: string[];
   internal: InternalCommand[];
+  runtimeCommands: RuntimeCommand[];
   invented: InventedIdentifier[];
   settingPairs: SettingPair[];
   ungated: UngatedEntry[];
@@ -383,6 +390,7 @@ const DECLARED_FIELDS = [
   'contextKeys',
   'infoLineCommands',
   'internal',
+  'runtimeCommands',
   'invented',
   'settingPairs',
   'ungated',
@@ -416,6 +424,13 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
         id: entry.onlyFields(['id', 'role', 'kind']).field('id').string(),
         role: entry.field('role').oneOf(['served', 'called'] as const),
         kind: entry.field('kind').oneOf(['query', 'change', 'push'] as const),
+      })),
+    runtimeCommands: declared
+      .field('runtimeCommands')
+      .optionalItems()
+      .map(entry => ({
+        id: entry.onlyFields(['id', 'purpose']).field('id').string(),
+        purpose: entry.field('purpose').nonEmptyString(),
       })),
     invented: declared
       .field('invented')

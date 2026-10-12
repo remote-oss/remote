@@ -39,6 +39,7 @@ export function syntheticSources(
       contextKeys: [],
       infoLineCommands: [],
       internal: [],
+      runtimeCommands: [],
       invented: [],
       settingPairs: [],
       ungated: [],
