@@ -340,6 +340,11 @@ Rules:
 - The environment the helper hands to `ssh` is the editor's environment it was started with minus the helper's own parameter variable (`REMOTE_OSS_HELPER_PARAMETERS`: the nonce and the request); the askpass variables S3 sets are added on top (ruled 2026-10-09, #187 review).
 - The record is written only after the connection completes.
 - `acquire` is not used when `remote.SSH.useLocalServer` is off or socket mode is on (F-2102 BR-10, F-2410).
+  Interim until terminal mode is built (ruled on #299, 2026-10-12; a 0.2 release blocker with the two tunnel paths):
+  R1's validate step fails such a connect, after the target check and before the platform question, the
+  pre-connection script, the client check and any lease. Kind `unknown`, no reason (F-2601's S030), not retried, no
+  hang (R-79), and the cause named in the connect log (F-2003). Running the shared connection the user turned off
+  would ignore the setting silently; asking the platform question first would ask something nothing uses.
 
 S9 is built on lib-helper (§9): a per-profile registry, the end policy `graceAfterLastLease`, and the oldest-first
 lease list that S9 uses for login ownership. Lifetime, ownership and how it dies are in
