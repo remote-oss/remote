@@ -20,6 +20,7 @@ import {
 import type {Logger} from 'lib-log';
 import type {StartedServer} from 'lib-server';
 import {
+  connectWaitMilliseconds,
   type Forward,
   type Invocation,
   type LoginTerminals,
@@ -108,17 +109,6 @@ function forwardFor(
   );
 }
 
-/**
- * The bound on a question of the tunnel login that nobody can see: the length of the connect wait, by the same rule
- * `ConnectWait` follows. It is written out here until that rule is one exported function, which then replaces this
- * one, so that no reader has a rule of its own.
- */
-function unreachableBoundMilliseconds(settings: ConnectWaitSettings): number {
-  return settings.connectTimeoutSeconds === 0 && settings.fromHost
-    ? settings.unboundedWaitSeconds * 1000
-    : settings.connectTimeoutSeconds * 1000 + 2000;
-}
-
 /** What the tunnel's listeners hear when its `ssh` ends without being asked to. */
 const TUNNEL_ENDED = 'the tunnel ssh ended';
 
@@ -184,7 +174,7 @@ async function openTerminalTunnel(
   });
   const reader = new PromptReader(
     dependencies.scheduler,
-    unreachableBoundMilliseconds(dependencies.connectWait()),
+    connectWaitMilliseconds(dependencies.connectWait()),
     {
       onQuestion: text => {
         questions.onQuestion(text);
