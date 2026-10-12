@@ -200,3 +200,9 @@ export {
   TerminalSessionRunner,
   type TerminalRunnerOptions,
 } from './terminal/terminal-runs.ts';
+export {
+  openTunnelSession,
+  TUNNEL_SUCCESS_LINE,
+  type TunnelGate,
+  type TunnelSession,
+} from './terminal/tunnel-session.ts';
