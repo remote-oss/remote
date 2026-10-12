@@ -161,6 +161,8 @@ export default defineConfig(
       '**/dist/',
       '**/dist-local/',
       '**/dist-remote/',
+      '**/dist-reconnect/',
+      '**/dist-failure/',
       '**/.tsc/',
       '**/.vscode-test/',
       // The editor's own declaration files, kept as published.

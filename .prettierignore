@@ -6,6 +6,8 @@ pnpm-lock.yaml
 dist/
 dist-local/
 dist-remote/
+dist-reconnect/
+dist-failure/
 .vscode-test/
 # The editor's own declaration files, kept as published.
 vscode-dts/

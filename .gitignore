@@ -13,3 +13,5 @@ tests/acceptance/dist-remote/
 # Python bytecode (the conformance runner)
 __pycache__/
 *.pyc
+tests/acceptance/dist-reconnect/
+tests/acceptance/dist-failure/

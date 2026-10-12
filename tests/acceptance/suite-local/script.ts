@@ -3,7 +3,7 @@
  * record of what it was asked.
  */
 
-import {readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 
 /** One expected question and its answer, in the order the test expects them. */
 export type ScriptEntry =
@@ -39,23 +39,19 @@ function fileNamed(variable: string): string {
   return file;
 }
 
-/**
- * Writes the script for the next connect and empties the record. The extension reads the script when it activates,
- * once per window, so a test writes it before it opens the window that connects. Each entry the adapters use adds
- * one matched line to the record, so `assertAllUsed` counts the unused entries from it.
- */
-export function scriptFor(entries: ScriptEntry[]): {
+/** What a test reads back about a script: the record, and whether every entry was used. */
+export interface ScriptRun {
   record(): RecordLine[];
   /** Throws when an entry of the script was not used by a question. */
   assertAllUsed(): void;
-} {
-  writeFileSync(
-    fileNamed('REMOTE_OSS_ACCEPTANCE_SCRIPT'),
-    JSON.stringify({entries}),
-  );
-  const recordFile = fileNamed('REMOTE_OSS_ACCEPTANCE_RECORD');
-  writeFileSync(recordFile, '');
+}
+
+/** The run of `entries`, recorded in `recordFile`; a record not written yet is empty. */
+function runOf(entries: readonly ScriptEntry[], recordFile: string): ScriptRun {
   function record(): RecordLine[] {
+    if (!existsSync(recordFile)) {
+      return [];
+    }
     return readFileSync(recordFile, 'utf8')
       .split('\n')
       .filter(line => line !== '')
@@ -72,4 +68,27 @@ export function scriptFor(entries: ScriptEntry[]): {
       }
     },
   };
+}
+
+/**
+ * Writes the script for the next connect and empties the record. The extension reads the script when it activates,
+ * once per window, so a test writes it before it opens the window that connects. Each entry the adapters use adds
+ * one matched line to the record, so `assertAllUsed` counts the unused entries from it.
+ */
+export function scriptFor(entries: ScriptEntry[]): ScriptRun {
+  writeFileSync(
+    fileNamed('REMOTE_OSS_ACCEPTANCE_SCRIPT'),
+    JSON.stringify({entries}),
+  );
+  const recordFile = fileNamed('REMOTE_OSS_ACCEPTANCE_RECORD');
+  writeFileSync(recordFile, '');
+  return runOf(entries, recordFile);
+}
+
+/** The script this window was launched with, which the harness wrote before the editor started. */
+export function launchScript(): ScriptRun {
+  const {entries} = JSON.parse(
+    readFileSync(fileNamed('REMOTE_OSS_ACCEPTANCE_SCRIPT'), 'utf8'),
+  ) as {entries: ScriptEntry[]};
+  return runOf(entries, fileNamed('REMOTE_OSS_ACCEPTANCE_RECORD'));
 }
