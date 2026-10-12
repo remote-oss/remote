@@ -1,0 +1,357 @@
+import {deepStrictEqual} from 'node:assert';
+import {createLogger} from 'lib-log';
+import {MemorySink} from 'lib-log/testing/memory-sink';
+import {
+  RecordingChannel,
+  type RecordedCall,
+} from 'lib-host/testing/recording-channel';
+import {
+  type CliPlacement,
+  type DownloadResult,
+  installCli,
+  startCli,
+  type StartOutcome,
+  type TransferDependencies,
+} from '../../src/index.ts';
+import {parametersFor} from './fake-host.ts';
+import {answering, block, runOnce} from './scripted-steps.fixture.ts';
+
+const ADDRESS = 'https://download.example.invalid/cli.tar.gz';
+
+const NEVER_CANCELLED = new AbortController().signal;
+
+const CLI_PATH = '/home/user/.server-data/codium-insiders-abc123';
+
+const TOKEN = 'tok-xyz';
+
+const DOWNLOADED: DownloadResult = {
+  kind: 'downloaded',
+  facts: {},
+  finalAddress: ADDRESS,
+};
+
+function baseParameters(): ReturnType<typeof parametersFor> {
+  return {
+    ...parametersFor(),
+    launcher: 'codium-insiders',
+    ['cli']: {
+      name: 'codium-insiders-abc123',
+      dataFolder: '/home/user/.server-data/cli',
+    },
+  };
+}
+
+function scriptRequests(channel: RecordingChannel): RecordedCall[] {
+  return channel.calls.filter(call => call.operation === 'runScript');
+}
+
+function environmentsOf(channel: RecordingChannel): unknown[] {
+  return channel.calls.flatMap(call =>
+    call.operation === 'runScript' ? [call.request.environment] : [],
+  );
+}
+
+function startingChannel(output: readonly string[]): RecordingChannel {
+  return new RecordingChannel({
+    identity: 'host',
+    platformHint: 'linux',
+    scripts: [answering(output)],
+  });
+}
+
+function started(
+  output: readonly string[],
+  token = TOKEN,
+): Promise<{outcome: StartOutcome; channel: RecordingChannel}> {
+  const channel = startingChannel(output);
+  return startCli(
+    channel,
+    baseParameters(),
+    token,
+    {lockLoop: runOnce},
+    NEVER_CANCELLED,
+  ).then(outcome => ({outcome, channel}));
+}
+
+describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
+  describe('startCli', () => {
+    const STARTED = block('Ok', 'cli.port=41234', 'cli.pid=77', 'cli.log=/l');
+
+    it('§S10: the run carries the token as VSCODE_CLI_REQUIRE_TOKEN in its environment', async () => {
+      const {channel} = await started(STARTED);
+      deepStrictEqual(environmentsOf(channel), [
+        {VSCODE_CLI_REQUIRE_TOKEN: TOKEN},
+      ]);
+    });
+
+    it('§S10: the text of the script does not hold the token', async () => {
+      const {channel} = await started(STARTED);
+      deepStrictEqual(
+        channel.calls.some(
+          call =>
+            call.operation === 'runScript' &&
+            call.request.script.includes(TOKEN),
+        ),
+        false,
+      );
+    });
+
+    it('V7a: a result block with the port and the process is a started CLI with the token it was given', async () => {
+      const {outcome} = await started(STARTED);
+      deepStrictEqual(outcome, {
+        kind: 'started',
+        server: {
+          endpoint: {kind: 'port', port: 41234},
+          processId: 77,
+          connectionToken: TOKEN,
+          reused: false,
+        },
+        notices: [],
+      });
+    });
+
+    it('V7a: ServerFailedToStart is serverStart', async () => {
+      const {outcome} = await started(block('ServerFailedToStart'));
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {kind: 'serverStart'},
+      });
+    });
+
+    it('themis on #430: ServerFailedToStart with cli.tokenMissing is serverStart saying the token did not reach the host', async () => {
+      const {outcome} = await started(
+        block('ServerFailedToStart', 'cli.tokenMissing=yes'),
+      );
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {
+          kind: 'serverStart',
+          detail: "the CLI's token did not reach the host",
+        },
+      });
+    });
+
+    it('V5: another status is scriptFailed', async () => {
+      const {outcome} = await started(block('LockBusy'));
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {kind: 'scriptFailed', status: 'LockBusy'},
+      });
+    });
+
+    it('V7a: a port out of range is unreadable', async () => {
+      const {outcome} = await started(
+        block('Ok', 'cli.port=70000', 'cli.pid=77'),
+      );
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {kind: 'unreadableServerFacts'},
+      });
+    });
+
+    it('V7a: a process id that is not one is unreadable', async () => {
+      const {outcome} = await started(
+        block('Ok', 'cli.port=41234', 'cli.pid=1'),
+      );
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {kind: 'unreadableServerFacts'},
+      });
+    });
+
+    it('V7a: output with no result block is noResultBlock', async () => {
+      const {outcome} = await started(['nothing']);
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {kind: 'noResultBlock'},
+      });
+    });
+
+    it('V5: a lock loop that gives up is retriesExhausted', async () => {
+      const outcome = await startCli(
+        startingChannel(STARTED),
+        baseParameters(),
+        TOKEN,
+        {lockLoop: () => Promise.resolve('retriesExhausted')},
+        NEVER_CANCELLED,
+      );
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {kind: 'retriesExhausted'},
+      });
+    });
+
+    it('a channel that fails is channelFailed', async () => {
+      const failure = {kind: 'channelClosed', detail: 'closed'} as const;
+      const outcome = await startCli(
+        new RecordingChannel({
+          identity: 'host',
+          platformHint: 'linux',
+          scripts: [
+            {
+              interpreter: 'posixShell',
+              matches: () => true,
+              lines: [],
+              ending: {kind: 'fail', failure},
+            },
+          ],
+        }),
+        baseParameters(),
+        TOKEN,
+        {lockLoop: runOnce},
+        NEVER_CANCELLED,
+      );
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {kind: 'channelFailed', failure},
+      });
+    });
+  });
+
+  describe('installCli', () => {
+    function placement(
+      overrides: Partial<CliPlacement['plan']> = {},
+    ): CliPlacement {
+      return {
+        plan: {
+          kind: 'cli',
+          cliPath: CLI_PATH,
+          cliDataFolder: '/home/user/.server-data/cli',
+          download: true,
+          where: 'host',
+          clientFallback: false,
+          dataFolder: '/home/user/.server-data',
+          lockPlace: '/home/user/.server-data/bin/abc123',
+          notes: [],
+          ...overrides,
+        },
+        address: ADDRESS,
+        transfer: {
+          clientFolder: '/client/tmp',
+          cache: {kind: 'none'},
+          downloadBounds: {
+            deadlineMilliseconds: 30_000,
+            stallMilliseconds: 5000,
+            maximumBytes: 1_000_000,
+          },
+          temporaryToken: 'token1',
+          verification: ['none'],
+          hostFolder: '/host/tmp',
+          discardDeadlineMilliseconds: 30,
+        },
+      };
+    }
+
+    interface Run {
+      outcome: Awaited<ReturnType<typeof installCli>>;
+      channel: RecordingChannel;
+      downloads: number;
+      phases: string[];
+    }
+
+    async function install(
+      overrides: Partial<CliPlacement['plan']>,
+      outputs: ReadonlyArray<readonly string[]>,
+      downloadResults: readonly DownloadResult[] = [DOWNLOADED],
+    ): Promise<Run> {
+      const channel = new RecordingChannel({
+        identity: 'host',
+        platformHint: 'linux',
+        scripts: outputs.map(answering),
+        copies: [{matches: () => true, ending: {kind: 'copied'}}],
+      });
+      let downloads = 0;
+      const phases: string[] = [];
+      const results = [...downloadResults];
+      const dependencies: TransferDependencies = {
+        channel,
+        download: {
+          download: () => {
+            downloads += 1;
+            return Promise.resolve(results.shift() ?? DOWNLOADED);
+          },
+        },
+        files: {
+          remove: () => Promise.resolve(),
+          exists: () => Promise.resolve(false),
+          size: () => Promise.resolve(0),
+          sha256: () => Promise.resolve(''),
+          rename: () => Promise.resolve({kind: 'renamed'}),
+        },
+        lockLoop: runOnce,
+        logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
+        onPhase: phase => {
+          phases.push(phase.kind);
+        },
+      };
+      const outcome = await installCli(
+        baseParameters(),
+        placement(overrides),
+        dependencies,
+        NEVER_CANCELLED,
+      );
+      return {outcome, channel, downloads, phases};
+    }
+
+    const PLACED = block('Ok', `cli.path=${CLI_PATH}`);
+
+    it('F-2103 POST-2: a host download that works reports the CLI path of the plan', async () => {
+      const {outcome} = await install({}, [PLACED]);
+      deepStrictEqual(outcome, {kind: 'placed', path: CLI_PATH});
+    });
+
+    it('brief §4: with plan.download false one script run is made, with no download and no copy', async () => {
+      const installed = await install({download: false}, [PLACED]);
+      deepStrictEqual(
+        [
+          scriptRequests(installed.channel).length,
+          installed.downloads,
+          installed.channel.calls.length,
+          installed.phases,
+        ],
+        [1, 0, 1, []],
+      );
+    });
+
+    it('§S10: every run of the install has an empty environment', async () => {
+      const installed = await install({}, [PLACED]);
+      deepStrictEqual(environmentsOf(installed.channel), [{}]);
+    });
+
+    it('V7a: the install runs the installCli step', async () => {
+      const installed = await install({}, [PLACED]);
+      deepStrictEqual(
+        installed.channel.calls.every(
+          call =>
+            call.operation !== 'runScript' ||
+            (call.request.script.includes('CLI_STAGING') &&
+              call.request.script.includes('cli.path')),
+        ),
+        true,
+      );
+    });
+
+    it('F-3902 rule 6: a failed host download falls back to the client download and the copy', async () => {
+      const installed = await install({clientFallback: true}, [
+        block('ServerDownloadFailed'),
+        PLACED,
+      ]);
+      deepStrictEqual(
+        [
+          installed.outcome,
+          installed.downloads,
+          installed.phases.includes('copying'),
+        ],
+        [{kind: 'placed', path: CLI_PATH}, 1, true],
+      );
+    });
+
+    it('a failure of the install is the transfer failure', async () => {
+      const {outcome} = await install({}, [block('ServerDownloadFailed')]);
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {kind: 'serverDownload', cause: 'downloadFailed'},
+      });
+    });
+  });
+});

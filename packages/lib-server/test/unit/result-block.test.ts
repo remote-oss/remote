@@ -25,7 +25,7 @@ function blockOf(name: string): ResultBlock {
   return result.block;
 }
 
-const EMPTY_BLOCK = {hostFacts: {}, serverFacts: {}, timings: {}};
+const EMPTY_BLOCK = {hostFacts: {}, serverFacts: {}, cliFacts: {}, timings: {}};
 
 describe('parseResult (card server-02 table)', () => {
   it('[] -> noResultBlock', () => {
@@ -48,9 +48,29 @@ describe('parseResult (card server-02 table)', () => {
         status: 'Ok',
         hostFacts: {os: 'linux', arch: 'x64'},
         serverFacts: {port: '41263'},
+        cliFacts: {},
         timings: {download: 1532},
       },
     });
+  });
+
+  it('cli.path and cli.port lines -> cliFacts {path, port}', () => {
+    deepStrictEqual(
+      parseResult([
+        RESULT_BEGIN,
+        'status=Ok',
+        'cli.path=/h/codium',
+        'cli.port=41234',
+        RESULT_END,
+      ]),
+      {
+        block: {
+          status: 'Ok',
+          ...EMPTY_BLOCK,
+          cliFacts: {path: '/h/codium', port: '41234'},
+        },
+      },
+    );
   });
 
   it('begin without end -> noResultBlock', () => {

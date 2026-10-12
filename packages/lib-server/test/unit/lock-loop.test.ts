@@ -11,7 +11,7 @@ import {settle} from './clock-driver.fixture.ts';
 function resultWith(status: 'Ok' | 'LockBusy'): StepRun {
   return {
     kind: 'result',
-    block: {status, hostFacts: {}, serverFacts: {}, timings: {}},
+    block: {status, hostFacts: {}, serverFacts: {}, cliFacts: {}, timings: {}},
     exitStatus: 0,
   };
 }

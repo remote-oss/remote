@@ -122,6 +122,13 @@ export {
   type TransferOutcome,
   type TransferPhase,
 } from './transfer/transfer.ts';
+export {
+  type CliInstallOutcome,
+  type CliPlacement,
+  type CliStartDependencies,
+  installCli,
+  startCli,
+} from './lifecycle/cli.ts';
 export {proxyVariableText} from './proxy-variable-text.ts';
 export {
   type ProductKeys,
