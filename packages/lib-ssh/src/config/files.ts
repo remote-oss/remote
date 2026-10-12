@@ -4,7 +4,6 @@
 
 import path from 'node:path';
 import type {ClientPlatform} from './platform.ts';
-import {expandHome} from '../arguments/invocation.ts';
 
 /** Read access to the client's files; the library never touches the file system itself. */
 export interface ConfigFileReader {
@@ -45,8 +44,49 @@ export function pathsFor(platform: ClientPlatform): path.PlatformPath {
 }
 
 /**
- * The files in effect, in reading order: the one configured file when the setting holds anything, otherwise the
- * user file and then the system file. A configured `~` or `~/` path is expanded; any other form is used as written.
+ * A path with a leading `~/` (or `~\` on Windows), or a lone `~`, with the home folder in place of the `~`, joined
+ * with the platform's separator; any other path unchanged.
+ */
+export function expandHome(
+  file: string,
+  homeFolder: string,
+  platform: ClientPlatform,
+): string {
+  if (file === '~') {
+    return homeFolder;
+  }
+  const windows = platform === 'windows';
+  if (file.startsWith('~/') || (windows && file.startsWith('~\\'))) {
+    return `${homeFolder}${windows ? '\\' : '/'}${file.slice(2)}`;
+  }
+  return file;
+}
+
+/** What `remote.SSH.configFile` names: no file, an absolute file, or an invalid value. */
+export type ConfigFileSetting =
+  | {kind: 'unset'} // '' or only white space
+  | {kind: 'file'; path: string} // absolute after `~` expansion
+  | {kind: 'invalid'; value: string}; // anything else, `value` as written
+
+/** The one check of the setting's value, shared by every reader of it. */
+export function configFilePath(
+  value: string,
+  homeFolder: string,
+  platform: ClientPlatform,
+): ConfigFileSetting {
+  if (value.trim() === '') {
+    return {kind: 'unset'};
+  }
+  const expanded = expandHome(value, homeFolder, platform);
+  if (pathsFor(platform).isAbsolute(expanded)) {
+    return {kind: 'file', path: expanded};
+  }
+  return {kind: 'invalid', value};
+}
+
+/**
+ * The files in effect, in reading order: the one configured file when the setting names a file, the user file and
+ * the system file when it is unset, and nothing when its value is neither.
  */
 export function filesInEffect(
   configFile: string,
@@ -57,12 +97,13 @@ export function filesInEffect(
   function exists(file: string): boolean {
     return reader.readText(file) !== undefined;
   }
-  if (configFile !== '') {
-    const file = expandHome(
-      configFile,
-      locations.homeFolder,
-      locations.platform,
-    );
+  const setting = configFilePath(
+    configFile,
+    locations.homeFolder,
+    locations.platform,
+  );
+  if (setting.kind === 'file') {
+    const file = setting.path;
     return [
       {
         file,
@@ -71,6 +112,9 @@ export function filesInEffect(
         exists: exists(file),
       },
     ];
+  }
+  if (setting.kind === 'invalid') {
+    return [];
   }
   const sshFolder = paths.join(locations.homeFolder, '.ssh');
   const userFile = paths.join(sshFolder, 'config');

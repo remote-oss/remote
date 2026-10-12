@@ -96,6 +96,19 @@ function largeFileText(): string {
 }
 
 describe('listHosts (the host entries of the files in effect)', () => {
+  it('F-2201.BR-7: a configured file that is not absolute offers no hosts, silently', () => {
+    const reader = memoryReader(
+      new Map([
+        ['relcfg/x', 'Host from-relative\n'],
+        ['/h/.ssh/config', 'Host from-user\n'],
+      ]),
+    );
+    deepStrictEqual(
+      listHosts('relcfg/x', {homeFolder: '/h', platform: 'linux'}, reader),
+      {hosts: []},
+    );
+  });
+
   it('F-2202.AC-1: every name of a Host line, in order', () => {
     deepStrictEqual(names('Host one\nHost two three   four\nHost last'), [
       'one',
@@ -563,7 +576,7 @@ describe('listHosts (the host entries of the files in effect)', () => {
     );
   });
 
-  const AC13_FALLBACKS = ['rel/config', '~', '${HOME}/x', '   '] as const;
+  const AC13_FALLBACKS = ['rel/config', '~', '${HOME}/x'] as const;
   for (const setting of AC13_FALLBACKS) {
     it(`F-2201.AC-13: a configured ${setting} holds its own`, () => {
       deepStrictEqual(
@@ -572,6 +585,13 @@ describe('listHosts (the host entries of the files in effect)', () => {
       );
     });
   }
+
+  it('F-2201.BR-2: a configured setting of white space only is unset, so the files in effect list', () => {
+    deepStrictEqual(
+      names(undefined, [[SYSTEM_FILE, 'Host y']], {configFile: '   '}),
+      ['y'],
+    );
+  });
 
   it('F-2201.BR-8: an unparseable system file stops the list', () => {
     match(
