@@ -72,6 +72,7 @@ import {
 import type {ConnectionRequestEnvironment} from './pipeline/connection-request.ts';
 import {connectorOf, type SshConnector} from './pipeline/connector.ts';
 import {hostAlias} from './pipeline/host-settings.ts';
+import type {ConnectInput} from './pipeline/steps.ts';
 import {stepsOf, type WiringPorts} from './pipeline/wiring.ts';
 import {phaseTitleOf, startTitleOf} from './surfaces/progress-titles.ts';
 import {type FailureStringId, textOfId} from './surfaces/failure-strings.ts';
@@ -80,7 +81,10 @@ import {
   type PromptEditor,
 } from './surfaces/prompt-surface.ts';
 import type {Translate} from './surfaces/strings.ts';
-import {attachTerminalQuestions} from './surfaces/terminal-questions.ts';
+import {
+  attachTerminalQuestions,
+  type TerminalLogin,
+} from './surfaces/terminal-questions.ts';
 
 /** The editor's surfaces a connect shows, each over the editor. */
 export interface ConnectSurfaces {
@@ -186,6 +190,12 @@ export function wiringPortsOf(
   logger: Logger,
 ): WiringPorts {
   const {settings} = surfaces;
+  /** What every login terminal shares: its questions, and whether it is shown. */
+  const loginSurfaces = {
+    attachQuestions: (login: TerminalLogin, input: ConnectInput) =>
+      attachTerminalQuestions(login, surfaces.prompts, hostAlias(input.target)),
+    revealLoginTerminals: () => switchOf(settings, 'showLoginTerminal'),
+  };
   const processEnvironment = definedEnvironment(machine.processEnvironment);
   const requestEnvironment: ConnectionRequestEnvironment = {
     registryFolder: machine.folders.registry,
@@ -254,13 +264,7 @@ export function wiringPortsOf(
       freePort: machine.freeSocksPort,
       scheduler: machine.scheduler,
       newMarker: machine.helpers.newNonce,
-      attachQuestions: (login, input) =>
-        attachTerminalQuestions(
-          login,
-          surfaces.prompts,
-          hostAlias(input.target),
-        ),
-      revealLoginTerminals: () => switchOf(settings, 'showLoginTerminal'),
+      ...loginSurfaces,
     },
     server: {
       profile: machine.profile,
@@ -285,6 +289,8 @@ export function wiringPortsOf(
       logger,
     },
     tunnel: {
+      terminals: surfaces.terminals,
+      ...loginSurfaces,
       settings: () => tunnelSettingsOf(settings),
       local: machine.local,
       scheduler: machine.scheduler,

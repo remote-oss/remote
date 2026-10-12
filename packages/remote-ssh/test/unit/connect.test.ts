@@ -402,6 +402,58 @@ describe('the connect pipeline, when a step fails', () => {
     );
   });
 
+  /** A connect whose tunnel step settles `afterMilliseconds` after it starts, on the path named, with a bound of 20 ms. */
+  async function connectWithSlowTunnel(
+    path: 'socks' | 'secondSsh' | 'socket',
+    afterMilliseconds: number,
+  ) {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        locateClient: waitsOf({...WAITS, tunnelMilliseconds: 20}),
+        tunnelPath: () => path,
+        openTunnel: () =>
+          new Promise(resolve => {
+            setTimeout(() => {
+              resolve({kind: 'done', value: tunnelOf(recording)});
+            }, afterMilliseconds);
+          }),
+      }),
+      options,
+    );
+    return 'kind' in result ? result.kind : 'connected';
+  }
+
+  it('R1: a tunnel on the SOCKS path that settles after the limit still times out', async () => {
+    deepStrictEqual(await connectWithSlowTunnel('socks', 60), 'timeout');
+  });
+
+  it('R1 (athena on #393): a tunnel on the second-ssh path that settles after the limit still connects', async () => {
+    deepStrictEqual(await connectWithSlowTunnel('secondSsh', 60), 'connected');
+  });
+
+  it('R1 (athena on #393): a tunnel on the socket path that settles after the limit still connects', async () => {
+    deepStrictEqual(await connectWithSlowTunnel('socket', 60), 'connected');
+  });
+
+  it('R1: a cancel still ends a tunnel on the second-ssh path that never settles', async () => {
+    const {recording, options} = setup();
+    const controller = new AbortController();
+    const pending = connect(
+      INPUT,
+      steps(recording, {
+        tunnelPath: () => 'secondSsh',
+        openTunnel: () => never(),
+      }),
+      {...options, cancellation: controller.signal},
+    );
+    await new Promise(resolve => setTimeout(resolve, 10));
+    controller.abort();
+    const result = await pending;
+    deepStrictEqual('kind' in result ? result.kind : result, 'cancelled');
+  });
+
   it('a tunnel that never answers fails at its limit as a timeout', async () => {
     const {recording, options} = setup();
     const result = await connect(

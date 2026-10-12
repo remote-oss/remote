@@ -16,6 +16,7 @@ import type {
   TransferPhase,
 } from 'lib-server';
 import type {Connected} from 'lib-authority';
+import type {TunnelPath} from 'lib-forwarding';
 import type {HostChannel, PlatformHint} from 'lib-host';
 import type {ConnectionNotice, FailureHint, SharedRecord} from 'lib-ssh';
 import type {FailureDetail} from './failure.ts';
@@ -157,6 +158,11 @@ export interface ConnectSteps {
     lease: ConnectionLease,
     cancellation: AbortSignal,
   ): Promise<void>;
+  /**
+   * The path the window's tunnel takes, read once for the connect. The pipeline bounds the tunnel step itself only
+   * on the SOCKS path: a second `ssh` has its own bounds, and a login to wait for.
+   */
+  tunnelPath(): TunnelPath;
   /** Opens the window's port to the server through the connection; `onWaiting` fires if the port is slow to answer. */
   openTunnel(
     input: ConnectInput,
