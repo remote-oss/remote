@@ -371,10 +371,10 @@ OpenSSH hosts): a `ScriptRequest`'s `environment` never appears in an argv, on t
   child's environment, so no `ps` shows them. Never inside the `sh -c` text.
 - **On the direct channel** (`planScript`), the remote command is `ssh`'s own argument on the client and `sh -c`'s on
   the host, so neither an assignment line nor a prefix may be in it. A script **without** input already goes on stdin
-  (`sh -s`) and keeps its assignment lines there. A script **with** input and a non-empty environment sends the
-  environment on stdin first: the remote command is the fixed `sh -c 'IFS= read -r … ; <read the assignments>; exec sh
-  -c "$0"' '<script>'` form that reads one assignment line per variable from stdin before the input. The card writes it
-  out with a row against a real `sh`. A script with input and an empty environment is unchanged.
+  (`sh -s`) and keeps its assignment lines there. A script **with** input and a non-empty environment must also get its
+  environment through stdin, ahead of the input, with the remote command naming no value. The exact shell form is the
+  card's (ssh-32), proven by a row against a real `sh` and `ps`. A script with input and an empty environment is
+  unchanged.
 - Rows: for each of the three paths, a script whose environment holds a marker value runs, and the marker is in no
   process's `args` (`ps -eo args`, on the host and the client) while it runs; and the value reaches the script.
 
