@@ -171,6 +171,7 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm acceptance:clean
       - run: |
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
@@ -181,6 +182,8 @@ jobs:
           else
             DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium
           fi
+      - if: always()
+        run: pnpm acceptance:clean
 
   # integration:  pnpm test:integration under xvfb, after the testing ADR
   # per-package checks by profile: added in a later change
