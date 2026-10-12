@@ -896,8 +896,22 @@ describe('application-scope settings ignore workspace values', () => {
       })[settingId] ?? {defaultValue: undefined},
   };
 
+  /** A setting host whose remote.SSH.path is set in the user settings, the workspace and the folder. */
+  const USER_AND_WORKSPACE: SettingHost = {
+    inspectSetting: () => ({
+      defaultValue: '',
+      globalValue: '/u/ssh',
+      workspaceValue: '/w/ssh',
+      workspaceFolderValue: '/f/ssh',
+    }),
+  };
+
   it('F-2101 AC-13: a remote.SSH.path set only in workspace settings is never used', () => {
     deepStrictEqual(settingTextOf(WORKSPACE_ONLY, 'path'), '');
+  });
+
+  it('F-2101 AC-13: a remote.SSH.path in the user settings is used, whatever the workspace sets', () => {
+    deepStrictEqual(settingTextOf(USER_AND_WORKSPACE, 'path'), '/u/ssh');
   });
 
   it('F-2201 AC-14: a remote.SSH.configFile set only in workspace settings is ignored', () => {
