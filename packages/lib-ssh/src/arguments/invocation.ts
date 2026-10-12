@@ -6,6 +6,7 @@
 
 import type {EffectiveOptions} from '../config/effective.ts';
 import type {ClientPlatform} from '../config/platform.ts';
+import {posixQuote} from '../process/remote-program.ts';
 import type {SshTarget} from './target.ts';
 
 /** What an `ssh` run is for; a `copy` run uses `scp`. */
@@ -78,9 +79,12 @@ export interface Invocation {
 /** The loopback address every forward listens on and targets. */
 const LOOPBACK = '127.0.0.1';
 
+/** The line the tunnel run prints once its forwards are set up, as the host's own output. */
+export const TUNNEL_SUCCESS_LINE =
+  'Connected to SSH Host - Please do not close this terminal';
+
 /** What the tunnel run runs on the host: the line that says it is up, then a wait that holds the forward. */
-export const TUNNEL_COMMAND =
-  "echo 'Connected to SSH Host - Please do not close this terminal'; exec sleep 2147483647";
+export const TUNNEL_COMMAND = `echo ${posixQuote(TUNNEL_SUCCESS_LINE)}; exec sleep 2147483647`;
 
 /**
  * The invocation for a request whose target has passed `validateTarget`. The host and the user are separate
