@@ -9,7 +9,13 @@ import {
   strictEqual,
   throws,
 } from 'node:assert';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
@@ -20,6 +26,7 @@ import {
   type CommandRunner,
   hostImageOf,
   type HostContainer,
+  newPassword,
   RUN_LABEL,
   startHostContainer,
 } from './acceptance-run.ts';
@@ -243,6 +250,7 @@ describe('startHostContainer (card tooling-10)', () => {
             container: 'c123',
             port: 49153,
             keyFile: path.join(runFolder, 'id_ed25519'),
+            passwordFile: path.join(runFolder, 'password'),
           },
           build: [
             [
@@ -263,12 +271,109 @@ describe('startHostContainer (card tooling-10)', () => {
               'remote-oss.acceptance.run=77-2',
               '--env',
               'AUTHORIZED_KEY=ssh-ed25519 AAAA acceptance',
+              '--env-file',
+              path.join(runFolder, 'host.env'),
               '--publish',
               '127.0.0.1::22',
               'remote-oss-acceptance-host:77-2',
             ],
           ],
         },
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+});
+
+describe('newPassword (card tooling-17)', () => {
+  it('makes 24 letters and digits', () => {
+    strictEqual(/^[A-Za-z0-9]{24}$/.test(newPassword()), true);
+  });
+
+  it('draws every character from the whole alphabet of 62', () => {
+    const limits: number[] = [];
+    newPassword(limit => {
+      limits.push(limit);
+      return limit - 1;
+    });
+    deepStrictEqual([new Set(limits), limits.length], [new Set([62]), 24]);
+  });
+
+  it('maps the draw 0 to A, 25 to Z, 26 to a, 51 to z, 52 to 0 and 61 to 9', () => {
+    const draws = [0, 25, 26, 51, 52, 61];
+    strictEqual(newPassword(() => draws.shift() ?? 0).slice(0, 6), 'AZaz09');
+  });
+
+  it('differs between two calls', () => {
+    notStrictEqual(newPassword(), newPassword());
+  });
+});
+
+describe('the password of the start (card tooling-17)', () => {
+  /** Starts a host in a fresh run folder and gives back the folder, the host and the docker run call. */
+  function started(): {
+    runFolder: string;
+    host: HostContainer;
+    runCall: string[];
+  } {
+    const runFolder = mkdtempSync(path.join(tmpdir(), 'acceptance-run-'));
+    const scripted = startingCommands();
+    const host = startHostContainer(scripted, '/root', RUN_ID, runFolder);
+    return {
+      runFolder,
+      host,
+      runCall: scripted.callsOf('docker').find(argv => argv[0] === 'run') ?? [],
+    };
+  }
+
+  it('is the one line of the env file, HOST_PASSWORD=<password>', () => {
+    const {runFolder, host} = started();
+    try {
+      const password = readFileSync(host.passwordFile, 'utf8');
+      strictEqual(
+        readFileSync(path.join(runFolder, 'host.env'), 'utf8'),
+        `HOST_PASSWORD=${password}\n`,
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it('is the bare password, of 24 letters and digits, in the password file', () => {
+    const {runFolder, host} = started();
+    try {
+      strictEqual(
+        /^[A-Za-z0-9]{24}$/.test(readFileSync(host.passwordFile, 'utf8')),
+        true,
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it('is kept in files of mode 600', () => {
+    const {runFolder, host} = started();
+    try {
+      deepStrictEqual(
+        [
+          statSync(host.passwordFile).mode & 0o777,
+          statSync(path.join(runFolder, 'host.env')).mode & 0o777,
+        ],
+        [0o600, 0o600],
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it('never appears in the docker command line', () => {
+    const {runFolder, host, runCall} = started();
+    try {
+      const password = readFileSync(host.passwordFile, 'utf8');
+      strictEqual(
+        runCall.some(argument => argument.includes(password)),
+        false,
       );
     } finally {
       rmSync(runFolder, {recursive: true, force: true});

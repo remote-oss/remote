@@ -242,7 +242,93 @@ describe('acceptance', () => {
         '  IdentityAgent none',
         '  StrictHostKeyChecking ask',
         '  UserKnownHostsFile /run/known_hosts_stranger',
-        '',
+      ].join('\n'),
+    );
+  });
+
+  /** The alias blocks of the host's other accounts, after the four failure aliases. */
+  function accountBlock(name: string): string {
+    return (
+      harnessSshConfig(49153, '/run')
+        .split('\n\n')
+        .find(block => block.startsWith(`Host ${name}\n`))
+        ?.trimEnd() ?? ''
+    );
+  }
+
+  /** The lines every alias of the other accounts shares, with its user and its own known-hosts file. */
+  function sharedLines(name: string, user: string): string[] {
+    return [
+      `Host ${name}`,
+      '  HostName 127.0.0.1',
+      '  Port 49153',
+      `  User ${user}`,
+      '  IdentityAgent none',
+      '  StrictHostKeyChecking accept-new',
+      '  ConnectTimeout 10',
+      `  UserKnownHostsFile /run/known_hosts_${name}`,
+    ];
+  }
+
+  const PASSWORD_ALIAS_LINES = [
+    '  PubkeyAuthentication no',
+    '  PreferredAuthentications password,keyboard-interactive',
+    '  NumberOfPasswordPrompts 1',
+  ];
+
+  const KEY_ALIAS_LINES = [
+    '  IdentityFile /run/id_ed25519',
+    '  IdentitiesOnly yes',
+    '  BatchMode yes',
+  ];
+
+  it('D-85: Host password logs in to harness-pw by password, without BatchMode', () => {
+    strictEqual(
+      accountBlock('password'),
+      [...sharedLines('password', 'harness-pw'), ...PASSWORD_ALIAS_LINES].join(
+        '\n',
+      ),
+    );
+  });
+
+  it('D-85: Host noforward logs in to harness-nofwd with the run key', () => {
+    strictEqual(
+      accountBlock('noforward'),
+      [...sharedLines('noforward', 'harness-nofwd'), ...KEY_ALIAS_LINES].join(
+        '\n',
+      ),
+    );
+  });
+
+  it('D-85: Host mute logs in to harness-mute with the run key', () => {
+    strictEqual(
+      accountBlock('mute'),
+      [...sharedLines('mute', 'harness-mute'), ...KEY_ALIAS_LINES].join('\n'),
+    );
+  });
+
+  it('D-85: Host master is the password account behind a ControlMaster that starts on demand', () => {
+    strictEqual(
+      accountBlock('master'),
+      [
+        ...sharedLines('master', 'harness-pw'),
+        ...PASSWORD_ALIAS_LINES,
+        '  ControlMaster auto',
+        '  ControlPath /run/cm-%C',
+        '  ControlPersist 60',
+      ].join('\n'),
+    );
+  });
+
+  it('D-85: Host master-ask is the password account behind a ControlMaster that asks first', () => {
+    strictEqual(
+      accountBlock('master-ask'),
+      [
+        ...sharedLines('master-ask', 'harness-pw'),
+        ...PASSWORD_ALIAS_LINES,
+        '  ControlMaster ask',
+        '  ControlPath /run/cm-ask-%C',
+        '  ControlPersist 60',
       ].join('\n'),
     );
   });
@@ -309,6 +395,7 @@ describe('acceptance', () => {
         HARNESS_SSH_CONFIG: path.join(harness.runFolder, 'ssh_config'),
         HARNESS_CONTAINER: CONTAINER,
         HARNESS_RUN_FOLDER: harness.runFolder,
+        HARNESS_PASSWORD_FILE: path.join(harness.runFolder, 'password'),
         REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(
           harness.runFolder,
           'script.json',
@@ -1005,6 +1092,7 @@ describe('acceptance', () => {
           HARNESS_SSH_CONFIG: '',
           HARNESS_CONTAINER: '',
           HARNESS_RUN_FOLDER: '',
+          HARNESS_PASSWORD_FILE: '',
           REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
           REMOTE_OSS_ACCEPTANCE_RECORD: '',
           HARNESS_VSIX_FILES: '',
