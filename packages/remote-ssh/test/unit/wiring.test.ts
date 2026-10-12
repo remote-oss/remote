@@ -14,7 +14,10 @@ import type {
 import type {LoginLease} from '../../src/pipeline/connection-step.ts';
 import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
-import {stepsOf, type WiringPorts} from '../../src/pipeline/wiring.ts';
+import {
+  stepsOf as stepsWith,
+  type WiringPorts,
+} from '../../src/pipeline/wiring.ts';
 import {
   type Answer,
   OPENSSH,
@@ -170,6 +173,11 @@ const ALIAS = 'dev';
 /** `INPUT` for the plain host text `text`. */
 function inputFor(text: string): ConnectInput {
   return {...INPUT, target: {kind: 'plain', text}, rawHostString: text};
+}
+
+/** The steps of one connect, with a stage listener that nothing here reads. */
+function stepsOf(ports: WiringPorts): ReturnType<typeof stepsWith> {
+  return stepsWith(ports, () => undefined);
 }
 
 describe("the composition of a connect's steps", () => {

@@ -12,6 +12,7 @@ import type {
   ConnectionNotice,
   SharedConnection,
 } from 'lib-ssh';
+import type {PhaseEvent} from './connect.ts';
 import {ofAcquire, ofConnection} from './failure.ts';
 import type {ConnectInput, ConnectionTerms, ConnectSteps} from './steps.ts';
 
@@ -39,6 +40,8 @@ export interface ConnectionStepDependencies {
    * returned handle takes the questions down.
    */
   attachLogin: (login: LoginLease, input: ConnectInput) => {dispose(): void};
+  /** Reports a stage of the connect to the progress. */
+  onPhase: (event: PhaseEvent) => void;
   logger: Logger;
 }
 
@@ -78,11 +81,19 @@ export function openConnectionStep(
       connection.release();
     }
     const login = dependencies.attachLogin(connection, input);
+    const stopStages = connection.onNotice(notice => {
+      if (notice.type === 'waitingForOtherWindow') {
+        dependencies.onPhase({kind: 'waitingForOtherWindow'});
+      } else if (notice.type === 'loginOwned') {
+        dependencies.onPhase({kind: 'initializing'});
+      }
+    });
     let outcome: Awaited<ReturnType<SharedConnection['connect']>>;
     try {
       outcome = await connection.connect(cancellation);
     } finally {
       login.dispose();
+      stopStages();
     }
     if (outcome.kind === 'failed') {
       end();

@@ -13,6 +13,7 @@ const PHASE_IDS: ReadonlyArray<readonly [PhaseName, string]> = [
   ['installing', 'S084'],
   ['settingUpTunnel', 'S130'],
   ['waitingForForwarding', 'S158'],
+  ['waitingForOtherWindow', 'S157'],
 ];
 
 describe('the titles of the connection progress', () => {

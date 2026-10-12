@@ -295,6 +295,49 @@ describe('the connector over the connect pipeline', () => {
     deepStrictEqual(heard, []);
   });
 
+  /** The phases heard for a connect whose connection step reports that it waits for another window. */
+  async function phasesHeardWhileWaiting(): Promise<ConnectPhase[]> {
+    const {recording, options} = setup();
+    const {maximumReconnectionAttempts, preconnectMilliseconds, logger} =
+      options;
+    const connector = connectorOf({
+      stepsFor: onPhase =>
+        steps(recording, {
+          openConnection: (...given) => {
+            onPhase({kind: 'waitingForOtherWindow'});
+            return steps(recording).openConnection(...given);
+          },
+        }),
+      terminalMode: () => false,
+      options: {maximumReconnectionAttempts, preconnectMilliseconds, logger},
+      revealLog: () => undefined,
+    });
+    const heard: ConnectPhase[] = [];
+    connector.onPhase(given => {
+      heard.push(given);
+    });
+    await connector.connect(HOST_INPUT);
+    return heard;
+  }
+
+  it('contracts: a stage a step reports through the listener it was given reaches the phase listeners', async () => {
+    deepStrictEqual(
+      (await phasesHeardWhileWaiting()).some(
+        phase => phase.name === 'waitingForOtherWindow',
+      ),
+      true,
+    );
+  });
+
+  it('F-2102 5.2 step 3: the waiting stage carries no details link', async () => {
+    deepStrictEqual(
+      (await phasesHeardWhileWaiting()).find(
+        phase => phase.name === 'waitingForOtherWindow',
+      ),
+      {name: 'waitingForOtherWindow'},
+    );
+  });
+
   it('connect-14: each connect makes its own steps', async () => {
     const {recording, options} = setup();
     const {maximumReconnectionAttempts, preconnectMilliseconds, logger} =

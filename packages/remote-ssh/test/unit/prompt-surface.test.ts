@@ -61,8 +61,6 @@ interface Shown {
 /** An editor that shows nothing and lets the test answer what it was asked. */
 class FakeEditor implements PromptEditor {
   shown: Shown[] = [];
-  waiting: string[] = [];
-  waitingTakenDown = 0;
   failsToShow = false;
 
   translate = (template: string): string => `<${template}>`;
@@ -81,15 +79,6 @@ class FakeEditor implements PromptEditor {
     cancellation: AbortSignal,
   ): Promise<string | undefined> {
     return this.open('input', request, cancellation);
-  }
-
-  showWaiting(text: string): {dispose(): void} {
-    this.waiting.push(text);
-    return {
-      dispose: () => {
-        this.waitingTakenDown += 1;
-      },
-    };
   }
 
   last(): Shown {
@@ -296,41 +285,25 @@ describe('the prompt surface: an editor that cannot show a question', () => {
   });
 });
 
-describe('the prompt surface: waiting for another window (F-2304)', () => {
-  it('F-2304: the notice names the wait while another window holds the login', () => {
+describe('the prompt surface: waiting for another window (#253 Q12)', () => {
+  it('#253 Q12: hearing that another window holds the login shows nothing, the progress shows it now', () => {
     const context = setup();
     context.lease.send({type: 'waitingForOtherWindow'});
-    deepStrictEqual(context.editor.waiting, [
-      '<Waiting for other windows to connect>',
-    ]);
+    deepStrictEqual(context.editor.shown, []);
   });
 
-  it('F-2304: the notice is taken down when a question arrives', async () => {
+  it('#253 Q12: a question that arrives after the wait is still shown', async () => {
     const context = setup();
     context.lease.send({type: 'waitingForOtherWindow'});
     await question(context, 1, PASSWORD_TEXT);
-    deepStrictEqual(context.editor.waitingTakenDown, 1);
+    deepStrictEqual(context.editor.shown.length, 1);
   });
 
-  it('F-2304: the notice is taken down when the owner changes', () => {
+  it('#253 Q12: the login falling to this window takes down no question', async () => {
     const context = setup();
-    context.lease.send({type: 'waitingForOtherWindow'});
-    context.lease.send({type: 'ownerChanged', owner: 2});
-    deepStrictEqual(context.editor.waitingTakenDown, 1);
-  });
-
-  it('F-2304: a second wait replaces the first notice', () => {
-    const context = setup();
-    context.lease.send({type: 'waitingForOtherWindow'});
-    context.lease.send({type: 'waitingForOtherWindow'});
-    deepStrictEqual(context.editor.waitingTakenDown, 1);
-  });
-
-  it('F-2304: the notice is taken down when the transport is lost', () => {
-    const context = setup();
-    context.lease.send({type: 'waitingForOtherWindow'});
-    context.lease.send({type: 'transportLost'});
-    deepStrictEqual(context.editor.waitingTakenDown, 1);
+    await question(context, 1, PASSWORD_TEXT);
+    context.lease.send({type: 'loginOwned'});
+    deepStrictEqual(context.editor.last().signal.aborted, false);
   });
 });
 
@@ -341,15 +314,10 @@ describe('the prompt surface: its end', () => {
     deepStrictEqual(context.lease.listeners.size, 0);
   });
 
-  it('F-2305: ending it takes down the question and the notice', async () => {
+  it('F-2305: ending it takes down the question', async () => {
     const context = setup();
-    context.lease.send({type: 'waitingForOtherWindow'});
     await question(context, 1, PASSWORD_TEXT);
-    context.lease.send({type: 'waitingForOtherWindow'});
     context.surface.dispose();
-    deepStrictEqual(
-      [context.editor.last().signal.aborted, context.editor.waitingTakenDown],
-      [true, 2],
-    );
+    deepStrictEqual(context.editor.last().signal.aborted, true);
   });
 });

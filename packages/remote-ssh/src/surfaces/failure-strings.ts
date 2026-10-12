@@ -48,6 +48,7 @@ export type FailureStringId =
   | 'S137'
   | 'S140'
   | 'S142'
+  | 'S157'
   | 'S158'
   | 'installPathProvided'
   | 'templateNotHttp'
@@ -95,6 +96,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S137: 'The connection timed out',
   S140: 'The operation timed out',
   S142: 'The process tried to write to a nonexistent pipe',
+  S157: 'Waiting for other windows to connect',
   S158: 'Waiting for port forwarding to be ready',
   installPathProvided: 'Provided: "{0}"',
   templateNotHttp: 'it does not give an http or https address',
