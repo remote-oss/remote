@@ -54,6 +54,7 @@ jobs:
       - run: pnpm check-layout
       - run: pnpm check-identifiers
       - run: pnpm check-public-surface
+      - run: pnpm check-coverage # every acceptance criterion tagged, and every tagged one cited by a test (#142)
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm lint:shell # shellcheck is preinstalled on the runner
