@@ -629,10 +629,12 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     strictEqual(invocation.arguments.includes('-N'), false);
   });
 
-  it('F-2104 BR-12: a tunnel run carries no ExitOnForwardFailure', () => {
+  it('F-2104 BR-11, BR-12: a tunnel run carries no ExitOnForwardFailure', () => {
     const invocation = buildInvocation(makeRequest({purpose: 'tunnel'}));
     strictEqual(
-      invocation.arguments.includes('ExitOnForwardFailure=yes'),
+      invocation.arguments.some(argument =>
+        argument.includes('ExitOnForwardFailure'),
+      ),
       false,
     );
   });
