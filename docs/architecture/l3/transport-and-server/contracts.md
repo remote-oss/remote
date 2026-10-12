@@ -663,8 +663,10 @@ commit is the one its release names as its upstream.
   - While it runs, `serve` streams `serverlog {line, level}` notifications. Levels are 0 trace, 1 debug, 2 info,
     3 warn, 4 error. Every level reaches the caller.
   - It replies `{}` when the server has started.
-- **Bridge:** after `serve`, the editor's connection rides as `servermsg {i, body}` frames in both directions, and
-  `serverclose` ends one.
+- **Bridge:** each `serve` attaches one bridge for its `socket_id` (`[cli]` `attach_server_bridge`), so every editor
+  connection has its own `serve` before its first frame; only the first installs or starts the server. The connection
+  then rides as `servermsg {i, body}` frames in both directions, and `serverclose` ends one. A `servermsg` for an `i`
+  with no bridge fails with `NoAttachedServerError`, unanswered since `servermsg` goes without id.
 
 **The `serverlog` lines of a first install, in order, and S045 (F-2103 5.0 steps 6–8):**
 
