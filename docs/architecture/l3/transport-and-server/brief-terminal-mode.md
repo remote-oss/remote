@@ -89,7 +89,11 @@ connect in validate; this brief replaces that interim.
   of the `authenticated` marker. A `mode` input to the wait's owner decides which.
 - secondSsh and socket: purpose `tunnel`, **no `-N`** (the tunnel runs the remote command ruled under W2 below, which
   prints F-2308 BR-10's line), `-L 127.0.0.1:<port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (already
-  built), and `ExitOnForwardFailure yes` (it exits 255 on a busy port; checked by daedalus on OpenSSH 10.2p1).
+  built). **No `ExitOnForwardFailure`** (corrected on #340, 2026-10-12): the extension doesn't add it. F-2104 BR-11
+  applies the user's own forwards to this ssh, and BR-12/7.E6/7.E7 make a failing user forward end it **only when the
+  user's host entry sets `ExitOnForwardFailure yes`**. Forcing it would fail the connect for every user whose entry has
+  a forward that can't bind. The tunnel's own `-L` is safe without it: W1 has just found the port free, and the 10 s
+  readiness wait (BR-10) fails a tunnel that never accepts.
 - With dynamic forwarding off, the install `ssh` must not act on the user's own forwards (F-2104 6.2 step 1):
   `ClearAllForwardings yes` on that run only. S2's "never add" list gains this one exception, scoped to that run.
   Checked against a real sshd: a host block's `LocalForward` opens without it and doesn't open with it.
@@ -109,7 +113,7 @@ connect in validate; this brief replaces that interim.
   (POSIX `sh`, the remote login shell), so the line is the host's own output, as the spec says. It's still bounded by
   the 10 s readiness wait. Checked against a real OpenSSH sshd (2026-10-12): the line arrives, the forward carries
   traffic, and it ends with the process.
-- A tunnel login that is cancelled, fails, or exits through `ExitOnForwardFailure` fails the connect with F-2601's
+- A tunnel login that is cancelled, fails, or exits through the user's own `ExitOnForwardFailure` fails the connect with F-2601's
   dialog after the bound, never a hang (F-2104 7.E7/7.E10, F-2308 7.E2/BR-11, R-79).
 - W3 in these two paths: the user's forwarded ports open one `-L` each on the tunnel session. F-2104 Q4 and BR-11's
   socket-mode lab item stay open; until answered, W3 there reports a port it can't forward instead of guessing.
