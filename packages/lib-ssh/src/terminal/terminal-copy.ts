@@ -7,7 +7,7 @@
 import type {Scheduler} from 'lib-helper';
 import {type CopyOutcome, type CopyRequest, failFrom} from 'lib-host';
 import type {Invocation} from '../arguments/invocation.ts';
-import {logLinesOf} from '../diagnostics/classify.ts';
+import {isDebugLine} from '../diagnostics/classify.ts';
 import {
   ConnectWait,
   type ConnectWaitSettings,
@@ -25,7 +25,7 @@ import {PromptReader} from './prompt-reader.ts';
 /** The exit status `scp` gives when it could not keep its connection. */
 const CONNECTION_FAILED_STATUS = 255;
 
-/** How many raw lines are kept to find a failure's cause, and how many of the cause's lines are told. */
+/** How many of the kept lines are held for a failure's cause, and how many of those are told. */
 const KEPT_LINES = 200;
 const TOLD_LINES = 20;
 
@@ -137,9 +137,11 @@ export function terminalCopierOf(options: TerminalCopierOptions): Copier {
       );
       asking.questions = options.attachQuestions({terminal, reader});
       const splitter = new LineSplitter(line => {
-        lines.push(line);
-        if (lines.length > KEPT_LINES) {
-          lines.shift();
+        if (line.trim() !== '' && !isDebugLine(line)) {
+          lines.push(line);
+          if (lines.length > KEPT_LINES) {
+            lines.shift();
+          }
         }
       });
       followLoginOutput(terminal, {
@@ -153,7 +155,7 @@ export function terminalCopierOf(options: TerminalCopierOptions): Copier {
       terminal.onEnd(end => {
         ended = true;
         splitter.flush();
-        const told = logLinesOf(lines).slice(-TOLD_LINES).join('\n');
+        const told = lines.slice(-TOLD_LINES).join('\n');
         settle(endOutcome(end, told === '' ? '' : `: ${told}`));
       });
       cancellation.addEventListener('abort', onAbort);

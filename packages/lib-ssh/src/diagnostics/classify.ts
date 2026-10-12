@@ -142,14 +142,19 @@ export function classify(
   return plain('unknown');
 }
 
+/** Whether a line is a debug1 line of the client's `-v`, with or without the `scp: ` that scp puts before its ssh's lines. */
+export function isDebugLine(line: string): boolean {
+  const body = line.startsWith('scp: ') ? line.slice(5) : line;
+  return body.startsWith(DEBUG1_PREFIX);
+}
+
 /**
- * The lines of one run that go to the extension's log: every line except ssh's `debug1` lines, of which only the
- * server host key line is kept.
+ * The lines of one run that go to the extension's log: every line except the client's `debug1` lines, of which only
+ * the server host key line is kept.
  */
 export function logLinesOf(errorLines: readonly string[]): string[] {
   return errorLines.filter(
-    line =>
-      !line.startsWith(DEBUG1_PREFIX) || line.includes(SERVER_HOST_KEY_TEXT),
+    line => !isDebugLine(line) || line.includes(SERVER_HOST_KEY_TEXT),
   );
 }
 

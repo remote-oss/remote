@@ -10,7 +10,6 @@ import {
   type ScriptRequest,
 } from 'lib-host';
 import {
-  isDebugLine,
   LineSplitter,
   nodeLocalFiles,
   planScript,
@@ -586,6 +585,49 @@ describe('SSH host channel', () => {
       );
     });
 
+    it('#417 (1): a failed copy keeps its last 50 error lines, the oldest dropped', async () => {
+      const lines: string[] = [];
+      for (let index = 0; index < 60; index += 1) {
+        lines.push(`e${String(index + 1)}`);
+      }
+      const outcome = await copyBy(process => {
+        process.error(`${lines.join('\n')}\n`);
+        process.exit(1);
+      });
+      deepStrictEqual(
+        outcome.kind === 'failed' ? outcome.failure.detail : outcome,
+        `scp failed: ${lines.slice(10).join('\n')}`,
+      );
+    });
+
+    it('#417 (1): a cause followed by ten thousand debug lines is still told', async () => {
+      const outcome = await copyBy(process => {
+        process.error('scp: dest open "/x/f": No such file\n');
+        process.error(
+          Array.from(
+            {length: 10_000},
+            (unusedItem, index) => `debug1: ${String(index)}\n`,
+          ).join(''),
+        );
+        process.exit(1);
+      });
+      deepStrictEqual(
+        outcome.kind === 'failed' ? outcome.failure.detail : outcome,
+        'scp failed: scp: dest open "/x/f": No such file',
+      );
+    });
+
+    it('F-2109 BR-4: a debug2 line of the client stays in the detail, as in the log', async () => {
+      const outcome = await copyBy(process => {
+        process.error('debug2: forced\nscp: failed to upload\n');
+        process.exit(1);
+      });
+      deepStrictEqual(
+        outcome.kind === 'failed' ? outcome.failure.detail : outcome,
+        'scp failed: debug2: forced\nscp: failed to upload',
+      );
+    });
+
     it('maps status 255 to channelClosed', async () => {
       deepStrictEqual(
         await copyBy(process => {
@@ -691,32 +733,6 @@ describe('LineSplitter', () => {
     splitter.push('a\n');
     splitter.flush();
     deepStrictEqual(lines, ['a']);
-  });
-});
-
-describe('isDebugLine', () => {
-  it('#402: a line that starts with debug1: is one', () => {
-    strictEqual(isDebugLine('debug1: a'), true);
-  });
-
-  it('#402: a line that starts with debug2: is one', () => {
-    strictEqual(isDebugLine('debug2: a'), true);
-  });
-
-  it('#402: a line that starts with debug3: is one', () => {
-    strictEqual(isDebugLine('debug3: a'), true);
-  });
-
-  it('#402: a line that starts with scp: debug1: is one', () => {
-    strictEqual(isDebugLine('scp: debug1: a'), true);
-  });
-
-  it('#402: a line that says scp: dest open is not one', () => {
-    strictEqual(isDebugLine('scp: dest open'), false);
-  });
-
-  it('#402: a line that says Host key verification failed. is not one', () => {
-    strictEqual(isDebugLine('Host key verification failed.'), false);
   });
 });
 

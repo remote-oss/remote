@@ -1,6 +1,11 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
-import {classify, endWithFullStop, logLinesOf} from '../../src/index.ts';
+import {
+  classify,
+  endWithFullStop,
+  isDebugLine,
+  logLinesOf,
+} from '../../src/index.ts';
 import type {
   ClassifyPurpose,
   Classification,
@@ -821,6 +826,13 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     );
   });
 
+  it('F-2109.BR-4: a scp line before an ssh debug line is dropped too, the host key stays', () => {
+    deepStrictEqual(
+      logLinesOf(['scp: debug1: x', 'debug1: Server host key: k', 'debug2: y']),
+      ['debug1: Server host key: k', 'debug2: y'],
+    );
+  });
+
   it('F-2109.BR-4: no lines give no log lines', () => {
     deepStrictEqual(logLinesOf([]), []);
   });
@@ -879,6 +891,32 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
       classifyRun([CHANGED_KEY_LINE], 255, 'connection', 'shared').hints,
       [],
     );
+  });
+});
+
+describe('isDebugLine (the one debug-line rule, F-2109 BR-4)', () => {
+  it('F-2109 BR-4: a line that starts with debug1: is one', () => {
+    deepStrictEqual(isDebugLine('debug1: a'), true);
+  });
+
+  it('F-2109 BR-4: a line that starts with scp: debug1: is one', () => {
+    deepStrictEqual(isDebugLine('scp: debug1: a'), true);
+  });
+
+  it('F-2109 BR-4: a line that starts with debug2: is not one', () => {
+    deepStrictEqual(isDebugLine('debug2: a'), false);
+  });
+
+  it('F-2109 BR-4: a line that starts with debug3: is not one', () => {
+    deepStrictEqual(isDebugLine('debug3: a'), false);
+  });
+
+  it('F-2109 BR-4: a line that says scp: dest open is not one', () => {
+    deepStrictEqual(isDebugLine('scp: dest open'), false);
+  });
+
+  it('F-2109 BR-4: a line that says Warning: y is not one', () => {
+    deepStrictEqual(isDebugLine('Warning: y'), false);
   });
 });
 

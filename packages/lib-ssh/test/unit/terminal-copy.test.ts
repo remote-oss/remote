@@ -372,8 +372,31 @@ describe("the window's scp in a hidden login terminal (card ssh-29 table)", () =
     );
   });
 
-  it('#402: a cause followed by 200 debug lines is pushed out of the 200 lines kept, and only the failure is told', async () => {
-    deepStrictEqual(await causeAfter(200), 'scp failed');
+  it('themis on #413: a cause followed by 250 debug lines is still told, the cap counts only the kept lines', async () => {
+    const {result, terminal} = await started(fixture());
+    terminal.write('scp: dest open "/x/f": No such file\n');
+    terminal.write(
+      Array.from(
+        {length: 250},
+        (unusedItem, index) => `debug1: ${String(index)}\n`,
+      ).join(''),
+    );
+    terminal.end(1);
+    const outcome = await result;
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure.detail : outcome,
+      'scp failed: scp: dest open "/x/f": No such file',
+    );
+  });
+
+  it("themis on #413: a settled copy's wait and reader are stopped, so advancing the clock fires nothing", async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write("copy@host's password: ");
+    terminal.end(0);
+    const outcome = await result;
+    made.clock.advance(13_000);
+    deepStrictEqual([outcome, made.timers.fired], [{kind: 'copied'}, 0]);
   });
 
   it('contracts: a copy that ends takes down every timer it armed', async () => {
