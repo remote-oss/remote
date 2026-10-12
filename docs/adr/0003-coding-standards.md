@@ -88,7 +88,8 @@ No unused exports, files, dependencies, parameters or locals; no unreachable cod
 scaffolding "for later".
 
 Check: `tsc` `noUnusedLocals`; `knip` for unused exports, files and dependencies; `no-unreachable`; review
-question R4.
+question R4. An import cycle inside one package is reported the same way: the lint rule `layout/no-intra-package-cycles`
+names every cycle between a package's `src/` files once, in order; test files are out of scope.
 
 ### Tests cover every scenario **(ours)**
 

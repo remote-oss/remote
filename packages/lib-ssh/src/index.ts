@@ -17,9 +17,9 @@ export type {
   SshRequest,
 } from './arguments/invocation.ts';
 export {buildInvocation, buildOptionsQuery} from './arguments/invocation.ts';
+export type {ClientPlatform} from './config/platform.ts';
 export type {
   ClientLocations,
-  ClientPlatform,
   ConfigFileReader,
   FileInEffect,
 } from './config/files.ts';

@@ -5,7 +5,7 @@
  */
 
 import type {EffectiveOptions} from '../config/effective.ts';
-import type {ClientPlatform} from '../config/files.ts';
+import type {ClientPlatform} from '../config/platform.ts';
 import type {SshTarget} from './target.ts';
 
 /** What an `ssh` run is for; a `copy` run uses `scp`. */

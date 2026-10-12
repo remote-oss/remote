@@ -1,6 +1,7 @@
 /**
- * @fileoverview ESLint rule for the import rules of docs/architecture/layout.md: an extension never imports
- * another extension (rule 3); a library never imports an extension, and the library graph has no cycles (rule 4).
+ * @fileoverview ESLint rules for the import rules of docs/architecture/layout.md: an extension never imports
+ * another extension (rule 3); a library never imports an extension, and the library graph has no cycles (rule 4);
+ * and no package has an import cycle between its own source files.
  *
  * A package is a folder in packages/; a folder named lib-* is a library, every other folder an extension. A package
  * reaches another package only by its package name, so a relative path into another package's folder is reported
@@ -11,9 +12,15 @@
  * substitutions, `import name = require()`, `import('...')` types and `declare module '...'`; a computed specifier
  * in `import()` or `require()` is reported on its own. Known gaps, left to review: an inline `eslint-disable` of
  * this rule, `createRequire`, `require.resolve`, `import.meta.resolve` and triple-slash type references.
+ *
+ * The intra-package rule resolves the relative imports a package's src/ carries — static and `import type`
+ * declarations, `export … from`, and `import()` with a literal — and reports every cycle once, from the
+ * lexicographically first file of the cycle, naming the files in order. Test files are out of scope; files outside
+ * src/ are not nodes. Known gaps, left to review: a specifier inside a regular expression, a comment between the
+ * keyword and its string, and files whose extension is not .ts, .mts or .cts.
  */
 
-import {existsSync, readFileSync} from 'node:fs';
+import {existsSync, readdirSync, readFileSync, statSync} from 'node:fs';
 import path from 'node:path';
 import type {Rule} from 'eslint';
 import {isLibraryFolder, packageFolders} from '../repository.ts';
@@ -285,8 +292,377 @@ const packageImports: Rule.RuleModule = {
   },
 };
 
-/** The `layout` plugin: `package-imports`. */
+// ---------------------------------------------------------------------------
+// layout/no-intra-package-cycles
+
+/** A quoted literal the scanner reads: its text, the index after its end, and whether a template has no substitutions. */
+interface LiteralReading {
+  readonly text: string;
+  readonly end: number;
+  readonly plain: boolean;
+}
+
+function isQuote(character: string | undefined): boolean {
+  return character === "'" || character === '"' || character === '`';
+}
+
+function isIdentifierCharacter(character: string | undefined): boolean {
+  return character !== undefined && /[A-Za-z0-9_$]/.test(character);
+}
+
+/**
+ * The index after the literal that opens at `start`: a quote, a template, or the end of the text when the literal
+ * never closes.
+ */
+function literalEnd(source: string, start: number): number {
+  const quote = source[start];
+  let index = start + 1;
+  let depth = 0;
+  while (index < source.length) {
+    const character = source[index];
+    if (character === '\\') {
+      index += 2;
+      continue;
+    }
+    if (character === '`' && depth > 0) {
+      index = literalEnd(source, index);
+      continue;
+    }
+    if (character === '$' && source[index + 1] === '{') {
+      depth += 1;
+      index += 2;
+      continue;
+    }
+    if (character === '}' && depth > 0) {
+      depth -= 1;
+      index += 1;
+      continue;
+    }
+    if (character === quote) {
+      return index + 1;
+    }
+    index += 1;
+  }
+  return index;
+}
+
+function afterWhitespace(source: string, index: number): number {
+  while (index < source.length) {
+    const character = source[index];
+    if (
+      character === ' ' ||
+      character === '\t' ||
+      character === '\n' ||
+      character === '\r'
+    ) {
+      index += 1;
+      continue;
+    }
+    break;
+  }
+  return index;
+}
+
+/** True where the text at `index` is the word `word`, not a part of a longer identifier. */
+function isKeyword(source: string, index: number, word: string): boolean {
+  if (
+    isIdentifierCharacter(source[index - 1]) ||
+    !source.startsWith(word, index)
+  ) {
+    return false;
+  }
+  return !isIdentifierCharacter(source[index + word.length]);
+}
+
+/** The quoted literal that follows a `from` clause or an `import()` argument, or null where none follows. */
+function quoteAfter(source: string, index: number): LiteralReading | null {
+  if (!isQuote(source[index])) {
+    return null;
+  }
+  const end = literalEnd(source, index);
+  const content = source.slice(index + 1, end - 1);
+  if (source[index] === '`' && content.includes('${')) {
+    return {text: '', end, plain: false};
+  }
+  return {text: content, end, plain: true};
+}
+
+/**
+ * The relative import specifiers a source text carries: the `from` clauses of import and export declarations,
+ * side-effect imports, and `import()` with a literal argument. Comments and the inside of strings do not count,
+ * and a computed argument does not.
+ */
+function importSpecifiers(source: string): string[] {
+  const specifiers: string[] = [];
+  let index = 0;
+  while (index < source.length) {
+    const character = source[index];
+    if (character === '/' && source[index + 1] === '/') {
+      const lineEnd = source.indexOf('\n', index);
+      index = lineEnd === -1 ? source.length : lineEnd + 1;
+      continue;
+    }
+    if (character === '/' && source[index + 1] === '*') {
+      const blockEnd = source.indexOf('*/', index + 2);
+      index = blockEnd === -1 ? source.length : blockEnd + 2;
+      continue;
+    }
+    if (isQuote(character)) {
+      index = literalEnd(source, index);
+      continue;
+    }
+    if (isKeyword(source, index, 'from')) {
+      const clause = quoteAfter(source, afterWhitespace(source, index + 4));
+      if (clause?.plain) {
+        specifiers.push(clause.text);
+        index = clause.end;
+        continue;
+      }
+      index += 4;
+      continue;
+    }
+    if (isKeyword(source, index, 'import')) {
+      const memberAccess = source[index - 1] === '.';
+      const argumentStart = afterWhitespace(source, index + 6);
+      if (!memberAccess && source[argumentStart] === '(') {
+        const clause = quoteAfter(source, argumentStart + 1);
+        if (clause?.plain) {
+          specifiers.push(clause.text);
+          index = clause.end;
+          continue;
+        }
+      } else if (!memberAccess && isQuote(source[argumentStart])) {
+        const clause = quoteAfter(source, argumentStart);
+        if (clause?.plain) {
+          specifiers.push(clause.text);
+          index = clause.end;
+          continue;
+        }
+      }
+      index += 6;
+      continue;
+    }
+    index += 1;
+  }
+  return specifiers;
+}
+
+/** The src/-relative paths of a package's source files: test and fixture files out of scope. */
+function packageSourceFiles(srcDir: string): string[] {
+  const files: string[] = [];
+  function visit(folder: string): void {
+    for (const entry of readdirSync(folder, {withFileTypes: true})) {
+      const absolute = path.join(folder, entry.name);
+      if (entry.isDirectory()) {
+        visit(absolute);
+        continue;
+      }
+      if (!/\.(ts|mts|cts)$/.test(entry.name)) {
+        continue;
+      }
+      if (/\.(test|fixture)\.(ts|mts|cts)$/.test(entry.name)) {
+        continue;
+      }
+      files.push(path.relative(srcDir, absolute).split(path.sep).join('/'));
+    }
+  }
+  visit(srcDir);
+  return files.sort();
+}
+
+/** The src/-relative path a relative specifier of `importer` resolves to within `files`, or undefined. */
+function resolveIntra(
+  srcDir: string,
+  files: ReadonlySet<string>,
+  importer: string,
+  specifier: string,
+): string | undefined {
+  if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
+    return undefined;
+  }
+  const base = path.resolve(path.dirname(importer), specifier);
+  for (const candidate of [base, `${base}.ts`, path.join(base, 'index.ts')]) {
+    const relative = path.relative(srcDir, candidate).split(path.sep).join('/');
+    if (!relative.startsWith('..') && files.has(relative)) {
+      return relative;
+    }
+  }
+  return undefined;
+}
+
+interface IntraGraphEntry {
+  readonly fingerprint: string;
+  readonly graph: Map<string, string[]>;
+  readonly cycles: string[][];
+}
+
+const intraGraphCache = new Map<string, IntraGraphEntry>();
+
+/**
+ * The module graph of one package's src/: each file's resolved relative imports, and its cycles, each found once
+ * and starting at its lexicographically first file. The read is cached by the files' sizes and modification
+ * times, so a long-running ESLint in an editor sees edits.
+ */
+function intraGraphOf(root: string, folder: string): Map<string, string[]> {
+  const srcDir = path.join(root, 'packages', folder, 'src');
+  const files = packageSourceFiles(srcDir);
+  const fingerprint = files
+    .map(file => {
+      const info = statSync(path.join(srcDir, file));
+      return `${file}:${String(info.size)}:${String(info.mtimeMs)}`;
+    })
+    .join('|');
+  const cached = intraGraphCache.get(`${root}/${folder}`);
+  if (cached?.fingerprint === fingerprint) {
+    return cached.graph;
+  }
+  const fileSet = new Set(files);
+  const graph = new Map<string, string[]>();
+  for (const file of files) {
+    const absolute = path.join(srcDir, file);
+    const targets = new Set<string>();
+    for (const specifier of importSpecifiers(readFileSync(absolute, 'utf8'))) {
+      const target = resolveIntra(srcDir, fileSet, absolute, specifier);
+      if (target !== undefined) {
+        targets.add(target);
+      }
+    }
+    graph.set(file, [...targets].sort());
+  }
+  intraGraphCache.set(`${root}/${folder}`, {
+    fingerprint,
+    graph,
+    cycles: elementaryCycles(graph),
+  });
+  return graph;
+}
+
+/** Every cycle of `graph`, each once: `a.ts → b.ts → a.ts`, starting at the lexicographically first file. */
+function elementaryCycles(graph: Map<string, string[]>): string[][] {
+  const cycles: string[][] = [];
+  for (const start of [...graph.keys()].sort()) {
+    const onPath = new Set<string>([start]);
+    function visit(current: string, journey: string[]): void {
+      for (const next of graph.get(current) ?? []) {
+        if (next === start) {
+          cycles.push([...journey, start]);
+          continue;
+        }
+        // A cycle is found only from its smallest file, so each one is found once.
+        if (next < start || onPath.has(next)) {
+          continue;
+        }
+        onPath.add(next);
+        journey.push(next);
+        visit(next, journey);
+        journey.pop();
+        onPath.delete(next);
+      }
+    }
+    visit(start, [start]);
+  }
+  return cycles;
+}
+
+const noIntraPackageCycles: Rule.RuleModule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Report every import cycle between the source files of one package, each once, naming the files in order',
+    },
+    schema: [
+      {
+        type: 'object',
+        properties: {root: {type: 'string'}},
+        required: ['root'],
+        additionalProperties: false,
+      },
+    ],
+    messages: {
+      cycle:
+        'Import cycle inside the package: {{chain}}; the layout forbids cycles.',
+    },
+  },
+  create(context) {
+    // The schema above makes the option an object with a string `root`.
+    const {root} = context.options[0] as {root: string};
+    const relative = path.relative(
+      path.join(root, 'packages'),
+      context.filename,
+    );
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      return {};
+    }
+    const segments = relative.split(path.sep);
+    const [folder, kind, ...rest] = segments;
+    // Only a file under <package>/src/ is a node of the graph; test files are out of scope.
+    if (folder === undefined || kind !== 'src' || rest.length === 0) {
+      return {};
+    }
+    const sourceFile = rest.join(path.sep);
+    const srcDir = path.join(root, 'packages', folder, 'src');
+    const graph = intraGraphOf(root, folder);
+    const cycles = elementaryCycles(graph).filter(
+      chain => chain[0] === sourceFile,
+    );
+    if (cycles.length === 0) {
+      return {};
+    }
+    const fileSet = new Set(graph.keys());
+    const edges: Array<{node: Rule.Node; target: string}> = [];
+    function record(
+      node: Rule.Node,
+      source: SpecifierNode | null | undefined,
+    ): void {
+      if (source == null) {
+        return;
+      }
+      const specifier = specifierText(source);
+      if (specifier === null) {
+        return;
+      }
+      const target = resolveIntra(srcDir, fileSet, context.filename, specifier);
+      if (target !== undefined) {
+        edges.push({node, target});
+      }
+    }
+    return {
+      ImportDeclaration(node: Rule.Node & {source: SpecifierNode}) {
+        record(node, node.source);
+      },
+      ExportNamedDeclaration(
+        node: Rule.Node & {source?: SpecifierNode | null | undefined},
+      ) {
+        record(node, node.source);
+      },
+      ExportAllDeclaration(node: Rule.Node & {source: SpecifierNode}) {
+        record(node, node.source);
+      },
+      ImportExpression(node: Rule.Node & {source: SpecifierNode}) {
+        record(node, node.source);
+      },
+      'Program:exit'() {
+        for (const chain of cycles) {
+          const edge = edges.find(candidate => candidate.target === chain[1]);
+          if (edge !== undefined) {
+            context.report({
+              node: edge.node,
+              messageId: 'cycle',
+              data: {chain: chain.join(' → ')},
+            });
+          }
+        }
+      },
+    };
+  },
+};
+
+/** The `layout` plugin: `package-imports` and `no-intra-package-cycles`. */
 export const layoutPlugin = {
   meta: {name: 'layout'},
-  rules: {'package-imports': packageImports},
+  rules: {
+    'no-intra-package-cycles': noIntraPackageCycles,
+    'package-imports': packageImports,
+  },
 };

@@ -328,6 +328,7 @@ export default defineConfig(
     plugins: {layout: layoutPlugin},
     rules: {
       'layout/package-imports': ['error', {root: import.meta.dirname}],
+      'layout/no-intra-package-cycles': ['error', {root: import.meta.dirname}],
     },
   },
 );

@@ -5,7 +5,7 @@
  */
 
 import path from 'node:path';
-import type {ClientPlatform} from '../config/files.ts';
+import type {ClientPlatform} from '../config/platform.ts';
 import {pathsFor} from '../config/files.ts';
 
 /** A program to try and where it came from. */
