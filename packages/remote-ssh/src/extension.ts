@@ -5,6 +5,7 @@
  * this machine.
  */
 
+import {appendFileSync, readFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import path from 'node:path';
@@ -50,6 +51,7 @@ import {
   platformPickPortOf,
   promptEditorOf,
 } from './surfaces/editor-adapters.ts';
+import {adaptersFor} from './surfaces/scripted-adapters.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
 
 /** The page about SSH configuration files that the picker's Help row opens. */
@@ -238,14 +240,23 @@ async function registerConnectOf(
 ): Promise<ConnectRegistration> {
   const window = {alias: (): string => ''};
   const surfaces = editorSurfacesOf(
-    {
-      prompts: promptEditorOf(vscode, translate),
-      terminals: loginTerminalsOf(vscode, homedir()),
-      failureDialog: failureDialogOf(vscode),
-      licenceDialog: licenceDialogOf(vscode),
-      platformPick: platformPickPortOf(vscode, translate),
-      mitigationPick: mitigationPickPortOf(vscode),
-    },
+    adaptersFor(
+      process.env,
+      {
+        prompts: promptEditorOf(vscode, translate),
+        terminals: loginTerminalsOf(vscode, homedir()),
+        failureDialog: failureDialogOf(vscode),
+        licenceDialog: licenceDialogOf(vscode),
+        platformPick: platformPickPortOf(vscode, translate),
+        mitigationPick: mitigationPickPortOf(vscode),
+      },
+      {
+        read: file => readFileSync(file, 'utf8'),
+        append: (file, text) => {
+          appendFileSync(file, text);
+        },
+      },
+    ),
     editorOperationsOf(vscode, () => {
       served.revealLog();
     }),
