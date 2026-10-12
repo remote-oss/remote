@@ -20,7 +20,8 @@
 
 ## Behaviour to get right (each a named test; the harness proves the editor-facing ones)
 
-- Order at activation: stand-down → gate probe → registration; nothing registers after `standing`; a missing
+- Order at activation: stand-down → log channel → gate probe → registration (the channel, which registers nothing,
+  opens before the probe so the gate can log; ruled 2026-10-12, #253); nothing registers after `standing`; a missing
   `resolvers` grant registers nothing and the gate decides (notify, silent, or proceed-silenced).
 - The failure mapping order of §3.2 end to end: retryable → temporarily not available; reconnection → plain not
   available without presenter; silent → plain; userAlreadyNotified → handled; otherwise the presenter's outcome
