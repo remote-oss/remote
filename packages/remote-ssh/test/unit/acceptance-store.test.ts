@@ -7,7 +7,6 @@ function memory(initial: Record<string, unknown> = {}) {
   return {
     updates,
     state: {
-      // eslint-disable-next-line id-length -- the editor's own member name
       get: (stateKey: string) => values.get(stateKey),
       update: (stateKey: string, value: unknown) => {
         updates.push([stateKey, value]);
