@@ -127,6 +127,17 @@ connect in validate; this brief replaces that interim.
   forwarding.` (printed at every log level). And the readiness probe would then connect to **whoever holds the port**.
   So T7 fails the tunnel when the tunnel terminal shows `Could not request local forwarding.` or `cannot listen to
   port: <our port>` before the probe succeeds, and only then trusts the probe. The success line alone never means up.
+- **The success line is a gate, then the probe** (daedalus, ruled on #299: the rule above raced, since with a foreign
+  process on our port the probe connects to it at once, before ssh prints its failure). ssh sets up local forwards in
+  its session setup before it sends the remote command, so its forward-failure lines always precede the success line:
+  measured on OpenSSH 10.2 through a pty (stdout and stderr merged, as the terminal sees them), 10 of 10 runs, with
+  `-v` showing `Local connections to` → `cannot listen` → `Could not request local forwarding` → `Sending command` →
+  the success line. So T7:
+  1. runs the tunnel login under T2's prompt rules, **with no 10 s bound** (F-2104 6.2 step 4: the tunnel ssh may ask
+     for a password);
+  2. waits for the success line, failing the tunnel if a forward-failure line for our port came first;
+  3. only then starts the **10 s readiness wait** (F-2104 BR-10, "Waiting for port forwarding to be ready", S158, 6.2
+     step 5) and the probe. The 10 s counts from the success line, not from the spawn.
 - A tunnel login that is cancelled, fails, or exits through the user's own `ExitOnForwardFailure` fails the connect with F-2601's
   dialog after the bound, never a hang (F-2104 7.E7/7.E10, F-2308 7.E2/BR-11, R-79).
 - W3 in these two paths: the user's forwarded ports open one `-L` each on the tunnel session. F-2104 Q4 and BR-11's
