@@ -48,6 +48,7 @@ describe('connection handler (contracts §4 S9)', () => {
       spawner: spawner.spawn,
       askpassEnvironment: {},
       editorEnvironment: {},
+      sessionPrelude: 'P\n',
       waitSettings: {
         connectTimeoutSeconds: 10,
         fromHost: false,
@@ -598,13 +599,27 @@ describe('connection handler (contracts §4 S9)', () => {
       });
     });
 
-    it('are written to the standard input of the ssh session', async () => {
+    it('are written to the standard input of the ssh session after the session prelude', async () => {
       await connected();
       void send(1, RUN_REQUEST);
       await settled();
       deepStrictEqual(
         spawner.started[0]?.inputText(),
-        "printf '%s%s\\n' 'm1:st' 'art'\nsh -c 'echo hello' </dev/null\nprintf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"\n",
+        "P\nprintf '%s%s\\n' 'm1:st' 'art'\nsh -c 'echo hello' </dev/null\nprintf '%s%s %s\\n' 'm1:e' 'nd' \"$?\"\n",
+      );
+    });
+
+    it('#443: the session prelude is written once, however many runs follow', async () => {
+      await connected();
+      void send(1, RUN_REQUEST);
+      await settled();
+      spawner.started[0]?.output('m1:start\nhello\nm1:end 0\n');
+      await settled();
+      void send(1, {...RUN_REQUEST, runId: 8});
+      await settled();
+      deepStrictEqual(
+        (spawner.started[0]?.inputText() ?? '').split('P\n').length - 1,
+        1,
       );
     });
 

@@ -29,6 +29,14 @@ export function posixQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
+/**
+ * The remote command that evaluates the first `byteCount` bytes of its standard input and leaves the rest of the
+ * input to what they start. Only a number is on the command line; every login shell passes it to `sh` unchanged.
+ */
+export function preludeProgram(byteCount: number): string {
+  return `sh -c 'eval "$(dd bs=1 count=${String(byteCount)} 2>/dev/null)"'`;
+}
+
 /** The first name in the environment that cannot be a variable's, if any. */
 function badNameIn(
   environment: Readonly<Record<string, string>>,
@@ -101,7 +109,7 @@ export function planScript(
   const prelude = `${[...lines, script.text].join('\n')}\n`;
   return {
     kind: 'planned',
-    remoteProgram: `sh -c 'eval "$(dd bs=1 count=${String(Buffer.byteLength(prelude, 'utf8'))} 2>/dev/null)"'`,
+    remoteProgram: preludeProgram(Buffer.byteLength(prelude, 'utf8')),
     input:
       request.input.kind === 'text'
         ? {kind: 'text', text: prelude + request.input.text}

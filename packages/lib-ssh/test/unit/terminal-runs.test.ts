@@ -21,6 +21,8 @@ const OTHER: SessionRun = {
 
 const WAIT = 5000;
 
+const PRELUDE = 'P\n';
+
 const INVOCATION = {program: 'ssh', arguments: ['host'], environment: {}};
 
 function fixture() {
@@ -35,6 +37,7 @@ function fixture() {
   const runner = new TerminalSessionRunner({
     terminal: session,
     scheduler: clock.scheduler(),
+    prelude: PRELUDE,
     newMarker: () => {
       markers += 1;
       return `m${String(markers)}`;
@@ -60,10 +63,17 @@ async function settled(): Promise<void> {
 }
 
 describe('script runs over the login terminal (card ssh-21 table)', () => {
+  it('#443: the prelude is sent once, before the first run, and the commands follow it', () => {
+    const {terminal, start} = fixture();
+    start();
+    start(OTHER);
+    deepStrictEqual(terminal.sent, [PRELUDE, commandsFor('m1', SCRIPT)]);
+  });
+
   it('contracts §S10: sends the commands of the run', () => {
     const {terminal, start} = fixture();
     start();
-    deepStrictEqual(terminal.sent, [commandsFor('m1', SCRIPT)]);
+    deepStrictEqual(terminal.sent.slice(1), [commandsFor('m1', SCRIPT)]);
   });
 
   it('contracts §S10: delivers the lines of the run and its status', async () => {
@@ -79,7 +89,7 @@ describe('script runs over the login terminal (card ssh-21 table)', () => {
   it('brief T4, #299: the echo of the sent commands is not taken for the markers', async () => {
     const {terminal, start} = fixture();
     const attempt = start();
-    const echo = terminal.sent.join('').replaceAll('\n', '\r\n');
+    const echo = terminal.sent.slice(1).join('').replaceAll('\n', '\r\n');
     terminal.write(`${echo}m1:start\r\nhello\r\nm1:end 3\r\n`);
     deepStrictEqual(
       [attempt.lines, await attempt.ended],
@@ -106,6 +116,7 @@ describe('script runs over the login terminal (card ssh-21 table)', () => {
     terminal.write('m1:start\nhello\nm1:end 0\n');
     await settled();
     deepStrictEqual(terminal.sent, [
+      PRELUDE,
       commandsFor('m1', SCRIPT),
       commandsFor('m2', OTHER),
     ]);
@@ -134,7 +145,7 @@ describe('script runs over the login terminal (card ssh-21 table)', () => {
           reason: 'channelClosed',
           detail: 'the session ended',
         },
-        [],
+        [PRELUDE],
       ],
     );
   });

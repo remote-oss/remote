@@ -6,6 +6,7 @@ import type {EndpointConnection} from 'lib-helper';
 import {
   type ConnectionHelperOptions,
   runConnectionHelper,
+  sessionStart,
   type SshRequest,
 } from '../../src/index.ts';
 import {ScriptedSpawner} from './fake-client-process.ts';
@@ -174,6 +175,50 @@ describe('connection helper', () => {
     );
     connection.send({type: 'stop'});
     await ended;
+  });
+
+  async function lastArgumentFor(
+    request: SshRequest,
+    changes: Partial<ConnectionHelperOptions> = {},
+  ): Promise<string | undefined> {
+    const ended = start(request, changes);
+    const connection = await join();
+    connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
+    await settled();
+    const argumentsOfSsh = spawner.started[0]?.specification.programArguments;
+    connection.send({type: 'stop'});
+    await ended;
+    return argumentsOfSsh?.at(-1);
+  }
+
+  it('#443: the remote command is the session start of the effective connect timeout', async () => {
+    deepStrictEqual(
+      await lastArgumentFor({
+        ...REQUEST,
+        effective: {...REQUEST.effective, connectTimeout: '20'},
+      }),
+      sessionStart(20).remoteProgram,
+    );
+  });
+
+  it("#443: a host's own timeout of 0 takes the unbounded wait", async () => {
+    deepStrictEqual(
+      await lastArgumentFor(
+        {...REQUEST, effective: {...REQUEST.effective, connectTimeout: '0'}},
+        {unboundedWaitSeconds: 600},
+      ),
+      sessionStart(600).remoteProgram,
+    );
+  });
+
+  it('#443: a setting of 7.5 and no host value rounds up to 8', async () => {
+    deepStrictEqual(
+      await lastArgumentFor({
+        ...REQUEST,
+        settings: {...REQUEST.settings, connectTimeout: 7.5},
+      }),
+      sessionStart(8).remoteProgram,
+    );
   });
 
   it('F-2105 BR-4: with no looked-up timeout and the setting 0, the wait is the margin alone', async () => {

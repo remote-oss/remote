@@ -439,7 +439,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
       () => undefined,
       5000,
     );
-    deepStrictEqual(terminal.sent.length, 1);
+    deepStrictEqual(terminal.sent.length, 2);
   });
 
   it('contracts: the questions are taken down at the handover', async () => {

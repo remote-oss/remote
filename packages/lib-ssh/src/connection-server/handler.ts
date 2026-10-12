@@ -45,6 +45,8 @@ export interface ConnectionHandlerOptions {
   askpassEnvironment: Readonly<Record<string, string>>;
   editorEnvironment: Readonly<Record<string, string | undefined>>;
   waitSettings: ConnectWaitSettings;
+  /** Written to the session's standard input once, before any run's commands: the session bootstrap. */
+  sessionPrelude: string;
   scheduler: Scheduler;
   /** What the askpass endpoint needs: the nonce its program presents, the host's name and its first-message deadline. */
   askpass: {
@@ -258,6 +260,7 @@ export class ConnectionHandler implements MessageHandler {
       },
     );
     this.wait = wait;
+    void session.write(this.options.sessionPrelude);
     const runs = new ShellRuns({
       write: text => {
         void session.write(text);

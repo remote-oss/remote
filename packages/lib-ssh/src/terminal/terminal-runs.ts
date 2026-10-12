@@ -16,6 +16,8 @@ export interface TerminalRunnerOptions {
   /** The install terminal, whose `sh` reads the commands; its output carries the runs' lines. */
   terminal: LoginTerminalSession;
   scheduler: Scheduler;
+  /** The session bootstrap, sent to the terminal once, before any run's commands. */
+  prelude: string;
   /** A marker no script can guess and no earlier run used. */
   newMarker(): string;
 }
@@ -39,6 +41,7 @@ export class TerminalSessionRunner implements SessionRunner {
         terminal.dispose();
       },
     });
+    terminal.send(options.prelude);
     const output = new LineSplitter(line => {
       this.runs.hear(line);
     });

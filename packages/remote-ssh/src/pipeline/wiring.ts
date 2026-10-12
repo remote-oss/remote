@@ -255,6 +255,10 @@ export function stepsOf(
         connectionSettings(),
         ports.requestEnvironment,
         socksPort,
+        terminalWaitOf(
+          lookedUp(state).connectTimeout,
+          connectionSettings().connectTimeout,
+        ),
       ),
     channelFor: channelOf,
     connectWait: () =>

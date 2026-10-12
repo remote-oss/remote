@@ -107,8 +107,13 @@ export {type LocalFiles, nodeLocalFiles} from './process/node-files.ts';
 export {
   planScript,
   posixQuote,
+  preludeProgram,
   type ScriptPlan,
 } from './process/remote-program.ts';
+export {
+  sessionStart,
+  sessionStartFor,
+} from './connection-server/session-bootstrap.ts';
 export {
   firstSetupMarker,
   type SetupMarker,
