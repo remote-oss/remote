@@ -121,6 +121,8 @@ function channelTo(base: RunBase): SshHostChannel {
         };
       },
     },
+    // deliberately below the product's 30-minute download bound (SERVER_BOUNDS.downloadSeconds): a CI row does not wait
+    // that long on a stalled CDN; real-server.test.ts answers a timeout with one labelled infrastructure retry
     timeoutMilliseconds: 60000,
   });
 }
