@@ -51,7 +51,15 @@ connect in validate; this brief replaces that interim.
 ### Prompt recognition over terminal output (S7 terminal list)
 
 - A line splitter over the chunked output (LineSplitter, which already strips a trailing `\r`), plus a **partial-line
-  check**: a prompt has no newline, so the current partial line is also matched once the output pauses.
+  check**: a prompt has no newline, so the current partial line is also matched once the output pauses **for 100 ms**
+  (a named lib-ssh constant; ruled on #299). A prompt is ssh's last write before it blocks on input, so silence always
+  follows it. The pause is an optimisation, not what makes it correct: a fragment matched early fails to match and
+  the next chunk retries.
+- **The candidate text for a question** is the complete lines since the last recognised prompt, the last answer, or
+  the terminal's opening, capped at the **last 20**, joined with `\n`, plus the partial line (ruled on #299).
+  `classifyPrompt` already looks back from the question line for the fingerprint. Measured against a real OpenSSH 10
+  sshd: the first-contact question is 4 lines (with the `fingerprint is: SHA256:…` colon form), and the changed-key
+  warning block is 13.
 - The recognised set in terminal mode, with the setting off:
   - F-2306's three: `<user>@<host>'s password:`, `Password:` and `Verification code:` (F-2308 BR-4).
   - The host-key question by F-2305 BR-2's patterns (ruled below).
@@ -153,10 +161,14 @@ connect in validate; this brief replaces that interim.
 2. **Passphrase in terminal mode: recognised from the terminal output (option a), keeping F-2307 AC-23.** Asked on
    F-2307 (#40). If the spec answers (b), the recognition is dropped and an askpass set up for it instead.
 3. **An unanswered question after the handshake is bounded when nobody can reach it** (F-2308 7.E3, F-2305 BR-7;
-   R-79). A recognised prompt shown as an input waits without limit (F-2306 BR-7). An unrecognised question in a
-   hidden terminal is reachable only through "details" in a phase that carries the link (F-2308 6.1 step 4). In a
-   phase without the link, or once the output has been silent for the connect timeout with a partial line
-   pending, the attempt fails with F-2601 after the bound. The bound is R-79's family default, not a new number.
+   R-79). Corrected on #299 (daedalus, 2026-10-12): "R-79's family default" was not a defined value; every R-79 bound
+   is a named, ruled one. So:
+   - **A recognised prompt shown as an input has no bound** (F-2306 BR-7): the user sees it and can answer or cancel,
+     so it's not a hidden hang. F-2308 BR-6's held output ends with that input.
+   - **The unreachable-question bound is the effective connect timeout** (the looked-up `ConnectTimeout`, else the
+     setting, as F-2105 BR-1): after the handshake, output silent for that long with a partial line pending and no
+     input open fails the attempt with F-2601. Before the handshake, ssh's own timeout already ends it (F-2308 BR-5).
+     No new number.
 4. **The connect wait ends at the first output** in terminal mode (F-2105 BR-3), not at `authenticated`. The `-v`
    banner arriving first is what the spec observed (F-2308 5.0 step 4).
 5. **A late trust answer** (after the attempt failed): nothing runs. The terminal isn't created after the attempt's
