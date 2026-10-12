@@ -61,9 +61,12 @@ export interface LocateStepDependencies {
   logger: Logger;
 }
 
-/** What a run printed on each stream, and how it ended; `undefined` status when it did not end in time. */
+/**
+ * What a run printed on each stream, and how it ended: it could not start, it outlasted its bound and was killed, or
+ * it exited, with no status when a signal ended it.
+ */
 interface RunOutcome {
-  started: boolean;
+  ending: 'unstarted' | 'outlasted' | 'exited';
   output: string;
   errorOutput: string;
   status: number | undefined;
@@ -84,11 +87,16 @@ async function runBounded(
     });
   } catch {
     // A program that cannot be started gives no output.
-    return {started: false, output: '', errorOutput: '', status: undefined};
+    return {
+      ending: 'unstarted',
+      output: '',
+      errorOutput: '',
+      status: undefined,
+    };
   }
   const started = handle;
   const outcome: RunOutcome = {
-    started: true,
+    ending: 'exited',
     output: '',
     errorOutput: '',
     status: undefined,
@@ -102,6 +110,7 @@ async function runBounded(
   outcome.status = await new Promise<number | undefined>(resolve => {
     const timer = setTimeout(() => {
       started.kill();
+      outcome.ending = 'outlasted';
       resolve(undefined);
     }, dependencies.checkMilliseconds);
     started.onExit(exitStatus => {
@@ -122,10 +131,7 @@ async function accepted(
     VERSION_ARGUMENTS,
     dependencies,
   );
-  return (
-    outcome.started &&
-    judge(outcome.status, `${outcome.output}${outcome.errorOutput}`)
-  );
+  return judge(outcome.status, `${outcome.output}${outcome.errorOutput}`);
 }
 
 /** Reads the host's options with `ssh -G`; a failure is read the way the connection's own run would be. */
@@ -146,7 +152,7 @@ async function lookUp(
     query.arguments,
     dependencies,
   );
-  if (outcome.started && outcome.status === undefined) {
+  if (outcome.ending === 'outlasted') {
     return {failure: {kind: 'timeout'}};
   }
   if (outcome.status === 0) {

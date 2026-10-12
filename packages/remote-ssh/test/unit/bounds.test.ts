@@ -1,7 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   CLIENT_CHECK_MILLISECONDS,
+  connectionLimitsFor,
   effectiveConnectTimeoutSeconds,
+  HELPER_GRACE_MILLISECONDS,
   PRECONNECT_MILLISECONDS,
   SERVER_BOUNDS,
   connectWaitsFor,
@@ -73,5 +75,30 @@ describe('the waits of the probe and the tunnel', () => {
       probeMilliseconds: 602000,
       tunnelMilliseconds: 600000,
     });
+  });
+});
+
+describe("the window's waits on the shared connection's helper", () => {
+  it('ruled on #253 Q8: the helper outlives its last window by 3 seconds', () => {
+    deepStrictEqual(HELPER_GRACE_MILLISECONDS, 3000);
+  });
+
+  it('ruled on #253 Q8: a reply may take 10 s, and the login the default 17 s plus 10 s', () => {
+    deepStrictEqual(connectionLimitsFor(undefined, undefined), {
+      requestMilliseconds: 10000,
+      loginMilliseconds: 27000,
+    });
+  });
+
+  it("ruled on #253 Q8: the login wait follows the host's own timeout", () => {
+    deepStrictEqual(connectionLimitsFor('9', 30).loginMilliseconds, 21000);
+  });
+
+  it("F-2105 BR-4: a host's 0 waits the ceiling plus the margin", () => {
+    deepStrictEqual(connectionLimitsFor('0', 30).loginMilliseconds, 610000);
+  });
+
+  it("F-2105 AC-9: the setting's 0 waits the extra 2 s plus the margin", () => {
+    deepStrictEqual(connectionLimitsFor(undefined, 0).loginMilliseconds, 12000);
   });
 });
