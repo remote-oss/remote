@@ -52,3 +52,19 @@ export {
   tunnelDestination,
   userForwardingHolder,
 } from './tunnel-path/select.ts';
+export {
+  type DefaultForwards,
+  parseDefaultForwards,
+  type SkippedEntry,
+  type SkipReason,
+  type TunnelRequest,
+} from './defaults/entries.ts';
+export {
+  type EnvironmentAddress,
+  type EnvironmentTunnel,
+  environmentTunnels,
+  type EnvironmentTunnels,
+  type ForwardSkipReason,
+  type SkippedForward,
+} from './defaults/environment.ts';
+export {shouldApplyDefaults} from './defaults/policy.ts';
