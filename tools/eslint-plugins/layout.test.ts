@@ -281,6 +281,15 @@ function chainFiles(): Record<string, string> {
 }
 const chain = chainFiles();
 
+// The table names its files at runtime, so the reads below are unchecked; the helper makes each of them a string.
+function codeOf(files: Record<string, string>, name: string): string {
+  const text = files[name];
+  if (text === undefined) {
+    throw new Error(`no fixture file ${name}`);
+  }
+  return text;
+}
+
 writeIntraPackage('lib-two', {
   'src/a.ts': twoCycle['a.ts'],
   'src/b.ts': twoCycle['b.ts'],
@@ -320,39 +329,39 @@ new RuleTester({languageOptions: {parser: tseslint.parser}}).run(
       // A ten-file chain without a cycle reports nothing, at every file.
       ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(index => ({
         filename: intraFile('lib-dag', `src/m${String(index)}.ts`),
-        code: chain[`src/m${String(index)}.ts`],
+        code: codeOf(chain, `src/m${String(index)}.ts`),
         options: intraOptions,
       })),
       // A cycle that lives only in test/ is out of scope, in and out of src/.
       {
         filename: intraFile('lib-tests-only', 'src/plain.ts'),
-        code: testOnlyCycle['src/plain.ts'],
+        code: codeOf(testOnlyCycle, 'src/plain.ts'),
         options: intraOptions,
       },
       {
         filename: intraFile('lib-tests-only', 'test/ta.ts'),
-        code: testOnlyCycle['test/ta.ts'],
+        code: codeOf(testOnlyCycle, 'test/ta.ts'),
         options: intraOptions,
       },
       {
         filename: intraFile('lib-tests-only', 'test/tb.ts'),
-        code: testOnlyCycle['test/tb.ts'],
+        code: codeOf(testOnlyCycle, 'test/tb.ts'),
         options: intraOptions,
       },
       // The package that reads every specifier form, without a cycle.
       {
         filename: intraFile('lib-mixed', 'src/mix1.ts'),
-        code: mixed['src/mix1.ts'],
+        code: codeOf(mixed, 'src/mix1.ts'),
         options: intraOptions,
       },
       {
         filename: intraFile('lib-mixed', 'src/mix2.ts'),
-        code: mixed['src/mix2.ts'],
+        code: codeOf(mixed, 'src/mix2.ts'),
         options: intraOptions,
       },
       {
         filename: intraFile('lib-mixed', 'src/mix3.ts'),
-        code: mixed['src/mix3.ts'],
+        code: codeOf(mixed, 'src/mix3.ts'),
         options: intraOptions,
       },
     ],

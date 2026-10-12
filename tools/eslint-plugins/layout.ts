@@ -595,12 +595,12 @@ const noIntraPackageCycles: Rule.RuleModule = {
       return {};
     }
     const segments = relative.split(path.sep);
+    const [folder, kind, ...rest] = segments;
     // Only a file under <package>/src/ is a node of the graph; test files are out of scope.
-    if (segments.length < 3 || segments[1] !== 'src') {
+    if (folder === undefined || kind !== 'src' || rest.length === 0) {
       return {};
     }
-    const folder = segments[0];
-    const sourceFile = segments.slice(2).join(path.sep);
+    const sourceFile = rest.join(path.sep);
     const srcDir = path.join(root, 'packages', folder, 'src');
     const graph = intraGraphOf(root, folder);
     const cycles = elementaryCycles(graph).filter(
@@ -631,7 +631,9 @@ const noIntraPackageCycles: Rule.RuleModule = {
       ImportDeclaration(node: Rule.Node & {source: SpecifierNode}) {
         record(node, node.source);
       },
-      ExportNamedDeclaration(node: Rule.Node & {source?: SpecifierNode}) {
+      ExportNamedDeclaration(
+        node: Rule.Node & {source?: SpecifierNode | null | undefined},
+      ) {
         record(node, node.source);
       },
       ExportAllDeclaration(node: Rule.Node & {source: SpecifierNode}) {
