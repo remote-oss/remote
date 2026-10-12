@@ -57,6 +57,14 @@ const FAILURE_TEXTS = [
   'Open Setting',
 ];
 
+const CONNECT_TEXTS = [
+  'Downloading VS Code Server failed. Please try again later.',
+  'Failed to install the VS Code Server',
+  'Provided: "{0}"',
+  'it does not give an http or https address',
+  'the placeholder {0} is not known',
+];
+
 const PICKER_TEXTS = ['Select the platform of the remote host "{0}"'];
 
 const LICENCE_TEXTS = [
@@ -85,6 +93,7 @@ describe('the runtime strings of the extension', () => {
           ...FAILURE_TEXTS,
           ...LICENCE_TEXTS,
           ...PICKER_TEXTS,
+          ...CONNECT_TEXTS,
           'SSH: {0}',
         ].map(text => [text, text]),
       ),

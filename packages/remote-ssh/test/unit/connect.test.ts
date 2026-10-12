@@ -324,8 +324,9 @@ describe('the connect pipeline, when a step fails', () => {
     );
   });
 
-  it('a transfer that fails is read by the transfer table', async () => {
-    const {recording, options} = setup();
+  /** A connect whose transfer fails the way the library reports a download that did not work. */
+  async function downloadFailed() {
+    const {recording, options, logSink} = setup();
     const result = await connect(
       INPUT,
       steps(recording, {
@@ -337,7 +338,32 @@ describe('the connect pipeline, when a step fails', () => {
       }),
       options,
     );
+    return {result, logSink};
+  }
+
+  it('a transfer that fails is read by the transfer table', async () => {
+    const {result} = await downloadFailed();
     deepStrictEqual('kind' in result ? result.kind : result, 'serverDownload');
+  });
+
+  it('contracts R1: a failed transfer carries only the reason id', async () => {
+    const {result} = await downloadFailed();
+    deepStrictEqual('reason' in result ? result.reason : result, {id: 'S043'});
+  });
+
+  it('contracts R1: what the library said about a failed transfer is not in the failure', async () => {
+    const {result} = await downloadFailed();
+    deepStrictEqual(JSON.stringify(result).includes('downloadFailed'), false);
+  });
+
+  it('F-2003: what the library said about a failed transfer is in the log', async () => {
+    const {logSink} = await downloadFailed();
+    deepStrictEqual(
+      logSink.lines.some(
+        line => line.message === 'the serverDownload failure: downloadFailed',
+      ),
+      true,
+    );
   });
 
   it('a start that fails is read by the start table, and the tunnel is not opened', async () => {
@@ -748,7 +774,25 @@ describe('the connect pipeline, what it keeps and gives back', () => {
         'kind' in result ? [result.kind, result.reason] : result,
         recording.releases,
       ],
-      [['unknown', {text: 'Error: exploded'}], 1],
+      [['unknown', undefined], 1],
+    );
+  });
+
+  it('contracts R1: a step that throws puts its message in the log and not in the failure', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {probe: () => Promise.reject(new Error('boom'))}),
+      options,
+    );
+    deepStrictEqual(
+      [
+        JSON.stringify(result).includes('boom'),
+        logSink.lines.some(
+          line => line.message === 'the unknown failure: Error: boom',
+        ),
+      ],
+      [false, true],
     );
   });
 

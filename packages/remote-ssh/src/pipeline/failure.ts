@@ -14,6 +14,7 @@ import type {
   TransferFailure,
 } from 'lib-server';
 import type {AcquireFailure} from 'lib-helper';
+import type {TemplateProblem} from 'lib-product';
 import type {ConnectionFailure, FailureHint, FailureKind} from 'lib-ssh';
 
 /** The kinds of a failed connect: the failures of `ssh` itself and those of the server install and start. */
@@ -39,27 +40,44 @@ export interface FailureDetail {
   kind: FailedKind;
   /** Absent when the failure has no reason of its own; the window then names only the host. */
   reason?: FailureReason;
+  /** What the library said, for the log only; never shown. */
+  logDetail?: string;
 }
 
-function detailOf(kind: FailedKind, text?: string): FailureDetail {
-  return text === undefined || text === '' ? {kind} : {kind, reason: {text}};
+/** A failure that shows no library text: the library's words go to the log. */
+function logged(
+  kind: FailedKind,
+  logDetail: string | undefined,
+  reason?: FailureReason,
+): FailureDetail {
+  return {
+    kind,
+    ...(reason === undefined ? {} : {reason}),
+    ...(logDetail === undefined || logDetail === '' ? {} : {logDetail}),
+  };
 }
+
+/** The reason of a server install that failed: the extension's own text. */
+const INSTALL_FAILED: FailureReason = {id: 'S075'};
+
+/** The reason of a server download that failed: the extension's own text. */
+const DOWNLOAD_FAILED: FailureReason = {id: 'S043'};
 
 /** The failure of a host channel: a closed or timed out connection, a cancel, or a copy that did not work. */
 export function ofChannel(failure: ChannelFailure): FailureDetail {
   switch (failure.kind) {
     case 'channelClosed':
-      return detailOf('channelClosed', failure.detail);
+      return logged('channelClosed', failure.detail);
     case 'timeout':
-      return detailOf('timeout', failure.detail);
+      return logged('timeout', failure.detail);
     case 'cancelled':
-      return detailOf('cancelled');
+      return {kind: 'cancelled'};
     case 'copyToolMissing':
-      return detailOf('prerequisiteMissing', failure.detail);
+      return logged('prerequisiteMissing', failure.detail);
     case 'copyFailed':
-      return detailOf('serverInstall', failure.detail);
+      return logged('serverInstall', failure.detail, INSTALL_FAILED);
     default:
-      return detailOf('unknown', failure.detail);
+      return logged('unknown', failure.detail);
   }
 }
 
@@ -81,7 +99,11 @@ const STATUS_KINDS: ReadonlyMap<string, FailedKind> = new Map<
 
 /** The failure a bootstrap script's status word stands for; a word outside the list is `unknown`. */
 function ofStatus(status: string): FailureDetail {
-  return {kind: STATUS_KINDS.get(status) ?? 'unknown'};
+  const kind = STATUS_KINDS.get(status) ?? 'unknown';
+  if (kind === 'serverDownload') {
+    return {kind, reason: DOWNLOAD_FAILED};
+  }
+  return kind === 'serverInstall' ? {kind, reason: INSTALL_FAILED} : {kind};
 }
 
 /** The failure of the host probe. */
@@ -89,9 +111,12 @@ export function ofProbe(failure: ProbeFailure): FailureDetail {
   switch (failure.kind) {
     case 'unsupportedPlatform':
     case 'unsupportedArch':
-      return detailOf('unsupportedPlatform', failure.reported);
+      return logged('unsupportedPlatform', `reported: ${failure.reported}`);
     case 'prerequisiteMissing':
-      return detailOf('prerequisiteMissing', failure.missing.join(', '));
+      return logged(
+        'prerequisiteMissing',
+        `missing: ${failure.missing.join(', ')}`,
+      );
     case 'probeFailed':
       return ofStatus(failure.status);
     case 'unreadableFacts':
@@ -128,10 +153,10 @@ export function ofConnection(
       };
     case 'spawnFailed':
       return failure.cause === 'clientVanished'
-        ? detailOf('prerequisiteMissing', failure.detail)
-        : detailOf('unknown', failure.detail);
+        ? logged('prerequisiteMissing', failure.detail)
+        : logged('unknown', failure.detail);
     case 'helperRefused':
-      return detailOf('unknown', failure.reason);
+      return logged('unknown', failure.reason);
     case 'timeout':
       return {kind: 'timeout'};
     case 'cancelled':
@@ -141,15 +166,34 @@ export function ofConnection(
   }
 }
 
+/** What is wrong with the user's download address template, in words of ours; nothing for a problem that is not theirs. */
+function templateReason(problem: TemplateProblem): FailureReason | undefined {
+  switch (problem.kind) {
+    case 'unknownPlaceholder':
+      return {
+        id: 'templateUnknownPlaceholder',
+        values: [`\${${problem.name}}`],
+      };
+    case 'notHttpUrl':
+      return {id: 'templateNotHttp', values: []};
+    default:
+      return undefined;
+  }
+}
+
 /** The failure of the install plan, which is made before the host is asked anything. */
 export function ofPlan(failure: PlanFailure): FailureDetail {
   switch (failure.kind) {
     case 'noSource':
       return {kind: 'noServerSource'};
     case 'invalidOverride':
-      return detailOf('invalidServerTemplate', failure.problem);
+      return logged(
+        'invalidServerTemplate',
+        JSON.stringify(failure.problem),
+        templateReason(failure.problem),
+      );
     default:
-      return detailOf('invalidSetting', failure.reason);
+      return logged('invalidSetting', failure.reason);
   }
 }
 
@@ -157,15 +201,15 @@ export function ofPlan(failure: PlanFailure): FailureDetail {
 export function ofTransfer(failure: TransferFailure): FailureDetail {
   switch (failure.kind) {
     case 'serverDownload':
-      return detailOf('serverDownload', failure.cause);
+      return logged('serverDownload', failure.cause, DOWNLOAD_FAILED);
     case 'localDownload':
-      return detailOf('serverDownload', failure.detail);
+      return logged('serverDownload', failure.detail, DOWNLOAD_FAILED);
     case 'downloadTimeout':
-      return detailOf('serverDownload', failure.reason);
+      return logged('serverDownload', failure.reason, DOWNLOAD_FAILED);
     case 'verification':
-      return detailOf('serverDownload', failure.mismatch);
+      return logged('serverDownload', failure.mismatch, DOWNLOAD_FAILED);
     case 'unpack':
-      return {kind: 'serverInstall'};
+      return {kind: 'serverInstall', reason: INSTALL_FAILED};
     case 'copy':
       return ofChannel(failure.failure);
     case 'cancelled':

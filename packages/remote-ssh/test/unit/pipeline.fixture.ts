@@ -205,7 +205,12 @@ export function steps(
 }
 
 /** An empty recording and the options of one connect that record its phases. */
-export function setup(): {recording: Recording; options: ConnectOptions} {
+export function setup(): {
+  recording: Recording;
+  options: ConnectOptions;
+  logSink: MemorySink;
+} {
+  const logSink = new MemorySink();
   const recording: Recording = {
     calls: [],
     releases: 0,
@@ -215,6 +220,7 @@ export function setup(): {recording: Recording; options: ConnectOptions} {
   };
   return {
     recording,
+    logSink,
     options: {
       cancellation: new AbortController().signal,
       onPhase: event => {
@@ -222,7 +228,7 @@ export function setup(): {recording: Recording; options: ConnectOptions} {
       },
       maximumReconnectionAttempts: null,
       preconnectMilliseconds: 1000,
-      logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
+      logger: createLogger(logSink, {minimumLevel: () => 'info'}),
     },
   };
 }

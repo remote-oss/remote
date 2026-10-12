@@ -18,9 +18,11 @@ export type FailureStringId =
   | 'S031'
   | 'S032'
   | 'S041'
+  | 'S043'
   | 'S044'
   | 'S067'
   | 'S073'
+  | 'S075'
   | 'S079'
   | 'S082'
   | 'S084'
@@ -41,7 +43,10 @@ export type FailureStringId =
   | 'S137'
   | 'S140'
   | 'S142'
-  | 'S158';
+  | 'S158'
+  | 'installPathProvided'
+  | 'templateNotHttp'
+  | 'templateUnknownPlaceholder';
 
 /** The English template of each string id, with `{0}`, `{1}` for the values. */
 export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
@@ -54,9 +59,11 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S031: 'Could not establish connection to "{0}": {1}',
   S032: 'Could not resolve hostname',
   S041: 'Downloading VS Code Server',
+  S043: 'Downloading VS Code Server failed. Please try again later.',
   S044: 'Downloading VS Code Server locally',
   S067: 'Error establishing tunnel ({0}).',
   S073: 'Failed to find a free local port: {0}',
+  S075: 'Failed to install the VS Code Server',
   S079: 'Hostname contains invalid characters',
   S082: 'Initializing VS Code Server',
   S084: 'Installing VS Code Server',
@@ -78,6 +85,9 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S140: 'The operation timed out',
   S142: 'The process tried to write to a nonexistent pipe',
   S158: 'Waiting for port forwarding to be ready',
+  installPathProvided: 'Provided: "{0}"',
+  templateNotHttp: 'it does not give an http or https address',
+  templateUnknownPlaceholder: 'the placeholder {0} is not known',
 };
 
 /** The two dialogs of a missing or unusable server download location, which have no string id yet. */
