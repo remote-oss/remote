@@ -55,7 +55,15 @@ It fails, printing every problem on its own line, when:
 2. a `core` or `deferred` line has an empty reason, or another tag has one;
 3. an AC tagged `acceptance` has no acceptance row citing it;
 4. an AC tagged `unit` has no unit row and no acceptance row citing it;
-5. a row (acceptance or unit) cites an AC of a slice-1 feature that the TSV doesn't have.
+5. a row (acceptance or unit) cites an AC of a slice-1 feature that the TSV doesn't have;
+6. **an acceptance row names a slice-1 feature without an AC** (athena on #465): its name or `cite` starts with a slice-1
+   feature id followed by anything but ` AC-` or `.AC-`, for example `F-2409:`, `F-2409.BR-7:` or `F-2601 5.0:`. This
+   keeps untraceable names from coming back after coverage-02's sweep. A row that proves no AC by itself is named
+   `contracts <section>:` instead.
+
+Rule 6 covers **acceptance rows only**. Measured at main 78e461f, 491 unit rows name a slice-1 feature without an AC
+(for example `F-2502: a folder in the current window …`). Extending rule 6 to unit rows would need a sweep of its own,
+which is athena's call and a separate card.
 
 It **reports, but doesn't fail on**, the count per tag (`todo` included), so the progress shows in CI's log. With the
 seed (all `todo`), the check passes. A later `--strict` flag (not in this card) will fail on `todo`.
@@ -99,12 +107,19 @@ One assertion per `it`; over a temporary workspace with its own TSV and test fil
 | #142 2 | `cases.json` with `cite: "F-2601 AC-6"` and the TSV tagging AC-6 `acceptance` | it passes |
 | #142 2 | a test citing `F-2601.AC-99`, which the TSV lacks | it fails, `cites F-2601.AC-99, which the slice's file doesn't have` |
 | #142 2 | a test citing `F-2407 AC-1` (not a slice-1 feature) | it passes (no problem) |
+| athena on #465 | an acceptance test `F-2409: picks a free port` | it fails, `names F-2409 without an AC` |
+| athena on #465 | an acceptance test `F-2409.BR-7: …` | it fails the same way |
+| athena on #465 | an acceptance test `F-2601 5.0: …` | it fails the same way |
+| athena on #465 | a `cases.json` `cite` of `F-2601` | it fails the same way |
+| athena on #465 | an acceptance test `F-2407: …` (not a slice-1 feature) | it passes |
+| athena on #465 | an acceptance test `contracts V7: …` | it passes |
+| athena on #465 | a **unit** test `F-2409: …` | it passes (rule 6 covers acceptance rows only) |
 | #142 | a missing TSV | exit code 2 |
 | #142 | two problems | both lines are printed, sorted |
 | #142 | `acceptanceCriteriaOf` of a body with AC-1, AC-2 and a later line quoting `F-2601.AC-1` | `['F-2601.AC-1', 'F-2601.AC-2']` |
 
-Plus: `pnpm check-coverage` on the repository passes, with the seed and coverage-02 merged. If coverage-02 isn't merged
-yet, the rows it renames cite nothing, which still passes.
+Plus: `pnpm check-coverage` on the repository passes. **Order (athena on #465): coverage-02 (#464) merges first.**
+Before it, rule 6 fails on the 42 rows it renames. Build against #464's branch and rebase once it merges.
 
 ## 6. Rule for the worker
 
