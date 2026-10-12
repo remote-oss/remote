@@ -23,7 +23,9 @@ doesn't wait for `serve`:
 | `packages/remote-ssh/src/cli/cli-bridge.ts` | new: the bridge (section 4) |
 | `packages/remote-ssh/src/cli/cli-connect.ts` | new: the CLI branch of the connect (section 3) |
 | `packages/remote-ssh/src/pipeline/connect.ts` | `plan.kind === 'cli'` runs `cli-connect.ts`; the fallback (section 5) |
-| `packages/remote-ssh/src/pipeline/steps.ts`, `server-steps.ts` | `installCli`, `startCli` steps over cli-03b |
+| `packages/remote-ssh/src/pipeline/steps.ts`, `server-steps.ts` | `installCli`, `startCli`, `stopCli` steps over cli-03b and section 3a |
+| `packages/lib-server/src/scripts/bootstrap.ts`, `src/lifecycle/cli.ts`, `src/index.ts` | `stopCli` (section 3a) |
+| `packages/lib-server/test/unit/bootstrap-script.test.ts`, `cli-lifecycle.test.ts`; `tests/acceptance/server/cli.test.ts` | `stopCli`'s rows (section 7) |
 | `packages/remote-ssh/src/surfaces/…` | the S045 notification (section 6) |
 | `packages/remote-ssh/test/unit/cli-bridge.test.ts`, `cli-connect.test.ts`, `connect.test.ts` | rows (section 7) |
 
@@ -42,14 +44,37 @@ After the plan (`kind: 'cli'`) and the licence gate, as the server path has them
 4. **Check the CLI requires the token** (themis on #430): `authenticate('<a second fresh nonce>')` must give
    `challengeRefused` with `message` `CodeError(AuthChallengeBadToken)`. Anything else (`authenticated`, another error,
    `closed`) means the CLI accepts callers it shouldn't. Then the connect fails as `serverStart` with the detail `the CLI
-   did not require its token`, and the control connection and the tunnel are closed (no fallback: the CLI ran but is
-   unsafe). Measured against the user's CLI build on Alpine with cli-03a's client: started with
+   did not require its token`. The control connection and the tunnel are closed, and **the CLI is stopped**
+   (`stopCli`, section 3a; themis on #458): a CLI that requires no token stays up until its session ends and serves any
+   local user meanwhile. No fallback: the CLI ran but is unsafe. Measured against the user's CLI build on Alpine with cli-03a's client: started with
    `VSCODE_CLI_REQUIRE_TOKEN`, a wrong token gave `challengeRefused` / `CodeError(AuthChallengeBadToken)` and the right
    one then gave `authenticated` on the same connection; started without it, the wrong token gave `authenticated`.
 5. **Authenticate:** `authenticate(controlToken)` gives `authenticated`. A failure here is §6's "the CLI doesn't
-   start": fallback (section 5).
+   start": the control connection and the tunnel are closed, **the CLI is stopped** (`stopCli`), then the fallback
+   (section 5).
 6. **The bridge:** `openCliBridge(control, serveParams, events)` (section 4) gives a local listener. `Connected` is
    `{address: bridge.address, connectionToken: serveParams.connectionToken, …}`, as today's.
+
+### 3a. `stopCli` (lib-server)
+
+lib-server's `kill` can't stop the CLI: `stop_servers` kills a recorded process only when its command line holds
+`$DATA_DIR/bin/`, and the CLI's file is `$DATA_DIR/<applicationName>-<commit>`. A new script step and function:
+
+```ts
+/** Stops the CLI that `startCli` started: `processId` only when it is still that CLI. */
+export function stopCli(channel: HostChannel, base: ScriptParameters, processId: number, cancellation: AbortSignal): Promise<{kind: 'stopped' | 'notRunning'} | {kind: 'failed'; failure: RuntimeFailure}>;
+```
+
+- `ScriptStep` gains `'stopCli'`, with the body: `is_server_process "$CLI_STOP_PID" "$CLI_FILE"` (the existing guard,
+  with the CLI's own file as the needle, so a recycled pid of another program is never killed). Then
+  `pkill -P "$CLI_STOP_PID"` where `pkill` exists, `kill "$CLI_STOP_PID"`, `fact cli.stopped yes`, and `leave Ok`. A pid
+  that fails the guard gives `fact cli.stopped no` and `leave Ok`.
+- `CLI_STOP_PID` is a script parameter (a number, never a secret). It isn't in the lock loop: stopping one process needs
+  no host lock.
+- Callers: step 4 and step 5 of section 3, with `StartedServer.processId` from step 2.
+
+Steps 1–3 need no stop: a failed `installCli` started nothing, and a failed `startCli` already ends its CLI (its script
+kills the CLI that gave no ready line, and a CLI that exited is gone).
 
 **Two tokens, never mixed:**
 - the **control token** authenticates this extension to the CLI. It's given to `startCli` (environment only) and to
@@ -167,6 +192,8 @@ One assertion per `it`; the cite starts the name. Over cli-03a's `fakeCli` and r
 |---|---|---|
 | themis on #430 | a CLI that answers any token | the connect fails `serverStart`, detail `the CLI did not require its token` |
 | themis on #430 | the same | no fallback ran (the direct path's steps weren't called) |
+| themis on #458 | the same | `stopCli` ran with the CLI's process id |
+| themis on #458 | `authenticate` with the control token is refused | `stopCli` ran with the CLI's process id, before the fallback's first step |
 | themis on #430 | a CLI that requires its token | the first `challenge_issue` carried a token that isn't the control token |
 | §4a | a connect that succeeds | `Connected.address` is the bridge's |
 | §4a | the same | `Connected.connectionToken` is `serve`'s `connection_token`, and neither is the control token |
@@ -183,6 +210,17 @@ One assertion per `it`; the cite starts the name. Over cli-03a's `fakeCli` and r
 | §6 | the same, with `error.kind` `template` | the log holds `the CLI could not serve: template: …` |
 | §W2 | after `Connected`, the bridge reports `controlClosed` | the window's `onTransport` got `lost` |
 | — | `release()` | the bridge, the control, the tunnel and the lease were closed in that order |
+
+**stopCli** (lib-server)
+
+| Cite | Given | Expected |
+|---|---|---|
+| themis on #458 | the `stopCli` script | it calls `is_server_process "$CLI_STOP_PID" "$CLI_FILE"` before any `kill` |
+| themis on #458 | a result block `Ok` with `cli.stopped=yes` | `{kind: 'stopped'}` |
+| themis on #458 | `Ok` with `cli.stopped=no` | `{kind: 'notRunning'}` |
+| themis on #458 | `stopCli` | the request's `environment` is `{}` and its runs aren't wrapped in the lock loop |
+| themis on #458 (real host, `cli.test.ts`, with the archive) | `startCli`, then `stopCli` with its pid | within 5 s, `ps -eo args` on the host shows no `command-shell` |
+| themis on #458 (real host) | `stopCli` with the pid of a `sleep 60` started on the host | `notRunning`, and the `sleep` still runs |
 
 **S045** (over the progress fake)
 
