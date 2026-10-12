@@ -11,6 +11,7 @@
  */
 
 import {spawn} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -47,6 +48,22 @@ export type {CommandResult} from './acceptance-run.ts';
 /** The editor version the tests run on: the floor of ADR-0007. */
 const EDITOR_VERSION = '1.139.1';
 
+/** The editor a run uses: VS Code at the floor of ADR-0007, or the pinned VSCodium Insiders. */
+export type EditorChoice = 'vscode' | 'vscodium';
+
+/** The VSCodium build the VSCodium run uses: an exact tag, never "latest". */
+export const VSCODIUM_RELEASE = {
+  tagName: '1.140.06829-insider',
+  repository: 'VSCodium/vscodium-insiders',
+  /** The release asset's sha256, by `<os>-<arch>` of the client. */
+  sha256: {
+    'linux-x64':
+      '7d8779cb07f5dd66810a94a45855d0ffbe5c286ffddbb88f8ecdca6b63a6813f',
+    'linux-arm64':
+      'e0ad855b10ec0928f8f832bbf9d12536918b6ecb8cec4600431654ff27a72c37',
+  },
+} as const;
+
 /** The packages whose VSIX files are installed into the editor under test, by their extension id. */
 const EXTENSIONS_UNDER_TEST = new Map([
   ['remote-oss.remote-ssh', 'remote-ssh'],
@@ -71,6 +88,10 @@ export interface HarnessVariables {
   HARNESS_RUN_FOLDER: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
   HARNESS_VSIX_FILES: string;
+  /** The editor of the run. */
+  HARNESS_EDITOR: EditorChoice;
+  /** The VSCodium executable, in the VSCodium run only. */
+  HARNESS_VSCODIUM_EXECUTABLE?: string;
 }
 
 /** Waits the given number of milliseconds. */
@@ -83,10 +104,16 @@ export interface HarnessDependencies {
   bundleSuite: (root: string) => Promise<void>;
   /** The command line of the editor's CLI at the version under test, downloading the editor when it is missing. */
   editorCli: () => Promise<string>;
-  /** Starts test-cli with the harness variables and returns its exit code and its output. */
+  /** The VSCodium executable at the pinned release, downloading and unpacking it when it is missing. */
+  vscodiumExecutable: () => Promise<string>;
+  /**
+   * Starts test-cli with the harness variables and returns its exit code and its output; `label` picks one of the
+   * configurations, and none runs the only one.
+   */
   runTests: (
     root: string,
     variables: HarnessVariables,
+    label?: string,
   ) => Promise<AttemptResult>;
 }
 
@@ -168,6 +195,7 @@ async function prepare(
   dependencies: HarnessDependencies,
   runFolder: string,
   started: string[],
+  editor: EditorChoice,
 ): Promise<HarnessVariables> {
   const {command} = dependencies;
   const runId = acceptanceRunId(process.env, process.pid);
@@ -179,13 +207,21 @@ async function prepare(
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
   await dependencies.bundleSuite(root);
+  const vscodium =
+    editor === 'vscodium' ? await dependencies.vscodiumExecutable() : undefined;
   const vsixFiles = packagedExtensions(root);
   if (vsixFiles.length > 0) {
-    checked(command, await dependencies.editorCli(), [
-      `--extensions-dir=${path.join(runFolder, 'extensions')}`,
-      `--user-data-dir=${path.join(runFolder, 'user-data')}`,
-      ...vsixFiles.flatMap(file => ['--install-extension', file]),
-    ]);
+    checked(
+      command,
+      vscodium === undefined
+        ? await dependencies.editorCli()
+        : vscodiumCliOf(vscodium),
+      [
+        `--extensions-dir=${path.join(runFolder, 'extensions')}`,
+        `--user-data-dir=${path.join(runFolder, 'user-data')}`,
+        ...vsixFiles.flatMap(file => ['--install-extension', file]),
+      ],
+    );
   }
   return {
     REMOTE_OSS_ACCEPTANCE: '1',
@@ -193,25 +229,45 @@ async function prepare(
     HARNESS_CONTAINER: host.container,
     HARNESS_RUN_FOLDER: runFolder,
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
+    HARNESS_EDITOR: editor,
+    ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
   };
 }
 
+/** The test-cli labels each editor runs, in order: the VS Code run has one configuration and needs no label. */
+const LABELS: Readonly<
+  Record<EditorChoice, ReadonlyArray<string | undefined>>
+> = {vscode: [undefined], vscodium: ['local', 'remote']};
+
 /**
- * Runs the acceptance tests and returns the exit code for the process: test-cli's, or 1 when the harness could not
- * be prepared.
+ * Runs the acceptance tests and returns the exit code for the process: the first failing run's test-cli code, or 1
+ * when the harness could not be prepared. Every label runs, also after a failure.
  */
 export async function runAcceptance(
   root: string,
   dependencies: HarnessDependencies,
+  editor: EditorChoice = 'vscode',
 ): Promise<number> {
   const runFolder = mkdtempSync(path.join(tmpdir(), 'acceptance-'));
   const started: string[] = [];
   try {
-    const variables = await prepare(root, dependencies, runFolder, started);
-    return await runWithRetry(
-      () => dependencies.runTests(root, variables),
-      console.log.bind(console),
+    const variables = await prepare(
+      root,
+      dependencies,
+      runFolder,
+      started,
+      editor,
     );
+    const exitCodes: number[] = [];
+    for (const label of LABELS[editor]) {
+      exitCodes.push(
+        await runWithRetry(
+          () => dependencies.runTests(root, variables, label),
+          console.log.bind(console),
+        ),
+      );
+    }
+    return exitCodes.find(exitCode => exitCode !== 0) ?? 0;
   } catch (error) {
     console.error(`acceptance: ${failureText(error)}`);
     return 1;
@@ -221,6 +277,18 @@ export async function runAcceptance(
     }
     rmSync(runFolder, {recursive: true, force: true});
   }
+}
+
+/** What every run's editor is started with: the run's own folders, the proposed API of the extensions, no trust prompt. */
+function editorArguments(runFolder: string): string[] {
+  return [
+    `--user-data-dir=${path.join(runFolder, 'user-data')}`,
+    `--extensions-dir=${path.join(runFolder, 'extensions')}`,
+    ...PROPOSED_API_EXTENSIONS.map(
+      extensionId => `--enable-proposed-api=${extensionId}`,
+    ),
+    '--disable-workspace-trust',
+  ];
 }
 
 /** The `@vscode/test-cli` configuration of a run, from the harness variables in `environment`. */
@@ -243,27 +311,94 @@ export function acceptanceConfiguration(
     extensionDevelopmentPath: path.join(root, 'tests', 'acceptance', 'runner'),
     // test-cli expands a glob relative to its configuration file, tests/acceptance/vscode-test.mjs.
     files: 'dist/**/*.test.cjs',
-    launchArgs: [
-      `--user-data-dir=${path.join(runFolder, 'user-data')}`,
-      `--extensions-dir=${path.join(runFolder, 'extensions')}`,
-      ...PROPOSED_API_EXTENSIONS.map(
-        extensionId => `--enable-proposed-api=${extensionId}`,
-      ),
-      '--disable-workspace-trust',
-    ],
+    launchArgs: editorArguments(runFolder),
     env: {...environment},
     mocha: {ui: 'bdd', timeout: 60_000},
   };
 }
 
-/** Bundles every `*.test.ts` of tests/acceptance/suite into tests/acceptance/dist, one `.cjs` file each. */
+/** The window the remote VSCodium run opens: the harness host's home folder over `ssh-remote`. */
+const REMOTE_FOLDER_URI = 'vscode-remote://ssh-remote+harness/home/harness';
+
+/** The test-cli configuration of one VSCodium window; the window's folder, when it has one, comes first on the editor's command line. */
+function vscodiumConfiguration(
+  root: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  executable: string,
+  window: {label: string; runner: string; files: string; folderUri?: string},
+) {
+  const runFolder = environment.HARNESS_RUN_FOLDER ?? '';
+  return {
+    label: window.label,
+    useInstallation: {fromPath: executable},
+    extensionDevelopmentPath: path.join(
+      root,
+      'tests',
+      'acceptance',
+      window.runner,
+    ),
+    files: window.files,
+    launchArgs: [
+      ...(window.folderUri === undefined
+        ? []
+        : ['--folder-uri', window.folderUri]),
+      ...editorArguments(runFolder),
+    ],
+    env: {...environment},
+    mocha: {ui: 'bdd' as const, timeout: 120_000},
+  };
+}
+
+/**
+ * The two VSCodium configurations: `local` runs suite-local in a plain window, and `remote` runs suite-remote in a
+ * window on `ssh-remote+harness`, where the runner is an extension of the workspace kind.
+ */
+export function vscodiumConfigurations(
+  root: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  executable: string,
+) {
+  return [
+    vscodiumConfiguration(root, environment, executable, {
+      label: 'local',
+      runner: 'runner',
+      files: 'dist-local/**/*.test.cjs',
+    }),
+    vscodiumConfiguration(root, environment, executable, {
+      label: 'remote',
+      runner: 'runner-remote',
+      files: 'dist-remote/**/*.test.cjs',
+      folderUri: REMOTE_FOLDER_URI,
+    }),
+  ];
+}
+
+/** The suites that are bundled, each into the folder of tests/acceptance named after it. */
+const SUITES: ReadonlyArray<{source: string; output: string}> = [
+  {source: 'suite', output: 'dist'},
+  {source: 'suite-local', output: 'dist-local'},
+  {source: 'suite-remote', output: 'dist-remote'},
+];
+
+/** Bundles every `*.test.ts` of each suite folder of tests/acceptance into its output folder, one `.cjs` file each. */
 export async function bundleSuite(root: string): Promise<void> {
-  const suite = path.join(root, 'tests', 'acceptance', 'suite');
+  for (const {source, output} of SUITES) {
+    await bundleFolder(root, source, output);
+  }
+}
+
+/** Bundles every `*.test.ts` of tests/acceptance/`source` into tests/acceptance/`output`. */
+async function bundleFolder(
+  root: string,
+  source: string,
+  output: string,
+): Promise<void> {
+  const suite = path.join(root, 'tests', 'acceptance', source);
   await build({
     entryPoints: sortedEntries(suite)
       .filter(entry => entry.name.endsWith('.test.ts'))
       .map(entry => path.join(suite, entry.name)),
-    outdir: path.join(root, 'tests', 'acceptance', 'dist'),
+    outdir: path.join(root, 'tests', 'acceptance', output),
     bundle: true,
     platform: 'node',
     // The repository's package.json says "type": "module", so a CommonJS bundle needs the .cjs extension.
@@ -285,6 +420,54 @@ async function editorCli(): Promise<string> {
     console.log.bind(console),
   );
   return resolveCliPathFromVSCodeExecutablePath(executable);
+}
+
+/** What the VSCodium download needs from outside: the network and the unpacking. */
+export interface VscodiumTransfer {
+  download: (url: string) => Promise<Uint8Array>;
+  unpack: (archive: Uint8Array, folder: string) => void;
+}
+
+/** The command-line wrapper beside the VSCodium executable; the editor itself, started through it, does not run tests. */
+function vscodiumCliOf(executable: string): string {
+  return path.join(path.dirname(executable), 'bin', 'codium-insiders');
+}
+
+/**
+ * The VSCodium executable of the pinned release under `<root>/.vscode-test`. A missing build is downloaded, checked
+ * against the release's sha256 and unpacked; one already there is used as it is.
+ */
+export async function vscodiumExecutableOf(
+  root: string,
+  platform: string,
+  architecture: string,
+  transfer: VscodiumTransfer,
+  checksums: Readonly<Record<string, string>> = VSCODIUM_RELEASE.sha256,
+): Promise<string> {
+  const folder = path.join(
+    root,
+    '.vscode-test',
+    `vscodium-${VSCODIUM_RELEASE.tagName}`,
+  );
+  const executable = path.join(folder, 'codium-insiders');
+  if (existsSync(executable)) {
+    return executable;
+  }
+  const key = `${platform}-${architecture}`;
+  const expected = checksums[key];
+  if (expected === undefined) {
+    throw new Error(
+      `no VSCodium build is pinned for ${platform}-${architecture}`,
+    );
+  }
+  const archive = await transfer.download(
+    `https://github.com/${VSCODIUM_RELEASE.repository}/releases/download/${VSCODIUM_RELEASE.tagName}/VSCodium-${key}-${VSCODIUM_RELEASE.tagName}.tar.gz`,
+  );
+  if (createHash('sha256').update(archive).digest('hex') !== expected) {
+    throw new Error('the VSCodium download does not match its checksum');
+  }
+  transfer.unpack(archive, folder);
+  return executable;
 }
 
 /** The lines in the editor's output that report a hung window; the run is retried once on them. */
@@ -418,6 +601,7 @@ export function runAndCollect(
 export function runTestCli(
   root: string,
   variables: HarnessVariables,
+  label?: string,
 ): Promise<AttemptResult> {
   return runAndCollect(
     process.execPath,
@@ -425,17 +609,82 @@ export function runTestCli(
       path.join(path.dirname(resolveBinary('@vscode/test-cli')), 'bin.mjs'),
       '--config',
       path.join(root, 'tests', 'acceptance', 'vscode-test.mjs'),
+      ...(label === undefined ? [] : ['--label', label]),
     ],
     {cwd: root, env: {...process.env, ...variables}},
   );
 }
 
+/** What a run prints when its arguments are not understood. */
+export const USAGE =
+  'usage: node tools/acceptance.ts [--editor vscode|vscodium]';
+
+/** The editor the arguments choose (VS Code when they name none), or undefined when they are not understood. */
+export function editorChoiceOf(
+  commandArguments: readonly string[],
+): EditorChoice | undefined {
+  if (commandArguments.length === 0) {
+    return 'vscode';
+  }
+  const [flag, value, ...rest] = commandArguments;
+  return flag === '--editor' &&
+    rest.length === 0 &&
+    (value === 'vscode' || value === 'vscodium')
+    ? value
+    : undefined;
+}
+
+/** Downloads `url` into memory through `fetcher`, with one retry. */
+export async function downloadWithRetry(
+  url: string,
+  fetcher: typeof fetch = fetch,
+  pause: Sleeper = delay,
+): Promise<Uint8Array> {
+  return withOneRetry(
+    async () => {
+      const response = await fetcher(url);
+      if (!response.ok) {
+        throw new Error(`${url}: ${String(response.status)}`);
+      }
+      return new Uint8Array(await response.arrayBuffer());
+    },
+    pause,
+    console.log.bind(console),
+  );
+}
+
+/** Unpacks a gzipped tar archive into `folder`. */
+export function unpackArchive(archive: Uint8Array, folder: string): void {
+  mkdirSync(folder, {recursive: true});
+  const archiveFile = path.join(folder, 'archive.tar.gz');
+  writeFileSync(archiveFile, archive);
+  checked(runCommand, 'tar', ['-xzf', archiveFile, '-C', folder]);
+  rmSync(archiveFile);
+}
+
 if (isMainModule(import.meta.url)) {
-  process.exitCode = await runAcceptance(REPOSITORY_ROOT, {
-    command: runCommand,
-    sleep: delay,
-    bundleSuite,
-    editorCli,
-    runTests: runTestCli,
-  });
+  const editor = editorChoiceOf(process.argv.slice(2));
+  if (editor === undefined) {
+    console.error(USAGE);
+    process.exitCode = 2;
+  } else {
+    process.exitCode = await runAcceptance(
+      REPOSITORY_ROOT,
+      {
+        command: runCommand,
+        sleep: delay,
+        bundleSuite,
+        editorCli,
+        vscodiumExecutable: vscodiumExecutableOf.bind(
+          undefined,
+          REPOSITORY_ROOT,
+          process.platform,
+          process.arch,
+          {download: downloadWithRetry, unpack: unpackArchive},
+        ),
+        runTests: runTestCli,
+      },
+      editor,
+    );
+  }
 }

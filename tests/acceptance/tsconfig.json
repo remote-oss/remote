@@ -4,7 +4,11 @@
     "types": ["node", "mocha", "vscode"],
     "tsBuildInfoFile": "${configDir}/.tsc/suite.tsbuildinfo"
   },
-  "include": ["${configDir}/suite"],
+  "include": [
+    "${configDir}/suite",
+    "${configDir}/suite-local",
+    "${configDir}/suite-remote"
+  ],
   "references": [
     {
       "path": "../../packages/lib-forwarding"

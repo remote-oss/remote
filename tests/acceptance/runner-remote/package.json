@@ -1,0 +1,14 @@
+{
+  "name": "acceptance-runner-remote",
+  "displayName": "Acceptance test runner (remote window)",
+  "description": "Hosts the acceptance tests in the remote extension host of the editor under test; it contributes nothing.",
+  "version": "0.0.0",
+  "publisher": "remote-oss",
+  "private": true,
+  "engines": {
+    "vscode": "^1.139.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ]
+}

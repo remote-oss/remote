@@ -8,6 +8,8 @@
     "**/node_modules/**",
     "**/.tsc/**",
     "**/dist/**",
+    "**/dist-local/**",
+    "**/dist-remote/**",
     "**/.vscode-test/**",
     "**/vscode-dts/**"
   ],
