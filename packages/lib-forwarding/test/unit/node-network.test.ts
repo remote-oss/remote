@@ -1,6 +1,7 @@
 import {deepStrictEqual, rejects} from 'node:assert';
 import {createServer} from 'node:net';
 import {type Duplex, type Listening, nodeLocalPort} from '../../src/index.ts';
+import {listenOn} from '../../src/window-tunnel/node-network.ts';
 
 /** A port on the loopback that nothing listens on. */
 async function freePort(): Promise<number> {
@@ -44,9 +45,13 @@ async function pair(): Promise<Pair> {
   const network = nodeLocalPort();
   const port = await freePort();
   const accepted: Duplex[] = [];
-  const listening = await network.listen(port, connection => {
-    accepted.push(connection);
-  });
+  const listening = await network.listen(
+    port,
+    connection => {
+      accepted.push(connection);
+    },
+    () => undefined,
+  );
   const client = await network.connect(port);
   await until(() => accepted.length > 0);
   const [server] = accepted;
@@ -159,9 +164,78 @@ describe('the loopback over node:net', () => {
   it('refuses to listen on a port that is taken', async () => {
     const {listening} = await connected();
     const taken = await freePort();
-    const first = await nodeLocalPort().listen(taken, () => undefined);
-    await rejects(nodeLocalPort().listen(taken, () => undefined));
+    const first = await nodeLocalPort().listen(
+      taken,
+      () => undefined,
+      () => undefined,
+    );
+    await rejects(
+      nodeLocalPort().listen(
+        taken,
+        () => undefined,
+        () => undefined,
+      ),
+    );
     first.close();
+    listening.close();
+  });
+});
+
+describe('an error after listening', () => {
+  async function listeningServer(failures: string[]) {
+    const server = createServer();
+    const port = await freePort();
+    const listening = await listenOn(
+      server,
+      port,
+      () => undefined,
+      detail => {
+        failures.push(detail);
+      },
+    );
+    return {server, port, listening};
+  }
+
+  it('#228: tells the failure once it is raised', async () => {
+    const failures: string[] = [];
+    const {server} = await listeningServer(failures);
+    server.emit('error', new Error('accept failed'));
+    deepStrictEqual(failures, ['accept failed']);
+  });
+
+  it('#228: closes the server, so nothing can connect any more', async () => {
+    const {server, port} = await listeningServer([]);
+    server.emit('error', new Error('accept failed'));
+    await until(() => !server.listening);
+    await rejects(nodeLocalPort().connect(port));
+  });
+
+  it('#228: tells only the first of two failures', async () => {
+    const failures: string[] = [];
+    const {server} = await listeningServer(failures);
+    server.emit('error', new Error('first'));
+    server.emit('error', new Error('second'));
+    deepStrictEqual(failures, ['first']);
+  });
+
+  it('#253 Q1: tells nothing after the listening is closed', async () => {
+    const failures: string[] = [];
+    const {server, listening} = await listeningServer(failures);
+    listening.close();
+    server.emit('error', new Error('late'));
+    deepStrictEqual(failures, []);
+  });
+
+  it('#228: rejects a second listen on the port the first holds', async () => {
+    const {port, listening} = await listeningServer([]);
+    await rejects(
+      listenOn(
+        createServer(),
+        port,
+        () => undefined,
+        () => undefined,
+      ),
+    );
     listening.close();
   });
 });

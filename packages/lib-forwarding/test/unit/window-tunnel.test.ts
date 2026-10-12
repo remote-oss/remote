@@ -466,3 +466,88 @@ describe('the cap on the bytes a bridge holds before the host side opens', () =>
     );
   });
 });
+
+describe('a window tunnel whose listener fails after listening', () => {
+  async function opened(): Promise<{
+    fixture: RelayFixture;
+    outcome: Extract<WindowTunnelOutcome, {kind: 'open'}>;
+  }> {
+    const fixture = relay();
+    const outcome = await fixture.open();
+    if (outcome.kind !== 'open') {
+      throw new Error('the tunnel did not open');
+    }
+    return {fixture, outcome};
+  }
+
+  it('#253 Q1: tells every closed listener once, with the detail', async () => {
+    const {fixture, outcome} = await opened();
+    const heard: string[] = [];
+    outcome.onClosed(detail => heard.push(`first ${detail}`));
+    outcome.onClosed(detail => heard.push(`second ${detail}`));
+    fixture.local.fail(50000, 'accept failed');
+    fixture.local.fail(50000, 'again');
+    deepStrictEqual(heard, ['first accept failed', 'second accept failed']);
+  });
+
+  it('#253 Q1: closes the connections and stays open for its callers', async () => {
+    const {fixture, outcome} = await opened();
+    const client = fixture.local.accept(50000);
+    await settled();
+    fixture.local.fail(50000, 'accept failed');
+    deepStrictEqual(
+      [client?.closed, fixture.dialer.connections[1]?.closed, outcome.kind],
+      [true, true, 'open'],
+    );
+  });
+
+  it('#253 Q1: tells a listener registered afterwards at once', async () => {
+    const {fixture, outcome} = await opened();
+    fixture.local.fail(50000, 'accept failed');
+    const heard: string[] = [];
+    outcome.onClosed(detail => heard.push(detail));
+    deepStrictEqual(heard, ['accept failed']);
+  });
+
+  it('#253 Q1: tells nobody about a failure after the tunnel was closed', async () => {
+    const {fixture, outcome} = await opened();
+    const heard: string[] = [];
+    outcome.onClosed(detail => heard.push(detail));
+    outcome.close();
+    fixture.local.fail(50000, 'late');
+    deepStrictEqual(heard, []);
+  });
+
+  it('#253 Q1: is a listen failure when the listener fails while the tunnel waits to be ready', async () => {
+    const {open, local, dialer} = relay(['later']);
+    const pending = open();
+    await settled();
+    local.fail(50000, 'accept failed');
+    dialer.openNext();
+    deepStrictEqual(await pending, {
+      kind: 'listenFailed',
+      detail: 'accept failed',
+    });
+  });
+
+  it('#253 Q1: never fires for a tunnel of a second ssh session', async () => {
+    const heard: string[] = [];
+    const outcome = await openForwardedTunnel({
+      local: new FakeLocalPort(),
+      scheduler: new FakeClock().scheduler(),
+      localPort: 50000,
+      limits: LIMITS,
+      stopSession: () => undefined,
+    });
+    if (outcome.kind === 'open') {
+      outcome.onClosed(detail => heard.push(detail));
+    }
+    deepStrictEqual([outcome.kind, heard], ['open', []]);
+  });
+});
+
+describe('the fake loopback', () => {
+  it('a failure on a port nothing listens on tells nobody', () => {
+    new FakeLocalPort().fail(50000, 'nothing there');
+  });
+});

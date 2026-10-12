@@ -160,6 +160,7 @@ export class FakeLocalPort implements LocalPort {
   /** The ports whose listening was closed, in order. */
   readonly closedPorts: number[] = [];
   private readonly listeners = new Map<number, (connection: Duplex) => void>();
+  private readonly failures = new Map<number, (detail: string) => void>();
   private readonly listenAnswer: Answer;
   private readonly connectScript: readonly Answer[];
 
@@ -176,18 +177,29 @@ export class FakeLocalPort implements LocalPort {
   listen(
     port: number,
     onConnection: (connection: Duplex) => void,
+    onFailure: (detail: string) => void,
   ): Promise<Listening> {
     if (this.listenAnswer === 'fail') {
       return Promise.reject(new Error(`port ${String(port)} is in use`));
     }
     this.listened.push(port);
     this.listeners.set(port, onConnection);
+    this.failures.set(port, onFailure);
     return Promise.resolve({
       close: () => {
         this.closedPorts.push(port);
         this.listeners.delete(port);
+        this.failures.delete(port);
       },
     });
+  }
+
+  /** The listener on `port` fails after listening, as an adapter tells it: nothing listens there any more. */
+  fail(port: number, detail: string): void {
+    const onFailure = this.failures.get(port);
+    this.listeners.delete(port);
+    this.failures.delete(port);
+    onFailure?.(detail);
   }
 
   /** Records the port and ends as the connect script says. */

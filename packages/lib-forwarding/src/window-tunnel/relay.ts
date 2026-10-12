@@ -22,7 +22,13 @@ export interface WindowAddress {
 
 /** How a tunnel ended up: open, or why not. */
 export type WindowTunnelOutcome =
-  | {kind: 'open'; address: WindowAddress; close: () => void}
+  | {
+      kind: 'open';
+      address: WindowAddress;
+      close: () => void;
+      /** Registers a listener for the tunnel ending without being asked to, with the reason. */
+      onClosed: (listener: (detail: string) => void) => void;
+    }
   | {kind: 'tunnelNotReady'}
   | {kind: 'listenFailed'; detail: string};
 
@@ -126,17 +132,34 @@ export async function openRelayTunnel(
       active.delete(connection);
     });
   }
+  const closedListeners: Array<(detail: string) => void> = [];
+  let ended: {detail: string} | undefined;
+  function closeConnections(): void {
+    for (const connection of [...active]) {
+      connection.close();
+    }
+  }
   let listening: Listening;
   try {
-    listening = await request.local.listen(request.localPort, accepted => {
-      track(accepted);
-      bridge(
-        accepted,
-        dialer.dial(target),
-        track,
-        request.limits.heldBytesMaximum,
-      );
-    });
+    listening = await request.local.listen(
+      request.localPort,
+      accepted => {
+        track(accepted);
+        bridge(
+          accepted,
+          dialer.dial(target),
+          track,
+          request.limits.heldBytesMaximum,
+        );
+      },
+      detail => {
+        ended = {detail};
+        closeConnections();
+        for (const listener of closedListeners.splice(0)) {
+          listener(detail);
+        }
+      },
+    );
   } catch (caught) {
     return {
       kind: 'listenFailed',
@@ -145,9 +168,7 @@ export async function openRelayTunnel(
   }
   function close(): void {
     listening.close();
-    for (const connection of [...active]) {
-      connection.close();
-    }
+    closeConnections();
   }
   const ready = await succeedsWithin(
     async () => {
@@ -156,6 +177,9 @@ export async function openRelayTunnel(
     request.limits,
     request.scheduler,
   );
+  if (ended !== undefined) {
+    return {kind: 'listenFailed', detail: ended.detail};
+  }
   if (!ready) {
     close();
     return {kind: 'tunnelNotReady'};
@@ -164,5 +188,12 @@ export async function openRelayTunnel(
     kind: 'open',
     address: {host: '127.0.0.1', port: request.localPort},
     close,
+    onClosed: listener => {
+      if (ended === undefined) {
+        closedListeners.push(listener);
+      } else {
+        listener(ended.detail);
+      }
+    },
   };
 }
