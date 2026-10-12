@@ -13,6 +13,7 @@ import {
   hostLockLoopOf,
   runStep,
   type ScriptParameters,
+  type StartedServer,
 } from 'lib-server';
 import type {RunningHost} from './host-fixture.ts';
 import {
@@ -77,6 +78,7 @@ export function parametersFor(
       extensions: [],
       fileWatcherPollingMilliseconds: 0,
       readySeconds: 10,
+      socketMode: false,
     },
     ...changes,
   };
@@ -183,6 +185,11 @@ export function receivedBytes(
       }
     });
   });
+}
+
+/** The port of a started server that listens on one; -1 for a server on a socket, which no test here expects. */
+export function portOfStarted(server: StartedServer): number {
+  return server.endpoint.kind === 'port' ? server.endpoint.port : -1;
 }
 
 /** The real clock, for the host lock loop. */

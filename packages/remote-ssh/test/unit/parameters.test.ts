@@ -180,6 +180,7 @@ describe('the script parameters', () => {
           extensions: [],
           fileWatcherPollingMilliseconds: 0,
           readySeconds: 20,
+          socketMode: false,
         },
       },
     );
@@ -257,6 +258,7 @@ describe('the start options', () => {
         defaultExtensions: ['one.alpha'],
         fileWatcherPollingMilliseconds: 0,
         readySeconds: 20,
+        socketMode: false,
       },
     );
   });

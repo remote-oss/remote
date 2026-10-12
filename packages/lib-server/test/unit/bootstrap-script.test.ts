@@ -937,6 +937,162 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
+    describe('in socket mode', () => {
+      function socket(): ScriptParameters {
+        const parameters = parametersFor();
+        parameters.start.socketMode = true;
+        return parameters;
+      }
+
+      function dataFiles(): string[] {
+        return readdirSync(path.join(host.home, '.server-data'));
+      }
+
+      function serverStarts(): string[] {
+        return readFileSync(host.environment.SERVER_STARTS ?? '', 'utf8')
+          .trim()
+          .split('\n');
+      }
+
+      function processIdOf(pidFile: string): number {
+        return Number(
+          readFileSync(path.join(host.home, '.server-data', pidFile), 'utf8'),
+        );
+      }
+
+      function alive(processId: number): boolean {
+        try {
+          process.kill(processId, 0);
+          return true;
+        } catch {
+          // A process that is gone raises on a signal of 0.
+          return false;
+        }
+      }
+
+      /** Waits until the processes are gone: a signal returns before the process has exited. */
+      async function exited(processes: readonly number[]): Promise<void> {
+        for (
+          let attempt = 0;
+          attempt < 50 && processes.some(alive);
+          attempt++
+        ) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      function factsOf(parameters: ScriptParameters): Record<string, string> {
+        const block = blockOf(host, single('start'), parameters);
+        return block === 'none' ? {} : block.serverFacts;
+      }
+
+      it('F-2410 BR-4, AC-3: a socket start gives a v4 UUID socket path in the temporary folder and no port', () => {
+        const facts = factsOf(socket());
+        deepStrictEqual(
+          [
+            /^\/.*\/code-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+              facts.socketPath ?? '',
+            ),
+            facts.port,
+          ],
+          [true, undefined],
+        );
+      });
+
+      it('F-2410 AC-9: the launcher gets a socket path and neither a host nor a port', () => {
+        startFacts(socket());
+        deepStrictEqual(
+          [
+            launcherArguments().includes('--socket-path'),
+            launcherArguments().includes('--host'),
+            launcherArguments().includes('--port'),
+          ],
+          [true, false, false],
+        );
+      });
+
+      it('F-2410 BR-4: the socket lies in the temporary folder of the host', () => {
+        const folder = path.join(host.home, 'temporary');
+        mkdirSync(folder);
+        const block = blockOf(host, single('start'), socket(), {
+          environment: {TMPDIR: folder},
+        });
+        deepStrictEqual(
+          block === 'none'
+            ? block
+            : path.dirname(block.serverFacts.socketPath ?? ''),
+          folder,
+        );
+      });
+
+      it('F-2410 BR-6: a second socket start has the first path and reuses the server', () => {
+        const first = factsOf(socket());
+        const second = factsOf(socket());
+        deepStrictEqual(
+          [second.socketPath === first.socketPath, second.reused],
+          [true, 'yes'],
+        );
+      });
+
+      it('F-2410 BR-6: two socket starts launch the server once', () => {
+        runScript(host, single('start'), socket());
+        runScript(host, single('start'), socket());
+        deepStrictEqual(serverStarts(), ['started']);
+      });
+
+      it('F-2410 BR-7: a port start after a socket start starts its own server on the port', () => {
+        runScript(host, single('start'), socket());
+        const facts = factsOf(parametersFor());
+        deepStrictEqual([facts.port, facts.reused], ['4321', 'no']);
+      });
+
+      it('F-2410 BR-7: the socket server is still alive after a port start beside it', () => {
+        runScript(host, single('start'), socket());
+        const socketProcess = processIdOf('.abc123.socket.pid');
+        runScript(host, single('start'), parametersFor());
+        deepStrictEqual(
+          [serverStarts(), alive(socketProcess)],
+          [['started', 'started'], true],
+        );
+      });
+
+      it('F-2410 BR-7: a socket start after a port start does not reuse the port server', () => {
+        runScript(host, single('start'), parametersFor());
+        deepStrictEqual(factsOf(socket()).reused, 'no');
+      });
+
+      it('F-2411 POST-1: kill stops the port server and the socket server', async () => {
+        runScript(host, single('start'), socket());
+        runScript(host, single('start'), parametersFor());
+        const processes = [
+          processIdOf('.abc123.socket.pid'),
+          processIdOf('.abc123.pid'),
+        ];
+        runScript(host, single('kill'), parametersFor());
+        await exited(processes);
+        deepStrictEqual(processes.map(alive), [false, false]);
+      });
+
+      it('F-2410 BR-6: a socket start keeps its own record files, and makes no port record', () => {
+        runScript(host, single('start'), socket());
+        deepStrictEqual(
+          dataFiles()
+            .filter(name => name.startsWith('.abc123'))
+            .sort(),
+          ['.abc123.socket.log', '.abc123.socket.pid', '.abc123.socket.token'],
+        );
+      });
+
+      it('#299: a server that reports a port in socket mode fails the start', () => {
+        deepStrictEqual(
+          statusOf(host, single('start'), socket(), {
+            environment: {SERVER_READY_TEXT: '4321'},
+          }),
+          'ServerFailedToStart',
+        );
+      });
+    });
+
     it('F-2703.7.E2: a server that exits with 207 is LinuxPrereqs', () => {
       deepStrictEqual(
         statusOf(host, single('start'), parametersFor(), {
@@ -1054,6 +1210,23 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(
         existsSync(path.join(host.home, '.server-data', '.old2.log')),
         false,
+      );
+    });
+
+    it('F-2413.BR-9: cleanup removes the three socket files of an install it removes', () => {
+      const parameters = parametersFor();
+      parameters.cleanup = {kind: 'keepNewest', count: 1};
+      const dataFolder = path.join(host.home, '.server-data');
+      mkdirSync(dataFolder, {recursive: true});
+      for (const extension of ['log', 'pid', 'token']) {
+        writeFileSync(path.join(dataFolder, `.old2.socket.${extension}`), '');
+      }
+      binAfter(['new1', 'old2', 'abc123'], parameters);
+      deepStrictEqual(
+        ['log', 'pid', 'token'].map(extension =>
+          existsSync(path.join(dataFolder, `.old2.socket.${extension}`)),
+        ),
+        [false, false, false],
       );
     });
 

@@ -64,6 +64,8 @@ export interface StartParameters {
   fileWatcherPollingMilliseconds: number;
   /** How many seconds the start waits for the ready line before it fails. */
   readySeconds: number;
+  /** Whether the server listens on a socket in the host's temporary folder instead of a TCP port. */
+  socketMode: boolean;
 }
 
 /** Everything a script needs, as data; nothing in it is specific to one product. */
@@ -151,19 +153,16 @@ function parameterBlock(parameters: ScriptParameters): string[] {
     assignment('BIND_HOST', start.bindHost),
     assignment('SERVER_PORT', start.port),
     assignment('READY_SECONDS', start.readySeconds),
+    assignment('SOCKET_MODE', yesNo(start.socketMode)),
   ];
 }
 
 /** The `set --` line that holds the server's start options, each as one quoted word. */
 function startOptions(start: StartParameters): string {
-  const words = [
-    '--start-server',
-    '--host',
-    start.bindHost,
-    '--port',
-    start.port,
-    '--connection-token-file',
-  ];
+  const endpoint = start.socketMode
+    ? ['--socket-path', '"$SOCKET_FILE"']
+    : ['--host', start.bindHost, '--port', start.port];
+  const words = ['--start-server', ...endpoint, '--connection-token-file'];
   const tail = ['--telemetry-level', 'off', '--enable-remote-auto-shutdown'];
   const optional = [
     ...(start.licenceAccepted ? ['--accept-server-license-terms'] : []),
@@ -325,16 +324,21 @@ const STEPWISE_BODIES: Readonly<Record<StepwiseAction, readonly string[]>> = {
 
 function startBody(start: StartParameters): string[] {
   return [
-    'PID_FILE=$BOOT_PREFIX.pid',
-    'LOG_FILE=$BOOT_PREFIX.log',
-    'TOKEN_FILE=$BOOT_PREFIX.token',
+    'if [ "$SOCKET_MODE" = yes ]; then KIND_PREFIX=$BOOT_PREFIX.socket; else KIND_PREFIX=$BOOT_PREFIX; fi',
+    'PID_FILE=$KIND_PREFIX.pid',
+    'LOG_FILE=$KIND_PREFIX.log',
+    'TOKEN_FILE=$KIND_PREFIX.token',
     'STARTED_AT=$(now_seconds)',
     'ready_port() {',
-    `  sed -n 's/.*${READY_LINE} \\([0-9][0-9]*\\).*/\\1/p' "$LOG_FILE" 2>/dev/null | tail -n 1`,
+    `  sed -n 's/.*${READY_LINE} \\([^ ]*\\).*/\\1/p' "$LOG_FILE" 2>/dev/null | tail -n 1`,
     '}',
     'started() {',
     '  [ -s "$TOKEN_FILE" ] || leave ServerFailedToStart',
-    '  fact server.port "$1"',
+    '  case $SOCKET_MODE:$1 in',
+    '    yes:/*) fact server.socketPath "$1" ;;',
+    '    no:[0-9]*) fact server.port "$1" ;;',
+    '    *) leave ServerFailedToStart ;;',
+    '  esac',
     '  fact server.pid "$2"',
     '  fact server.token "$(cat "$TOKEN_FILE" 2>/dev/null)"',
     '  fact server.log "$LOG_FILE"',
@@ -359,6 +363,12 @@ function startBody(start: StartParameters): string[] {
     '    (umask 077; tr -dc \'A-Za-z0-9\' </dev/urandom | head -c 32 >"$TOKEN_FILE")',
     '  fi',
     '  [ -s "$TOKEN_FILE" ] || leave ServerFailedToStart',
+    '  if [ "$SOCKET_MODE" = yes ]; then',
+    "    SOCKET_HEX=$(tr -dc 'a-f0-9' </dev/urandom | head -c 32)",
+    "    SOCKET_VARIANT=$(tr -dc '89ab' </dev/urandom | head -c 1)",
+    `    SOCKET_NAME=$(printf '%s' "$SOCKET_HEX" | sed "s/^\\(........\\)\\(....\\).\\(...\\).\\(...\\)\\(............\\)$/\\1-\\2-4\\3-$SOCKET_VARIANT\\4-\\5/")`,
+    '    SOCKET_FILE="${TMPDIR:-/tmp}/code-$SOCKET_NAME"',
+    '  fi',
     `  ${startOptions(start)}`,
     '  (umask 077; printf \'\' >"$LOG_FILE") || leave ServerFailedToStart',
     '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 9>&- &',

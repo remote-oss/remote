@@ -50,6 +50,7 @@ describe('the maintenance of the host server', function () {
         defaultExtensions: [],
         fileWatcherPollingMilliseconds: 0,
         readySeconds: 10,
+        socketMode: false,
       },
       [],
       {
