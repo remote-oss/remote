@@ -27,11 +27,14 @@ Builder: hestia. Size: M. **Depends on tooling-16 (#488)** (per-launch environme
 file is named. When they are, it returns a port whose `withProgress(request, task)`:
 1. appends `{surface: 'progress', question: request.title, answer: 'shown', matched: true}`;
 2. calls `real.withProgress(request, update => …)`. Each call of the task's `update(title, details)` appends
-   `{surface: 'progress', question: title, answer: 'shown', matched: true}`, then passes the call on unchanged;
+   `{surface: 'progress', question: title, answer: 'shown', matched: true, details}`, with `details` `true` or `false`
+   as given, then passes the call on unchanged. F-2304 AC-1, AC-5 and AC-30 are about that flag;
 3. resolves as `real` does. Nothing is appended at the end.
 
-This is the line shape of cli-05's `downloadProgress` lines (athena). `RecordLine.surface` widens to
-`ScriptEntry['surface'] | 'progress' | 'downloadProgress'`. Lines are appended in the order the calls happen.
+Display-only lines keep the four fields of cli-05's `downloadProgress` lines (athena), and a surface may add its own:
+the title line has no `details`, a phase line has it. `RecordLine.surface` widens to
+`ScriptEntry['surface'] | 'progress' | 'downloadProgress'`, and `RecordLine` gains an optional `details`. Lines are
+appended in the order the calls happen, each as one append (section 3 of tooling-20).
 
 In `extension.ts`, the resolver editor becomes `{...real, progress: progressFor(process.env, real.progress, …)}`, with
 the same `files` as `adaptersFor`.
@@ -90,7 +93,7 @@ One assertion per `it`.
 | Cite | Given | Expected |
 |---|---|---|
 | D-85 | switch off | `progressFor` returns the real port itself |
-| D-85 | switch on, a task that updates `('A', true)` then `('B', false)` | the record's lines are the title, `A`, `B`, each `answer: 'shown'`, `matched: true`, `surface: 'progress'` |
+| D-85 | switch on, a task that updates `('A', true)` then `('B', false)` | the record's lines are the title (no `details`), `A` with `details: true`, `B` with `details: false`, each `answer: 'shown'`, `matched: true`, `surface: 'progress'` |
 | D-85 | the same | the real port got both updates, in order, with their `details` |
 | D-85 | the same | the result is the task's |
 | D-85 | switch on, no record file | the real port itself |

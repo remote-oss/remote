@@ -52,7 +52,17 @@ Users, each with home `/home/<name>`:
   `<runFolder>/host.env` as one line, `HOST_PASSWORD=<password>`, with mode 600.
 - `startHostContainer` passes that file with `--env-file <runFolder>/host.env`. The password never appears in a
   command line (register rule), so never use `--env HOST_PASSWORD=…`.
-- `start-sshd` sets it with `printf 'harness-pw:%s\n' "$HOST_PASSWORD" | chpasswd`, then `unset HOST_PASSWORD`.
+- `start-sshd` sets it with a here-document, so no command line ever holds it, whether or not `printf` is a builtin:
+
+  ```sh
+  chpasswd <<EOF
+  harness-pw:$HOST_PASSWORD
+  EOF
+  unset HOST_PASSWORD
+  ```
+
+- `docker inspect` still shows `HOST_PASSWORD` in the container's configuration. That's acceptable for a per-run fake
+  (R-26); the README says so.
 - `start-sshd` installs `AUTHORIZED_KEY` for `harness-nofwd` and `harness-mute` as it does for `harness`, with the same
   modes and owners.
 - The tests read the password from the file named by the new harness variable `HARNESS_PASSWORD_FILE`
