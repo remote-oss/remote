@@ -1,4 +1,4 @@
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, throws} from 'node:assert';
 import {
   plan,
   type DownloadPlacement,
@@ -269,28 +269,24 @@ describe('install planner (card server-04 table)', () => {
     );
   });
 
-  it('useExecServerSetting true on a download -> notes contains useExecServerIgnored', () => {
+  it('brief §2: useExecServerSetting true on a download, with no mode asked for, notes nothing', () => {
     const result = plan(
       input({
         useExecServerSetting: true,
         source: {kind: 'resolved', address: 'https://x/s.tgz'},
       }),
     );
-    deepStrictEqual((asPlan(result) as Plan & {kind: 'download'}).notes, [
-      'useExecServerIgnored',
-    ]);
+    deepStrictEqual((asPlan(result) as Plan & {kind: 'download'}).notes, []);
   });
 
-  it('useExecServerSetting true on a reuse -> notes contains useExecServerIgnored', () => {
+  it('brief §2: useExecServerSetting true on a reuse, with no mode asked for, notes nothing', () => {
     const result = plan(
       input({
         facts: {...facts, existingLayouts: [binLayout('abc')]},
         useExecServerSetting: true,
       }),
     );
-    deepStrictEqual((asPlan(result) as Plan & {kind: 'reuse'}).notes, [
-      'useExecServerIgnored',
-    ]);
+    deepStrictEqual((asPlan(result) as Plan & {kind: 'reuse'}).notes, []);
   });
 
   it('useExecServerSetting false -> notes empty', () => {
@@ -320,5 +316,140 @@ describe('install planner (card server-04 table)', () => {
     deepStrictEqual(result, {
       failure: {kind: 'invalidInstallPath', reason: 'relative'},
     });
+  });
+});
+
+// The mode inputs of a connect that may use the CLI: every row but the one a row changes.
+const cliMode: NonNullable<PlanInput['cliMode']> = {
+  useExecServerSetting: true,
+  manualBootstrap: false,
+  cliTemplate: 'https://x/${version}/cli-${os}-${arch}.tar.gz',
+  sourcesFree: true,
+};
+
+// A plan input that asks for the CLI mode on the standard host, with a data folder under the home folder.
+function cliInput(mutations: Partial<PlanInput>): PlanInput {
+  return input({
+    serverDataFolderName: '.data',
+    cliMode,
+    cliName: 'editor-abc',
+    cliPresentOnHost: false,
+    source: {kind: 'resolved', address: 'https://x/s.tgz'},
+    ...mutations,
+  });
+}
+
+describe('install planner, the CLI mode (card cli-02 table)', () => {
+  it('brief §2: with the CLI absent the plan is a CLI plan that downloads it, on the host with a fallback', () => {
+    deepStrictEqual(plan(cliInput({})), {
+      plan: {
+        kind: 'cli',
+        cliPath: '/home/u/.data/editor-abc',
+        cliDataFolder: '/home/u/.data/cli',
+        download: true,
+        where: 'host',
+        clientFallback: true,
+        dataFolder: '/home/u/.data',
+        lockPlace: '/home/u/.data/bin/abc',
+        notes: [],
+      },
+    });
+  });
+
+  it('F-2103 BR-8, BR-7: a server of the commit in a bin layout does not turn a CLI plan into a reuse', () => {
+    deepStrictEqual(
+      asPlan(
+        plan(
+          cliInput({
+            facts: {
+              ...facts,
+              existingLayouts: [binLayout('abc', '/home/u/.data/bin')],
+            },
+          }),
+        ),
+      ).kind,
+      'cli',
+    );
+  });
+
+  it('brief §4: a CLI that is already there is not downloaded again', () => {
+    deepStrictEqual(
+      (asPlan(plan(cliInput({cliPresentOnHost: true}))) as Plan & {kind: 'cli'})
+        .download,
+      false,
+    );
+  });
+
+  it('brief §4: the placement always downloads on the client, without a fallback', () => {
+    const planned = asPlan(
+      plan(cliInput({placement: {kind: 'hostFirst', mode: 'always'}})),
+    ) as Plan & {kind: 'cli'};
+    deepStrictEqual([planned.where, planned.clientFallback], ['client', false]);
+  });
+
+  it('brief §2 row 2: a product without a CLI source gets a direct plan that notes why', () => {
+    const planned = asPlan(
+      plan(cliInput({cliMode: {...cliMode, cliTemplate: ''}})),
+    );
+    deepStrictEqual(
+      [planned.kind, planned.notes],
+      ['download', [{kind: 'cliNotUsed', reason: 'noCliSource'}]],
+    );
+  });
+
+  it('brief §2 row 1: a setting that is off gets a direct plan that notes nothing', () => {
+    const planned = asPlan(
+      plan(cliInput({cliMode: {...cliMode, useExecServerSetting: false}})),
+    );
+    deepStrictEqual([planned.kind, planned.notes], ['download', []]);
+  });
+
+  it('brief §2 row 3: a platform without a CLI build gets a direct plan that notes why', () => {
+    const planned = asPlan(
+      plan(
+        cliInput({
+          facts: {...facts, architecture: 'riscv64'},
+        }),
+      ),
+    );
+    deepStrictEqual(planned.notes, [
+      {kind: 'cliNotUsed', reason: 'noBuildForPlatform'},
+    ]);
+  });
+
+  it('brief §2 row 4: sources that need terms accepted get a direct plan that notes why', () => {
+    const planned = asPlan(
+      plan(cliInput({cliMode: {...cliMode, sourcesFree: false}})),
+    );
+    deepStrictEqual(planned.notes, [
+      {kind: 'cliNotUsed', reason: 'termsToAccept'},
+    ]);
+  });
+
+  it('brief §2: a direct plan after a CLI refusal still reuses a server of the commit', () => {
+    const planned = asPlan(
+      plan(
+        cliInput({
+          cliMode: {...cliMode, cliTemplate: ''},
+          facts: {...facts, existingLayouts: [binLayout('abc')]},
+        }),
+      ),
+    );
+    deepStrictEqual(
+      [planned.kind, planned.notes],
+      ['reuse', [{kind: 'cliNotUsed', reason: 'noCliSource'}]],
+    );
+  });
+
+  it('brief §2: an invalid install path is judged before the mode', () => {
+    deepStrictEqual(plan(cliInput({installPathSetting: 'relative/path'})), {
+      failure: {kind: 'invalidInstallPath', reason: 'relative'},
+    });
+  });
+
+  it('brief §3: a mode asked for without the CLI name is a defect and throws', () => {
+    const withName = cliInput({});
+    delete withName.cliName;
+    throws(() => plan(withName), /cliName/);
   });
 });

@@ -1,67 +1,129 @@
 import {deepStrictEqual} from 'node:assert';
 import {
-  type CliPathInput,
+  CLI_PLATFORMS,
+  type CliModeInput,
   cliArchiveTemplateVariables,
-  decideCliPath,
+  decideCliMode,
 } from '../../src/index.ts';
 
-const BUILDS = ['linux-x64', 'alpine-x64', 'alpine-arm64', 'linux-armhf'];
-
-function inputWith(overrides: Partial<CliPathInput> = {}): CliPathInput {
+function inputWith(overrides: Partial<CliModeInput> = {}): CliModeInput {
   return {
-    productCliTemplate:
-      'https://example.invalid/${commit}/${os}-${arch}.tar.gz',
-    hostPlatform: {operatingSystem: 'linux', architecture: 'x64'},
-    cliBuildsAvailable: BUILDS,
     useExecServerSetting: true,
-    cliPresentOnHost: false,
-    serverPresentOnHost: false,
+    manualBootstrap: false,
+    cliTemplate: 'https://example.invalid/${commit}/${os}-${arch}.tar.gz',
+    hostPlatform: {operatingSystem: 'linux', architecture: 'x64'},
+    sourcesFree: true,
     ...overrides,
   };
 }
 
-describe('decideCliPath (card ssh-08 table)', () => {
-  it('a server on the host is reused whatever else is favourable', () => {
-    deepStrictEqual(decideCliPath(inputWith({serverPresentOnHost: true})), {
-      kind: 'bootstrap',
-      reason: 'serverPresent',
-    });
-  });
-
-  it('a setting that is off chooses the bootstrap', () => {
-    deepStrictEqual(decideCliPath(inputWith({useExecServerSetting: false})), {
-      kind: 'bootstrap',
+describe('decideCliMode (card cli-02 table)', () => {
+  it('F-2103 BR-1: a setting that is off chooses the direct install', () => {
+    deepStrictEqual(decideCliMode(inputWith({useExecServerSetting: false})), {
+      kind: 'direct',
       reason: 'settingOff',
     });
   });
 
-  it('a product without a template chooses the bootstrap', () => {
-    deepStrictEqual(decideCliPath(inputWith({productCliTemplate: undefined})), {
-      kind: 'bootstrap',
-      reason: 'noTemplate',
+  it('F-2103 BR-3: a manual bootstrap chooses the direct install', () => {
+    deepStrictEqual(decideCliMode(inputWith({manualBootstrap: true})), {
+      kind: 'direct',
+      reason: 'manualBootstrap',
     });
   });
 
-  it('a platform with no published build chooses the bootstrap', () => {
+  it('brief §2 row 2: a product without a CLI source chooses the direct install', () => {
+    deepStrictEqual(decideCliMode(inputWith({cliTemplate: ''})), {
+      kind: 'direct',
+      reason: 'noCliSource',
+    });
+  });
+
+  it('brief §2 row 3: a platform the CLI is not built for chooses the direct install', () => {
     deepStrictEqual(
-      decideCliPath(
+      decideCliMode(
         inputWith({
-          hostPlatform: {operatingSystem: 'alpine', architecture: 'armhf'},
+          hostPlatform: {operatingSystem: 'linux', architecture: 'riscv64'},
         }),
       ),
-      {kind: 'bootstrap', reason: 'noBuildForPlatform'},
+      {kind: 'direct', reason: 'noBuildForPlatform'},
     );
   });
 
-  it('a favourable host without the program downloads it', () => {
-    deepStrictEqual(decideCliPath(inputWith()), {kind: 'cli', download: true});
+  it('brief §2 row 3: a platform the CLI is built for is not refused for its platform', () => {
+    deepStrictEqual(
+      decideCliMode(
+        inputWith({
+          hostPlatform: {operatingSystem: 'alpine', architecture: 'arm64'},
+        }),
+      ),
+      {kind: 'cli'},
+    );
   });
 
-  it('a favourable host with the program does not download it', () => {
-    deepStrictEqual(decideCliPath(inputWith({cliPresentOnHost: true})), {
-      kind: 'cli',
-      download: false,
+  it('R-68, brief §5: sources that are not free choose the direct install', () => {
+    deepStrictEqual(decideCliMode(inputWith({sourcesFree: false})), {
+      kind: 'direct',
+      reason: 'termsToAccept',
     });
+  });
+
+  it('brief §2: with every row passed the mode is the CLI', () => {
+    deepStrictEqual(decideCliMode(inputWith()), {kind: 'cli'});
+  });
+
+  it('brief §2 order: the setting is judged before the source', () => {
+    deepStrictEqual(
+      decideCliMode(inputWith({useExecServerSetting: false, cliTemplate: ''})),
+      {kind: 'direct', reason: 'settingOff'},
+    );
+  });
+
+  it('brief §2 order: a manual bootstrap is judged before the source', () => {
+    deepStrictEqual(
+      decideCliMode(inputWith({manualBootstrap: true, cliTemplate: ''})),
+      {kind: 'direct', reason: 'manualBootstrap'},
+    );
+  });
+
+  it('brief §2 order: the source is judged before the platform', () => {
+    deepStrictEqual(
+      decideCliMode(
+        inputWith({
+          cliTemplate: '',
+          hostPlatform: {operatingSystem: 'linux', architecture: 'riscv64'},
+        }),
+      ),
+      {kind: 'direct', reason: 'noCliSource'},
+    );
+  });
+
+  it('brief §2 order: the platform is judged before the terms', () => {
+    deepStrictEqual(
+      decideCliMode(
+        inputWith({
+          sourcesFree: false,
+          hostPlatform: {operatingSystem: 'linux', architecture: 'riscv64'},
+        }),
+      ),
+      {kind: 'direct', reason: 'noBuildForPlatform'},
+    );
+  });
+
+  it('brief §3: the CLI is built for these eleven platforms, in this order', () => {
+    deepStrictEqual(CLI_PLATFORMS, [
+      'linux-x64',
+      'linux-arm64',
+      'linux-armhf',
+      'linux-ppc64le',
+      'linux-s390x',
+      'alpine-x64',
+      'alpine-arm64',
+      'darwin-x64',
+      'darwin-arm64',
+      'win32-x64',
+      'win32-arm64',
+    ]);
   });
 });
 

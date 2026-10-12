@@ -1,4 +1,9 @@
 import type {TemplateProblem} from 'lib-product';
+import {
+  type CliModeInput,
+  decideCliMode,
+  type DirectReason,
+} from '../cli-path/decision.ts';
 import type {DownloadPlacement} from '../policy/record.ts';
 
 /** What the planner knows about the host before any channel is used. */
@@ -24,6 +29,12 @@ export interface PlanInput {
   installPathSetting: string | undefined;
   placement: DownloadPlacement;
   useExecServerSetting: boolean;
+  /** The mode inputs; absent means the direct install, as every caller did before the CLI path. */
+  cliMode?: Omit<CliModeInput, 'hostPlatform'>;
+  /** Whether `<dataFolder>/<cliName>` already holds the CLI; only read in the CLI mode. */
+  cliPresentOnHost?: boolean;
+  /** The CLI's file name on the host, `<applicationName>-<commit>`; required with `cliMode`. */
+  cliName?: string;
   source:
     | {kind: 'resolved'; address: string}
     | {kind: 'noSource'}
@@ -50,6 +61,20 @@ export type Plan =
       launcher: string;
       lockPlace: string;
       notes: readonly PlanNote[];
+    }
+  | {
+      kind: 'cli';
+      /** The CLI's place on the host: `<dataFolder>/<cliName>`. */
+      cliPath: string;
+      /** Its data folder: `<dataFolder>/cli`. */
+      cliDataFolder: string;
+      /** Whether the CLI archive must be transferred; false when it is already there. */
+      download: boolean;
+      where: 'host' | 'client';
+      clientFallback: boolean;
+      dataFolder: string;
+      lockPlace: string;
+      notes: readonly PlanNote[];
     };
 
 /** Why the plan could not be made, before any channel is used. */
@@ -62,7 +87,11 @@ export type PlanFailure =
     };
 
 /** The notes a plan carries for the caller to log once per connect. */
-export type PlanNote = 'useExecServerIgnored';
+export interface PlanNote {
+  kind: 'cliNotUsed';
+  /** Why the direct install was used; the reasons the user chose themselves are not noted. */
+  reason: Exclude<DirectReason, 'settingOff' | 'manualBootstrap'>;
+}
 
 /**
  * Decide where the server comes from and where it lives, before any channel is used. The install
@@ -97,9 +126,25 @@ export function plan(input: PlanInput): {plan: Plan} | {failure: PlanFailure} {
   // The host lock lives in a folder, <dataFolder>/bin/<commit>, the same as the install folder;
   // the lock file's own name is composed by V1's script, not here.
   const lockPlace = `${dataFolder}/bin/${input.commit}`;
-  const notes: PlanNote[] = input.useExecServerSetting
-    ? ['useExecServerIgnored']
-    : [];
+  const mode = modeOf(input);
+  if (mode.kind === 'cli') {
+    const placement = placementOf(input.placement);
+    const cliName = requiredCliName(input);
+    return {
+      plan: {
+        kind: 'cli',
+        cliPath: `${dataFolder}/${cliName}`,
+        cliDataFolder: `${dataFolder}/cli`,
+        download: input.cliPresentOnHost !== true,
+        where: placement.where,
+        clientFallback: placement.clientFallback,
+        dataFolder,
+        lockPlace,
+        notes: [],
+      },
+    };
+  }
+  const notes = notesOf(mode.reason);
   const reused = reuseBeforeSource(
     input.facts.existingLayouts,
     input.commit,
@@ -131,6 +176,34 @@ export function plan(input: PlanInput): {plan: Plan} | {failure: PlanFailure} {
       notes,
     },
   };
+}
+
+/** The install mode of this connect: the direct install when the caller asked for no other. */
+function modeOf(input: PlanInput): ReturnType<typeof decideCliMode> {
+  return input.cliMode === undefined
+    ? {kind: 'direct', reason: 'settingOff'}
+    : decideCliMode({
+        ...input.cliMode,
+        hostPlatform: {
+          operatingSystem: input.facts.operatingSystem,
+          architecture: input.facts.architecture,
+        },
+      });
+}
+
+/** The CLI's file name, which a caller that asks for the mode must give: a missing one is a defect. */
+function requiredCliName(input: PlanInput): string {
+  if (input.cliName === undefined) {
+    throw new Error('the CLI mode was asked for without cliName');
+  }
+  return input.cliName;
+}
+
+/** The notes of a direct plan: only the reasons the user would want to know about are noted. */
+function notesOf(reason: DirectReason): readonly PlanNote[] {
+  return reason === 'settingOff' || reason === 'manualBootstrap'
+    ? []
+    : [{kind: 'cliNotUsed', reason}];
 }
 
 /** `~` and `~/x` expand against the home folder; everything else is used as written. */
