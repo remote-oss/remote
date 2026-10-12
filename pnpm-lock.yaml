@@ -285,6 +285,9 @@ importers:
       lib-authority:
         specifier: workspace:*
         version: link:../lib-authority
+      lib-forwarding:
+        specifier: workspace:*
+        version: link:../lib-forwarding
       lib-helper:
         specifier: workspace:*
         version: link:../lib-helper
