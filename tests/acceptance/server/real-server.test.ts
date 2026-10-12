@@ -264,7 +264,9 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
     it('F-2403: the host downloads the archive itself and unpacks it where the plan says', () => {
       deepStrictEqual(
         [
-          installation.transferred.kind,
+          installation.transferred.kind === 'failed'
+            ? `failed: ${JSON.stringify(installation.transferred.failure)}`
+            : installation.transferred.kind,
           phaseKinds(installation).includes('downloading'),
           phaseKinds(installation).includes('downloadingLocally'),
         ],
