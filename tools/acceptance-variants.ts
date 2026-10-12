@@ -4,29 +4,44 @@
  *
  *     node tools/acceptance-variants.ts
  *
- * Each download tool of tools/host-variants.ts gets its own mocha run of the download rows, on a host
- * started with that tool (`HARNESS_HOST_FETCH`). A run that fails does not stop the others; the exit status is the
+ * Each login shell of tools/host-variants.ts gets its own mocha run of the shell-sensitive rows, on a host started
+ * with that shell (`HARNESS_HOST_SHELL`), and each download tool one of the download rows (`HARNESS_HOST_FETCH`). A run that fails does not stop the others; the exit status is the
  * first failure's. The rest of the server rows run once, on the default host, in `pnpm test:acceptance:server`.
  */
 
 import {spawn} from 'node:child_process';
-import {FETCH_VARIANTS} from './host-variants.ts';
+import {FETCH_VARIANTS, SHELL_VARIANTS} from './host-variants.ts';
 import {isMainModule, REPOSITORY_ROOT, resolveBinary} from './repository.ts';
 
-/** One mocha run of the variant rows: its label, the test file, and the variables that choose the host. */
+/** One mocha run of the variant rows: its label, the test files, and the variables that choose the host. */
 export interface VariantRun {
   label: string;
-  testFile: string;
+  testFiles: readonly string[];
   environment: Readonly<Record<string, string>>;
 }
 
-/** The runs of the download rows, one per download tool. */
+/** The rows that depend on the login shell, which every shell goes through. */
+const SHELL_ROWS: readonly string[] = [
+  'tests/acceptance/server/login-shell-variant.test.ts',
+  'tests/acceptance/server/login-shells.test.ts',
+  'tests/acceptance/server/start.test.ts',
+  'tests/acceptance/server/shared-session.test.ts',
+];
+
+/** The runs of the login-shell rows, one per shell, then the download rows, one per download tool. */
 export function variantRuns(): VariantRun[] {
-  return FETCH_VARIANTS.map(variant => ({
-    label: `download tool ${variant}`,
-    testFile: 'tests/acceptance/server/fetch-tools.test.ts',
-    environment: {HARNESS_HOST_FETCH: variant},
-  }));
+  return [
+    ...SHELL_VARIANTS.map(shell => ({
+      label: `login shell ${shell}`,
+      testFiles: SHELL_ROWS,
+      environment: {HARNESS_HOST_SHELL: shell},
+    })),
+    ...FETCH_VARIANTS.map(variant => ({
+      label: `download tool ${variant}`,
+      testFiles: ['tests/acceptance/server/fetch-tools.test.ts'],
+      environment: {HARNESS_HOST_FETCH: variant},
+    })),
+  ];
 }
 
 /** The command line of one run's mocha. */
@@ -35,7 +50,7 @@ export function mochaArguments(variant: VariantRun): string[] {
     resolveBinary('mocha/bin/mocha.js'),
     '--no-config',
     '--extension=ts',
-    variant.testFile,
+    ...variant.testFiles,
   ];
 }
 

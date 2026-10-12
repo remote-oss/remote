@@ -1,7 +1,52 @@
 /**
- * @fileoverview The host variants of the acceptance tests: the download tools a host may have, and the one this
- * process runs, named by the harness variable of the run.
+ * @fileoverview The host variants of the acceptance tests: the login shells and the download tools a host may have,
+ * and the one this process runs, named by the harness variable of the run.
  */
+
+/** The login shells of `HOST_SHELL`, by the path `usermod -s` takes, in the order the variant run goes through them. */
+export const SHELL_VARIANTS = [
+  '/bin/sh',
+  '/bin/bash',
+  '/bin/zsh',
+  '/usr/bin/dash',
+  '/usr/bin/fish',
+  '/bin/tcsh',
+  '/bin/csh',
+  '/bin/mksh',
+] as const;
+
+/** One login shell of a host. */
+export type ShellVariant = (typeof SHELL_VARIANTS)[number];
+
+/** Whether `value` names a login shell of a host. */
+function isShellVariant(value: string): value is ShellVariant {
+  return (SHELL_VARIANTS as readonly string[]).includes(value);
+}
+
+/**
+ * The login shell this process runs the rows of, from `HARNESS_HOST_SHELL`; undefined when it is unset, which is the
+ * host's own. A name that is none of the shells throws.
+ */
+export function shellVariantOf(
+  environment: Readonly<Record<string, string | undefined>>,
+): ShellVariant | undefined {
+  const named = environment.HARNESS_HOST_SHELL;
+  if (named === undefined || named === '') {
+    return undefined;
+  }
+  if (!isShellVariant(named)) {
+    throw new Error(`HARNESS_HOST_SHELL names no login shell: ${named}`);
+  }
+  return named;
+}
+
+/** The login shells whose rows this process runs: the one named, or all. */
+export function shellVariantsToRun(
+  environment: Readonly<Record<string, string | undefined>>,
+): readonly ShellVariant[] {
+  const named = shellVariantOf(environment);
+  return named === undefined ? SHELL_VARIANTS : [named];
+}
 
 /** The download tools of `HOST_FETCH`, in the order the variant run goes through them. */
 export const FETCH_VARIANTS = [

@@ -1,5 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
 import {createHash, randomBytes} from 'node:crypto';
+import {
+  SHELL_VARIANTS,
+  shellVariantsToRun,
+} from '../../../tools/host-variants.ts';
 import {startHost, type RunningHost} from './host-fixture.ts';
 import {openSharedSession, type SharedSession} from './shared-session.ts';
 
@@ -133,7 +137,9 @@ function boundedHost(host: RunningHost): RunningHost {
 describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', function () {
   this.timeout(240000);
 
-  for (const shell of LOGIN_SHELLS) {
+  for (const shell of LOGIN_SHELLS.filter(each =>
+    (shellVariantsToRun(process.env) as readonly string[]).includes(each.path),
+  )) {
     describe(`login shell ${shell.name} (${shell.path})`, () => {
       let host: RunningHost;
 
@@ -253,49 +259,96 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
     });
   }
 
-  describe('the bound on the login shell (bash, then zsh and dash)', () => {
-    let bash: RunningHost;
-    let zshell: RunningHost;
-    let dash: RunningHost;
+  // The bound is checked on three fixed hosts of its own, so it runs once: with every shell, or with the first.
+  const boundRuns = shellVariantsToRun(process.env)[0] === SHELL_VARIANTS[0];
+  (boundRuns ? describe : describe.skip)(
+    'the bound on the login shell (bash, then zsh and dash)',
+    () => {
+      let bash: RunningHost;
+      let zshell: RunningHost;
+      let dash: RunningHost;
 
-    before(async () => {
-      [bash, zshell, dash] = await Promise.all([
-        startHost({shell: '/bin/bash'}),
-        startHost({shell: '/bin/zsh'}),
-        startHost({shell: '/usr/bin/dash'}),
-      ]);
-    });
+      before(async () => {
+        [bash, zshell, dash] = await Promise.all([
+          startHost({shell: '/bin/bash'}),
+          startHost({shell: '/bin/zsh'}),
+          startHost({shell: '/usr/bin/dash'}),
+        ]);
+      });
 
-    after(() => {
-      bash.stop();
-      zshell.stop();
-      dash.stop();
-    });
+      after(() => {
+        bash.stop();
+        zshell.stop();
+        dash.stop();
+      });
 
-    function write(host: RunningHost, name: string, text: string): void {
-      host.onHost(
-        'sh',
-        '-c',
-        'printf "%s" "$2" > "$1"',
-        'sh',
-        `${HOME}/${name}`,
-        text,
-      );
-    }
+      function write(host: RunningHost, name: string, text: string): void {
+        host.onHost(
+          'sh',
+          '-c',
+          'printf "%s" "$2" > "$1"',
+          'sh',
+          `${HOME}/${name}`,
+          text,
+        );
+      }
 
-    async function twoScripts(host: RunningHost): Promise<{
-      statuses: number[];
-      firstMilliseconds: number;
-      session: SharedSession;
-    }> {
-      const started = Date.now();
-      const session = await openSharedSession(boundedHost(host));
-      const statuses: number[] = [];
-      let firstMilliseconds = 0;
-      for (const script of ['echo one', 'echo two']) {
-        const outcome = await session.channel.runScript(
+      async function twoScripts(host: RunningHost): Promise<{
+        statuses: number[];
+        firstMilliseconds: number;
+        session: SharedSession;
+      }> {
+        const started = Date.now();
+        const session = await openSharedSession(boundedHost(host));
+        const statuses: number[] = [];
+        let firstMilliseconds = 0;
+        for (const script of ['echo one', 'echo two']) {
+          const outcome = await session.channel.runScript(
+            {
+              script,
+              interpreter: 'posixShell',
+              environment: {},
+              input: {kind: 'text', text: ''},
+              cancellation: new AbortController().signal,
+            },
+            () => undefined,
+          );
+          statuses.push(outcome.kind === 'exited' ? outcome.status : -1);
+          firstMilliseconds ||= Date.now() - started;
+        }
+        return {statuses, firstMilliseconds, session};
+      }
+
+      it('#443: a .bash_profile that sleeps 30 s holds the session for the bound alone; both scripts run', async () => {
+        write(bash, '.bash_profile', 'sleep 30\n');
+        const {statuses, firstMilliseconds, session} = await twoScripts(bash);
+        await session.stop();
+        deepStrictEqual(
+          [statuses, firstMilliseconds < BOUND_AND_MARGIN_MILLISECONDS],
+          [[0, 0], true],
+        );
+      });
+
+      it("#443: right after that session ends no sleep is left on the host, the profile's or the watchdog's", async () => {
+        write(bash, '.bash_profile', 'sleep 30\n');
+        const {session} = await twoScripts(bash);
+        await session.stop();
+        deepStrictEqual(
+          bash
+            .onHost('ps', '-o', 'args')
+            .split('\n')
+            .some(line => line.includes('sleep')),
+          false,
+        );
+      });
+
+      it('#443: while the first script runs on zsh the watchdog is gone once the login shell ended', async () => {
+        write(zshell, '.zprofile', 'export LAYER1=x\n');
+        const session = await openSharedSession(boundedHost(zshell));
+        const gate = `/tmp/gate-${randomBytes(6).toString('hex')}`;
+        const running = session.channel.runScript(
           {
-            script,
+            script: `mkfifo ${gate}; echo up >${gate}.up; read line <${gate}`,
             interpreter: 'posixShell',
             environment: {},
             input: {kind: 'text', text: ''},
@@ -303,98 +356,56 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
           },
           () => undefined,
         );
-        statuses.push(outcome.kind === 'exited' ? outcome.status : -1);
-        firstMilliseconds ||= Date.now() - started;
-      }
-      return {statuses, firstMilliseconds, session};
-    }
-
-    it('#443: a .bash_profile that sleeps 30 s holds the session for the bound alone; both scripts run', async () => {
-      write(bash, '.bash_profile', 'sleep 30\n');
-      const {statuses, firstMilliseconds, session} = await twoScripts(bash);
-      await session.stop();
-      deepStrictEqual(
-        [statuses, firstMilliseconds < BOUND_AND_MARGIN_MILLISECONDS],
-        [[0, 0], true],
-      );
-    });
-
-    it("#443: right after that session ends no sleep is left on the host, the profile's or the watchdog's", async () => {
-      write(bash, '.bash_profile', 'sleep 30\n');
-      const {session} = await twoScripts(bash);
-      await session.stop();
-      deepStrictEqual(
-        bash
+        for (let attempt = 0; attempt < 100; attempt++) {
+          if (
+            zshell
+              .onHost('sh', '-c', `test -e ${gate}.up && echo yes || echo no`)
+              .trim() === 'yes'
+          ) {
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        const sleeping = zshell
           .onHost('ps', '-o', 'args')
           .split('\n')
-          .some(line => line.includes('sleep')),
-        false,
-      );
-    });
+          .some(line => line.includes('sleep'));
+        zshell.onHost('sh', '-c', `echo go >${gate}`);
+        await running;
+        await session.stop();
+        deepStrictEqual(sleeping, false);
+      });
 
-    it('#443: while the first script runs on zsh the watchdog is gone once the login shell ended', async () => {
-      write(zshell, '.zprofile', 'export LAYER1=x\n');
-      const session = await openSharedSession(boundedHost(zshell));
-      const gate = `/tmp/gate-${randomBytes(6).toString('hex')}`;
-      const running = session.channel.runScript(
-        {
-          script: `mkfifo ${gate}; echo up >${gate}.up; read line <${gate}`,
-          interpreter: 'posixShell',
-          environment: {},
-          input: {kind: 'text', text: ''},
-          cancellation: new AbortController().signal,
-        },
-        () => undefined,
-      );
-      for (let attempt = 0; attempt < 100; attempt++) {
-        if (
-          zshell
-            .onHost('sh', '-c', `test -e ${gate}.up && echo yes || echo no`)
-            .trim() === 'yes'
-        ) {
-          break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      const sleeping = zshell
-        .onHost('ps', '-o', 'args')
-        .split('\n')
-        .some(line => line.includes('sleep'));
-      zshell.onHost('sh', '-c', `echo go >${gate}`);
-      await running;
-      await session.stop();
-      deepStrictEqual(sleeping, false);
-    });
-
-    it('#443: a dash .profile that reads standard input and exits 3 leaves both scripts running and LAYER1 empty', async () => {
-      write(dash, '.profile', 'export LAYER1=never\nread x\nexit 3\n');
-      const session = await openSharedSession(boundedHost(dash));
-      const lines: string[] = [];
-      const first = await session.channel.runScript(
-        {
-          script: 'printf \'%s\\n\' "$LAYER1"',
-          interpreter: 'posixShell',
-          environment: {},
-          input: {kind: 'text', text: ''},
-          cancellation: new AbortController().signal,
-        },
-        line => lines.push(line),
-      );
-      const second = await session.channel.runScript(
-        {
-          script: 'true',
-          interpreter: 'posixShell',
-          environment: {},
-          input: {kind: 'text', text: ''},
-          cancellation: new AbortController().signal,
-        },
-        () => undefined,
-      );
-      await session.stop();
-      deepStrictEqual(
-        [first.kind, second.kind, lines],
-        ['exited', 'exited', ['']],
-      );
-    });
-  });
+      it('#443: a dash .profile that reads standard input and exits 3 leaves both scripts running and LAYER1 empty', async () => {
+        write(dash, '.profile', 'export LAYER1=never\nread x\nexit 3\n');
+        const session = await openSharedSession(boundedHost(dash));
+        const lines: string[] = [];
+        const first = await session.channel.runScript(
+          {
+            script: 'printf \'%s\\n\' "$LAYER1"',
+            interpreter: 'posixShell',
+            environment: {},
+            input: {kind: 'text', text: ''},
+            cancellation: new AbortController().signal,
+          },
+          line => lines.push(line),
+        );
+        const second = await session.channel.runScript(
+          {
+            script: 'true',
+            interpreter: 'posixShell',
+            environment: {},
+            input: {kind: 'text', text: ''},
+            cancellation: new AbortController().signal,
+          },
+          () => undefined,
+        );
+        await session.stop();
+        deepStrictEqual(
+          [first.kind, second.kind, lines],
+          ['exited', 'exited', ['']],
+        );
+      });
+    },
+  );
 });

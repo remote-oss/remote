@@ -26,6 +26,7 @@ import {
   startHostContainer,
 } from '../../../tools/acceptance-run.ts';
 import {harnessSshConfig} from '../../../tools/acceptance.ts';
+import {shellVariantOf} from '../../../tools/host-variants.ts';
 
 const REPOSITORY_ROOT = path.join(import.meta.dirname, '..', '..', '..');
 
@@ -131,7 +132,10 @@ function channelTo(base: RunBase): SshHostChannel {
 export interface HostVariant {
   /** The download tool the host keeps (`HOST_FETCH`). */
   fetch?: string;
-  /** The login shell of the user harness, a path the host image lists in `/etc/shells` (`HOST_SHELL`); `/bin/sh` when absent. */
+  /**
+   * The login shell of the user harness, a path the host image lists in `/etc/shells` (`HOST_SHELL`). When absent, the
+   * shell the process was asked for with `HARNESS_HOST_SHELL`, else the image's `/bin/sh`.
+   */
   shell?: string;
 }
 
@@ -140,6 +144,7 @@ export async function startHost(
   variant: HostVariant = {},
 ): Promise<RunningHost> {
   const runFolder = mkdtempSync(path.join(tmpdir(), 'server-acceptance-'));
+  const shell = variant.shell ?? shellVariantOf(process.env);
   let container = '';
   try {
     const runId = acceptanceRunId(process.env, process.pid);
@@ -152,9 +157,7 @@ export async function startHost(
         ...(variant.fetch === undefined
           ? []
           : ['--env', `HOST_FETCH=${variant.fetch}`]),
-        ...(variant.shell === undefined
-          ? []
-          : ['--env', `HOST_SHELL=${variant.shell}`]),
+        ...(shell === undefined ? [] : ['--env', `HOST_SHELL=${shell}`]),
       ],
     );
     container = host.container;
