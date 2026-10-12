@@ -75,6 +75,14 @@ export function classify(
   if (contains(FAILURE_TEXTS.hostKeyRejected)) {
     return plain('hostKeyRejected');
   }
+  const configDenied = errorLines.some(
+    line =>
+      line.includes(FAILURE_TEXTS.configFileUnreadable) &&
+      line.endsWith(': Permission denied'),
+  );
+  if (configDenied) {
+    return plain('unknown', {text: 'Permission denied'});
+  }
   const denied = lastPermissionDenied(errorLines);
   if (denied !== undefined) {
     return withHint('authentication', 'PermissionDenied', {text: denied});
