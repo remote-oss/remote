@@ -53,7 +53,7 @@ export function openTunnelStep(
   dependencies: TunnelStepDependencies,
 ): ConnectSteps['openTunnel'] {
   return async (...given) => {
-    const [, lease, server] = given;
+    const [, lease, server, onWaiting] = given;
     const path = selectTunnelPath(dependencies.settings());
     if (path !== 'socks') {
       dependencies.logger.warn(
@@ -73,6 +73,7 @@ export function openTunnelStep(
       target: {kind: 'port', port: server.port},
       localPort,
       limits: dependencies.limits,
+      onWaiting,
     });
     if (outcome.kind !== 'open') {
       return NOT_OPENED;
@@ -84,6 +85,7 @@ export function openTunnelStep(
       limits: dependencies.limits,
     });
     const {extensionHostEnv, environmentTunnels} = dependencies.environment();
+    let closeRan = false;
     return {
       kind: 'done',
       value: {
@@ -95,6 +97,10 @@ export function openTunnelStep(
           tunnelFactory: factory,
         },
         close: () => {
+          if (closeRan) {
+            return;
+          }
+          closeRan = true;
           factory.closeAll();
           outcome.close();
         },
