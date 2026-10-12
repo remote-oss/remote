@@ -17,6 +17,7 @@ import {
   type ConnectionRequestEnvironment,
   type ConnectionRequestSettings,
   connectionRequestOf,
+  installRequestOf,
 } from './connection-request.ts';
 import {type LoginLease, openConnectionStep} from './connection-step.ts';
 import {
@@ -36,6 +37,10 @@ import {
 } from './server-steps.ts';
 import type {ConnectInput, ConnectionTerms, ConnectSteps} from './steps.ts';
 import {createTermsSteps, type TermsStepDependencies} from './terms-steps.ts';
+import {
+  openTerminalConnectionStep,
+  type TerminalConnectionDependencies,
+} from './terminal-connection-step.ts';
 import {openTunnelStep, type TunnelStepDependencies} from './tunnel-step.ts';
 
 /** The settings a connect reads, each when the step that needs it runs. */
@@ -69,6 +74,8 @@ export interface WiringPorts {
   ) => HostChannel;
   /** Shows the login's questions for this connect; the alias names the host in them. */
   attachLogin: (login: LoginLease, alias: string) => {dispose(): void};
+  /** The terminal connection step's ports, apart from what the connect's own state and settings give. */
+  terminal: Omit<TerminalConnectionDependencies, 'installRequest' | 'logger'>;
   /** The server steps' dependencies, apart from what depends on the connect's host. */
   server: Omit<ServerStepDependencies, 'settings' | 'remoteUser'>;
   tunnel: TunnelStepDependencies;
@@ -104,6 +111,41 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
   }
 
   const terms = createTermsSteps(ports.terms);
+  const sharedConnection = openConnectionStep({
+    acquire: request =>
+      ports.acquire(
+        request,
+        connectionLimitsFor(
+          lookedUp(state).connectTimeout,
+          ports.settings.connection().connectTimeout,
+        ),
+      ),
+    requestFor: (input, connectTerms) =>
+      connectionRequestOf(
+        input,
+        connectTerms,
+        state,
+        ports.settings.connection(),
+        ports.requestEnvironment,
+      ),
+    channelFor: ports.channelFor,
+    attachLogin: (login, input) =>
+      ports.attachLogin(login, hostAlias(input.target)),
+    logger: ports.logger,
+  });
+  const terminalConnection = openTerminalConnectionStep({
+    ...ports.terminal,
+    installRequest: (input, connectTerms, socksPort) =>
+      installRequestOf(
+        input,
+        connectTerms,
+        state,
+        ports.settings.connection(),
+        ports.requestEnvironment,
+        socksPort,
+      ),
+    logger: ports.logger,
+  });
   return {
     validate: input => serverSteps(input).validate(input),
     preconnect: preconnectStep({
@@ -117,28 +159,10 @@ export function stepsOf(ports: WiringPorts): ConnectSteps {
       connectTimeout: () => ports.settings.connection().connectTimeout,
       state,
     }),
-    openConnection: openConnectionStep({
-      acquire: request =>
-        ports.acquire(
-          request,
-          connectionLimitsFor(
-            lookedUp(state).connectTimeout,
-            ports.settings.connection().connectTimeout,
-          ),
-        ),
-      requestFor: (input, connectTerms) =>
-        connectionRequestOf(
-          input,
-          connectTerms,
-          state,
-          ports.settings.connection(),
-          ports.requestEnvironment,
-        ),
-      channelFor: ports.channelFor,
-      attachLogin: (login, input) =>
-        ports.attachLogin(login, hostAlias(input.target)),
-      logger: ports.logger,
-    }),
+    openConnection: (input, connectTerms, cancellation) =>
+      (ports.locate.mode() === 'shared'
+        ? sharedConnection
+        : terminalConnection)(input, connectTerms, cancellation),
     probe: (input, ...rest) => serverSteps(input).probe(input, ...rest),
     plan: (input, ...rest) => serverSteps(input).plan(input, ...rest),
     gate: (input, ...rest) => serverSteps(input).gate(input, ...rest),

@@ -55,6 +55,7 @@ const FAILURE_TEXTS = [
   "{2} knows no download location for the server of {0}. Set {1} to a URL template for this editor's server builds.",
   'The value of {1} is not a usable server download URL template: {3}.',
   'Open Setting',
+  'Got bad result from install script',
 ];
 
 const CONNECT_TEXTS = [

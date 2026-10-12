@@ -1,11 +1,14 @@
 import {deepStrictEqual, rejects, throws} from 'node:assert';
+import {FakeClock} from 'lib-helper/testing/fake-clock';
 import type {HostChannel} from 'lib-host';
+import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
   ConnectionLimits,
+  ConnectionMode,
   SharedConnection,
 } from 'lib-ssh';
 import type {LoginLease} from '../../src/pipeline/connection-step.ts';
@@ -56,6 +59,7 @@ interface WiringSeen {
     limits: ConnectionLimits;
   }>;
   logins: string[];
+  terminals: RecordingTerminals;
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -65,12 +69,14 @@ function portsOf(
     server?: Partial<RawServerSettings>;
     preconnect?: unknown;
     connectTimeout?: unknown;
+    mode?: ConnectionMode;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
     spawned: {started: [], killed: []},
     acquires: [],
     logins: [],
+    terminals: new RecordingTerminals(),
   };
   const logger = createLogger(new MemorySink(), {
     minimumLevel: (): Level => 'info',
@@ -98,7 +104,7 @@ function portsOf(
     },
     locate: {
       settingValue: () => '',
-      mode: () => 'shared',
+      mode: () => changes.mode ?? 'shared',
       environment: {searchPath: '/usr/bin', programFilesFolder: ''},
       platform: 'linux',
       homeFolder: '/home/a',
@@ -132,6 +138,24 @@ function portsOf(
     attachLogin: (login: LoginLease, alias: string) => {
       seen.logins.push(alias);
       return {dispose: () => undefined};
+    },
+    terminal: {
+      terminals: seen.terminals,
+      scheduler: new FakeClock().scheduler(),
+      dynamicForwarding: () => false,
+      freePort: () => Promise.resolve(41000),
+      newMarker: () => 'marker',
+      channelFor: () => ({}) as unknown as HostChannel,
+      attachQuestions: () => ({
+        onQuestion: () => undefined,
+        dispose: () => undefined,
+      }),
+      revealLoginTerminals: () => false,
+      connectWait: () => ({
+        connectTimeoutSeconds: 10,
+        fromHost: false,
+        unboundedWaitSeconds: 600,
+      }),
     },
     server: dependencies(),
     tunnel: {} as unknown as WiringPorts['tunnel'],
@@ -372,6 +396,60 @@ describe("the composition's forwarding of the later server steps", () => {
       new AbortController().signal,
     );
     deepStrictEqual(seen.logins, ['dev']);
+  });
+});
+
+describe('the connection step by mode (card connect-17)', () => {
+  /** Opens the connection of a connect in `mode`, and what the shared and the terminal steps were asked for. */
+  async function connectIn(mode: ConnectionMode) {
+    const {ports, seen} = portsOf({mode});
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    void steps
+      .openConnection(inputFor('dev'), TERMS, new AbortController().signal)
+      .catch(() => undefined);
+    await Promise.resolve();
+    return seen;
+  }
+
+  it('F-2102 BR-9: the shared connection on uses the shared step', async () => {
+    const seen = await connectIn('shared');
+    deepStrictEqual(
+      [seen.acquires.length, seen.terminals.opened.length],
+      [1, 0],
+    );
+  });
+
+  it('F-2102 BR-10: the shared connection off uses the terminal step', async () => {
+    const seen = await connectIn('terminal');
+    deepStrictEqual(
+      [seen.acquires.length, seen.terminals.opened.length],
+      [0, 1],
+    );
+  });
+
+  it('F-2410 BR-2: socket mode, which is the terminal mode, opens the install terminal', async () => {
+    const seen = await connectIn('terminal');
+    deepStrictEqual(seen.terminals.opened[0]?.name, 'install');
+  });
+
+  it('F-2102 BR-9: the mode is read when the step runs', async () => {
+    let mode: ConnectionMode = 'shared';
+    const {ports, seen} = portsOf();
+    const steps = stepsOf({
+      ...ports,
+      locate: {...ports.locate, mode: () => mode},
+    });
+    await steps.locateClient(inputFor('dev'));
+    mode = 'terminal';
+    void steps
+      .openConnection(inputFor('dev'), TERMS, new AbortController().signal)
+      .catch(() => undefined);
+    await Promise.resolve();
+    deepStrictEqual(
+      [seen.acquires.length, seen.terminals.opened.length],
+      [0, 1],
+    );
   });
 });
 

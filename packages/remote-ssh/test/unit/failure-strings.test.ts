@@ -52,6 +52,7 @@ describe('the texts of the failure dialog and the progress', () => {
       'installPathProvided',
       'templateNotHttp',
       'templateUnknownPlaceholder',
+      'trustRefused',
     ]);
   });
 
@@ -66,6 +67,13 @@ describe('the texts of the failure dialog and the progress', () => {
     deepStrictEqual(
       FAILURE_TEMPLATES.S075,
       'Failed to install the VS Code Server',
+    );
+  });
+
+  it('F-2308 7.E7: the refused trust has its text', () => {
+    deepStrictEqual(
+      reasonText({id: 'trustRefused'}, text => text),
+      'Got bad result from install script',
     );
   });
 
