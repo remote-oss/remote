@@ -142,3 +142,13 @@ export {downloadPortOf, type HttpGet} from './transfer/http-download.ts';
 export {CLIENT_DOWNLOAD_BOUNDS} from './policy/bounds.ts';
 export {nodeClientFiles, sha256Of} from './transfer/node-files.ts';
 export {hostLockLoopOf} from './transfer/lock-loop.ts';
+export {
+  type ByteStream,
+  type CliControl,
+  type CliControlFailure,
+  type CliServeParams,
+  type CliSocket,
+  openCliControl,
+  type ServerLogLine,
+} from './cli-control/client.ts';
+export {type S045Event, s045EventOf} from './cli-control/progress.ts';
