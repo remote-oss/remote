@@ -388,6 +388,18 @@ describe("the window's scp in a hidden login terminal (card ssh-29 table)", () =
       'scp failed: scp: dest open "/x/f": No such file',
     );
   });
+  it('#434: a blank line between two error lines is not told', async () => {
+    const {result, terminal} = await started(fixture());
+    terminal.write(
+      'scp: /x: No such file or directory\n\nscp: /y: Permission denied\n',
+    );
+    terminal.end(1);
+    const outcome = await result;
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure.detail : outcome,
+      'scp failed: scp: /x: No such file or directory\nscp: /y: Permission denied',
+    );
+  });
 
   it("themis on #413: a settled copy's wait and reader are stopped, so advancing the clock fires nothing", async () => {
     const made = fixture();

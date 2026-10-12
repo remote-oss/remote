@@ -627,6 +627,18 @@ describe('SSH host channel', () => {
         'scp failed: debug2: forced\nscp: failed to upload',
       );
     });
+    it('#434: a blank line between two error lines is not kept in the detail', async () => {
+      const outcome = await copyBy(process => {
+        process.error(
+          'scp: /x: No such file or directory\n\nscp: /y: Permission denied\n',
+        );
+        process.exit(1);
+      });
+      deepStrictEqual(
+        outcome.kind === 'failed' ? outcome.failure.detail : outcome,
+        'scp failed: scp: /x: No such file or directory\nscp: /y: Permission denied',
+      );
+    });
 
     it('maps status 255 to channelClosed', async () => {
       deepStrictEqual(
