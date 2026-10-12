@@ -2,6 +2,7 @@ import {deepStrictEqual, strictEqual} from 'node:assert';
 import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
+import {licenceModalOf} from '../../src/surfaces/licence-modal.ts';
 import type {EditorAdapters} from '../../src/editor-surfaces.ts';
 import {
   adaptersFor,
@@ -401,6 +402,18 @@ describe('the scripted adapters answer from the script only', () => {
         'Cancel',
       ]),
       'Cancel',
+    );
+  });
+
+  it('constraint 3: the modal of the extension reads a decline as a cancel, never as an acceptance', async () => {
+    deepStrictEqual(
+      await licenceModalOf(
+        scripted([{surface: 'licenceModal', match: '', answer: 'decline'}])
+          .adapters.licenceDialog,
+        template => template,
+        {applicationName: 'Editor', displayName: 'Remote'},
+      ).askUser('https://example.invalid/terms', NEVER),
+      'cancel',
     );
   });
 

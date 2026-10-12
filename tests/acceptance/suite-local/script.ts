@@ -41,20 +41,35 @@ function fileNamed(variable: string): string {
 
 /**
  * Writes the script for the next connect and empties the record. The extension reads the script when it activates,
- * once per window, so a test writes it before it opens the window that connects.
+ * once per window, so a test writes it before it opens the window that connects. Each entry the adapters use adds
+ * one matched line to the record, so `assertAllUsed` counts the unused entries from it.
  */
-export function scriptFor(entries: ScriptEntry[]): {record(): RecordLine[]} {
+export function scriptFor(entries: ScriptEntry[]): {
+  record(): RecordLine[];
+  /** Throws when an entry of the script was not used by a question. */
+  assertAllUsed(): void;
+} {
   writeFileSync(
     fileNamed('REMOTE_OSS_ACCEPTANCE_SCRIPT'),
     JSON.stringify({entries}),
   );
   const recordFile = fileNamed('REMOTE_OSS_ACCEPTANCE_RECORD');
   writeFileSync(recordFile, '');
+  function record(): RecordLine[] {
+    return readFileSync(recordFile, 'utf8')
+      .split('\n')
+      .filter(line => line !== '')
+      .map(line => JSON.parse(line) as RecordLine);
+  }
   return {
-    record: () =>
-      readFileSync(recordFile, 'utf8')
-        .split('\n')
-        .filter(line => line !== '')
-        .map(line => JSON.parse(line) as RecordLine),
+    record,
+    assertAllUsed: () => {
+      const used = record().filter(line => line.matched).length;
+      if (used < entries.length) {
+        throw new Error(
+          `${String(entries.length - used)} of ${String(entries.length)} script entries were not used`,
+        );
+      }
+    },
   };
 }
