@@ -31,6 +31,11 @@ export type FailureStringId =
   | 'S094'
   | 'S095'
   | 'S097'
+  | 'S100'
+  | 'S102'
+  | 'S103'
+  | 'S104'
+  | 'S105'
   | 'S107'
   | 'S111'
   | 'S117'
@@ -72,6 +77,11 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S094: 'Network is unreachable',
   S095: "No free ports in specified range '{0}-{1}'.  Remove or update the 'Preferred Local Port Range' setting and try again.",
   S097: 'No route to host',
+  S100: 'Open Documentation',
+  S102: 'Open Recent...',
+  S103: 'Open SSH Configuration File',
+  S104: 'Open Settings',
+  S105: 'Pick an action to help resolve the problem.',
   S107: 'Port forwarding is disabled',
   S111: 'Remote host key has changed, port forwarding is disabled',
   S117: 'Retry',

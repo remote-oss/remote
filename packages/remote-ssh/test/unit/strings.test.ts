@@ -67,6 +67,15 @@ const CONNECT_TEXTS = [
 
 const PICKER_TEXTS = ['Select the platform of the remote host "{0}"'];
 
+const MITIGATION_TEXTS = [
+  'Reload Window',
+  'Open Recent...',
+  'Open Documentation',
+  'Open SSH Configuration File',
+  'Open Settings',
+  'Pick an action to help resolve the problem.',
+];
+
 const LICENCE_TEXTS = [
   '{0} needs you to accept the license terms of the {1} server before installing it.',
   'Read the terms at {0}.',
@@ -94,6 +103,7 @@ describe('the runtime strings of the extension', () => {
           ...LICENCE_TEXTS,
           ...PICKER_TEXTS,
           ...CONNECT_TEXTS,
+          ...MITIGATION_TEXTS,
           'SSH: {0}',
         ].map(text => [text, text]),
       ),
