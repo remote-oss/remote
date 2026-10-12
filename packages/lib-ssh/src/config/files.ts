@@ -3,10 +3,8 @@
  */
 
 import path from 'node:path';
+import type {ClientPlatform} from './platform.ts';
 import {expandHome} from '../arguments/invocation.ts';
-
-/** The client platforms whose file locations differ. */
-export type ClientPlatform = 'linux' | 'macOS' | 'windows';
 
 /** Read access to the client's files; the library never touches the file system itself. */
 export interface ConfigFileReader {
