@@ -61,12 +61,12 @@ export function cliArchiveTemplateVariables(
   profile: CliProfile,
   host: {operatingSystem: string; architecture: string},
 ): Record<string, string> {
-  return Object.fromEntries([
-    ['os', host.operatingSystem],
-    ['arch', host.architecture],
-    ['commit', profile.commit],
-    ['quality', profile.quality],
-    ['version', profile.version],
-    ['release', profile.version],
-  ]);
+  return {
+    os: host.operatingSystem,
+    arch: host.architecture,
+    commit: profile.commit,
+    quality: profile.quality,
+    version: profile.version,
+    release: profile.version,
+  };
 }

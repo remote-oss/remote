@@ -73,6 +73,11 @@ const IMPOSED_PROPERTY_KEYS = [
   'key',
   'own',
   'read',
+  // The server's result block (its `host.os` fact) and the editor CLI's download template (its `os` variable).
+  'os',
+  // VS Code: the `all` of `extensions.all`, and the `get` of a `Memento` (an extension's global state).
+  'all',
+  'get',
 ];
 
 // Phrases that address a reader of a conversation rather than of the code (ADR-0003, comments). An entry with an

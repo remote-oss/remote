@@ -44,7 +44,6 @@ function fakeEditor(events: string[], registered = false): typeof vscode {
       },
     },
     extensions: {
-      // eslint-disable-next-line id-length -- the editor's own member name
       all: [
         {
           id: 'remote-oss.remote-ssh',
@@ -64,7 +63,6 @@ function contextOf(
 ): Pick<vscode.ExtensionContext, 'globalState' | 'subscriptions'> {
   const globalState: vscode.ExtensionContext['globalState'] = {
     keys: () => [...stored.keys()],
-    // eslint-disable-next-line id-length -- the editor's own member name
     get: (key: string) => stored.get(key) as never,
     update: (key: string, value: unknown) => {
       stored.set(key, value as boolean);

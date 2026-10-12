@@ -46,7 +46,6 @@ describe('parseResult (card server-02 table)', () => {
     deepStrictEqual(parseResult(fixtureLines('with-facts')), {
       block: {
         status: 'Ok',
-        // eslint-disable-next-line id-length -- the host fact key is the table's word
         hostFacts: {os: 'linux', arch: 'x64'},
         serverFacts: {port: '41263'},
         timings: {download: 1532},
@@ -124,7 +123,6 @@ describe('parseResult (card server-02 table)', () => {
   });
 
   it('host.os=linux, then host.os=alpine -> hostFacts {os: alpine}', () => {
-    // eslint-disable-next-line id-length -- the host fact key is the table's word
     deepStrictEqual(blockOf('duplicate-host').hostFacts, {os: 'alpine'});
   });
 
