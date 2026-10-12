@@ -11,7 +11,10 @@ export interface InterfaceVersion {
 }
 
 /** The version this side of the interface speaks. */
-export const INTERFACE_VERSION: InterfaceVersion = {major: 1, minor: 0};
+export const INTERFACE_VERSION: InterfaceVersion = Object.freeze({
+  major: 1,
+  minor: 0,
+});
 
 /** Why a payload is refused: it does not fit the shape at all, or its major version is not ours. */
 export type Refusal = 'foreign' | 'unknownMajor';
