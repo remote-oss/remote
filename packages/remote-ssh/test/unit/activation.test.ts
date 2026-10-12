@@ -332,6 +332,15 @@ describe('the activation', () => {
     deepStrictEqual(seen.events.at(-1), 'channel shown');
   });
 
+  it("F-2304: the serving result reveals the channel, as the connect's details link needs", async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    const result = await activateRemoteSsh(inputs);
+    if (result.kind === 'serving') {
+      result.revealLog();
+    }
+    deepStrictEqual(seen.events.at(-1), 'channel shown');
+  });
+
   it('serves the help commands over the editor', async () => {
     const {inputs, seen} = surroundings({otherRuns: false});
     await activateRemoteSsh(inputs);
