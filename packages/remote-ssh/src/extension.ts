@@ -13,6 +13,7 @@ import * as vscode from 'vscode';
 import {
   gateEditorOf,
   type ProposalName,
+  type ResolverEditor,
   resolverEditorOf,
   setupPortsOf,
 } from 'lib-authority';
@@ -52,7 +53,11 @@ import {
   platformPickPortOf,
   promptEditorOf,
 } from './surfaces/editor-adapters.ts';
-import {adaptersFor} from './surfaces/scripted-adapters.ts';
+import {
+  adaptersFor,
+  channelPortFor,
+  progressFor,
+} from './surfaces/scripted-adapters.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
 
 /** The page about SSH configuration files that the picker's Help row opens. */
@@ -118,6 +123,22 @@ async function readArgvFile(filePath: string): Promise<string | undefined> {
   }
 }
 
+/** The files the harness's adapters read and append to: the script, the record and the log. */
+const ACCEPTANCE_FILES = {
+  read: (file: string): string => readFileSync(file, 'utf8'),
+  append: (file: string, text: string): void => {
+    appendFileSync(file, text);
+  },
+};
+
+/** The resolver's editor with its progress recorded when the harness's switch is on; the same editor otherwise. */
+function acceptanceProgressOf(editor: ResolverEditor): ResolverEditor {
+  return {
+    ...editor,
+    progress: progressFor(process.env, editor.progress, ACCEPTANCE_FILES),
+  };
+}
+
 /** Called by the editor when it resolves an `ssh-remote` authority, runs one of the commands, or opens a URI. */
 export async function activate(
   context: vscode.ExtensionContext,
@@ -173,7 +194,7 @@ export async function activate(
       extension,
       translate,
     ),
-    channels: vscode.window,
+    channels: channelPortFor(process.env, vscode.window, ACCEPTANCE_FILES),
     clock: Date.now,
     gate: logFailure =>
       setupPortsOf(gateEditorOf(vscode, context, readArgvFile), {
@@ -254,12 +275,7 @@ async function registerConnectOf(
         mitigationPick: mitigationPickPortOf(vscode),
         downloadProgress: downloadProgressOf(vscode),
       },
-      {
-        read: file => readFileSync(file, 'utf8'),
-        append: (file, text) => {
-          appendFileSync(file, text);
-        },
-      },
+      ACCEPTANCE_FILES,
     ),
     editorOperationsOf(vscode, () => {
       served.revealLog();
@@ -288,9 +304,11 @@ async function registerConnectOf(
   );
   const registration = await registerConnect(
     {
-      resolverEditor: resolverEditorOf(vscode, {
-        detailsCommand: runtimeCommands.showDetails,
-      }),
+      resolverEditor: acceptanceProgressOf(
+        resolverEditorOf(vscode, {
+          detailsCommand: runtimeCommands.showDetails,
+        }),
+      ),
       labels: vscode.workspace,
       commands: host,
       openExternal: address =>
