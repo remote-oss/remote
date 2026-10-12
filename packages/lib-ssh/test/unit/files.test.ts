@@ -108,7 +108,7 @@ describe('configFilePath (the one check of the configured file)', () => {
 });
 
 describe('filesInEffect (the configuration files in reading order)', () => {
-  it('F-2201.BR-1 / AC-1: the user and the system file when the setting is empty', () => {
+  it('F-2201.AC-1: BR-1, the user and the system file when the setting is empty', () => {
     const reader = userAndSystem(USER_TEXT);
     deepStrictEqual(filesInEffect('', {...LINUX}, reader), EXPECTED_FILES);
   });

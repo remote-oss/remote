@@ -253,14 +253,14 @@ describe('ssh-remote codec (card authority-01 table)', () => {
     );
   });
 
-  it("encode({kind:'host', hostName:'h', user:'u'}) -> hex of {hostName, user}", () => {
+  it("F-2301 AC-12: encode({kind:'host', hostName:'h', user:'u'}) -> hex of {hostName, user}", () => {
     strictEqual(
       sshRemoteCodec.encode({kind: 'host', hostName: 'h', user: 'u'}),
       HEX_H_U,
     );
   });
 
-  it("encode({kind:'host', hostName:'h', port:22}) -> hex of {hostName, port}", () => {
+  it("F-2301 AC-12: encode({kind:'host', hostName:'h', port:22}) -> hex of {hostName, port}", () => {
     strictEqual(
       sshRemoteCodec.encode({kind: 'host', hostName: 'h', port: 22}),
       HEX_H_PORT_22,

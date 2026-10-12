@@ -59,7 +59,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
     );
   }
 
-  it('F-2102 AC-10: probes, installs and starts the server over the session, with the one login of the session', async () => {
+  it('contracts S9: probes, installs and starts the server over the session, with the one login of the session', async () => {
     const parameters = parametersFor();
     const probed = await probe(session.channel, parameters, CANCELLATION);
     const installed = await runStep(
