@@ -4,7 +4,7 @@ Why: brief `brief-cli-path.md` §10 item 5. cli-04 (#457, PR #477) wires the CLI
 it end to end in the editor, with the editor carrying `cliDownloadUrlTemplate`. Builder: daedalus. Reviewers: athena
 (design), proteus (harness and CI).
 
-**Depends on cli-04 (PR #477) merged.**
+**Depends on cli-04 (PR #477) and tooling-18's log switch merged.**
 
 ## 1. The constraint: where the CLI comes from
 
@@ -62,15 +62,15 @@ Each window opens `vscode-remote://ssh-remote+harness/home/harness`. The host is
 
 ## 4. Seeing the log
 
-The rows read the extension's log. The run gives every launch its own user-data folder, so the log is the file VS Code
-writes for the output channel "Remote - SSH" under `<user data>/logs/**/`. Its exact path is measured first. A helper
-`connectionLog()` in `tests/acceptance/suite/harness.ts` reads it. If VS Code doesn't write that file for a plain output
-channel, the card's fallback is a line-per-message copy the extension writes when `REMOTE_OSS_ACCEPTANCE` is on, to a
-file named by `REMOTE_OSS_ACCEPTANCE_LOG`, next to the record (one switch, as the scripted adapters have).
+The rows read the extension's log through `REMOTE_OSS_ACCEPTANCE_LOG`, the switch the harness README already promises.
+Under `REMOTE_OSS_ACCEPTANCE`, the extension appends each line it logs, after the logger's secret masking, to the
+file that variable names: one per launch, in the run's folder, set by the run beside the script and the record. A
+helper `connectionLog()` in `tests/acceptance/suite/harness.ts` reads it. The switch itself is built by card
+tooling-18 (D-85); this card depends on it.
 
 **S045.** The scripted adapters (`scripted-adapters.ts`) record the download notification: `show` adds a record line
-`{surface: 'downloadProgress', question: <title>, answer: 'shown', matched: true}`, and the editor's own notification
-is still shown.
+`{surface: 'downloadProgress', question: <title>, answer: 'shown', matched: true}`, the shape of tooling-18's progress
+lines, and the editor's own notification is still shown.
 
 ## 5. The rows
 
@@ -85,7 +85,7 @@ One assertion per `it`; names start with the cite.
 | brief §3 | the server is under `~/.vscodium-server/cli/servers/Insiders-<commit>/server/` and its `node` runs |
 | F-2103 5.0 step 6 | the record has one `downloadProgress` line, `Downloading VS Code Server...` |
 | F-2103 5.0 step 5 | `ps -eo args` on the host shows `<CLI file> command-shell` |
-| contracts S10 | no `ps -eo args` line on the host holds the control token or the connection token (both read from the log's absence: the log names neither, and the process list holds no 32-character hex word after `--`) |
+| contracts S10 | the control token, read from the CLI process's `/proc/<pid>/environ` (`VSCODE_CLI_REQUIRE_TOKEN`), and the connection token, read from the running server's token file, appear in no `ps -eo args` line on the host and no line of the log. The row compares booleans only, so no output ever holds a token |
 | #140 | a file written through the window is on the host |
 
 **suite-cli-reconnect (second launch)**
@@ -123,7 +123,7 @@ One assertion per `it`; names start with the cite.
 | File | Change |
 |---|---|
 | `tools/acceptance.ts`, `tools/acceptance.test.ts` | `VSCODIUM_CLI_RELEASE`, `--cli`, the archive server, the product field, the four labels; rows for each new pure part |
-| `tests/acceptance/suite/harness.ts` | `connectionLog()` |
+| `tests/acceptance/suite/harness.ts` | `connectionLog()` (tooling-18 builds the switch it reads) |
 | `tests/acceptance/suite-cli*/` | the suites of section 5 |
 | `tests/acceptance/suite-remote/remote-window.test.ts` | the BR-13 row |
 | `packages/remote-ssh/src/surfaces/scripted-adapters.ts` and its test | the `downloadProgress` record |
