@@ -59,8 +59,10 @@ export function cleanRun(command: CommandRunner, runId: string): void;
 ```
 
 - `CommandRunner` and `CommandResult` move here from `tools/acceptance.ts`, which imports them, as `checked` does.
-- `acceptanceRunId`: `${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}` when both are set and non-empty (a re-run is a new
-  attempt with its own objects); otherwise `local-${processId}`.
+- `acceptanceRunId`: `${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_JOB}` when all three are set and non-empty (a
+  re-run is a new attempt with its own objects; the three acceptance jobs of ONE workflow run share run id and attempt
+  and may run at the same time on runners that share a Docker daemon, so the job's id keeps one job's clean-up from
+  removing another job's live container; amended by athena 2026-10-12, #287); otherwise `local-${processId}`.
 - `startHostContainer` is the shared sequence exactly as both harnesses run it today (build `--load --quiet`, the
   ed25519 key with comment `acceptance` and no passphrase, `run --detach --rm --env AUTHORIZED_KEY=… --publish
   127.0.0.1::22`, then `docker port … 22` through `mappedPort`), with two changes: the build's `--tag` is
@@ -88,7 +90,9 @@ script, except the last.
 
 | Given | Expected |
 |---|---|
-| `GITHUB_RUN_ID=77`, `GITHUB_RUN_ATTEMPT=2` | `acceptanceRunId` gives `77-2` |
+| `GITHUB_RUN_ID=77`, `GITHUB_RUN_ATTEMPT=2`, `GITHUB_JOB=acceptance-server` | `acceptanceRunId` gives `77-2-acceptance-server` |
+| the same run and attempt with `GITHUB_JOB=acceptance-slice-1` | a different id: two jobs of one run never share a label |
+| `GITHUB_JOB` empty | `local-<process id>` |
 | no GitHub variables, process id 4242 | `local-4242` |
 | `GITHUB_RUN_ID` set, `GITHUB_RUN_ATTEMPT` empty | `local-<process id>` |
 | `hostImageOf('77-2')` | `remote-oss-acceptance-host:77-2` |
