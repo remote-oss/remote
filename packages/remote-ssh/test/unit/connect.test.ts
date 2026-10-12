@@ -20,6 +20,8 @@ import {
   TERMS,
   tunnelFails,
   tunnelOf,
+  WAITS,
+  waitsOf,
 } from './pipeline.fixture.ts';
 
 describe('the connect pipeline, when it works', () => {
@@ -29,8 +31,8 @@ describe('the connect pipeline, when it works', () => {
     deepStrictEqual(recording.calls, [
       'validate',
       'preconnect',
-      'locateClient',
       'decideTerms',
+      'locateClient',
       'openConnection',
       'probe',
       'plan',
@@ -216,7 +218,7 @@ describe('the connect pipeline, when a step fails', () => {
     const result = await connect(
       INPUT,
       steps(recording, {preconnect: () => never()}),
-      {...options, limits: {...options.limits, preconnectMilliseconds: 20}},
+      {...options, preconnectMilliseconds: 20},
     );
     deepStrictEqual(
       'kind' in result ? result.kind : result,
@@ -273,8 +275,11 @@ describe('the connect pipeline, when a step fails', () => {
     const {recording, options} = setup();
     const result = await connect(
       INPUT,
-      steps(recording, {probe: () => never()}),
-      {...options, limits: {...options.limits, probeMilliseconds: 20}},
+      steps(recording, {
+        locateClient: waitsOf({...WAITS, probeMilliseconds: 20}),
+        probe: () => never(),
+      }),
+      options,
     );
     deepStrictEqual('kind' in result ? result.kind : result, 'timeout');
   });
@@ -369,8 +374,11 @@ describe('the connect pipeline, when a step fails', () => {
     const {recording, options} = setup();
     const result = await connect(
       INPUT,
-      steps(recording, {openTunnel: () => never()}),
-      {...options, limits: {...options.limits, tunnelMilliseconds: 20}},
+      steps(recording, {
+        locateClient: waitsOf({...WAITS, tunnelMilliseconds: 20}),
+        openTunnel: () => never(),
+      }),
+      options,
     );
     deepStrictEqual('kind' in result ? result.kind : result, 'timeout');
   });
@@ -525,13 +533,26 @@ describe('the connect pipeline, steps before the connection opens and the decisi
         abort => ({
           locateClient: () => {
             abort();
-            return Promise.resolve({kind: 'done', value: undefined});
+            return Promise.resolve({kind: 'done', value: WAITS});
           },
         }),
         'openConnection',
       ),
       ['cancelled', false],
     );
+  });
+
+  it('F-2206 AC-2: a cancelled pick runs no program: the client is never located', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        decideTerms: () =>
+          Promise.resolve({kind: 'failed', failure: {kind: 'cancelled'}}),
+      }),
+      options,
+    );
+    deepStrictEqual(recording.calls.includes('locateClient'), false);
   });
 
   it('a cancel while the terms are decided stops before a connection is opened', async () => {
@@ -710,12 +731,13 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     const result = await connect(
       INPUT,
       steps(recording, {
+        locateClient: waitsOf({...WAITS, tunnelMilliseconds: 10}),
         openTunnel: () =>
           new Promise(resolve => {
             waiting.push(resolve);
           }),
       }),
-      {...options, limits: {...options.limits, tunnelMilliseconds: 10}},
+      options,
     );
     waiting[0]?.({kind: 'done', value: tunnelOf(recording)});
     await new Promise(resolve => setTimeout(resolve, 10));
@@ -730,19 +752,13 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     const result = await connect(
       INPUT,
       steps(recording, {
+        locateClient: waitsOf({probeMilliseconds: 10, tunnelMilliseconds: 10}),
         openConnection: async () => {
           await new Promise(resolve => setTimeout(resolve, 60));
           return {kind: 'done', value: leaseOf(recording)};
         },
       }),
-      {
-        ...options,
-        limits: {
-          preconnectMilliseconds: 10,
-          probeMilliseconds: 10,
-          tunnelMilliseconds: 10,
-        },
-      },
+      {...options, preconnectMilliseconds: 10},
     );
     deepStrictEqual('connected' in result, true);
   });

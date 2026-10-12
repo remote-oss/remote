@@ -21,12 +21,12 @@ function connectorFor(changes: Partial<ConnectSteps> = {}): {
   revealed: string[];
 } {
   const {recording, options} = setup();
-  const {maximumReconnectionAttempts, limits, logger} = options;
+  const {maximumReconnectionAttempts, preconnectMilliseconds, logger} = options;
   const revealed: string[] = [];
   return {
     connector: connectorOf({
-      steps: steps(recording, changes),
-      options: {maximumReconnectionAttempts, limits, logger},
+      stepsFor: () => steps(recording, changes),
+      options: {maximumReconnectionAttempts, preconnectMilliseconds, logger},
       revealLog: () => {
         revealed.push('log');
       },
@@ -212,6 +212,24 @@ describe('the connector over the connect pipeline', () => {
     connector.cancel();
     send?.({type: 'transportLost'});
     deepStrictEqual([heard, recording.notice], [[], undefined]);
+  });
+
+  it('connect-14: each connect makes its own steps', async () => {
+    const {recording, options} = setup();
+    const {maximumReconnectionAttempts, preconnectMilliseconds, logger} =
+      options;
+    let made = 0;
+    const connector = connectorOf({
+      stepsFor: () => {
+        made += 1;
+        return steps(recording);
+      },
+      options: {maximumReconnectionAttempts, preconnectMilliseconds, logger},
+      revealLog: () => undefined,
+    });
+    await connector.connect(HOST_INPUT);
+    await connector.connect({...HOST_INPUT, attempt: 2, isReconnection: true});
+    deepStrictEqual(made, 2);
   });
 
   it('F-2304 BR-12: the details reveal the log', () => {

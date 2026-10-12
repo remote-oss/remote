@@ -14,6 +14,7 @@ import type {
   ConnectionLease,
   ConnectionTerms,
   ConnectSteps,
+  ConnectWaits,
   TunnelOpening,
 } from '../../src/pipeline/steps.ts';
 
@@ -94,6 +95,17 @@ export const TERMS: ConnectionTerms = {
   remoteCommandInEffect: false,
 };
 
+/** The waits a located client gives: a second each for the probe and the tunnel. */
+export const WAITS: ConnectWaits = {
+  probeMilliseconds: 1000,
+  tunnelMilliseconds: 1000,
+};
+
+/** A located client whose host gives `waits`. */
+export function waitsOf(waits: ConnectWaits): ConnectSteps['locateClient'] {
+  return () => Promise.resolve({kind: 'done', value: waits});
+}
+
 /** The window tunnel's address and the facts it gives the window. */
 export const OPENED = {
   address: {host: '127.0.0.1', port: 50000},
@@ -153,7 +165,7 @@ export function steps(
     preconnect: () =>
       Promise.resolve(note('preconnect', {kind: 'done', value: undefined})),
     locateClient: () =>
-      Promise.resolve(note('locateClient', {kind: 'done', value: undefined})),
+      Promise.resolve(note('locateClient', {kind: 'done', value: WAITS})),
     decideTerms: () =>
       Promise.resolve(note('decideTerms', {kind: 'done', value: TERMS})),
     openConnection: () =>
@@ -209,11 +221,7 @@ export function setup(): {recording: Recording; options: ConnectOptions} {
         recording.phases.push(event);
       },
       maximumReconnectionAttempts: null,
-      limits: {
-        preconnectMilliseconds: 1000,
-        probeMilliseconds: 1000,
-        tunnelMilliseconds: 1000,
-      },
+      preconnectMilliseconds: 1000,
       logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
     },
   };

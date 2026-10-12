@@ -5,6 +5,8 @@
  * none of them writes a setting.
  */
 
+import type {SshTarget} from 'lib-ssh';
+import {parseTypedHost} from '../connect/typed-input.ts';
 import type {ConnectTarget} from './steps.ts';
 
 /** The alias that keys the per-host settings: the host part of the authority, without a user or a port. */
@@ -12,6 +14,18 @@ export function hostAlias(target: ConnectTarget): string {
   const written = target.kind === 'host' ? target.hostName : target.text;
   const name = written.slice(written.lastIndexOf('@') + 1);
   return target.kind === 'plain' ? name.replace(/^([^:]+):\d+$/, '$1') : name;
+}
+
+/** The target as `ssh` is given it: a plain host text read as typed, a structured host with its user and port. */
+export function sshTargetOf(target: ConnectTarget): SshTarget {
+  if (target.kind === 'plain') {
+    return parseTypedHost(target.text);
+  }
+  return {
+    host: target.hostName,
+    ...(target.user === undefined ? {} : {user: target.user}),
+    ...(target.port === undefined ? {} : {port: target.port}),
+  };
 }
 
 function isMap(value: unknown): value is Record<string, unknown> {

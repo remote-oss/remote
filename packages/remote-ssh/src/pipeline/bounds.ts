@@ -4,7 +4,7 @@
  */
 
 import type {ServerBounds} from './parameters.ts';
-import type {StepLimits} from './connect.ts';
+import type {ConnectWaits} from './steps.ts';
 
 /** Half an hour for the host's own download of the server, and a minute for a started server to listen. */
 export const SERVER_BOUNDS: ServerBounds = {
@@ -54,10 +54,9 @@ export function effectiveConnectTimeoutSeconds(
   return DEFAULT_TIMEOUT_SECONDS;
 }
 
-/** The pipeline's step limits for a connect timeout of `seconds`. */
-export function stepLimitsFor(seconds: number): StepLimits {
+/** The probe's and the tunnel's waits for a connect timeout of `seconds`. */
+export function connectWaitsFor(seconds: number): ConnectWaits {
   return {
-    preconnectMilliseconds: PRECONNECT_MILLISECONDS,
     probeMilliseconds: (seconds + EXTRA_WAIT_SECONDS) * 1000,
     tunnelMilliseconds: (seconds === 0 ? EXTRA_WAIT_SECONDS : seconds) * 1000,
   };

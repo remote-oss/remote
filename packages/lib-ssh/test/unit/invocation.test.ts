@@ -235,9 +235,9 @@ function forbiddenSweep(): string[] {
   return violations;
 }
 
-/** The run options that appear in the two query runs, or nothing when none do. */
+/** The run options that appear in the two query runs, or nothing when none do; `-l` and `-p` select the target. */
 function queryFlags(): string[][] {
-  const flags = ['-o', '-T', '-v', '-D', '-L', '-l', '-p'];
+  const flags = ['-o', '-T', '-v', '-D', '-L'];
   return [
     buildOptionsQuery(makeQuery()),
     buildOptionsQuery(makeQuery({configFile: '/etc/custom/config'})),
@@ -620,5 +620,21 @@ describe('buildOptionsQuery (the ssh -G run)', () => {
 
   it('ADR-0004.2: the query carries no run option', () => {
     deepStrictEqual(queryFlags(), [[], []]);
+  });
+
+  it('connect-14: the query names the target as the connection does, with its user and port', () => {
+    deepStrictEqual(
+      buildOptionsQuery(
+        makeQuery({target: {host: 'h1', user: 'alice', port: 2222}}),
+      ).arguments.slice(-6),
+      ['-G', '-l', 'alice', '-p', '2222', 'h1'],
+    );
+  });
+
+  it('connect-14: a target with no user or port is the host alone after -G', () => {
+    deepStrictEqual(
+      buildOptionsQuery(makeQuery({target: {host: 'h1'}})).arguments.slice(-2),
+      ['-G', 'h1'],
+    );
   });
 });

@@ -112,13 +112,7 @@ export function buildInvocation(request: InvocationRequest): Invocation {
   for (const forward of request.forwards ?? []) {
     argumentList.push(...forwardArguments(forward));
   }
-  if (request.target.user !== undefined && request.target.user !== '') {
-    argumentList.push('-l', request.target.user);
-  }
-  if (request.target.port !== undefined) {
-    argumentList.push('-p', String(request.target.port));
-  }
-  argumentList.push(request.target.host);
+  argumentList.push(...targetArguments(request.target));
   if (request.purpose !== 'tunnel' && request.remoteProgram !== undefined) {
     argumentList.push(request.remoteProgram);
   }
@@ -142,11 +136,31 @@ export interface OptionsQueryRequest {
   platform: ClientPlatform;
 }
 
+/**
+ * The target as `ssh` is given it: the user with `-l`, the port with `-p`, then the host. The options query passes it
+ * the same way, since a configuration's `Match user` or `Match` on the port can change what OpenSSH computes.
+ */
+function targetArguments(target: SshTarget): string[] {
+  const argumentList: string[] = [];
+  if (target.user !== undefined && target.user !== '') {
+    argumentList.push('-l', target.user);
+  }
+  if (target.port !== undefined) {
+    argumentList.push('-p', String(target.port));
+  }
+  argumentList.push(target.host);
+  return argumentList;
+}
+
 /** The `ssh -G` run that prints the options OpenSSH computes for the target, read by `parseEffectiveOptions`. */
 export function buildOptionsQuery(request: OptionsQueryRequest): Invocation {
   return {
     program: request.sshProgram,
-    arguments: [...configFileArguments(request), '-G', request.target.host],
+    arguments: [
+      ...configFileArguments(request),
+      '-G',
+      ...targetArguments(request.target),
+    ],
     environment: {},
   };
 }

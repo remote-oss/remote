@@ -4,7 +4,7 @@ import {
   effectiveConnectTimeoutSeconds,
   PRECONNECT_MILLISECONDS,
   SERVER_BOUNDS,
-  stepLimitsFor,
+  connectWaitsFor,
 } from '../../src/pipeline/bounds.ts';
 
 describe('the connect bounds', () => {
@@ -53,26 +53,23 @@ describe('the connect timeout', () => {
   });
 });
 
-describe('the step limits', () => {
+describe('the waits of the probe and the tunnel', () => {
   it('F-2401 AC-18: a timeout of 15 waits 17 seconds for the probe and 15 for the tunnel', () => {
-    deepStrictEqual(stepLimitsFor(15), {
-      preconnectMilliseconds: 300000,
+    deepStrictEqual(connectWaitsFor(15), {
       probeMilliseconds: 17000,
       tunnelMilliseconds: 15000,
     });
   });
 
   it('F-2105 BR-4: a timeout of 0 waits 2 seconds for both', () => {
-    deepStrictEqual(stepLimitsFor(0), {
-      preconnectMilliseconds: 300000,
+    deepStrictEqual(connectWaitsFor(0), {
       probeMilliseconds: 2000,
       tunnelMilliseconds: 2000,
     });
   });
 
   it("ruled on #253 Q7: a host's 0 waits 602 seconds for the probe and 600 for the tunnel", () => {
-    deepStrictEqual(stepLimitsFor(600), {
-      preconnectMilliseconds: 300000,
+    deepStrictEqual(connectWaitsFor(600), {
       probeMilliseconds: 602000,
       tunnelMilliseconds: 600000,
     });

@@ -58,6 +58,12 @@ export interface ConnectionTerms {
   remoteCommandInEffect: boolean;
 }
 
+/** How long the probe and the tunnel may wait, in milliseconds, from the host's connect timeout. */
+export interface ConnectWaits {
+  probeMilliseconds: number;
+  tunnelMilliseconds: number;
+}
+
 /** The connection to the host once the login is done: a channel for the server steps, and the end of it. */
 export interface ConnectionLease {
   channel: HostChannel;
@@ -94,8 +100,8 @@ export interface ConnectSteps {
     input: ConnectInput,
     cancellation: AbortSignal,
   ): Promise<StepResult<undefined>>;
-  /** Finds the `ssh` client. */
-  locateClient(input: ConnectInput): Promise<StepResult<undefined>>;
+  /** Finds the `ssh` client and reads the host's configuration, which decides how long the later waits may take. */
+  locateClient(input: ConnectInput): Promise<StepResult<ConnectWaits>>;
   /**
    * Decides the platform and the remote command from the settings and the host string alone, and asks the user for
    * the platform when the settings do not say. It runs before any `ssh` does, so a question comes first; the wait
