@@ -82,3 +82,21 @@ local extension host, also in a window on `ssh-remote`: they see the host throug
 they start in a window whose connect failed. `HARNESS_EDITOR` (`vscode` or `vscodium`)
 and, for VSCodium, `HARNESS_VSCODIUM_EXECUTABLE` join the harness variables. In CI the job `acceptance (VSCodium)` runs
 when the workflow is dispatched with the `vscodium` input set to true, and on the tag of a release.
+
+## Host variants
+
+The default host has the login shell BusyBox `sh` and BusyBox `wget`. One image carries every variant, and the variant
+is chosen when the container starts, by an environment variable of `start-sshd`:
+
+| Variable | Values | What `start-sshd` does |
+|---|---|---|
+| `HOST_FETCH` | `busybox-wget` (the default), `gnu-wget`, `curl`, `none` | removes the download tools the variant leaves out with `rm`, never `apk del` (which puts BusyBox's `wget` link back), and for `busybox-wget` links `/usr/bin/wget` to BusyBox |
+
+`startHost({fetch})` in `server/host-fixture.ts` starts a host with a variant. After `none` the host has neither `wget`
+nor `curl` as the install script looks for them; `busybox wget` can still be called by that name.
+
+`pnpm test:acceptance:variants` runs `server/fetch-tools.test.ts` once per download tool, each in its own mocha run on
+its own host (`HARNESS_HOST_FETCH` picks the tool; unset, the file goes through all four). The rows serve the
+stand-in archive from the host itself with BusyBox `nc`, so nothing leaves the machine; the client download of the
+`none` variant reaches the same source through an `ssh -L` forward of the harness configuration. The rest of `server/`
+runs once on the default host, in `pnpm test:acceptance:server`.
