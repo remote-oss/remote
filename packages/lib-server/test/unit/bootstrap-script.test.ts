@@ -986,11 +986,13 @@ describe('the POSIX bootstrap script', () => {
         return block === 'none' ? {} : block.serverFacts;
       }
 
-      it('F-2410 5.0 step 5: a socket start gives a socket path in the temporary folder and no port', () => {
+      it('F-2410 BR-4, AC-3: a socket start gives a v4 UUID socket path in the temporary folder and no port', () => {
         const facts = factsOf(socket());
         deepStrictEqual(
           [
-            /^\/.*\/code-[0-9a-f]{32}$/.test(facts.socketPath ?? ''),
+            /^\/.*\/code-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+              facts.socketPath ?? '',
+            ),
             facts.port,
           ],
           [true, undefined],
