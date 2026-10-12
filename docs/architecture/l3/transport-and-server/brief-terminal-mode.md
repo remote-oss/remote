@@ -38,7 +38,7 @@ connect in validate; this brief replaces that interim.
 | Operation | Contract |
 |---|---|
 | `open(invocation, name, reveal)` | creates the terminal (`window.createTerminal` with `hideFromUser: !reveal`, the local home as cwd, never trust-exempt: F-2308 §16, F-3903 rule 1), starts the invocation, and returns a session: `onOutput(chunk)`, `send(text)`, `reveal()`, `onEnd(status)`, `dispose()` |
-| output | read through the proposed `terminalDataWriteEvent` (`window.onDidWriteTerminalData`), filtered to this terminal, chunked as the editor delivers it |
+| output | read through the proposed `terminalDataWriteEvent` (`window.onDidWriteTerminalData`), filtered to this terminal, chunked as the editor delivers it. The event delivers raw data including VT escape sequences (the proposal's own doc), so **the adapter strips them and the port promises plain text** (ruled on #299): CSI, OSC and the other ESC sequences are removed, `\r\n` and `\r` are kept for the line splitter. Prompt and marker matching are then pure functions of plain lines, testable without a terminal. A sequence split across two chunks is held until it completes |
 | `reveal` | `Terminal.show(false)`: reveals and focuses (F-2308 BR-2, 6.1 step 4) |
 | trust | the editor's workspace-trust dialog gates the terminal. Cancel → the attempt fails at once and no `ssh` runs (F-2308 7.E7, AC-24); an answer later than the connect wait → the wait's timeout (F-2306 AC-28) |
 
@@ -67,11 +67,17 @@ connect in validate; this brief replaces that interim.
 - lib-ssh's `ShellRuns` and `SharedSessionChannel` already run scripts over one long-lived `sh` session, framed by
   markers. In shared mode the helper writes to ssh's stdin. In terminal mode the **same classes** take S8's `send` as
   their writer and S8's output lines as their reader. The marker framing, base64 input and deadlines are unchanged.
-- **Constraint:** the remote side has no pty (`sh` as a command, `-T`; checked against a real sshd: `sh` echoes
-  nothing back), but the local terminal echoes what `send` writes into
-  its own output. So the reader must match a marker as an **exact whole line**: an echoed command line
-  (`printf '%s\n' '<marker>:start'`) never equals the bare marker line. `ShellRuns` already matches whole lines; the
-  card adds a test with echoed input.
+- **Constraint, corrected on #299 (daedalus, 2026-10-12):** the remote side has no pty (`sh` as a command, `-T`;
+  checked against a real sshd: `sh` echoes nothing back), but the local terminal echoes what `send` writes into its
+  own output. `ShellRuns` does **not** match markers as whole lines: the start uses `includes` and the end `indexOf`,
+  on purpose, for scripts with no final newline. Fed its own echo, a run would start on the echoed `printf` line.
+  **Ruled (option b): the commands never contain a marker literally.** `commandsFor` prints each marker from two
+  pieces (for example `printf '%s%s\n' '<marker>:st' 'art'`, and the same for the end), so no echo, wherever it
+  falls, can carry the marker text, while the printed line is unchanged. The matching logic stays as it is, and one
+  framing serves both modes. Rejected: (a) whole-line matching (it would change the shared path's start-in-line
+  behaviour) and (c) turning echo off (it acts on the editor's own pty and can't cover the first command). Rows:
+  a run fed its own echoed commands starts and ends only on the printed markers, and collects no echoed line; the
+  shared path's existing rows are unchanged.
 - The terminal also merges ssh's stderr (the `-v` lines, F-2308 BR-8) into the same stream. The reader ignores lines
   outside a run's markers, as it does today.
 
