@@ -244,7 +244,7 @@ describe('ssh-remote codec (card authority-01 table)', () => {
     strictEqual(sshRemoteCodec.encode({kind: 'host', hostName: 'h'}), 'h');
   });
 
-  it('encode of Mixed.invalid, Ü.invalid, a/b, a+b and a\\b -> the hex JSON form each', () => {
+  it('F-2301 AC-12: encode of Mixed.invalid, Ü.invalid, a/b, a+b and a\\b -> the hex JSON form each', () => {
     deepStrictEqual(
       ['Mixed.invalid', 'Ü.invalid', 'a/b', 'a+b', 'a\\b'].map(text =>
         sshRemoteCodec.encode({kind: 'host', hostName: text}),
@@ -319,6 +319,15 @@ describe('ssh-remote codec (card authority-01 table)', () => {
           : encodeAuthority(outcome);
       }),
       forms,
+    );
+  });
+
+  it('F-2301 AC-12: a host with no upper-case letter, user, port or separator stays plain, as written', () => {
+    deepStrictEqual(
+      ['ü.invalid', 'a=b.invalid', 'a*b.invalid', "a'b.invalid", 'fe80::1'].map(
+        text => sshRemoteCodec.encode({kind: 'host', hostName: text}),
+      ),
+      ['ü.invalid', 'a=b.invalid', 'a*b.invalid', "a'b.invalid", 'fe80::1'],
     );
   });
 });

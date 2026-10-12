@@ -6,7 +6,7 @@ import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {MemoryFilePort} from 'lib-helper/testing/memory-file-port';
 import {clientEnvironment} from 'lib-helper/testing/client-environment';
-import type {SettingInspection} from 'lib-identifiers';
+import type {SettingHost, SettingInspection} from 'lib-identifiers';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {RunBase, SharedConnection} from 'lib-ssh';
@@ -23,6 +23,12 @@ import {
   type ConnectorDependencies,
   connectorOf,
 } from '../../src/pipeline/connector.ts';
+import {
+  connectionSettingsOf,
+  termsSettingsOf,
+  textOf as settingTextOf,
+} from '../../src/pipeline/connect-settings.ts';
+import {decidePlatform} from '../../src/pipeline/platform.ts';
 import type {PromptEditor} from '../../src/surfaces/prompt-surface.ts';
 import {textOf} from '../../src/surfaces/prompt-strings.ts';
 import {
@@ -864,5 +870,47 @@ describe("the assembled ports' channel", () => {
 
   it('lib-product: a policy table without remote-ssh is a defect', () => {
     throws(() => sshOverridePolicy({}), /no override policy for remote-ssh/);
+  });
+});
+
+describe('application-scope settings ignore workspace values', () => {
+  /** A setting host whose remote.SSH.path, configFile and remotePlatform are set only in the workspace and the folder. */
+  const WORKSPACE_ONLY: SettingHost = {
+    inspectSetting: settingId =>
+      ({
+        'remote.SSH.path': {
+          defaultValue: '',
+          workspaceValue: '/w/ssh',
+          workspaceFolderValue: '/f/ssh',
+        },
+        'remote.SSH.configFile': {
+          defaultValue: '',
+          workspaceValue: '/w/config',
+          workspaceFolderValue: '/f/config',
+        },
+        'remote.SSH.remotePlatform': {
+          defaultValue: undefined,
+          workspaceValue: {devbox: 'windows'},
+          workspaceFolderValue: {devbox: 'windows'},
+        },
+      })[settingId] ?? {defaultValue: undefined},
+  };
+
+  it('F-2101 AC-13: a remote.SSH.path set only in workspace settings is never used', () => {
+    deepStrictEqual(settingTextOf(WORKSPACE_ONLY, 'path'), '');
+  });
+
+  it('F-2201 AC-14: a remote.SSH.configFile set only in workspace settings is ignored', () => {
+    deepStrictEqual(connectionSettingsOf(WORKSPACE_ONLY).configFile, '');
+  });
+
+  it('F-2206 AC-23: a workspace remotePlatform entry is ignored, so non-local mode asks', () => {
+    deepStrictEqual(
+      decidePlatform(
+        {...termsSettingsOf(WORKSPACE_ONLY), useLocalServer: false},
+        'devbox',
+      ),
+      {kind: 'ask'},
+    );
   });
 });
