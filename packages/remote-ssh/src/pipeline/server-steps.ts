@@ -31,7 +31,8 @@ import {
   startOrReuse,
   transfer,
 } from 'lib-server';
-import type {HostServerSettings} from './host-settings.ts';
+import {validateTarget} from 'lib-ssh';
+import {sshTargetOf, type HostServerSettings} from './host-settings.ts';
 import {
   type ParameterInput,
   runtimeOptionsFor,
@@ -122,8 +123,18 @@ export function createServerSteps(
   }
 
   return {
-    validate: () =>
-      settings.installFolder.kind === 'invalid'
+    validate: input => {
+      const problem = validateTarget(sshTargetOf(input.target));
+      if (problem !== undefined) {
+        return {
+          kind: 'failed',
+          failure: {
+            kind: 'invalidSetting',
+            reason: {id: problem.reason, values: [problem.character]},
+          },
+        };
+      }
+      return settings.installFolder.kind === 'invalid'
         ? {
             kind: 'failed',
             failure: {
@@ -131,7 +142,8 @@ export function createServerSteps(
               reason: {text: 'remote.SSH.serverInstallPath'},
             },
           }
-        : {kind: 'done', value: undefined},
+        : {kind: 'done', value: undefined};
+    },
     probe: (input, lease, cancellation) =>
       probe(lease.channel, parametersFor({}), cancellation),
     plan: (input, host) => {

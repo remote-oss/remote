@@ -37,6 +37,10 @@ describe('the texts of the failure dialog and the progress', () => {
       'S107',
       'S111',
       'S117',
+      'S119',
+      'S120',
+      'S121',
+      'S122',
       'S129',
       'S130',
       'S137',
@@ -92,6 +96,20 @@ describe('the texts of the failure dialog and the progress', () => {
 
   it('F-2601: a reason that is an id without a template gives nothing', () => {
     deepStrictEqual(reasonText({id: 'S999'}, marked), undefined);
+  });
+
+  it('F-2205 7.E1: the host beginning failure names the character', () => {
+    deepStrictEqual(
+      reasonText({id: 'S119', values: ['-']}, template => template),
+      'SSH host name cannot begin with -',
+    );
+  });
+
+  it('F-2205 7.E5, R-93: the host character failure names a control character', () => {
+    deepStrictEqual(
+      reasonText({id: 'S120', values: ['U+000A']}, template => template),
+      'SSH host name cannot include the character U+000A',
+    );
   });
 
   it('F-2601: an id named like a member of Object gives nothing', () => {

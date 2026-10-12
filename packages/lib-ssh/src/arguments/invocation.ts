@@ -137,8 +137,9 @@ export interface OptionsQueryRequest {
 }
 
 /**
- * The target as `ssh` is given it: the user with `-l`, the port with `-p`, then the host. The options query passes it
- * the same way, since a configuration's `Match user` or `Match` on the port can change what OpenSSH computes.
+ * The target as `ssh` is given it: the user with `-l`, the port with `-p`, then `--` and the host, so a host is never
+ * read as an option. The options query passes it the same way, since a configuration's `Match user` or `Match` on the
+ * port can change what OpenSSH computes.
  */
 function targetArguments(target: SshTarget): string[] {
   const argumentList: string[] = [];
@@ -148,7 +149,7 @@ function targetArguments(target: SshTarget): string[] {
   if (target.port !== undefined) {
     argumentList.push('-p', String(target.port));
   }
-  argumentList.push(target.host);
+  argumentList.push('--', target.host);
   return argumentList;
 }
 
@@ -219,6 +220,7 @@ function copyInvocation(request: CopyRunRequest, common: string[]): Invocation {
     : request.target.host;
   const argumentList = [
     ...common,
+    '--',
     request.copy.localFile,
     `${host}:${request.copy.remotePath}`,
   ];
