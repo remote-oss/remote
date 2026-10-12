@@ -11,7 +11,12 @@ import {INPUT} from './pipeline.fixture.ts';
 
 /** How a fake run answers: what it prints on each stream and its status, no exit at all, or a start failure. */
 type Answer =
-  | {kind: 'exit'; output?: string; errorOutput?: string; status: number}
+  | {
+      kind: 'exit';
+      output?: string;
+      errorOutput?: string;
+      status: number | undefined;
+    }
   | {kind: 'hang'}
   | {kind: 'refuse'};
 
@@ -401,6 +406,21 @@ describe("the lookup of the host's configuration", () => {
     deepStrictEqual(
       [result, seen.killed],
       [{kind: 'failed', failure: {kind: 'timeout'}}, ['ssh']],
+    );
+  });
+
+  it('connect-14: a lookup a signal ended is read from its lines, not as a timeout', async () => {
+    const {result} = await located({
+      lookup: {
+        kind: 'exit',
+        errorOutput:
+          'ssh: Could not resolve hostname dev: Name or service not known\n',
+        status: undefined,
+      },
+    });
+    deepStrictEqual(
+      result.kind === 'failed' && result.failure.kind,
+      'unreachable',
     );
   });
 
