@@ -1,20 +1,50 @@
 /**
  * @fileoverview The Remote - SSH extension's entry point: it loads the editor, which exists only in the
  * extension host, so the unit tests do not load it. Activation runs the stand-down guard and, when this extension
- * serves, opens the log and registers the commands the package serves.
+ * serves, opens the log, registers the commands the package serves, and registers the connect over the editor and
+ * this machine.
  */
 
 import {readFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
-import {gateEditorOf, type ProposalName, setupPortsOf} from 'lib-authority';
+import {
+  gateEditorOf,
+  type ProposalName,
+  resolverEditorOf,
+  setupPortsOf,
+} from 'lib-authority';
 import {identifierHost} from 'lib-identifiers';
-import {readProfile} from 'lib-product';
+import type {Logger} from 'lib-log';
+import {type ProductProfile, readProfile} from 'lib-product';
 import {standDownHost} from 'lib-standdown';
 import {activateRemoteSsh} from './activation.ts';
-import {helpLinksOf} from './help-commands.ts';
-import {commands, settings, standDown} from './identifiers.generated.ts';
+import {connectAssemblyOf} from './connect-ports.ts';
+import {editorOperationsOf} from './editor-operations.ts';
+import {editorSurfacesOf} from './editor-surfaces.ts';
+import {
+  type HelpEditor,
+  type HelpHandlers,
+  helpHandlers,
+  helpLinksOf,
+} from './help-commands.ts';
+import {
+  commands,
+  runtimeCommands,
+  settings,
+  standDown,
+} from './identifiers.generated.ts';
+import {nodeFacts, nodeMachineOf} from './node-machine.ts';
+import {type ConnectRegistration, registerConnect} from './register-connect.ts';
+import {
+  failureDialogOf,
+  licenceDialogOf,
+  mitigationPickPortOf,
+  platformPickPortOf,
+  promptEditorOf,
+} from './surfaces/editor-adapters.ts';
+import {loginTerminalsOf} from './surfaces/login-terminal.ts';
 
 /** The stand-down warning and its button, as written in the runtime strings. */
 const STAND_DOWN_WARNING =
@@ -46,15 +76,20 @@ interface Manifest {
   };
 }
 
-/** The `dataFolderName` of the editor's product, which names the folder of its runtime arguments. */
-async function dataFolderNameOfEditor(): Promise<string> {
+/** The editor's product, as its `product.json` describes it. */
+async function editorProfile(): Promise<ProductProfile> {
   const reading = readProfile(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
   if (reading.kind === 'unreadable') {
     throw new Error(`product.json cannot be read: ${reading.reason}`);
   }
-  return reading.profile.dataFolderName;
+  return reading.profile;
+}
+
+/** The `dataFolderName` of the editor's product, which names the folder of its runtime arguments. */
+async function dataFolderNameOfEditor(): Promise<string> {
+  return (await editorProfile()).dataFolderName;
 }
 
 /** The text of a file, or nothing when it cannot be read. */
@@ -73,14 +108,24 @@ export async function activate(
 ): Promise<void> {
   const manifest = context.extension.packageJSON as Manifest;
   const host = identifierHost(vscode, manifest);
+  const extension = {
+    id: context.extension.id,
+    pack: manifest.extensionPack ?? [],
+    name: manifest.name,
+    version: manifest.version,
+  };
+  const help: HelpEditor = {
+    openExternal: address => vscode.env.openExternal(vscode.Uri.parse(address)),
+    openSettings: filter =>
+      vscode.commands.executeCommand('workbench.action.openSettings', filter),
+    openIssueReporter: extensionId =>
+      vscode.commands.executeCommand('workbench.action.openIssueReporter', {
+        extensionId,
+      }),
+  };
   const result = await activateRemoteSsh({
     table: {commands, settings, standDown},
-    extension: {
-      id: context.extension.id,
-      pack: manifest.extensionPack ?? [],
-      name: manifest.name,
-      version: manifest.version,
-    },
+    extension,
     links: () => helpLinksOf(manifest),
     environment: {
       editorVersion: vscode.version,
@@ -94,16 +139,7 @@ export async function activate(
     standDown: standDownHost(vscode),
     commands: host,
     settings: host,
-    help: {
-      openExternal: address =>
-        vscode.env.openExternal(vscode.Uri.parse(address)),
-      openSettings: filter =>
-        vscode.commands.executeCommand('workbench.action.openSettings', filter),
-      openIssueReporter: extensionId =>
-        vscode.commands.executeCommand('workbench.action.openIssueReporter', {
-          extensionId,
-        }),
-    },
+    help,
     channels: vscode.window,
     clock: Date.now,
     gate: logFailure =>
@@ -129,11 +165,98 @@ export async function activate(
         logFailure,
       }),
   });
-  if (result.kind === 'serving') {
-    context.subscriptions.push({
-      dispose: () => {
-        result.dispose();
-      },
-    });
+  if (result.kind !== 'serving') {
+    return;
   }
+  context.subscriptions.push({
+    dispose: () => {
+      result.dispose();
+    },
+  });
+  const connect = await registerConnectOf(context, manifest, host, {
+    revealLog: () => {
+      result.revealLog();
+    },
+    logger: result.logger,
+    help: helpHandlers(help, helpLinksOf(manifest), extension),
+    resolversGranted: result.proposals.granted.includes('resolvers'),
+  });
+  context.subscriptions.push({
+    dispose: () => {
+      connect.dispose();
+    },
+  });
+}
+
+/** A template in the display language. */
+function translate(template: string): string {
+  return vscode.l10n.t(template);
+}
+
+/** What the connect takes from the activation that served. */
+interface ServedActivation {
+  revealLog(): void;
+  logger: Logger;
+  help: HelpHandlers;
+  resolversGranted: boolean;
+}
+
+/** The connect over the editor and this machine: its surfaces, its assembly and its registration. */
+async function registerConnectOf(
+  context: vscode.ExtensionContext,
+  manifest: Manifest,
+  host: ReturnType<typeof identifierHost>,
+  served: ServedActivation,
+): Promise<ConnectRegistration> {
+  const window = {alias: (): string => ''};
+  const surfaces = editorSurfacesOf(
+    {
+      prompts: promptEditorOf(vscode, translate),
+      terminals: loginTerminalsOf(vscode, homedir()),
+      failureDialog: failureDialogOf(vscode),
+      licenceDialog: licenceDialogOf(vscode),
+      platformPick: platformPickPortOf(vscode, translate),
+      mitigationPick: mitigationPickPortOf(vscode),
+    },
+    editorOperationsOf(vscode, () => {
+      served.revealLog();
+    }),
+    {
+      settings: host,
+      translate,
+      help: served.help,
+      names: {
+        alias: () => window.alias(),
+        applicationName: vscode.env.appName,
+        displayName: manifest.displayName,
+      },
+      acceptanceState: context.globalState,
+    },
+  );
+  const machine = nodeMachineOf(
+    {
+      extensionFolder: context.extensionPath,
+      storageFolder: context.globalStorageUri.fsPath,
+      runtime: process.execPath,
+      profile: await editorProfile(),
+      httpGet: (address, init) => fetch(address, init),
+    },
+    nodeFacts(),
+  );
+  const registration = await registerConnect(
+    {
+      resolverEditor: resolverEditorOf(vscode, {
+        detailsCommand: runtimeCommands.showDetails,
+      }),
+      labels: vscode.workspace,
+      commands: host,
+      openExternal: address =>
+        vscode.env.openExternal(vscode.Uri.parse(address)),
+      translate,
+    },
+    connectAssemblyOf(surfaces, machine, served.logger),
+    served.resolversGranted,
+  );
+  window.alias = () => registration.currentAlias();
+  return registration;
 }

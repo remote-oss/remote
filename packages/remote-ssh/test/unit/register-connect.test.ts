@@ -25,6 +25,7 @@ async function registered(
 ): Promise<{
   seen: Seen;
   registration: Awaited<ReturnType<typeof registerConnect>>;
+  recording: ReturnType<typeof recordingResolverEditor>;
 }> {
   const seen: Seen = {
     events: [],
@@ -73,9 +74,10 @@ async function registered(
     },
     showOutOfContext: () => undefined,
   };
+  const recording = recordingResolverEditor(seen.events);
   const registration = await registerConnect(
     {
-      resolverEditor: recordingResolverEditor(seen.events).editor,
+      resolverEditor: recording.editor,
       labels: {
         registerResourceLabelFormatter: () => {
           seen.labels += 1;
@@ -92,7 +94,7 @@ async function registered(
     {...assembly, connector},
     resolversGranted,
   );
-  return {seen, registration};
+  return {seen, registration, recording};
 }
 
 describe("the connect's registration", () => {
@@ -148,5 +150,25 @@ describe("the connect's registration", () => {
     const {seen, registration} = await registered(false);
     registration.dispose();
     deepStrictEqual(seen.disposed, []);
+  });
+
+  it('F-2601: the window has no alias before its first resolve', async () => {
+    const {registration} = await registered(true);
+    deepStrictEqual(registration.currentAlias(), '');
+  });
+
+  it('F-2601: a registration that registered nothing names no alias', async () => {
+    const {registration} = await registered(false);
+    deepStrictEqual(registration.currentAlias(), '');
+  });
+
+  it("F-2601: once a resolve starts, the alias is the window's host as the user wrote it", async () => {
+    const {registration, recording} = await registered(true);
+    void recording
+      .registered()
+      ?.resolve('ssh-remote+alex@devbox:22', {resolveAttempt: 1})
+      .catch(() => undefined);
+    await Promise.resolve();
+    deepStrictEqual(registration.currentAlias(), 'devbox');
   });
 });

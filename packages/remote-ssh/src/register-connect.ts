@@ -17,6 +17,7 @@ import {
 } from 'lib-identifiers';
 import type {ConnectAssembly} from './connect-ports.ts';
 import {commands, runtimeCommands} from './identifiers.generated.ts';
+import {hostAlias} from './pipeline/host-settings.ts';
 import {registerWindowLabel} from './surfaces/label-formatter.ts';
 import type {Translate} from './surfaces/strings.ts';
 import {openWebUiHandler} from './surfaces/web-ui-command.ts';
@@ -34,6 +35,8 @@ export interface ConnectRegistrationHost {
 /** What the registration gives back: whether the resolver is registered, and the end of everything it registered. */
 export interface ConnectRegistration {
   registration: Registration['kind'];
+  /** The host alias of the window's connection, as the user wrote it; empty before the first resolve. */
+  currentAlias(): string;
   dispose(): void;
 }
 
@@ -55,7 +58,11 @@ export async function registerConnect(
     },
   );
   if (registration.kind !== 'registered') {
-    return {registration: registration.kind, dispose: () => undefined};
+    return {
+      registration: registration.kind,
+      currentAlias: () => '',
+      dispose: () => undefined,
+    };
   }
   const {resolver} = registration;
   const label = registerWindowLabel(resolver, host.labels, host.translate);
@@ -78,6 +85,10 @@ export async function registerConnect(
   );
   return {
     registration: 'registered',
+    currentAlias: () => {
+      const target = resolver.currentConnection()?.decodedTarget.target;
+      return target !== undefined && 'kind' in target ? hostAlias(target) : '';
+    },
     dispose: () => {
       details.dispose();
       served.dispose();
