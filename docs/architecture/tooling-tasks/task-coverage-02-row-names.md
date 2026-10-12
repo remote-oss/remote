@@ -110,7 +110,7 @@ The other `F-2407:` rows of this file are F-2407's (not in slice 1) and keep the
 | 269 | `F-2403 BR-8: a curlrc with an unreachable proxy is kept out with -q` | `F-2403 AC-15:` |
 | 278 | `F-2403 BR-8: the same curlrc is read when the configuration files are used` | `F-2403 AC-16:` |
 | 292 | `F-2403: with no downloader and the client as a fallback the client downloads and copies` | `F-2403 AC-11:` |
-| 309 | `F-2403, S043: with no downloader and no fallback the install fails as no downloader` | `F-2403 AC-9:` |
+| 309 | `F-2403, S043: with no downloader and no fallback the install fails as no downloader` | `contracts V4:` |
 
 Also rename that file's `describe` title `F-2403 the download with the tool …` to `the download with the tool …`.
 
