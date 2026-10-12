@@ -12,6 +12,8 @@ export const OWN_TEMPLATES = {
   [SSH_LABEL_PREFIX_ID]: 'SSH: {0}',
   platformPickPlaceholder: 'Select the platform of the remote host "{0}"',
   mitigationReloadWindow: 'Reload Window',
+  configFileNotAbsolute:
+    'remote.SSH.configFile must be an absolute path or start with ~/: "{0}"',
 } as const;
 
 /** The text of a string of our own: its template translated and filled. Throws for an id this table lacks. */

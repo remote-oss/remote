@@ -14,4 +14,8 @@ case "${HOST_FETCH:-busybox-wget}" in
   none) rm -f /usr/bin/wget /usr/bin/curl ;;
   *) echo "unknown HOST_FETCH: ${HOST_FETCH}" >&2; exit 1 ;;
 esac
+# HOST_SHELL, when given, is the login shell of the user harness; unset leaves the image's /bin/sh.
+if [ -n "${HOST_SHELL:-}" ]; then
+  usermod -s "$HOST_SHELL" harness
+fi
 exec /usr/sbin/sshd -D -e

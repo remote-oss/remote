@@ -1,5 +1,5 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import {filesInEffect} from '../../src/index.ts';
+import {configFilePath, filesInEffect} from '../../src/index.ts';
 import {pathsFor} from '../../src/config/files.ts';
 import {memoryReader} from './memory-reader.fixture.ts';
 import type {ConfigFileReader} from '../../src/index.ts';
@@ -35,6 +35,77 @@ const EXPECTED_FILES = [
     exists: true,
   },
 ] as const;
+
+describe('configFilePath (the one check of the configured file)', () => {
+  it('F-2201.BR-3: an empty value is unset', () => {
+    deepStrictEqual(configFilePath('', '/h', 'linux'), {kind: 'unset'});
+  });
+
+  it('F-2201.BR-3: a value of white space only is unset', () => {
+    deepStrictEqual(configFilePath('  ', '/h', 'linux'), {kind: 'unset'});
+  });
+
+  it('F-2201.BR-3: /etc/x on Linux is a file', () => {
+    deepStrictEqual(configFilePath('/etc/x', '/h', 'linux'), {
+      kind: 'file',
+      path: '/etc/x',
+    });
+  });
+
+  it('F-2201.BR-3: ~/x on Linux is the home folder with x', () => {
+    deepStrictEqual(configFilePath('~/x', '/h', 'linux'), {
+      kind: 'file',
+      path: '/h/x',
+    });
+  });
+
+  it('F-2201.BR-3: a lone ~ is the home folder', () => {
+    deepStrictEqual(configFilePath('~', '/h', 'linux'), {
+      kind: 'file',
+      path: '/h',
+    });
+  });
+
+  const NOT_ABSOLUTE = [
+    'relcfg/rel_config',
+    './x',
+    '$HOME/x',
+    '${env:HOME}/x',
+    '~user/x',
+  ] as const;
+  for (const value of NOT_ABSOLUTE) {
+    it(`F-2203 7.E3: ${value} on Linux is invalid as written`, () => {
+      deepStrictEqual(configFilePath(value, '/h', 'linux'), {
+        kind: 'invalid',
+        value,
+      });
+    });
+  }
+
+  const WINDOWS_FILES = [
+    ['C:\\x', 'C:\\x'],
+    ['\\\\s\\sh\\x', '\\\\s\\sh\\x'],
+    ['~\\x', 'C:\\h\\x'],
+  ] as const;
+  for (const [value, file] of WINDOWS_FILES) {
+    it(`F-2201.BR-3: ${value} on Windows is a file`, () => {
+      deepStrictEqual(configFilePath(value, 'C:\\h', 'windows'), {
+        kind: 'file',
+        path: file,
+      });
+    });
+  }
+
+  const WINDOWS_INVALID = ['C:x', 'x\\y'] as const;
+  for (const value of WINDOWS_INVALID) {
+    it(`F-2203 7.E3: ${value} on Windows is invalid as written`, () => {
+      deepStrictEqual(configFilePath(value, 'C:\\h', 'windows'), {
+        kind: 'invalid',
+        value,
+      });
+    });
+  }
+});
 
 describe('filesInEffect (the configuration files in reading order)', () => {
   it('F-2201.BR-1 / AC-1: the user and the system file when the setting is empty', () => {
@@ -114,36 +185,21 @@ describe('filesInEffect (the configuration files in reading order)', () => {
     ]);
   });
 
-  const AS_WRITTEN = [
-    ['rel/config', 'rel'],
-    ['$HOME/x', '$HOME'],
-    ['${env:HOME}/x', '${env:HOME}'],
-  ] as const;
-  for (const [setting, includeBase] of AS_WRITTEN) {
-    it(`F-2201.BR-3: a configured ${setting} is used as written`, () => {
+  const NOT_ABSOLUTE = ['rel/config', '$HOME/x', '${env:HOME}/x'] as const;
+  for (const setting of NOT_ABSOLUTE) {
+    it(`F-2201.BR-7: a configured ${setting} that is not absolute offers no file`, () => {
       deepStrictEqual(
         filesInEffect(setting, {...LINUX}, memoryReader(new Map())),
-        [
-          {
-            file: setting,
-            role: 'configured',
-            includeBase,
-            exists: false,
-          },
-        ],
+        [],
       );
     });
   }
 
-  it('F-2201.BR-2: a configured setting of spaces is used as written', () => {
-    deepStrictEqual(filesInEffect('   ', {...LINUX}, memoryReader(new Map())), [
-      {
-        file: '   ',
-        role: 'configured',
-        includeBase: '.',
-        exists: false,
-      },
-    ]);
+  it('F-2201.BR-2: a configured setting of white space only is unset, so the default files apply', () => {
+    deepStrictEqual(
+      filesInEffect('   ', {...LINUX}, userAndSystem(USER_TEXT)),
+      EXPECTED_FILES,
+    );
   });
 
   it('F-2201.BR-6: a call reads the port again, so a changed file shows', () => {

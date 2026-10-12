@@ -7,37 +7,86 @@ import {
 } from './acceptance-variants.ts';
 
 const VARIANTS: VariantRun[] = [
-  {label: 'one', testFile: 'a.test.ts', environment: {}},
-  {label: 'two', testFile: 'b.test.ts', environment: {}},
-  {label: 'three', testFile: 'c.test.ts', environment: {}},
+  {label: 'one', testFiles: ['a.test.ts'], environment: {}},
+  {label: 'two', testFiles: ['b.test.ts', 'c.test.ts'], environment: {}},
+  {label: 'three', testFiles: ['c.test.ts'], environment: {}},
 ];
 
 const THE_SECOND: VariantRun = {
   label: 'two',
-  testFile: 'b.test.ts',
+  testFiles: ['b.test.ts', 'c.test.ts'],
   environment: {},
 };
 
 describe('acceptance-variants (card tooling-14)', () => {
   it('runs the download rows once per download tool, in order', () => {
     deepStrictEqual(
-      variantRuns().map(variant => variant.environment.HARNESS_HOST_FETCH),
+      variantRuns().flatMap(variant =>
+        variant.environment.HARNESS_HOST_FETCH === undefined
+          ? []
+          : [variant.environment.HARNESS_HOST_FETCH],
+      ),
       ['busybox-wget', 'gnu-wget', 'curl', 'none'],
+    );
+  });
+
+  it('runs the shell rows once per login shell, in order', () => {
+    deepStrictEqual(
+      variantRuns().flatMap(variant =>
+        variant.environment.HARNESS_HOST_SHELL === undefined
+          ? []
+          : [variant.environment.HARNESS_HOST_SHELL],
+      ),
+      [
+        '/bin/sh',
+        '/bin/bash',
+        '/bin/zsh',
+        '/usr/bin/dash',
+        '/usr/bin/fish',
+        '/bin/tcsh',
+        '/bin/csh',
+        '/bin/mksh',
+      ],
+    );
+  });
+
+  it('runs the shell runs before the download runs', () => {
+    deepStrictEqual(
+      variantRuns().map(variant => variant.label.split(' ')[0]),
+      [...Array<string>(8).fill('login'), ...Array<string>(4).fill('download')],
     );
   });
 
   it('runs the download rows from fetch-tools.test.ts', () => {
     deepStrictEqual(
-      new Set(variantRuns().map(variant => variant.testFile)),
+      new Set(
+        variantRuns()
+          .filter(variant => variant.label.startsWith('download'))
+          .flatMap(variant => variant.testFiles),
+      ),
       new Set(['tests/acceptance/server/fetch-tools.test.ts']),
     );
   });
 
-  it("gives mocha the run's spec file last", () => {
+  it('runs the shell-sensitive rows on every login shell', () => {
+    deepStrictEqual(
+      variantRuns().find(variant => variant.label.startsWith('login'))
+        ?.testFiles,
+      [
+        'tests/acceptance/server/login-shell-variant.test.ts',
+        'tests/acceptance/server/login-shells.test.ts',
+        'tests/acceptance/server/start.test.ts',
+        'tests/acceptance/server/shared-session.test.ts',
+      ],
+    );
+  });
+
+  it('gives mocha the test files of the variant last', () => {
     deepStrictEqual(mochaArguments(THE_SECOND).slice(1), [
       '--no-config',
       '--extension=ts',
       'b.test.ts',
+      'c.test.ts',
     ]);
   });
 

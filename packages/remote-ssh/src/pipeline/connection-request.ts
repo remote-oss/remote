@@ -8,8 +8,10 @@ import type {EndPolicy} from 'lib-helper';
 import {
   type ClientPlatform,
   type ConnectionAcquireRequest,
+  type ConnectWaitSettings,
   DEFAULT_FIRST_MESSAGE_MILLISECONDS,
   type RunBase,
+  sessionStartFor,
   type SshRequest,
 } from 'lib-ssh';
 import {
@@ -118,7 +120,7 @@ export function connectionRequestOf(
 }
 
 /**
- * The `ssh` request of the install connection in terminal mode: the host's shell as the remote program, and either our
+ * The `ssh` request of the install connection in terminal mode: the session start as the remote program, and either our
  * `-D` port when the window tunnel rides it, or, with no `-D`, the user's own forwards cleared so the run holds none.
  */
 export function installRequestOf(
@@ -128,11 +130,12 @@ export function installRequestOf(
   settings: ConnectionRequestSettings,
   environment: ConnectionRequestEnvironment,
   socksPort: number | undefined,
+  connectWait: ConnectWaitSettings,
 ): SshRequest {
   return {
     ...runBaseOf(input, terms, state, settings, environment),
     purpose: 'connection',
-    remoteProgram: 'sh',
+    remoteProgram: sessionStartFor(connectWait).remoteProgram,
     ...(socksPort === undefined
       ? {clearUserForwards: true}
       : {forwards: [{kind: 'dynamic' as const, localPort: socksPort}]}),

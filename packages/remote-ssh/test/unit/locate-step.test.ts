@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {createLogger, type Level} from 'lib-log';
+import {createLogger, type Level, type LogLine} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {ConnectionMode} from 'lib-ssh';
 import {
@@ -39,6 +39,7 @@ async function located(scenario: Scenario = {}): Promise<{
   result: Awaited<ReturnType<ReturnType<typeof locateClientStep>>>;
   state: ConnectState;
   seen: Seen;
+  lines: LogLine[];
   logged: string[];
 }> {
   const seen: Seen = {started: [], killed: []};
@@ -67,6 +68,7 @@ async function located(scenario: Scenario = {}): Promise<{
     result,
     state,
     seen,
+    lines: sink.lines,
     logged: sink.lines.map(line => line.message),
   };
 }
@@ -138,6 +140,24 @@ describe('the step that finds the ssh client', () => {
         },
         {},
       ],
+    );
+  });
+
+  it('F-2201 7.E8: a configured file that is not absolute fails as unknown with no reason', async () => {
+    const {result} = await located({configFile: 'relcfg/x'});
+    deepStrictEqual(result, {kind: 'failed', failure: {kind: 'unknown'}});
+  });
+
+  it('F-2201 7.E8: the same starts no process', async () => {
+    const {seen} = await located({configFile: 'relcfg/x'});
+    deepStrictEqual([seen.started, seen.killed], [[], []]);
+  });
+
+  it('F-2201 7.E8: the same is told to the log once as an error', async () => {
+    const {lines} = await located({configFile: 'relcfg/x'});
+    deepStrictEqual(
+      lines.map(line => `${line.level} ${line.message}`),
+      ['error remote.SSH.configFile is not an absolute path: "relcfg/x"'],
     );
   });
 });

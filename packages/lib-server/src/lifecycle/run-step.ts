@@ -28,6 +28,8 @@ export interface StepOptions {
   cancellation: AbortSignal;
   /** What the script reads on its standard input; nothing when absent. */
   input?: ScriptInput;
+  /** Variables added to the script's environment; they never appear in a command line (contracts §S10). */
+  environment?: Readonly<Record<string, string>>;
   /** Receives every output line as it arrives, before the outcome is known. */
   onLine?: (line: string) => void;
 }
@@ -53,7 +55,7 @@ export async function runStep(
     {
       script: scriptFor(request, interpreter, parameters),
       interpreter,
-      environment: {},
+      environment: options.environment ?? {},
       input: options.input ?? {kind: 'text', text: ''},
       cancellation: options.cancellation,
     },

@@ -45,6 +45,7 @@ const REAL_TOOLS = [
   'nohup',
   'ps',
   'rm',
+  'rmdir',
   'sed',
   'sleep',
   'tail',

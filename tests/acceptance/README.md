@@ -91,8 +91,9 @@ is chosen when the container starts, by an environment variable of `start-sshd`:
 | Variable | Values | What `start-sshd` does |
 |---|---|---|
 | `HOST_FETCH` | `busybox-wget` (the default), `gnu-wget`, `curl`, `none` | removes the download tools the variant leaves out with `rm`, never `apk del` (which puts BusyBox's `wget` link back), and for `busybox-wget` links `/usr/bin/wget` to BusyBox |
+| `HOST_SHELL` | `/bin/sh` (the default), `/bin/bash`, `/bin/zsh`, `/usr/bin/dash`, `/usr/bin/fish`, `/bin/tcsh`, `/bin/csh`, `/bin/mksh` | sets the login shell of the user `harness` with `usermod -s` |
 
-`startHost({fetch})` in `server/host-fixture.ts` starts a host with a variant. After `none` the host has neither `wget`
+`startHost({fetch, shell})` in `server/host-fixture.ts` starts a host with a variant of either kind. After `none` the host has neither `wget`
 nor `curl` as the install script looks for them; `busybox wget` can still be called by that name.
 
 `pnpm test:acceptance:variants` runs `server/fetch-tools.test.ts` once per download tool, each in its own mocha run on
@@ -100,3 +101,8 @@ its own host (`HARNESS_HOST_FETCH` picks the tool; unset, the file goes through 
 stand-in archive from the host itself with BusyBox `nc`, so nothing leaves the machine; the client download of the
 `none` variant reaches the same source through an `ssh -L` forward of the harness configuration. The rest of `server/`
 runs once on the default host, in `pnpm test:acceptance:server`.
+
+`pnpm test:acceptance:variants` also runs the login-shell files once per shell (`HARNESS_HOST_SHELL` picks the shell; unset,
+all eight), each in its own mocha run on its own host: `server/login-shell-variant.test.ts` pins the shell the host
+reports, and `server/login-shells.test.ts`, `server/start.test.ts` and `server/shared-session.test.ts` prove that every
+session hands its commands to POSIX `sh` whatever the login shell is.

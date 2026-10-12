@@ -19,16 +19,16 @@ export type {
 export {
   buildInvocation,
   buildOptionsQuery,
-  expandHome,
   TUNNEL_SUCCESS_LINE,
 } from './arguments/invocation.ts';
 export type {ClientPlatform} from './config/platform.ts';
 export type {
   ClientLocations,
   ConfigFileReader,
+  ConfigFileSetting,
   FileInEffect,
 } from './config/files.ts';
-export {filesInEffect} from './config/files.ts';
+export {configFilePath, expandHome, filesInEffect} from './config/files.ts';
 export type {HostEntry, HostListResult} from './config/hosts.ts';
 export {listHosts} from './config/hosts.ts';
 export type {
@@ -107,8 +107,13 @@ export {type LocalFiles, nodeLocalFiles} from './process/node-files.ts';
 export {
   planScript,
   posixQuote,
+  preludeProgram,
   type ScriptPlan,
 } from './process/remote-program.ts';
+export {
+  sessionStart,
+  sessionStartFor,
+} from './connection-server/session-bootstrap.ts';
 export {
   firstSetupMarker,
   type SetupMarker,

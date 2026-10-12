@@ -5,6 +5,7 @@
  */
 
 import type {EffectiveOptions} from '../config/effective.ts';
+import {configFilePath} from '../config/files.ts';
 import type {ClientPlatform} from '../config/platform.ts';
 import {posixQuote} from '../process/remote-program.ts';
 import type {SshTarget} from './target.ts';
@@ -182,36 +183,25 @@ export function buildOptionsQuery(request: OptionsQueryRequest): Invocation {
   };
 }
 
-/** `-F <file>` with a leading `~/` expanded against the home folder, or nothing when no file is configured. */
+/**
+ * The configured file's `-F` pair: nothing when unset, the expanded path when the value is absolute after the
+ * `~` expansion, and an error otherwise, which a caller must have refused before it ran.
+ */
 function configFileArguments(
   setting: Pick<OptionsQueryRequest, 'configFile' | 'homeFolder' | 'platform'>,
 ): string[] {
-  if (setting.configFile === '') {
-    return [];
+  const configured = configFilePath(
+    setting.configFile,
+    setting.homeFolder,
+    setting.platform,
+  );
+  if (configured.kind === 'invalid') {
+    throw new Error('remote.SSH.configFile is not absolute');
   }
-  return [
-    '-F',
-    expandHome(setting.configFile, setting.homeFolder, setting.platform),
-  ];
-}
-
-/**
- * A path with a leading `~/` (or `~\` on Windows), or a lone `~`, with the home folder in place of the `~`, joined
- * with the platform's separator; any other path unchanged.
- */
-export function expandHome(
-  file: string,
-  homeFolder: string,
-  platform: ClientPlatform,
-): string {
-  if (file === '~') {
-    return homeFolder;
+  if (configured.kind === 'file') {
+    return ['-F', configured.path];
   }
-  const windows = platform === 'windows';
-  if (file.startsWith('~/') || (windows && file.startsWith('~\\'))) {
-    return `${homeFolder}${windows ? '\\' : '/'}${file.slice(2)}`;
-  }
-  return file;
+  return [];
 }
 
 /** The `-D` or `-L` arguments of one forward. */

@@ -28,6 +28,8 @@ export interface ResultBlock {
   hostFacts: Record<string, string>;
   /** The `server.*` keys of the block, without their prefix. */
   serverFacts: Record<string, string>;
+  /** The `cli.*` keys of the block, without their prefix. */
+  cliFacts: Record<string, string>;
   /** The `timing.*` keys of the block, without their prefix, in integer milliseconds. */
   timings: Record<string, number>;
   /** Set when the printed status word was not a ScriptStatus; status is then ServerFailedToStart. */
@@ -51,6 +53,7 @@ const STATUS_WORDS: readonly ScriptStatus[] = [
 const STATUS_SET = new Set<string>(STATUS_WORDS);
 const HOST_PREFIX = 'host.';
 const SERVER_PREFIX = 'server.';
+const CLI_PREFIX = 'cli.';
 const TIMING_PREFIX = 'timing.';
 const TIMING_VALUE = /^\d+$/;
 
@@ -59,6 +62,7 @@ interface RawBlock {
   statusWord: string | undefined;
   hostFacts: Record<string, string>;
   serverFacts: Record<string, string>;
+  cliFacts: Record<string, string>;
   timings: Record<string, number>;
 }
 
@@ -67,6 +71,7 @@ function emptyBlock(): RawBlock {
     statusWord: undefined,
     hostFacts: {},
     serverFacts: {},
+    cliFacts: {},
     timings: {},
   };
 }
@@ -94,6 +99,8 @@ function recordLine(block: RawBlock, line: string): void {
     block.hostFacts[field.slice(HOST_PREFIX.length)] = value;
   } else if (field.startsWith(SERVER_PREFIX)) {
     block.serverFacts[field.slice(SERVER_PREFIX.length)] = value;
+  } else if (field.startsWith(CLI_PREFIX)) {
+    block.cliFacts[field.slice(CLI_PREFIX.length)] = value;
   } else if (field.startsWith(TIMING_PREFIX)) {
     if (TIMING_VALUE.test(value)) {
       block.timings[field.slice(TIMING_PREFIX.length)] = Number(value);
@@ -135,6 +142,7 @@ export function parseResult(
     status: 'ServerFailedToStart',
     hostFacts: latest.hostFacts,
     serverFacts: latest.serverFacts,
+    cliFacts: latest.cliFacts,
     timings: latest.timings,
   };
   if (isScriptStatus(latest.statusWord)) {
