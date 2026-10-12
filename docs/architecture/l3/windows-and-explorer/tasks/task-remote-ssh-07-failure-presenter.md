@@ -15,7 +15,8 @@ runtime review `daedalus`; design check `athena`.
 | `packages/remote-ssh/src/surfaces/progress-titles.ts` | new: `startTitleOf`, `phaseTitleOf` |
 | `packages/remote-ssh/l10n/bundle.l10n.json` and the 14 locale bundles | each new template as a key, its English text as the value in every file (the stand-down strings' pattern) |
 | `packages/remote-ssh/test/unit/failure-presenter.test.ts`, `progress-titles.test.ts`, `failure-strings.test.ts` | new |
-| `packages/remote-ssh/src/pipeline/connect.ts` and its test | one line: `failure({kind: 'licenceDeclined', reason: {id: 'S027', values: []}})` (ruled 2026-10-12: the reason belongs to the failure, not the presenter) |
+| `packages/remote-ssh/src/pipeline/connect.ts` and its test | one line: `failure({kind: 'licenceDeclined', reason: {id: 'S027'}})` (ruled 2026-10-12: the reason belongs to the failure, not the presenter) |
+| `packages/remote-ssh/src/pipeline/failure.ts` | `FailureDetail.reason` takes lib-authority's `FailureReason` (`{id: string} \| {text: string}`, what `Failed.reason` takes) instead of lib-ssh's, whose `{id}` is the classifier's closed `DiagnosticStringId` without S027; the lib-ssh import of `FailureReason` goes (amended 2026-10-12 from iris's report; checked: typecheck and the 88 pipeline tests green) |
 
 Nothing else. No `vscode` import in these modules: the editor is behind the ports of section 2. The activation wiring
 is part E of #140, not this card. `feature/ssh-resolver-front` (#141's old branch) may be read as material; nothing is
@@ -40,6 +41,16 @@ copied from it without being checked against this card.
 | S117 | `Retry` | F-2601 |
 | S092 | `More Actions...` | F-2601 |
 | S022 | `Close Remote` | F-2601 |
+| S014 | `Can't assign requested address` | F-2603 (a reason of lib-ssh's classifier) |
+| S032 | `Could not resolve hostname` | F-2603 (reason) |
+| S079 | `Hostname contains invalid characters` | F-2105 (reason) |
+| S094 | `Network is unreachable` | F-2603 (reason) |
+| S097 | `No route to host` | F-2603 (reason) |
+| S107 | `Port forwarding is disabled` | F-2305 (reason) |
+| S111 | `Remote host key has changed, port forwarding is disabled` | F-2305 (reason) |
+| S137 | `The connection timed out` | F-2104 (reason) |
+| S140 | `The operation timed out` | F-2104 (reason) |
+| S142 | `The process tried to write to a nonexistent pipe` | F-2603 (reason) |
 | S027 | `Connecting was canceled` | F-2304 |
 | S015 | `Cancel` | F-2601 |
 
@@ -96,6 +107,10 @@ export function failurePresenterOf(
 
 - `present(failed)` starts the dialog **without awaiting it** and returns `'handled'` at once (contracts §3.2: the
   buttons act later). A rejected dialog or action is swallowed (never an unhandled rejection) and leaves `'handled'`.
+- The reason ids above are every id lib-ssh's classifier gives as a `reason` (checked in `classify.ts` and
+  `rules.ts`, 2026-10-12). Its other ids (S005, S046, S116, S150) are hint and log texts for F-2605's view and the
+  log, not this dialog. A `{id}` reason with no template in the table is a programming error: the presenter shows S030
+  (no reason) and the test below pins it; it never shows a raw id.
 - Text: no `reason` gives S030 with [alias] and a full stop appended; a reason gives S031 with [alias, reason text],
   where a `{id}` reason is translated through the table and a `{text}` reason is used as it is, and a full stop is
   appended unless the reason already ends with one (F-2601 §3.4 S030 and S031, and §6 "text").
@@ -121,6 +136,8 @@ One assertion per `it`; the Cite starts the name. Fakes for the two ports record
 | F-2601 S031 | reason `{text 'Connection refused'}` | `Could not establish connection to "box": Connection refused.` |
 | F-2601 S031 | reason `{text 'Host key changed.'}` | no second full stop |
 | F-2601 S031 | reason `{id 'S027'}` | the reason is the translated S027 |
+| F-2601 S031 | reason `{id 'S094'}`, alias `box` | `Could not establish connection to "box": Network is unreachable.` |
+| F-2601 | reason `{id 'S999'}` (no template) | the S030 text, no raw id |
 | F-3902 rule 11 | kind `licenceDeclined`, no reason, alias `box` | `Could not establish connection to "box": Connecting was canceled.` |
 | F-2601 | any failure | buttons `['Close Remote', 'Retry', 'More Actions...']` |
 | contracts §3.2 | a dialog that never resolves | `present` resolves `'handled'` |
