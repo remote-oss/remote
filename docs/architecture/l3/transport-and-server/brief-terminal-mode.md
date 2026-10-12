@@ -28,7 +28,7 @@ connect in validate; this brief replaces that interim.
 4. Prompts while it logs in (S7 over S8, below).
 5. The probe, install and start run through S10 **over that terminal** (below).
 6. The window tunnel by path: `socks` (dynamic forwarding on: the install `ssh` holds the `-D`, F-2104 6.3, BR-11),
-   `secondSsh` (`ssh -N -L` in an `SSH Tunnel` terminal, F-2104 6.2), or `socket` (always two logins, `-L
+   `secondSsh` (`ssh -L` with the tunnel's remote command, in an `SSH Tunnel` terminal, F-2104 6.2), or `socket` (always two logins, `-L
    <port>:<socket path>`, F-2104 BR-2, F-2410 5.0 steps 5–6).
 
 ## Components
@@ -87,12 +87,16 @@ connect in validate; this brief replaces that interim.
   output unfiltered), and keeps S5's classification of ssh's own failure lines.
 - The connect wait (`ConnectWait`) is started after the platform choice, and stopped at the first output chunk instead
   of the `authenticated` marker. A `mode` input to the wait's owner decides which.
-- secondSsh and socket: purpose `tunnel`, `-N` (S2 doesn't emit it today; card adds it), `-L
-  127.0.0.1:<port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (already built), and `ExitOnForwardFailure
-  yes`.
+- secondSsh and socket: purpose `tunnel`, **no `-N`** (the tunnel runs the remote command ruled under W2 below, which
+  prints F-2308 BR-10's line), `-L 127.0.0.1:<port>:127.0.0.1:<remote port>` or `-L <port>:<socket path>` (already
+  built), and `ExitOnForwardFailure yes` (it exits 255 on a busy port; checked by daedalus on OpenSSH 10.2p1).
 - With dynamic forwarding off, the install `ssh` must not act on the user's own forwards (F-2104 6.2 step 1):
   `ClearAllForwardings yes` on that run only. S2's "never add" list gains this one exception, scoped to that run.
   Checked against a real sshd: a host block's `LocalForward` opens without it and doesn't open with it.
+  **It also clears command-line forwards** (daedalus, OpenSSH 10.2p1: a `-L` given beside it didn't open). So it may go
+  only on a run that carries no forward of ours: the second-login and socket paths' install run. The
+  dynamic-forwarding path's install run carries our `-D` and never gets it; that path's user forwards are the user's
+  own, as in shared mode (F-2104 BR-11). `buildInvocation` throws if the two are combined.
 
 ### W2 second-login and socket paths
 
@@ -151,8 +155,8 @@ needs a decision; it's taken when the lab result is in.
 |---|---|---|---|
 | T1 | S8 port, recording fake, adapter over `createTerminal`/`onDidWriteTerminalData`/`sendText`/`show`; trust outcomes | lib-ssh, remote-ssh | — |
 | T2 | Prompt recognition over terminal output: splitter plus partial line, the terminal list, held output while an input is open, the R-79 bound for unreachable questions | lib-ssh | T1 |
-| T3 | S2/S3: terminal invocation (`sh`, `-T`), the wait's first-output end, `-N`/remote-command tunnel invocation, `ClearAllForwardings` on the install run | lib-ssh | — |
-| T4 | S10 over the terminal: `ShellRuns` with S8 as writer and reader, the exact-line marker test with echoed input | lib-ssh | T1 |
+| T3 | S2/S3: terminal invocation (`sh`, `-T`), the wait's first-output end, the tunnel invocation with its remote command (no `-N`), `ClearAllForwardings` on a forward-free install run only | lib-ssh | — |
+| T4 | S10 over the terminal: `ShellRuns` with S8 as writer and reader, markers printed from two pieces, the test with echoed input | lib-ssh | T1 |
 | T5 | R1's terminal branch replacing connect-15's interim: the mode decision, the install terminal, the wait, login through T2, the server steps through T4 | remote-ssh | T1–T4 |
 | T6 | V7 socket path: `--socket-path`, `StartedServer.socketPath`, the discarded port record | lib-server | — |
 | T7 | W2's secondSsh and socket branches: the tunnel terminal, the success line, the 10 s wait, failures after the bound | lib-forwarding, remote-ssh | T1–T3, T6 |
