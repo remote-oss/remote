@@ -15,6 +15,12 @@
     }
   ],
   "infoLineCommands": [],
+  "runtimeCommands": [
+    {
+      "id": "opensshremotes.showDetails",
+      "purpose": "the \"(details)\" link of the connect progress, which reveals the connection's log"
+    }
+  ],
   "internal": [
     {
       "id": "remote-internal.getSshFoldersHistory",

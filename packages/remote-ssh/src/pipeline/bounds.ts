@@ -25,6 +25,19 @@ export const HOST_ZERO_TIMEOUT_SECONDS = 600;
 /** How long the shared connection's helper outlives its last window, long enough to carry a reload. */
 export const HELPER_GRACE_MILLISECONDS = 3000;
 
+/** The waits of the window's client of the helper: a running helper's answer, a started one's listening, the pause. */
+export const HELPER_CLIENT_WAITS = {
+  helloLimitMilliseconds: 2000,
+  startLimitMilliseconds: 10 * 1000,
+  retryMilliseconds: 100,
+} as const;
+
+/** How often the install asks for the host's lock while another window holds it, and how far apart. */
+export const HOST_LOCK_ATTEMPTS = 30;
+
+/** The pause between two asks for the host's lock. */
+export const HOST_LOCK_INTERVAL_MILLISECONDS = 1000;
+
 /** How long the helper may take to answer one request over its local socket. */
 const HELPER_REQUEST_MILLISECONDS = 10 * 1000;
 

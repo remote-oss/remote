@@ -3,7 +3,10 @@ import {
   CLIENT_CHECK_MILLISECONDS,
   connectionLimitsFor,
   effectiveConnectTimeoutSeconds,
+  HELPER_CLIENT_WAITS,
   HELPER_GRACE_MILLISECONDS,
+  HOST_LOCK_ATTEMPTS,
+  HOST_LOCK_INTERVAL_MILLISECONDS,
   PRECONNECT_MILLISECONDS,
   SERVER_BOUNDS,
   connectWaitsFor,
@@ -100,5 +103,23 @@ describe("the window's waits on the shared connection's helper", () => {
 
   it("F-2105 AC-9: the setting's 0 waits the extra 2 s plus the margin", () => {
     deepStrictEqual(connectionLimitsFor(undefined, 0).loginMilliseconds, 12000);
+  });
+});
+
+describe('the waits around the helper and the host lock', () => {
+  it("ruled on #253 Q10: the client's hello 2 s, a started helper's listening 10 s, retries 100 ms apart", () => {
+    deepStrictEqual(HELPER_CLIENT_WAITS, {
+      helloLimitMilliseconds: 2000,
+      startLimitMilliseconds: 10000,
+      retryMilliseconds: 100,
+    });
+  });
+
+  it('F-2408: the host lock is asked for 30 times', () => {
+    deepStrictEqual(HOST_LOCK_ATTEMPTS, 30);
+  });
+
+  it('F-2408: one second apart', () => {
+    deepStrictEqual(HOST_LOCK_INTERVAL_MILLISECONDS, 1000);
   });
 });
