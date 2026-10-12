@@ -79,6 +79,37 @@ describe('decideCliMode (card cli-02 table)', () => {
     );
   });
 
+  it('brief §2 order: a manual bootstrap is judged before the source', () => {
+    deepStrictEqual(
+      decideCliMode(inputWith({manualBootstrap: true, cliTemplate: ''})),
+      {kind: 'direct', reason: 'manualBootstrap'},
+    );
+  });
+
+  it('brief §2 order: the source is judged before the platform', () => {
+    deepStrictEqual(
+      decideCliMode(
+        inputWith({
+          cliTemplate: '',
+          hostPlatform: {operatingSystem: 'linux', architecture: 'riscv64'},
+        }),
+      ),
+      {kind: 'direct', reason: 'noCliSource'},
+    );
+  });
+
+  it('brief §2 order: the platform is judged before the terms', () => {
+    deepStrictEqual(
+      decideCliMode(
+        inputWith({
+          sourcesFree: false,
+          hostPlatform: {operatingSystem: 'linux', architecture: 'riscv64'},
+        }),
+      ),
+      {kind: 'direct', reason: 'noBuildForPlatform'},
+    );
+  });
+
   it('brief §3: the CLI is built for these eleven platforms, in this order', () => {
     deepStrictEqual(CLI_PLATFORMS, [
       'linux-x64',

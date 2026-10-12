@@ -42,6 +42,7 @@ export const PROFILE: ProductProfile = {
   tunnelApplicationName: 'fixture-tunnel',
   urlProtocol: 'fixture',
   serverDownloadUrlTemplate: '',
+  cliDownloadUrlTemplate: '',
   updateUrl: '',
   downloadUrl: '',
   serverLicense: [],
