@@ -60,7 +60,7 @@ or more, properties included (`now` excepted); no `const` arrow helpers; comment
 them, none with a feature, rule or decision id (ids may appear in test names); no duplicated code. Coverage of the
 module: 100 % lines, branches and functions.
 Gates: `pnpm identifiers`, `pnpm check-layout`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
-`pnpm test:unit`, `pnpm dupes`, `pnpm dead`, `pnpm check-licences`; `pnpm coverage` as card explorer-01 row 1 says.
+`pnpm test:unit`, `pnpm dupes`, `pnpm dead`, `pnpm coverage`, `pnpm check-licences` (card explorer-01 adds the package's `coverage.json`).
 
 ## 5. Gates and review
 

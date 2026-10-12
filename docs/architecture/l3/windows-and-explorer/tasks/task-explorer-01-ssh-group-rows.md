@@ -14,10 +14,23 @@ only (checked with `git ls-files`); it has no `src/` and no `coverage.json`. Thi
 |---|---|
 | `packages/remote-explorer/src/model/ssh-group.ts` | new |
 | `packages/remote-explorer/test/unit/ssh-group.test.ts` | new |
+| `packages/remote-explorer/coverage.json` | new, exactly the block below |
 
-Nothing else may change: no `package.json`, no `coverage.json`, no `src/index.ts`, no dependency. The integrator
-records the coverage ratchet once the package has code; until then `pnpm coverage` reports a missing ratchet for
-remote-explorer only (section 6, row 1).
+```json
+{
+  "exclude": {},
+  "ratchet": {
+    "lines": 100,
+    "branches": 100,
+    "functions": 100
+  }
+}
+```
+
+Nothing else may change: no `package.json`, no `src/index.ts`, no dependency. (Amended 2026-10-12: the package gets
+its first `src/` file here, so the coverage tool measures it from this card on and needs its ratchet now; checked on
+main with a stand-in module: 100/100/100, no problem, `pnpm check-layout` green. The README already lists the
+coverage exclusions as none.)
 
 ## 2. Contract
 
@@ -76,7 +89,7 @@ or more, properties included (`now` excepted); no `const` arrow helpers; comment
 them, none with a feature, rule or decision id (ids may appear in test names); no duplicated code. Coverage of the
 module: 100 % lines, branches and functions.
 Gates: `pnpm identifiers`, `pnpm check-layout`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
-`pnpm test:unit`, `pnpm dupes`, `pnpm dead`, `pnpm check-licences`; `pnpm coverage` as row 1 says.
+`pnpm test:unit`, `pnpm dupes`, `pnpm dead`, `pnpm coverage`, `pnpm check-licences`.
 
 ## 5. Gates and review
 
@@ -85,8 +98,8 @@ answers R1 to R4 and R6, maps each cite to its test name (R5), and lists the sec
 
 ## 6. Open rows (stop and report)
 
-1. `pnpm coverage` or `pnpm check-layout` demands a `coverage.json` or a `src/index.ts` for remote-explorer. Question:
-   who adds it? Stop and report the exact message.
+1. If `pnpm coverage` or `pnpm check-layout` still reports a problem for remote-explorer with the `coverage.json` of
+   section 1 in place, stop and report the exact message; do not add a `src/index.ts`, an exclusion or a dummy.
 2. The same alias twice in `aliases` (the companion's list already has none): two rows or one? Not tested.
 3. Characters outside the Basic Multilingual Plane in the alphabetical sort: the spec says "character codes". Code
    unit or code point comparison? Not tested.
