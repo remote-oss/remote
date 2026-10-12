@@ -19,6 +19,8 @@ interface Fixture {
   questions: string[];
   logins: TerminalLogin[];
   disposed: number;
+  /** The timers the copy armed and cancelled, so a take-down that leaves one running can be seen. */
+  timers: {armed: number; cancelled: number; fired: number};
   copy(controller?: AbortController): Promise<CopyOutcome>;
 }
 
@@ -28,9 +30,23 @@ function fixture(options: {reveal?: boolean} = {}): Fixture {
   const questions: string[] = [];
   const logins: TerminalLogin[] = [];
   const state = {disposed: 0};
+  const timers = {armed: 0, cancelled: 0, fired: 0};
+  const clockScheduler = clock.scheduler();
   const copier = terminalCopierOf({
     terminals,
-    scheduler: clock.scheduler(),
+    scheduler: {
+      setTimer: (milliseconds, callback) => {
+        timers.armed += 1;
+        const cancel = clockScheduler.setTimer(milliseconds, () => {
+          timers.fired += 1;
+          callback();
+        });
+        return () => {
+          timers.cancelled += 1;
+          cancel();
+        };
+      },
+    },
     invocationFor: () => INVOCATION,
     connectWait: () => ({
       connectTimeoutSeconds: 10,
@@ -58,6 +74,7 @@ function fixture(options: {reveal?: boolean} = {}): Fixture {
     get disposed() {
       return state.disposed;
     },
+    timers,
     copy: controller =>
       copier({
         localFile: '/local/a',
@@ -330,6 +347,69 @@ describe("the window's scp in a hidden login terminal (card ssh-29 table)", () =
     deepStrictEqual(
       [told.length, told[0], told.at(-1)],
       [20, 'scp failed: scp: error 280', 'scp: error 299'],
+    );
+  });
+
+  /** A failed copy whose cause `after` debug lines follow, and the cause it tells. */
+  async function causeAfter(after: number): Promise<string> {
+    const {result, terminal} = await started(fixture());
+    terminal.write('scp: /x: Permission denied\n');
+    terminal.write(
+      Array.from(
+        {length: after},
+        (unusedItem, index) => `debug1: ${String(index)}\n`,
+      ).join(''),
+    );
+    terminal.end(1);
+    const outcome = await result;
+    return outcome.kind === 'failed' ? outcome.failure.detail : outcome.kind;
+  }
+
+  it('#402: a cause followed by 199 debug lines is still told', async () => {
+    deepStrictEqual(
+      await causeAfter(199),
+      'scp failed: scp: /x: Permission denied',
+    );
+  });
+
+  it('#402: a cause followed by 200 debug lines is pushed out of the 200 lines kept, and only the failure is told', async () => {
+    deepStrictEqual(await causeAfter(200), 'scp failed');
+  });
+
+  it('contracts: a copy that ends takes down every timer it armed', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write("copy@host's password: ");
+    terminal.end(0);
+    await result;
+    deepStrictEqual(
+      made.timers.armed - made.timers.cancelled - made.timers.fired,
+      0,
+    );
+  });
+
+  it('contracts: a copy that ends before any output takes down the wait it armed', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.end(undefined, 'process');
+    await result;
+    deepStrictEqual(
+      made.timers.armed - made.timers.cancelled - made.timers.fired,
+      0,
+    );
+  });
+
+  it('contracts: a copy that is cancelled takes down every timer it armed', async () => {
+    const made = fixture();
+    const controller = new AbortController();
+    const {result, terminal} = await started(made, controller);
+    terminal.write(HANDSHAKE);
+    terminal.write('Some unknown question? ');
+    controller.abort();
+    await result;
+    deepStrictEqual(
+      made.timers.armed - made.timers.cancelled - made.timers.fired,
+      0,
     );
   });
 
