@@ -30,13 +30,17 @@ interface PickOptions<Answer> {
 
 /**
  * Shows a single-selection quick pick with the first choice focused and gives the answer of the choice taken, or
- * nothing when it is hidden without one or `cancellation` ends. The pick is disposed after.
+ * nothing when it is hidden without one or `cancellation` ends. A cancellation that has ended already shows nothing.
+ * The pick is disposed after.
  */
 function pickOne<Answer>(
   editor: Editor,
   options: PickOptions<Answer>,
   cancellation: AbortSignal,
 ): Promise<Answer | undefined> {
+  if (cancellation.aborted) {
+    return Promise.resolve(undefined);
+  }
   return new Promise(settle => {
     const pick = editor.window.createQuickPick();
     const items: vscode.QuickPickItem[] = options.choices.map(choice => ({
@@ -56,10 +60,11 @@ function pickOne<Answer>(
     }
     cancellation.addEventListener('abort', onAbort);
     pick.onDidAccept(() => {
-      const chosen = pick.selectedItems[0];
-      answer = options.choices.find(
-        choice => choice.label === chosen?.label,
-      )?.answer;
+      const [taken] = pick.selectedItems;
+      answer =
+        taken === undefined
+          ? undefined
+          : options.choices[items.indexOf(taken)]?.answer;
       pick.hide();
     });
     pick.onDidHide(() => {

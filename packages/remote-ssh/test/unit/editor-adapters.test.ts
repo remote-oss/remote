@@ -266,6 +266,38 @@ describe('platformPickPortOf (card remote-ssh-17 table)', () => {
     deepStrictEqual([await result, pick.hides], [undefined, 1]);
   });
 
+  it('contracts: a cancellation that aborted before the pick shows nothing and gives nothing', async () => {
+    const fake = fakeEditor(() => undefined);
+    const controller = new AbortController();
+    controller.abort();
+    const result = platformPickPortOf(fake.editor, same).pick(
+      platformPickOf('box'),
+      controller.signal,
+    );
+    deepStrictEqual([await result, fake.picks.length], [undefined, 0]);
+  });
+
+  it('F-2206: two choices with the same label are told apart by which one was taken', async () => {
+    const fake = fakeEditor(() => undefined);
+    const result = platformPickPortOf(fake.editor, same).pick(
+      {
+        placeholder: {id: 'platformPickPlaceholder', values: ['box']},
+        items: [
+          {label: 'Same', platform: 'linux'},
+          {label: 'Same', platform: 'windows'},
+        ],
+      },
+      NEVER,
+    );
+    const [pick] = fake.picks;
+    const second = pick?.items[1];
+    if (pick === undefined || second === undefined) {
+      throw new Error('no second item');
+    }
+    pick.accept(second);
+    deepStrictEqual(await result, 'windows');
+  });
+
   it('contracts: the pick is disposed after an answer', async () => {
     const fake = fakeEditor(() => undefined);
     const {result, pick} = shown(fake);
