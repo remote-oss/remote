@@ -9,6 +9,7 @@ import {
   HOST_LOCK_INTERVAL_MILLISECONDS,
   PRECONNECT_MILLISECONDS,
   SERVER_BOUNDS,
+  SESSION_RUN_LIMITS,
   connectWaitsFor,
 } from '../../src/pipeline/bounds.ts';
 
@@ -121,5 +122,27 @@ describe('the waits around the helper and the host lock', () => {
 
   it('F-2408: one second apart', () => {
     deepStrictEqual(HOST_LOCK_INTERVAL_MILLISECONDS, 1000);
+  });
+});
+
+describe("the shared session's run limits", () => {
+  it('ruled on #253 Q10: a run may take the host download and the ready wait, and 5 minutes more (36 minutes)', () => {
+    deepStrictEqual(SESSION_RUN_LIMITS.runDeadlineMilliseconds, 2_160_000);
+  });
+
+  it('ruled on #253 Q10: a caller waits one run more (41 minutes)', () => {
+    deepStrictEqual(SESSION_RUN_LIMITS.runWaitMilliseconds, 2_460_000);
+  });
+
+  it('ruled on #253 Q10: the deadline is never shorter than the host download and the ready wait', () => {
+    deepStrictEqual(
+      SESSION_RUN_LIMITS.runDeadlineMilliseconds >
+        (SERVER_BOUNDS.downloadSeconds + SERVER_BOUNDS.readySeconds) * 1000,
+      true,
+    );
+  });
+
+  it('ruled on #253 Q10: an input of 1 MiB at most goes through the shell', () => {
+    deepStrictEqual(SESSION_RUN_LIMITS.maximumInputBytes, 1_048_576);
   });
 });

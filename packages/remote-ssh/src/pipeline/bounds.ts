@@ -13,6 +13,23 @@ export const SERVER_BOUNDS: ServerBounds = {
   readySeconds: 60,
 };
 
+/** The margin each run of the shared session gets beyond the longest step it may take, and a queued run beyond that. */
+const RUN_MARGIN_MILLISECONDS = 5 * 60 * 1000;
+
+/** The longest step a run of the shared session may take: the host's download of the server, then its ready wait. */
+const LONGEST_STEP_MILLISECONDS =
+  (SERVER_BOUNDS.downloadSeconds + SERVER_BOUNDS.readySeconds) * 1000;
+
+/**
+ * The limits of the shared session's runs: a run's own deadline, never shorter than the host download and the
+ * server's ready wait together; a caller's whole wait, one run more; and the largest input carried through the shell.
+ */
+export const SESSION_RUN_LIMITS = {
+  runDeadlineMilliseconds: LONGEST_STEP_MILLISECONDS + RUN_MARGIN_MILLISECONDS,
+  runWaitMilliseconds: LONGEST_STEP_MILLISECONDS + 2 * RUN_MARGIN_MILLISECONDS,
+  maximumInputBytes: 1024 * 1024,
+} as const;
+
 /** How long the pre-connection script, with its question to the user, may take. */
 export const PRECONNECT_MILLISECONDS = 5 * 60 * 1000;
 
