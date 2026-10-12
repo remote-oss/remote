@@ -11,6 +11,7 @@ import {
   buildInvocation,
   classify,
   ConnectWait,
+  connectWaitMilliseconds,
   type ConnectWaitSettings,
   type ConnectionNotice,
   LineSplitter,
@@ -73,8 +74,6 @@ export interface TerminalConnectionDependencies {
   connectWait(): ConnectWaitSettings;
   logger: Logger;
 }
-
-const MILLISECONDS_PER_SECOND = 1000;
 
 /**
  * The failure of a login that did not reach the handover, as the pipeline reads it. A terminal that ended with no exit
@@ -154,7 +153,7 @@ export function openTerminalConnectionStep(
       });
       const reader = new PromptReader(
         dependencies.scheduler,
-        waitSettings.connectTimeoutSeconds * MILLISECONDS_PER_SECOND,
+        connectWaitMilliseconds(waitSettings),
         {
           onQuestion: text => {
             asking.questions?.onQuestion(text);
