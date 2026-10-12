@@ -6,6 +6,10 @@
     ".": {
       "types": "./.tsc/src/index.d.ts",
       "default": "./src/index.ts"
+    },
+    "./testing/*": {
+      "types": "./.tsc/src/testing/*.d.ts",
+      "default": "./src/testing/*.ts"
     }
   }
 }

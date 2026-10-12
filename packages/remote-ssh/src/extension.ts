@@ -4,8 +4,13 @@
  * serves, opens the log and registers the commands the package serves.
  */
 
+import {readFile} from 'node:fs/promises';
+import {homedir} from 'node:os';
+import path from 'node:path';
 import * as vscode from 'vscode';
+import {gateEditorOf, type ProposalName, setupPortsOf} from 'lib-authority';
 import {identifierHost} from 'lib-identifiers';
+import {readProfile} from 'lib-product';
 import {standDownHost} from 'lib-standdown';
 import {activateRemoteSsh} from './activation.ts';
 import {helpLinksOf} from './help-commands.ts';
@@ -16,15 +21,50 @@ const STAND_DOWN_WARNING =
   'Remote - SSH stays inactive in this window because another extension that provides SSH remotes is enabled. Both use the same commands and settings. Disable one of the two and reload the window.';
 const STAND_DOWN_BUTTON = 'Show Other Extension';
 
+/** The English templates of the proposed-API setup notices; the placeholders are filled by the setup. */
+const SETUP_TEXT_TEMPLATES = {
+  setup:
+    "{0} needs proposed VS Code APIs that {1} has not enabled for it. Add {2} to 'enable-proposed-api' in argv.json, then restart {1}.",
+  failedAttempt:
+    "The previous setup attempt did not enable the proposed APIs {0} needs. Check that 'enable-proposed-api' in argv.json lists '{2}', then restart {1}.",
+  restart: 'Quit and start {1} again to apply the changes to argv.json.',
+  configureButton: 'Configure Runtime Arguments',
+  notNowButton: 'Not Now',
+  quitButton: 'Quit {1}',
+};
+
 /** What the editor tells about the extension, as far as activation reads it. */
 interface Manifest {
   name: string;
+  displayName: string;
   version: string;
   extensionPack?: string[];
+  enabledApiProposals?: ProposalName[];
   contributes?: {
     commands?: Array<{command: string; title: string}>;
     remoteHelp?: Record<string, unknown>;
   };
+}
+
+/** The `dataFolderName` of the editor's product, which names the folder of its runtime arguments. */
+async function dataFolderNameOfEditor(): Promise<string> {
+  const reading = readProfile(
+    await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
+  );
+  if (reading.kind === 'unreadable') {
+    throw new Error(`product.json cannot be read: ${reading.reason}`);
+  }
+  return reading.profile.dataFolderName;
+}
+
+/** The text of a file, or nothing when it cannot be read. */
+async function readArgvFile(filePath: string): Promise<string | undefined> {
+  try {
+    return await readFile(filePath, 'utf8');
+  } catch {
+    // No runtime-arguments file yet, or one the user cannot read: the same as none.
+    return undefined;
+  }
 }
 
 /** Called by the editor when it resolves an `ssh-remote` authority, runs one of the commands, or opens a URI. */
@@ -66,6 +106,28 @@ export async function activate(
     },
     channels: vscode.window,
     clock: Date.now,
+    gate: logFailure =>
+      setupPortsOf(gateEditorOf(vscode, context, readArgvFile), {
+        extensionId: context.extension.id,
+        displayName: manifest.displayName,
+        applicationName: vscode.env.appName,
+        proposals: manifest.enabledApiProposals ?? [],
+        argv: {
+          portableFolder: process.env.VSCODE_PORTABLE,
+          homeFolder: homedir(),
+          dataFolderName: dataFolderNameOfEditor,
+        },
+        platform: process.platform,
+        texts: {
+          setup: vscode.l10n.t(SETUP_TEXT_TEMPLATES.setup),
+          failedAttempt: vscode.l10n.t(SETUP_TEXT_TEMPLATES.failedAttempt),
+          restart: vscode.l10n.t(SETUP_TEXT_TEMPLATES.restart),
+          configureButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.configureButton),
+          notNowButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.notNowButton),
+          quitButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.quitButton),
+        },
+        logFailure,
+      }),
   });
   if (result.kind === 'serving') {
     context.subscriptions.push({
