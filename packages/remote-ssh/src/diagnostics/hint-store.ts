@@ -1,0 +1,45 @@
+/**
+ * @fileoverview The connection hints the extension keeps for its troubleshooting view: the records of the two most
+ * recent resolves, oldest first. Every function returns a new store and changes nothing it is given.
+ */
+
+type SessionHint =
+  | {kind: 'environment'; message: string; details?: string}
+  | {
+      kind: 'error';
+      status: string;
+      message: string;
+      details?: string;
+      mitigations?: string[];
+      resources?: string[];
+    }
+  | {kind: 'log'; text: string};
+
+/** The hints of one resolve, which started at the ISO time `started`. */
+export interface SessionRecord {
+  started: string;
+  hints: SessionHint[];
+}
+
+/** The records kept, oldest first. */
+export interface HintStore {
+  records: SessionRecord[];
+}
+
+/** How many records the store keeps. */
+const RECORDS_KEPT = 2;
+
+/** A store with no record. */
+export function emptyHintStore(): HintStore {
+  return {records: []};
+}
+
+/** `store` with `record` as its newest record; the oldest ones beyond the two kept are dropped. */
+export function addHint(store: HintStore, record: SessionRecord): HintStore {
+  return {records: [...store.records, record].slice(-RECORDS_KEPT)};
+}
+
+/** A store with no record, whatever `store` held. */
+export function clearAll(store: HintStore): HintStore {
+  return {records: store.records.slice(store.records.length)};
+}
