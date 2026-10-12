@@ -10,12 +10,11 @@
  * folder are removed at the end, whatever the outcome. Run `pnpm package` first; `pnpm test:acceptance` does both.
  */
 
-import {spawn, spawnSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -28,6 +27,13 @@ import {
 } from '@vscode/test-electron';
 import {build} from 'esbuild';
 import {
+  acceptanceRunId,
+  checked,
+  startHostContainer,
+  type CommandRunner,
+  runCommand,
+} from './acceptance-run.ts';
+import {
   isMainModule,
   messageOf,
   REPOSITORY_ROOT,
@@ -35,11 +41,12 @@ import {
   sortedEntries,
 } from './repository.ts';
 
+/** The port mapping and the real runner, re-exported for the tests. */
+export {mappedPort, runCommand} from './acceptance-run.ts';
+export type {CommandResult} from './acceptance-run.ts';
+
 /** The editor version the tests run on: the floor of ADR-0007. */
 const EDITOR_VERSION = '1.139.1';
-
-/** The image tag of the SSH host. */
-export const HOST_IMAGE = 'remote-oss-acceptance-host';
 
 /** The packages whose VSIX files are installed into the editor under test, by their extension id. */
 const EXTENSIONS_UNDER_TEST = new Map([
@@ -67,19 +74,6 @@ export interface HarnessVariables {
   HARNESS_VSIX_FILES: string;
 }
 
-/** The result of one command: its exit status and its standard output and error. */
-export interface CommandResult {
-  status: number;
-  stdout: string;
-  stderr: string;
-}
-
-/** Runs a program with its arguments and waits for it. */
-type CommandRunner = (
-  program: string,
-  programArguments: readonly string[],
-) => CommandResult;
-
 /** Waits the given number of milliseconds. */
 type Sleeper = (milliseconds: number) => Promise<void>;
 
@@ -101,29 +95,6 @@ export interface HarnessDependencies {
 const READY_ATTEMPTS = 40;
 
 const READY_INTERVAL = 500;
-
-function checked(
-  command: CommandRunner,
-  program: string,
-  programArguments: readonly string[],
-): string {
-  const result = command(program, programArguments);
-  if (result.status !== 0) {
-    throw new Error(
-      `${program} ${programArguments.join(' ')} failed (${String(result.status)}): ${result.stderr.trim()}`,
-    );
-  }
-  return result.stdout;
-}
-
-/** The host port Docker maps to the container's port 22, from `docker port` output such as `127.0.0.1:49153`. */
-export function mappedPort(dockerPortOutput: string): number {
-  const match = /:(\d+)\s*$/m.exec(dockerPortOutput);
-  if (match?.[1] === undefined) {
-    throw new Error(`no mapped port in '${dockerPortOutput.trim()}'`);
-  }
-  return Number(match[1]);
-}
 
 /** The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent. */
 export function harnessSshConfig(port: number, runFolder: string): string {
@@ -200,41 +171,10 @@ async function prepare(
   started: string[],
 ): Promise<HarnessVariables> {
   const {command} = dependencies;
-  checked(command, 'docker', [
-    'build',
-    '--load',
-    '--quiet',
-    '--tag',
-    HOST_IMAGE,
-    path.join(root, 'tests', 'acceptance', 'host'),
-  ]);
-  const keyFile = path.join(runFolder, 'id_ed25519');
-  checked(command, 'ssh-keygen', [
-    '-q',
-    '-t',
-    'ed25519',
-    '-N',
-    '',
-    '-C',
-    'acceptance',
-    '-f',
-    keyFile,
-  ]);
-  const publicKey = readFileSync(`${keyFile}.pub`, 'utf8').trim();
-  const container = checked(command, 'docker', [
-    'run',
-    '--detach',
-    '--rm',
-    '--env',
-    `AUTHORIZED_KEY=${publicKey}`,
-    '--publish',
-    '127.0.0.1::22',
-    HOST_IMAGE,
-  ]).trim();
-  started.push(container);
-  const port = mappedPort(
-    checked(command, 'docker', ['port', container, '22']),
-  );
+  const runId = acceptanceRunId(process.env, process.pid);
+  const host = startHostContainer(command, root, runId, runFolder);
+  started.push(host.container);
+  const port = host.port;
   const configFile = path.join(runFolder, 'ssh_config');
   writeFileSync(configFile, harnessSshConfig(port, runFolder));
   writeUserSettings(runFolder, configFile);
@@ -251,7 +191,7 @@ async function prepare(
   return {
     REMOTE_OSS_ACCEPTANCE: '1',
     HARNESS_SSH_CONFIG: configFile,
-    HARNESS_CONTAINER: container,
+    HARNESS_CONTAINER: host.container,
     HARNESS_RUN_FOLDER: runFolder,
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
   };
@@ -342,19 +282,6 @@ export async function bundleSuite(root: string): Promise<void> {
 async function editorCli(): Promise<string> {
   const executable = await downloadAndUnzipVSCode(EDITOR_VERSION);
   return resolveCliPathFromVSCodeExecutablePath(executable);
-}
-
-/** Runs a program and collects its exit status and output. */
-export function runCommand(
-  program: string,
-  programArguments: readonly string[],
-): CommandResult {
-  const result = spawnSync(program, programArguments, {encoding: 'utf8'});
-  return {
-    status: result.status ?? 1,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
 }
 
 /** The lines in the editor's output that report a hung window; the run is retried once on them. */

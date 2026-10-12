@@ -75,6 +75,9 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The runner is shared and keeps its Docker state: remove what an earlier attempt of this run left, by the
+      # run's own label. The same step, with `if: always()`, closes the job, so a killed run leaves nothing.
+      - run: pnpm acceptance:clean
       # Ubuntu 24.04 restricts unprivileged user namespaces, which the editor's renderer sandbox needs; a kernel
       # without that AppArmor switch (the org's Fedora runners) has nothing to lift.
       - run: |
@@ -89,6 +92,8 @@ jobs:
           else
             DISPLAY=${DISPLAY:-:99} pnpm test:acceptance
           fi
+      - if: always()
+        run: pnpm acceptance:clean
 
   # The server lifecycle (probe, install, start, lock, kill, uninstall, clean-up) against a stand-in server on the same
   # SSH host container, with no editor and no download.
@@ -104,7 +109,10 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm acceptance:clean
       - run: pnpm test:acceptance:server
+      - if: always()
+        run: pnpm acceptance:clean
 
   # The real VSCodium server for musl, installed and started on the same host: once by the host's own download, once
   # with the host's network cut so that the client downloads and copies, and once from the archive the client kept.
@@ -124,7 +132,10 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm acceptance:clean
       - run: pnpm test:acceptance:real-server
+      - if: always()
+        run: pnpm acceptance:clean
 
   # integration:  pnpm test:integration under xvfb, after the testing ADR
   # per-package checks by profile: added in a later change
