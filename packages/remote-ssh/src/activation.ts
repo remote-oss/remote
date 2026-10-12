@@ -111,6 +111,8 @@ export type ActivationResult =
   | {
       kind: 'serving';
       logger: Logger;
+      /** Reveals the log channel, as Show Log does. */
+      revealLog(): void;
       proposals: ProposalGrants;
       setup: SetupRun['interaction'];
       dispose(): void;
@@ -186,6 +188,9 @@ export async function activateRemoteSsh(
   return {
     kind: 'serving',
     logger: logChannel.logger,
+    revealLog: () => {
+      logChannel.reveal();
+    },
     proposals: probed.proposals,
     setup: probed.setupRun.interaction,
     dispose: () => {
