@@ -186,6 +186,26 @@ describe('pickerModel (card remote-ssh-02)', () => {
       parseError: {file: 'F', reason: 'R'},
     });
   });
+
+  it('F-2201 AC-2: a host defined in the user file and in the system file is listed twice', () => {
+    const model = pickerModel(
+      {
+        hosts: [
+          {name: 'both', file: '/home/dev/.ssh/config'},
+          {name: 'both', file: '/etc/ssh/ssh_config'},
+        ],
+      },
+      '',
+    );
+    deepStrictEqual(
+      'items' in model
+        ? model.items
+            .filter(item => item.kind === 'host')
+            .map(item => item.label)
+        : model,
+      ['both', 'both'],
+    );
+  });
 });
 
 describe('outcomeOfPick (card remote-ssh-02)', () => {

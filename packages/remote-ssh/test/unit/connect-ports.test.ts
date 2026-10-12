@@ -221,6 +221,18 @@ describe('the connect assembled from the editor and the machine', () => {
     );
   });
 
+  it('F-2304 AC-29: a typed user@host or user@host:port target is titled by the host alone', () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
+    deepStrictEqual(
+      [
+        options.startTitle(decoded('alex@dev')),
+        options.startTitle(decoded('alex@dev:22')),
+      ],
+      ['<Setting up SSH Host dev>', '<Setting up SSH Host dev>'],
+    );
+  });
+
   it('F-2304: a stage shows its own message', () => {
     const {surfaces, machine, recorded} = assemblyInputs();
     const {options} = connectAssemblyOf(surfaces, machine, loggerOf(recorded));
