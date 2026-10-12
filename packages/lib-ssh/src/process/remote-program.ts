@@ -1,8 +1,8 @@
 /**
  * @fileoverview What an `ssh` run sends to the host to run a script: the remote command and the text that goes to
- * its standard input. A script without input travels on standard input of `sh -s`, which every login shell parses
- * the same way. A script with input needs standard input for that input, so it travels as the one quoted argument
- * of `sh -c`, for login shells that read single quotes as POSIX does.
+ * its standard input. A script without input travels on standard input of `sh -s`. A script with input travels as a
+ * prelude ahead of its input on standard input, read by a fixed command whose one quoted word every login shell
+ * parses alike.
  */
 
 import type {ScriptInput, ScriptRequest} from 'lib-host';
@@ -96,13 +96,6 @@ export function planScript(
       kind: 'planned',
       remoteProgram: 'sh -s',
       input: {kind: 'text', text: [...lines, script.text].join('\n')},
-    };
-  }
-  if (lines.length === 0) {
-    return {
-      kind: 'planned',
-      remoteProgram: `sh -c ${posixQuote(script.text)}`,
-      input: request.input,
     };
   }
   const prelude = `${[...lines, script.text].join('\n')}\n`;

@@ -184,8 +184,8 @@ describe('SSH host channel', () => {
         ),
         {
           kind: 'planned',
-          remoteProgram: "sh -c 'cat'",
-          input: {kind: 'text', text: 'data'},
+          remoteProgram: `sh -c 'eval "$(dd bs=1 count=4 2>/dev/null)"'`,
+          input: {kind: 'text', text: 'cat\ndata'},
         },
       );
     });
@@ -197,9 +197,74 @@ describe('SSH host channel', () => {
         ),
         {
           kind: 'planned',
-          remoteProgram: "sh -c 'cat'",
-          input: {kind: 'file', localFile: '/a'},
+          remoteProgram: `sh -c 'eval "$(dd bs=1 count=4 2>/dev/null)"'`,
+          input: {kind: 'prefixedFile', prefix: 'cat\n', localFile: '/a'},
         },
+      );
+    });
+
+    it('#443: with input and no environment, the remote command is the fixed reader of the prelude', () => {
+      const plan = planScript(
+        request({script: 'cat', input: {kind: 'text', text: 'abc'}}),
+      );
+      strictEqual(
+        plan.kind === 'planned' ? plan.remoteProgram : plan.reason,
+        `sh -c 'eval "$(dd bs=1 count=4 2>/dev/null)"'`,
+      );
+    });
+
+    it('#443: with input and no environment, the prelude leads the text on the input', () => {
+      const plan = planScript(
+        request({script: 'cat', input: {kind: 'text', text: 'abc'}}),
+      );
+      deepStrictEqual(plan.kind === 'planned' ? plan.input : plan.kind, {
+        kind: 'text',
+        text: 'cat\nabc',
+      });
+    });
+
+    it('#443: with a streamed file and no environment, the prelude is the prefix of the file', () => {
+      const plan = planScript(
+        request({script: 'cat', input: {kind: 'file', localFile: '/f'}}),
+      );
+      deepStrictEqual(plan.kind === 'planned' ? plan.input : plan.kind, {
+        kind: 'prefixedFile',
+        prefix: 'cat\n',
+        localFile: '/f',
+      });
+    });
+
+    it('#443: no combination of input and environment puts a newline or ! in the remote command', () => {
+      const runs = [
+        planScript(request({script: 'cat'})),
+        planScript(request({environment: {FIRST: 'x'}, script: 'cat'})),
+        planScript(request({script: 'cat', input: {kind: 'text', text: 'a'}})),
+        planScript(
+          request({
+            environment: {FIRST: 'x'},
+            script: 'cat',
+            input: {kind: 'text', text: 'a'},
+          }),
+        ),
+        planScript(
+          request({script: 'cat', input: {kind: 'file', localFile: '/f'}}),
+        ),
+        planScript(
+          request({
+            environment: {FIRST: 'x'},
+            script: 'cat',
+            input: {kind: 'file', localFile: '/f'},
+          }),
+        ),
+      ];
+      deepStrictEqual(
+        runs.map(plan =>
+          plan.kind === 'planned'
+            ? plan.remoteProgram.includes('\n') ||
+              plan.remoteProgram.includes('!')
+            : true,
+        ),
+        [false, false, false, false, false, false],
       );
     });
 
@@ -460,7 +525,7 @@ describe('SSH host channel', () => {
       );
       deepStrictEqual(
         spawner.started[0]?.input.map(piece => [...piece]),
-        [[1, 2], [3]],
+        [[...Buffer.from('echo hi\n', 'utf8')], [1, 2], [3]],
       );
     });
 

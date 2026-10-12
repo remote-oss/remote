@@ -111,10 +111,13 @@ export class FakeClientProcess implements ProcessHandle {
     this.onInputEnd.push(listener);
   }
 
-  /** Prints the SHA-256 of everything written to the input once it is closed, then exits 0. */
-  digestInputThenExit(): void {
+  /**
+   * The remote command reads `prefix` from its input before the script's own input does; this prints the SHA-256 of
+   * the rest once the input is closed, then exits 0.
+   */
+  digestInputThenExit(prefix: Uint8Array): void {
     this.whenInputEnds(() => {
-      const bytes = Buffer.concat(this.input);
+      const bytes = Buffer.concat(this.input).subarray(prefix.length);
       this.output(`${createHash('sha256').update(bytes).digest('hex')}\n`);
       this.exit(0);
     });
