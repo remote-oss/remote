@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -48,7 +48,7 @@ jobs:
       fail-fast: false
       matrix:
         check: [dupes, dead, coverage]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -61,11 +61,11 @@ jobs:
       - run: pnpm identifiers
       - run: pnpm ${{ matrix.check }}
 
-  # The editor under test against the SSH host container of tests/acceptance, one job per slice. The runner's Docker,
-  # OpenSSH client and xvfb are preinstalled.
+  # The editor under test against the SSH host container of tests/acceptance, one job per slice. The runner's Docker
+  # and OpenSSH client are preinstalled, and xvfb or a display of its own.
   acceptance-slice-1:
     name: acceptance (slice 1)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -75,16 +75,26 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Ubuntu 24.04 restricts unprivileged user namespaces, which the editor's renderer sandbox needs.
-      - run: sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
-      # The run retries once inside the tool when the editor window is reported unresponsive; both attempts land in this log.
-      - run: xvfb-run --auto-servernum pnpm test:acceptance
+      # Ubuntu 24.04 restricts unprivileged user namespaces, which the editor's renderer sandbox needs; a kernel
+      # without that AppArmor switch (the org's Fedora runners) has nothing to lift.
+      - run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      # The run retries once inside the tool when the editor window is reported unresponsive; both attempts land in this
+      # log. A runner without xvfb-run has a display of its own (DISPLAY, :99 on the org's runners).
+      - run: |
+          if command -v xvfb-run >/dev/null; then
+            xvfb-run --auto-servernum pnpm test:acceptance
+          else
+            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance
+          fi
 
   # The server lifecycle (probe, install, start, lock, kill, uninstall, clean-up) against a stand-in server on the same
   # SSH host container, with no editor and no download.
   acceptance-server:
     name: acceptance (server lifecycle)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -104,7 +114,7 @@ jobs:
   acceptance-real-server:
     name: acceptance (real server)
     if: inputs.real-server || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
