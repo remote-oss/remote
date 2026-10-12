@@ -32,7 +32,7 @@ applied to the parsed host. One rule for both forms; nothing new is invented.
 |---|---|---|---|
 | A (amends remote-ssh-03) | `window/host-label.ts` | `hostLabel(target)`: for `plain`, `parseTypedHost(text)` first; then for every form: the host without user, `:<port>` only after an IP literal (one pair of brackets stripped). Test rows: every row of BR-3's table, plus `my-alias:22` → `my-alias`, `u@192.0.2.10` → `192.0.2.10`, `u@192.0.2.10:2222` → `192.0.2.10:2222`, `u@my-alias:2200` → `my-alias` | F-2502 BR-3, AC-14, AC-15, AC-35 |
 | B | `window/label-suffix.ts` | `workspaceSuffixOf(target): StringRef` → `{id: <SSH prefix id>, values: [hostLabel(target)]}`. The `SSH: {0}` text is a new string-table entry ruled below; the pure model carries the id (R-29). `shouldRegisterLabel(outcome)`: true only for a resolve whose connection is up, false for a failed one | F-2502 BR-2, BR-3, AC-17, AC-34 |
-| C | `window/web-ui.ts` | `webUiUrl(port: number \| 'none'): string \| undefined` (lib-server's `serverPort` result as is) → `http://localhost:<port>/`, or nothing for `'none'` (socket mode, local window, no server) | F-2509 BR-5, AC-19, AC-20 |
+| C | `window/web-ui.ts` | `webUiUrl(port: number \| 'none'): string \| undefined` (lib-server's `serverPort` result as is) → `http://localhost:<port>/`, or nothing for `'none'` (socket mode, local window, no server: AC-19; a new port after a reconnection: AC-20) | F-2509 BR-5, AC-19, AC-20 |
 
 ## Adapter parts (Claude cards; one `vscode` file each)
 
