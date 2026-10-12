@@ -54,6 +54,58 @@ export interface AttachedPromptSurface {
   dispose(): void;
 }
 
+/** The text of a prompt part in the display language. */
+function describe(editor: PromptEditor, text: PromptText): string {
+  return textOf(text, editor.translate);
+}
+
+/**
+ * Shows one question as the classifier chooses (a pick for a host key, a masked input otherwise) and gives the user's
+ * answer, or nothing when it was dismissed, the signal ended it, or the editor could not show it.
+ */
+export async function askQuestion(
+  editor: PromptEditor,
+  text: string,
+  displayHost: string,
+  cancellation: AbortSignal,
+): Promise<string | undefined> {
+  try {
+    return await askUser(
+      editor,
+      classifyPrompt(text, displayHost),
+      cancellation,
+    );
+  } catch {
+    // An editor that cannot show the question is the same as a user who dismissed it.
+    return undefined;
+  }
+}
+
+/** The answer of one shown question, as the classifier chose: a pick or a masked input. */
+async function askUser(
+  editor: PromptEditor,
+  surface: PromptSurface,
+  cancellation: AbortSignal,
+): Promise<string | undefined> {
+  if (surface.surface === 'maskedInput') {
+    return editor.maskedInput(
+      {placeholder: describe(editor, surface.placeholder)},
+      cancellation,
+    );
+  }
+  return editor.pick(
+    {
+      title: describe(editor, surface.title),
+      placeholder: describe(editor, surface.placeholder),
+      items: surface.items.map(item => ({
+        label: describe(editor, item.label),
+        answer: item.answer,
+      })),
+    },
+    cancellation,
+  );
+}
+
 /** Starts showing the lease's questions. */
 export function attachPromptSurface(
   lease: LoginLease,
@@ -62,10 +114,6 @@ export function attachPromptSurface(
 ): AttachedPromptSurface {
   const open = new Map<number, AbortController>();
   const state: {waiting: {dispose(): void} | undefined} = {waiting: undefined};
-
-  function describe(text: PromptText): string {
-    return textOf(text, editor.translate);
-  }
 
   function stopWaiting(): void {
     state.waiting?.dispose();
@@ -80,42 +128,16 @@ export function attachPromptSurface(
     ).catch(() => false);
   }
 
-  async function askUser(
-    surface: PromptSurface,
-    cancellation: AbortSignal,
-  ): Promise<string | undefined> {
-    if (surface.surface === 'maskedInput') {
-      return editor.maskedInput(
-        {placeholder: describe(surface.placeholder)},
-        cancellation,
-      );
-    }
-    return editor.pick(
-      {
-        title: describe(surface.title),
-        placeholder: describe(surface.placeholder),
-        items: surface.items.map(item => ({
-          label: describe(item.label),
-          answer: item.answer,
-        })),
-      },
-      cancellation,
-    );
-  }
-
   async function show(promptId: number, text: string): Promise<void> {
-    const surface = classifyPrompt(text, options.displayHost);
     const controller = new AbortController();
     open.set(promptId, controller);
-    let answer: string | undefined;
-    try {
-      answer = await askUser(surface, controller.signal);
-    } catch {
-      // An editor that cannot show the question is the same as a user who dismissed it.
-      answer = undefined;
-    } finally {
-      open.delete(promptId);
-    }
+    const answer = await askQuestion(
+      editor,
+      text,
+      options.displayHost,
+      controller.signal,
+    );
+    open.delete(promptId);
     if (!controller.signal.aborted) {
       settle(promptId, answer);
     }
