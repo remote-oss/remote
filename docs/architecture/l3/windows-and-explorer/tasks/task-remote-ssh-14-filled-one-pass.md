@@ -2,7 +2,8 @@
 
 Why: athena's follow-up (themis first noted the `$&` part on #306). `filled` in `surfaces/strings.ts` puts the values
 in one at a time with `replaceAll(string, string)`, which has two defects, both checked with node:
-1. A replacement string reads `$&`, `$1` and the like as patterns: an alias `box$&` shows as `box{0}`.
+1. A replacement string reads `$&` and `$$` as patterns (`$1` stays literal, since there is no capture group): an alias
+   `box$&` shows as `box{0}`, and `a$$b` as `a$b`.
 2. A value that contains `{1}` (a typed alias goes through as written) is filled again by the next value.
 
 Reviewing coder: `remote-coding-worker-1`.
@@ -40,13 +41,14 @@ gives its template back (`(template: string) => template`).
 |---|---|---|
 | F-3902 rule 8 | `filled(same, 'Host "{0}"', ['box$&'])` | `Host "box$&"` |
 | F-3902 rule 8 | `filled(same, 'Host "{0}"', ['box$1'])` | `Host "box$1"` |
+| F-3902 rule 8 | `filled(same, 'Host "{0}"', ['a$$b'])` | `Host "a$$b"` |
 | F-3902 rule 8 | `filled(same, '{0} and {1}', ['a{1}', 'b'])` | `a{1} and b` |
 | F-3902 rule 8 | `filled(same, '{0} and {1}', ['a'])` | `a and {1}` |
 | F-3902 rule 8 | `filled(same, '{0}, again {0}', ['z'])` | `z, again z` |
 | F-3902 rule 8 | `filled(() => 'Hôte {0}', 'Host {0}', ['box'])` | `Hôte box` (the translation is filled, not the English) |
 | F-3902 rule 8 | `filled(same, 'no places')` | `no places` |
 
-The first and third rows fail on today's `filled` (it gives `Host "box{0}"` and `ab and b`) and pass with section 2;
+The first, third and fourth rows fail on today's `filled` (it gives `Host "box{0}"`, `Host "a$b"` and `ab and b`) and pass with section 2;
 the others pass on both and pin what must not change. Checked on a prototype (2026-10-12). Every existing test of the
 package passes unchanged.
 
