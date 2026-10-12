@@ -40,7 +40,7 @@ const SERVING_LINES = [
   'done',
   'PORT=${PORT%%-*}',
   'if [ "$PORT" = 0 ]; then',
-  "  PORT=$(awk 'BEGIN { srand(); print int(20000 + rand() * 20000) }')",
+  '  PORT=$(( 20000 + $(od -An -N2 -tu2 /dev/urandom) % 20000 ))',
   'fi',
   'echo "Extension host agent listening on $PORT"',
 ];
