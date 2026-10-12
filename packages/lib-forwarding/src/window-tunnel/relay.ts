@@ -41,6 +41,8 @@ export interface RelayTunnelRequest {
   /** The port on this machine's loopback the window connects to. */
   localPort: number;
   limits: WaitLimits;
+  /** Told once, when the first probe through the dialer did not work and the tunnel goes on waiting. */
+  onWaiting?: () => void;
 }
 
 /**
@@ -166,13 +168,27 @@ export async function openRelayTunnel(
       detail: caught instanceof Error ? caught.message : String(caught),
     };
   }
+  let closeRan = false;
   function close(): void {
+    if (closeRan) {
+      return;
+    }
+    closeRan = true;
     listening.close();
     closeConnections();
   }
+  let waitingTold = false;
   const ready = await succeedsWithin(
     async () => {
-      (await dialer.dial(target)).close();
+      try {
+        (await dialer.dial(target)).close();
+      } catch (caught) {
+        if (!waitingTold) {
+          waitingTold = true;
+          request.onWaiting?.();
+        }
+        throw caught;
+      }
     },
     request.limits,
     request.scheduler,

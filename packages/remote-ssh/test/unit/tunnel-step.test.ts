@@ -34,6 +34,7 @@ function stepWith(
     settings?: TunnelSettings;
     dialScript?: readonly DialAnswer[];
     port?: number | undefined;
+    onWaiting?: () => void;
   } = {},
 ): {
   open: () => ReturnType<ReturnType<typeof openTunnelStep>>;
@@ -75,7 +76,7 @@ function stepWith(
         INPUT,
         lease,
         STARTED.server,
-        () => undefined,
+        options.onWaiting ?? (() => undefined),
         new AbortController().signal,
       ),
     local,
@@ -126,6 +127,32 @@ describe('the step that opens the window tunnel', () => {
     const {open, local} = stepWith();
     const result = await open();
     if (result.kind === 'done') {
+      result.value.close();
+    }
+    deepStrictEqual(local.closedPorts, [50000]);
+  });
+
+  it('F-2304 S158: the step tells its caller when the relay goes on waiting', async () => {
+    let waits = 0;
+    const {open, clock} = stepWith({
+      dialScript: ['fail', 'work'],
+      onWaiting: () => {
+        waits += 1;
+      },
+    });
+    const pending = open();
+    for (let round = 0; round < 10; round++) {
+      await Promise.resolve();
+      clock.advance(10);
+    }
+    deepStrictEqual([(await pending).kind, waits], ['done', 1]);
+  });
+
+  it('F-2104: closing the tunnel twice closes the window port once', async () => {
+    const {open, local} = stepWith();
+    const result = await open();
+    if (result.kind === 'done') {
+      result.value.close();
       result.value.close();
     }
     deepStrictEqual(local.closedPorts, [50000]);

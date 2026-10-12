@@ -26,6 +26,7 @@ function relay(
   dialScript: readonly DialAnswer[] = ['work'],
   listenAnswer: Answer = 'work',
   heldBytesMaximum: number = LIMITS.heldBytesMaximum,
+  onWaiting?: () => void,
 ): RelayFixture {
   const clock = new FakeClock();
   const dialer = new FakeDialer(dialScript);
@@ -37,6 +38,7 @@ function relay(
     target: {kind: 'port', port: 4321},
     localPort: 50000,
     limits: {...LIMITS, heldBytesMaximum},
+    ...(onWaiting === undefined ? {} : {onWaiting}),
   };
   return {clock, dialer, local, open: () => openRelayTunnel(request)};
 }
@@ -160,6 +162,61 @@ describe('the window tunnel through the relay', () => {
       [local.closedPorts, client?.closed, dialer.connections[1]?.closed],
       [[50000], true, true],
     );
+  });
+
+  it('F-2104 7.E3 b: a first probe that fails tells the caller the tunnel waits, once', async () => {
+    let waits = 0;
+    const {open, clock} = relay(
+      ['fail', 'work'],
+      'work',
+      LIMITS.heldBytesMaximum,
+      () => {
+        waits += 1;
+      },
+    );
+    const pending = open();
+    await advanced(clock, 500);
+    deepStrictEqual([(await pending).kind, waits], ['open', 1]);
+  });
+
+  it('F-2104: a first probe that works never tells the caller', async () => {
+    let waits = 0;
+    const {open} = relay(['work'], 'work', LIMITS.heldBytesMaximum, () => {
+      waits += 1;
+    });
+    deepStrictEqual([(await open()).kind, waits], ['open', 0]);
+  });
+
+  it('F-2104 7.E5: every probe failing tells the caller once and is not ready at the bound', async () => {
+    let waits = 0;
+    const {open, clock} = relay(
+      ['fail'],
+      'work',
+      LIMITS.heldBytesMaximum,
+      () => {
+        waits += 1;
+      },
+    );
+    const pending = open();
+    await advanced(clock, 10_000);
+    deepStrictEqual([(await pending).kind, waits], ['tunnelNotReady', 1]);
+  });
+
+  it('F-2104: without the tell, a first probe that fails opens as today', async () => {
+    const {open, clock} = relay(['fail', 'work']);
+    const pending = open();
+    await advanced(clock, 500);
+    deepStrictEqual((await pending).kind, 'open');
+  });
+
+  it('F-2104: closing an open tunnel twice closes the port once', async () => {
+    const {open, local} = relay();
+    const outcome = await open();
+    if (outcome.kind === 'open') {
+      outcome.close();
+      outcome.close();
+    }
+    deepStrictEqual(local.closedPorts, [50000]);
   });
 });
 
