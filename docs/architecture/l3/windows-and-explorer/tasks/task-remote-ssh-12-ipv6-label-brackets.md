@@ -5,11 +5,9 @@ Why: athena's note on #303 (card remote-ssh-09). `hostLabel` strips the brackets
 last group. With a port the brackets stay; without one the bare form stays. This replaces the IPv6 interim of
 remote-ssh-03 and remote-ssh-09 for the with-port case only. Reviewing coder: `remote-coding-worker-1`.
 
-**Start only when both hold:**
-- #303 (remote-ssh-09) is merged, since this card edits the same function and rows;
-- the spec has confirmed the form (athena asked metis on remote-ssh; F-2502 Q1).
-
-If either is missing, stop and report.
+**Both start conditions hold (2026-10-12):** #303 (remote-ssh-09) is merged, and the spec answered remote-ssh#90.
+F-2502 BR-3's table now has the row "IPv6 literal … `SSH: [2001:db8::1]:2222` with a port, `SSH: 2001:db8::1` without
+one" [adaptation]. Cite it as `F-2502.BR-3` in the changed and added rows.
 
 ## 1. Package and file boundary
 
@@ -61,4 +59,4 @@ PR title `remote-ssh: an IPv6 host label keeps its brackets before a port (card 
 
 ## 6. Open rows
 
-None, once the two start conditions hold.
+None.
