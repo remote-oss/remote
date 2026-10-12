@@ -107,6 +107,13 @@ describe('the failure presenter', () => {
     );
   });
 
+  it('F-2601 S031: a reason with values resolves through the table, no second full stop', async () => {
+    deepStrictEqual(
+      await textFor({reason: {id: 'S067', values: [{id: 'S089', values: []}]}}),
+      'Could not establish connection to "box": Error establishing tunnel (Max wait time exhausted).',
+    );
+  });
+
   it('F-2601: a reason that is an id without a template shows the text of a failure without reason, never the id', async () => {
     deepStrictEqual(
       await textFor({reason: {id: 'S999'}}),
