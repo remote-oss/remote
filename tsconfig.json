@@ -107,6 +107,12 @@
       "path": "packages/lib-authority/tsconfig.test.json"
     },
     {
+      "path": "packages/lib-companion"
+    },
+    {
+      "path": "packages/lib-companion/tsconfig.test.json"
+    },
+    {
       "path": "packages/lib-wsl"
     },
     {
