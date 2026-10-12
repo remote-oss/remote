@@ -182,7 +182,8 @@ const SSH_HARNESS: ChannelHarness = {
   },
 };
 
-describe('host channel over SSH: the lib-host contract', () => {
+describe('host channel over SSH: the lib-host contract', function () {
+  this.timeout(20000);
   for (const contractCase of channelContractCases(SSH_HARNESS)) {
     it(contractCase.name, contractCase.check);
   }

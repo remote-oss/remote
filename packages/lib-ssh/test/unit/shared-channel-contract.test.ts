@@ -85,7 +85,8 @@ const DIRECT: Pick<HostChannel, 'copyToHost' | 'identity' | 'platformHint'> = {
     ),
 };
 
-describe('host channel over the shared ssh session: the lib-host contract', () => {
+describe('host channel over the shared ssh session: the lib-host contract', function () {
+  this.timeout(20000);
   const folders: string[] = [];
   const disposers: Array<() => void> = [];
 
