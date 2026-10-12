@@ -12,7 +12,11 @@ import {pickOne} from '../surfaces/editor-adapters.ts';
 import {textOfId} from '../surfaces/failure-strings.ts';
 import type {FailureStringId} from '../surfaces/failure-strings.ts';
 import type {Translate} from '../surfaces/strings.ts';
-import type {ConfigFileEditor, ConfigFiles} from './open-config-file.ts';
+import type {
+  ConfigFileEditor,
+  ConfigFiles,
+  OpenedEditor,
+} from './open-config-file.ts';
 import type {FileChoiceItem} from './file-choice.ts';
 import {snippetPartsOf} from './snippet-parts.ts';
 
@@ -27,6 +31,12 @@ function textOfReference(
   translate: Translate,
 ): string {
   return textOfId(reference.id as FailureStringId, translate, reference.values);
+}
+
+/** The opened editor as this adapter makes it: the port's view plus the editor it showed. */
+interface Opened extends OpenedEditor {
+  /** The editor `showTextDocument` resolved with; the template's snippet goes into it. */
+  editor: vscode.TextEditor;
 }
 
 /** The editor side of the command: the picker, the preview of a file, and the starter template as a snippet. */
@@ -54,18 +64,16 @@ export function configFileEditorOf(
         },
         new AbortController().signal,
       ),
-    open: async file => {
-      await editor.window.showTextDocument(editor.Uri.file(file), {
-        preview: true,
-      });
-    },
-    insertTemplate: async (file, template) => {
-      const target = editor.window.visibleTextEditors.find(
-        candidate => candidate.document.uri.fsPath === file,
+    open: async (file): Promise<Opened> => {
+      const shown = await editor.window.showTextDocument(
+        editor.Uri.file(file),
+        {preview: true},
       );
-      if (target === undefined) {
-        return;
-      }
+      return {file, editor: shown};
+    },
+    insertTemplate: async (opened, template) => {
+      // `open` made this editor this run; the command hands it back.
+      const target = (opened as Opened).editor;
       const snippet = new editor.SnippetString();
       for (const part of snippetPartsOf(template)) {
         if (part.kind === 'text') {

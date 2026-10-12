@@ -19,6 +19,7 @@ export type {
 export {
   buildInvocation,
   buildOptionsQuery,
+  expandHome,
   TUNNEL_SUCCESS_LINE,
 } from './arguments/invocation.ts';
 export type {ClientPlatform} from './config/platform.ts';

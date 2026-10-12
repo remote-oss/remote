@@ -53,9 +53,10 @@ interface FakeTextEditor {
   ): Promise<boolean>;
 }
 
-function fakeEditor(visible: FakeTextEditor[] = []) {
+function fakeEditor() {
   const picks: FakeQuickPick[] = [];
   const shownDocuments: Array<{uri: {fsPath: string}; options: unknown}> = [];
+  const editors: FakeTextEditor[] = [];
   const editor = {
     window: {
       createQuickPick: () => {
@@ -65,9 +66,10 @@ function fakeEditor(visible: FakeTextEditor[] = []) {
       },
       showTextDocument: (uri: {fsPath: string}, options: unknown) => {
         shownDocuments.push({uri, options});
-        return Promise.resolve({});
+        const shown = textEditorFor(uri.fsPath);
+        editors.push(shown);
+        return Promise.resolve(shown);
       },
-      visibleTextEditors: visible,
     },
     ['Uri']: {file: (fsPath: string) => ({fsPath})},
     Position: class {
@@ -81,7 +83,7 @@ function fakeEditor(visible: FakeTextEditor[] = []) {
     },
     SnippetString: FakeSnippet,
   } as unknown as Editor;
-  return {editor, picks, shownDocuments};
+  return {editor, picks, shownDocuments, editors};
 }
 
 function textEditorFor(file: string): FakeTextEditor {
@@ -179,11 +181,24 @@ describe('the editor adapter of the Open SSH Configuration File command (card re
     ]);
   });
 
-  it('F-2203 BR-6: the template is inserted as a snippet at the start of the editor of that file', async () => {
-    const target = textEditorFor('/h/.ssh/config');
-    const fake = fakeEditor([textEditorFor('/other'), target]);
-    await configFileEditorOf(fake.editor, translated).insertTemplate(
+  it('#408 (2): open gives back the editor showTextDocument showed', async () => {
+    const fake = fakeEditor();
+    const opened = (await configFileEditorOf(fake.editor, translated).open(
       '/h/.ssh/config',
+    )) as {file: string; editor: unknown};
+    const [shown] = fake.editors;
+    deepStrictEqual(
+      [opened.file, opened.editor === shown],
+      ['/h/.ssh/config', true],
+    );
+  });
+
+  it('#408 (2): the template goes into the editor open gave, and no visible editor is needed', async () => {
+    const target = textEditorFor('/h/.ssh/config');
+    const fake = fakeEditor();
+    const opened = {file: '/h/.ssh/config', editor: target};
+    await configFileEditorOf(fake.editor, translated).insertTemplate(
+      opened,
       starterTemplate({insertSpaces: true, tabSize: 4}),
     );
     deepStrictEqual(
@@ -198,16 +213,6 @@ describe('the editor adapter of the Open SSH Configuration File command (card re
         ],
       ],
     );
-  });
-
-  it('F-2203 BR-6: no editor shows the file, so nothing is inserted and nothing throws', async () => {
-    const other = textEditorFor('/other');
-    const fake = fakeEditor([other]);
-    await configFileEditorOf(fake.editor, translated).insertTemplate(
-      '/h/.ssh/config',
-      starterTemplate({insertSpaces: true, tabSize: 4}),
-    );
-    deepStrictEqual(other.inserted, []);
   });
 });
 
