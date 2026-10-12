@@ -52,6 +52,8 @@ const FAILURE_TEXTS = [
   'Open Setting',
 ];
 
+const PICKER_TEXTS = ['Select the platform of the remote host "{0}"'];
+
 const LICENCE_TEXTS = [
   '{0} needs you to accept the license terms of the {1} server before installing it.',
   'Read the terms at {0}.',
@@ -73,10 +75,12 @@ describe('the runtime strings of the extension', () => {
       "'{0}' is not possible in the current context.":
         "'{0}' is not possible in the current context.",
       ...Object.fromEntries(
-        [...SETUP_TEXTS, ...FAILURE_TEXTS, ...LICENCE_TEXTS].map(text => [
-          text,
-          text,
-        ]),
+        [
+          ...SETUP_TEXTS,
+          ...FAILURE_TEXTS,
+          ...LICENCE_TEXTS,
+          ...PICKER_TEXTS,
+        ].map(text => [text, text]),
       ),
     });
   });
