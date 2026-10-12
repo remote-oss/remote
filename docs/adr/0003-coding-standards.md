@@ -104,11 +104,12 @@ exists; review question R5.
 
 Line, branch and function coverage are measured per package, and for `tools/` as one unit, with `c8` on the unit and
 integration tests. Gates: **90 % lines, 85 % branches, 90 % functions**, failing CI. A ratchet per unit records the
-last passing numbers; CI fails when a number drops by more than 0.5 points below the record, and an update writes
-the maximum of record and current, so repeated small drops cannot creep. A file is excluded only by name in the
-unit's `coverage.json` with a one-line reason; the package README lists the exclusions; a stale or unexplained
-exclusion fails the check. Generated files (`*.generated.ts`) are excluded by rule in every unit and are never named in a
-`coverage.json` (added 2026-10-12, #253 Q3; card tooling-03). A package without `src/` is skipped until it has code.
+last passing numbers; CI fails when a number drops by more than 0.5 points below the record, and an update writes the
+maximum of record and current, so repeated small drops cannot creep. Apart from generated files (below), a file is
+excluded only by name in the unit's `coverage.json` with a one-line reason; the package README lists the exclusions; a
+stale or unexplained exclusion fails the check. Generated files (`*.generated.ts`) are excluded by rule in every unit
+and are never named in a `coverage.json` (added 2026-10-12, #253 Q3; card tooling-03). A package without `src/` is
+skipped until it has code.
 
 Check: `c8 --check-coverage`, the ratchet script, the exclusion check; review question R6.
 
