@@ -11,7 +11,7 @@ import yaml
 
 import redact
 
-NORM_VERSION = 12  # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines (<docker command> ...);
+NORM_VERSION = 13  # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines (<docker command> ...);
 #                  5: environment noise dropped from notification observations (ENV_NOISE)
 #                  6: the extension's host temp root (per window since the R-42 temp-root amendment)
 #                  7: VS Code core's keychain-write warning is environment noise (kit parity, 2026-10-02)
@@ -21,6 +21,8 @@ NORM_VERSION = 12  # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines
 #                 11: ${RELAY}, the kit's askpass relay path (athena on kit #186: remote.SSH.path holds it, F-2101 AC-26
 #                     logs that setting, and the kit is not under ROOT)
 #                 12: ${SSH_HOST_UPPER}, the SSH host alias in upper case (athena on F-2409 BR-3/AC-4), before ssh-host
+#                 13: ${SSH_TARGET_FINGERPRINT} and ${SSH_TARGET_FINGERPRINT_NEW}, the per-case target's own host key
+#                     fingerprints, bound per run (athena on #198: a pattern would let a wrong fingerprint pass)
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # (name, placeholder, regex, description); applied to every string value, in this order, after the path rules
@@ -121,6 +123,9 @@ def rules_used(ctx):
          if "GENERATED_NAME" in redact.ROOM_RULES else [])
     pats = [{"rule": n, "placeholder": p.replace("\\1", "<host>"), "what": d} for n, p, _, d in PATTERN_RULES]
     binds = [{"rule": f"bind-{k[5:]}", "placeholder": "${" + k + "}", "applies": "whole tokens"} for k, _ in _binds(ctx)]
+    binds += [{"rule": "ssh-target-fingerprint" + ("-new" if k.endswith("_NEW") else ""), "placeholder": "${" + k + "}",
+               "applies": "exact values, before every other rule (the per-case target's own host key fingerprints)"}
+              for k in FINGERPRINT_KEYS if ctx.get(k)]
     binds += [{"rule": "ssh-host-upper", "placeholder": "${SSH_HOST_UPPER}",
                "applies": "whole tokens (the SSH window's host alias in upper case; before ssh-host)"}] if _upper_host(ctx) else []
     binds += [{"rule": "ssh-host", "placeholder": "${SSH_HOST}", "applies": "whole tokens (the SSH window's host alias)"}
@@ -152,8 +157,20 @@ def _binds(ctx):
     return sorted(out, key=lambda kv: -len(kv[1]))
 
 
+FINGERPRINT_KEYS = ("SSH_TARGET_FINGERPRINT_NEW", "SSH_TARGET_FINGERPRINT")   # the newer key's first: a rekey keeps both
+
+
+def _fingerprints(ctx):
+    """[(placeholder name, exact value)] of the run's own target host keys: every key type's SHA256:<base64> and
+    MD5:<hex pairs>, bound at provisioning and after a rekey (space-separated in the context). Only these values map
+    back; any other fingerprint stays literal, so a case that shows a wrong one fails (athena on #198)."""
+    return [(k, v) for k in FINGERPRINT_KEYS for v in str(ctx.get(k) or "").split() if v]
+
+
 def norm_str(s, ctx, key=None):
     s = redact.redact_captured(s)   # R-34: command lines first, so replays compare redacted to redacted
+    for name, value in _fingerprints(ctx):   # first: exact values, before any pattern can cut into one
+        s = re.sub(r"(?<![A-Za-z0-9+/:=])" + re.escape(value) + r"(?![A-Za-z0-9+/:=])", "${" + name + "}", s)
     for name, value in _path_pairs(ctx):
         s = s.replace(value, "${" + name + "}")
     # The extension id before the bound values (remote-oss/remote#72, F-4003-AC14-1): a bound publisher name can lie

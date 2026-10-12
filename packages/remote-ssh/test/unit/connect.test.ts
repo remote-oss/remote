@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import type {MemorySink} from 'lib-log/testing/memory-sink';
 import type {StartOutcome, TransferPhase} from 'lib-server';
 import {
   connect,
@@ -12,6 +13,7 @@ import type {
 } from '../../src/pipeline/steps.ts';
 import {
   CHANNEL_CLOSED,
+  endTunnel,
   INPUT,
   leaseOf,
   type Recording,
@@ -855,13 +857,19 @@ describe('the connect pipeline, what it keeps and gives back', () => {
 });
 
 describe('the connect pipeline, the transport of a connection that worked', () => {
-  /** A connect that worked, with the recording whose lease takes the notices, and the events the window heard. */
+  /**
+   * A connect that worked, with the recording whose lease takes the notices, the tunnel's end, and the events the
+   * window heard.
+   */
   async function connected(): Promise<{
     send: (notice: Parameters<NonNullable<Recording['notice']>>[0]) => void;
+    endTunnel: (detail: string) => void;
+    release: () => void;
     heard: TransportEvent[];
     stop: () => void;
+    logSink: MemorySink;
   }> {
-    const {recording, options} = setup();
+    const {recording, options, logSink} = setup();
     const result = await connect(INPUT, steps(recording), options);
     if (!('onTransport' in result)) {
       throw new Error('the connect did not work');
@@ -874,8 +882,15 @@ describe('the connect pipeline, the transport of a connection that worked', () =
       send: notice => {
         recording.notice?.(notice);
       },
+      endTunnel: detail => {
+        endTunnel(recording, detail);
+      },
+      release: () => {
+        result.release();
+      },
       heard,
       stop,
+      logSink,
     };
   }
 
@@ -896,6 +911,34 @@ describe('the connect pipeline, the transport of a connection that worked', () =
     const {send, heard, stop} = await connected();
     stop();
     send({type: 'transportLost'});
+    deepStrictEqual(heard, []);
+  });
+
+  it('#299: a tunnel that ends without being asked to is a lost transport', async () => {
+    const {endTunnel, heard} = await connected();
+    endTunnel('listener failed');
+    deepStrictEqual(heard, ['lost']);
+  });
+
+  it('F-2003: the tunnel end is logged with the reason the tunnel gives', async () => {
+    const {endTunnel, logSink} = await connected();
+    endTunnel('listener failed');
+    deepStrictEqual(
+      logSink.lines.map(line => line.message),
+      ['the window tunnel ended: listener failed'],
+    );
+  });
+
+  it('#299, safety: a release that closes the tunnel is not a lost transport', async () => {
+    const {release, heard} = await connected();
+    release();
+    deepStrictEqual(heard, []);
+  });
+
+  it('#299: a tunnel end after the window stops following is not heard', async () => {
+    const {endTunnel, heard, stop} = await connected();
+    stop();
+    endTunnel('listener failed');
     deepStrictEqual(heard, []);
   });
 });

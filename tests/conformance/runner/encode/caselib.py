@@ -217,11 +217,19 @@ def workspace_of(case_id):
 PLACEHOLDER = re.compile(r"\$\{([A-Z_]+|bind\.[a-z][a-z0-9_]*)\}")
 
 
+MULTI_VALUED = ("SSH_TARGET_FINGERPRINT", "SSH_TARGET_FINGERPRINT_NEW")   # every key type's forms; a case gets the first
+
+
+def _one(name, value):
+    """A placeholder's value for a case: a multi-valued one (a target's host key fingerprints) gives its first."""
+    return str(value).split()[0] if name in MULTI_VALUED and str(value).split() else str(value)
+
+
 def subst(value, ph):
     """Replace ${NAME} placeholders and ${bind.<name>} values bound by an earlier observe (recursively in lists and
     dicts) with the run's values; anything else (VS Code's own ${rootName} ...) is left as it is."""
     if isinstance(value, str):
-        return PLACEHOLDER.sub(lambda m: str(ph.get(m.group(1), m.group(0))), value)
+        return PLACEHOLDER.sub(lambda m: _one(m.group(1), ph.get(m.group(1), m.group(0))), value)
     if isinstance(value, list):
         return [subst(v, ph) for v in value]
     if isinstance(value, dict):

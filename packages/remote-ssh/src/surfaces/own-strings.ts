@@ -11,6 +11,7 @@ import {type Translate, filled} from './strings.ts';
 export const OWN_TEMPLATES = {
   [SSH_LABEL_PREFIX_ID]: 'SSH: {0}',
   platformPickPlaceholder: 'Select the platform of the remote host "{0}"',
+  mitigationReloadWindow: 'Reload Window',
 } as const;
 
 /** The text of a string of our own: its template translated and filled. Throws for an id this table lacks. */

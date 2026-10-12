@@ -16,7 +16,7 @@ import redact
 WRITER_KEYS = ("id", "feature", "title", "ac", "atoms", "kind", "covers", "profile", "fixtures", "fixture", "steps", "notes",
                "reference-only", "issue", "ac_issue_refs")   # the last two are added when a case is published
 VERBS = ("cmd", "palette", "pick", "check", "type", "key", "button", "link", "remote", "view", "rowmenu", "rowaction",
-         "viewaction", "menu", "focus", "hover", "window", "wait", "observe", "engine", "settings", "restart",
+         "viewaction", "menu", "focus", "hover", "window", "wait", "observe", "engine", "settings", "restart", "target",
          "goto", "open")   # goto/open: the editor helpers of the lab driver (remote-ssh-edit, 2026-10-02)
 ENGINE_CONTAINER_ACTIONS = ("pause", "unpause", "stop", "start", "kill", "remove")
 ENGINE_ACTIONS = ENGINE_CONTAINER_ACTIONS + ("create_volume", "remove_volume", "run")
@@ -244,6 +244,8 @@ def _step_errors(i, step, seen):
         return []
     if verb == "restart":
         return [] if arg is True else [f"{where}: restart: true (restarts the window on the same profile, folder and daemon)"]
+    if verb == "target":   # athena on #198: new host keys on the per-case target, ${SSH_TARGET_FINGERPRINT_NEW} bound to them
+        return [] if arg == "rekey" else [f"{where}: target: rekey (new host keys on the case's own SSH target)"]
     return []
 
 
@@ -700,6 +702,9 @@ def validate_case(path, case=None, for_recording=False):
         errs += _fixture_binding_errors(case, profile)
     errs += _fixture_errors(case.get("fixture"), case, profile)
     errs += _engine_use_errors(case, profile)
+    if profile is not None and not caselib.ssh_variant(profile):   # target: rekey acts on the case's own SSH target
+        errs += [f"steps[{i}]: target: {case.get('profile')} has no per-case SSH target" for i, st in enumerate(case.get("steps") or [])
+                 if isinstance(st, dict) and "target" in st]
     steps = case.get("steps")
     seen = set()
     if not isinstance(steps, list) or not steps:

@@ -144,12 +144,14 @@ class FakeEditor implements ResolverEditor {
   readonly progress = {
     withProgress: async <Result>(
       request: ProgressRequest,
-      task: (update: (title: string) => void) => Promise<Result>,
+      task: (
+        update: (title: string, details: boolean) => void,
+      ) => Promise<Result>,
     ): Promise<Result> => {
       const entry = {...request, updates: [] as string[]};
       this.progressRuns.push(entry);
-      return task(title => {
-        entry.updates.push(title);
+      return task((title, details) => {
+        entry.updates.push(details ? `${title} (details)` : title);
       });
     },
   };
@@ -469,6 +471,28 @@ describe('the resolver host: progress (F-2304)', () => {
     deepStrictEqual(context.editor.progressRuns[0]?.updates, [
       'phase initializing',
       'phase installing',
+    ]);
+  });
+
+  it('contracts §3.2: a stage the connector flags for the details link reaches the progress flagged', async () => {
+    const context = await setup();
+    context.connector.phases = [
+      {name: 'installing'},
+      {name: 'initializing', details: true},
+    ];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns[0]?.updates, [
+      'phase installing',
+      'phase initializing (details)',
+    ]);
+  });
+
+  it('contracts §3.2: a stage whose flag is false has no link', async () => {
+    const context = await setup();
+    context.connector.phases = [{name: 'initializing', details: false}];
+    await resolve(context);
+    deepStrictEqual(context.editor.progressRuns[0]?.updates, [
+      'phase initializing',
     ]);
   });
 

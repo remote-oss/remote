@@ -53,5 +53,11 @@
   "Failed to install the VS Code Server": "Failed to install the VS Code Server",
   "Provided: \"{0}\"": "Provided: \"{0}\"",
   "it does not give an http or https address": "it does not give an http or https address",
-  "the placeholder {0} is not known": "the placeholder {0} is not known"
+  "the placeholder {0} is not known": "the placeholder {0} is not known",
+  "Reload Window": "Reload Window",
+  "Open Recent...": "Open Recent...",
+  "Open Documentation": "Open Documentation",
+  "Open SSH Configuration File": "Open SSH Configuration File",
+  "Open Settings": "Open Settings",
+  "Pick an action to help resolve the problem.": "Pick an action to help resolve the problem."
 }

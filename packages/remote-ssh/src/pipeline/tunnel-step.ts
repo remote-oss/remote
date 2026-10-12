@@ -105,6 +105,7 @@ export function openTunnelStep(
           factory.closeAll();
           outcome.close();
         },
+        onClosed: outcome.onClosed,
       },
     };
   };

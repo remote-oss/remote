@@ -45,7 +45,7 @@ describe('the recording resolver host editor', () => {
         onDetails: () => undefined,
       },
       update => {
-        update('stage');
+        update('stage', false);
         fake.cancelProgress();
         return Promise.resolve();
       },
@@ -55,6 +55,23 @@ describe('the recording resolver host editor', () => {
       'phase stage',
       'cancelled',
     ]);
+  });
+
+  it('contracts §3.2: records a stage that carries the details link', async () => {
+    const events: string[] = [];
+    await recordingResolverEditor(events).editor.progress.withProgress(
+      {
+        title: 'Setting up',
+        cancellable: false,
+        onCancel: () => undefined,
+        onDetails: () => undefined,
+      },
+      update => {
+        update('stage', true);
+        return Promise.resolve();
+      },
+    );
+    deepStrictEqual(events, ['progress Setting up', 'phase stage (details)']);
   });
 
   it('cancels nothing when no progress runs', () => {

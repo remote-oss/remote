@@ -118,6 +118,8 @@ def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counter
                     res = {"ok": False, "error": str(e)}
             elif verb == "settings":
                 res = run.merge_settings(arg)
+            elif verb == "target":
+                res = run.target_action(arg)
             elif verb == "restart":
                 try:
                     res = run.restart(sess)
@@ -285,7 +287,12 @@ def norm_version_refusal(case):
     cases recorded under v9-v12 and failed them silently on rule differences that look like the product's). A case
     recorded under a NEWER normalization version than this code's is not-comparable: named, counted, never a pass or a
     fail. An equal or older version (or none, before versions were recorded) compares as before."""
-    norm = (case.get("recorded") or {}).get("normalization") or {}
+    rec = case.get("recorded") or {}
+    norm = rec.get("normalization") if isinstance(rec, dict) else None
+    if norm is None:
+        return None
+    if not isinstance(norm, dict):   # themis on #193: a non-mapping raised a TypeError; named instead
+        return f"recorded normalization {type(norm).__name__} is not a mapping: not comparable"
     if "version" not in norm:
         return None
     v = norm["version"]
