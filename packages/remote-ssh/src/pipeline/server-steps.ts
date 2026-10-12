@@ -7,6 +7,9 @@
 import type {Logger} from 'lib-log';
 import {
   type ArchiveResolution,
+  BASE_PLACEHOLDERS,
+  classifyLicence,
+  expand,
   type OverridePolicy,
   type LicenceFacts,
   type OverrideValue,
@@ -19,12 +22,14 @@ import {
   type ClientFilePort,
   classifyServerLicence,
   type DownloadBounds,
+  type DirectReason,
   type DownloadPort,
   ensureAccepted,
   installExtensions,
   type HostLockLoop,
   type LicenceModal,
   plan,
+  type ProbedHost,
   type PlanInput,
   probe,
   type ServerPolicyRecord,
@@ -94,6 +99,54 @@ function sourceOf(resolution: ArchiveResolution): PlanInput['source'] {
   }
 }
 
+/** Why the CLI path was not used, as the log says it once per connect (brief-cli-path §2, rows 2, 4 and 5). */
+const CLI_NOT_USED_REASONS: Readonly<
+  Record<Exclude<DirectReason, 'settingOff' | 'manualBootstrap'>, string>
+> = {
+  noCliSource: 'the editor names no CLI source',
+  noBuildForPlatform: 'there is no CLI build for this host',
+  termsToAccept: "the server's terms must be accepted first",
+};
+
+/** The host's platform as the templates name it: a musl Linux is `alpine`. */
+function templatePlatformOf(host: ProbedHost): {
+  operatingSystem: ProbedHost['operatingSystem'] | 'alpine';
+  architecture: ProbedHost['architecture'];
+} {
+  return {
+    operatingSystem: host.libc === 'musl' ? 'alpine' : host.operatingSystem,
+    architecture: host.architecture,
+  };
+}
+
+/**
+ * The address of the CLI archive for a host, from the product's `cliDownloadUrlTemplate`, or why it gives none: no
+ * template (brief §2 row 2), or one that is unusable for this host (row 3).
+ */
+export function cliAddressOf(
+  profile: ProductProfile,
+  platform: {operatingSystem: string; architecture: string},
+): {kind: 'address'; address: string} | {kind: 'none'} | {kind: 'unusable'} {
+  if (profile.cliDownloadUrlTemplate === '') {
+    return {kind: 'none'};
+  }
+  const expansion = expand(
+    profile.cliDownloadUrlTemplate,
+    {
+      ...platform,
+      commit: profile.commit,
+      quality: profile.quality,
+      version: profile.version,
+      release: profile.version,
+      applicationName: profile.applicationName,
+    },
+    BASE_PLACEHOLDERS,
+  );
+  return expansion.kind === 'url'
+    ? {kind: 'address', address: expansion.address}
+    : {kind: 'unusable'};
+}
+
 /** The steps that talk to the host and the libraries, for one connect. */
 export function createServerSteps(
   dependencies: ServerStepDependencies,
@@ -105,6 +158,8 @@ export function createServerSteps(
     updateUrl: profile.updateUrl,
   };
   let licenceFacts: LicenceFacts = {...noLicenceFacts, step: 'reuse'};
+  /** The CLI archive's address for this connect's host, once the plan has read it. */
+  let cliAddress: string | undefined;
 
   function parametersFor(
     changes: Partial<ParameterInput>,
@@ -150,21 +205,37 @@ export function createServerSteps(
     probe: (input, lease, cancellation) =>
       probe(lease.channel, parametersFor({}), cancellation),
     plan: (input, host) => {
+      const platform = templatePlatformOf(host);
       const resolution = resolveServerArchive(
         profile,
-        {
-          operatingSystem:
-            host.libc === 'musl' ? 'alpine' : host.operatingSystem,
-          architecture: host.architecture,
-        },
+        platform,
         dependencies.overridePolicy,
         dependencies.override,
       );
+      const cli = cliAddressOf(profile, platform);
+      if (cli.kind === 'unusable') {
+        dependencies.logger.info(
+          'the CLI path was not used: the CLI template is unusable',
+        );
+      }
+      cliAddress = cli.kind === 'address' ? cli.address : undefined;
+      const serverFree =
+        resolution.kind !== 'resolved' ||
+        !classifyLicence({
+          ...noLicenceFacts,
+          step: resolution.step,
+          downloadUrl: resolution.address,
+        });
+      const cliFree =
+        cliAddress === undefined ||
+        !classifyLicence({
+          ...noLicenceFacts,
+          step: 'productTemplate',
+          downloadUrl: cliAddress,
+        });
       const result = plan({
         facts: {
-          operatingSystem:
-            host.libc === 'musl' ? 'alpine' : host.operatingSystem,
-          architecture: host.architecture,
+          ...platform,
           homeFolder: host.home,
           existingLayouts: host.installed
             ? [{kind: 'bin', commit: names.commit, path: host.installFolder}]
@@ -180,7 +251,29 @@ export function createServerSteps(
         placement: dependencies.policy.downloadPlacement,
         useExecServerSetting: dependencies.useExecServer,
         source: sourceOf(resolution),
+        // An unusable template (row 3) plans the direct install, as no template does.
+        ...(cliAddress === undefined
+          ? {}
+          : {
+              cliMode: {
+                useExecServerSetting: dependencies.useExecServer,
+                // `localServerDownload` has no manual bootstrap value in this extension (F-2103 BR-3).
+                manualBootstrap: false,
+                cliTemplate: profile.cliDownloadUrlTemplate,
+                sourcesFree: serverFree && cliFree,
+              },
+              cliName: `${profile.applicationName}-${names.commit}`,
+              // installCli's own step finds a CLI already placed and reports it without a download.
+              cliPresentOnHost: false,
+            }),
       });
+      for (const note of 'plan' in result ? result.plan.notes : []) {
+        if (note.kind === 'cliNotUsed') {
+          dependencies.logger.info(
+            `the CLI path was not used: ${CLI_NOT_USED_REASONS[note.reason]}`,
+          );
+        }
+      }
       if (
         'plan' in result &&
         result.plan.kind === 'download' &&
