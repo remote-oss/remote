@@ -166,6 +166,7 @@ function dependencies(
       acceptsBaseUrl: false,
       placeholders: BASE_PLACEHOLDERS,
     },
+    connectionSettings: () => ({listenOnSocket: false, useLocalServer: true}),
     remoteUser: 'alex',
     clock: () => 1700000000000,
     bounds: {downloadSeconds: 60, readySeconds: 20},
@@ -188,6 +189,14 @@ function dependencies(
     logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
     ...changes,
   };
+}
+
+/** A validate step whose connection settings are fixed to a row's values. */
+function stepsWith(settings: {
+  listenOnSocket: boolean;
+  useLocalServer: boolean;
+}) {
+  return createServerSteps(dependencies({connectionSettings: () => settings}));
 }
 
 /** The failure the target check gives the validate step, for a row to compare. */
@@ -590,6 +599,96 @@ describe('the server steps: validate and the names', () => {
         target: {kind: 'plain', text: '-oProxyCommand=x'},
       }),
       targetFailure('S119', '-'),
+    );
+  });
+
+  it('#299, F-2102 BR-10: a shared-connection-off setting fails the validate step', () => {
+    deepStrictEqual(
+      stepsWith({listenOnSocket: false, useLocalServer: false}).validate(INPUT),
+      {kind: 'failed', failure: {kind: 'unknown'}},
+    );
+  });
+
+  it('#299, F-2003: the failure names the cause in the log', () => {
+    const sink = new MemorySink();
+    const settings = {listenOnSocket: false, useLocalServer: false};
+    const steps = createServerSteps(
+      dependencies({
+        connectionSettings: () => settings,
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+      }),
+    );
+    steps.validate(INPUT);
+    deepStrictEqual(
+      sink.lines.map(line => line.message),
+      ['a connection without the shared connection is not built yet'],
+    );
+  });
+
+  it('#299, F-2104 6.8: socket mode fails even with the setting on', () => {
+    deepStrictEqual(
+      stepsWith({listenOnSocket: true, useLocalServer: true}).validate(INPUT),
+      {kind: 'failed', failure: {kind: 'unknown'}},
+    );
+  });
+
+  it('#299, F-2104 6.8: socket mode fails with the setting off too', () => {
+    deepStrictEqual(
+      stepsWith({listenOnSocket: true, useLocalServer: false}).validate(INPUT),
+      {kind: 'failed', failure: {kind: 'unknown'}},
+    );
+  });
+
+  it('F-2102: the default settings pass the connection check', () => {
+    const steps = createServerSteps(dependencies());
+    deepStrictEqual(steps.validate(INPUT), {kind: 'done', value: undefined});
+  });
+
+  it('F-2205 BR-2: a bad host is reported even with the setting off', () => {
+    const settings = {listenOnSocket: false, useLocalServer: false};
+    const steps = createServerSteps(
+      dependencies({connectionSettings: () => settings}),
+    );
+    deepStrictEqual(
+      steps.validate({...INPUT, target: {kind: 'plain', text: '-h'}}),
+      targetFailure('S119', '-'),
+    );
+  });
+
+  it('#299: the failure comes before the install folder check', () => {
+    const settings = {listenOnSocket: false, useLocalServer: false};
+    const steps = createServerSteps(
+      dependencies({
+        connectionSettings: () => settings,
+        settings: settingsWith({
+          serverInstallPath: {devbox: '/data/$HOME'},
+        }),
+      }),
+    );
+    deepStrictEqual(steps.validate(INPUT), {
+      kind: 'failed',
+      failure: {kind: 'unknown'},
+    });
+  });
+
+  it('#299: the settings are read at each validate call', () => {
+    let localServer = false;
+    const steps = createServerSteps(
+      dependencies({
+        connectionSettings: () => ({
+          listenOnSocket: false,
+          useLocalServer: localServer,
+        }),
+      }),
+    );
+    const first = steps.validate(INPUT);
+    localServer = true;
+    deepStrictEqual(
+      [first, steps.validate(INPUT)],
+      [
+        {kind: 'failed', failure: {kind: 'unknown'}},
+        {kind: 'done', value: undefined},
+      ],
     );
   });
 
