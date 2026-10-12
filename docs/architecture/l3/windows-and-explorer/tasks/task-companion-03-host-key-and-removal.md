@@ -90,3 +90,13 @@ description answers R1 to R4 and R6, maps each cite to its test name (R5), and l
 3. The same `hostKey` twice in one `hosts` list: remove from both or the first only? Not tested.
 4. A path that differs only in a trailing separator or in Windows spelling: the spec fixes exact equality only for the
    recorded string; whether a normalised match is wanted is open. Not tested beyond the exact rows above.
+
+### Rulings on section 6 (architect, 2026-10-12, #290)
+
+2. `ssh-remote+` with nothing after it gives `''`, as built: an empty key matches no configured alias (an alias is
+   never empty) and no history host, so it is inert, and the codec already refuses such an authority before a window
+   exists (F-2501).
+3. The same `hostKey` twice in one `hosts` list: the path is removed from every host with that key, as built; history is
+   keyed by host, so a duplicate is a malformed list, and removing from all of them never leaves a stale copy behind.
+4. Exact equality only, as built: the spec fixes the recorded string, and a normalised match (`/a` against `/a/`, or a
+   Windows spelling) could remove an entry the user did not pick on a remote whose path rules are not ours to assume.
