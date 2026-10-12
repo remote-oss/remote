@@ -80,3 +80,13 @@ PR title `lib-server: the socket's folder is always one the start can report (ca
 None. The fallback and its fact are ruled (section 2, athena). An unset `TMPDIR` takes `/tmp` as the default and
 reports no fact; an empty, a relative and a white-space one fall back and report `empty`, `relative` and `whiteSpace`.
 `${TMPDIR+set}` tells unset from empty under dash (checked).
+
+## Follow-up (athena, 2026-10-12, themis's note on #359)
+
+An absolute `TMPDIR` that doesn't exist, or isn't a writable directory (`/nonexistent/tmp`, a file, a read-only
+folder), passes the "absolute, no white space" test, so the socket path points into a missing folder and the server's
+`listen` fails the start. By this card's ruling (an unusable `TMPDIR` falls back, not fails), it falls back too: the
+folder is `$TMPDIR` only when it's also `[ -d "$TMPDIR" ] && [ -w "$TMPDIR" ]`; otherwise `/tmp`, with the fact
+`server.socketFolderFallback=unusable`. Rows over the real shell: a missing absolute `TMPDIR`, a file, and a folder
+without write permission each give `/tmp` and `unusable`; a writable absolute folder is used with no fact. A small
+follow-up card (daedalus).
