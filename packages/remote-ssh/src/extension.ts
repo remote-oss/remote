@@ -21,11 +21,8 @@ const STAND_DOWN_WARNING =
   'Remote - SSH stays inactive in this window because another extension that provides SSH remotes is enabled. Both use the same commands and settings. Disable one of the two and reload the window.';
 const STAND_DOWN_BUTTON = 'Show Other Extension';
 
-/**
- * The texts of the proposed-API setup notices. `{0}` is the extension's name, `{1}` the
- * editor's, `{2}` the ids to add or the extension's own id.
- */
-const SETUP_TEXTS = {
+/** The English templates of the proposed-API setup notices; the placeholders are filled by the setup. */
+const SETUP_TEXT_TEMPLATES = {
   setup:
     "{0} needs proposed VS Code APIs that {1} has not enabled for it. Add {2} to 'enable-proposed-api' in argv.json, then restart {1}.",
   failedAttempt:
@@ -76,7 +73,6 @@ export async function activate(
 ): Promise<void> {
   const manifest = context.extension.packageJSON as Manifest;
   const host = identifierHost(vscode, manifest);
-  const dataFolderName = await dataFolderNameOfEditor();
   const result = await activateRemoteSsh({
     table: {commands, settings, standDown},
     extension: {
@@ -119,9 +115,17 @@ export async function activate(
         argv: {
           portableFolder: process.env.VSCODE_PORTABLE,
           homeFolder: homedir(),
-          dataFolderName,
+          dataFolderName: dataFolderNameOfEditor,
         },
-        texts: SETUP_TEXTS,
+        platform: process.platform,
+        texts: {
+          setup: vscode.l10n.t(SETUP_TEXT_TEMPLATES.setup),
+          failedAttempt: vscode.l10n.t(SETUP_TEXT_TEMPLATES.failedAttempt),
+          restart: vscode.l10n.t(SETUP_TEXT_TEMPLATES.restart),
+          configureButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.configureButton),
+          notNowButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.notNowButton),
+          quitButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.quitButton),
+        },
         logFailure,
       }),
   });

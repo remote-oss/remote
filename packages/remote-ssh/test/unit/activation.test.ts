@@ -243,6 +243,33 @@ describe('the activation', () => {
     );
   });
 
+  it('serves with one failure line and its commands when the gate cannot find the data folder', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    const lacking: ActivationInputs = {
+      ...inputs,
+      gate: logFailure => ({
+        ...recordingSetupPorts(
+          {extensionId: 'remote-oss.remote-ssh'},
+          seen.events,
+        ),
+        argvEnabled: () => {
+          logFailure('the runtime arguments cannot be located');
+          return Promise.resolve([]);
+        },
+      }),
+    };
+    const result = await activateRemoteSsh(lacking);
+    deepStrictEqual(
+      [
+        result.kind,
+        seen.channelLines.filter(line => line.includes('cannot be located'))
+          .length,
+        seen.registered.size,
+      ],
+      ['serving', 1, 6],
+    );
+  });
+
   it('logs a failure of the setup into the channel', async () => {
     const {inputs, seen} = surroundings({otherRuns: false});
     const failing: ActivationInputs = {

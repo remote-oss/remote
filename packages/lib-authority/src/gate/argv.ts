@@ -23,12 +23,41 @@ export function argvPath(location: ArgvLocation): string {
     : path.join(location.portableFolder, ARGV_FILE);
 }
 
-/** Whether a document is the runtime-arguments file, whichever install it belongs to. */
-export function isArgvFile(documentPath: string): boolean {
-  return path.basename(documentPath) === ARGV_FILE;
+/** Whether the paths name the same file; the case is ignored on the platforms whose file systems ignore it. */
+export function isArgvFile(
+  documentPath: string,
+  argvFile: string,
+  platform: string,
+): boolean {
+  function fold(value: string): string {
+    return platform === 'win32' || platform === 'darwin'
+      ? value.toLowerCase()
+      : value;
+  }
+  return fold(path.resolve(documentPath)) === fold(path.resolve(argvFile));
 }
 
-/** Removes `//` and block comments and trailing commas that lie outside strings. */
+/** The index of the next character that is not white space or inside a comment. */
+function afterBlanks(text: string, from: number): number {
+  let index = from;
+  while (index < text.length) {
+    const pair = text.slice(index, index + 2);
+    if (pair === '//') {
+      const lineEnd = text.indexOf('\n', index);
+      index = lineEnd === -1 ? text.length : lineEnd;
+    } else if (pair === '/*') {
+      const blockEnd = text.indexOf('*/', index + 2);
+      index = blockEnd === -1 ? text.length : blockEnd + 2;
+    } else if (/\s/.test(text.charAt(index))) {
+      index += 1;
+    } else {
+      return index;
+    }
+  }
+  return index;
+}
+
+/** Removes `//` and block comments and trailing commas, wherever they lie outside strings. */
 function withoutJsoncExtras(text: string): string {
   let result = '';
   let index = 0;
@@ -42,18 +71,19 @@ function withoutJsoncExtras(text: string): string {
       }
       result += text.slice(index, end + 1);
       index = end + 1;
-    } else if (pair === '//') {
-      const lineEnd = text.indexOf('\n', index);
-      index = lineEnd === -1 ? text.length : lineEnd;
-    } else if (pair === '/*') {
-      const blockEnd = text.indexOf('*/', index + 2);
-      index = blockEnd === -1 ? text.length : blockEnd + 2;
+    } else if (pair === '//' || pair === '/*') {
+      index = afterBlanks(text, index);
+    } else if (
+      char === ',' &&
+      /[\]}]/.test(text.charAt(afterBlanks(text, index + 1)))
+    ) {
+      index += 1;
     } else {
       result += char;
       index += 1;
     }
   }
-  return result.replace(/,(\s*[\]}])/g, '$1');
+  return result;
 }
 
 /**

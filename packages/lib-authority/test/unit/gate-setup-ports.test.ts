@@ -86,8 +86,9 @@ function surroundings(
     argv: {
       portableFolder: undefined,
       homeFolder: '/home/user',
-      dataFolderName: '.vscode-oss',
+      dataFolderName: () => Promise.resolve('.vscode-oss'),
     },
+    platform: 'linux',
     texts: {
       setup:
         "{0} needs proposed VS Code APIs that {1} has not enabled for it. Add {2} to 'enable-proposed-api' in argv.json, then restart {1}.",
@@ -228,10 +229,17 @@ describe('the ports of the proposed-API setup', () => {
     ]);
   });
 
-  it('reports an edit of the argv file when it is saved and closed', async () => {
+  /** The editor of a test whose document events the test fires by hand. */
+  function firing(): {
+    editor: GateEditor;
+    identity: GateIdentity;
+    fire: (event: 'save' | 'close', documentPath: string) => void;
+    logged: string[];
+  } {
     const {editor, identity} = surroundings();
     const saves: Array<(documentPath: string) => void> = [];
     const closes: Array<(documentPath: string) => void> = [];
+    const logged: string[] = [];
     editor.documents = {
       onSaved: listener => {
         saves.push(listener);
@@ -242,13 +250,96 @@ describe('the ports of the proposed-API setup', () => {
         return {dispose: () => undefined};
       },
     };
-    const edited = setupPortsOf(editor, identity).argvEdited();
-    for (const listener of saves) {
-      listener('/x/argv.json');
+    return {
+      editor,
+      identity: {
+        ...identity,
+        logFailure: message => {
+          logged.push(message);
+        },
+      },
+      fire: (event, documentPath) => {
+        for (const listener of event === 'save' ? saves : closes) {
+          listener(documentPath);
+        }
+      },
+      logged,
+    };
+  }
+
+  /** Starts the wait for an edit, and fires the given events at the documents once it is under way. */
+  async function editAfter(
+    events: ReadonlyArray<readonly ['save' | 'close', string]>,
+    platform = 'linux',
+  ): Promise<boolean | 'unsettled'> {
+    const {editor, identity, fire} = firing();
+    const ports = setupPortsOf(editor, {...identity, platform});
+    const outcome = ports.argvEdited();
+    await new Promise(resolve => setImmediate(resolve));
+    for (const [event, documentPath] of events) {
+      fire(event, documentPath);
     }
-    for (const listener of closes) {
-      listener('/x/argv.json');
-    }
-    deepStrictEqual(await edited, true);
+    return Promise.race([
+      outcome,
+      new Promise<'unsettled'>(resolve => {
+        setImmediate(() => {
+          resolve('unsettled');
+        });
+      }),
+    ]);
+  }
+
+  const ARGV_FILE = '/home/user/.vscode-oss/argv.json';
+
+  it('reports an edit when the resolved argv file is saved and then closed', async () => {
+    deepStrictEqual(
+      await editAfter([
+        ['save', ARGV_FILE],
+        ['close', ARGV_FILE],
+      ]),
+      true,
+    );
+  });
+
+  it('reports no edit when the resolved argv file is closed unsaved', async () => {
+    deepStrictEqual(await editAfter([['close', ARGV_FILE]]), false);
+  });
+
+  it('is not settled by a file of the same name elsewhere', async () => {
+    deepStrictEqual(
+      await editAfter([
+        ['save', '/home/user/project/argv.json'],
+        ['close', '/home/user/project/argv.json'],
+      ]),
+      'unsettled',
+    );
+  });
+
+  it('matches the path in another case on win32', async () => {
+    deepStrictEqual(
+      await editAfter(
+        [
+          ['save', '/HOME/User/.VSCODE-OSS/ARGV.JSON'],
+          ['close', '/HOME/User/.VSCODE-OSS/ARGV.JSON'],
+        ],
+        'win32',
+      ),
+      true,
+    );
+  });
+
+  it('lists nothing and logs once when the data folder cannot be found', async () => {
+    const {editor, identity, logged} = firing();
+    const ports = setupPortsOf(editor, {
+      ...identity,
+      argv: {
+        ...identity.argv,
+        dataFolderName: () => Promise.reject(new Error('product.json is gone')),
+      },
+    });
+    deepStrictEqual(
+      [await ports.argvEnabled(), await ports.argvEdited(), logged.length],
+      [[], false, 2],
+    );
   });
 });

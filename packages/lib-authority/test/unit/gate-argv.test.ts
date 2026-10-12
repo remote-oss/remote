@@ -51,10 +51,49 @@ describe('the runtime-arguments file', () => {
     );
   });
 
-  it('recognises the file by its name', () => {
+  it('recognises the resolved file, and not a file of the same name elsewhere', () => {
     deepStrictEqual(
-      [isArgvFile('/a/b/argv.json'), isArgvFile('/a/b/settings.json')],
-      [true, false],
+      [
+        isArgvFile(
+          '/home/user/.vscode/argv.json',
+          '/home/user/.vscode/argv.json',
+          'linux',
+        ),
+        isArgvFile(
+          '/home/user/./.vscode/../.vscode/argv.json',
+          '/home/user/.vscode/argv.json',
+          'linux',
+        ),
+        isArgvFile(
+          '/home/user/project/argv.json',
+          '/home/user/.vscode/argv.json',
+          'linux',
+        ),
+      ],
+      [true, true, false],
+    );
+  });
+
+  it('ignores the case of the path on win32 and darwin, and not on linux', () => {
+    deepStrictEqual(
+      [
+        isArgvFile(
+          '/Users/Me/.vscode/ARGV.json',
+          '/Users/me/.vscode/argv.json',
+          'win32',
+        ),
+        isArgvFile(
+          '/Users/Me/.vscode/ARGV.json',
+          '/Users/me/.vscode/argv.json',
+          'darwin',
+        ),
+        isArgvFile(
+          '/Users/Me/.vscode/ARGV.json',
+          '/Users/me/.vscode/argv.json',
+          'linux',
+        ),
+      ],
+      [true, true, false],
     );
   });
 
@@ -65,6 +104,27 @@ describe('the runtime-arguments file', () => {
         "enable-proposed-api": ["remote-oss.remote-ssh", "x.y",],
       }`),
       {identifiers: ['remote-oss.remote-ssh', 'x.y'], logged: []},
+    );
+  });
+
+  it('keeps a comma and a bracket inside a string', () => {
+    deepStrictEqual(read('{"enable-proposed-api": ["a,]", "b,}"]}'), {
+      identifiers: ['a,]', 'b,}'],
+      logged: [],
+    });
+  });
+
+  it('drops a trailing comma that a comment separates from the bracket', () => {
+    deepStrictEqual(
+      read('{"enable-proposed-api": ["a.b", /* x */ // y\n ]}').identifiers,
+      ['a.b'],
+    );
+  });
+
+  it('keeps a comma that a value follows', () => {
+    deepStrictEqual(
+      read('{"enable-proposed-api": ["a.b", "c.d"]}').identifiers,
+      ['a.b', 'c.d'],
     );
   });
 

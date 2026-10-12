@@ -92,7 +92,12 @@ export interface GateIdentity {
   /** The editor's application name. */
   applicationName: string;
   proposals: readonly ProposalName[];
-  argv: ArgvLocation;
+  /** Where the runtime arguments are; the data folder is looked up when the setup needs it, never at activation. */
+  argv: Omit<ArgvLocation, 'dataFolderName'> & {
+    dataFolderName(): PromiseLike<string>;
+  };
+  /** The platform the editor runs on, which decides whether file names differ by case. */
+  platform: string;
   texts: SetupTexts;
   logFailure(message: string): void;
 }
@@ -122,7 +127,19 @@ export function setupPortsOf(
 ): SetupPorts {
   const {texts} = identity;
   const names = [identity.displayName, identity.applicationName];
-  const argvFile = argvPath(identity.argv);
+  async function resolvedArgvFile(): Promise<string | undefined> {
+    try {
+      return argvPath({
+        ...identity.argv,
+        dataFolderName: await identity.argv.dataFolderName(),
+      });
+    } catch (caught) {
+      identity.logFailure(
+        `the runtime arguments cannot be located: ${String(caught)}`,
+      );
+      return undefined;
+    }
+  }
   const configure = texts.configureButton;
   const quit = filled(texts.quitButton, names);
   function noticeText(notice: SetupNotice): string {
@@ -138,10 +155,14 @@ export function setupPortsOf(
         viewIds: [],
       }),
     installedFamilyIds: () => installedFamilyIds(editor.installed()),
-    argvEnabled: async () =>
-      enabledProposedApiIds(await editor.readFile(argvFile), message => {
-        identity.logFailure(message);
-      }),
+    argvEnabled: async () => {
+      const argvFile = await resolvedArgvFile();
+      return argvFile === undefined
+        ? []
+        : enabledProposedApiIds(await editor.readFile(argvFile), message => {
+            identity.logFailure(message);
+          });
+    },
     flags: {
       dismissed: () => editor.state.read(DISMISSED_KEY) ?? false,
       setDismissed: value => editor.state.update(DISMISSED_KEY, value),
@@ -163,7 +184,15 @@ export function setupPortsOf(
         ? 'quit'
         : 'later',
     configureRuntimeArguments: () => editor.runCommand(CONFIGURE_COMMAND),
-    argvEdited: () => savedAndClosed(editor.documents, isArgvFile),
+    argvEdited: async () => {
+      const argvFile = await resolvedArgvFile();
+      return (
+        argvFile !== undefined &&
+        (await savedAndClosed(editor.documents, documentPath =>
+          isArgvFile(documentPath, argvFile, identity.platform),
+        ))
+      );
+    },
     quit: () => editor.runCommand(QUIT_COMMAND),
     logFailure: message => {
       identity.logFailure(message);
