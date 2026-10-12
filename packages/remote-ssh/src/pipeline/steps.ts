@@ -89,6 +89,11 @@ export interface TunnelOpening {
   opened: OpenedTunnel;
   /** Closes the tunnel; called once, when the window ends or when the connect is abandoned after the tunnel opened. */
   close(): void;
+  /**
+   * Calls `listener` once when the tunnel ends without being asked to (its listener failed, or its own session
+   * ended), at once if it already has. A `close()` the caller asked for never calls it.
+   */
+  onClosed(listener: (detail: string) => void): void;
 }
 
 /** The steps of one connect, each over the real thing in the extension and over a fake in a test. */
