@@ -65,6 +65,7 @@ export const FAILURE_TEXTS = {
     'Port forwarding is disabled to avoid man-in-the-middle attacks',
   brokenPipe: 'send disconnect: Broken pipe',
   connectionClosed: 'Connection closed.',
+  configFileUnreadable: "Can't open user config file ",
 } as const;
 
 /** The prefix of ssh's first-level debug lines. */

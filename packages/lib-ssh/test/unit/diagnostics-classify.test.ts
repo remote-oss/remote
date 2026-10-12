@@ -411,6 +411,67 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     );
   });
 
+  it('F-2201 AC-35: a config file ssh cannot read gives Permission denied', () => {
+    deepStrictEqual(
+      classifyRun(
+        ["Can't open user config file /home/a/cfg: Permission denied"],
+        255,
+        'connection',
+        'shared',
+      ),
+      {
+        kind: 'unknown',
+        reason: {text: 'Permission denied'},
+        hints: [],
+        logLines: [],
+      },
+    );
+  });
+
+  it('F-2201 AC-35: the config-file line wins over a following denied line', () => {
+    deepStrictEqual(
+      classifyRun(
+        [
+          "Can't open user config file /home/a/cfg: Permission denied",
+          'Permission denied (publickey).',
+        ],
+        255,
+        'connection',
+        'shared',
+      ),
+      {
+        kind: 'unknown',
+        reason: {text: 'Permission denied'},
+        hints: [],
+        logLines: [],
+      },
+    );
+  });
+
+  it('F-2201 7.E8: a config file that is missing keeps no reason', () => {
+    deepStrictEqual(
+      classifyRun(
+        ["Can't open user config file /home/a/cfg: No such file or directory"],
+        255,
+        'connection',
+        'shared',
+      ),
+      {kind: 'unknown', hints: [], logLines: []},
+    );
+  });
+
+  it('F-2603 BR-10: a denied line that is not a config file stays an authentication', () => {
+    deepStrictEqual(
+      classifyRun(
+        ['a@h: Permission denied (password).'],
+        255,
+        'connection',
+        'shared',
+      ),
+      denied('Permission denied (password).'),
+    );
+  });
+
   it('F-2306.BR-13: the later denied line wins', () => {
     deepStrictEqual(
       classifyRun(
