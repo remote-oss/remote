@@ -19,8 +19,10 @@ Nothing else. No module is changed to use the defaults yet; the wiring of part E
 
 ## 2. Contract
 
-Each constant carries its basis in a one-line comment, exactly as given here (the voice rule: the feature and row, or
-`ruled on #253 Q7`). The values are athena's table on #253 Q7.
+The values are athena's table on #253 Q7. **The code carries no feature, rule or issue ids** (ADR-0008's voice rule,
+as `DISCARD_DEADLINE_MILLISECONDS` shows): each constant gets a JSDoc that says what the value bounds, in plain words.
+The basis lives in the **test names**, which may carry ids (the Cite column below). The `//` notes in the block below
+are for the card's reader only and are not copied into the code.
 
 ```ts
 // lib-server: the client's download (DownloadBounds).
