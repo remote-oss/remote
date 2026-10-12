@@ -8,12 +8,12 @@ import {
   type ConnectWaitSettings,
   setupMarkerOf,
   TUNNEL_SUCCESS_LINE,
+  type TerminalLogin,
 } from 'lib-ssh';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {openTunnelStep} from '../../src/pipeline/tunnel-step.ts';
-import type {TerminalLogin} from '../../src/surfaces/terminal-questions.ts';
 import type {StartedServer} from 'lib-server';
 import {emptyRecording, INPUT, leaseOf, STARTED} from './pipeline.fixture.ts';
 

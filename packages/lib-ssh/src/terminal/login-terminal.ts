@@ -4,10 +4,11 @@
  */
 
 import type {Invocation} from '../arguments/invocation.ts';
+import type {PromptReader} from './prompt-reader.ts';
 
 /** The names of the login terminals. */
 export type LoginTerminalName =
-  'install' | 'SSH Tunnel' | 'Uninstall VS Code Server';
+  'install' | 'SSH Tunnel' | 'Copy VS Code Server' | 'Uninstall VS Code Server';
 
 /** How a terminal ended: its exit code when the process gave one, and why it ended, as the editor reports it. */
 export interface TerminalEnd {
@@ -40,4 +41,10 @@ export interface LoginTerminals {
     name: LoginTerminalName,
     reveal: boolean,
   ): LoginTerminalSession;
+}
+
+/** The terminal and the reader one login's questions come from. */
+export interface TerminalLogin {
+  terminal: Pick<LoginTerminalSession, 'send'>;
+  reader: Pick<PromptReader, 'inputOpened' | 'inputClosed'>;
 }

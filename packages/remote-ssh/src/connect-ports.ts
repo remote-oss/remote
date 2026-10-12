@@ -48,6 +48,7 @@ import {
   type ProcessSpawner,
   SharedSessionChannel,
   SshHostChannel,
+  type TerminalLogin,
 } from 'lib-ssh';
 import type {RemotePlatform} from './pipeline/platform.ts';
 import {
@@ -81,10 +82,7 @@ import {
   type PromptEditor,
 } from './surfaces/prompt-surface.ts';
 import type {Translate} from './surfaces/strings.ts';
-import {
-  attachTerminalQuestions,
-  type TerminalLogin,
-} from './surfaces/terminal-questions.ts';
+import {attachTerminalQuestions} from './surfaces/terminal-questions.ts';
 
 /** The editor's surfaces a connect shows, each over the editor. */
 export interface ConnectSurfaces {

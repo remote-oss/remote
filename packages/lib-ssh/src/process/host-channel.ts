@@ -17,6 +17,7 @@ import {
 } from 'lib-host';
 import type {Scheduler} from 'lib-helper';
 import {buildInvocation, type SshRequest} from '../arguments/invocation.ts';
+import type {Copier} from '../terminal/terminal-copy.ts';
 import {LineSplitter} from './line-splitter.ts';
 import type {LocalFiles} from './node-files.ts';
 import type {ProcessSpawner} from './ports.ts';
@@ -49,6 +50,8 @@ export interface SshHostChannelOptions {
   scheduler: Scheduler;
   /** How long one run may take, in milliseconds; absent when only the caller's cancellation ends it. */
   timeoutMilliseconds?: number;
+  /** Copies a file in a login terminal of the editor; absent, the copy is a process of its own. */
+  copier?: Copier;
 }
 
 /** How a supervised run ended. */
@@ -156,6 +159,9 @@ export class SshHostChannel implements HostChannel {
     const {cancellation} = request;
     if (cancellation.aborted) {
       return failFrom('cancelled', 'cancelled before the copy');
+    }
+    if (this.options.copier !== undefined) {
+      return this.options.copier(request);
     }
     const invocation = buildInvocation({
       ...this.options.base,

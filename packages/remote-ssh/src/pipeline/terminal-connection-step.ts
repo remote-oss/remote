@@ -16,12 +16,14 @@ import {
   type ConnectionNotice,
   LineSplitter,
   type LoginTerminals,
+  followLoginOutput,
   PromptReader,
   type SessionRunner,
   setupMarkerOf,
   type SshRequest,
   type TerminalEnd,
   TerminalSessionRunner,
+  type TerminalLogin,
 } from 'lib-ssh';
 import type {
   ConnectInput,
@@ -31,7 +33,6 @@ import type {
   StepFailure,
   StepResult,
 } from './steps.ts';
-import type {TerminalLogin} from '../surfaces/terminal-questions.ts';
 
 /** What the terminal connection step is made from. */
 export interface TerminalConnectionDependencies {
@@ -211,17 +212,13 @@ export function openTerminalConnectionStep(
           handOver();
         }
       });
-      let heardOutput = false;
-      terminal.onOutput(text => {
-        if (finished) {
-          return;
-        }
-        if (!heardOutput) {
-          heardOutput = true;
+      followLoginOutput(terminal, {
+        isFinished: () => finished,
+        onFirstOutput: () => {
           wait.stop();
-        }
-        reader.push(text);
-        splitter.push(text);
+        },
+        reader,
+        lines: splitter,
       });
       terminal.onEnd(end => {
         if (handedOver) {
