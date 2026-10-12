@@ -61,17 +61,24 @@ describe('hostLabel', () => {
     );
   });
 
-  it('{kind:"host", hostName:"2001:db8::1", user:"u", port:2222} is 2001:db8::1:2222', () => {
+  it('F-2502.BR-3: {kind:"host", hostName:"2001:db8::1", user:"u", port:2222} is [2001:db8::1]:2222', () => {
     deepStrictEqual(
       hostLabel({kind: 'host', hostName: '2001:db8::1', user: 'u', port: 2222}),
-      '2001:db8::1:2222',
+      '[2001:db8::1]:2222',
     );
   });
 
-  it('{kind:"host", hostName:"[2001:db8::1]", port:2222} is 2001:db8::1:2222', () => {
+  it('F-2502.BR-3: {kind:"host", hostName:"[2001:db8::1]", port:2222} is [2001:db8::1]:2222', () => {
     deepStrictEqual(
       hostLabel({kind: 'host', hostName: '[2001:db8::1]', port: 2222}),
-      '2001:db8::1:2222',
+      '[2001:db8::1]:2222',
+    );
+  });
+
+  it('F-2502.BR-3: {kind:"host", hostName:"192.0.2.10", port:2222} has no brackets', () => {
+    deepStrictEqual(
+      hostLabel({kind: 'host', hostName: '192.0.2.10', port: 2222}),
+      '192.0.2.10:2222',
     );
   });
 
@@ -93,7 +100,7 @@ describe('hostLabel', () => {
     ['u@my-alias', 'my-alias'],
     ['u@my-alias:2200', 'my-alias'],
     ['u@build.example.com:2200', 'build.example.com'],
-    ['[2001:db8::1]:2222', '2001:db8::1:2222'],
+    ['[2001:db8::1]:2222', '[2001:db8::1]:2222'],
     ['u@[2001:db8::1]', '2001:db8::1'],
     ['anything typed', 'anything typed'],
   ];
