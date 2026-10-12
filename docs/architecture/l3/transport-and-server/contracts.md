@@ -601,6 +601,13 @@ Rules:
    temporary name. A connect that needs the same archive waits for the in-flight download under R-79's bound instead
    of starting a second one; the atomic rename makes either outcome safe.
 
+Bounds (ruled 2026-10-12, #253 Q7): every time and size bound of the connect lives in a named-defaults module of the
+library that owns it, each value with its basis (a spec row, or the ruling). Where the reference had no bound, R-79's
+bounded wait catches a hang and never ends a slow but working operation the spec's acceptance tests require: a
+download is bounded by a stall (60 s without bytes) with a generous runaway ceiling (30 min, 1 GiB unannounced);
+the host download by 30 min (F-2403 AC-24 requires at least 10); the server's ready wait by 60 s (F-2409 BR-10: 14–16 s
+observed). The table with every value and its basis is on #253 (Q7).
+
 ### V9 server-cache
 
 | Operation | Inputs | Output | Failures |
