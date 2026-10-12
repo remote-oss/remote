@@ -55,6 +55,8 @@ export interface SshRequest extends RequestBase {
   forwards?: Forward[];
   /** The command run on the host: the command of a `oneShot` run, or `sh` for a connection in terminal mode. */
   remoteProgram?: string;
+  /** Whether the user's own forwards are dropped on this run: the install run when dynamic forwarding is off. */
+  clearUserForwards?: boolean;
 }
 
 /** An `scp` run that copies one file to the target. */
@@ -75,6 +77,10 @@ export interface Invocation {
 
 /** The loopback address every forward listens on and targets. */
 const LOOPBACK = '127.0.0.1';
+
+/** What the tunnel run runs on the host: the line that says it is up, then a wait that holds the forward. */
+export const TUNNEL_COMMAND =
+  "echo 'Connected to SSH Host - Please do not close this terminal'; exec sleep 2147483647";
 
 /**
  * The invocation for a request whose target has passed `validateTarget`. The host and the user are separate
@@ -109,11 +115,23 @@ export function buildInvocation(request: InvocationRequest): Invocation {
   ) {
     argumentList.push('-o', 'RemoteCommand=none');
   }
+  if (request.clearUserForwards) {
+    if ((request.forwards ?? []).length > 0) {
+      throw new Error(
+        "clearUserForwards would also clear the run's own forwards",
+      );
+    }
+    if (request.purpose === 'connection') {
+      argumentList.push('-o', 'ClearAllForwardings=yes');
+    }
+  }
   for (const forward of request.forwards ?? []) {
     argumentList.push(...forwardArguments(forward));
   }
   argumentList.push(...targetArguments(request.target));
-  if (request.purpose !== 'tunnel' && request.remoteProgram !== undefined) {
+  if (request.purpose === 'tunnel') {
+    argumentList.push(TUNNEL_COMMAND);
+  } else if (request.remoteProgram !== undefined) {
     argumentList.push(request.remoteProgram);
   }
   return {
