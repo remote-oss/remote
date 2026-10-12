@@ -43,13 +43,13 @@ copied from it without being checked against this card.
 | S022 | `Close Remote` | F-2601 |
 | S014 | `Can't assign requested address` | F-2603 (a reason of lib-ssh's classifier) |
 | S032 | `Could not resolve hostname` | F-2603 (reason) |
-| S079 | `Hostname contains invalid characters` | F-2105 (reason) |
+| S079 | `Hostname contains invalid characters` | F-2205 (reason) |
 | S094 | `Network is unreachable` | F-2603 (reason) |
 | S097 | `No route to host` | F-2603 (reason) |
 | S107 | `Port forwarding is disabled` | F-2305 (reason) |
 | S111 | `Remote host key has changed, port forwarding is disabled` | F-2305 (reason) |
-| S137 | `The connection timed out` | F-2104 (reason) |
-| S140 | `The operation timed out` | F-2104 (reason) |
+| S137 | `The connection timed out` | F-2105 (reason) |
+| S140 | `The operation timed out` | F-2105 (reason) |
 | S142 | `The process tried to write to a nonexistent pipe` | F-2603 (reason) |
 | S027 | `Connecting was canceled` | F-2304 |
 | S015 | `Cancel` | F-2601 |
