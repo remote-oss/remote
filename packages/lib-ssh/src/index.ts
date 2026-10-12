@@ -182,3 +182,11 @@ export {
   readConnectionEvent,
   readConnectionReply,
 } from './connection-server/messages.ts';
+export {
+  type LoginTerminalName,
+  type LoginTerminals,
+  type LoginTerminalSession,
+  type TerminalEnd,
+} from './terminal/login-terminal.ts';
+export {PlainTextFilter} from './terminal/plain-text.ts';
+export {TerminalStream} from './terminal/terminal-stream.ts';
