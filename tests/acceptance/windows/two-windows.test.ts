@@ -1,6 +1,7 @@
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import path from 'node:path';
 import {
   closeWindow,
   emptyWindows,
@@ -11,6 +12,7 @@ import {
   openWindow,
   recordLines,
   reloadWindow,
+  scriptEntries,
   windowEvents,
   windowNameOrder,
   windowState,
@@ -33,6 +35,24 @@ async function connectionHelpers(): Promise<number> {
 
 describe('windows of one editor on the same host (the first window is local)', function () {
   this.timeout(180000);
+
+  before(() => {
+    // The windows that open after this write read these entries: the picks they ask are answered from the script.
+    scriptEntries([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: 'dismiss',
+        window: 'c',
+      },
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: 'dismiss',
+        window: 'c',
+      },
+    ]);
+  });
 
   it('D-85: a window on the host opens and connects', async () => {
     await openWindow('harness', 'b');
@@ -101,5 +121,53 @@ describe('windows of one editor on the same host (the first window is local)', f
     );
     console.log(`      window name order: ${windowNameOrder(name)}`);
     await closeWindow(name);
+  });
+
+  it('D-85: the configuration-file pick of Open SSH Configuration File... is answered from the script', async () => {
+    await inWindow('c', 'opensshremotes.openConfigFile');
+    deepStrictEqual(
+      recordLines('filePick', 'c').map(line => [
+        line.question,
+        line.answer,
+        line.matched,
+        line.items,
+      ]),
+      [
+        [
+          'Edit custom SSH configuration file',
+          'dismiss',
+          true,
+          [
+            path.join(process.env.HARNESS_RUN_FOLDER ?? '', 'ssh_config'),
+            'Settings',
+            'Help',
+          ],
+        ],
+      ],
+    );
+  });
+
+  it('D-85: the host pick of Kill Local Connection Server is answered from the script', async () => {
+    await inWindow('c', 'opensshremotes.cleanLocalServer');
+    deepStrictEqual(
+      recordLines('hostPick', 'c').map(line => [
+        line.question,
+        line.answer,
+        line.matched,
+        line.items?.includes('harness'),
+        line.items?.at(-2),
+        line.items?.at(-1),
+      ]),
+      [
+        [
+          'Select configured SSH host or enter user@host',
+          'dismiss',
+          true,
+          true,
+          '$(plus) Add New SSH Host...',
+          'Configure SSH Hosts...',
+        ],
+      ],
+    );
   });
 });

@@ -11,6 +11,7 @@ import {
   readdirSync,
   readFileSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
@@ -50,7 +51,18 @@ export interface RecordLine {
   window: string;
   /** The labels a failure dialog or a notice was shown with, in order. */
   buttons?: string[];
+  /** The labels the pick was shown with, in order; only the lines of a `hostPick` or a `filePick` surface have it. */
+  items?: string[];
   time: number;
+}
+
+/** A question the scripted adapters of the launch's windows answer from the script, in the order the windows ask them. */
+export interface WindowScriptEntry {
+  surface: 'hostPick' | 'filePick';
+  match: string;
+  answer: {label: string} | {typed: string} | 'dismiss';
+  /** The window that answers; an entry without one is answered by every window. */
+  window?: string;
 }
 
 /** A harness variable of the run; throws when the tests run outside the harness. */
@@ -87,6 +99,18 @@ function agentFile(name: string, kind: 'events' | 'commands'): string {
 /** The events the agent of window `name` has reported, in order. */
 export function windowEvents(name: string): AgentEvent[] {
   return linesOf<AgentEvent>(agentFile(name, 'events'));
+}
+
+/**
+ * Writes the launch's script with `entries`, which the extensions read when they activate: a window that opens after
+ * the write answers its questions from it. A window that activated before the write keeps the entries it read, so an
+ * entry names the window it prepares for.
+ */
+export function scriptEntries(entries: readonly WindowScriptEntry[]): void {
+  writeFileSync(
+    variable('REMOTE_OSS_ACCEPTANCE_SCRIPT'),
+    JSON.stringify({entries}),
+  );
 }
 
 /** The lines of the record, optionally of one surface and one window. */

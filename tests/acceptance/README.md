@@ -158,15 +158,18 @@ authority its resolver resolves to `<pids>/<pid>.authority`, and the agent's `st
 `windows/harness.ts` has the Node helpers: `openWindow(alias, folder)`, `inWindow(name, command, ...args)` (resolves on
 `done`, fails on `failed`), `reloadWindow(name)` (resolves on the next `activated`; the reload command's own `failed` is
 ignored, since its extension host may end first), `closeWindow(name)` (resolves on `deactivated`), `windowState(name)`,
-which re-asks a remote window until its authority has arrived, `windowEvents(name)` and `recordLines(surface?,
-window?)`. For the empty windows: `emptyWindows()` lists the names their agents have activated with, in the order of
-their numbers, `nextEmptyName()` the name the next empty window will claim, and `nextEmptyWindow(action)` runs
-`action` and resolves with the one empty window it opens once that window's agent has activated, failing when it
-opens none or more than one. `windowNameOrder(name)` measures the order the window's name reached its adapters: the
-milliseconds between the window's pid file and its first record line, the row that opens the first empty window logs
-it. Every wait is bounded at 60 s and fails naming the window and the event. The record's lines name the window that
-wrote them and carry the time of their writing, and a script entry may name the window that answers it. The run's
-folder is named after the run's id, so that `acceptance:clean` ends an editor a killed job left behind.
+which re-asks a remote window until its authority has arrived, `windowEvents(name)`, `recordLines(surface?, window?)`
+and `scriptEntries(entries)`, which writes the launch's script for the windows that activate after the write. For the
+empty windows: `emptyWindows()` lists the names their agents have activated with, in the order of their numbers,
+`nextEmptyName()` the name the next empty window will claim, and `nextEmptyWindow(action)` runs `action` and resolves
+with the one empty window it opens once that window's agent has activated, failing when it opens none or more than
+one. `windowNameOrder(name)` measures the order the window's name reached its adapters: the milliseconds between the
+window's pid file and its first record line, the row that opens the first empty window logs it. Every wait is bounded
+at 60 s and fails naming the window and the event. The record's lines name the window that wrote them and carry the
+time of their writing, and a script entry may name the window that answers it. The `hostPick` and `filePick` lines
+record the pick's placeholder as the question, the answer taken or `dismiss`, and `items`, the labels the pick
+showed, so a row reads the hosts and the fixed rows from the record. The run's folder is named after the run's id, so
+that `acceptance:clean` ends an editor a killed job left behind.
 
 ### Reading the window
 
