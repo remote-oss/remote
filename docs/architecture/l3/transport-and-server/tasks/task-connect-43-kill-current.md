@@ -1,7 +1,13 @@
 # Task card connect-43: Kill Current VS Code Server is registered, with its own-host plans
 
 Issue: #681. Release 0.2 (the user put the maintenance commands in 0.2, #299's scope note), not gating. Size: M (about
-2 agent-days). Builder: assigned by hermes. Spec: F-2411 (remote-oss/remote-ssh#56) §6.1, §6.2, §6.5, §6.7 and AC-19–22,
+2 agent-days). Builder: iris (hermes), after connect-41.
+
+**This card is connect-23's part 2c (#532)**, the Kill Current part iris planned after parts 2 (#589) and 2b (#608). It
+replaces that plan: build 2c from this card, and the PR closes #532's remaining scope too. **Depends on helper-03
+(#596)**, which must merge first. After Kill Current and Uninstall on the window's own host, F-2412 BR-7 wants no stored
+connection record for the host. helper-03 is the nonce-checked record removal that makes connect-11's `killLocalServer`
+the whole of F-2412 6.1 (athena and daedalus on #532, 2026-10-13). Spec: F-2411 (remote-oss/remote-ssh#56) §6.1, §6.2, §6.5, §6.7 and AC-19–22,
 26, 29; F-2412 (#57) §6.1. Found by the unwired-contribution audit (2026-10-13).
 
 ## 1. The defect
