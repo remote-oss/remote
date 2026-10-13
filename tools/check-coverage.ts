@@ -5,7 +5,7 @@
  *     node tools/check-coverage.ts
  *
  * The file is docs/architecture/catalogue/coverage-slice1.tsv: `ac`, `tag`, `reason` per line. A test row proves the
- * criteria its name starts with (a feature id, `AC-` and a number, then a colon). The check fails when a line is malformed, when a tag asks for a
+ * criteria its name starts with (feature ids, each with its `AC-` numbers, after a space or a dot, in a `, `-separated list, then a colon). The check fails when a line is malformed, when a tag asks for a
  * kind of row that does not cite the criterion, when a row cites a criterion the file does not have, or when an
  * acceptance row of the slice names a feature and no criterion. It prints how many criteria each tag holds. Exit 0 when it passes, 1
  * with problems, 2 when the file cannot be read.
@@ -46,8 +46,16 @@ const REASON_TAGS: readonly string[] = ['core', 'deferred'];
 
 const AC_PATTERN = /^(F-\d{4})\.AC-(\d+)$/;
 
-/** The criteria a name or cite starts with: a feature id, then `AC-1`, or a list `AC-1, AC-3`, after a space or a dot. */
-const CITE_PATTERN = /^(F-\d{4})(?: |\.)AC-(\d+)((?:, ?AC-\d+)*)(?::|$)/;
+/** One feature's part of a cite: its id, then its criteria, `AC-1` or a list `AC-1, AC-3`, after a space or a dot. */
+const FEATURE_CITE = String.raw`F-\d{4}[ .]AC-\d+(?:, ?AC-\d+)*`;
+
+/**
+ * The criteria a name or cite starts with: one or more feature cites separated by `, `, then an optional lower-case case
+ * label in parentheses, then a colon or the end.
+ */
+const CITE_PATTERN = new RegExp(
+  `^(${FEATURE_CITE}(?:, ${FEATURE_CITE})*)(?: \\([a-z0-9-]+\\))?(?::|$)`,
+);
 
 /** What the check found. */
 export type CoverageReport =
@@ -61,18 +69,29 @@ interface Row {
   acceptance: boolean;
 }
 
-/** The criterion ids a name or cite starts with, or none for a name that cites nothing. */
+/**
+ * The criterion ids a name or cite starts with, in the order the features are cited, or none for a name that cites
+ * nothing.
+ */
 export function citedBy(name: string): string[] {
   const match = CITE_PATTERN.exec(name);
   if (match === null) {
     return [];
   }
-  const [, feature, first, rest] = match;
-  const numbers = [
-    first,
-    ...[...(rest ?? '').matchAll(/AC-(\d+)/g)].map(each => each[1]),
-  ];
-  return numbers.map(number => `${String(feature)}.AC-${String(number)}`);
+  const criteria: string[] = [];
+  for (const featureCite of (match[1] ?? '').matchAll(
+    /(F-\d{4})[ .]AC-(\d+)((?:, ?AC-\d+)*)/g,
+  )) {
+    const [, feature, first, rest] = featureCite;
+    const numbers = [
+      first,
+      ...[...(rest ?? '').matchAll(/AC-(\d+)/g)].map(each => each[1]),
+    ];
+    for (const number of numbers) {
+      criteria.push(`${String(feature)}.AC-${String(number)}`);
+    }
+  }
+  return criteria;
 }
 
 /** The test files under `folder` whose names end in `.test.ts`, skipping what is installed or built. */
@@ -112,16 +131,18 @@ function rowNamesOf(source: string): string[] {
   );
 }
 
-/** The `cite` fields of the failure suite's cases file. */
+/** The `cite` and `bound.cite` fields of the failure suite's cases file. */
 function casesCites(file: string): string[] {
   if (!existsSync(file)) {
     return [];
   }
   const parsed = JSON.parse(readFileSync(file, 'utf8')) as {
-    cases?: Array<{cite?: unknown}>;
+    cases?: Array<{cite?: unknown; bound?: {cite?: unknown}}>;
   };
   return (parsed.cases ?? []).flatMap(each =>
-    typeof each.cite === 'string' ? [each.cite] : [],
+    [each.cite, each.bound?.cite].filter(
+      (cite): cite is string => typeof cite === 'string',
+    ),
   );
 }
 
