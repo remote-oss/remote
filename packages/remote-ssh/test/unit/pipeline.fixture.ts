@@ -3,10 +3,18 @@
  * the lease and tunnel they hand out.
  */
 
+import type {Failed} from 'lib-authority';
 import type {ChannelFailure, HostChannel} from 'lib-host';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {Plan, ProbedHost, StartOutcome, TransferOutcome} from 'lib-server';
+import {
+  fakeCli,
+  type CliScript,
+  type FakeCli,
+} from 'lib-server/testing/fake-cli';
+import type {CliBridgeLoss} from '../../src/cli/cli-bridge.ts';
+import type {DownloadProgressPort} from '../../src/cli/server-download-progress.ts';
 import type {ConnectionNotice, SharedRecord} from 'lib-ssh';
 import type {ConnectOptions, PhaseEvent} from '../../src/pipeline/connect.ts';
 import type {PromptEditor} from '../../src/surfaces/prompt-surface.ts';
@@ -79,6 +87,18 @@ export const STARTED = {
   notices: [],
 } satisfies StartOutcome;
 
+/** A CLI that started and listens on its own port of the host. */
+const CLI_STARTED = {
+  kind: 'started',
+  server: {
+    endpoint: {kind: 'port', port: 5432},
+    processId: 88,
+    connectionToken: 'control-token',
+    reused: false,
+  },
+  notices: [],
+} satisfies StartOutcome;
+
 /** The steps' calls in order, the lease releases, and the phases the window saw. */
 export interface Recording {
   /** The listener the lease's `onNotice` was given last, for a test to send notices through. */
@@ -90,7 +110,36 @@ export interface Recording {
   tunnelCloses: number;
   records: SharedRecord[];
   phases: PhaseEvent[];
+  /** The fake CLI the last control connection reached. */
+  program?: FakeCli;
+  /** The listener the bridge's `onLost` was given last, for a test to end the bridge through. */
+  bridgeLost?: (cause: CliBridgeLoss) => void;
+  /** The failures shown after the window resolved. */
+  presented: Failed[];
+  /** How many secrets the steps made: the n-th is `secret-<n>`. */
+  secrets: number;
 }
+
+/** The error a CLI that requires its token gives to another token. */
+const BAD_TOKEN = 'CodeError(AuthChallengeBadToken)';
+
+/** The control token of a connect over the fixture's steps: its first secret. */
+export const CONTROL_TOKEN = 'secret-1';
+
+/** A CLI that requires `token`: the challenge with any other is refused, and every `serve` succeeds. */
+export function requiringToken(token: string): CliScript {
+  return request => {
+    if (request.method === 'challenge_issue') {
+      return (request.params as {token: string}).token === token
+        ? [{id: request.id, result: {challenge: 'challenge-text'}}]
+        : [{id: request.id, error: {code: -1, message: BAD_TOKEN}}];
+    }
+    return [{id: request.id, result: {}}];
+  };
+}
+
+/** The bridge the fixture's `openBridge` gives: its listener's address. */
+export const BRIDGE_ADDRESS = {host: '127.0.0.1', port: 51000} as const;
 
 /** Terms decided before ssh runs: the platform still unknown, no remote command. */
 export const TERMS: ConnectionTerms = {
@@ -199,6 +248,42 @@ export function steps(
         }),
       ),
     start: () => Promise.resolve(note('start', STARTED)),
+    installCli: () =>
+      Promise.resolve(
+        note('installCli', {
+          kind: 'placed' as const,
+          path: '/home/dev/.server/fixture-abc',
+        }),
+      ),
+    startCli: () => Promise.resolve(note('startCli', CLI_STARTED)),
+    stopCli: (input, lease, host, plan, processId) => {
+      note(`stopCli ${String(processId)}`, undefined);
+      return Promise.resolve();
+    },
+    connectControl: () => {
+      const program = fakeCli(requiringToken(CONTROL_TOKEN));
+      recording.program = program;
+      return Promise.resolve(note('connectControl', program.stream));
+    },
+    openBridge: () =>
+      Promise.resolve(
+        note('openBridge', {
+          address: BRIDGE_ADDRESS,
+          onLost: listener => {
+            recording.bridgeLost = listener;
+          },
+          close: () => {
+            recording.calls.push('closeBridge');
+          },
+        }),
+      ),
+    newSecret: () => {
+      recording.secrets += 1;
+      return `secret-${String(recording.secrets)}`;
+    },
+    presentLateFailure: failed => {
+      recording.presented.push(failed);
+    },
     installExtensions: () => {
       note('installExtensions', undefined);
       return Promise.resolve();
@@ -218,7 +303,15 @@ export function steps(
 
 /** A recording with nothing in it yet. */
 export function emptyRecording(): Recording {
-  return {calls: [], releases: 0, tunnelCloses: 0, records: [], phases: []};
+  return {
+    calls: [],
+    releases: 0,
+    tunnelCloses: 0,
+    records: [],
+    phases: [],
+    presented: [],
+    secrets: 0,
+  };
 }
 
 /** An empty recording and the options of one connect that record its phases, with the sink its log writes to. */
@@ -240,6 +333,7 @@ export function setup(): {
       maximumReconnectionAttempts: null,
       preconnectMilliseconds: 1000,
       logger: createLogger(logSink, {minimumLevel: () => 'info'}),
+      serve: {commit: 'c1', quality: 'insider'},
     },
   };
 }
@@ -261,6 +355,11 @@ export function tunnelFails(): ReturnType<ConnectSteps['openTunnel']> {
 export const CHANNEL_CLOSED: ChannelFailure = {
   kind: 'channelClosed',
   detail: 'gone',
+};
+
+/** Download notifications that show nothing. */
+export const SILENT_PROGRESS: DownloadProgressPort = {
+  show: () => ({report: () => undefined, close: () => undefined}),
 };
 
 /** A prompt editor that shows nothing: every question is dismissed at once. */

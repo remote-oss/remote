@@ -64,6 +64,9 @@ const REAL: EditorAdapters = {
   licenceDialog: {showModal: () => Promise.resolve('real')},
   platformPick: {pick: () => Promise.resolve('linux')},
   mitigationPick: {pick: () => Promise.resolve('reloadWindow')},
+  downloadProgress: {
+    show: () => ({report: () => undefined, close: () => undefined}),
+  },
 };
 
 /** The scripted adapters over `entries`, with the files they wrote to. */
@@ -641,5 +644,12 @@ describe('the scripted adapters answer from the script only', () => {
 
   it('#253: the terminals are the real ones', () => {
     strictEqual(scripted([]).adapters.terminals, REAL.terminals);
+  });
+});
+
+describe("the scripted adapters' download notification", () => {
+  it("F-2103 5.0 step 6: it is the editor's own, which asks nothing", () => {
+    const {adapters} = scripted([]);
+    deepStrictEqual(adapters.downloadProgress, REAL.downloadProgress);
   });
 });

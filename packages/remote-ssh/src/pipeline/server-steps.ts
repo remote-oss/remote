@@ -7,6 +7,9 @@
 import type {Logger} from 'lib-log';
 import {
   type ArchiveResolution,
+  BASE_PLACEHOLDERS,
+  classifyLicence,
+  expand,
   type OverridePolicy,
   type LicenceFacts,
   type OverrideValue,
@@ -19,16 +22,23 @@ import {
   type ClientFilePort,
   classifyServerLicence,
   type DownloadBounds,
+  type DirectReason,
   type DownloadPort,
   ensureAccepted,
   installExtensions,
   type HostLockLoop,
+  installCli,
   type LicenceModal,
+  type Plan,
   plan,
+  type ProbedHost,
   type PlanInput,
   probe,
+  type ScriptParameters,
   type ServerPolicyRecord,
+  startCli,
   startOrReuse,
+  stopCli,
   transfer,
 } from 'lib-server';
 import {validateTarget} from 'lib-ssh';
@@ -80,6 +90,9 @@ type ServerStepNames =
   | 'gate'
   | 'transfer'
   | 'start'
+  | 'installCli'
+  | 'startCli'
+  | 'stopCli'
   | 'installExtensions';
 
 /** The archive source the planner reads, from what the resolution found. */
@@ -94,6 +107,57 @@ function sourceOf(resolution: ArchiveResolution): PlanInput['source'] {
   }
 }
 
+/** The script parameters' key for the CLI's name and data folder. */
+const CLI_PARAMETERS = 'cli';
+
+/** Why the CLI path was not used, as the log says it once per connect. */
+const CLI_NOT_USED_REASONS: Readonly<
+  Record<Exclude<DirectReason, 'settingOff' | 'manualBootstrap'>, string>
+> = {
+  noCliSource: 'the editor names no CLI source',
+  noBuildForPlatform: 'there is no CLI build for this host',
+  termsToAccept: "the server's terms must be accepted first",
+};
+
+/** The host's platform as the templates name it: a musl Linux is `alpine`. */
+function templatePlatformOf(host: ProbedHost): {
+  operatingSystem: ProbedHost['operatingSystem'] | 'alpine';
+  architecture: ProbedHost['architecture'];
+} {
+  return {
+    operatingSystem: host.libc === 'musl' ? 'alpine' : host.operatingSystem,
+    architecture: host.architecture,
+  };
+}
+
+/**
+ * The address of the CLI archive for a host, from the product's `cliDownloadUrlTemplate`, or why it gives none: no
+ * template, or one that is unusable for this host.
+ */
+function cliAddressOf(
+  profile: ProductProfile,
+  platform: {operatingSystem: string; architecture: string},
+): {kind: 'address'; address: string} | {kind: 'none'} | {kind: 'unusable'} {
+  if (profile.cliDownloadUrlTemplate === '') {
+    return {kind: 'none'};
+  }
+  const expansion = expand(
+    profile.cliDownloadUrlTemplate,
+    {
+      ...platform,
+      commit: profile.commit,
+      quality: profile.quality,
+      version: profile.version,
+      release: profile.version,
+      applicationName: profile.applicationName,
+    },
+    BASE_PLACEHOLDERS,
+  );
+  return expansion.kind === 'url'
+    ? {kind: 'address', address: expansion.address}
+    : {kind: 'unusable'};
+}
+
 /** The steps that talk to the host and the libraries, for one connect. */
 export function createServerSteps(
   dependencies: ServerStepDependencies,
@@ -105,6 +169,8 @@ export function createServerSteps(
     updateUrl: profile.updateUrl,
   };
   let licenceFacts: LicenceFacts = {...noLicenceFacts, step: 'reuse'};
+  /** The CLI archive's address for this connect's host, once the plan has read it. */
+  let cliAddress: string | undefined;
 
   function parametersFor(
     changes: Partial<ParameterInput>,
@@ -120,6 +186,32 @@ export function createServerSteps(
       bounds: dependencies.bounds,
       ...changes,
     });
+  }
+
+  /** The CLI archive's address, which a CLI plan always comes with: asking for it before such a plan is a defect. */
+  function plannedCliAddress(): string {
+    if (cliAddress === undefined) {
+      throw new Error('a CLI step ran before a CLI plan');
+    }
+    return cliAddress;
+  }
+
+  /** The script parameters of the CLI's install and start: its name in the archive, and its place on the host. */
+  function cliParametersFor(
+    cliPlan: Extract<Plan, {kind: 'cli'}>,
+    host: ProbedHost,
+  ): ScriptParameters & {cli: NonNullable<ScriptParameters['cli']>} {
+    return {
+      ...parametersFor({
+        archiveUrl: plannedCliAddress(),
+        hostOperatingSystem: host.operatingSystem,
+      }),
+      launcher: profile.applicationName,
+      [CLI_PARAMETERS]: {
+        name: `${profile.applicationName}-${names.commit}`,
+        dataFolder: cliPlan.cliDataFolder,
+      },
+    };
   }
 
   return {
@@ -149,22 +241,41 @@ export function createServerSteps(
     },
     probe: (input, lease, cancellation) =>
       probe(lease.channel, parametersFor({}), cancellation),
-    plan: (input, host) => {
+    plan: (input, host, options) => {
+      const platform = templatePlatformOf(host);
       const resolution = resolveServerArchive(
         profile,
-        {
-          operatingSystem:
-            host.libc === 'musl' ? 'alpine' : host.operatingSystem,
-          architecture: host.architecture,
-        },
+        platform,
         dependencies.overridePolicy,
         dependencies.override,
       );
+      const cliSource = cliAddressOf(profile, platform);
+      if (cliSource.kind === 'unusable') {
+        dependencies.logger.info(
+          'the CLI path was not used: the CLI template is unusable',
+        );
+      }
+      cliAddress =
+        cliSource.kind === 'address' && options?.direct !== true
+          ? cliSource.address
+          : undefined;
+      const serverFree =
+        resolution.kind !== 'resolved' ||
+        !classifyLicence({
+          ...noLicenceFacts,
+          step: resolution.step,
+          downloadUrl: resolution.address,
+        });
+      const cliFree =
+        cliAddress === undefined ||
+        !classifyLicence({
+          ...noLicenceFacts,
+          step: 'productTemplate',
+          downloadUrl: cliAddress,
+        });
       const result = plan({
         facts: {
-          operatingSystem:
-            host.libc === 'musl' ? 'alpine' : host.operatingSystem,
-          architecture: host.architecture,
+          ...platform,
           homeFolder: host.home,
           existingLayouts: host.installed
             ? [{kind: 'bin', commit: names.commit, path: host.installFolder}]
@@ -180,7 +291,27 @@ export function createServerSteps(
         placement: dependencies.policy.downloadPlacement,
         useExecServerSetting: dependencies.useExecServer,
         source: sourceOf(resolution),
+        // An unusable template plans the direct install, as no template does.
+        ...(cliAddress === undefined
+          ? {}
+          : {
+              cliMode: {
+                useExecServerSetting: dependencies.useExecServer,
+                // `localServerDownload` has no manual bootstrap value in this extension.
+                manualBootstrap: false,
+                cliTemplate: profile.cliDownloadUrlTemplate,
+                sourcesFree: serverFree && cliFree,
+              },
+              cliName: `${profile.applicationName}-${names.commit}`,
+              // installCli's own step finds a CLI already placed and reports it without a download.
+              cliPresentOnHost: false,
+            }),
       });
+      for (const note of 'plan' in result ? result.plan.notes : []) {
+        dependencies.logger.info(
+          `the CLI path was not used: ${CLI_NOT_USED_REASONS[note.reason]}`,
+        );
+      }
       if (
         'plan' in result &&
         result.plan.kind === 'download' &&
@@ -244,6 +375,55 @@ export function createServerSteps(
         {lockLoop: dependencies.lockLoop, logger: dependencies.logger},
         cancellation,
       ),
+    installCli: async (input, lease, host, cliPlan, onPhase, cancellation) =>
+      installCli(
+        cliParametersFor(cliPlan, host),
+        {
+          plan: cliPlan,
+          address: plannedCliAddress(),
+          transfer: {
+            clientFolder: dependencies.clientFolder,
+            cache: dependencies.archiveCache,
+            downloadBounds: dependencies.downloadBounds,
+            temporaryToken: dependencies.newTemporaryToken(),
+            verification: dependencies.policy.verification,
+            hostFolder: host.temporaryFolder,
+            discardDeadlineMilliseconds:
+              dependencies.discardDeadlineMilliseconds,
+          },
+        },
+        {
+          channel: lease.channel,
+          download: dependencies.download,
+          files: dependencies.files,
+          lockLoop: dependencies.lockLoop,
+          logger: dependencies.logger,
+          onPhase,
+        },
+        cancellation,
+      ),
+    startCli: async (input, lease, host, cliPlan, controlToken, cancellation) =>
+      startCli(
+        lease.channel,
+        cliParametersFor(cliPlan, host),
+        controlToken,
+        {lockLoop: dependencies.lockLoop},
+        cancellation,
+      ),
+    stopCli: async (input, lease, host, cliPlan, processId) => {
+      // The stop runs whatever became of the connect's own cancellation: a CLI left running serves any local user.
+      const stopped = await stopCli(
+        lease.channel,
+        cliParametersFor(cliPlan, host),
+        processId,
+        new AbortController().signal,
+      );
+      if (stopped.kind === 'failed') {
+        dependencies.logger.warn(
+          `the CLI was not stopped: ${stopped.failure.kind}`,
+        );
+      }
+    },
     installExtensions: async (input, lease, cancellation) => {
       await installExtensions(
         lease.channel,

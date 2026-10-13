@@ -31,6 +31,7 @@ export type ScriptStep =
   | 'installExtensions'
   | 'installCli'
   | 'startCli'
+  | 'stopCli'
   | 'kill'
   | 'uninstall'
   | 'cleanup';
@@ -44,7 +45,7 @@ export type BootstrapRequest =
   | {
       installMode: 'stepwise';
       step:
-        | Exclude<ScriptStep, 'install' | 'installCli' | 'startCli'>
+        | Exclude<ScriptStep, 'install' | 'installCli' | 'startCli' | 'stopCli'>
         | StepwiseAction;
     };
 
@@ -79,6 +80,8 @@ interface CliParameters {
   name: string;
   /** The CLI's `--cli-data-dir`. */
   dataFolder: string;
+  /** The process `stopCli` ends, the one `startCli` reported; absent for the other steps. */
+  stopProcessId?: number;
 }
 
 /** Everything a script needs, as data; nothing in it is specific to one product. */
@@ -171,6 +174,7 @@ function parameterBlock(parameters: ScriptParameters): string[] {
     assignment('SOCKET_MODE', yesNo(start.socketMode)),
     assignment('CLI_NAME', parameters.cli?.name ?? ''),
     assignment('CLI_DATA', parameters.cli?.dataFolder ?? ''),
+    assignment('CLI_STOP_PID', parameters.cli?.stopProcessId ?? ''),
   ];
 }
 
@@ -559,6 +563,31 @@ const CLEANUP_BODY: readonly string[] = [
   'finish Ok',
 ];
 
+/**
+ * Ends the CLI that `startCli` started, only while its process is still that CLI: its first argument is the CLI's own
+ * file and its second `command-shell`, read field by field from `/proc`, so neither a recycled process id nor a
+ * process that merely mentions the file passes. Without `/proc` the fields can't be read, and nothing is ended.
+ */
+const STOP_CLI_BODY: readonly string[] = [
+  'is_cli_process() {',
+  "  case $1 in ''|*[!0-9]*|0|1) return 1 ;; esac",
+  '  [ -r "/proc/$1/cmdline" ] || return 1',
+  "  CLI_ARGUMENT_0=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | sed -n 1p)",
+  "  CLI_ARGUMENT_1=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | sed -n 2p)",
+  '  [ "$CLI_ARGUMENT_0" = "$CLI_FILE" ] && [ "$CLI_ARGUMENT_1" = command-shell ]',
+  '}',
+  'if is_cli_process "$CLI_STOP_PID"; then',
+  '  if have pkill; then',
+  '    pkill -P "$CLI_STOP_PID" 2>/dev/null',
+  '  fi',
+  '  kill "$CLI_STOP_PID" 2>/dev/null',
+  '  fact cli.stopped yes',
+  'else',
+  '  fact cli.stopped no',
+  'fi',
+  'finish Ok',
+];
+
 type BodyStep = Exclude<
   BootstrapRequest['step'],
   'start' | 'installExtensions'
@@ -574,6 +603,8 @@ function bodyOf(step: BodyStep): readonly string[] {
       return INSTALL_CLI_BODY;
     case 'startCli':
       return START_CLI_BODY;
+    case 'stopCli':
+      return STOP_CLI_BODY;
     case 'discard':
       return DISCARD_BODY;
     case 'kill':
@@ -623,6 +654,7 @@ const FUNCTION_GROUPS: Readonly<
     LEAVE,
   ],
   startCli: [COMMON_FUNCTIONS, CLI_FUNCTIONS],
+  stopCli: [COMMON_FUNCTIONS],
   kill: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
   uninstall: [COMMON_FUNCTIONS, PROCESS_FUNCTIONS, STOP_FUNCTIONS],
   cleanup: [COMMON_FUNCTIONS, LOCK_FUNCTIONS, FOLDER_KIND_FUNCTIONS],

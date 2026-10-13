@@ -52,6 +52,10 @@ import {
   terminalCopierOf,
   type TerminalLogin,
 } from 'lib-ssh';
+import {
+  type DownloadProgressPort,
+  serverDownloadProgress,
+} from './cli/server-download-progress.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
@@ -103,6 +107,8 @@ export interface ConnectSurfaces {
   licenceModal: LicenceModal;
   acceptances: AcceptanceStore;
   presenter: FailurePresenter;
+  /** The editor's notifications with a percentage, which the server download shows after the window resolved. */
+  downloadProgress: DownloadProgressPort;
   /** Reveals the connection's log. */
   revealLog: () => void;
 }
@@ -196,6 +202,14 @@ export function wiringPortsOf(
       attachTerminalQuestions(login, surfaces.prompts, hostAlias(input.target)),
     revealLoginTerminals: () => switchOf(settings, 'showLoginTerminal'),
   };
+  /** A loopback port for the window, the tunnel's or the CLI bridge's, in the preferred range when one is free. */
+  function chooseWindowPort(): Promise<number | undefined> {
+    return chooseLocalPort(
+      machine.prober,
+      valueOf(settings, 'preferredLocalPortRange'),
+      logger,
+    );
+  }
   const processEnvironment = definedEnvironment(machine.processEnvironment);
   const requestEnvironment: ConnectionRequestEnvironment = {
     registryFolder: machine.folders.registry,
@@ -302,6 +316,18 @@ export function wiringPortsOf(
       discardDeadlineMilliseconds: DISCARD_DEADLINE_MILLISECONDS,
       logger,
     },
+    cliPath: {
+      local: machine.local,
+      scheduler: machine.scheduler,
+      chooseLocalPort: chooseWindowPort,
+      newSecret: machine.helpers.newNonce,
+      presenter: surfaces.presenter,
+      downloadProgress: () =>
+        serverDownloadProgress(
+          surfaces.downloadProgress,
+          textOfId('S045', surfaces.translate),
+        ),
+    },
     tunnel: {
       terminals: surfaces.terminals,
       ...loginSurfaces,
@@ -316,12 +342,7 @@ export function wiringPortsOf(
           scheduler: machine.scheduler,
           handshakeMilliseconds: SOCKS_HANDSHAKE_MILLISECONDS,
         }),
-      chooseLocalPort: () =>
-        chooseLocalPort(
-          machine.prober,
-          valueOf(settings, 'preferredLocalPortRange'),
-          logger,
-        ),
+      chooseLocalPort: chooseWindowPort,
       logger,
     },
     logger,
@@ -350,6 +371,7 @@ export function connectAssemblyOf(
       },
       preconnectMilliseconds: PRECONNECT_MILLISECONDS,
       logger,
+      serve: {commit: machine.profile.commit, quality: machine.profile.quality},
     },
     revealLog: surfaces.revealLog,
     terminalMode: () => terminalModeOf(surfaces.settings),

@@ -11,6 +11,7 @@ import type {
   ProbeFailure,
   ScriptStatus,
   StartFailure,
+  CliServeError,
   TransferFailure,
 } from 'lib-server';
 import type {AcquireFailure} from 'lib-helper';
@@ -222,6 +223,28 @@ export function ofTransfer(failure: TransferFailure): FailureDetail {
       return {kind: 'channelClosed'};
     default:
       return ofChannel(failure.failure);
+  }
+}
+
+/**
+ * The failure of the CLI's `serve`, after the window resolved: a download the CLI could not make, a server template it
+ * could not use for its own release, or another fault of the install or the start. The CLI's words go to the log.
+ */
+export function ofCliServe(
+  error: CliServeError,
+  errorLine: string | undefined,
+): FailureDetail {
+  const logDetail = [errorLine, JSON.stringify(error)]
+    .filter(part => part !== undefined)
+    .join(' ');
+  switch (error.kind) {
+    case 'download':
+      return logged('serverDownload', logDetail, DOWNLOAD_FAILED);
+    case 'template':
+    case 'commitMismatch':
+      return logged('invalidServerTemplate', logDetail);
+    default:
+      return logged('serverInstall', logDetail, INSTALL_FAILED);
   }
 }
 

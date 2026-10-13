@@ -105,7 +105,9 @@ export function isReversedRange(range: string): boolean {
   return match !== null && Number(match[1]) > Number(match[2]);
 }
 
-function failed(failure: StartFailure): StartOutcome {
+function failed(
+  failure: StartFailure,
+): Extract<StartOutcome, {kind: 'failed'}> {
   return {kind: 'failed', failure};
 }
 
@@ -128,7 +130,8 @@ function endpointOf(
 /** The result block of a finished step, or the failed start that a step with none is. */
 export function blockOfStart(
   stepRun: StepRun | 'retriesExhausted',
-): {block: ResultBlock} | {unfinished: StartOutcome} {
+):
+  {block: ResultBlock} | {unfinished: Extract<StartOutcome, {kind: 'failed'}>} {
   if (stepRun === 'retriesExhausted') {
     return {unfinished: failed({kind: 'retriesExhausted'})};
   }

@@ -8,7 +8,7 @@ import {
   type SurfaceContext,
 } from '../../src/editor-surfaces.ts';
 import type {MitigationAction} from '../../src/surfaces/mitigation-picker.ts';
-import {SILENT_PROMPTS} from './pipeline.fixture.ts';
+import {SILENT_PROGRESS, SILENT_PROMPTS} from './pipeline.fixture.ts';
 
 /** What the fakes were asked, in order. */
 interface Calls {
@@ -41,6 +41,7 @@ function surfacesWith(
     licenceDialog: {showModal: () => Promise.resolve(undefined)},
     platformPick: {pick: () => Promise.resolve(changes.platform)},
     mitigationPick: {pick: () => Promise.resolve(changes.mitigation)},
+    downloadProgress: SILENT_PROGRESS,
   };
   const operations: EditorOperations = {
     reloadWindow: noted('reloadWindow'),

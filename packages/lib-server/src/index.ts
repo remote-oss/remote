@@ -126,8 +126,10 @@ export {
   type CliInstallOutcome,
   type CliPlacement,
   type CliStartDependencies,
+  type CliStopOutcome,
   installCli,
   startCli,
+  stopCli,
 } from './lifecycle/cli.ts';
 export {proxyVariableText} from './proxy-variable-text.ts';
 export {

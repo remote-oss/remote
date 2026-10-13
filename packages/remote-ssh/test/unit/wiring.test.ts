@@ -2,6 +2,13 @@ import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
+import {openCliControl} from 'lib-server';
+import {
+  fakeCli,
+  type CliScript,
+  type Request,
+} from 'lib-server/testing/fake-cli';
+import type {Failed} from 'lib-authority';
 import {TUNNEL_SUCCESS_LINE} from 'lib-ssh';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {createLogger, type Level} from 'lib-log';
@@ -13,6 +20,7 @@ import type {
   ConnectionMode,
   SharedConnection,
 } from 'lib-ssh';
+import {serverDownloadProgress} from '../../src/cli/server-download-progress.ts';
 import type {LoginLease} from '../../src/pipeline/connection-step.ts';
 import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
@@ -41,6 +49,7 @@ import {
   channelAnswering,
   dependencies,
   HOST,
+  PROFILE,
   leaseOn,
   lines,
 } from './server-steps.fixture.ts';
@@ -77,6 +86,12 @@ interface WiringSeen {
   terminals: RecordingTerminals;
   /** The clock the terminal step's waits run on. */
   clock: FakeClock;
+  /** The loopback the CLI path connects and listens on. */
+  cliLocal: FakeLocalPort;
+  /** The kinds of the failures shown after the window resolved. */
+  presented: string[];
+  /** What the S045 notifications did, in order. */
+  progress: string[];
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -88,6 +103,10 @@ function portsOf(
     connectTimeout?: unknown;
     connection?: SharedConnection;
     mode?: ConnectionMode;
+    cliLocal?: FakeLocalPort;
+    bridgePort?: number | 'none';
+    cliTemplate?: string;
+    useExecServer?: boolean;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
@@ -98,6 +117,9 @@ function portsOf(
     sink: new MemorySink(),
     terminals: new RecordingTerminals(),
     clock: new FakeClock(),
+    cliLocal: changes.cliLocal ?? new FakeLocalPort(),
+    presented: [],
+    progress: [],
   };
   const logger = createLogger(seen.sink, {
     minimumLevel: (): Level => 'info',
@@ -116,7 +138,7 @@ function portsOf(
         value: 'https://example.invalid/server-${os}-${arch}-${commit}.tar.gz',
         layer: 'defaultProfileUser',
       }),
-      useExecServer: () => false,
+      useExecServer: () => changes.useExecServer ?? false,
     },
     terms: {
       settings: () => ({
@@ -181,7 +203,11 @@ function portsOf(
       }),
       revealLoginTerminals: () => false,
     },
-    server: dependencies(),
+    server: dependencies(
+      changes.cliTemplate === undefined
+        ? {}
+        : {profile: {...PROFILE, cliDownloadUrlTemplate: changes.cliTemplate}},
+    ),
     tunnel: {
       terminals: seen.terminals,
       attachQuestions: () => ({
@@ -205,10 +231,44 @@ function portsOf(
       chooseLocalPort: () => Promise.resolve(50000),
       logger,
     },
+    cliPath: {
+      local: seen.cliLocal,
+      scheduler: seen.clock.scheduler(),
+      chooseLocalPort: () =>
+        Promise.resolve(
+          changes.bridgePort === 'none'
+            ? undefined
+            : (changes.bridgePort ?? BRIDGE_PORT),
+        ),
+      newSecret: () => 'fresh-secret',
+      presenter: {
+        present: failed => {
+          seen.presented.push(failed.kind);
+          return Promise.resolve('handled');
+        },
+      },
+      downloadProgress: () =>
+        serverDownloadProgress(
+          {
+            show: title => {
+              seen.progress.push(`show ${title}`);
+              return {
+                report: percent =>
+                  seen.progress.push(`report ${String(percent)}`),
+                close: () => seen.progress.push('close'),
+              };
+            },
+          },
+          'S045',
+        ),
+    },
     logger,
   };
   return {ports, seen};
 }
+
+/** The port the CLI path's bridge listens on, unless a row says otherwise. */
+const BRIDGE_PORT = 52000;
 
 /** The alias the rows connect to. */
 const ALIAS = 'dev';
@@ -645,7 +705,7 @@ async function tunnelWith(
   await steps.locateClient(inputFor('dev'));
   const outcome = await steps.openTunnel(
     inputFor('dev'),
-    leaseOf({calls: [], releases: 0, tunnelCloses: 0, records: [], phases: []}),
+    leaseOf(emptyRecording()),
     STARTED.server,
     () => undefined,
     new AbortController().signal,
@@ -896,5 +956,196 @@ describe("a terminal-mode connect's wait, from this connect's lookup and setting
 
   it("F-2305 3.4: the channel's own login names the host as the user wrote it, without user and port", async () => {
     deepStrictEqual((await channelRunOf('alex@dev:22'))?.displayHost, 'dev');
+  });
+});
+
+describe("the composition's CLI path", () => {
+  const SERVE_PARAMS = {
+    commit: 'c1',
+    quality: 'insider',
+    connectionToken: 'server-token',
+    useLocalDownload: false,
+  };
+
+  /** Lets the control client's decoder and the bridge's callbacks run. */
+  async function settled(): Promise<void> {
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+  }
+
+  /** A CLI whose first `serve` logs a download and succeeds, and whose later ones are never answered. */
+  function downloading(request: Request): readonly unknown[] {
+    const {socket_id: socketId} = (request.params ?? {}) as {
+      socket_id?: number;
+    };
+    if (request.method !== 'serve' || socketId !== 0) {
+      return [];
+    }
+    return [
+      {
+        id: null,
+        method: 'serverlog',
+        params: {line: 'Downloading VSCodium server -> /tmp/x', level: 2},
+      },
+      {id: request.id, result: {}},
+    ];
+  }
+
+  /** The bridge of a located connect over a CLI answering `script`, with what the fakes saw. */
+  async function bridged(
+    changes: Parameters<typeof portsOf>[0] = {},
+    script: CliScript = downloading,
+  ) {
+    const {ports, seen} = portsOf(changes);
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const peer = fakeCli(script);
+    const bridge = await steps.openBridge(
+      openCliControl(peer.stream),
+      SERVE_PARAMS,
+      {onServeLog: () => undefined, onControlEnded: () => undefined},
+    );
+    return {seen, peer, bridge};
+  }
+
+  /** The messages the composition logged. */
+  function messagesOf(seen: WiringSeen): string[] {
+    return seen.sink.lines.map(line => line.message);
+  }
+
+  it("cli-04 §3 step 3: the control connection goes to the tunnel's local port", async () => {
+    const {ports, seen} = portsOf();
+    await stepsOf(ports).connectControl(50001);
+    deepStrictEqual(seen.cliLocal.connected, [50001]);
+  });
+
+  it('cli-04 §3 step 3: a control port that refuses gives no connection', async () => {
+    const {ports} = portsOf({cliLocal: new FakeLocalPort('work', ['fail'])});
+    deepStrictEqual(await stepsOf(ports).connectControl(50001), undefined);
+  });
+
+  it('cli-04 §3 step 3: the refusal is logged with its reason', async () => {
+    const {ports, seen} = portsOf({
+      cliLocal: new FakeLocalPort('work', ['fail']),
+    });
+    await stepsOf(ports).connectControl(50001);
+    deepStrictEqual(
+      messagesOf(seen).filter(message => message.startsWith("the CLI's")),
+      ["the CLI's control port refused a connection: connection refused"],
+    );
+  });
+
+  it("cli-04 §4: the bridge listens on the port chosen as the tunnel's is", async () => {
+    const {seen} = await bridged();
+    deepStrictEqual(seen.cliLocal.listened, [BRIDGE_PORT]);
+  });
+
+  it('cli-04 §4: the bridge gives the window that port on 127.0.0.1', async () => {
+    const {bridge} = await bridged();
+    deepStrictEqual(bridge?.address, {host: '127.0.0.1', port: BRIDGE_PORT});
+  });
+
+  it('cli-04 §4: with no free port there is no bridge', async () => {
+    const {bridge} = await bridged({bridgePort: 'none'});
+    deepStrictEqual(bridge, undefined);
+  });
+
+  it('cli-04 §4: a port that cannot be listened on gives no bridge', async () => {
+    const {bridge} = await bridged({cliLocal: new FakeLocalPort('fail')});
+    deepStrictEqual(bridge, undefined);
+  });
+
+  it('cli-04 §4: the failed listen is logged with its reason', async () => {
+    const {seen} = await bridged({cliLocal: new FakeLocalPort('fail')});
+    deepStrictEqual(
+      messagesOf(seen).filter(message => message.startsWith('the bridge')),
+      ['the bridge could not listen on 52000: port 52000 is in use'],
+    );
+  });
+
+  it("F-2103 5.0 step 6: the first serve's download shows S045, and its reply closes it", async () => {
+    const {seen} = await bridged();
+    seen.cliLocal.accept(BRIDGE_PORT);
+    await settled();
+    await settled();
+    deepStrictEqual(seen.progress, ['show S045', 'close']);
+  });
+
+  it("themis on #431: a later serve is bounded by the connect's wait (30 s + 2 s)", async () => {
+    const {seen, peer} = await bridged({connectTimeout: 30});
+    seen.cliLocal.accept(BRIDGE_PORT);
+    await settled();
+    seen.cliLocal.accept(BRIDGE_PORT);
+    await settled();
+    await settled();
+    seen.clock.advance(31999);
+    await settled();
+    const before = peer.closes();
+    seen.clock.advance(1);
+    await settled();
+    deepStrictEqual([before, peer.closes()], [0, 1]);
+  });
+
+  it('athena on #458: a late failure is shown through the failure dialog', () => {
+    const {ports, seen} = portsOf();
+    const failed: Failed = {
+      kind: 'serverInstall',
+      retryable: false,
+      silent: false,
+      userAlreadyNotified: false,
+      hints: [],
+      diagnostics: [],
+    };
+    stepsOf(ports).presentLateFailure(failed);
+    deepStrictEqual(seen.presented, ['serverInstall']);
+  });
+
+  it("connect-14: the CLI's install, start and stop are this connect's server steps'", async () => {
+    const {ports} = portsOf({
+      cliTemplate: 'https://example.invalid/cli-${os}-${arch}.tar.gz',
+      useExecServer: true,
+    });
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const planned = steps.plan(inputFor('dev'), HOST);
+    if (!('plan' in planned) || planned.plan.kind !== 'cli') {
+      throw new Error('the plan should take the CLI path');
+    }
+    const channels = [1, 2, 3].map(() => channelAnswering(lines('Ok')));
+    const [installOn, startOn, stopOn] = channels.map(leaseOn);
+    const signal = new AbortController().signal;
+    await steps.installCli(
+      inputFor('dev'),
+      installOn ?? leaseOn(channelAnswering([])),
+      HOST,
+      {...planned.plan, download: false},
+      () => undefined,
+      signal,
+    );
+    await steps.startCli(
+      inputFor('dev'),
+      startOn ?? leaseOn(channelAnswering([])),
+      HOST,
+      planned.plan,
+      'control-token',
+      signal,
+    );
+    await steps.stopCli(
+      inputFor('dev'),
+      stopOn ?? leaseOn(channelAnswering([])),
+      HOST,
+      planned.plan,
+      88,
+    );
+    deepStrictEqual(
+      channels.map(channel => channel.calls.length > 0),
+      [true, true, true],
+    );
+  });
+
+  it("cli-04 §3: the connect's secrets are the port's", () => {
+    const {ports} = portsOf();
+    deepStrictEqual(stepsOf(ports).newSecret(), 'fresh-secret');
   });
 });

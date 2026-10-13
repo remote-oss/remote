@@ -940,3 +940,47 @@ describe('application-scope settings ignore workspace values', () => {
     );
   });
 });
+
+describe("the assembled ports' CLI path", () => {
+  it('F-2103 5.0 step 6: the S045 notification has its own text, translated', () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const titles: string[] = [];
+    const progress = wiringPortsOf(
+      {
+        ...surfaces,
+        downloadProgress: {
+          show: title => {
+            titles.push(title);
+            return {report: () => undefined, close: () => undefined};
+          },
+        },
+      },
+      machine,
+      loggerOf(recorded),
+    ).cliPath.downloadProgress();
+    progress.onLine({text: 'Downloading VSCodium server -> /tmp/x', level: 2});
+    deepStrictEqual(titles, ['<Downloading VS Code Server...>']);
+  });
+
+  it("cli-04 §3: the CLI's secrets are the helpers' nonces, a new one each time", () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const {cliPath} = wiringPortsOf(surfaces, machine, loggerOf(recorded));
+    deepStrictEqual(
+      [cliPath.newSecret(), cliPath.newSecret()],
+      ['nonce-1', 'nonce-2'],
+    );
+  });
+
+  it("cli-04 §3: the CLI's serve names the editor's commit and quality", () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    let given: unknown;
+    connectAssemblyOf(surfaces, machine, loggerOf(recorded), options => {
+      given = options.options.serve;
+      return connectorOf(options);
+    });
+    deepStrictEqual(given, {
+      commit: machine.profile.commit,
+      quality: machine.profile.quality,
+    });
+  });
+});

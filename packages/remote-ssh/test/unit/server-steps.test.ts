@@ -1,5 +1,7 @@
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, rejects} from 'node:assert';
 import type {RecordingChannel} from 'lib-host/testing/recording-channel';
+import {createLogger} from 'lib-log';
+import {MemorySink} from 'lib-log/testing/memory-sink';
 import {createServerSteps} from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
 import {
@@ -166,6 +168,305 @@ describe('the server steps: plan', () => {
         ? result.plan.installFolder
         : result,
       '/data/.fixture-server/bin/abc123',
+    );
+  });
+});
+
+describe('the server steps: plan, the CLI path', () => {
+  const CLI_TEMPLATE =
+    'https://example.invalid/cli-${os}-${arch}-${version}.tar.gz';
+
+  /** The plan and the log lines of a plan step for a product with `cliTemplate`. */
+  function planned(
+    cliTemplate: string,
+    changes: Parameters<typeof dependencies>[0] = {},
+  ) {
+    const sink = new MemorySink();
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: cliTemplate},
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+        ...changes,
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    return {result, messages: sink.lines.map(line => line.message)};
+  }
+
+  it('F-3902 rule 5 (ii): a product with a usable CLI template plans the CLI', () => {
+    const {result} = planned(CLI_TEMPLATE);
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'cli');
+  });
+
+  it('F-3902 rule 5 (i): the CLI is placed as <applicationName>-<commit> in the data folder', () => {
+    const {result} = planned(CLI_TEMPLATE);
+    deepStrictEqual(
+      'plan' in result && result.plan.kind === 'cli'
+        ? result.plan.cliPath
+        : result,
+      '/home/alex/.fixture-server/fixture-abc123',
+    );
+  });
+
+  it('brief §2 row 1: useExecServer off plans the direct install', () => {
+    const {result} = planned(CLI_TEMPLATE, {useExecServer: false});
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('brief §2 row 1: useExecServer off logs no reason', () => {
+    const {messages} = planned(CLI_TEMPLATE, {useExecServer: false});
+    deepStrictEqual(
+      messages.filter(message => message.startsWith('the CLI path')),
+      [],
+    );
+  });
+
+  it('brief §2 row 2: no CLI template plans the direct install', () => {
+    const {result} = planned('');
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('brief §2 row 3: a template with an unknown placeholder plans the direct install', () => {
+    const {result} = planned('https://example.invalid/${platform}.tar.gz');
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('brief §2 row 3: an unusable template is logged once, with its reason', () => {
+    const {messages} = planned('not a url ${os}');
+    deepStrictEqual(
+      messages.filter(message => message.startsWith('the CLI path')),
+      ['the CLI path was not used: the CLI template is unusable'],
+    );
+  });
+
+  it('brief §2 row 4: a host without a CLI build plans the direct install, logged', () => {
+    const sink = new MemorySink();
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+      }),
+    );
+    steps.plan(INPUT, {
+      ...HOST,
+      architecture: 'riscv64' as typeof HOST.architecture,
+    });
+    deepStrictEqual(
+      sink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('the CLI path')),
+      ['the CLI path was not used: there is no CLI build for this host'],
+    );
+  });
+
+  it('brief §2 row 5: a CLI source under the terms plans the direct install, logged', () => {
+    const {messages} = planned(
+      'https://update.code.visualstudio.com/cli-${os}-${arch}',
+    );
+    deepStrictEqual(
+      messages.filter(message => message.startsWith('the CLI path')),
+      ["the CLI path was not used: the server's terms must be accepted first"],
+    );
+  });
+
+  it("§6: the fallback's plan, asked for the direct install, never takes the CLI path", () => {
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
+      }),
+    );
+    const result = steps.plan(INPUT, HOST, {direct: true});
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('brief §2 row 5: a server source under the terms keeps the CLI out too', () => {
+    const {result} = planned(CLI_TEMPLATE, {
+      override: {
+        value: 'https://update.code.visualstudio.com/server-${os}-${arch}',
+        layer: 'defaultProfileUser',
+      },
+    });
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+});
+
+describe("the server steps: the CLI's install and start", () => {
+  const CLI_TEMPLATE =
+    'https://example.invalid/cli-${os}-${arch}-${version}.tar.gz';
+
+  /** The steps for a product with a CLI template, and the CLI plan they make for HOST. */
+  function cliSteps() {
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    if (!('plan' in result) || result.plan.kind !== 'cli') {
+      throw new Error('the plan should take the CLI path');
+    }
+    return {steps, cliPlan: result.plan};
+  }
+
+  /** The scripts a channel was asked to run, with their environments. */
+  function scriptsOf(channel: RecordingChannel) {
+    return channel.calls.flatMap(call =>
+      call.operation === 'runScript' ? [call.request] : [],
+    );
+  }
+
+  it('F-3902 rule 5 (i): a CLI already on the host is reported where the plan puts it', async () => {
+    const {steps, cliPlan} = cliSteps();
+    const outcome = await steps.installCli(
+      INPUT,
+      leaseOn(
+        channelAnswering(
+          lines('Ok', 'cli.path=/home/alex/.fixture-server/fixture-abc123'),
+        ),
+      ),
+      HOST,
+      {...cliPlan, download: false},
+      () => undefined,
+      new AbortController().signal,
+    );
+    deepStrictEqual(outcome, {
+      kind: 'placed',
+      path: '/home/alex/.fixture-server/fixture-abc123',
+    });
+  });
+
+  it('F-3902 rule 5 (i): the install step names the CLI <applicationName>-<commit>', async () => {
+    const {steps, cliPlan} = cliSteps();
+    const channel = channelAnswering(
+      lines('Ok', 'cli.path=/home/alex/.fixture-server/fixture-abc123'),
+    );
+    await steps.installCli(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      {...cliPlan, download: false},
+      () => undefined,
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      scriptsOf(channel)[0]?.script.includes("CLI_NAME='fixture-abc123'"),
+      true,
+    );
+  });
+
+  /** The scripts of a start with the control token `control-token-1`. */
+  async function startScripts() {
+    const {steps, cliPlan} = cliSteps();
+    const channel = channelAnswering(
+      lines('Ok', 'cli.port=5432', 'cli.pid=88'),
+    );
+    await steps.startCli(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      cliPlan,
+      'control-token-1',
+      new AbortController().signal,
+    );
+    return scriptsOf(channel);
+  }
+
+  it('contracts S10: the CLI is started with the control token in its environment', async () => {
+    deepStrictEqual((await startScripts())[0]?.environment, {
+      VSCODE_CLI_REQUIRE_TOKEN: 'control-token-1',
+    });
+  });
+
+  it('contracts S10: the control token is in no script text', async () => {
+    deepStrictEqual(
+      (await startScripts()).some(request =>
+        request.script.includes('control-token-1'),
+      ),
+      false,
+    );
+  });
+
+  it('a CLI step before a CLI plan is a defect', async () => {
+    const steps = createServerSteps(dependencies());
+    const {cliPlan} = cliSteps();
+    await rejects(
+      steps.startCli(
+        INPUT,
+        leaseOn(channelAnswering([])),
+        HOST,
+        cliPlan,
+        'control-token-1',
+        new AbortController().signal,
+      ),
+      /a CLI step ran before a CLI plan/,
+    );
+  });
+
+  it('V7a: a started CLI gives its port and process', async () => {
+    const {steps, cliPlan} = cliSteps();
+    const outcome = await steps.startCli(
+      INPUT,
+      leaseOn(channelAnswering(lines('Ok', 'cli.port=5432', 'cli.pid=88'))),
+      HOST,
+      cliPlan,
+      'control-token-1',
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      outcome.kind === 'started' ? outcome.server.endpoint : outcome,
+      {kind: 'port', port: 5432},
+    );
+  });
+});
+
+describe("the server steps: the CLI's stop", () => {
+  const CLI_TEMPLATE =
+    'https://example.invalid/cli-${os}-${arch}-${version}.tar.gz';
+
+  /** Stops process 88 over a channel that answers `output`, with the log the steps wrote. */
+  async function stopped(output: readonly string[]) {
+    const sink = new MemorySink();
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    if (!('plan' in result) || result.plan.kind !== 'cli') {
+      throw new Error('the plan should take the CLI path');
+    }
+    const channel = channelAnswering(output);
+    await steps.stopCli(INPUT, leaseOn(channel), HOST, result.plan, 88);
+    return {
+      channel,
+      messages: sink.lines.map(line => line.message),
+    };
+  }
+
+  it("themis on #458: the stop names the CLI's process", async () => {
+    const {channel} = await stopped(lines('Ok', 'cli.stopped=yes'));
+    const [call] = channel.calls;
+    deepStrictEqual(
+      call?.operation === 'runScript' &&
+        call.request.script.includes("CLI_STOP_PID='88'"),
+      true,
+    );
+  });
+
+  it('themis on #458: a stop that ran logs nothing', async () => {
+    const {messages} = await stopped(lines('Ok', 'cli.stopped=no'));
+    deepStrictEqual(
+      messages.filter(message => message.includes('not stopped')),
+      [],
+    );
+  });
+
+  it('themis on #458: a stop that failed is logged with its kind', async () => {
+    const {messages} = await stopped([]);
+    deepStrictEqual(
+      messages.filter(message => message.startsWith('the CLI was not stopped')),
+      ['the CLI was not stopped: noResultBlock'],
     );
   });
 });

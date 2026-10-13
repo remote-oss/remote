@@ -11,6 +11,7 @@ import {
   installCli,
   startCli,
   type StartOutcome,
+  stopCli,
   type TransferDependencies,
 } from '../../src/index.ts';
 import {parametersFor} from './fake-host.ts';
@@ -30,7 +31,9 @@ const DOWNLOADED: DownloadResult = {
   finalAddress: ADDRESS,
 };
 
-function baseParameters(): ReturnType<typeof parametersFor> {
+function baseParameters(): ReturnType<typeof parametersFor> & {
+  cli: NonNullable<ReturnType<typeof parametersFor>['cli']>;
+} {
   return {
     ...parametersFor(),
     launcher: 'codium-insiders',
@@ -352,6 +355,87 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
         kind: 'failed',
         failure: {kind: 'serverDownload', cause: 'downloadFailed'},
       });
+    });
+  });
+});
+
+describe("the CLI's stop (card cli-04, themis on #458)", () => {
+  /** A stop of process 4242 over a channel that prints `output`. */
+  async function stopped(output: readonly string[]) {
+    const channel = startingChannel(output);
+    const outcome = await stopCli(
+      channel,
+      baseParameters(),
+      4242,
+      NEVER_CANCELLED,
+    );
+    return {outcome, channel};
+  }
+
+  /** The script text of a stop that ran. */
+  async function stopScript(): Promise<string> {
+    const {channel} = await stopped(block('Ok', 'cli.stopped=yes'));
+    const script = scriptRequests(channel)[0];
+    return script?.operation === 'runScript' ? script.request.script : '';
+  }
+
+  it('themis on #458: the stop checks the process is still the CLI, by its first two arguments, before it kills it', async () => {
+    const text = await stopScript();
+    deepStrictEqual(
+      text.indexOf('is_cli_process "$CLI_STOP_PID"') <
+        text.indexOf('kill "$CLI_STOP_PID"'),
+      true,
+    );
+  });
+
+  it('themis on #458: the check compares the first argument with the CLI file and the second with command-shell', async () => {
+    const text = await stopScript();
+    deepStrictEqual(
+      text.includes(
+        '[ "$CLI_ARGUMENT_0" = "$CLI_FILE" ] && [ "$CLI_ARGUMENT_1" = command-shell ]',
+      ),
+      true,
+    );
+  });
+
+  it('themis on #458: the stop is given the process id of the CLI', async () => {
+    const {channel} = await stopped(block('Ok', 'cli.stopped=yes'));
+    const script = scriptRequests(channel)[0];
+    deepStrictEqual(
+      script?.operation === 'runScript' &&
+        script.request.script.includes("CLI_STOP_PID='4242'"),
+      true,
+    );
+  });
+
+  it('themis on #458: a CLI that was ended is stopped', async () => {
+    const {outcome} = await stopped(block('Ok', 'cli.stopped=yes'));
+    deepStrictEqual(outcome, {kind: 'stopped'});
+  });
+
+  it('themis on #458: a process that is no longer the CLI is not running', async () => {
+    const {outcome} = await stopped(block('Ok', 'cli.stopped=no'));
+    deepStrictEqual(outcome, {kind: 'notRunning'});
+  });
+
+  it('themis on #458: the stop carries no secret and needs no host lock', async () => {
+    const {channel} = await stopped(block('Ok', 'cli.stopped=yes'));
+    deepStrictEqual(environmentsOf(channel), [{}]);
+  });
+
+  it('themis on #458: a stop whose script gives no result block failed', async () => {
+    const {outcome} = await stopped([]);
+    deepStrictEqual(outcome, {
+      kind: 'failed',
+      failure: {kind: 'noResultBlock'},
+    });
+  });
+
+  it('themis on #458: a stop whose script fails reports its status', async () => {
+    const {outcome} = await stopped(block('CreateInstallDirFailed'));
+    deepStrictEqual(outcome, {
+      kind: 'failed',
+      failure: {kind: 'scriptFailed', status: 'CreateInstallDirFailed'},
     });
   });
 });
