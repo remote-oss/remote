@@ -152,7 +152,10 @@ export function launchesOf(root: string): Launch[] {
       runner: 'runner-remote',
       suite: 'suite-terminal',
       folderUri: REMOTE_FOLDER_URI,
-      settings: {'remote.SSH.useLocalServer': false},
+      settings: {
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
     },
     {
       label: 'slow',
