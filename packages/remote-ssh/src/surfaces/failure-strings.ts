@@ -12,6 +12,7 @@ export type FailureStringId =
   | 'S014'
   | 'S015'
   | 'S022'
+  | 'S024'
   | 'S027'
   | 'S029'
   | 'S030'
@@ -47,6 +48,7 @@ export type FailureStringId =
   | 'S121'
   | 'S122'
   | 'S126'
+  | 'S127'
   | 'S129'
   | 'S130'
   | 'S131'
@@ -57,6 +59,7 @@ export type FailureStringId =
   | 'S158'
   | 'S162'
   | 'S166'
+  | 'S167'
   | 'installPathProvided'
   | 'templateNotHttp'
   | 'templateUnknownPlaceholder'
@@ -67,6 +70,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S014: "Can't assign requested address",
   S015: 'Cancel',
   S022: 'Close Remote',
+  S024: 'Configure SSH Hosts...',
   S027: 'Connecting was canceled',
   S029: 'Copying VS Code Server to host with scp',
   S030: 'Could not establish connection to "{0}"',
@@ -102,6 +106,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S121: 'SSH user name cannot begin with {0}',
   S122: 'SSH user name cannot include the character {0}',
   S126: 'Select SSH configuration file to update',
+  S127: 'Select configured SSH host or enter user@host',
   S129: 'Setting up SSH Host {0}',
   S130: 'Setting up SSH tunnel',
   S131: 'Settings',
@@ -112,6 +117,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S158: 'Waiting for port forwarding to be ready',
   S162: 'about SSH configuration files',
   S166: 'specify a custom configuration file',
+  S167: '{0} Add New SSH Host...',
   installPathProvided: 'Provided: "{0}"',
   templateNotHttp: 'it does not give an http or https address',
   templateUnknownPlaceholder: 'the placeholder {0} is not known',

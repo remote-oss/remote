@@ -169,6 +169,52 @@ async function connected(
   return {result, recorded};
 }
 
+describe('the Kill Local Connection Server of the assembled connect (card connect-21)', () => {
+  /** The assembly over a helper client on a file port the test can read afterwards. */
+  function killing(): {
+    files: MemoryFilePort;
+    kill: (hostString: string) => Promise<void>;
+  } {
+    const {surfaces, machine, clock, recorded} = assemblyInputs();
+    const files = new MemoryFilePort();
+    const assembly = connectAssemblyOf(
+      surfaces,
+      {
+        ...machine,
+        helpers: clientEnvironment(
+          {
+            files,
+            endpoints: new FakeEndpointPort(),
+            spawn: () => Promise.reject(new Error('no helper in a unit test')),
+          },
+          clock,
+        ),
+      },
+      loggerOf(recorded),
+    );
+    return {files, kill: hostString => assembly.killLocalServer(hostString)};
+  }
+
+  it('F-2102 AC-21: the kill reads the record of the host in the registry folder and creates and removes nothing', async () => {
+    const {files, kill} = killing();
+    await kill('dev');
+    deepStrictEqual(
+      [
+        files.calls.map(call => call.operation),
+        files.calls.every(call => call.path.startsWith('/storage/registry')),
+      ],
+      [['read'], true],
+    );
+  });
+
+  it('F-2102 AC-17: two host strings read two different records', async () => {
+    const {files, kill} = killing();
+    await kill('dev');
+    await kill('alex@10.0.0.5');
+    deepStrictEqual(new Set(files.calls.map(call => call.path)).size, 2);
+  });
+});
+
 describe('the connect assembled from the editor and the machine', () => {
   it('connect-14: a connect looks the host up with the found client, then asks the helper to start', async () => {
     const {recorded} = await connected();

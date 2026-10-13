@@ -19,6 +19,8 @@ interface Seen {
   labels: number;
   revealed: number;
   opened: string[];
+  killed: string[];
+  remote: Array<[string, string]>;
 }
 
 /** The registration over fakes; the connector's server port is `serverPort`. */
@@ -40,6 +42,8 @@ async function registered(
     labels: 0,
     revealed: 0,
     opened: [],
+    killed: [],
+    remote: [],
   };
   const surfacesInUse =
     surfaces ??
@@ -70,6 +74,10 @@ async function registered(
   );
   const assembly = connectAssemblyOf(surfacesInUse, machine, logger);
   const connector = {...assembly.connector, serverPort: () => serverPort};
+  function killLocalServer(hostString: string): Promise<void> {
+    seen.killed.push(hostString);
+    return Promise.resolve();
+  }
   const commands: CommandHost = {
     registerCommand: (commandId, callback) => {
       seen.commands.set(commandId, callback);
@@ -92,6 +100,17 @@ async function registered(
         },
       },
       commands,
+      connectEditor: {
+        listHosts: () => ({hosts: [{name: 'dev', file: '/f'}]}),
+        pickHost: () =>
+          Promise.resolve({kind: 'host', label: 'dev', keepVisible: false}),
+        openRemote: (authority, window) => {
+          seen.remote.push([authority, window]);
+          return Promise.resolve();
+        },
+        runCommand: () => Promise.resolve(),
+        remoteName: () => 'ssh-remote',
+      },
       openExternal: address => {
         seen.opened.push(address);
         return Promise.resolve(true);
@@ -105,7 +124,7 @@ async function registered(
       },
       logger,
     },
-    {...assembly, connector},
+    {...assembly, connector, killLocalServer},
     resolversGranted,
   );
   return {seen, registration, recording, state, sink};
@@ -131,13 +150,65 @@ describe("the connect's registration", () => {
   it('F-2304, F-2405, F-2605: Open Web UI, Clear and the details command are registered with the resolver', async () => {
     const {seen} = await registered(true);
     deepStrictEqual(
-      [...seen.commands.keys()],
+      [...seen.commands.keys()].filter(command =>
+        [
+          'opensshremotes.openWebUI',
+          'opensshremotes.clearAllSessionHints',
+          'opensshremotes.showDetails',
+        ].includes(command),
+      ),
       [
         'opensshremotes.openWebUI',
         'opensshremotes.clearAllSessionHints',
         'opensshremotes.showDetails',
       ],
     );
+  });
+
+  it('connect-21: the four connect commands are registered with the resolver', async () => {
+    const {seen} = await registered(true);
+    deepStrictEqual(
+      [...seen.commands.keys()]
+        .filter(
+          command => command.includes('Empty') || command.includes('clean'),
+        )
+        .sort(),
+      [
+        'opensshremotes.cleanLocalServer',
+        'opensshremotes.openEmptyWindow',
+        'opensshremotes.openEmptyWindowInCurrentWindow',
+        'opensshremotes.openEmptyWindowOnCurrentHost',
+      ],
+    );
+  });
+
+  it('connect-21: Connect to Host... picks a host and opens it in a new window', async () => {
+    const {seen} = await registered(true);
+    await seen.commands.get('opensshremotes.openEmptyWindow')?.();
+    deepStrictEqual(seen.remote, [['ssh-remote+dev', 'new']]);
+  });
+
+  it('connect-21: Kill Local Connection Server ends the server of the picked host', async () => {
+    const {seen} = await registered(true);
+    await seen.commands.get('opensshremotes.cleanLocalServer')?.();
+    deepStrictEqual(seen.killed, ['dev']);
+  });
+
+  it('connect-21: the active-host command opens nothing before the window has a connection', async () => {
+    const {seen} = await registered(true);
+    await seen.commands.get('opensshremotes.openEmptyWindowOnCurrentHost')?.();
+    deepStrictEqual(seen.remote, []);
+  });
+
+  it('connect-21: the active-host command opens nothing while the connection is still resolving', async () => {
+    const {seen, recording} = await registered(true);
+    void recording
+      .registered()
+      ?.resolve('ssh-remote+alex@devbox:22', {resolveAttempt: 1})
+      .catch(() => undefined);
+    await Promise.resolve();
+    await seen.commands.get('opensshremotes.openEmptyWindowOnCurrentHost')?.();
+    deepStrictEqual(seen.remote, []);
   });
 
   it("F-2304: the details command reveals the connection's log", async () => {
@@ -193,13 +264,17 @@ describe("the connect's registration", () => {
     const {seen, registration} = await registered(true);
     registration.dispose();
     deepStrictEqual(
-      [seen.disposed, seen.events.at(-1)],
+      [[...seen.disposed].sort(), seen.events.at(-1)],
       [
         [
           'opensshremotes.showDetails',
           'opensshremotes.openWebUI',
           'opensshremotes.clearAllSessionHints',
-        ],
+          'opensshremotes.openEmptyWindow',
+          'opensshremotes.openEmptyWindowInCurrentWindow',
+          'opensshremotes.openEmptyWindowOnCurrentHost',
+          'opensshremotes.cleanLocalServer',
+        ].sort(),
         'unregister ssh-remote',
       ],
     );
