@@ -23,6 +23,9 @@ window's label (`surfaces/label-formatter.ts`, `registerWindowLabel`: `onFirstRe
   `register-connect.ts` takes beside `labels`. `extension.ts` passes `() =>
   vscode.commands.executeCommand('setContext', 'forwardedPortsViewEnabled', true)`.
 - The key's name is a constant with an `[oss]` citation, as other core names are.
+- Put the helper (`enablePortsViewWhenConnected(resolver, host, logger)`) beside `registerWindowLabel` in
+  `surfaces/label-formatter.ts`, with the same connected-first-resolve condition shared between them. Containers and WSL
+  then reuse one place (athena on #615; contracts §3.2, 8961677, makes it a family-wide rule).
 - A rejected `setContext` is logged at `warn` (`the Ports view could not be enabled: <message>`) and changes nothing
   else.
 
