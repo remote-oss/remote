@@ -26,6 +26,7 @@ import {
   type HarnessDependencies,
   type HarnessVariables,
   mappedPort,
+  installsOf,
   packagedExtensions,
   removeBundles,
   RETRY_PAUSE_MILLISECONDS,
@@ -46,6 +47,7 @@ import type {RunDownloads} from './acceptance-downloads.ts';
 import type {Started} from './acceptance-plain.ts';
 import {
   failureCases,
+  launchesOf,
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
@@ -418,6 +420,66 @@ describe('acceptance', () => {
     it('finds none before anything is packaged', () => {
       deepStrictEqual(packagedExtensions(workspace.root), []);
     });
+
+    it('tooling-30: the run-wide set leaves the explorer out', () => {
+      workspace.write('dist/remote-ssh-0.0.0.vsix', '');
+      workspace.write('dist/remote-explorer-0.0.0.vsix', '');
+      deepStrictEqual(packagedExtensions(workspace.root), [
+        path.join(workspace.root, 'dist', 'remote-ssh-0.0.0.vsix'),
+      ]);
+    });
+  });
+
+  describe('installsOf (card tooling-30)', () => {
+    it('tooling-30: the run installs once into its folder, and once into each explorer launch’s folder with the explorer', () => {
+      workspace.write('dist/remote-explorer-0.0.0.vsix', '');
+      deepStrictEqual(
+        installsOf(
+          workspace.root,
+          '/run',
+          ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
+          launchesOf(REPOSITORY_ROOT),
+        ),
+        [
+          {
+            folder: path.join('/run', 'extensions'),
+            files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
+          },
+          ...['explorer', 'explorer-alone', 'explorer-no-proposals'].map(
+            label => ({
+              folder: path.join('/run', `extensions-${label}`),
+              files: [
+                '/dist/remote-ssh.vsix',
+                '/run/window-agent.vsix',
+                path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
+              ],
+            }),
+          ),
+        ],
+      );
+    });
+
+    it('tooling-30: an explorer that is not packaged yet is skipped, as the run-wide set skips one', () => {
+      deepStrictEqual(
+        installsOf(
+          workspace.root,
+          '/run',
+          ['/a.vsix'],
+          [
+            {
+              label: 'explorer',
+              kind: 'plain',
+              suite: 'explorer',
+              withExtensions: [
+                'remote-oss.remote-explorer',
+                'remote-oss.unknown',
+              ],
+            },
+          ],
+        )[1]?.files,
+        ['/a.vsix'],
+      );
+    });
   });
 
   describe('runAcceptance', () => {
@@ -752,6 +814,7 @@ describe('acceptance', () => {
             '--user-data-dir=/run/user-data',
             '--extensions-dir=/run/extensions',
             '--enable-proposed-api=remote-oss.remote-ssh',
+            '--enable-proposed-api=remote-oss.acceptance-window-agent',
             '--disable-workspace-trust',
           ],
         ],
@@ -921,9 +984,13 @@ describe('acceptance', () => {
       workspace.write('dist/remote-ssh-0.0.0.vsix', '');
       await runAcceptance(workspace.root, harness, 'vscodium');
       deepStrictEqual(
-        harness.calls
-          .filter(call => call.includes('--install-extension'))
-          .map(call => call.split(' ')[0]),
+        [
+          ...new Set(
+            harness.calls
+              .filter(call => call.includes('--install-extension'))
+              .map(call => call.split(' ')[0]),
+          ),
+        ],
         [path.join('bin', 'codium-insiders')],
       );
     });
@@ -939,6 +1006,9 @@ describe('acceptance', () => {
         'slow',
         'windows',
         'no-proposals',
+        'explorer',
+        'explorer-alone',
+        'explorer-no-proposals',
       ]);
     });
 
@@ -1048,6 +1118,9 @@ describe('acceptance', () => {
         'slow',
         'windows',
         'no-proposals',
+        'explorer',
+        'explorer-alone',
+        'explorer-no-proposals',
       ]);
     });
 
@@ -1309,9 +1382,12 @@ describe('acceptance', () => {
       );
     });
 
-    it('#253 Q14: a checked download is unpacked and the executable returned', async () => {
+    /** The linux-x64 build fetched by a download whose checksum is pinned: the executable and the folders unpacked into. */
+    async function fetchedForLinuxX64(): Promise<{
+      executable: string;
+      unpacked: string[];
+    }> {
       const archive = new Uint8Array([1, 2, 3]);
-      const digest = createHash('sha256').update(archive).digest('hex');
       const unpacked: string[] = [];
       const executable = await vscodiumExecutableOf(
         workspace.root,
@@ -1323,15 +1399,23 @@ describe('acceptance', () => {
             unpacked.push(folder);
           },
         },
-        {...VSCODIUM_RELEASE.sha256, 'linux-x64': digest},
+        {
+          ...VSCODIUM_RELEASE.sha256,
+          'linux-x64': createHash('sha256').update(archive).digest('hex'),
+        },
       );
+      return {executable, unpacked};
+    }
+
+    it('#253 Q14: a checked download is unpacked and the executable returned', async () => {
+      const {executable, unpacked} = await fetchedForLinuxX64();
       deepStrictEqual(
         [executable, unpacked.length],
         [
           path.join(
             workspace.root,
             '.vscode-test',
-            `vscodium-${VSCODIUM_RELEASE.tagName}`,
+            `vscodium-${VSCODIUM_RELEASE.tagName}-linux-x64`,
             'codium-insiders',
           ),
           1,
@@ -1341,7 +1425,7 @@ describe('acceptance', () => {
 
     it('#253 Q14: a build that is already there is not downloaded again', async () => {
       workspace.write(
-        `.vscode-test/vscodium-${VSCODIUM_RELEASE.tagName}/codium-insiders`,
+        `.vscode-test/vscodium-${VSCODIUM_RELEASE.tagName}-linux-x64/codium-insiders`,
         '',
       );
       let downloads = 0;
@@ -1353,6 +1437,20 @@ describe('acceptance', () => {
         unpack: () => undefined,
       });
       strictEqual(downloads, 0);
+    });
+
+    it('#657: a build of another architecture is not taken for this one', async () => {
+      workspace.write(
+        `.vscode-test/vscodium-${VSCODIUM_RELEASE.tagName}-linux-arm64/codium-insiders`,
+        '',
+      );
+      deepStrictEqual((await fetchedForLinuxX64()).unpacked, [
+        path.join(
+          workspace.root,
+          '.vscode-test',
+          `vscodium-${VSCODIUM_RELEASE.tagName}-linux-x64`,
+        ),
+      ]);
     });
 
     it('#253 Q14: a platform with no pinned build throws', async () => {

@@ -1,6 +1,6 @@
 /**
- * @fileoverview The strings that are ours alone: our own named string ids, their English templates, and the text one
- * of them gives with its values.
+ * @fileoverview The strings outside the failure dialog's table: our own named ids, and the numbered ids used elsewhere,
+ * with their English templates, and the text one of them gives with its values.
  */
 
 import {SSH_LABEL_PREFIX_ID} from '../window/label-suffix.ts';
@@ -15,6 +15,13 @@ export const OWN_TEMPLATES = {
   S085: 'Killed VS Code Server on {0}.',
   S076: 'Failed to kill VS Code Server on {0}.',
   S101: 'Open Logs',
+  platformStoredNotice:
+    'You selected "{0}" as the remote platform - this will be stored in the setting "remote.SSH.remotePlatform" and can be changed there if needed.',
+  S039: "Don't Show Again",
+  S025: 'Connect',
+  S063: 'Enter SSH Connection Command',
+  S078: 'Host added!',
+  S099: 'Open Config',
   configFileNotAbsolute:
     'remote.SSH.configFile must be an absolute path or start with ~/: "{0}"',
 } as const;

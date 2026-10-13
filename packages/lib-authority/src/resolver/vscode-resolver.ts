@@ -37,33 +37,25 @@ function resultOf(
       ] as vscode.TunnelDescription[],
     },
   );
-  if (connection.tunnelFeatures !== undefined) {
-    result.tunnelFeatures = connection.tunnelFeatures as NonNullable<
-      vscode.TunnelInformation['tunnelFeatures']
-    >;
-  }
   if (connection.isTrusted !== undefined) {
     result.isTrusted = connection.isTrusted;
   }
   return result;
 }
 
-/** The resolver the editor calls: each resolve through the host, and the host's tunnel factory read when asked. */
+/**
+ * The resolver the editor calls: each resolve through the host. It gives the editor no tunnel factory and no tunnel
+ * features: core then builds the window's forwards itself, through the server connection, with its own defaults
+ * (the host-side connection of a forwarded port is the server's).
+ */
 function editorResolverOf(
   editor: typeof vscode,
   resolver: EditorResolver,
 ): vscode.RemoteAuthorityResolver {
-  const editorResolver: Pick<vscode.RemoteAuthorityResolver, 'resolve'> & {
-    readonly tunnelFactory: unknown;
-  } = {
+  return {
     resolve: async (authority, context) =>
       resultOf(editor, await resolver.resolve(authority, context)),
-    get tunnelFactory() {
-      return resolver.tunnelFactory;
-    },
   };
-  // The editor reads the factory after each resolve; the getter gives it the one the latest connect brought.
-  return editorResolver as vscode.RemoteAuthorityResolver;
 }
 
 /** The progress of a connect as a notification, with the details link in front of each stage that has it. */

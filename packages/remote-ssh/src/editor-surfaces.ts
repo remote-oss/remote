@@ -77,6 +77,8 @@ export interface SurfaceContext {
   names: PresenterNames;
   /** The profile's own record of accepted terms, never synced. */
   acceptanceState: AcceptanceState;
+  /** The profile's record of the notices the user asked not to see again. */
+  noticeState: AcceptanceState;
 }
 
 /** The setting the platform is written to. */
@@ -132,6 +134,8 @@ export function editorSurfacesOf(
         [alias]: platform,
       });
     },
+    notice: adapters.notice,
+    noticeState: context.noticeState,
     licenceModal: licenceModalOf(
       adapters.licenceDialog,
       translate,

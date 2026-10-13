@@ -37,17 +37,6 @@ export {
   type ForwardedTunnelRequest,
   openForwardedTunnel,
 } from './window-tunnel/forwarded.ts';
-export {
-  factoryFor,
-  type FactoryInit,
-  type ForwardedPort,
-  type ForwardFailure,
-  type ForwardOutcome,
-  type ForwardRequest,
-  type ReviveReport,
-  type TunnelFactory,
-  type TunnelFeatures,
-} from './window-tunnel/factory.ts';
 export {socksDialer, type SocksDialerInit} from './window-tunnel/socks.ts';
 export {nodeLocalPort} from './window-tunnel/node-network.ts';
 export {

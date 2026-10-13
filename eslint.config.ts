@@ -105,6 +105,9 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/server/tsconfig.json',
   './tests/acceptance/windows/tsconfig.json',
   './tests/acceptance/no-proposals/tsconfig.json',
+  './tests/acceptance/explorer/tsconfig.json',
+  './tests/acceptance/explorer-alone/tsconfig.json',
+  './tests/acceptance/explorer-no-proposals/tsconfig.json',
 ];
 
 const DEFAULT_EXPORT_BAN = {
@@ -326,6 +329,24 @@ export default defineConfig(
       'packages/lib-product/src/product-table.ts',
     ],
     rules: {'comments/public-surface': 'error'},
+  },
+  {
+    // Test doubles live under src/testing/ and are imported only by tests, so no bundle can carry one.
+    files: ['packages/*/src/**/*.ts'],
+    ignores: ['packages/*/src/testing/**', '**/*.test.ts', '**/*.fixture.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(^|/)testing/',
+              message: 'Test doubles under src/testing/ are for tests only.',
+            },
+          ],
+        },
+      ],
+    },
   },
   {
     files: ['**/*.{js,mjs,cjs}'],

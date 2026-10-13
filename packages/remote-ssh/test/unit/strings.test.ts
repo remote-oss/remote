@@ -102,6 +102,20 @@ const MAINTENANCE_TEXTS = [
   'Open Logs',
 ];
 
+/** The platform notice and its button. */
+const PLATFORM_NOTICE_TEXTS = [
+  'You selected "{0}" as the remote platform - this will be stored in the setting "remote.SSH.remotePlatform" and can be changed there if needed.',
+  "Don't Show Again",
+];
+
+/** The texts of the command that adds a host: the input's title, the notice and its buttons. */
+const ADD_HOST_TEXTS = [
+  'Enter SSH Connection Command',
+  'Host added!',
+  'Open Config',
+  'Connect',
+];
+
 function bundle(file: string): Record<string, string> {
   return JSON.parse(readFileSync(path.join(BUNDLES, file), 'utf8')) as Record<
     string,
@@ -127,6 +141,8 @@ describe('the runtime strings of the extension', () => {
           ...WAITING_TEXTS,
           ...CONFIG_FILE_TEXTS,
           ...MAINTENANCE_TEXTS,
+          ...PLATFORM_NOTICE_TEXTS,
+          ...ADD_HOST_TEXTS,
           'SSH: {0}',
         ].map(text => [text, text]),
       ),

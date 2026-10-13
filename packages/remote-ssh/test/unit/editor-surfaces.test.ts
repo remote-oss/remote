@@ -95,6 +95,7 @@ function surfacesWith(
         return Promise.resolve();
       },
     },
+    noticeState: {get: () => undefined, update: () => Promise.resolve()},
   };
   return {surfaces: editorSurfacesOf(adapters, operations, context), calls};
 }

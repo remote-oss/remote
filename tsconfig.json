@@ -129,6 +129,15 @@
     },
     {
       "path": "tests/acceptance/no-proposals"
+    },
+    {
+      "path": "tests/acceptance/explorer"
+    },
+    {
+      "path": "tests/acceptance/explorer-alone"
+    },
+    {
+      "path": "tests/acceptance/explorer-no-proposals"
     }
   ]
 }

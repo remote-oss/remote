@@ -7,7 +7,6 @@ const CONNECTION = {
   connectionToken: 't',
   extensionHostEnv: {},
   environmentTunnels: [],
-  tunnelFeatures: undefined,
 };
 
 describe('the recording resolver host editor', () => {
@@ -16,7 +15,6 @@ describe('the recording resolver host editor', () => {
     const fake = recordingResolverEditor(events);
     const handle = fake.editor.registerRemoteAuthorityResolver('ssh-remote', {
       resolve: () => Promise.resolve(CONNECTION),
-      tunnelFactory: undefined,
     });
     const resolved = await fake.registered()?.resolve('ssh-remote+box', {
       resolveAttempt: 1,

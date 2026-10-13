@@ -51,6 +51,7 @@ import {
   failureCases,
   hostExtensionFolder,
   failureLabel,
+  LAUNCH_EXTENSIONS,
   type Launch,
   type RunnerLaunch,
   launchesOf,
@@ -59,6 +60,7 @@ import {
 } from './acceptance-launches.ts';
 import {
   editorArguments,
+  extensionsFolderOf,
   launchFiles,
   packageWindowAgent,
   runPlainLaunch,
@@ -327,13 +329,18 @@ function accountAlias(
   ];
 }
 
-/** The packaged VSIX files of the extensions under test that exist under `<root>/dist`. */
-export function packagedExtensions(root: string): string[] {
+/**
+ * The packaged VSIX files that exist under `<root>/dist` of the named packages: by default, the extensions under test.
+ */
+export function packagedExtensions(
+  root: string,
+  packages: Iterable<string> = EXTENSIONS_UNDER_TEST.values(),
+): string[] {
   const folder = path.join(root, 'dist');
   if (!existsSync(folder)) {
     return [];
   }
-  const packageNames = new Set(EXTENSIONS_UNDER_TEST.values());
+  const packageNames = new Set(packages);
   return sortedEntries(folder)
     .filter(entry => {
       const packageName = /^(.+)-\d+\.\d+\.\d+\.vsix$/.exec(entry.name)?.[1];
@@ -384,6 +391,39 @@ async function waitForHost(
  * Prepares the host and the run's folder and returns the harness variables. The caller removes the container and
  * the folder through `tearDown`, also when this throws after the container started.
  */
+/**
+ * The installs of a run: the run's VSIX files into the run's extensions folder, and for each launch with extensions of
+ * its own, the same files and the packaged VSIX of each of its own extensions into the launch's folder.
+ */
+export function installsOf(
+  root: string,
+  runFolder: string,
+  vsixFiles: readonly string[],
+  launches: readonly Launch[],
+): Array<{folder: string; files: string[]}> {
+  return [
+    {folder: extensionsFolderOf(runFolder), files: [...vsixFiles]},
+    ...launches.flatMap(launch =>
+      launch.kind === 'plain' && launch.withExtensions !== undefined
+        ? [
+            {
+              folder: extensionsFolderOf(runFolder, launch),
+              files: [
+                ...vsixFiles,
+                ...packagedExtensions(
+                  root,
+                  launch.withExtensions.flatMap(
+                    extensionId => LAUNCH_EXTENSIONS.get(extensionId) ?? [],
+                  ),
+                ),
+              ],
+            },
+          ]
+        : [],
+    ),
+  ];
+}
+
 async function prepare(
   root: string,
   dependencies: HarnessDependencies,
@@ -431,18 +471,24 @@ async function prepare(
   ) {
     vsixFiles.push(await dependencies.windowAgentVsix(root, runFolder));
   }
-  if (vsixFiles.length > 0) {
-    checked(
-      command,
+  const installs = installsOf(
+    root,
+    runFolder,
+    vsixFiles,
+    editor === 'vscodium' ? launchesOf(root) : [],
+  ).filter(install => install.files.length > 0);
+  if (installs.length > 0) {
+    const editorCommand =
       vscodium === undefined
         ? await dependencies.editorCli()
-        : vscodiumCliOf(vscodium),
-      [
-        `--extensions-dir=${path.join(runFolder, 'extensions')}`,
+        : vscodiumCliOf(vscodium);
+    for (const {folder, files} of installs) {
+      checked(command, editorCommand, [
+        `--extensions-dir=${folder}`,
         `--user-data-dir=${path.join(runFolder, 'user-data')}`,
-        ...vsixFiles.flatMap(file => ['--install-extension', file]),
-      ],
-    );
+        ...files.flatMap(file => ['--install-extension', file]),
+      ]);
+    }
   }
   return {
     REMOTE_OSS_ACCEPTANCE: '1',
@@ -780,7 +826,8 @@ function vscodiumCliOf(executable: string): string {
 }
 
 /**
- * The VSCodium executable of the pinned release under `<root>/.vscode-test`. A missing build is downloaded, checked
+ * The VSCodium executable of the pinned release under `<root>/.vscode-test`, in a folder of the release and the
+ * client's platform, so a build of another architecture is never taken for it. A missing build is downloaded, checked
  * against the release's sha256 and unpacked; one already there is used as it is.
  */
 export async function vscodiumExecutableOf(
@@ -790,16 +837,16 @@ export async function vscodiumExecutableOf(
   transfer: VscodiumTransfer,
   checksums: Readonly<Record<string, string>> = VSCODIUM_RELEASE.sha256,
 ): Promise<string> {
+  const key = `${platform}-${architecture}`;
   const folder = path.join(
     root,
     '.vscode-test',
-    `vscodium-${VSCODIUM_RELEASE.tagName}`,
+    `vscodium-${VSCODIUM_RELEASE.tagName}-${key}`,
   );
   const executable = path.join(folder, 'codium-insiders');
   if (existsSync(executable)) {
     return executable;
   }
-  const key = `${platform}-${architecture}`;
   const expected = checksums[key];
   if (expected === undefined) {
     throw new Error(

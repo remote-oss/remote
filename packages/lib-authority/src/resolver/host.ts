@@ -72,7 +72,6 @@ export interface ResolvedConnection {
   connectionToken: string;
   extensionHostEnv: Readonly<Record<string, string | null>>;
   environmentTunnels: readonly unknown[];
-  tunnelFeatures: unknown;
   isTrusted?: boolean;
 }
 
@@ -82,8 +81,6 @@ export interface EditorResolver {
     authority: string,
     context: {resolveAttempt: number},
   ): Promise<ResolvedConnection>;
-  /** The factory of the current connection, if it brought one. */
-  readonly tunnelFactory: unknown;
 }
 
 /** What the progress shows and how the user can act on it. */
@@ -191,7 +188,6 @@ export interface Readiness {
 interface Memory {
   connectedBefore: boolean;
   settled: boolean;
-  tunnelFactory: unknown;
   listeners: Array<() => void>;
 }
 
@@ -205,7 +201,6 @@ function connectionOf(
     connectionToken: connected.connectionToken,
     extensionHostEnv: connected.extensionHostEnv,
     environmentTunnels: connected.environmentTunnels,
-    tunnelFeatures: connected.tunnelFeatures,
     ...(connected.trusted && allowsTrust ? {isTrusted: true} : {}),
   };
 }
@@ -233,7 +228,6 @@ export async function registerResolver(
   const memory: Memory = {
     connectedBefore: false,
     settled: false,
-    tunnelFactory: undefined,
     listeners: [],
   };
   const {connector} = options;
@@ -339,7 +333,6 @@ export async function registerResolver(
     }
     if (isConnected(result)) {
       memory.connectedBefore = true;
-      memory.tunnelFactory = result.tunnelFactory;
       applyAndAnnounce({kind: 'resolveSucceeded'});
       return connectionOf(result, options.allowsTrust);
     }
@@ -355,9 +348,6 @@ export async function registerResolver(
         () => undefined,
       );
       return turn;
-    },
-    get tunnelFactory() {
-      return memory.tunnelFactory;
     },
   };
   const registration = editor.registerRemoteAuthorityResolver(

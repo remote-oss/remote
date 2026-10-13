@@ -14,5 +14,8 @@
   "activationEvents": [
     "*"
   ],
+  "enabledApiProposals": [
+    "tunnels"
+  ],
   "main": "./extension.cjs"
 }

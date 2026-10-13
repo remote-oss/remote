@@ -76,6 +76,11 @@ export function connectTargetOf(target: SshTarget): ConnectTarget {
       };
 }
 
+/** The authority that opens a window on the host as the user wrote it. */
+export function plainAuthority(host: string): string {
+  return AUTHORITY_PREFIX + sshRemoteCodec.encode({kind: 'plain', text: host});
+}
+
 /** The text of an authority's payload for a target: plain as written, or the hex form the codec chooses. */
 export function payloadOf(target: SshTarget): string {
   return sshRemoteCodec.encode(connectTargetOf(target));
@@ -124,8 +129,7 @@ function openHandler(editor: ConnectCommandEditor, source: ConnectSource) {
       const choice = argumentChoice(commandArguments[0]);
       if ('host' in choice) {
         await editor.openRemote(
-          AUTHORITY_PREFIX +
-            sshRemoteCodec.encode({kind: 'plain', text: choice.host}),
+          plainAuthority(choice.host),
           windowTargetOf(source),
         );
         return;

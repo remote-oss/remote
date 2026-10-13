@@ -4,7 +4,7 @@
  * the modes asked whatever the umask. `vscode` is imported for its types only; the editor is a value it is given.
  */
 
-import {chmod, close, mkdir, open, stat} from 'node:fs';
+import {chmod, close, mkdir, open, readFile, stat, writeFile} from 'node:fs';
 import {promisify} from 'node:util';
 import path from 'node:path';
 import type * as vscode from 'vscode';
@@ -12,6 +12,7 @@ import {pickOne} from '../surfaces/editor-adapters.ts';
 import {textOfId} from '../surfaces/failure-strings.ts';
 import type {FailureStringId} from '../surfaces/failure-strings.ts';
 import type {Translate} from '../surfaces/strings.ts';
+import type {HostFiles} from './add-host-command.ts';
 import type {
   ConfigFileEditor,
   ConfigFiles,
@@ -93,6 +94,8 @@ const changeMode = promisify(chmod);
 const makeFolder = promisify(mkdir);
 const openFile = promisify(open);
 const closeFile = promisify(close);
+const readText = promisify(readFile);
+const writeText = promisify(writeFile);
 const statPath = promisify(stat);
 
 /** Whether a path exists. */
@@ -127,4 +130,11 @@ export const nodeConfigFiles: ConfigFiles = {
     await closeFile(await openFile(file, 'wx', mode));
     await changeMode(file, mode);
   },
+};
+
+/** The client's files with their text, for the command that adds a host. */
+export const nodeHostFiles: HostFiles = {
+  ...nodeConfigFiles,
+  read: file => readText(file, 'utf8'),
+  write: (file, text) => writeText(file, text),
 };

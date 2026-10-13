@@ -15,7 +15,7 @@ import {TemporaryWorkspace} from './temporary-workspace.ts';
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow, windows and no-proposals', () => {
+  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow, windows, no-proposals and the three explorer launches', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -29,6 +29,44 @@ describe('the launches of the VSCodium run', () => {
         'slow',
         'windows',
         'no-proposals',
+        'explorer',
+        'explorer-alone',
+        'explorer-no-proposals',
+      ],
+    );
+  });
+
+  it('tooling-30: only the three explorer launches install the explorer and open a debugging port, and only explorer-alone disables remote-ssh', () => {
+    deepStrictEqual(
+      launches.flatMap(launch =>
+        launch.kind === 'plain' &&
+        (launch.withExtensions !== undefined ||
+          launch.debuggingPort !== undefined ||
+          launch.disabledExtensions !== undefined)
+          ? [
+              [
+                launch.label,
+                launch.withExtensions,
+                launch.debuggingPort,
+                launch.disabledExtensions,
+              ],
+            ]
+          : [],
+      ),
+      [
+        ['explorer', ['remote-oss.remote-explorer'], true, undefined],
+        [
+          'explorer-alone',
+          ['remote-oss.remote-explorer'],
+          true,
+          ['remote-oss.remote-ssh'],
+        ],
+        [
+          'explorer-no-proposals',
+          ['remote-oss.remote-explorer'],
+          true,
+          undefined,
+        ],
       ],
     );
   });
@@ -40,10 +78,13 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the terminal launch turns the local server off', () => {
+  it('D-85: the terminal launch turns the local server off and names the platform of the host, so that no pick is asked', () => {
     deepStrictEqual(
       launches.find(launch => launch.label === 'terminal')?.settings,
-      {'remote.SSH.useLocalServer': false},
+      {
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
     );
   });
 
@@ -60,12 +101,27 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are the terminal launch and the failing connects that name them', () => {
+  it('D-85: the settings of their own are the terminal launch, the failing connects that name them and the explorer launches', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
         .map(launch => launch.label),
-      ['failure-refused-shown', 'terminal'],
+      [
+        'failure-refused-shown',
+        'terminal',
+        'explorer',
+        'explorer-alone',
+        'explorer-no-proposals',
+      ],
+    );
+  });
+
+  it('tooling-30: an explorer launch titles each window with its folder name in brackets', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.label.startsWith('explorer'))
+        .map(launch => launch.settings),
+      Array.from({length: 3}, () => ({'window.title': '[${rootName}]'})),
     );
   });
 
@@ -193,12 +249,12 @@ describe('the launch with no runner', () => {
     );
   });
 
-  it('F-3903 §5 rule 4: only the no-proposals launch leaves the proposed API out', () => {
+  it('F-3903 §5 rule 4: only the two no-proposals launches leave the proposed API out', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.proposedApi === false)
         .map(launch => launch.label),
-      ['no-proposals'],
+      ['no-proposals', 'explorer-no-proposals'],
     );
   });
 

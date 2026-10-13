@@ -55,6 +55,8 @@ export interface ManifestIdentifiers {
   languages: string[];
   activationEvents: string[];
   menuEntries: MenuEntry[];
+  /** The proposed APIs the manifest enables, in its order. */
+  enabledApiProposals: string[];
   /** Every `%key%` reference in the manifest's strings. */
   stringReferences: string[];
 }
@@ -361,6 +363,10 @@ export function readManifest(file: string, where: string): ManifestIdentifiers {
     ],
     activationEvents,
     menuEntries,
+    enabledApiProposals: manifest
+      .field('enabledApiProposals')
+      .optionalItems()
+      .map(proposal => proposal.string()),
     stringReferences: [...new Set(stringReferencesIn(manifest.value))],
   };
 }

@@ -15,12 +15,22 @@ const WAIT_MILLISECONDS = 60_000;
 
 /** What a window's agent reports: an event with the time it happened, and the command it concerns. */
 export interface AgentEvent {
-  event: 'activated' | 'deactivated' | 'accepted' | 'done' | 'failed' | 'state';
+  event:
+    | 'activated'
+    | 'deactivated'
+    | 'accepted'
+    | 'done'
+    | 'failed'
+    | 'state'
+    | 'forwarded';
   time: number;
   id?: string;
   message?: string;
   remoteName?: string | null;
   folders?: string[];
+  /** Where a forwarded port is reachable on this machine, as the editor gave it. */
+  localAddress?: string | {host: string; port: number};
+  remotePort?: number;
 }
 
 /** One line of the record the extensions append to. */
@@ -30,10 +40,12 @@ export interface RecordLine {
   answer: string;
   matched: boolean;
   window: string;
+  /** The labels a failure dialog or a notice was shown with, in order. */
+  buttons?: string[];
 }
 
 /** A harness variable of the run; throws when the tests run outside the harness. */
-function variable(name: string): string {
+export function variable(name: string): string {
   const value = process.env[name];
   if (value === undefined || value === '') {
     throw new Error(
@@ -74,6 +86,14 @@ export function recordLines(surface?: string, window?: string): RecordLine[] {
       (surface === undefined || line.surface === surface) &&
       (window === undefined || line.window === window),
   );
+}
+
+/** The lines of the log the launch's extensions write, without their time stamps. */
+export function connectionLog(): string[] {
+  return readFileSync(variable('REMOTE_OSS_ACCEPTANCE_LOG'), 'utf8')
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => line.slice(line.indexOf('] ') + 2));
 }
 
 /** The output of a command run in the host container as the user harness. */

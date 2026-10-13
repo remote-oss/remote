@@ -27,13 +27,16 @@ const SETTINGS: TermsSettings = {
 interface Calls {
   asked: string[];
   written: Array<[string, RemotePlatform]>;
+  announced: RemotePlatform[];
+  /** The order of the announcements and the writes. */
+  order: string[];
 }
 
 function stepsFor(
   changes: Partial<TermsSettings>,
   answer?: RemotePlatform,
 ): {calls: Calls; steps: ReturnType<typeof createTermsSteps>} {
-  const calls: Calls = {asked: [], written: []};
+  const calls: Calls = {asked: [], written: [], announced: [], order: []};
   return {
     calls,
     steps: createTermsSteps({
@@ -42,8 +45,13 @@ function stepsFor(
         calls.asked.push(alias);
         return Promise.resolve(answer);
       },
+      announcePlatform: platform => {
+        calls.announced.push(platform);
+        calls.order.push('announce');
+      },
       writePlatform: (alias, platform) => {
         calls.written.push([alias, platform]);
+        calls.order.push('write');
         return Promise.resolve();
       },
     }),
@@ -118,5 +126,29 @@ describe('remembering the platform', () => {
     const {steps, calls} = stepsFor({});
     await steps.rememberPlatform(INPUT, 'linux');
     deepStrictEqual(calls.written, []);
+  });
+
+  it('F-2206 5.2: a set write announces the stored platform, before the write', async () => {
+    const {steps, calls} = stepsFor({useLocalServer: false});
+    await steps.rememberPlatform(INPUT, 'linux');
+    deepStrictEqual(
+      [calls.announced, calls.order],
+      [['linux'], ['announce', 'write']],
+    );
+  });
+
+  it('F-2206 BR-8: the announcement names the reported platform, not the one picked', async () => {
+    const {steps, calls} = stepsFor({useLocalServer: false}, 'macOS');
+    await steps.rememberPlatform(INPUT, 'linux');
+    deepStrictEqual(calls.announced, ['linux']);
+  });
+
+  it('F-2206 BR-9: no write, no announcement', async () => {
+    const {steps, calls} = stepsFor({
+      useLocalServer: false,
+      remotePlatform: {devbox: 'linux'},
+    });
+    await steps.rememberPlatform(INPUT, 'linux');
+    deepStrictEqual(calls.announced, []);
   });
 });

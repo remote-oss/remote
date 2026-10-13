@@ -8,7 +8,6 @@
 import type {Scheduler} from 'lib-helper';
 import {
   type Dialer,
-  factoryFor,
   type LocalPort,
   openForwardedTunnel,
   openRelayTunnel,
@@ -309,12 +308,6 @@ export function openTunnelStep(
     if (outcome.kind !== 'open') {
       return NOT_OPENED;
     }
-    const factory = factoryFor({
-      dialer,
-      local: dependencies.local,
-      scheduler: dependencies.scheduler,
-      limits: dependencies.limits,
-    });
     const {extensionHostEnv, environmentTunnels} = dependencies.environment();
     let closeRan = false;
     return {
@@ -324,15 +317,12 @@ export function openTunnelStep(
           address: outcome.address,
           extensionHostEnv,
           environmentTunnels,
-          tunnelFeatures: factory.features,
-          tunnelFactory: factory,
         },
         close: () => {
           if (closeRan) {
             return;
           }
           closeRan = true;
-          factory.closeAll();
           outcome.close();
         },
         onClosed: outcome.onClosed,

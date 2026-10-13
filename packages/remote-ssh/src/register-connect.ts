@@ -17,6 +17,10 @@ import {
   type Registration as CommandRegistration,
   registerCommands,
 } from 'lib-identifiers';
+import {
+  addNewSshHostHandler,
+  type AddHostSurroundings,
+} from './config/add-host-command.ts';
 import type {ConnectAssembly} from './connect-ports.ts';
 import {
   type ConnectCommandEditor,
@@ -26,7 +30,11 @@ import {commands, runtimeCommands} from './identifiers.generated.ts';
 import {hostAlias, sshTargetOf} from './pipeline/host-settings.ts';
 import {maintenanceHandlers} from './maintenance/maintenance-commands.ts';
 import type {NoticePort} from './surfaces/notice.ts';
-import {registerWindowLabel} from './surfaces/label-formatter.ts';
+import {
+  enablePortsViewWhenConnected,
+  type PortsViewHost,
+  registerWindowLabel,
+} from './surfaces/label-formatter.ts';
 import type {Translate} from './surfaces/strings.ts';
 import {openWebUiHandler} from './surfaces/web-ui-command.ts';
 import type {Logger} from 'lib-log';
@@ -39,6 +47,8 @@ import {
 export interface ConnectRegistrationHost {
   resolverEditor: ResolverEditor;
   labels: LabelFormatterHost;
+  /** Core's Ports view, which the connected window enables. */
+  portsView: PortsViewHost;
   commands: CommandHost;
   /** The editor behind the connect commands. */
   connectEditor: ConnectCommandEditor;
@@ -51,6 +61,8 @@ export interface ConnectRegistrationHost {
   logger: Logger;
   /** The non-modal notices the maintenance commands show. */
   notice: NoticePort;
+  /** What the command that adds a host takes besides the notices and the window it opens. */
+  addHost: AddHostSurroundings;
 }
 
 /** What the registration gives back: whether the resolver is registered, and the end of everything it registered. */
@@ -84,6 +96,9 @@ export async function registerConnect(
     resolver === undefined
       ? undefined
       : registerWindowLabel(resolver, host.labels, host.translate);
+  if (resolver !== undefined) {
+    enablePortsViewWhenConnected(resolver, host.portsView, host.logger);
+  }
   const connection = {
     killLocalServer: (hostString: string) =>
       assembly.killLocalServer(hostString),
@@ -108,11 +123,18 @@ export async function registerConnect(
       openEmptyWindowInCurrentWindow: commands.openEmptyWindowInCurrentWindow,
       openEmptyWindowOnCurrentHost: commands.openEmptyWindowOnCurrentHost,
       cleanLocalServer: commands.cleanLocalServer,
+      addNewSshHost: commands.addNewSshHost,
       cleanRemoteServer: commands.cleanRemoteServer,
       cleanDevBox: commands.cleanDevBox,
     },
     {
       ...connectCommandHandlers(host.connectEditor, connection),
+      addNewSshHost: addNewSshHostHandler({
+        ...host.addHost,
+        windows: host.connectEditor,
+        notice: host.notice,
+        translate: host.translate,
+      }),
       ...maintenanceHandlers({
         editor: host.connectEditor,
         perform: (action, target) => assembly.maintain(action, target),

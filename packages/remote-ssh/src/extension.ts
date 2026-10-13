@@ -12,7 +12,6 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import {
   gateEditorOf,
-  type ProposalName,
   type ResolverEditor,
   resolverEditorOf,
   setupPortsOf,
@@ -26,13 +25,17 @@ import {activateRemoteSsh} from './activation.ts';
 import {
   configFileEditorOf,
   nodeConfigFiles,
+  nodeHostFiles,
 } from './config/config-file-editor.ts';
-import {openConfigFileHandler} from './config/open-config-file.ts';
+import {
+  type ConfigFilePlaces,
+  openConfigFileHandler,
+} from './config/open-config-file.ts';
 import {connectCommandEditorOf} from './connect/connect-editor.ts';
 import {nodeConfigReader} from './connect/node-config-reader.ts';
 import {connectAssemblyOf} from './connect-ports.ts';
 import {editorOperationsOf} from './editor-operations.ts';
-import {editorSurfacesOf} from './editor-surfaces.ts';
+import {type EditorAdapters, editorSurfacesOf} from './editor-surfaces.ts';
 import {
   type HelpEditor,
   type HelpHandlers,
@@ -41,6 +44,7 @@ import {
 } from './help-commands.ts';
 import {
   commands,
+  enabledApiProposals,
   runtimeCommands,
   settings,
   standDown,
@@ -64,6 +68,7 @@ import {
   progressFor,
   windowNameOf,
 } from './surfaces/scripted-adapters.ts';
+import {PORTS_VIEW_KEY} from './surfaces/label-formatter.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
 
 /** The page about SSH configuration files that the picker's Help row opens. */
@@ -96,7 +101,6 @@ interface Manifest {
   displayName: string;
   version: string;
   extensionPack?: string[];
-  enabledApiProposals?: ProposalName[];
   contributes?: {
     commands?: Array<{command: string; title: string}>;
     remoteHelp?: Record<string, unknown>;
@@ -161,11 +165,19 @@ export async function activate(
 ): Promise<void> {
   const manifest = context.extension.packageJSON as Manifest;
   const host = identifierHost(vscode, manifest);
+  // Made once, before the setup: the script is read once per window, and the setup's notices go through the same notice port.
+  const adapters = surfaceAdapters();
   const extension = {
     id: context.extension.id,
     pack: manifest.extensionPack ?? [],
     name: manifest.name,
     version: manifest.version,
+  };
+  const configPlaces: ConfigFilePlaces = {
+    homeFolder: homedir(),
+    platform: clientPlatformOf(process.platform),
+    userFile: path.join(homedir(), '.ssh', 'config'),
+    systemFile: SYSTEM_CONFIG_FILE,
   };
   const help: HelpEditor = {
     openExternal: address => vscode.env.openExternal(vscode.Uri.parse(address)),
@@ -200,12 +212,7 @@ export async function activate(
         openSettings: filter => help.openSettings(filter),
         openHelp: () => help.openExternal(CONFIG_HELP_ADDRESS),
       },
-      {
-        homeFolder: homedir(),
-        platform: clientPlatformOf(process.platform),
-        userFile: path.join(homedir(), '.ssh', 'config'),
-        systemFile: SYSTEM_CONFIG_FILE,
-      },
+      configPlaces,
       () => textOf(host, 'configFile'),
       extension,
       translate,
@@ -213,27 +220,38 @@ export async function activate(
     channels: channelPortFor(process.env, vscode.window, ACCEPTANCE_FILES),
     clock: Date.now,
     gate: logFailure =>
-      setupPortsOf(gateEditorOf(vscode, context, readArgvFile), {
-        extensionId: context.extension.id,
-        displayName: manifest.displayName,
-        applicationName: vscode.env.appName,
-        proposals: manifest.enabledApiProposals ?? [],
-        argv: {
-          portableFolder: process.env.VSCODE_PORTABLE,
-          homeFolder: homedir(),
-          dataFolderName: dataFolderNameOfEditor,
+      setupPortsOf(
+        gateEditorOf(
+          vscode,
+          context,
+          readArgvFile,
+          logFailure,
+          adapters.notice,
+        ),
+        {
+          extensionId: context.extension.id,
+          displayName: manifest.displayName,
+          applicationName: vscode.env.appName,
+          proposals: enabledApiProposals,
+          argv: {
+            portableFolder: process.env.VSCODE_PORTABLE,
+            homeFolder: homedir(),
+            dataFolderName: dataFolderNameOfEditor,
+          },
+          platform: process.platform,
+          texts: {
+            setup: vscode.l10n.t(SETUP_TEXT_TEMPLATES.setup),
+            failedAttempt: vscode.l10n.t(SETUP_TEXT_TEMPLATES.failedAttempt),
+            restart: vscode.l10n.t(SETUP_TEXT_TEMPLATES.restart),
+            configureButton: vscode.l10n.t(
+              SETUP_TEXT_TEMPLATES.configureButton,
+            ),
+            notNowButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.notNowButton),
+            quitButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.quitButton),
+          },
+          logFailure,
         },
-        platform: process.platform,
-        texts: {
-          setup: vscode.l10n.t(SETUP_TEXT_TEMPLATES.setup),
-          failedAttempt: vscode.l10n.t(SETUP_TEXT_TEMPLATES.failedAttempt),
-          restart: vscode.l10n.t(SETUP_TEXT_TEMPLATES.restart),
-          configureButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.configureButton),
-          notNowButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.notNowButton),
-          quitButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.quitButton),
-        },
-        logFailure,
-      }),
+      ),
   });
   if (result.kind !== 'serving') {
     return;
@@ -243,14 +261,21 @@ export async function activate(
       result.dispose();
     },
   });
-  const connect = await registerConnectOf(context, manifest, host, {
-    revealLog: () => {
-      result.revealLog();
+  const connect = await registerConnectOf(
+    context,
+    manifest,
+    host,
+    {
+      revealLog: () => {
+        result.revealLog();
+      },
+      logger: result.logger,
+      help: helpHandlers(help, helpLinksOf(manifest), extension),
+      resolversGranted: result.proposals.granted.includes('resolvers'),
+      configPlaces,
     },
-    logger: result.logger,
-    help: helpHandlers(help, helpLinksOf(manifest), extension),
-    resolversGranted: result.proposals.granted.includes('resolvers'),
-  });
+    adapters,
+  );
   context.subscriptions.push({
     dispose: () => {
       connect.dispose();
@@ -263,23 +288,9 @@ function translate(template: string): string {
   return vscode.l10n.t(template);
 }
 
-/** What the connect takes from the activation that served. */
-interface ServedActivation {
-  revealLog(): void;
-  logger: Logger;
-  help: HelpHandlers;
-  resolversGranted: boolean;
-}
-
-/** The connect over the editor and this machine: its surfaces, its assembly and its registration. */
-async function registerConnectOf(
-  context: vscode.ExtensionContext,
-  manifest: Manifest,
-  host: ReturnType<typeof identifierHost>,
-  served: ServedActivation,
-): Promise<ConnectRegistration> {
-  const window = {alias: (): string => ''};
-  const adapters = adaptersFor(
+/** The adapters of the editor's surfaces: the real ones, or the harness's scripted ones when its switch is on. */
+function surfaceAdapters(): EditorAdapters {
+  return adaptersFor(
     process.env,
     {
       prompts: promptEditorOf(vscode, translate),
@@ -295,6 +306,27 @@ async function registerConnectOf(
     ACCEPTANCE_FILES,
     acceptanceWindowName(),
   );
+}
+
+/** What the connect takes from the activation that served. */
+interface ServedActivation {
+  revealLog(): void;
+  logger: Logger;
+  help: HelpHandlers;
+  resolversGranted: boolean;
+  /** The client's configuration files, which the command that adds a host writes to. */
+  configPlaces: ConfigFilePlaces;
+}
+
+/** The connect over the editor and this machine: its surfaces, its assembly and its registration. */
+async function registerConnectOf(
+  context: vscode.ExtensionContext,
+  manifest: Manifest,
+  host: ReturnType<typeof identifierHost>,
+  served: ServedActivation,
+  adapters: EditorAdapters,
+): Promise<ConnectRegistration> {
+  const window = {alias: (): string => ''};
   const surfaces = editorSurfacesOf(
     adapters,
     editorOperationsOf(vscode, () => {
@@ -310,6 +342,7 @@ async function registerConnectOf(
         displayName: manifest.displayName,
       },
       acceptanceState: context.globalState,
+      noticeState: context.globalState,
     },
   );
   const machine = nodeMachineOf(
@@ -330,6 +363,10 @@ async function registerConnectOf(
         }),
       ),
       labels: vscode.workspace,
+      portsView: {
+        enablePortsView: () =>
+          vscode.commands.executeCommand('setContext', PORTS_VIEW_KEY, true),
+      },
       commands: host,
       connectEditor: connectCommandEditorOf(vscode, translate, () =>
         listHosts(
@@ -350,6 +387,13 @@ async function registerConnectOf(
       globalState: context.globalState,
       logger: served.logger,
       notice: adapters.notice,
+      addHost: {
+        editor: configFileEditorOf(vscode, translate),
+        input: adapters.textInput,
+        files: nodeHostFiles,
+        places: served.configPlaces,
+        configFile: () => textOf(host, 'configFile'),
+      },
     },
     connectAssemblyOf(surfaces, machine, served.logger),
     served.resolversGranted,

@@ -169,16 +169,21 @@ export function scriptedAdapters(
     buttons: readonly string[],
   ): Promise<string | undefined> {
     return Promise.resolve(
-      answerFrom('notice', message, entry => {
-        if (entry.answer === 'dismiss') {
-          return {value: undefined, recorded: 'dismiss'};
-        }
-        const button = entry.answer.button;
-        if (buttons.includes(button)) {
-          return {value: button, recorded: button};
-        }
-        return undefined;
-      }),
+      answerFrom(
+        'notice',
+        message,
+        entry => {
+          if (entry.answer === 'dismiss') {
+            return {value: undefined, recorded: 'dismiss'};
+          }
+          const button = entry.answer.button;
+          if (buttons.includes(button)) {
+            return {value: button, recorded: button};
+          }
+          return undefined;
+        },
+        buttons,
+      ),
     );
   }
 
@@ -257,7 +262,7 @@ export function scriptedAdapters(
         Promise.resolve(
           answerFrom(
             'textInput',
-            request.prompt ?? request.placeholder ?? '',
+            request.title ?? request.prompt ?? request.placeholder ?? '',
             entry => ({
               value: entry.answer === 'dismiss' ? undefined : entry.answer.text,
               recorded:

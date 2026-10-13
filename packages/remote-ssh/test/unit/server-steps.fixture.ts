@@ -210,6 +210,12 @@ export function surfacesOf(
     terminals: new RecordingTerminals(),
     pickPlatform: () => Promise.resolve(undefined),
     writePlatform: () => Promise.resolve(),
+    notice: {
+      showInformation: () => Promise.resolve(undefined),
+      showWarning: () => Promise.resolve(undefined),
+      showError: () => Promise.resolve(undefined),
+    },
+    noticeState: {get: () => undefined, update: () => Promise.resolve()},
     licenceModal: modalAnswering('accept', []),
     acceptances: storeOf(),
     presenter: {present: () => Promise.resolve('handled')},

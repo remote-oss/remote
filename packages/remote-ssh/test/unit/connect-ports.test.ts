@@ -999,6 +999,33 @@ describe("the assembly's maintenance run (card connect-23)", () => {
   });
 });
 
+describe("the assembled ports' platform notice", () => {
+  it("F-2206 5.2: the terms announce a stored platform through the surfaces' notice, naming it", async () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const shown: string[] = [];
+    wiringPortsOf(
+      {
+        ...surfaces,
+        notice: {
+          showInformation: message => {
+            shown.push(message);
+            return Promise.resolve(undefined);
+          },
+          showWarning: () => Promise.resolve(undefined),
+          showError: () => Promise.resolve(undefined),
+        },
+      },
+      machine,
+      loggerOf(recorded),
+    ).terms.announcePlatform('linux');
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(
+      shown.map(message => message.includes('"linux"')),
+      [true],
+    );
+  });
+});
+
 describe("the assembled ports' CLI path", () => {
   it('F-2103 5.0 step 6: the S045 notification has its own text, translated', () => {
     const {surfaces, machine, recorded} = assemblyInputs();

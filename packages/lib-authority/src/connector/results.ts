@@ -56,11 +56,7 @@ export interface Failed {
  * A connect that ended in a connection. The pieces whose shapes belong to the editor's proposed API are type
  * parameters, so this package needs no editor types: the resolver host that registers with the editor fixes them.
  */
-export interface Connected<
-  Tunnel = unknown,
-  Features = unknown,
-  Factory = unknown,
-> {
+export interface Connected<Tunnel = unknown> {
   /** Where the editor connects to reach the server: a port on this machine. */
   address: {host: string; port: number};
   /** The secret the server expects from the editor. It must not reach a log. */
@@ -69,10 +65,6 @@ export interface Connected<
   extensionHostEnv: Readonly<Record<string, string | null>>;
   /** Ports forwarded for the whole window from the start. */
   environmentTunnels: readonly Tunnel[];
-  /** What the window's port forwarding offers; handed to the editor unchanged. */
-  tunnelFeatures?: Features;
-  /** Opens a forwarded port; handed to the editor unchanged. */
-  tunnelFactory?: Factory;
   /** Whether the remote side counts as trusted; the host passes it on only where the family allows it. */
   trusted: boolean;
 }

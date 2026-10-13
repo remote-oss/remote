@@ -731,6 +731,21 @@ describe('the scripted adapters answer from the script only', () => {
     );
   });
 
+  it('card connect-22: a text input with a title is matched by its title, and the record keeps the title as the question', async () => {
+    const {adapters, files} = scripted([
+      {surface: 'textInput', match: 'Enter SSH', answer: {text: 'host1'}},
+    ]);
+    await adapters.textInput.showInputBox({
+      title: 'Enter SSH Connection Command',
+      prompt: 'ignored',
+      placeholder: 'ignored',
+    });
+    deepStrictEqual(
+      files.lines().map(line => (line as {question: string}).question),
+      ['Enter SSH Connection Command'],
+    );
+  });
+
   it('card tooling-24: a text input that asks no text is matched by an empty entry', async () => {
     deepStrictEqual(
       await scripted([
@@ -760,6 +775,7 @@ describe('the scripted adapters answer from the script only', () => {
             question: 'Host added to the config',
             answer: 'OK',
             matched: true,
+            buttons: ['OK', 'Dismiss'],
             window: WINDOW,
           },
         ],
@@ -793,6 +809,7 @@ describe('the scripted adapters answer from the script only', () => {
             question: 'Broken',
             answer: 'dismiss',
             matched: false,
+            buttons: ['OK'],
             window: WINDOW,
           },
         ],
@@ -812,6 +829,7 @@ describe('the scripted adapters answer from the script only', () => {
             question: 'Something',
             answer: 'dismiss',
             matched: false,
+            buttons: ['OK'],
             window: WINDOW,
           },
         ],
@@ -1274,5 +1292,30 @@ describe('the windows of one script (card tooling-20)', () => {
 
   it('D-85: a window on the root folder is local', () => {
     strictEqual(windowNameOf('/'), 'local');
+  });
+});
+
+describe('a notice line of the record (card connect-25)', () => {
+  it('a notice record line carries its buttons, in order', async () => {
+    const {adapters, files} = scripted([
+      {surface: 'notice', match: 'You selected', answer: 'dismiss'},
+    ]);
+    await adapters.notice.showInformation('You selected "linux"', [
+      "Don't Show Again",
+      'Other',
+    ]);
+    deepStrictEqual(
+      files.lines().map(line => line.buttons),
+      [["Don't Show Again", 'Other']],
+    );
+  });
+
+  it('a notice nothing in the script matches still carries its buttons', async () => {
+    const {adapters, files} = scripted([]);
+    await adapters.notice.showInformation('Something else', ['OK']);
+    deepStrictEqual(
+      files.lines().map(line => line.buttons),
+      [['OK']],
+    );
   });
 });

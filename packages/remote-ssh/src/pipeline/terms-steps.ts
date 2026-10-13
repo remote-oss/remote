@@ -28,6 +28,8 @@ export interface TermsStepDependencies {
     alias: string,
     cancellation: AbortSignal,
   ) => Promise<RemotePlatform | undefined>;
+  /** Shows the notice for the platform about to be stored; the connect does not wait for it. */
+  announcePlatform: (platform: RemotePlatform) => void;
   /** Sets the exact key for the alias in `remote.SSH.remotePlatform`. */
   writePlatform: (alias: string, platform: RemotePlatform) => Promise<void>;
 }
@@ -76,6 +78,7 @@ export function createTermsSteps(
         PLATFORM_OF_PROBE[reported],
       );
       if (write.kind === 'set') {
+        dependencies.announcePlatform(write.platform);
         await dependencies.writePlatform(alias, write.platform);
       }
     },
