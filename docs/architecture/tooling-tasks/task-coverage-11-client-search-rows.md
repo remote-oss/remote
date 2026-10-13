@@ -4,14 +4,16 @@ Issue: #548. Why: #142's acceptance rows, batch 2 (gate risk: every connect star
 ACs say which program the connect checks and runs, for each kind of `remote.SSH.path`. Today unit rows prove the
 decisions (`client/locate.ts`) with partial cites. These rows prove it end to end in the VSCodium run, with fake
 clients on the editor's side. Builder: iris or hestia (hermes assigns). Size: about 1.5 agent-days. **Depends on
-nothing beyond main** (tooling-16's launch table, #511's log switch).
+connect-28 (#563)**, which writes the client search's log lines (F-2101 §9) that AC-6 and AC-26 read; the rest needs
+only main (tooling-16's launch table, #511's log switch, tooling-24's `notice` surface).
 
 ## 1. The fake clients
 
 The run writes them into `<HARNESS_RUN_FOLDER>/clients/` before the first launch, each a POSIX `sh` script, mode 755
 unless the table says otherwise. Each one:
 - appends one line to `<HARNESS_RUN_FOLDER>/clients/calls.log`: its own name, a tab, then `check` when its first
-  argument is `-V`, else `connect`;
+  argument is `-V`, `options` when any argument is `-G` (the lookup of the host's options, `<program> [-F file] -G --
+  <host>`, which runs through the same program since remote-ssh#29), else `connect`;
 - for `-V`: prints its banner to the stream the table names, then exits with the table's status;
 - otherwise: `exec /usr/bin/ssh "$@"`, the real client, so the connection works.
 
@@ -40,26 +42,34 @@ live helper is reused without any check (F-2101 AC-14), which would hide the row
 grace (`HELPER_GRACE_MILLISECONDS`) to pass after the previous launch, or ends the run's helpers through their
 registry. The builder picks one and says which in the README.
 
-| Label | `remote.SSH.path` | Other settings | Expected `calls.log` lines of the launch | AC |
-|---|---|---|---|---|
-| `client-unset` | (unset) | — | `path/ssh check`, then `path/ssh connect` | F-2101 AC-1 |
-| `client-empty` | `""` | — | the same | F-2101 AC-12 |
-| `client-absolute` | `<run>/clients/configured/ssh` | — | `configured/ssh check`, `configured/ssh connect`, and no `path/ssh` line | F-2101 AC-3 |
-| `client-space` | `<run>/clients/with space/ssh` | — | `with space/ssh check`, `with space/ssh connect` | F-2101 AC-4 (local server on) |
-| `client-space-terminal` | the same | `remote.SSH.useLocalServer: false` | the connection lines come from `with space/ssh` | F-2101 AC-4 (off) |
-| `client-bare` | `ssh` | — | `path/ssh check`, `path/ssh connect` | F-2101 AC-5 |
-| `client-missing` | `<run>/clients/none/ssh` | — | `path/ssh check`, `path/ssh connect` | F-2101 AC-6 |
-| `client-directory` | `<run>/clients/adir` | — | the same | F-2101 AC-7 |
-| `client-not-executable` | `<run>/clients/notexec/ssh` | — | the same | F-2101 AC-7 |
-| `client-not-on-path` | `nosuchclient` | — | the same | F-2101 AC-7 |
-| `client-tilde` | `~/clients-copy/ssh` (the run puts a working copy there in the editor user's home) | — | the same | F-2101 AC-7 |
-| `client-fails` | `<run>/clients/fails/ssh` | — | `fails/ssh check`, `path/ssh check`, `path/ssh connect` | F-2101 AC-8 |
-| `client-putty` | `<run>/clients/putty/ssh` | — | `putty/ssh check`, `path/ssh check`, `path/ssh connect` | F-2101 AC-9 |
-| `client-lower` | `<run>/clients/lower/ssh` | — | `lower/ssh check`, `lower/ssh connect` | F-2101 AC-10 |
-| `client-stdout` | `<run>/clients/stdout/ssh` | — | `stdout/ssh check`, `stdout/ssh connect` | F-2101 AC-10 |
-| `client-old` | `<run>/clients/old/ssh` | — | `old/ssh check`, `old/ssh connect` | F-2101 AC-11 |
-| `client-windows` | `<run>/clients/windows/ssh` | `remote.SSH.suppressWindowsSshWarning: false` | `windows/ssh check`, `windows/ssh connect` | F-2101 AC-25 |
-| `client-windows-suppressed` | the same | `…: true` | the same | F-2101 AC-25 |
+The expected `calls.log` lines of a launch are one `<name> check` line per checked program, in order, then
+`<used> options`, then `<used> connect`. No other line is expected: in particular, no line of a program that's neither
+checked nor used.
+
+| Label | `remote.SSH.path` | Other settings | Checked (in order) | Used | `cite` |
+|---|---|---|---|---|---|
+| `client-unset` | (unset) | — | `path/ssh` | `path/ssh` | `F-2101 AC-1` |
+| `client-empty` | `""` | — | `path/ssh` | `path/ssh` | `F-2101 AC-12` |
+| `client-absolute` | `<run>/clients/configured/ssh` | — | `configured/ssh` | `configured/ssh` | `F-2101 AC-3` |
+| `client-space` | `<run>/clients/with space/ssh` | — | `with space/ssh` | `with space/ssh` | `F-2101 AC-4` |
+| `client-space-terminal` | the same | `remote.SSH.useLocalServer: false` | `with space/ssh` | `with space/ssh` | `F-2101 AC-4` |
+| `client-bare` | `ssh` | — | `path/ssh` | `path/ssh` | `F-2101 AC-5` |
+| `client-missing` | `<run>/clients/none/ssh` | — | `path/ssh` | `path/ssh` | `F-2101 AC-6` |
+| `client-directory` | `<run>/clients/adir` | — | `path/ssh` | `path/ssh` | `F-2101 AC-7` |
+| `client-not-executable` | `<run>/clients/notexec/ssh` | — | `path/ssh` | `path/ssh` | `F-2101 AC-7` |
+| `client-not-on-path` | `nosuchclient` | — | `path/ssh` | `path/ssh` | `F-2101 AC-7` |
+| `client-tilde` | `~/clients-copy/ssh` (see below) | — | `path/ssh` | `path/ssh` | `F-2101 AC-7` |
+| `client-fails` | `<run>/clients/fails/ssh` | — | `fails/ssh`, `path/ssh` | `path/ssh` | `F-2101 AC-8` |
+| `client-putty` | `<run>/clients/putty/ssh` | — | `putty/ssh`, `path/ssh` | `path/ssh` | `F-2101 AC-9` |
+| `client-lower` | `<run>/clients/lower/ssh` | — | `lower/ssh` | `lower/ssh` | `F-2101 AC-10` |
+| `client-stdout` | `<run>/clients/stdout/ssh` | — | `stdout/ssh` | `stdout/ssh` | `F-2101 AC-10` |
+| `client-old` | `<run>/clients/old/ssh` | — | `old/ssh` | `old/ssh` | `F-2101 AC-11` |
+| `client-windows` | `<run>/clients/windows/ssh` | `remote.SSH.suppressWindowsSshWarning: false` | `windows/ssh` | `windows/ssh` | `F-2101 AC-25` |
+| `client-windows-suppressed` | the same | `…: true` | `windows/ssh` | `windows/ssh` | `F-2101 AC-25` |
+
+`client-tilde`: the run copies `configured/ssh` to `~/clients-copy/ssh` in the editor user's home, with its logged name
+changed to `tilde/ssh`. No `tilde/ssh` line is expected: AC-7 says the configured `~/...` value isn't used even when
+its expansion exists.
 
 `client-tilde` writes into the editor user's real home folder: the run removes `~/clients-copy` at its end, whatever
 happens. The connections are to the harness host, so every connected launch runs real `ssh` with the run's
@@ -70,15 +80,21 @@ VSCodium run or in a dispatch of their own (`-f client-search=true`). Say which 
 
 ## 3. The rows (`suite-client/client.test.ts`, run in each launch)
 
+Each row's name starts with `` `${cite} (${label})` ``, for example `F-2101 AC-4 (client-space-terminal)`, the form
+ruled on #546.
+
 | Name | Assertion |
 |---|---|
-| `` `${cite}: the window connected` `` | `vscode.env.remoteName` is `ssh-remote` |
-| `` `${cite}: the programs checked and run are the table's` `` | the launch's `calls.log` lines (the run clears the file between launches) equal the table's |
-| `` `${cite}: no notification or dialog of the client search` `` | the record holds no `failureDialog` line. A notice row waits for tooling-24's `notice` surface; until it lands, list it as open in the PR |
-| `F-2101 AC-26: the log names the setting, the program checked, its banner and the program run` (in `client-fails` only) | `connectionLog()` has lines that contain the configured path, the reason it was rejected, `PATH`, `path/ssh`, the banner `OpenSSH_9.6p1` and the program the connection runs. Match the extension's own log texts, read from `client/locate.ts` and `locate-step.ts` |
-| `F-2101 AC-6: the log says the configured path is not a valid SSH binary` (in `client-missing` only) | a log line says so, in the extension's own words for the rejection |
+| `` `${cite} (${label}): the window connected` `` | `vscode.env.remoteName` is `ssh-remote` |
+| `` `${cite} (${label}): the programs checked and run are the table's` `` | the launch's `calls.log` lines (the run clears the file between launches) equal the table's |
+| `` `${cite} (${label}): no notification or dialog of the client search` `` | the record holds no `failureDialog` line and no `notice` line (tooling-24, merged) |
+| `F-2101 AC-26 (client-fails): the log gives the setting, the rejection, the search path, the program checked, its banner and the program used, in order` | `connectionLog()` holds connect-28 §1's lines 1, 2, 3, 4 (`exit status 1`), 5, 6, 2, 3, 7, in that order. They name `<run>/clients/fails/ssh`, the launch's `PATH` folders, `ssh`, and the banner `OpenSSH_9.6p1` as the fake prints it. Build the expected lines with connect-28's builders from `log-content.ts`, not from copied text |
+| `F-2101 AC-6 (client-missing): the log says the configured path is not a valid SSH binary` | connect-28 §1's line 5 for `<run>/clients/none/ssh`, from its builder |
 
-Tag F-2101 AC-1, 3–12, 25 and 26 `acceptance` in `coverage-slice1.tsv`. AC-2 is unit (tagged by #481).
+Tag F-2101 AC-1, 4–12, 25 and 26 `acceptance` in `coverage-slice1.tsv`. AC-2 is unit (tagged by #481).
+
+AC-3's row runs, but AC-3 stays `todo` until remote-oss/remote-ssh#94 says whether "run exactly twice" counts the
+`-G` lookup. Answer (a) or (b) leaves the row as it is and tags AC-3; only an answer (c) changes the row.
 
 ## 4. Done when
 
