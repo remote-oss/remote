@@ -463,4 +463,9 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
       deepStrictEqual(parse(command), block(alias));
     });
   }
+  it('F-2204: a backslash that starts a word escapes its first character', () => {
+    deepStrictEqual(parseAddHostCommand('ssh \\dev'), {
+      block: {alias: 'dev', lines: [{keyword: 'HostName', value: 'dev'}]},
+    });
+  });
 });
