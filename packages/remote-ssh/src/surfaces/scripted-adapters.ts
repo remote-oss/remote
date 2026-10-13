@@ -5,8 +5,17 @@
  */
 
 import type {ProgressPort} from 'lib-authority';
+import {
+  fileChoiceLabelOf,
+  fileChoiceTextOf,
+  type FileChoice,
+} from '../config/file-choice.ts';
+import {labelOf} from '../connect/connect-editor.ts';
+import type {PickerItem, PickerModel} from '../connect/picker-model.ts';
 import type {EditorAdapters} from '../editor-surfaces.ts';
 import type {ChannelPort} from '../log-channel.ts';
+import {textOfId} from './failure-strings.ts';
+import type {FailureStringId} from './failure-strings.ts';
 import type {MitigationAction} from './mitigation-picker.ts';
 import {ownText} from './own-strings.ts';
 
@@ -29,6 +38,12 @@ export type ScriptEntry = (
       match: string;
       answer: 'linux' | 'windows' | 'macOS' | 'dismiss';
     }
+  | {
+      surface: 'hostPick';
+      match: string;
+      answer: {label: string} | {typed: string} | 'dismiss';
+    }
+  | {surface: 'filePick'; match: string; answer: {label: string} | 'dismiss'}
   | {
       surface: 'failureDialog';
       match: string;
@@ -61,6 +76,8 @@ export interface RecordLine {
   time: number;
   /** The labels the failure dialog was shown with, in order; only the lines of a `failureDialog` surface have it. */
   buttons?: string[];
+  /** The labels the pick was shown with, in order; only the lines of a `hostPick` or a `filePick` surface have it. */
+  items?: string[];
 }
 
 /** The name of a window: the last segment of its first workspace folder's path, or `local` for a window without one. */
@@ -135,16 +152,22 @@ export function scriptedAdapters(
     answerOf: (
       entry: Extract<ScriptEntry, {surface: Kind}>,
     ) => Given<Value> | undefined,
-    buttons?: readonly string[],
+    shown?: {buttons?: readonly string[]; items?: readonly string[]},
   ): Value | undefined {
-    const withButtons = buttons === undefined ? {} : {buttons: [...buttons]};
+    const details: Partial<Pick<RecordLine, 'buttons' | 'items'>> = {};
+    if (shown?.buttons !== undefined) {
+      details.buttons = [...shown.buttons];
+    }
+    if (shown?.items !== undefined) {
+      details.items = [...shown.items];
+    }
     const entry = entries[cursor];
     if (entry?.surface === surface && question.includes(entry.match)) {
       const given = answerOf(entry as Extract<ScriptEntry, {surface: Kind}>);
       if (given !== undefined) {
         cursor += 1;
         record({
-          ...withButtons,
+          ...details,
           surface,
           question,
           answer: given.recorded,
@@ -154,7 +177,7 @@ export function scriptedAdapters(
       }
     }
     record({
-      ...withButtons,
+      ...details,
       surface,
       question,
       answer: 'dismiss',
@@ -202,6 +225,71 @@ export function scriptedAdapters(
     },
     terminals: real.terminals,
     downloadProgress: real.downloadProgress,
+    hostPick: {
+      pick: (initial: PickerModel, modelOf) =>
+        Promise.resolve(
+          answerFrom(
+            'hostPick',
+            textOfId(
+              initial.placeholder.id as FailureStringId,
+              template => template,
+              initial.placeholder.values,
+            ),
+            entry => {
+              if (entry.answer === 'dismiss') {
+                return {value: undefined, recorded: 'dismiss'};
+              }
+              if ('label' in entry.answer) {
+                const label = entry.answer.label;
+                const taken = initial.items.find(
+                  item => labelOf(item, template => template) === label,
+                );
+                return taken === undefined
+                  ? undefined
+                  : {value: taken, recorded: label};
+              }
+              // The script takes the typed row of the typed model without modelling the editor's filter of the rows.
+              const typed: PickerItem | undefined = modelOf(
+                entry.answer.typed,
+              ).items.find(item => item.kind === 'typed');
+              return typed === undefined
+                ? undefined
+                : {value: typed, recorded: entry.answer.typed};
+            },
+            {
+              items: initial.items.map(item =>
+                labelOf(item, template => template),
+              ),
+            },
+          ),
+        ),
+    },
+    filePick: {
+      pick: (choice: FileChoice) =>
+        Promise.resolve(
+          answerFrom(
+            'filePick',
+            fileChoiceTextOf(choice.placeholder, template => template),
+            entry => {
+              if (entry.answer === 'dismiss') {
+                return {value: undefined, recorded: 'dismiss'};
+              }
+              const label = entry.answer.label;
+              const taken = choice.items.find(
+                item => fileChoiceLabelOf(item, template => template) === label,
+              );
+              return taken === undefined
+                ? undefined
+                : {value: taken, recorded: label};
+            },
+            {
+              items: choice.items.map(item =>
+                fileChoiceLabelOf(item, template => template),
+              ),
+            },
+          ),
+        ),
+    },
     failureDialog: {
       showError: (text, buttons) =>
         Promise.resolve(
@@ -217,7 +305,7 @@ export function scriptedAdapters(
                 ? {value: button, recorded: button}
                 : undefined;
             },
-            buttons,
+            {buttons},
           ),
         ),
     },

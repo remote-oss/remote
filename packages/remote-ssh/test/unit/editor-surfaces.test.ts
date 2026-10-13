@@ -48,6 +48,8 @@ function surfacesWith(
       showWarning: () => Promise.resolve(undefined),
       showError: () => Promise.resolve(undefined),
     },
+    hostPick: {pick: () => Promise.resolve(undefined)},
+    filePick: {pick: () => Promise.resolve(undefined)},
   };
   const operations: EditorOperations = {
     reloadWindow: noted('reloadWindow'),

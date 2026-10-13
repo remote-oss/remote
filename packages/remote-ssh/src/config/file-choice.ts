@@ -1,10 +1,14 @@
 /**
  * @fileoverview The rows of the SSH configuration file picker: the configured file as written, or the user and
  * system files, with the settings and help rows; narrowing keeps a file row while its path contains the typed
- * text, and the fixed rows always. The fixed rows carry string ids, never text; the surface resolves them.
+ * text, and the fixed rows always. The fixed rows carry string ids, never text; the surface resolves them. The pick
+ * itself is a port, so the command sees neither the editor's quick pick nor the harness's script.
  */
 
 import type {StringRef} from '../connect/picker-model.ts';
+import {textOfId} from '../surfaces/failure-strings.ts';
+import type {FailureStringId} from '../surfaces/failure-strings.ts';
+import type {Translate} from '../surfaces/strings.ts';
 
 /** The input the picker model reads. */
 export interface FileChoiceInput {
@@ -26,6 +30,32 @@ export type FileChoiceItem =
 export interface FileChoice {
   placeholder: StringRef;
   items: readonly FileChoiceItem[];
+}
+
+/**
+ * The SSH configuration file pick: the rows of `choice`, single selection, the first row focused, open when the
+ * focus moves away; the row taken, or nothing when the pick is closed without one.
+ */
+export interface FilePickPort {
+  pick(choice: FileChoice): Promise<FileChoiceItem | undefined>;
+}
+
+/** The text of one of this picker's string references, in the display language. */
+export function fileChoiceTextOf(
+  reference: StringRef,
+  translate: Translate,
+): string {
+  return textOfId(reference.id as FailureStringId, translate, reference.values);
+}
+
+/** The label of a row: a file's path as it is, a fixed row from the string table. */
+export function fileChoiceLabelOf(
+  item: FileChoiceItem,
+  translate: Translate,
+): string {
+  return item.kind === 'file'
+    ? item.label
+    : fileChoiceTextOf(item.label, translate);
 }
 
 /** The placeholder when no file is configured. */

@@ -10,13 +10,14 @@ import type {HostListResult} from 'lib-ssh';
 import {textOfId} from '../surfaces/failure-strings.ts';
 import type {FailureStringId} from '../surfaces/failure-strings.ts';
 import type {Translate} from '../surfaces/strings.ts';
+import type {HostPickPort} from '../surfaces/host-pick.ts';
 import type {ConnectCommandEditor} from './connect-commands.ts';
 import type {PickerItem, PickerModel} from './picker-model.ts';
 
 type Editor = Pick<typeof vscode, 'window' | 'commands' | 'env' | 'Uri'>;
 
 /** The label of a row: a host or the typed text as it is, a fixed row from the string table. */
-function labelOf(item: PickerItem, translate: Translate): string {
+export function labelOf(item: PickerItem, translate: Translate): string {
   return item.kind === 'host' || item.kind === 'typed'
     ? item.label
     : textOfId(item.label.id as FailureStringId, translate, item.label.values);
@@ -78,6 +79,16 @@ function pickHost(
   });
 }
 
+/** The editor's host pick: the quick pick `pickHost` runs, as the port the connect commands and the harness use. */
+export function hostPickPortOf(
+  editor: Editor,
+  translate: Translate,
+): HostPickPort {
+  return {
+    pick: (initial, modelOf) => pickHost(editor, translate, initial, modelOf),
+  };
+}
+
 /** The opener's view of the editor: its commands, and the address it builds for a resource. */
 export function openerHostOf(editor: Editor): OpenerHost {
   return {
@@ -87,16 +98,15 @@ export function openerHostOf(editor: Editor): OpenerHost {
   };
 }
 
-/** The connect commands' editor: the host list is read by `listHosts` at each command. */
+/** The connect commands' editor: the host list is read by `listHosts` at each command, and the pick is `hostPick`. */
 export function connectCommandEditorOf(
   editor: Editor,
-  translate: Translate,
   listHosts: () => HostListResult,
+  hostPick: HostPickPort,
 ): ConnectCommandEditor {
   return {
     listHosts,
-    pickHost: (initial, modelOf) =>
-      pickHost(editor, translate, initial, modelOf),
+    pickHost: (initial, modelOf) => hostPick.pick(initial, modelOf),
     openRemote: async (authority, window) => {
       const outcome = await openRemote(openerHostOf(editor), authority, {
         pathKind: 'folder',

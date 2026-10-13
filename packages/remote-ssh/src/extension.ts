@@ -28,11 +28,14 @@ import {
   nodeConfigFiles,
 } from './config/config-file-editor.ts';
 import {openConfigFileHandler} from './config/open-config-file.ts';
-import {connectCommandEditorOf} from './connect/connect-editor.ts';
+import {
+  connectCommandEditorOf,
+  hostPickPortOf,
+} from './connect/connect-editor.ts';
 import {nodeConfigReader} from './connect/node-config-reader.ts';
 import {connectAssemblyOf} from './connect-ports.ts';
 import {editorOperationsOf} from './editor-operations.ts';
-import {editorSurfacesOf} from './editor-surfaces.ts';
+import {type EditorAdapters, editorSurfacesOf} from './editor-surfaces.ts';
 import {
   type HelpEditor,
   type HelpHandlers,
@@ -51,6 +54,7 @@ import {type ConnectRegistration, registerConnect} from './register-connect.ts';
 import {
   downloadProgressOf,
   failureDialogOf,
+  filePickPortOf,
   licenceDialogOf,
   mitigationPickPortOf,
   noticeOf,
@@ -176,6 +180,24 @@ export async function activate(
         extensionId,
       }),
   };
+  const adapters = adaptersFor(
+    process.env,
+    {
+      prompts: promptEditorOf(vscode, translate),
+      terminals: loginTerminalsOf(vscode, homedir()),
+      failureDialog: failureDialogOf(vscode),
+      licenceDialog: licenceDialogOf(vscode),
+      platformPick: platformPickPortOf(vscode, translate),
+      mitigationPick: mitigationPickPortOf(vscode),
+      downloadProgress: downloadProgressOf(vscode),
+      textInput: textInputOf(vscode),
+      notice: noticeOf(vscode),
+      hostPick: hostPickPortOf(vscode, translate),
+      filePick: filePickPortOf(vscode, translate),
+    },
+    ACCEPTANCE_FILES,
+    acceptanceWindowName(),
+  );
   const result = await activateRemoteSsh({
     table: {commands, settings, standDown},
     extension,
@@ -194,7 +216,7 @@ export async function activate(
     settings: host,
     help,
     openConfigFile: openConfigFileHandler(
-      configFileEditorOf(vscode, translate),
+      configFileEditorOf(vscode, adapters.filePick),
       nodeConfigFiles,
       {
         openSettings: filter => help.openSettings(filter),
@@ -243,14 +265,20 @@ export async function activate(
       result.dispose();
     },
   });
-  const connect = await registerConnectOf(context, manifest, host, {
-    revealLog: () => {
-      result.revealLog();
+  const connect = await registerConnectOf(
+    context,
+    manifest,
+    host,
+    {
+      revealLog: () => {
+        result.revealLog();
+      },
+      logger: result.logger,
+      help: helpHandlers(help, helpLinksOf(manifest), extension),
+      resolversGranted: result.proposals.granted.includes('resolvers'),
     },
-    logger: result.logger,
-    help: helpHandlers(help, helpLinksOf(manifest), extension),
-    resolversGranted: result.proposals.granted.includes('resolvers'),
-  });
+    adapters,
+  );
   context.subscriptions.push({
     dispose: () => {
       connect.dispose();
@@ -277,25 +305,11 @@ async function registerConnectOf(
   manifest: Manifest,
   host: ReturnType<typeof identifierHost>,
   served: ServedActivation,
+  adapters: EditorAdapters,
 ): Promise<ConnectRegistration> {
   const window = {alias: (): string => ''};
   const surfaces = editorSurfacesOf(
-    adaptersFor(
-      process.env,
-      {
-        prompts: promptEditorOf(vscode, translate),
-        terminals: loginTerminalsOf(vscode, homedir()),
-        failureDialog: failureDialogOf(vscode),
-        licenceDialog: licenceDialogOf(vscode),
-        platformPick: platformPickPortOf(vscode, translate),
-        mitigationPick: mitigationPickPortOf(vscode),
-        downloadProgress: downloadProgressOf(vscode),
-        textInput: textInputOf(vscode),
-        notice: noticeOf(vscode),
-      },
-      ACCEPTANCE_FILES,
-      acceptanceWindowName(),
-    ),
+    adapters,
     editorOperationsOf(vscode, () => {
       served.revealLog();
     }),
@@ -330,18 +344,21 @@ async function registerConnectOf(
       ),
       labels: vscode.workspace,
       commands: host,
-      connectEditor: connectCommandEditorOf(vscode, translate, () =>
-        listHosts(
-          textOf(host, 'configFile'),
-          {
-            homeFolder: homedir(),
-            platform: clientPlatformOf(process.platform),
-            ...(process.env.ProgramData === undefined
-              ? {}
-              : {programDataFolder: process.env.ProgramData}),
-          },
-          nodeConfigReader,
-        ),
+      connectEditor: connectCommandEditorOf(
+        vscode,
+        () =>
+          listHosts(
+            textOf(host, 'configFile'),
+            {
+              homeFolder: homedir(),
+              platform: clientPlatformOf(process.platform),
+              ...(process.env.ProgramData === undefined
+                ? {}
+                : {programDataFolder: process.env.ProgramData}),
+            },
+            nodeConfigReader,
+          ),
+        adapters.hostPick,
       ),
       openExternal: address =>
         vscode.env.openExternal(vscode.Uri.parse(address)),

@@ -124,9 +124,12 @@ are `acceptance.agent.openWindow(uri)`, `acceptance.agent.writeFile(name, text)`
 `windows/harness.ts` has the Node helpers: `openWindow(alias, folder)`, `inWindow(name, command, ...args)` (resolves on
 `done`, fails on `failed`), `reloadWindow(name)` (resolves on the next `activated`; the reload command's own `failed` is
 ignored, since its extension host may end first), `closeWindow(name)` (resolves on `deactivated`), `windowState(name)`,
-`windowEvents(name)` and `recordLines(surface?, window?)`. Every wait is bounded at 60 s and fails naming the window and
+`windowEvents(name)`, `recordLines(surface?, window?)` and `scriptEntries(entries)`, which writes the launch's script
+for the windows that activate after the write. Every wait is bounded at 60 s and fails naming the window and
 the event. The record's lines name the window that wrote them, and a script entry may name the window that answers it.
-The run's folder is named after the run's id, so that `acceptance:clean` ends an editor a killed job left behind.
+The `hostPick` and `filePick` lines record the pick's placeholder as the question, the answer taken or `dismiss`, and
+`items`, the labels the pick showed, so a row reads the hosts and the fixed rows from the record. The run's folder is
+named after the run's id, so that `acceptance:clean` ends an editor a killed job left behind.
 
 ### Launches
 
