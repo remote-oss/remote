@@ -20,7 +20,8 @@ running CLI (it needs the control token in the shared record). Builder: daedalus
 |---|---|
 | `packages/lib-server/src/scripts/bootstrap.ts` | `STOP_CLI_BODY`: drop the `pkill -P "$CLI_STOP_PID"` branch; after the guard it runs only `kill "$CLI_STOP_PID"` |
 | `packages/lib-server/test/unit/bootstrap-script.test.ts`, `cli-lifecycle.test.ts` | the rows that named `pkill`; one row that the stop script holds no `pkill` |
-| `packages/remote-ssh/src/cli/cli-connect.ts` | `release()`: close the bridge, close the tunnel, then `stopCli` with the connect's CLI pid; the lease is given back when the stop settles, whatever its outcome. A second `release()` does nothing |
+| `packages/remote-ssh/src/cli/cli-connect.ts` | `release()`: close the bridge, close the tunnel, then `stopCli` with the connect's CLI pid and an abort signal that fires after the request bound (10 s, contracts S9). The lease is given back when the stop settles or the bound passes, whichever comes first, whatever the outcome, so a hung stop never holds the shared session's lease (athena on #519). A second `release()` does nothing |
+| `packages/remote-ssh/src/pipeline/steps.ts`, `server-steps.ts` | `stopCli` takes that cancellation, and passes it to lib-server's `stopCli` in place of today's own never-firing signal |
 | `packages/remote-ssh/src/pipeline/connector.ts` | check that the extension's deactivation reaches the held connection's `release()`. If it doesn't, the connector's `dispose` releases what it holds |
 | `packages/remote-ssh/test/unit/cli-connect.test.ts`, `connector.test.ts` | rows (section 2) |
 | `tests/acceptance/server/cli.test.ts` | the real-host rows (section 2), opt-in on `REMOTE_OSS_CLI_ARCHIVE` as today |
@@ -34,6 +35,7 @@ VSCodium build's commit, not upstream vscode's, and the patched CLI expands its 
 |---|---|---|
 | athena on #412 | a resolved CLI connect, then `release()` | the steps saw `closeBridge`, the tunnel's close, `stopCli 88`, then the lease's release, in that order |
 | athena on #412 | the same, with `stopCli` rejecting | the lease is still given back |
+| athena on #519 | the same, with a `stopCli` that never settles, on a fake scheduler | the lease is given back once the 10 s bound passes, not before, and the stop's signal is aborted |
 | athena on #412 | `release()` twice | `stopCli` ran once |
 | athena on #412 | the connector holding a CLI connection, then `dispose()` | the connection's `release()` ran |
 | athena on #412 | the stop script | it holds `kill "$CLI_STOP_PID"` and no `pkill` |
