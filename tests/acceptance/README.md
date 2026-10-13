@@ -127,3 +127,26 @@ runs once on the default host, in `pnpm test:acceptance:server`.
 all eight), each in its own mocha run on its own host: `server/login-shell-variant.test.ts` pins the shell the host
 reports, and `server/login-shells.test.ts`, `server/start.test.ts` and `server/shared-session.test.ts` prove that every
 session hands its commands to POSIX `sh` whatever the login shell is.
+
+## The host's other accounts (D-85)
+
+Besides `harness`, the host image has three users, and the run's `ssh_config` has an alias for each use of them. The
+`Match User` blocks that give them their rules are at the end of `/etc/ssh/sshd_config`: Alpine includes
+`sshd_config.d/` at the top of the file, where a `Match` would swallow every line after it.
+
+| Alias | User | What it is for |
+|---|---|---|
+| `password` | `harness-pw` | login by password only (no public key); the password is the run's own, 24 letters and digits |
+| `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
+| `mute` | `harness-mute` | the run's key; the login shell `/usr/local/bin/mute-shell` runs a command given with `-c` and otherwise never answers |
+| `master` | `harness-pw` | `password`, behind `ControlMaster auto` (socket `cm-%C` in the run's folder, `ControlPersist 60`) |
+| `master-ask` | `harness-pw` | `password`, behind `ControlMaster ask` (socket `cm-ask-%C`) |
+
+The run's password is written to `<run folder>/host.env` (`HOST_PASSWORD=…`, mode 600), which `docker run` reads with
+`--env-file`, so it never appears in a command line, and to `<run folder>/password` (the bare password, mode 600), whose
+path is the harness variable `HARNESS_PASSWORD_FILE`. A test gives it to ssh through an `SSH_ASKPASS` script that prints
+it (with `SSH_ASKPASS_REQUIRE=force`), or puts it in a script entry `{surface: 'maskedInput', match, answer: {text}}`,
+and the record keeps `<supplied>`. Nothing prints it. `docker inspect` does show `HOST_PASSWORD` in the container's configuration (the env file becomes the container's environment); that is acceptable only because the password is a per-run fake that opens nothing but the run's own throw-away host (R-26). A `ControlPath` is `<run folder>/cm-%C`, about 75 characters on a
+Linux runner, under the 108 of a socket path.
+
+`server/host-accounts.test.ts` shows each account does what it is for.

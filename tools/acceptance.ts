@@ -94,6 +94,8 @@ export interface HarnessVariables {
   HARNESS_CONTAINER: string;
   /** The run's folder: user data, extensions, keys. */
   HARNESS_RUN_FOLDER: string;
+  /** The file with the bare password of the host's user `harness-pw`, mode 600: a test puts it in a script entry. */
+  HARNESS_PASSWORD_FILE: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
   HARNESS_VSIX_FILES: string;
   /** The file the scripted adapters read their script from, in the run's folder. */
@@ -135,9 +137,11 @@ const READY_ATTEMPTS = 40;
 const READY_INTERVAL = 500;
 
 /**
- * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent, and three
+ * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
- * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown).
+ * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); and the aliases of the
+ * host's other accounts: `password` (login by password only), `noforward` (TCP forwarding refused), `mute` (a
+ * login shell that does not answer) and `master` and `master-ask` (the password account behind a ControlMaster).
  */
 export function harnessSshConfig(port: number, runFolder: string): string {
   return [
@@ -172,7 +176,72 @@ export function harnessSshConfig(port: number, runFolder: string): string {
     '  StrictHostKeyChecking ask',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_stranger')}`,
     '',
+    ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
+    ...accountAlias(
+      'noforward',
+      'harness-nofwd',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'mute',
+      'harness-mute',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias('master', 'harness-pw', port, runFolder, [
+      ...PASSWORD_LINES,
+      'ControlMaster auto',
+      `ControlPath ${path.join(runFolder, 'cm-%C')}`,
+      'ControlPersist 60',
+    ]),
+    ...accountAlias('master-ask', 'harness-pw', port, runFolder, [
+      ...PASSWORD_LINES,
+      'ControlMaster ask',
+      `ControlPath ${path.join(runFolder, 'cm-ask-%C')}`,
+      'ControlPersist 60',
+    ]),
   ].join('\n');
+}
+
+/** The lines of an alias that logs in with the account's password; `BatchMode` would refuse the prompt. */
+const PASSWORD_LINES = [
+  'PubkeyAuthentication no',
+  'PreferredAuthentications password,keyboard-interactive',
+  'NumberOfPasswordPrompts 1',
+];
+
+/** The lines of an alias that logs in with the run's key and never prompts. */
+function keyLines(runFolder: string): string[] {
+  return [
+    `IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    'IdentitiesOnly yes',
+    'BatchMode yes',
+  ];
+}
+
+/** One alias of the host's other accounts: the lines every one shares, its own known-hosts file, then `further`. */
+function accountAlias(
+  alias: string,
+  user: string,
+  port: number,
+  runFolder: string,
+  further: readonly string[],
+): string[] {
+  return [
+    `Host ${alias}`,
+    '  HostName 127.0.0.1',
+    `  Port ${String(port)}`,
+    `  User ${user}`,
+    '  IdentityAgent none',
+    '  StrictHostKeyChecking accept-new',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${path.join(runFolder, `known_hosts_${alias}`)}`,
+    ...further.map(line => `  ${line}`),
+    '',
+  ];
 }
 
 /** The packaged VSIX files of the extensions under test that exist under `<root>/dist`. */
@@ -270,6 +339,7 @@ async function prepare(
     HARNESS_SSH_CONFIG: configFile,
     HARNESS_CONTAINER: host.container,
     HARNESS_RUN_FOLDER: runFolder,
+    HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),

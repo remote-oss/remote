@@ -1,12 +1,19 @@
 #!/bin/sh
-# Installs the run's public key, given in AUTHORIZED_KEY, for the user harness, leaves the host with the download tool
+# Installs the run's public key, given in AUTHORIZED_KEY, for the users harness, harness-nofwd and harness-mute, sets
+# the password HOST_PASSWORD (from the run's env file) for harness-pw and forgets it, leaves the host with the download tool
 # HOST_FETCH names (busybox-wget, the default; gnu-wget; curl; none), then runs sshd in the foreground.
 # The tools are removed with rm: apk del would put BusyBox's wget link back.
 set -eu
-install -d -m 700 -o harness -g harness /home/harness/.ssh
-printf '%s\n' "$AUTHORIZED_KEY" > /home/harness/.ssh/authorized_keys
-chown harness:harness /home/harness/.ssh/authorized_keys
-chmod 600 /home/harness/.ssh/authorized_keys
+for account in harness harness-nofwd harness-mute; do
+  install -d -m 700 -o "$account" -g "$account" "/home/$account/.ssh"
+  printf '%s\n' "$AUTHORIZED_KEY" > "/home/$account/.ssh/authorized_keys"
+  chown "$account:$account" "/home/$account/.ssh/authorized_keys"
+  chmod 600 "/home/$account/.ssh/authorized_keys"
+done
+chpasswd <<EOF
+harness-pw:$HOST_PASSWORD
+EOF
+unset HOST_PASSWORD
 case "${HOST_FETCH:-busybox-wget}" in
   busybox-wget) rm -f /usr/bin/curl /usr/bin/wget; ln -s /bin/busybox /usr/bin/wget ;;
   gnu-wget) rm -f /usr/bin/curl ;;

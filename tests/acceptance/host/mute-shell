@@ -1,0 +1,6 @@
+#!/bin/sh
+# A login shell that runs a command given with -c and never answers otherwise: started without -c, it waits forever.
+if [ "${1:-}" = -c ]; then
+  exec /bin/sh "$@"
+fi
+exec sleep 2147483647

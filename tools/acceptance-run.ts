@@ -10,7 +10,8 @@
  */
 
 import {spawnSync} from 'node:child_process';
-import {readFileSync} from 'node:fs';
+import {randomInt} from 'node:crypto';
+import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {isMainModule, messageOf} from './repository.ts';
 
@@ -91,11 +92,29 @@ export function hostImageOf(runId: string): string {
   return `${HOST_IMAGE}:${runId}`;
 }
 
-/** What a started host container is: its id, its mapped SSH port, and the key file of the run. */
+/** The characters of the run's password for the user `harness-pw`, and its length. */
+const PASSWORD_ALPHABET =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+const PASSWORD_LENGTH = 24;
+
+/** A password of 24 letters and digits; `pick` gives a whole number below its argument (`randomInt` by default). */
+export function newPassword(
+  pick: (limit: number) => number = limit => randomInt(limit),
+): string {
+  return Array.from(
+    {length: PASSWORD_LENGTH},
+    () => PASSWORD_ALPHABET[pick(PASSWORD_ALPHABET.length)],
+  ).join('');
+}
+
+/** What a started host container is: its id, its mapped SSH port, and the key and password files of the run. */
 export interface HostContainer {
   container: string;
   port: number;
   keyFile: string;
+  /** The file holding the bare password of the user `harness-pw`, mode 600. */
+  passwordFile: string;
 }
 
 /** The host port Docker maps to the container's port 22, from `docker port` output such as `127.0.0.1:49153`. */
@@ -108,9 +127,9 @@ export function mappedPort(dockerPortOutput: string): number {
 }
 
 /**
- * Builds the run's image, makes the run's key in `runFolder`, and runs the labelled container: the one start of
- * the host both acceptance harnesses share. `extraArguments` go to `docker run` before the image, such as the
- * `--env` of a host variant.
+ * Builds the run's image, makes the run's key and password in `runFolder`, and runs the labelled container: the one
+ * start of the host both acceptance harnesses share. The password reaches the container in an env file, never in a
+ * command line. `extraArguments` go to `docker run` before the image, such as the `--env` of a host variant.
  */
 export function startHostContainer(
   command: CommandRunner,
@@ -140,6 +159,11 @@ export function startHostContainer(
     keyFile,
   ]);
   const publicKey = readFileSync(`${keyFile}.pub`, 'utf8').trim();
+  const password = newPassword();
+  const passwordFile = path.join(runFolder, 'password');
+  const environmentFile = path.join(runFolder, 'host.env');
+  writeFileSync(passwordFile, password, {mode: 0o600});
+  writeFileSync(environmentFile, `HOST_PASSWORD=${password}\n`, {mode: 0o600});
   const container = checked(command, 'docker', [
     'run',
     '--detach',
@@ -148,6 +172,8 @@ export function startHostContainer(
     `${RUN_LABEL}=${runId}`,
     '--env',
     `AUTHORIZED_KEY=${publicKey}`,
+    '--env-file',
+    environmentFile,
     '--publish',
     '127.0.0.1::22',
     ...extraArguments,
@@ -156,7 +182,7 @@ export function startHostContainer(
   const port = mappedPort(
     checked(command, 'docker', ['port', container, '22']),
   );
-  return {container, port, keyFile};
+  return {container, port, keyFile, passwordFile};
 }
 
 /** The container ids of a `docker ps --quiet` answer. */
