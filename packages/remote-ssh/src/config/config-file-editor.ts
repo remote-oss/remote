@@ -1,24 +1,22 @@
 /**
  * @fileoverview The editor and the client files behind the Open SSH Configuration File command: the quick pick over the
  * files, opening a file as a preview, inserting the starter template as a snippet, and making folders and files with
- * the modes asked whatever the umask. `vscode` is imported for its types only; the editor is a value it is given.
+ * the modes asked whatever the umask. The pick itself is the `FilePickPort` it is given, so the command sees neither
+ * the editor's quick pick nor the harness's script. `vscode` is imported for its types only; the editor is a value it
+ * is given.
  */
 
 import {chmod, close, mkdir, open, readFile, stat, writeFile} from 'node:fs';
 import {promisify} from 'node:util';
 import path from 'node:path';
 import type * as vscode from 'vscode';
-import {pickOne} from '../surfaces/editor-adapters.ts';
-import {textOfId} from '../surfaces/failure-strings.ts';
-import type {FailureStringId} from '../surfaces/failure-strings.ts';
-import type {Translate} from '../surfaces/strings.ts';
 import type {HostFiles} from './add-host-command.ts';
 import type {
   ConfigFileEditor,
   ConfigFiles,
   OpenedEditor,
 } from './open-config-file.ts';
-import type {FileChoiceItem} from './file-choice.ts';
+import type {FileChoice, FilePickPort} from './file-choice.ts';
 import {snippetPartsOf} from './snippet-parts.ts';
 
 type Editor = Pick<
@@ -26,45 +24,19 @@ type Editor = Pick<
   'window' | 'Uri' | 'SnippetString' | 'Position'
 >;
 
-/** The text of the string id a reference names, in the display language. */
-function textOfReference(
-  reference: {id: string; values: readonly string[]},
-  translate: Translate,
-): string {
-  return textOfId(reference.id as FailureStringId, translate, reference.values);
-}
-
 /** The opened editor as this adapter makes it: the port's view plus the editor it showed. */
 interface Opened extends OpenedEditor {
   /** The editor `showTextDocument` resolved with; the template's snippet goes into it. */
   editor: vscode.TextEditor;
 }
 
-/** The editor side of the command: the picker, the preview of a file, and the starter template as a snippet. */
+/** The editor side of the command: the pick it is given, the preview of a file, and the starter template as a snippet. */
 export function configFileEditorOf(
   editor: Editor,
-  translate: Translate,
+  filePick: FilePickPort,
 ): ConfigFileEditor {
   return {
-    pickFile: choice =>
-      pickOne<FileChoiceItem>(
-        editor,
-        {
-          placeholder: textOfReference(choice.placeholder, translate),
-          choices: choice.items.map(item =>
-            item.kind === 'file'
-              ? {label: item.label, answer: item}
-              : {
-                  label: textOfReference(item.label, translate),
-                  description: textOfReference(item.description, translate),
-                  alwaysShow: true,
-                  answer: item,
-                },
-          ),
-          ignoreFocusOut: true,
-        },
-        new AbortController().signal,
-      ),
+    pickFile: (choice: FileChoice) => filePick.pick(choice),
     open: async (file): Promise<Opened> => {
       const shown = await editor.window.showTextDocument(
         editor.Uri.file(file),

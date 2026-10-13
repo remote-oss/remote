@@ -5,7 +5,9 @@
  */
 
 import type {AcceptanceStore} from 'lib-server';
+import type {FilePickPort} from './config/file-choice.ts';
 import type {DownloadProgressPort} from './cli/server-download-progress.ts';
+import type {HostPickPort} from './surfaces/host-pick.ts';
 import type {LoginTerminals} from 'lib-ssh';
 import {
   pickRemotePlatform,
@@ -52,6 +54,10 @@ export interface EditorAdapters {
   textInput: TextInputPort;
   /** The non-modal notices the commands show. */
   notice: NoticePort;
+  /** The host pick the connect commands show when they ask for a host. */
+  hostPick: HostPickPort;
+  /** The SSH configuration file pick the Open SSH Configuration File command shows. */
+  filePick: FilePickPort;
 }
 
 /** The editor's operations the surfaces' buttons and items run. */

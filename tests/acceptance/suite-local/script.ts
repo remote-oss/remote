@@ -15,6 +15,12 @@ export type ScriptEntry = (
       answer: {button: string} | 'dismiss';
     }
   | {
+      surface: 'hostPick';
+      match: string;
+      answer: {label: string} | {typed: string} | 'dismiss';
+    }
+  | {surface: 'filePick'; match: string; answer: {label: string} | 'dismiss'}
+  | {
       surface: 'platformPick';
       match: string;
       answer: 'linux' | 'windows' | 'macOS' | 'dismiss';
@@ -46,7 +52,7 @@ export interface RecordLine {
   time: number;
   /** The labels the failure dialog was shown with, in order; only the lines of a `failureDialog` surface have it. */
   buttons?: string[];
-  /** The labels of the rows the mitigation pick was shown with, in order; only the lines of a `mitigationPick` surface have it. */
+  /** The labels of the rows the pick was shown with, in order; only the lines of a `mitigationPick`, a `hostPick` or a `filePick` surface have it. */
   items?: string[];
 }
 

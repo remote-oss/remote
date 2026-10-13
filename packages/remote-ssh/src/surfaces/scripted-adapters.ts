@@ -6,8 +6,17 @@
 
 import path from 'node:path';
 import type {ProgressPort, ResolverEditor} from 'lib-authority';
+import {
+  fileChoiceLabelOf,
+  fileChoiceTextOf,
+  type FileChoice,
+} from '../config/file-choice.ts';
+import {labelOf} from '../connect/connect-editor.ts';
+import type {PickerItem, PickerModel} from '../connect/picker-model.ts';
 import type {EditorAdapters} from '../editor-surfaces.ts';
 import type {ChannelPort} from '../log-channel.ts';
+import {textOfId} from './failure-strings.ts';
+import type {FailureStringId} from './failure-strings.ts';
 import type {MitigationAction} from './mitigation-picker.ts';
 import {ownText} from './own-strings.ts';
 
@@ -40,6 +49,12 @@ export type ScriptEntry = (
       answer: 'linux' | 'windows' | 'macOS' | 'dismiss';
     }
   | {
+      surface: 'hostPick';
+      match: string;
+      answer: {label: string} | {typed: string} | 'dismiss';
+    }
+  | {surface: 'filePick'; match: string; answer: {label: string} | 'dismiss'}
+  | {
       surface: 'failureDialog';
       match: string;
       answer: {button: string} | 'dismiss';
@@ -71,7 +86,7 @@ export interface RecordLine {
   time: number;
   /** The labels the failure dialog or the notice was shown with, in order; only the lines of those surfaces have it. */
   buttons?: string[];
-  /** The labels of the rows the mitigation pick was shown with, in order; only the lines of a `mitigationPick` surface have it. */
+  /** The labels of the rows the pick was shown with, in order; only the lines of a `mitigationPick`, a `hostPick` or a `filePick` surface have it. */
   items?: string[];
 }
 
@@ -302,6 +317,71 @@ export function scriptedAdapters(
     },
     terminals: real.terminals,
     downloadProgress: real.downloadProgress,
+    hostPick: {
+      pick: (initial: PickerModel, modelOf) =>
+        Promise.resolve(
+          answerFrom(
+            'hostPick',
+            textOfId(
+              initial.placeholder.id as FailureStringId,
+              template => template,
+              initial.placeholder.values,
+            ),
+            entry => {
+              if (entry.answer === 'dismiss') {
+                return {value: undefined, recorded: 'dismiss'};
+              }
+              if ('label' in entry.answer) {
+                const label = entry.answer.label;
+                const taken = initial.items.find(
+                  item => labelOf(item, template => template) === label,
+                );
+                return taken === undefined
+                  ? undefined
+                  : {value: taken, recorded: label};
+              }
+              // The script takes the typed row of the typed model without modelling the editor's filter of the rows.
+              const typed: PickerItem | undefined = modelOf(
+                entry.answer.typed,
+              ).items.find(item => item.kind === 'typed');
+              return typed === undefined
+                ? undefined
+                : {value: typed, recorded: entry.answer.typed};
+            },
+            {
+              items: initial.items.map(item =>
+                labelOf(item, template => template),
+              ),
+            },
+          ),
+        ),
+    },
+    filePick: {
+      pick: (choice: FileChoice) =>
+        Promise.resolve(
+          answerFrom(
+            'filePick',
+            fileChoiceTextOf(choice.placeholder, template => template),
+            entry => {
+              if (entry.answer === 'dismiss') {
+                return {value: undefined, recorded: 'dismiss'};
+              }
+              const label = entry.answer.label;
+              const taken = choice.items.find(
+                item => fileChoiceLabelOf(item, template => template) === label,
+              );
+              return taken === undefined
+                ? undefined
+                : {value: taken, recorded: label};
+            },
+            {
+              items: choice.items.map(item =>
+                fileChoiceLabelOf(item, template => template),
+              ),
+            },
+          ),
+        ),
+    },
     failureDialog: {
       showError: (text, buttons) =>
         Promise.resolve(

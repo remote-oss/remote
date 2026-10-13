@@ -3,7 +3,8 @@
     "src/extension.ts": "loads the editor",
     "src/programs/connection-helper.ts": "runs as a program of its own over real sockets, files and processes; the acceptance run covers it",
     "src/programs/askpass.ts": "runs as a program of its own over a real socket; the acceptance run covers it",
-    "src/pipeline/steps.ts": "types only; no executable code"
+    "src/pipeline/steps.ts": "types only; no executable code",
+    "src/surfaces/host-pick.ts": "types only; no executable code"
   },
   "ratchet": {
     "lines": 100,
