@@ -329,7 +329,7 @@ async function runSteps(
       cancellation,
     });
     if (overCli.kind === 'connected') {
-      await quietly('the platform setting', () =>
+      void quietly('the platform setting', () =>
         steps.rememberPlatform(input, host.operatingSystem),
       );
       return {
@@ -426,7 +426,7 @@ async function runSteps(
       connectionToken: started.server.connectionToken,
     }),
   );
-  await quietly('the platform setting', () =>
+  void quietly('the platform setting', () =>
     steps.rememberPlatform(input, host.operatingSystem),
   );
   const {opened} = tunnel.value;

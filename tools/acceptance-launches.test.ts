@@ -20,7 +20,7 @@ import {TemporaryWorkspace} from './temporary-workspace.ts';
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow, the client searches, windows, no-proposals, the three explorer launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow, the client searches, terminal-pick, windows, no-proposals, the three explorer launches and the ports cases in the order of theirs', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -33,6 +33,7 @@ describe('the launches of the VSCodium run', () => {
         'terminal',
         'slow',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
+        'terminal-pick',
         'windows',
         'no-proposals',
         'explorer',
@@ -119,6 +120,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-refused-shown',
         'terminal',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
+        'terminal-pick',
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',

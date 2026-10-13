@@ -98,6 +98,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `no-proposals`: the same without the proposed API.
 
+- `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.
+
 - `explorer`, `explorer-alone` and `explorer-no-proposals`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, and `explorer-no-proposals` without the proposed API.
 
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
