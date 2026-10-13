@@ -1,6 +1,8 @@
 /**
  * @fileoverview The Node side of the multi-window launch: the helpers with which a test drives the windows of a plainly
- * started editor through the window agent, and observes them from the agent's events, the record and the host.
+ * started editor through the window agent, and observes them from the agent's events, the record and the host. It
+ * also writes the script the launch's scripted adapters answer from, so a test may append entries, hold one
+ * behind a signal, and read back what was held and what the host accepted.
  */
 
 import {execFile} from 'node:child_process';
@@ -15,6 +17,11 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {
+  appendScriptTo,
+  signalFile,
+  type AppendedEntry,
+} from '../../../tools/script-file.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -46,8 +53,11 @@ export interface AgentEvent {
 export interface RecordLine {
   surface: string;
   question: string;
+  /** The answer given: `'held'` on the waiting line of a held entry, `'withdrawn'` when its question ended while it waited. */
   answer: string;
   matched: boolean;
+  /** The waiting line of a held entry: the answer or withdrawal line that follows it counts for the cursor, not this one. */
+  held?: boolean;
   window: string;
   /** The labels a failure dialog or a notice was shown with, in order. */
   buttons?: string[];
@@ -130,6 +140,11 @@ export function connectionLog(): string[] {
     .map(line => line.slice(line.indexOf('] ') + 2));
 }
 
+/** The waiting lines of the record, optionally of one window: a held entry's line while it waits for its signal. */
+export function heldLines(window?: string): RecordLine[] {
+  return recordLines(undefined, window).filter(line => line.held === true);
+}
+
 /** The output of a command run in the host container as the user harness. */
 export async function onHost(...command: string[]): Promise<string> {
   const {stdout} = await execFileAsync('docker', [
@@ -140,6 +155,43 @@ export async function onHost(...command: string[]): Promise<string> {
     ...command,
   ]);
   return stdout;
+}
+
+/** The bare password of the host's user `harness-pw`, from the run's file. */
+export function hostPassword(): string {
+  return readFileSync(variable('HARNESS_PASSWORD_FILE'), 'utf8');
+}
+
+/**
+ * Creates the run's signal file `<signals>/<name>`: a held entry that names it answers from then on. The name is
+ * letters, digits and hyphens, never the reserved one.
+ */
+export function signal(name: string): void {
+  signalFile(variable('REMOTE_OSS_ACCEPTANCE_SIGNALS'), name);
+}
+
+/**
+ * Adds `entries` to the launch's script, atomically: the adapters read it at every question, so they count from the
+ * next question on.
+ */
+export function appendScript(entries: readonly AppendedEntry[]): void {
+  appendScriptTo(variable('REMOTE_OSS_ACCEPTANCE_SCRIPT'), entries);
+}
+
+/**
+ * The number of logins the host's sshd counted for the password account: the `Accepted password` lines of the
+ * container's log, which sshd gets with `-e` — read from both of the container's streams, since its log is its
+ * stderr.
+ */
+export async function acceptedPasswords(): Promise<number> {
+  const {stdout, stderr} = await execFileAsync(
+    'docker',
+    ['logs', variable('HARNESS_CONTAINER')],
+    {encoding: 'utf8'},
+  );
+  return `${stdout}\n${stderr}`
+    .split('\n')
+    .filter(line => line.includes('Accepted password for harness-pw')).length;
 }
 
 /** Polls until `ready` holds, for up to a minute; it fails naming what it waited for. */

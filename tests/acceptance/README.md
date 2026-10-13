@@ -41,10 +41,14 @@ The extension host sees these variables:
 | `HARNESS_CONTAINER` | The host container's id. |
 | `HARNESS_RUN_FOLDER` | The run's folder: keys, known hosts, user data, extensions. |
 | `HARNESS_VSIX_FILES` | The VSIX files installed, separated by the platform's path delimiter. |
-| `REMOTE_OSS_ACCEPTANCE_SCRIPT` | The JSON file `{"entries": [...]}` that remote-ssh's scripted adapters answer from. Each entry names a surface, a text the question must contain, and the answer; the adapters answer only the next entry in order, dismiss anything else, and the licence modal can only be declined. |
-| `REMOTE_OSS_ACCEPTANCE_RECORD` | The file the adapters append one JSON line per question to: the surface, the question, the answer (a masked input's text is `<supplied>`) and whether an entry matched. |
+| `REMOTE_OSS_ACCEPTANCE_SCRIPT` | The JSON file `{"entries": [...]}` that remote-ssh's scripted adapters answer from. Each entry names a surface, a text the question must contain, and the answer; the adapters answer only the next entry in order, dismiss anything else, and the licence modal can only be declined. An entry with an `after` is a held one: it answers only after the signal file of that name in `REMOTE_OSS_ACCEPTANCE_SIGNALS` exists. |
+| `REMOTE_OSS_ACCEPTANCE_RECORD` | The file the adapters append one JSON line per question to: the surface, the question, the answer (a masked input's text is `<supplied>`, a held entry's waiting line is `held` and its withdrawal `withdrawn`) and whether an entry matched. |
+| `REMOTE_OSS_ACCEPTANCE_SIGNALS` | The folder the signal files of held entries live in: the harness's `signal(name)` creates `<folder>/<name>` in it, and a held entry whose question ends first records `withdrawn` and gives nothing. |
 
-The extension reads the script when it activates, once per window. A test that needs its own script writes it before it opens the window that connects.
+The extension reads the script at every question, so a test may append entries at any time — they count from the next
+question on — and a window's place in the script, its cursor, is the count of its matched record lines, so a reloaded
+window continues where it left off. A test that needs its own script writes it before it opens the window that
+connects, and `appendScript` of `windows/harness.ts` adds entries to the launch's script, atomically, between steps.
 
 ## The server lifecycle without the editor
 
@@ -161,7 +165,7 @@ authority its resolver resolves to `<pids>/<pid>.authority`, and the agent's `st
 `done`, fails on `failed`), `reloadWindow(name)` (resolves on the next `activated`; the reload command's own `failed` is
 ignored, since its extension host may end first), `closeWindow(name)` (resolves on `deactivated`), `windowState(name)`,
 which re-asks a remote window until its authority has arrived, `windowEvents(name)`, `recordLines(surface?, window?)`
-and `scriptEntries(entries)`, which writes the launch's script for the windows that activate after the write. For the
+and `scriptEntries(entries)`, which writes the launch's script for the windows that activate after the write. For the script and its held entries: `appendScript(entries)` (adds them to the launch's script atomically, so an adapter reading mid-write sees the old list or the new one), `signal(name)` (creates the run's signal file of that name; `never` is refused, the reserved name of an answer that must never come), `heldLines(window?)` (the record's waiting lines), `acceptedPasswords()` (the host's `Accepted password` lines for `harness-pw`, read from both of the container's streams, since sshd logs to its stderr with `-e`) and `hostPassword()` (the run's bare password, from `HARNESS_PASSWORD_FILE`).For the
 empty windows: `emptyWindows()` lists the names their agents have activated with, in the order of their numbers,
 `nextEmptyName()` the name the next empty window will claim, and `nextEmptyWindow(action)` runs `action` and resolves
 with the one empty window it opens once that window's agent has activated, failing when it opens none or more than
@@ -327,6 +331,7 @@ Besides `harness`, the host image has three users, and the run's `ssh_config` ha
 | Alias | User | What it is for |
 |---|---|---|
 | `password` | `harness-pw` | login by password only (no public key); the password is the run's own, 24 letters and digits |
+| `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
 | `readonly` | `harness-ro` | the run's key; its `.vscodium-server-insiders` and `bin` folders exist, are owned by root and cannot be written by the user |
 | `mute` | `harness-mute` | the run's key; the login shell `/usr/local/bin/mute-shell` runs a command given with `-c` and otherwise never answers |

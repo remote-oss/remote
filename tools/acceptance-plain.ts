@@ -242,6 +242,7 @@ export async function runPlainLaunch(
       'agent',
       'pids',
     ),
+    REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(session.runFolder, 'signals'),
     ...launch.environment,
   };
   // A port file an earlier launch left would name a port nobody listens on.
