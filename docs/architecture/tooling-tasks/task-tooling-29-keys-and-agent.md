@@ -16,6 +16,7 @@ The run makes these in its folder, with `ssh-keygen`, next to `id_ed25519`:
 |---|---|
 | `id_passphrase` | ed25519, comment `acceptance-passphrase`, protected by the run's passphrase: 24 letters and digits, made as the password is. The passphrase goes to `<run>/passphrase` (mode 600, the harness variable `HARNESS_PASSPHRASE_FILE`) and never onto a command line, so not `-N` (R-26). `ssh-keygen` runs without `-N`, with `SSH_ASKPASS` set to a script in the run's folder that prints the file and `SSH_ASKPASS_REQUIRE=force`, which answers both of its passphrase prompts. Check once that this works with the client's `ssh-keygen`, and say in the PR which version was used |
 | `id_second` | ed25519, no passphrase (AC-27's second key) |
+| `id_passphrase_stranger` | ed25519, comment `acceptance-stranger`, protected by the same passphrase, and **not** authorised on the host (F-2307 AC-20, AC-21: a passphrase key the host refuses) |
 | `id_loose` | a copy of `id_ed25519` with mode 0644 (AC-22) |
 | `ca`, `ca.pub` | ed25519 CA key |
 | `id_certified`, `id_certified-cert.pub` | ed25519, signed by `ca` for the principal `harness-cert` (`ssh-keygen -s ca -I acceptance -n harness-cert`) |
@@ -32,8 +33,10 @@ one per line, for the users `start-sshd` installs keys for.
 
 ## 3. The run's agent (`tools/acceptance.ts`)
 
-- Before the editor starts, the run starts `ssh-agent -a <run>/agent.sock -D` (a child it ends at the run's end).
-- Every launch gets `SSH_AUTH_SOCK=<run>/agent.sock` and the harness variable `HARNESS_AGENT_SOCKET` with the same path.
+- Before the editor starts, the run starts `ssh-agent -a <socket> -D` (a child it ends at the run's end). The socket is
+  `<run>/agent.sock`, or, when that path would pass 100 bytes (a Unix socket's path is limited to 104–108), `agent.sock`
+  in a short folder made under `/tmp` (athena on #603). A tools row covers the length.
+- Every launch gets `SSH_AUTH_SOCK=<socket>` and the harness variable `HARNESS_AGENT_SOCKET` with the same path.
 - The agent starts empty.
 - The agent has no askpass of its own (`SSH_ASKPASS` unset, no `DISPLAY` in its environment), so a confirm-constrained
   key can't be confirmed (AC-17, AC-31).
