@@ -100,7 +100,7 @@ describe('F-2409 the start of the server', function () {
       .map(line => line.slice(OPTION_LINE_PREFIX.length));
   }
 
-  it('F-2409 AC-1: starts the server and reads its port from the ready line', async () => {
+  it('contracts V7: starts the server and reads its port from the ready line', async () => {
     const outcome = await start(await installed(), {portRange: '30000-30010'});
     deepStrictEqual(
       outcome.kind === 'started' ? portOfStarted(outcome.server) : outcome,
@@ -159,7 +159,7 @@ describe('F-2409 the start of the server', function () {
     );
   });
 
-  it('F-2409 AC-7: replaces a bind host it rejects with the loopback address, and says so', async () => {
+  it('contracts V7: replaces a bind host it rejects with the loopback address, and says so', async () => {
     const parameters = await installed();
     const outcome = await start(parameters, {bindHost: '-bad'});
     deepStrictEqual(
@@ -174,14 +174,14 @@ describe('F-2409 the start of the server', function () {
     );
   });
 
-  it('F-2409 AC-16: reuses the server that runs instead of starting another', async () => {
+  it('contracts V7: reuses the server that runs instead of starting another', async () => {
     const parameters = await installed();
     const first = await start(parameters);
     const second = await start(parameters);
     deepStrictEqual(second, asReused(first));
   });
 
-  it('F-2409 AC-13: refuses a reversed port range before it asks the host anything', async () => {
+  it('contracts V7: refuses a reversed port range before it asks the host anything', async () => {
     const parameters = await installed();
     deepStrictEqual(await start(parameters, {portRange: '9000-8000'}), {
       kind: 'failed',
@@ -203,14 +203,14 @@ describe('F-2409 the start of the server', function () {
     });
   });
 
-  it('F-2401 AC-3: reports a server that lacks libraries on the host as missing prerequisites', async () => {
+  it('contracts V7: reports a server that lacks libraries on the host as missing prerequisites', async () => {
     deepStrictEqual(await start(await installed('missingLibraries')), {
       kind: 'failed',
       failure: {kind: 'prerequisitesMissing'},
     });
   });
 
-  it('F-2409 AC-25: gives up on a server that never reports a port, after the time it was given', async () => {
+  it('contracts V7: gives up on a server that never reports a port, after the time it was given', async () => {
     deepStrictEqual(await start(await installed('silent'), {readySeconds: 2}), {
       kind: 'failed',
       failure: {kind: 'serverStart'},

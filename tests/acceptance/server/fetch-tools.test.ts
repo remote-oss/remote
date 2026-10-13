@@ -222,7 +222,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
     });
 
     if (variant !== 'none') {
-      it('F-2403 AC-23: the host downloads the archive and installs it', async () => {
+      it('contracts V4: the host downloads the archive and installs it', async () => {
         const {outcome} = await installFrom(
           host,
           `http://127.0.0.1:${String(SOURCE_PORT)}/server.tar.gz`,
@@ -252,7 +252,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
         deepStrictEqual(outcome.kind, 'transferred');
       });
 
-      it('F-2403 AC-16: the same wgetrc is read when the configuration files are used', async () => {
+      it('contracts V4: the same wgetrc is read when the configuration files are used', async () => {
         host.onHost('sh', '-c', `printf '%s' '${WGETRC}' > ~/.wgetrc`);
         const {outcome} = await installFrom(
           host,
@@ -275,7 +275,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
         deepStrictEqual(outcome.kind, 'transferred');
       });
 
-      it('F-2403 AC-16: the same curlrc is read when the configuration files are used', async () => {
+      it('contracts V4: the same curlrc is read when the configuration files are used', async () => {
         host.onHost('sh', '-c', `printf '%s' '${CURLRC}' > ~/.curlrc`);
         const {outcome} = await installFrom(
           host,
@@ -289,7 +289,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
     }
 
     if (variant === 'none') {
-      it('F-2403 AC-11: with no downloader and the client as a fallback the client downloads and copies', async () => {
+      it('contracts V4: with no downloader and the client as a fallback the client downloads and copies', async () => {
         const {outcome, phases} = await installFrom(host, sourceOnClient, {
           clientFallback: true,
         });
