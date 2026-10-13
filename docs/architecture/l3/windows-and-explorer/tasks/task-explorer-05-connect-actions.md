@@ -66,7 +66,7 @@ returns `undefined` in every case and never rejects:
 2. `host = current.targets.hostOf(argument)`. When it's `undefined`, return without a call. That covers no argument,
    a string, `{}`, the group row, an old build's row and a look-alike object (F-5002 §19 items 1, 3 and 7; F-5103
    rows only). The command is silent out of context: explorer-03a's `infoLineCommands` is empty.
-3. Otherwise `await current.calls.open(host.row.alias, target)`. `target` is `'current'` for
+3. Otherwise `await current.calls.open(host.hostRow.alias, target)`. `target` is `'current'` for
    `connectToRemoteInCurrentWindow` and `'new'` for `connectToRemoteInNewWindow`. The host key is the alias as
    written, case kept (F-5902 §5, RR-2; F-5103 BR-1).
 4. Whatever `open` gives (`answered`, or `unavailable` with any cause), return. Nothing is shown, written or
@@ -83,7 +83,7 @@ Nothing else changes.
 - **The session fake:** `targets.hostOf` answers a chosen node for one chosen value and `undefined` for everything
   else. `calls.open` records `(hostKey, target)` and returns an outcome the row chooses. `calls.activeRemote` and
   `calls.hostnames` throw if called.
-- **`HOST`** is a host node with `row.alias` `'F5103-Upper'`.
+- **`HOST`** is a host node with `hostRow.alias` `'F5103-Upper'`.
 
 | Cite | Given | Expected |
 |---|---|---|
