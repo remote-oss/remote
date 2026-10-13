@@ -11,15 +11,14 @@ import {homedir} from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {
-  gateEditorOf,
+  familySetupPortsOf,
   type ResolverEditor,
   resolverEditorOf,
-  setupPortsOf,
 } from 'lib-authority';
 import {identifierHost} from 'lib-identifiers';
 import {listHosts} from 'lib-ssh';
 import type {Logger} from 'lib-log';
-import {type ProductProfile, readProfile} from 'lib-product';
+import {type ProductProfile, profileOf} from 'lib-product';
 import {standDownHost} from 'lib-standdown';
 import {activateRemoteSsh} from './activation.ts';
 import {
@@ -109,28 +108,14 @@ interface Manifest {
 
 /** The editor's product, as its `product.json` describes it. */
 async function editorProfile(): Promise<ProductProfile> {
-  const reading = readProfile(
+  return profileOf(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
-  if (reading.kind === 'unreadable') {
-    throw new Error(`product.json cannot be read: ${reading.reason}`);
-  }
-  return reading.profile;
 }
 
 /** The `dataFolderName` of the editor's product, which names the folder of its runtime arguments. */
 async function dataFolderNameOfEditor(): Promise<string> {
   return (await editorProfile()).dataFolderName;
-}
-
-/** The text of a file, or nothing when it cannot be read. */
-async function readArgvFile(filePath: string): Promise<string | undefined> {
-  try {
-    return await readFile(filePath, 'utf8');
-  } catch {
-    // No runtime-arguments file yet, or one the user cannot read: the same as none.
-    return undefined;
-  }
 }
 
 /** The files the harness's adapters read and append to: the script, the record and the log. */
@@ -220,38 +205,16 @@ export async function activate(
     channels: channelPortFor(process.env, vscode.window, ACCEPTANCE_FILES),
     clock: Date.now,
     gate: logFailure =>
-      setupPortsOf(
-        gateEditorOf(
-          vscode,
-          context,
-          readArgvFile,
-          logFailure,
-          adapters.notice,
-        ),
-        {
-          extensionId: context.extension.id,
-          displayName: manifest.displayName,
-          applicationName: vscode.env.appName,
-          proposals: enabledApiProposals,
-          argv: {
-            portableFolder: process.env.VSCODE_PORTABLE,
-            homeFolder: homedir(),
-            dataFolderName: dataFolderNameOfEditor,
-          },
-          platform: process.platform,
-          texts: {
-            setup: vscode.l10n.t(SETUP_TEXT_TEMPLATES.setup),
-            failedAttempt: vscode.l10n.t(SETUP_TEXT_TEMPLATES.failedAttempt),
-            restart: vscode.l10n.t(SETUP_TEXT_TEMPLATES.restart),
-            configureButton: vscode.l10n.t(
-              SETUP_TEXT_TEMPLATES.configureButton,
-            ),
-            notNowButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.notNowButton),
-            quitButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.quitButton),
-          },
-          logFailure,
-        },
-      ),
+      familySetupPortsOf(vscode, context, {
+        displayName: manifest.displayName,
+        proposals: enabledApiProposals,
+        viewIds: [],
+        templates: SETUP_TEXT_TEMPLATES,
+        translate,
+        dataFolderName: dataFolderNameOfEditor,
+        logFailure,
+        notices: adapters.notice,
+      }),
   });
   if (result.kind !== 'serving') {
     return;

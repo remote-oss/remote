@@ -92,6 +92,8 @@ export interface GateIdentity {
   /** The editor's application name. */
   applicationName: string;
   proposals: readonly ProposalName[];
+  /** The ids of the remote views the extension contributes; their focus commands probe `contribViewsRemote`. */
+  viewIds: readonly string[];
   /** Where the runtime arguments are; the data folder is looked up when the setup needs it, never at activation. */
   argv: Omit<ArgvLocation, 'dataFolderName'> & {
     dataFolderName(): PromiseLike<string>;
@@ -164,7 +166,7 @@ export function setupPortsOf(
     probe: () =>
       probeProposals(editor.probeApi, {
         proposals: identity.proposals,
-        viewIds: [],
+        viewIds: identity.viewIds,
       }),
     installedFamilyIds: async () =>
       installedFamilyIds(await editor.installed()),

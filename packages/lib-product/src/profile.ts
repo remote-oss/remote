@@ -149,3 +149,12 @@ export function serverDataFolderNameOrDefault(
     ? declared
     : `.${profile.applicationName}-server`;
 }
+
+/** The profile of a product.json text; throws when the text cannot be read as one. */
+export function profileOf(productJsonText: string): ProductProfile {
+  const reading = readProfile(productJsonText);
+  if (reading.kind === 'unreadable') {
+    throw new Error(`product.json cannot be read: ${reading.reason}`);
+  }
+  return reading.profile;
+}
