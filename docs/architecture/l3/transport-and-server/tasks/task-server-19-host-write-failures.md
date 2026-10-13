@@ -19,6 +19,11 @@ retriesExhausted", with nothing in between and no reason shown.
    `LockBusy` step until its attempts run out, then answers `retriesExhausted`.
 4. Every error text is discarded (`2>/dev/null`). The failure carries no detail, so the log has none.
 
+**Confirmed by the user:** setting `remote.SSH.lockfilesInTmp` to `true` makes the AFS connect work. So the install
+folder was usable, and the **lock file in the install folder** was the problem: the open, or `flock`, failed there on
+AFS (hermes, 2026-10-13). That's the case this card must tell apart from a busy lock, and explain. An unwritable
+install folder is the second case.
+
 The start script's own writes have the same blind spot:
 - the token file;
 - the empty log file (`(umask 077; printf '' >"$LOG_FILE") || leave ServerFailedToStart`);
@@ -42,6 +47,12 @@ The start script's own writes have the same blind spot:
 - **R4.** On `LockBusy`, the script also reports `server.lockPath`, the lock file's path.
 - **R5.** A connect that ends in `retriesExhausted` logs the last attempt's cause:
   `the host lock <path> was still held after <n> attempts`, as the failure's `logDetail`.
+- **R7** (a log hint, pending athena's design check): when `writeFailedPath` is the host lock file and the lock isn't
+  in `/tmp` already, the log adds one line after R2's:
+  `The host lock file can't be used here. On a distributed file system such as NFS or AFS, setting
+  remote.SSH.lockfilesInTmp to true keeps the lock in /tmp.`
+  - The wording is ours (ADR-0008), in the spirit of F-2408 §9's `remote.SSH.useFlock` hint.
+  - The dialog stays S075. The script reports `server.lockInTemporary yes|no` so the mapping can tell.
 
 ## 3. Changes
 
@@ -159,6 +170,8 @@ the test machine, as the existing script rows do):
 | #668 R3 | `/tmp` mode, the lock path a symlink; a directory | returns 2 with `not a regular file` (each) |
 | #668 R1 | the install body with `INSTALL_DIR`'s parent read-only (the folder missing) | status `CreateInstallDirFailed`; `server.writeFailedPath` is `INSTALL_DIR`; `writeFailedError` is non-empty |
 | #668 R1 | the install body with `INSTALL_DIR` existing and read-only | `CreateInstallDirFailed`; `writeFailedPath` is the lock file's path |
+| #668 R3 (the AFS case) | the install body with `INSTALL_DIR` writable and the lock path pre-created as a **directory** (an open that fails whoever runs it, root included) | `CreateInstallDirFailed`; `writeFailedPath` is the lock path; `writeFailedError` non-empty; `server.lockInTemporary` `no` |
+| #668 R3 | the same with `LOCK_IN_TEMPORARY=yes` and the `/tmp` lock path free | `Ok`: the lock moved to `/tmp` works, as `lockfilesInTmp` did for the user |
 | #668 R4 | the install body with the lock held by another process | `LockBusy`, and `server.lockPath` is the lock file's path |
 | #668 R1 | the start body with the token file's folder read-only | `CreateInstallDirFailed`, `writeFailedPath` the token file |
 
@@ -170,12 +183,17 @@ the test machine, as the existing script rows do):
 
 **remote-ssh unit rows (`failure.test.ts`):**
 - `writeFailure` gives `logDetail` `cannot write /p: Permission denied` with reason S075;
-- `retriesExhausted` with `lockPath` gives R5's text, and without it the short text.
+- `retriesExhausted` with `lockPath` gives R5's text, and without it the short text;
+- a `writeFailure` on the lock file with `lockInTemporary` `no` adds R7's line; with `yes`, or on another path, it
+  doesn't.
 
 **Real-host rows** (`tests/acceptance/server/`, against the harness host, opt-in like the other real-shell rows):
 - the install step as `harness-ro` gives `CreateInstallDirFailed` with `writeFailedPath` under
   `/home/harness-ro/.vscodium-server-insiders/bin/`;
-- a second process holding the harness user's lock gives `LockBusy` with `lockPath`.
+- a second process holding the harness user's lock gives `LockBusy` with `lockPath`;
+- the AFS case: as `harness`, with the stand-in server's commit, the lock path pre-created as a directory through
+  `onHost` gives `CreateInstallDirFailed` naming the lock path at once, not `LockBusy`. Remove the directory in a
+  `finally`.
 
 **VSCodium row** (athena's): a failing connect in `tests/acceptance/suite-failure/cases.json`, alias `readonly`:
 - the script answers the failure dialog with dismiss and the mitigation pick with dismiss, as `refused` does;
