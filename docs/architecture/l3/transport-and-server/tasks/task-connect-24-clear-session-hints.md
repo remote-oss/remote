@@ -7,8 +7,9 @@ isn't in this card. Builder: selene. Size: S.
 
 ## 1. The command (F-2605 6.6)
 
-- **The key.** `src/diagnostics/hint-store.ts` gains `export const HINT_STORE_KEY = 'remote-ssh.sessionHints'`: the
-  global-state key the future recorder writes, kept in one place.
+- **The key.** `src/diagnostics/hint-store.ts` gains `export const HINT_STORE_KEY = 'remote.ssh.hints'`: the
+  global-state key the future recorder writes, kept in one place. It's the sub-key F-2605 BR-8 records as reference
+  data, reused under D-14; our global state is keyed by our own extension id, so nothing collides (athena on #535).
 - **The handler** (`src/diagnostics/clear-hints-command.ts`), taking a `{update(key: string, value: undefined):
   PromiseLike<void>}` port and the logger. It runs `update(HINT_STORE_KEY, undefined)`, then logs `Cleared all session
   hints`. It shows nothing: no notification, dialog, pick or progress (6.6 step 2). It touches no other key (step 3).
@@ -19,7 +20,7 @@ isn't in this card. Builder: selene. Size: S.
 
 | Cite | Given | Expected |
 |---|---|---|
-| F-2605 6.6 step 3 | the handler over a recording port | `update` ran once, with `('remote-ssh.sessionHints', undefined)` |
+| F-2605 6.6 step 3 | the handler over a recording port | `update` ran once, with `('remote.ssh.hints', undefined)` |
 | F-2605 6.6 step 4 | the same | the log has `Cleared all session hints` |
 | F-2605 6.6 step 2 | the same, with recording editor surfaces | no notification, dialog, pick or progress was shown |
 | F-2605 6.6 step 6 | an empty store | the same `update`, and no error |
