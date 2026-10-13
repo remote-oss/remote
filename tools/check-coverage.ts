@@ -98,13 +98,18 @@ function unescaped(text: string): string {
   return text.replace(/\\(.)/g, '$1');
 }
 
-const NAME_PATTERN = /\bit\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g;
+/**
+ * An `it(` and its name: a quoted name on one line, or a template literal up to its first placeholder, which stays in the name
+ * as `${`, or up to its closing backtick, with no newline needed before either.
+ */
+const NAME_PATTERN =
+  /\bit\(\s*(?:(['"])((?:\\.|(?!\1)[^\\\n])*)\1|`((?:\\.|[^\\`$]|\$(?!\{))*)(\$\{)?)/g;
 
-/** The names of the `it(` rows of a file; a template literal with a placeholder is built at run time and left out. */
+/** The names of the `it(` rows of a file; a template literal with a placeholder is read as the text up to the first one, the `${` included. */
 function rowNamesOf(source: string): string[] {
-  return [...source.matchAll(NAME_PATTERN)]
-    .filter(match => !(match[1] === '`' && (match[2] ?? '').includes('${')))
-    .map(match => unescaped(match[2] ?? ''));
+  return [...source.matchAll(NAME_PATTERN)].map(
+    match => unescaped(match[2] ?? match[3] ?? '') + (match[4] ?? ''),
+  );
 }
 
 /** The `cite` fields of the failure suite's cases file. */

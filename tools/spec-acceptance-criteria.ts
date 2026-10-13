@@ -29,10 +29,13 @@ export const SLICE_ONE_FEATURES: readonly string[] = [
 
 /**
  * The ids of the criteria of `feature` in an issue's body, in body order, each once: the lines that start with a
- * bold `<feature>.AC-<n>` after a list dash. A later line that only quotes an id does not count.
+ * bold `<feature>.AC-<n>` after a list dash, unless the text after the id starts with `Removed`. A later line that only
+ * quotes an id does not count.
  */
 export function acceptanceCriteriaOf(body: string, feature: string): string[] {
-  const pattern = new RegExp(`^- \\*\\*(${feature}\\.AC-\\d+)\\*\\*`);
+  const pattern = new RegExp(
+    `^- \\*\\*(${feature}\\.AC-\\d+)\\*\\*(?! *Removed)`,
+  );
   const found: string[] = [];
   for (const line of body.split('\n')) {
     const criterion = pattern.exec(line)?.[1];
