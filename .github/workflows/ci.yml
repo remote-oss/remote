@@ -41,6 +41,31 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
+  # Whether a pull request changes only docs/ (no .tsv): only the checks job reads docs/ (layout, public surface,
+  # coverage citations, the user guide's unit test), so the quality and acceptance jobs skip such a change and the run
+  # still concludes success at its head. The diff is the merge commit's against its base parent, what the pull request
+  # brings to the base it would merge into. Dispatches and tags skip this job and run everything.
+  changes:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    outputs:
+      docs-only: ${{ steps.diff.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - id: diff
+        run: |
+          files=$(git diff --name-only HEAD^1 HEAD)
+          printf '%s\n' "$files"
+          if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '^docs/[^[:space:]]*$' \
+             && ! printf '%s\n' "$files" | grep -qE '\.tsv$'; then
+            echo docs-only=true >> "$GITHUB_OUTPUT"
+          else
+            echo docs-only=false >> "$GITHUB_OUTPUT"
+          fi
+
   checks:
     if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
@@ -74,7 +99,11 @@ jobs:
   # dupes: jscpd; dead: knip; coverage: c8 with the gates and the ratchet.
   quality:
     name: ${{ matrix.check }}
-    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    needs: changes
+    if: >-
+      !cancelled() && needs.changes.result != 'failure' && (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
+      needs.changes.outputs.docs-only != 'true'))
     strategy:
       fail-fast: false
       matrix:
@@ -98,7 +127,11 @@ jobs:
   # and OpenSSH client are preinstalled, and xvfb or a display of its own.
   acceptance-slice-1:
     name: acceptance (slice 1)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    needs: changes
+    if: >-
+      !cancelled() && needs.changes.result != 'failure' && (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
+      needs.changes.outputs.docs-only != 'true'))
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
@@ -133,7 +166,11 @@ jobs:
   # SSH host container, with no editor and no download.
   acceptance-server:
     name: acceptance (server lifecycle)
-    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    needs: changes
+    if: >-
+      !cancelled() && needs.changes.result != 'failure' && (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
+      needs.changes.outputs.docs-only != 'true'))
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
