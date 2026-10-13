@@ -159,11 +159,16 @@ export function startDetached(program: Program): Started {
     detached: true,
     stdio: 'ignore',
   });
+  // A program that cannot start has no process group to stop; the error must not end the harness unhandled.
+  child.on('error', () => undefined);
   child.unref();
   return {
     stop: () => {
+      if (child.pid === undefined) {
+        return;
+      }
       try {
-        process.kill(-(child.pid ?? 0), 'SIGTERM');
+        process.kill(-child.pid, 'SIGTERM');
       } catch {
         // The group is already gone.
       }

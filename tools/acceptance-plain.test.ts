@@ -236,6 +236,17 @@ describe('startDetached', () => {
     strictEqual(statSync(file).size, before);
   });
 
+  it('D-85: a program that cannot start is not an error, and stopping it signals nothing', () => {
+    const started = startDetached({
+      file: path.join(workspace.root, 'no-such-program'),
+      programArguments: [],
+      environment: {},
+    });
+    doesNotThrow(() => {
+      started.stop();
+    });
+  });
+
   it('D-85: stopping a program twice is harmless', async () => {
     const started = startDetached(writer(path.join(workspace.root, 'ticks')));
     await pause(200);
