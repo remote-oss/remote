@@ -133,10 +133,10 @@ These stay `todo`. List each under "Needs an acceptance row: harness capability 
 | AC | Waits for |
 |---|---|
 | AC-7 | STR:S168 at the start of the connect: not built; decision Q1 (remote-oss/remote-ssh#93), then a card |
-| AC-9, 10, 29 | STR:S135 as the reason with `useExecServer` false: connect-26 (#557) |
+| AC-9, 10, 25, 29 | STR:S135 as the reason with `useExecServer` false, the 15 s start wait, and AC-29's unit row: connect-26 (#557) |
 | AC-14 | a malformed range that fails before the start: connect-26 (#557) |
 | AC-13 | the reversed range's reason: decision Q3 (a) (remote-oss/remote-ssh#93) |
-| AC-25, 26 | the ready wait: 60 s by the ruling of #253 Q7, where the AC wants about 13–20 s (athena) |
+| AC-26 | a slow stand-in server in the VSCodium run, and tooling-20's Retry |
 | AC-11, 16 | Retry and reload: tooling-20 (#544) |
 | AC-12, 19, 22, 28 | exec-server mode, which needs the CLI path (dormant in 0.2) |
 | AC-1 | a second fresh host |
