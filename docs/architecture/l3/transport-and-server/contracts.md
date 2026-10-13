@@ -707,6 +707,10 @@ commit is the one its release names as its upstream.
   the winner's), every connect reads it back from a script's output and passes it, and it stays after close and Kill.
   The found server then holds the token every window uses. The token lands in the server's argv: S10's documented
   deviation.
+  The host also holds `[cli]`'s own `cli/agent-host-token` for its agent-host supervisor, which reaches the server only
+  through its environment. The two are never the same value (cli-07 ruling on #523): the server's token is visible in
+  argv, and the deviation is acceptable only because it opens nothing another user can reach, which a shared value would
+  undo for the supervisor's loopback bridge. F-2409 BR-11's single file is a recorded deviation for this reason.
   - While it runs, `serve` streams `serverlog {line, level}` notifications. Levels are 0 trace, 1 debug, 2 info,
     3 warn, 4 error. Every level reaches the caller.
   - It replies `{}` when the server has started.
