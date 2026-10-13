@@ -44,7 +44,11 @@ import {
   uninstall,
 } from 'lib-server';
 import {validateTarget} from 'lib-ssh';
-import {sshTargetOf, type HostServerSettings} from './host-settings.ts';
+import {
+  hostAlias,
+  sshTargetOf,
+  type HostServerSettings,
+} from './host-settings.ts';
 import {
   type ParameterInput,
   runtimeOptionsFor,
@@ -64,6 +68,11 @@ export interface ServerStepDependencies {
   /** The user's download override and where it came from, when one is set. */
   override: OverrideValue | undefined;
   overridePolicy: OverridePolicy;
+  /**
+   * Tells the user that the host's bind host entry is not valid and the loopback address is used; `configured` is the
+   * entry as written. It does not wait for the user.
+   */
+  rejectBindHost: (alias: string, configured: string) => void;
   /** The user name on the host, from the effective ssh config; read when a step needs it, once the lookup has run. */
   remoteUser: () => string;
   clock: () => number;
@@ -226,6 +235,23 @@ export function createServerSteps(
 
   return {
     validate: input => {
+      if (settings.rangeProblem !== undefined) {
+        return {
+          kind: 'failed',
+          failure: {
+            kind: 'invalidSetting',
+            ...(settings.rangeProblem === 'reversed'
+              ? {reason: {id: 'reversedPortRange', values: []}}
+              : {}),
+          },
+        };
+      }
+      if (settings.bindHost.rejected !== undefined) {
+        dependencies.rejectBindHost(
+          hostAlias(input.target),
+          settings.bindHost.rejected,
+        );
+      }
       const problem = validateTarget(sshTargetOf(input.target));
       if (problem !== undefined) {
         return {

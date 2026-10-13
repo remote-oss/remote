@@ -131,7 +131,7 @@ function rowNamesOf(source: string): string[] {
   );
 }
 
-/** The `cite` and `bound.cite` fields of the failure suite's cases file. */
+/** The `cite` and `bound.cite` fields of a suite's cases file. */
 function casesCites(file: string): string[] {
   if (!existsSync(file)) {
     return [];
@@ -146,7 +146,7 @@ function casesCites(file: string): string[] {
   );
 }
 
-/** Every test row of the repository: the acceptance rows, the failure suite's cites, and the unit rows. */
+/** Every test row of the repository: the acceptance rows, the cites of the suites' cases files, and the unit rows. */
 function rowsOf(root: string): Row[] {
   const rows: Row[] = [];
   const acceptance = path.join(root, 'tests', 'acceptance');
@@ -155,9 +155,16 @@ function rowsOf(root: string): Row[] {
       rows.push({file: path.relative(root, file), name, acceptance: true});
     }
   }
-  const cases = path.join(acceptance, 'suite-failure', 'cases.json');
-  for (const name of casesCites(cases)) {
-    rows.push({file: path.relative(root, cases), name, acceptance: true});
+  if (existsSync(acceptance)) {
+    for (const entry of sortedEntries(acceptance)) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const cases = path.join(acceptance, entry.name, 'cases.json');
+      for (const name of casesCites(cases)) {
+        rows.push({file: path.relative(root, cases), name, acceptance: true});
+      }
+    }
   }
   const packages = path.join(root, 'packages');
   if (existsSync(packages)) {

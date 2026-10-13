@@ -131,10 +131,10 @@ isn't built here.
 
 | Name | Expected |
 |---|---|
-| `F-2409 BR-10: a server that exits before reporting a port fails at the end of the wait` | the stand-in exits at once with status 1: `serverStart`, no `cause`, no sooner than 2 s after the start began |
-| `F-2401: a server that exits with 207 fails at once` | `prerequisitesMissing` within 1 s |
-| `F-2409 BR-10: a port written before the exit still counts` | the stand-in writes the ready line, then exits: the start reports that port |
-| `F-2409 6.2: a server with no free port in its range fails with that cause` | the stand-in prints `--port: Could not find free port in range: 1 - 2 (inclusive).` and exits 1: cause `noFreePort` |
+| `contracts V7: F-2409 BR-10, a server that exits before reporting a port fails at the end of the wait` | the stand-in exits at once with status 1: `serverStart`, no `cause`, no sooner than 2 s after the start began |
+| `contracts V7: F-2401, a server that exits with 207 fails at once` | `prerequisitesMissing` within 1 s |
+| `contracts V7: F-2409 BR-10, a port written before the exit still counts` | the stand-in writes the ready line, then exits: the start reports that port |
+| `contracts V7: F-2409 6.2, a server with no free port in its range fails with that cause` | the stand-in prints `--port: Could not find free port in range: 1 - 2 (inclusive).` and exits 1: cause `noFreePort` |
 | `F-2409 AC-30: a server that ended for CVE-2020-1416 fails at once with that cause` | the stand-in (the test double of AC-30) prints `* !!!! Server terminated due to presence of CVE-2020-1416 !!!!` and exits 0: cause `cveTerminated`, within 1 s |
 
 **Acceptance cases** for `suite-ports/cases.json`, after coverage-13's cases. They use coverage-13's setup and script,

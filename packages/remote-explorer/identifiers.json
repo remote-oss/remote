@@ -1,4 +1,72 @@
 {
   "source": "remote-oss/remote-explorer#7 (F-5901)",
-  "standsDownFor": "ms-vscode.remote-explorer"
+  "standsDownFor": "ms-vscode.remote-explorer",
+  "standingDownKey": "remote-explorer.standingDown",
+  "namespaces": {
+    "commands": ["remote-explorer."],
+    "settings": ["remote-explorer."],
+    "contextKeys": ["remote-explorer."],
+    "internalCommands": ["remote-internal."]
+  },
+  "contextKeys": [
+    {
+      "id": "remote-explorer.standingDown",
+      "setter": "extension"
+    }
+  ],
+  "infoLineCommands": [],
+  "runtimeCommands": [],
+  "internal": [
+    {
+      "id": "remote-internal.setActiveFolders",
+      "role": "served",
+      "kind": "push"
+    },
+    {
+      "id": "remote-internal.getActiveSshRemote",
+      "role": "called",
+      "kind": "query"
+    },
+    {
+      "id": "remote-internal.getConfiguredHostnames",
+      "role": "called",
+      "kind": "query"
+    },
+    {
+      "id": "remote-internal.openRemoteSshTarget",
+      "role": "called",
+      "kind": "change"
+    },
+    {
+      "id": "remote-oss.gate.claim",
+      "role": "called",
+      "kind": "query"
+    }
+  ],
+  "invented": [
+    {
+      "id": "remote-explorer.standingDown",
+      "kind": "contextKeys",
+      "spec": "F-5001",
+      "date": "2026-10-13"
+    }
+  ],
+  "settingPairs": [],
+  "ungated": [],
+  "locales": [
+    "cs",
+    "de",
+    "es",
+    "fr",
+    "it",
+    "ja",
+    "ko",
+    "pl",
+    "pt-br",
+    "qps-ploc",
+    "ru",
+    "tr",
+    "zh-cn",
+    "zh-tw"
+  ]
 }

@@ -59,8 +59,10 @@ export interface RecordLine {
   window: string;
   /** The time of the line's append. */
   time: number;
-  /** The labels the failure dialog was shown with, in order; only the lines of a `failureDialog` surface have it. */
+  /** The labels the failure dialog or the notice was shown with, in order; only the lines of those surfaces have it. */
   buttons?: string[];
+  /** The labels of the rows the mitigation pick was shown with, in order; only the lines of a `mitigationPick` surface have it. */
+  items?: string[];
 }
 
 /** The name of a window: the last segment of its first workspace folder's path, or `local` for a window without one. */
@@ -135,16 +137,15 @@ export function scriptedAdapters(
     answerOf: (
       entry: Extract<ScriptEntry, {surface: Kind}>,
     ) => Given<Value> | undefined,
-    buttons?: readonly string[],
+    shown: Pick<RecordLine, 'buttons' | 'items'> = {},
   ): Value | undefined {
-    const withButtons = buttons === undefined ? {} : {buttons: [...buttons]};
     const entry = entries[cursor];
     if (entry?.surface === surface && question.includes(entry.match)) {
       const given = answerOf(entry as Extract<ScriptEntry, {surface: Kind}>);
       if (given !== undefined) {
         cursor += 1;
         record({
-          ...withButtons,
+          ...shown,
           surface,
           question,
           answer: given.recorded,
@@ -154,7 +155,7 @@ export function scriptedAdapters(
       }
     }
     record({
-      ...withButtons,
+      ...shown,
       surface,
       question,
       answer: 'dismiss',
@@ -182,7 +183,7 @@ export function scriptedAdapters(
           }
           return undefined;
         },
-        buttons,
+        {buttons: [...buttons]},
       ),
     );
   }
@@ -222,7 +223,7 @@ export function scriptedAdapters(
                 ? {value: button, recorded: button}
                 : undefined;
             },
-            buttons,
+            {buttons: [...buttons]},
           ),
         ),
     },
@@ -251,10 +252,15 @@ export function scriptedAdapters(
     mitigationPick: {
       pick: pick =>
         Promise.resolve(
-          answerFrom('mitigationPick', pick.placeholder, entry => ({
-            value: entry.answer === 'dismiss' ? undefined : entry.answer,
-            recorded: entry.answer,
-          })),
+          answerFrom(
+            'mitigationPick',
+            pick.placeholder,
+            entry => ({
+              value: entry.answer === 'dismiss' ? undefined : entry.answer,
+              recorded: entry.answer,
+            }),
+            {items: pick.items.map(item => item.label)},
+          ),
         ),
     },
     textInput: {

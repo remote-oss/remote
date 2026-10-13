@@ -248,12 +248,36 @@ export function ofCliServe(
   }
 }
 
+/**
+ * The reason a failed start gives: the server's own cause when it named one, else, when `useExecServer` is off, that it
+ * failed to start. With it on and no cause, the dialog names only the host.
+ */
+function startReason(
+  failure: Extract<StartFailure, {kind: 'serverStart'}>,
+  useExecServer: boolean,
+): FailureReason | undefined {
+  if (failure.cause === 'cveTerminated') {
+    return {id: 'S136', values: []};
+  }
+  return failure.cause === 'noFreePort' || !useExecServer
+    ? {id: 'S135', values: []}
+    : undefined;
+}
+
 /** The failure of the server start. */
-export function ofStart(failure: StartFailure): FailureDetail {
+export function ofStart(
+  failure: StartFailure,
+  settings: {useExecServer: boolean},
+): FailureDetail {
   switch (failure.kind) {
     case 'invalidPortRange':
       return {kind: 'invalidSetting'};
-    case 'serverStart':
+    case 'serverStart': {
+      const reason = startReason(failure, settings.useExecServer);
+      return reason === undefined
+        ? {kind: 'serverStart'}
+        : {kind: 'serverStart', reason};
+    }
     case 'unreadableServerFacts':
       return {kind: 'serverStart'};
     case 'prerequisitesMissing':

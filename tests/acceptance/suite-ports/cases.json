@@ -1,0 +1,147 @@
+{
+  "cases": [
+    {
+      "label": "range",
+      "cite": "F-2409 AC-2 (range)",
+      "settings": {
+        "remote.SSH.serverPickPortsFromRange": {"harness": "45000-45010"}
+      },
+      "outcome": "connected",
+      "port": 45000,
+      "address": "127.0.0.1"
+    },
+    {
+      "label": "reuse",
+      "cite": "F-2409 AC-23 (reuse)",
+      "settings": {
+        "remote.SSH.useExecServer": false,
+        "remote.SSH.serverPickPortsFromRange": {"harness": "46000-46010"},
+        "remote.SSH.bindHost": {"harness": "0.0.0.0"}
+      },
+      "keepServer": true,
+      "outcome": "connected",
+      "port": 45000,
+      "address": "127.0.0.1",
+      "noListenerOn": 46000
+    },
+    {
+      "label": "range-held",
+      "cite": "F-2409 AC-3 (range-held)",
+      "settings": {
+        "remote.SSH.serverPickPortsFromRange": {"harness": "45000-45010"}
+      },
+      "holders": [45000, 45001, 45002, 45003, 45004],
+      "outcome": "connected",
+      "port": 45005
+    },
+    {
+      "label": "range-gaps",
+      "cite": "F-2409 AC-21 (range-gaps)",
+      "settings": {
+        "remote.SSH.serverPickPortsFromRange": {"harness": "45000-45010"}
+      },
+      "holders": [45000, 45002],
+      "outcome": "connected",
+      "port": 45001
+    },
+    {
+      "label": "range-single",
+      "cite": "F-2409 AC-21 (range-single)",
+      "settings": {
+        "remote.SSH.serverPickPortsFromRange": {"harness": "45005-45005"}
+      },
+      "outcome": "connected",
+      "port": 45005
+    },
+    {
+      "label": "key-hostname",
+      "cite": "F-2409 AC-4 (key-hostname)",
+      "settings": {
+        "remote.SSH.serverPickPortsFromRange": {"127.0.0.1": "45000-45010"}
+      },
+      "outcome": "connected",
+      "port": "random"
+    },
+    {
+      "label": "key-star",
+      "cite": "F-2409 AC-4 (key-star)",
+      "settings": {"remote.SSH.serverPickPortsFromRange": {"*": "45000-45010"}},
+      "outcome": "connected",
+      "port": "random"
+    },
+    {
+      "label": "key-case",
+      "cite": "F-2409 AC-4 (key-case)",
+      "settings": {
+        "remote.SSH.serverPickPortsFromRange": {"HARNESS": "45000-45010"}
+      },
+      "outcome": "connected",
+      "port": "random"
+    },
+    {
+      "label": "address",
+      "cite": "F-2409 AC-5 (address)",
+      "authority": "harness@127.0.0.1",
+      "settings": {
+        "remote.SSH.serverPickPortsFromRange": {
+          "127.0.0.1": "45000-45010",
+          "harness@127.0.0.1": "46000-46010"
+        }
+      },
+      "outcome": "connected",
+      "port": 45000
+    },
+    {
+      "label": "bind-all",
+      "cite": "F-2409 AC-6 (bind-all)",
+      "settings": {"remote.SSH.bindHost": {"harness": "0.0.0.0"}},
+      "outcome": "connected",
+      "port": "random",
+      "address": "0.0.0.0",
+      "reaches": true
+    },
+    {
+      "label": "bind-all-range",
+      "cite": "F-2409 AC-20 (bind-all-range)",
+      "settings": {
+        "remote.SSH.useExecServer": false,
+        "remote.SSH.bindHost": {"harness": "0.0.0.0"},
+        "remote.SSH.serverPickPortsFromRange": {"harness": "46000-46010"}
+      },
+      "outcome": "connected",
+      "port": 46000,
+      "address": "0.0.0.0"
+    },
+    {
+      "label": "bind-other-key",
+      "cite": "F-2409 AC-8 (bind-other-key)",
+      "settings": {"remote.SSH.bindHost": {"other": "not a host!"}},
+      "outcome": "connected",
+      "noNotice": true
+    },
+    {
+      "label": "bind-number",
+      "cite": "F-2409 AC-27 (bind-number)",
+      "settings": {"remote.SSH.bindHost": {"harness": 5}},
+      "outcome": "connectedOrDialog",
+      "address": "127.0.0.1",
+      "noNotice": true
+    },
+    {
+      "label": "bind-true",
+      "cite": "F-2409 AC-27 (bind-true)",
+      "settings": {"remote.SSH.bindHost": {"harness": true}},
+      "outcome": "connectedOrDialog",
+      "address": "127.0.0.1",
+      "noNotice": true
+    },
+    {
+      "label": "bind-null",
+      "cite": "F-2409 AC-27 (bind-null)",
+      "settings": {"remote.SSH.bindHost": {"harness": null}},
+      "outcome": "connectedOrDialog",
+      "address": "127.0.0.1",
+      "noNotice": true
+    }
+  ]
+}

@@ -10,6 +10,11 @@ export type ScriptEntry = (
   | {surface: 'pick'; match: string; answer: 'yes' | 'no' | 'dismiss'}
   | {surface: 'maskedInput'; match: string; answer: {text: string} | 'dismiss'}
   | {
+      surface: 'notice';
+      match: string;
+      answer: {button: string} | 'dismiss';
+    }
+  | {
       surface: 'platformPick';
       match: string;
       answer: 'linux' | 'windows' | 'macOS' | 'dismiss';
@@ -41,6 +46,8 @@ export interface RecordLine {
   time: number;
   /** The labels the failure dialog was shown with, in order; only the lines of a `failureDialog` surface have it. */
   buttons?: string[];
+  /** The labels of the rows the mitigation pick was shown with, in order; only the lines of a `mitigationPick` surface have it. */
+  items?: string[];
 }
 
 /** The lines of a record file; a record not written yet is empty. */

@@ -52,6 +52,8 @@ export interface ConnectOptions {
   logger: Logger;
   /** The editor's commit and quality, which the CLI path's `serve` names. */
   serve: {commit: string; quality: string};
+  /** The value of `remote.SSH.useExecServer`, read when the connect starts. */
+  useExecServer: boolean;
 }
 
 /** How a bounded step ended when it did not give its value. */
@@ -322,6 +324,7 @@ async function runSteps(
       steps,
       logger: options.logger,
       serve: options.serve,
+      useExecServer: options.useExecServer,
       failedOf: detail => failedWith(detail, contextOf(input, options, detail)),
       cancellation,
     });
@@ -383,7 +386,9 @@ async function runSteps(
     cancellation,
   );
   if (started.kind === 'failed') {
-    return failure(ofStart(started.failure));
+    return failure(
+      ofStart(started.failure, {useExecServer: options.useExecServer}),
+    );
   }
   if (started.server.reused) {
     await quietly('the default extensions', () =>

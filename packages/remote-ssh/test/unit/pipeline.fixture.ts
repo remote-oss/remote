@@ -337,6 +337,7 @@ export function setup(): {
       preconnectMilliseconds: 1000,
       logger: createLogger(logSink, {minimumLevel: () => 'info'}),
       serve: {commit: 'c1', quality: 'insider'},
+      useExecServer: true,
     },
   };
 }

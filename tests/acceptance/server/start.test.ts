@@ -50,6 +50,9 @@ describe('F-2409 the start of the server', function () {
     placeStandInArchive(host, 'crashing');
     placeStandInArchive(host, 'missingLibraries');
     placeStandInArchive(host, 'silent');
+    placeStandInArchive(host, 'readyThenExit');
+    placeStandInArchive(host, 'noFreePort');
+    placeStandInArchive(host, 'cveTerminated');
   });
 
   after(() => {
@@ -197,10 +200,60 @@ describe('F-2409 the start of the server', function () {
   });
 
   it('contracts V7: reports a server that exits at once as a failed start', async () => {
-    deepStrictEqual(await start(await installed('crashing')), {
-      kind: 'failed',
-      failure: {kind: 'serverStart'},
+    deepStrictEqual(
+      await start(await installed('crashing'), {readySeconds: 2}),
+      {kind: 'failed', failure: {kind: 'serverStart'}},
+    );
+  });
+
+  it('contracts V7: F-2409 BR-10, a server that exits before reporting a port fails at the end of the wait', async () => {
+    const parameters = await installed('crashing');
+    const began = Date.now();
+    await start(parameters, {readySeconds: 2});
+    deepStrictEqual(Date.now() - began >= 2000, true);
+  });
+
+  it('contracts V7: F-2401, a server that exits with 207 fails at once', async () => {
+    const parameters = await installed('missingLibraries');
+    const began = Date.now();
+    await start(parameters, {readySeconds: 10});
+    deepStrictEqual(Date.now() - began < 1000, true);
+  });
+
+  it('contracts V7: F-2409 BR-10, a port written before the exit still counts', async () => {
+    const outcome = await start(await installed('readyThenExit'), {
+      readySeconds: 2,
     });
+    deepStrictEqual(
+      outcome.kind === 'started' ? portOfStarted(outcome.server) : outcome,
+      24680,
+    );
+  });
+
+  it('contracts V7: F-2409 6.2, a server with no free port in its range fails with that cause', async () => {
+    deepStrictEqual(
+      await start(await installed('noFreePort'), {
+        portRange: '1-2',
+        readySeconds: 2,
+      }),
+      {kind: 'failed', failure: {kind: 'serverStart', cause: 'noFreePort'}},
+    );
+  });
+
+  it('F-2409 AC-30: a server that ended for CVE-2020-1416 fails at once with that cause', async () => {
+    const parameters = await installed('cveTerminated');
+    const began = Date.now();
+    const outcome = await start(parameters, {readySeconds: 10});
+    deepStrictEqual(
+      [outcome, Date.now() - began < 1000],
+      [
+        {
+          kind: 'failed',
+          failure: {kind: 'serverStart', cause: 'cveTerminated'},
+        },
+        true,
+      ],
+    );
   });
 
   it('contracts V7: reports a server that lacks libraries on the host as missing prerequisites', async () => {

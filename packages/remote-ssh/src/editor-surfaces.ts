@@ -31,7 +31,9 @@ import {
   type MitigationPickPort,
   moreActionsOf,
 } from './surfaces/mitigation-picker.ts';
+import type {Logger} from 'lib-log';
 import type {NoticePort} from './surfaces/notice.ts';
+import {ownText} from './surfaces/own-strings.ts';
 import type {PromptEditor} from './surfaces/prompt-surface.ts';
 import type {TextInputPort} from './surfaces/text-input.ts';
 import type {Translate} from './surfaces/strings.ts';
@@ -79,6 +81,8 @@ export interface SurfaceContext {
   acceptanceState: AcceptanceState;
   /** The profile's record of the notices the user asked not to see again. */
   noticeState: AcceptanceState;
+  /** The window's log, where a notice that could not be shown is noted. */
+  logger: Logger;
 }
 
 /** The setting the platform is written to. */
@@ -156,6 +160,18 @@ export function editorSurfacesOf(
     downloadProgress: adapters.downloadProgress,
     revealLog: () => {
       operations.revealLog();
+    },
+    rejectBindHost: (alias, configured) => {
+      adapters.notice
+        .showError(
+          ownText({id: 'S168', values: [alias, configured]}, translate),
+          [],
+        )
+        .catch((error: unknown) => {
+          context.logger.warn(
+            `the invalid bind host notice could not be shown: ${String(error)}`,
+          );
+        });
     },
   };
 }

@@ -64,7 +64,7 @@ export function runtimeOptionsFor(
   licenceAccepted = false,
 ): RuntimeOptions {
   return {
-    bindHost: settings.bindHost,
+    bindHost: settings.bindHost.bindHost,
     portRange: settings.portRange,
     licenceAccepted,
     graceSeconds: settings.graceSeconds,
