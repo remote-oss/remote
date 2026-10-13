@@ -187,6 +187,36 @@ all eight), each in its own mocha run on its own host: `server/login-shell-varia
 reports, and `server/login-shells.test.ts`, `server/start.test.ts` and `server/shared-session.test.ts` prove that every
 session hands its commands to POSIX `sh` whatever the login shell is.
 
+## Download host
+
+The VSCodium run starts a download host before the harness host, and stops it at the end of the run, also after a
+failure (`tools/acceptance-downloads.ts`). The install rows fetch the server from it, or fail as the specs name. It is
+one Node process with an HTTP and an HTTPS port, listening on `127.0.0.1` and on Docker's bridge gateway, and its
+behaviour is chosen by the first segment of the path:
+
+| Segment | Answer |
+|---|---|
+| `ok` | 200 with the server archive, `Content-Length` set |
+| `missing` | 404, empty |
+| `busy` | 503, empty |
+| `junk` | 200 with 64 KiB of random bytes |
+| `hang` | the request is accepted and never answered, until `GET /control/drop-hung` or the run's end |
+| `cut` | 200 with the archive's length, then the connection drops after 1 MiB |
+| `slow` | the archive, 64 KiB every 100 ms |
+
+The archive is the VSCodium server for Alpine of the release the client is pinned to, cached under
+`.vscode-test/downloads/` and checked against its sha256 (`SERVER_ARCHIVE`). The HTTPS certificate is the run's own,
+made in Node for `downloads` and `update.code.visualstudio.com` and kept in the run's folder; nothing trusts it. The
+host's BusyBox `wget` verifies certificates through `ssl_client`, so an HTTPS download from it fails unless
+`--no-check-certificate` is given (measured on the host's image).
+
+The harness host reaches it by `--add-host downloads:host-gateway` and `--add-host
+update.code.visualstudio.com:host-gateway`; the editor reaches it on `127.0.0.1`. The launches get
+`HARNESS_DOWNLOADS_HTTP`, `HARNESS_DOWNLOADS_HTTPS` and `HARNESS_DOWNLOADS_LICENSED` (the update service's name), the
+bases as the harness host sees them, `HARNESS_DOWNLOADS_LOCAL`, the editor's base, and `HARNESS_DOWNLOADS_LOG`, the
+request log, one line per request: time, method, path and user agent. `startHost({downloads: true})` gives a host of
+the server suite the same names, and `server/downloads.test.ts` holds the rows that prove the capability.
+
 ## The host's other accounts (D-85)
 
 Besides `harness`, the host image has three users, and the run's `ssh_config` has an alias for each use of them. The

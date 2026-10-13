@@ -26,6 +26,7 @@ import {
   startHostContainer,
 } from '../../../tools/acceptance-run.ts';
 import {harnessSshConfig} from '../../../tools/acceptance.ts';
+import {downloadHostArguments} from '../../../tools/acceptance-downloads.ts';
 import {shellVariantOf} from '../../../tools/host-variants.ts';
 
 const REPOSITORY_ROOT = path.join(import.meta.dirname, '..', '..', '..');
@@ -139,6 +140,8 @@ export interface HostVariant {
    * shell the process was asked for with `HARNESS_HOST_SHELL`, else the image's `/bin/sh`.
    */
   shell?: string;
+  /** Whether the host knows the download host's names (tooling-27), at Docker's bridge gateway. */
+  downloads?: boolean;
 }
 
 /** Starts the host and waits until it accepts SSH; call `stop` when the tests are done, also after a failure. */
@@ -160,6 +163,7 @@ export async function startHost(
           ? []
           : ['--env', `HOST_FETCH=${variant.fetch}`]),
         ...(shell === undefined ? [] : ['--env', `HOST_SHELL=${shell}`]),
+        ...(variant.downloads === true ? downloadHostArguments() : []),
       ],
     );
     container = host.container;

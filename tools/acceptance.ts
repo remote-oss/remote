@@ -28,6 +28,11 @@ import {
 } from '@vscode/test-electron';
 import {build} from 'esbuild';
 import {
+  downloadHostArguments,
+  type RunDownloads,
+  startRunDownloads,
+} from './acceptance-downloads.ts';
+import {
   acceptanceRunId,
   checked,
   startHostContainer,
@@ -116,6 +121,12 @@ export interface HarnessVariables {
   REMOTE_OSS_ACCEPTANCE_LOG: string;
   /** The VSCodium executable, in the VSCodium run only. */
   HARNESS_VSCODIUM_EXECUTABLE?: string;
+  /** The download host's bases and request log (`tools/acceptance-downloads.ts`), in the VSCodium run only. */
+  HARNESS_DOWNLOADS_HTTP?: string;
+  HARNESS_DOWNLOADS_HTTPS?: string;
+  HARNESS_DOWNLOADS_LICENSED?: string;
+  HARNESS_DOWNLOADS_LOCAL?: string;
+  HARNESS_DOWNLOADS_LOG?: string;
 }
 
 /** Waits the given number of milliseconds. */
@@ -147,6 +158,8 @@ export interface HarnessDependencies {
     variables: HarnessVariables,
     launch: Launch,
   ) => Promise<AttemptResult>;
+  /** Starts the run's download host in the run's folder; the VSCodium run only. */
+  startDownloads: (root: string, runFolder: string) => Promise<RunDownloads>;
 }
 
 /** How long the run waits for sshd to accept the first connection, in attempts half a second apart. */
@@ -325,10 +338,24 @@ async function prepare(
   runFolder: string,
   started: string[],
   editor: EditorChoice,
+  stops: Array<() => Promise<void>>,
 ): Promise<HarnessVariables> {
   const {command} = dependencies;
   const runId = acceptanceRunId(process.env, process.pid);
-  const host = startHostContainer(command, root, runId, runFolder);
+  const downloads =
+    editor === 'vscodium'
+      ? await dependencies.startDownloads(root, runFolder)
+      : undefined;
+  if (downloads !== undefined) {
+    stops.push(() => downloads.stop());
+  }
+  const host = startHostContainer(
+    command,
+    root,
+    runId,
+    runFolder,
+    downloads === undefined ? [] : downloadHostArguments(),
+  );
   started.push(host.container);
   const port = host.port;
   const configFile = path.join(runFolder, 'ssh_config');
@@ -370,6 +397,7 @@ async function prepare(
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
+    ...downloads?.variables,
   };
 }
 
@@ -444,6 +472,7 @@ export async function runAcceptance(
     ),
   );
   const started: string[] = [];
+  const stops: Array<() => Promise<void>> = [];
   try {
     const variables = await prepare(
       root,
@@ -451,6 +480,7 @@ export async function runAcceptance(
       runFolder,
       started,
       editor,
+      stops,
     );
     const exitCodes: number[] = [];
     for (const failure of editor === 'vscodium' ? failureCases(root) : []) {
@@ -484,6 +514,9 @@ export async function runAcceptance(
   } finally {
     for (const container of started) {
       dependencies.command('docker', ['rm', '--force', container]);
+    }
+    for (const stop of stops) {
+      await stop();
     }
     rmSync(runFolder, {recursive: true, force: true});
     removeBundles(root);
@@ -930,6 +963,11 @@ if (isMainModule(import.meta.url)) {
         ),
         runTests: runTestCli,
         windowAgentVsix: packageWindowAgent,
+        startDownloads: startRunDownloads.bind(
+          undefined,
+          runCommand,
+          downloadWithRetry,
+        ),
         runPlain: (root, variables, launch) =>
           runPlainLaunch(
             root,
