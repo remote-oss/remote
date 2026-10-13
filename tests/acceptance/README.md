@@ -243,6 +243,7 @@ The VSCodium run also makes further keys in its folder (`tools/acceptance-keys.t
 | File | What |
 |---|---|
 | `id_passphrase` | ed25519, comment `acceptance-passphrase`, protected by the run's passphrase. The passphrase is in `<run folder>/passphrase` (mode 600, the harness variable `HARNESS_PASSPHRASE_FILE`), and `<run folder>/askpass-passphrase` prints it for `SSH_ASKPASS`; `ssh-keygen` gets it the same way, so no command line holds it |
+| `id_passphrase_stranger` | ed25519, comment `acceptance-stranger`, protected by the same passphrase; the host doesn't accept it |
 | `id_second` | ed25519 without a passphrase |
 | `id_loose` | a copy of `id_second` with mode 0644, which ssh refuses to use |
 | `ca`, `id_certified`, `id_certified-cert.pub` | the run's own authority, and a key it signed for the principal `harness-cert` |
@@ -259,7 +260,8 @@ aliases leave the agent to the environment and set no `BatchMode`, so ssh may as
 | `certonly` | `harness-cert` | `id_certified` and its certificate |
 | `certonly-nocert` | `harness-cert` | `id_second`, without a certificate |
 
-The run starts its own `ssh-agent` on `<run folder>/agent.sock` before the editor and ends it with the run. Every
+The run starts its own `ssh-agent` on `<run folder>/agent.sock` (or in a short folder under `/tmp` when that path
+would pass a Unix socket's limit) before the editor and ends it with the run. Every
 launch gets `SSH_AUTH_SOCK` and `HARNESS_AGENT_SOCKET` naming it. It starts empty, and it can't ask the user anything
 (no askpass, no display), so a key added with confirmation can't be used.
 

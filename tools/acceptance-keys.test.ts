@@ -102,6 +102,23 @@ describe('makeRunKeys', function () {
     );
   });
 
+  it("tooling-29: the stranger key opens with the run's passphrase and isn't given to the host", () => {
+    const opened = runProgram('ssh-keygen', ['-y', '-f', keys.strangerKey], {
+      SSH_ASKPASS: keys.passphraseAskpass,
+      SSH_ASKPASS_REQUIRE: 'force',
+      DISPLAY: '',
+    });
+    deepStrictEqual(
+      [
+        opened.status,
+        keys.hostArguments.some(argument =>
+          argument.includes(publicKeyOf(keys.strangerKey)),
+        ),
+      ],
+      [0, false],
+    );
+  });
+
   it('tooling-29: the loose key is a copy of the second key that anyone may read', () => {
     deepStrictEqual(
       [

@@ -29,6 +29,8 @@ export interface RunKeys {
   passphraseFile: string;
   /** The script that prints the passphrase, for `SSH_ASKPASS`. */
   passphraseAskpass: string;
+  /** A key protected by the same passphrase that the host does not accept. */
+  strangerKey: string;
   /** A second key without a passphrase. */
   secondKey: string;
   /** A copy of the second key with mode 0644, which ssh refuses to use. */
@@ -42,6 +44,28 @@ export interface RunKeys {
 /** The public part of a key file, from its `.pub` beside it. */
 function publicKeyOf(file: string): string {
   return readFileSync(`${file}.pub`, 'utf8').trim();
+}
+
+/** Makes a key protected by the passphrase that `askpass` prints, which never reaches a command line. */
+function protectedKey(
+  command: CommandRunner,
+  askpass: string,
+  file: string,
+  comment: string,
+): void {
+  checked(command, 'env', [
+    `SSH_ASKPASS=${askpass}`,
+    'SSH_ASKPASS_REQUIRE=force',
+    'DISPLAY=',
+    'ssh-keygen',
+    '-q',
+    '-t',
+    'ed25519',
+    '-C',
+    comment,
+    '-f',
+    file,
+  ]);
 }
 
 /** Makes a key without a passphrase. */
@@ -74,19 +98,14 @@ export function makeRunKeys(
     mode: 0o700,
   });
   const passphraseKey = path.join(runFolder, 'id_passphrase');
-  checked(command, 'env', [
-    `SSH_ASKPASS=${passphraseAskpass}`,
-    'SSH_ASKPASS_REQUIRE=force',
-    'DISPLAY=',
-    'ssh-keygen',
-    '-q',
-    '-t',
-    'ed25519',
-    '-C',
-    PASSPHRASE_KEY_COMMENT,
-    '-f',
+  protectedKey(
+    command,
+    passphraseAskpass,
     passphraseKey,
-  ]);
+    PASSPHRASE_KEY_COMMENT,
+  );
+  const strangerKey = path.join(runFolder, 'id_passphrase_stranger');
+  protectedKey(command, passphraseAskpass, strangerKey, 'acceptance-stranger');
   const secondKey = path.join(runFolder, 'id_second');
   plainKey(command, secondKey, 'acceptance-second');
   const looseKey = path.join(runFolder, 'id_loose');
@@ -111,6 +130,7 @@ export function makeRunKeys(
     passphraseKey,
     passphraseFile,
     passphraseAskpass,
+    strangerKey,
     secondKey,
     looseKey,
     certifiedKey,
