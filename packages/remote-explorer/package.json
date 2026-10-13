@@ -122,6 +122,7 @@
   },
   "dependencies": {
     "lib-authority": "workspace:*",
+    "lib-companion": "workspace:*",
     "lib-identifiers": "workspace:*",
     "lib-product": "workspace:*",
     "lib-standdown": "workspace:*"
