@@ -672,6 +672,17 @@ describe('the scripted adapters answer from the script only', () => {
     );
   });
 
+  it('F-2409 AC-29: a mitigation pick record line carries its items', async () => {
+    const {adapters, files} = scripted([
+      {surface: 'mitigationPick', match: 'More', answer: 'reloadWindow'},
+    ]);
+    await adapters.mitigationPick.pick(MITIGATION_PICK);
+    deepStrictEqual(
+      files.lines().map(line => (line as {items?: string[]}).items),
+      [['Reload']],
+    );
+  });
+
   it('#253: a more actions entry that dismisses gives nothing', async () => {
     deepStrictEqual(
       await scripted([

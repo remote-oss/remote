@@ -343,6 +343,7 @@ async function registerConnectOf(
       },
       acceptanceState: context.globalState,
       noticeState: context.globalState,
+      logger: served.logger,
     },
   );
   const machine = nodeMachineOf(

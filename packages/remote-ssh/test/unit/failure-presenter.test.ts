@@ -1,5 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
+import {KIND_MAY_RECOVER} from '../../src/pipeline/failure.ts';
+import {mitigationPickOf} from '../../src/surfaces/mitigation-picker.ts';
 import {
   type FailureActions,
   type FailureDialogPort,
@@ -72,6 +74,30 @@ async function textFor(parts: Partial<Failed>): Promise<string | undefined> {
 }
 
 describe('the failure presenter', () => {
+  it("F-2409 AC-29: no failure kind offers the Output Log's mitigation steps", async () => {
+    const shown: string[] = [];
+    for (const kind of Object.keys(KIND_MAY_RECOVER)) {
+      for (const reason of [undefined, {text: 'a reason'}]) {
+        const {presenter, seen} = surroundings(() =>
+          Promise.resolve(undefined),
+        );
+        await presenter.present(
+          failedWith({kind, ...(reason === undefined ? {} : {reason})}),
+        );
+        shown.push(
+          ...seen.dialogs.flatMap(dialog => [dialog.text, ...dialog.buttons]),
+        );
+      }
+    }
+    shown.push(
+      ...mitigationPickOf(template => template).items.map(item => item.label),
+    );
+    deepStrictEqual(
+      shown.filter(text => text.includes('View the Output Log')),
+      [],
+    );
+  });
+
   it('F-2601 S030: a failure without a reason names the host, with a full stop', async () => {
     deepStrictEqual(
       await textFor({}),

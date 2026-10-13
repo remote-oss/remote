@@ -56,10 +56,23 @@ export interface StartNotice {
   configured: string;
 }
 
+/** Why a launched server did not report a port, when the server says: its range had no free port, or it ended for CVE-2020-1416. */
+type ServerStartCause = 'noFreePort' | 'cveTerminated';
+
+/** The cause the host's facts name; any other value of the fact is ignored. */
+function causeOf(
+  serverFacts: Readonly<Record<string, string>>,
+): ServerStartCause | undefined {
+  const {failure} = serverFacts;
+  return failure === 'noFreePort' || failure === 'cveTerminated'
+    ? failure
+    : undefined;
+}
+
 /** Why no server was started. */
 export type StartFailure =
   | {kind: 'invalidPortRange'}
-  | {kind: 'serverStart'; detail?: string}
+  | {kind: 'serverStart'; detail?: string; cause?: ServerStartCause}
   | {kind: 'prerequisitesMissing'}
   | {kind: 'retriesExhausted'}
   | {kind: 'scriptFailed'; status: ScriptStatus}
@@ -99,10 +112,26 @@ export function isAcceptedBindHost(value: string): boolean {
   );
 }
 
-/** Whether a range has its start above its end; any other string is handed to the host as written. */
-export function isReversedRange(range: string): boolean {
-  const match = /^(\d+)-(\d+)$/.exec(range);
-  return match !== null && Number(match[1]) > Number(match[2]);
+/**
+ * What is wrong with a port range setting, as written: nothing for no entry, an empty one or `start-end` with both ends
+ * in 1 to 65535 and the start not above the end; `reversed` when only the order is wrong; `malformed` for any other
+ * string and for any value that is not a string.
+ */
+export function rangeProblem(
+  entry: unknown,
+): 'reversed' | 'malformed' | undefined {
+  if (entry === undefined || entry === '') {
+    return undefined;
+  }
+  const match = typeof entry === 'string' ? /^(\d+)-(\d+)$/.exec(entry) : null;
+  if (match === null) {
+    return 'malformed';
+  }
+  const [start, end] = [Number(match[1]), Number(match[2])];
+  if (start < 1 || end > MAXIMUM_PORT || end < 1 || start > MAXIMUM_PORT) {
+    return 'malformed';
+  }
+  return start > end ? 'reversed' : undefined;
 }
 
 function failed(
@@ -178,7 +207,12 @@ function outcomeOf(
       : failed({kind: 'unreadableServerFacts'});
   }
   if (block.status === 'ServerFailedToStart') {
-    return failed({kind: 'serverStart'});
+    const cause = causeOf(block.serverFacts);
+    return failed(
+      cause === undefined
+        ? {kind: 'serverStart'}
+        : {kind: 'serverStart', cause},
+    );
   }
   if (block.status === 'LinuxPrereqs') {
     return failed({kind: 'prerequisitesMissing'});
@@ -187,7 +221,7 @@ function outcomeOf(
 }
 
 /**
- * Starts the server of an install, or reuses the one that runs, and reads its port. A reversed range fails before the
+ * Starts the server of an install, or reuses the one that runs, and reads its port. A range with a problem fails before the
  * host is asked anything; a rejected bind host is replaced by the loopback address, with a notice. The extra start
  * option of the policy goes only when the policy allows it.
  */
@@ -199,7 +233,7 @@ export async function startOrReuse(
   dependencies: RuntimeDependencies,
   cancellation: AbortSignal,
 ): Promise<StartOutcome> {
-  if (isReversedRange(options.portRange)) {
+  if (rangeProblem(options.portRange) !== undefined) {
     return failed({kind: 'invalidPortRange'});
   }
   const notices: StartNotice[] = [];

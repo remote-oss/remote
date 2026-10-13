@@ -7,10 +7,13 @@ import type {ConnectionLimits} from 'lib-ssh';
 import type {ServerBounds} from './parameters.ts';
 import type {ConnectWaits} from './steps.ts';
 
-/** Half an hour for the host's own download of the server, and a minute for a started server to listen. */
+/**
+ * Half an hour for the host's own download of the server, and fifteen seconds for a started server to listen: the ready
+ * wait the architecture ruled on #253 (contracts "Bounds"), which a run measured at about ten seconds for a first connect.
+ */
 export const SERVER_BOUNDS: ServerBounds = {
   downloadSeconds: 30 * 60,
-  readySeconds: 60,
+  readySeconds: 15,
 };
 
 /** The margin each run of the shared session gets beyond the longest step it may take, and a queued run beyond that. */

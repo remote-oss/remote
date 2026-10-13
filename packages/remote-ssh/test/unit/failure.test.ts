@@ -50,6 +50,8 @@ const RECOVER: ReadonlyArray<readonly [FailedKind, boolean]> = [
   ['cancelled', false],
 ];
 
+const EXEC_SERVER = {useExecServer: true};
+
 describe('which kinds may recover during a reconnection', () => {
   for (const [kind, expected] of RECOVER) {
     it(`${kind} -> ${expected ? 'a reconnection is retryable' : 'a reconnection is not retryable'}`, () => {
@@ -224,7 +226,10 @@ const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
   ],
   [
     'start script',
-    ofStart({kind: 'scriptFailed', status: 'ServerDownloadFailed'}),
+    ofStart(
+      {kind: 'scriptFailed', status: 'ServerDownloadFailed'},
+      EXEC_SERVER,
+    ),
   ],
 ];
 
@@ -331,9 +336,41 @@ describe('the reading of each library failure (no library text is shown)', () =>
     );
   });
 
+  it('F-2409 7.E2: a failed start with useExecServer off gives STR:S135', () => {
+    deepStrictEqual(ofStart({kind: 'serverStart'}, {useExecServer: false}), {
+      kind: 'serverStart',
+      reason: {id: 'S135', values: []},
+    });
+  });
+
+  it('F-2409 BR-9: a failed start with useExecServer on gives no reason', () => {
+    deepStrictEqual(ofStart({kind: 'serverStart'}, EXEC_SERVER), {
+      kind: 'serverStart',
+    });
+  });
+
+  for (const useExecServer of [true, false]) {
+    it(`F-2409 6.2: no free port in the range gives STR:S135 with useExecServer ${String(useExecServer)}`, () => {
+      deepStrictEqual(
+        ofStart({kind: 'serverStart', cause: 'noFreePort'}, {useExecServer}),
+        {kind: 'serverStart', reason: {id: 'S135', values: []}},
+      );
+    });
+
+    it(`F-2409 AC-30: a server that ended for CVE-2020-1416 gives STR:S136 with useExecServer ${String(useExecServer)}`, () => {
+      deepStrictEqual(
+        ofStart({kind: 'serverStart', cause: 'cveTerminated'}, {useExecServer}),
+        {kind: 'serverStart', reason: {id: 'S136', values: []}},
+      );
+    });
+  }
+
   it('F-2403 7.E3: a script status of CreateInstallDirFailed gives the install reason S075', () => {
     deepStrictEqual(
-      ofStart({kind: 'scriptFailed', status: 'CreateInstallDirFailed'}),
+      ofStart(
+        {kind: 'scriptFailed', status: 'CreateInstallDirFailed'},
+        EXEC_SERVER,
+      ),
       {
         kind: 'serverInstall',
         reason: {id: 'S075'},
@@ -491,17 +528,20 @@ describe('the reading of each library failure (no library text is shown)', () =>
   it('a start: port range, server, facts, prerequisites, retries, script status, no block, channel', () => {
     deepStrictEqual(
       [
-        ofStart({kind: 'invalidPortRange'}),
-        ofStart({kind: 'serverStart'}),
-        ofStart({kind: 'unreadableServerFacts'}),
-        ofStart({kind: 'prerequisitesMissing'}),
-        ofStart({kind: 'retriesExhausted'}),
-        ofStart({kind: 'scriptFailed', status: 'LockBusy'}),
-        ofStart({kind: 'noResultBlock'}),
-        ofStart({
-          kind: 'channelFailed',
-          failure: {kind: 'cancelled', detail: ''},
-        }),
+        ofStart({kind: 'invalidPortRange'}, EXEC_SERVER),
+        ofStart({kind: 'serverStart'}, EXEC_SERVER),
+        ofStart({kind: 'unreadableServerFacts'}, EXEC_SERVER),
+        ofStart({kind: 'prerequisitesMissing'}, EXEC_SERVER),
+        ofStart({kind: 'retriesExhausted'}, EXEC_SERVER),
+        ofStart({kind: 'scriptFailed', status: 'LockBusy'}, EXEC_SERVER),
+        ofStart({kind: 'noResultBlock'}, EXEC_SERVER),
+        ofStart(
+          {
+            kind: 'channelFailed',
+            failure: {kind: 'cancelled', detail: ''},
+          },
+          EXEC_SERVER,
+        ),
       ],
       [
         {kind: 'invalidSetting'},

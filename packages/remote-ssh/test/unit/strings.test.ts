@@ -116,6 +116,14 @@ const ADD_HOST_TEXTS = [
   'Connect',
 ];
 
+/** The reasons of a failed start and the notice of a refused bind host. */
+const START_TEXTS = [
+  'The VS Code Server failed to start',
+  'The VS Code Server terminated due to presence of CVE-2020-1416. Check the Remote-SSH output channel for more details.',
+  'Invaid port range set',
+  '{1} is not a valid host to bind',
+];
+
 function bundle(file: string): Record<string, string> {
   return JSON.parse(readFileSync(path.join(BUNDLES, file), 'utf8')) as Record<
     string,
@@ -143,6 +151,7 @@ describe('the runtime strings of the extension', () => {
           ...MAINTENANCE_TEXTS,
           ...PLATFORM_NOTICE_TEXTS,
           ...ADD_HOST_TEXTS,
+          ...START_TEXTS,
           'SSH: {0}',
         ].map(text => [text, text]),
       ),

@@ -20,7 +20,14 @@ export const OPTION_LINE_PREFIX = 'option: ';
 
 /** How the stand-in server behaves once started. */
 export type StandInBehaviour =
-  'serving' | 'listening' | 'crashing' | 'missingLibraries' | 'silent';
+  | 'serving'
+  | 'listening'
+  | 'crashing'
+  | 'missingLibraries'
+  | 'silent'
+  | 'readyThenExit'
+  | 'noFreePort'
+  | 'cveTerminated';
 
 /** The exit status with which a server reports that the host lacks libraries it needs. */
 const MISSING_LIBRARIES_STATUS = 207;
@@ -69,6 +76,12 @@ const LAUNCHERS: Readonly<Record<StandInBehaviour, string>> = {
   crashing: '#!/bin/sh\necho "stand-in server crashed" >&2\nexit 1\n',
   missingLibraries: `#!/bin/sh\nexit ${String(MISSING_LIBRARIES_STATUS)}\n`,
   silent: '#!/bin/sh\nwhile :; do\n  sleep 1\ndone\n',
+  readyThenExit:
+    '#!/bin/sh\necho "Extension host agent listening on 24680"\nexit 0\n',
+  noFreePort:
+    '#!/bin/sh\necho "--port: Could not find free port in range: 1 - 2 (inclusive)." >&2\nexit 1\n',
+  cveTerminated:
+    '#!/bin/sh\necho "* !!!! Server terminated due to presence of CVE-2020-1416 !!!!"\nexit 0\n',
 };
 
 /** The files of the stand-in server archive. */

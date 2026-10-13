@@ -124,6 +124,8 @@ export interface ConnectSurfaces {
   downloadProgress: DownloadProgressPort;
   /** Reveals the connection's log. */
   revealLog: () => void;
+  /** Tells the user that the host's bind host entry is not valid; does not wait for the user. */
+  rejectBindHost: (alias: string, configured: string) => void;
 }
 
 /** Where the extension runs and what it may use there. */
@@ -345,6 +347,7 @@ export function wiringPortsOf(
       downloadBounds: CLIENT_DOWNLOAD_BOUNDS,
       newTemporaryToken: machine.newTemporaryToken,
       discardDeadlineMilliseconds: DISCARD_DEADLINE_MILLISECONDS,
+      rejectBindHost: surfaces.rejectBindHost,
       logger,
     },
     cliPath: {
@@ -403,6 +406,9 @@ export function connectAssemblyOf(
       preconnectMilliseconds: PRECONNECT_MILLISECONDS,
       logger,
       serve: {commit: machine.profile.commit, quality: machine.profile.quality},
+      get useExecServer() {
+        return switchOf(surfaces.settings, 'useExecServer');
+      },
     },
     revealLog: surfaces.revealLog,
     terminalMode: () => terminalModeOf(surfaces.settings),

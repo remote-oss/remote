@@ -73,7 +73,7 @@ export {
 export {
   type HostLockLoop,
   isAcceptedBindHost,
-  isReversedRange,
+  rangeProblem,
   type RuntimeDependencies,
   type RuntimeOptions,
   serverPort,

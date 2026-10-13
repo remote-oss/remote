@@ -1,5 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
+import {createLogger} from 'lib-log';
+import {MemorySink} from 'lib-log/testing/memory-sink';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {
   type EditorAdapters,
@@ -15,6 +17,8 @@ interface Calls {
   operations: string[];
   writes: Array<[string, unknown]>;
   stored: Array<[string, unknown]>;
+  errors: Array<[string, readonly string[]]>;
+  logged: MemorySink;
 }
 
 /** The surfaces over fakes: the dialog answers `dialogAnswer`, the picks `mitigation` and `platform`. */
@@ -25,9 +29,16 @@ function surfacesWith(
     platform?: 'linux' | 'windows' | 'macOS';
     writtenPlatforms?: unknown;
     accepted?: Record<string, unknown>;
+    noticeFails?: boolean;
   } = {},
 ): {surfaces: ReturnType<typeof editorSurfacesOf>; calls: Calls} {
-  const calls: Calls = {operations: [], writes: [], stored: []};
+  const calls: Calls = {
+    operations: [],
+    writes: [],
+    stored: [],
+    errors: [],
+    logged: new MemorySink(),
+  };
   function noted(name: string): () => Promise<void> {
     return () => {
       calls.operations.push(name);
@@ -46,7 +57,12 @@ function surfacesWith(
     notice: {
       showInformation: () => Promise.resolve(undefined),
       showWarning: () => Promise.resolve(undefined),
-      showError: () => Promise.resolve(undefined),
+      showError: (message, buttons) => {
+        calls.errors.push([message, buttons]);
+        return changes.noticeFails === true
+          ? Promise.reject(new Error('no window'))
+          : Promise.resolve(undefined);
+      },
     },
   };
   const operations: EditorOperations = {
@@ -96,6 +112,7 @@ function surfacesWith(
       },
     },
     noticeState: {get: () => undefined, update: () => Promise.resolve()},
+    logger: createLogger(calls.logged, {minimumLevel: () => 'info'}),
   };
   return {surfaces: editorSurfacesOf(adapters, operations, context), calls};
 }
@@ -132,6 +149,24 @@ async function afterDialog(
 }
 
 describe("the connect's surfaces over the editor", () => {
+  it('F-2409 7.E1: a refused bind host is an error notice with no buttons that names the value', () => {
+    const {surfaces, calls} = surfacesWith();
+    surfaces.rejectBindHost('devbox', 'not a host!');
+    deepStrictEqual(calls.errors, [
+      ['not a host! is not a valid host to bind', []],
+    ]);
+  });
+
+  it('F-2409 7.E1: a notice that cannot be shown is noted in the log, and the connect goes on', async () => {
+    const {surfaces, calls} = surfacesWith({noticeFails: true});
+    surfaces.rejectBindHost('devbox', '::1');
+    await settled();
+    deepStrictEqual(
+      calls.logged.lines.map(line => line.message),
+      ['the invalid bind host notice could not be shown: Error: no window'],
+    );
+  });
+
   it('F-2601: Retry reloads the window', async () => {
     deepStrictEqual(await afterDialog('Retry'), ['reloadWindow']);
   });
