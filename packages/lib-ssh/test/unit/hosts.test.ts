@@ -737,4 +737,19 @@ describe('listHosts (the host entries of the files in effect)', () => {
       ['good', 'quoted-name', 'plain'],
     );
   });
+  it('F-2201.BR-1: an empty home folder reads no user file, only the system file', () => {
+    deepStrictEqual(
+      listHosts(
+        '',
+        {homeFolder: '', platform: 'linux'},
+        memoryReader(
+          new Map([
+            ['.ssh/config', 'Host rel'],
+            ['/etc/ssh/ssh_config', 'Host sys'],
+          ]),
+        ),
+      ),
+      {hosts: [{name: 'sys', file: '/etc/ssh/ssh_config'}]},
+    );
+  });
 });

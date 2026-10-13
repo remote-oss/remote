@@ -72,4 +72,4 @@ process, the client side and the askpass endpoint come in later changes.
 | Maintainers | remote-oss |
 | Entry points | `lib-ssh` (`src/index.ts`) |
 | Allowed imports | `node:path`; in `src/process/`, `node:child_process`, `node:fs`, `lib-host` and `lib-helper` (types, the plain-data type of its messages, and its test clock); no extension, no `vscode` |
-| Coverage exclusions | `src/process/ports.ts`: it declares types only, and nothing in it runs |
+| Coverage exclusions | `src/process/ports.ts`: it declares types only, and nothing in it runs; `src/config/platform.ts`: it declares a type only, and nothing in it runs |
