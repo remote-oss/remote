@@ -27,6 +27,8 @@ D-55: the tunnels part (`remote-oss.remote-server` and its `remote-tunnels.*` id
 | `packages/lib-companion/README.md` | see below |
 | `packages/lib-companion/test/unit/endpoints.test.ts`, `detector.test.ts`, `recording-fake.test.ts`, `interface-document.test.ts` | new |
 | `packages/lib-companion/test/unit/editor-adapter.test.ts` | companion-04's file: add this card's adapter rows |
+| `eslint.config.ts` | add the block below, after the `comments/public-surface` block |
+| `tools/eslint-config.test.ts` | new: the two lint rows of section 3 |
 
 **README.md changes:**
 - after the first paragraph, add: "It also says which family companions are present, across extension hosts where the
@@ -38,6 +40,32 @@ D-55: the tunnels part (`remote-oss.remote-server` and its `remote-tunnels.*` id
 - add a row to the maintainers' table: first cell "Editor declarations", second cell "`vscode-dts/` holds the editor's
   declaration file for the `extensionsAny` proposal, copied unchanged from lib-authority's, so that the two-argument
   `extensions.getExtension` compiles. It isn't linted or formatted."
+
+**The lint block** (athena on #628: no product source may import a test double):
+
+```ts
+  {
+    // Test doubles live under src/testing/ and are imported only by tests, so no bundle can carry one.
+    files: ['packages/*/src/**/*.ts'],
+    ignores: ['packages/*/src/testing/**', '**/*.test.ts', '**/*.fixture.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(^|/)testing/',
+              message: 'Test doubles under src/testing/ are for tests only.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+```
+
+No source on main imports a `testing/` path outside `src/testing/` and the tests (checked with `grep` on 2026-10-13),
+so the block reports nothing on main.
 
 Nothing else may change.
 
@@ -199,8 +227,12 @@ export function createRecordingFake(): RecordingFake;
 | F-5902.5.rules | a registered callback and `answerWith('x', {kind: 'answer', result: R})` | the answer wins: `R`, and the callback isn't called |
 | F-5902.5.rules | `createProtocol({bus: fake, timers})` from companion-04 (the timers aren't advanced): `call` for an unset, unregistered id; for a `newerMajor` id; for a `reject` id | causes `notRegistered`, `unknownMajor`, `rejected` |
 | F-5902.AC-6 | `docs/companion-interface.md`, read with `node:fs` from the test's own location | its first line is `# Companion interface 1.0` and matches `INTERFACE_VERSION`; every id of `SSH_ENDPOINTS` and `EXPLORER_INBOX` appears between backticks; `opensshremotes.openConfigFile` and `opensshremotes.addNewSshHost` appear; the text doesn't contain `remote-tunnels.internal.` |
+| F-5902.5.contract | the same document | it contains, after joining its lines with single spaces, the sentence "A request with a `path` and no `kind` is malformed: the companion opens nothing and rejects the call, shows nothing and writes nothing." |
+| F-5902.5.contract | the same document | it contains, joined the same way, the sentence "A `kind` without a `path` is ignored, and the host opens with no folder." |
+| F-5902.5.rules | `tools/eslint-config.test.ts`: `new ESLint({cwd: <repository root>})`, then `calculateConfigForFile` for `packages/lib-companion/src/probe.ts`, `packages/remote-explorer/src/model/probe.ts`, `packages/lib-companion/src/testing/probe.ts`, `packages/lib-companion/test/unit/probe.test.ts` and `packages/lib-companion/src/probe.fixture.ts` | the rule `no-restricted-imports` is `error` for the first two paths, and off or absent for the other three |
+| F-5902.5.rules | a core `Linter` (flat config, the default parser) with `no-restricted-imports` set to the options the first path's configuration returned; verify (each) `import {x} from 'lib-companion/testing/recording-fake';`, `import {x} from './testing/recording-fake';`, `import {x} from '../testing/x';`, `import {x} from 'lib-companion';`, `import {x} from './protesting/x';` | one `no-restricted-imports` message each for the first three, with the block's text; none for the last two |
 
-24 rows (an (each) row counts once). `HOSTS` is `'remote-internal.getConfiguredHostnames'`, `R`, `V`, `A` and
+28 rows (an (each) row counts once). `HOSTS` is `'remote-internal.getConfiguredHostnames'`, `R`, `V`, `A` and
 `E` are distinct fresh objects, and "the timers" in the protocol row is a `Timers` whose `setTimer` returns
 `undefined` and whose `clearTimer` does nothing.
 
@@ -290,8 +322,9 @@ The request is `{hostKey, path}`, both strings and both required. The companion 
 
 The view sends `kind` exactly when it sends `path`: `"workspace"` for a path ending in the lower-case
 `.code-workspace`, `"folder"` for any other path. The companion opens a `"workspace"` as a workspace and a `"folder"`
-as a folder, as told, never by its own test of the path. A `path` without `kind` is opened as a folder, and a `kind`
-without `path` is ignored. The result is the envelope, sent once the companion has started the open.
+as a folder, as told, never by its own test of the path. A request with a `path` and no `kind` is malformed: the
+companion opens nothing and rejects the call, shows nothing and writes nothing. A `kind` without a `path` is ignored,
+and the host opens with no folder. The result is the envelope, sent once the companion has started the open.
 
 ### ActiveFoldersPush
 
