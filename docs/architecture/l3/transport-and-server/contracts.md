@@ -445,7 +445,7 @@ marker are login noise and dropped; the script's lines go to the asking lease on
 The shared channel's three policy values (ruled on #253 Q10 part 2, 2026-10-12), named constants in remote-ssh's
 bounds:
 - `runDeadlineMilliseconds` is **derived, not stated**: `SERVER_BOUNDS.downloadSeconds + SERVER_BOUNDS.readySeconds`
-  plus a 5-minute margin for unpacking (36 min with today's Q7 values: 30 + 1 + 5). The deadline must never be shorter than the
+  plus a 5-minute margin for unpacking (about 35 min with today's Q7 values: 30 min + 15 s + 5 min). The deadline must never be shorter than the
   longest step a run may legitimately take, and deriving it keeps that true if Q7's bounds change. Every run (probe,
   install, start, extensions install, kill) gets its own deadline from its start.
 - `runWaitMilliseconds` is the deadline plus 5 minutes (41 min today): one run's deadline plus a margin for the run
@@ -813,8 +813,12 @@ Bounds (ruled 2026-10-12, #253 Q7): every time and size bound of the connect liv
 library that owns it, each value with its basis (a spec row, or the ruling). Where the reference had no bound, R-79's
 bounded wait catches a hang and never ends a slow but working operation the spec's acceptance tests require: a
 download is bounded by a stall (60 s without bytes) with a generous runaway ceiling (30 min, 1 GiB unannounced);
-the host download by 30 min (F-2403 AC-24 requires at least 10); the server's ready wait by 60 s (F-2409 BR-10: 14–16 s
-observed). The table with every value and its basis is on #253 (Q7).
+the host download by 30 min (F-2403 AC-24 requires at least 10). **The server's ready wait is 15 s** (amended 2026-10-13,
+#253 Q7 follow-up): F-2409 AC-25 and AC-26 bind that wait itself, not only a hang. A server that never reports a port
+fails with STR:S135 no earlier than about 13 s and no later than about 20 s, and a healthy server slower than 20 s
+fails once and is found running on Retry (BR-10: 14–16 s observed). Here the spec's acceptance tests require the end,
+so R-79's "never end a slow but working operation" doesn't apply. The CLI path's first `serve` keeps its own bound
+(V7a: the host download plus this wait). The table with every value and its basis is on #253 (Q7).
 
 ### V9 server-cache
 
