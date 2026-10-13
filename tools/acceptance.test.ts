@@ -42,6 +42,7 @@ import {
   withOneRetry,
   writeUserSettings,
 } from './acceptance.ts';
+import type {RunDownloads} from './acceptance-downloads.ts';
 import {
   failureCases,
   type Launch,
@@ -109,6 +110,17 @@ class FakeHarness implements HarnessDependencies {
   };
 
   readonly editorCli = (): Promise<string> => Promise.resolve('code');
+
+  readonly startDownloads = (): Promise<RunDownloads> => {
+    this.calls.push('downloads started');
+    return Promise.resolve({
+      variables: {HARNESS_DOWNLOADS_HTTP: 'http://downloads:8080'},
+      stop: () => {
+        this.calls.push('downloads stopped');
+        return Promise.resolve();
+      },
+    });
+  };
 
   readonly windowAgentVsix = (): Promise<string> => {
     this.calls.push('window agent vsix');
@@ -771,6 +783,48 @@ describe('acceptance', () => {
           harness.calls.some(call => call.startsWith('code ')),
         ],
         [false, true],
+      );
+    });
+
+    it('tooling-27: the VSCodium run starts the download host before the harness host, which gets its names', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      const started = harness.calls.indexOf('downloads started');
+      const containerRun = harness.calls.findIndex(call =>
+        call.startsWith('docker run'),
+      );
+      deepStrictEqual(
+        [
+          started >= 0 && started < containerRun,
+          harness.calls[containerRun]?.includes(
+            '--add-host downloads:host-gateway --add-host update.code.visualstudio.com:host-gateway',
+          ),
+        ],
+        [true, true],
+      );
+    });
+
+    it("tooling-27: the download host's variables reach the launches", async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      strictEqual(
+        harness.variables?.HARNESS_DOWNLOADS_HTTP,
+        'http://downloads:8080',
+      );
+    });
+
+    it('tooling-27: the download host is stopped when the run ends, also after a failure', async () => {
+      harness.bundleSuiteError = new Error('bundle failed');
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      strictEqual(harness.calls.at(-1), 'downloads stopped');
+    });
+
+    it('tooling-27: the VS Code run starts no download host and gives the harness host no names', async () => {
+      await runAcceptance(workspace.root, harness);
+      deepStrictEqual(
+        [
+          harness.calls.includes('downloads started'),
+          harness.calls.some(call => call.includes('--add-host')),
+        ],
+        [false, false],
       );
     });
 
