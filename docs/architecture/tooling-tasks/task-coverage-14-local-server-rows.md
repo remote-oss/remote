@@ -48,14 +48,15 @@ and its end.
 | 2 | in `k2` (opened on `harness`), Kill, with `hostPick` → `dismiss` | the `hostPick` line of `k2`: question `Select configured SSH host or enter user@host`; `items` are the run's `ssh_config` `Host` names in file order (each word of a `Host` line without `*`, `?` or `!`), then `$(plus) Add New SSH Host...` and `Configure SSH Hosts...`. The helper is the same process, and there's no message | AC-4, AC-5 |
 | 3 | in `k2`, Kill, `hostPick` → `{label: 'harness'}` | no message. The helper of step 1 and its `ssh` children are gone within 2 s, and a new helper runs within 5 s | AC-6, AC-29 |
 | 4 | — | within 5 s of step 3, `k1` and `k2` are connected again, and no `maskedInput` or `pick` line was written after step 3 | AC-7 |
-| 5 | reload `k1`, the window that started the helper | after the reload, the helper is the same process and `k2` is connected | AC-14 (reload) |
-| 6 | close `k1` | the helper is the same process and `k2` is connected | AC-14 (close) |
+| 4a | close `k1` and `k2`; wait for no helper. Open `k1` on `harness`; wait until `k1` is connected and one helper `H` runs. Then open `k2` on `harness` | `k2` connected; the only helper is still `H`, so `k1` started it | — (setup of AC-14: `k1` is the starter) |
+| 5 | reload `k1`, which started `H` (step 4a) | after the reload, the helper is still `H` and `k2` is connected | AC-14 (reload) |
+| 6 | close `k1` | the helper is still `H` and `k2` is connected | AC-14 (close) |
 | 7 | in `k2`, run `workbench.action.remote.close` | within 5 s no helper runs | AC-15 (Close Remote Connection) |
 | 8 | in `k3`, opened on `harness`, then closed | within 5 s of the close no helper runs | AC-15 (close) |
 | 9 | with no helper running and no window on the host, in the `local` window, Kill, `hostPick` → `{label: 'harness'}` | no message; still no helper; no window's state changed (`k1`–`k3` closed, `local` local) | AC-16 |
-| 10 | open `k1` on `harness`; in `k1`, Kill, `hostPick` → `{typed: 'harness@127.0.0.1'}` | the helper is the same process; `k1` is connected | AC-17 |
-| 11 | open `k2` on the authority Connect to Host gives for the typed `harness@127.0.0.1`: `ssh-remote+` and lib-authority's `sshRemoteCodec.encode({kind: 'host', hostName: '127.0.0.1', user: 'harness'})`. In `k2`, Kill, `hostPick` → `{typed: 'harness@127.0.0.1'}` | `k2`'s helper (the newest helper process, distinct from `k1`'s) is gone within 2 s, a new one runs within 5 s, and `k2` is connected again within 5 s. `k1`'s helper is the same process | AC-31 |
-| 12 | in `k1`, Kill, `hostPick` → `{label: 'Configure SSH Hosts...'}`, then `filePick` → `dismiss` | a `filePick` line of `k1` with the question `Edit custom SSH configuration file` (S047: the run always sets `remote.SSH.configFile`); `k1`'s helper is the same process | AC-18 (Configure) |
+| 10 | open `k1` on `harness`; in `k1`, Kill, `hostPick` → `{typed: 'harness@127.0.0.1'}` | the helper is the same process; `k1` is connected; no message | AC-17, AC-29 |
+| 11 | open `k2` on the authority Connect to Host gives for the typed `harness@127.0.0.1`: `ssh-remote+` and lib-authority's `sshRemoteCodec.encode({kind: 'host', hostName: '127.0.0.1', user: 'harness'})`. In `k2`, Kill, `hostPick` → `{typed: 'harness@127.0.0.1'}` | `k2`'s helper (the newest helper process, distinct from `k1`'s) is gone within 2 s, a new one runs within 5 s, and `k2` is connected again within 5 s. `k1`'s helper is the same process; no message | AC-31, AC-29 |
+| 12 | in `k1`, Kill, `hostPick` → `{label: 'Configure SSH Hosts...'}`, then `filePick` → `dismiss` | a `filePick` line of `k1` with the question `Edit custom SSH configuration file` (S047: the run always sets `remote.SSH.configFile`); `k1`'s helper is the same process; no message | AC-18 (Configure), AC-29 |
 | 13 | close `k1` and `k2`; wait for no helper | — | — (teardown) |
 | 14 | open `k1` on `harness`; end its helper with `kill -9` (its record stays); reload `k1` | no message; a new helper runs; `k1` is connected. Then, in `k1`, Kill, `hostPick` → `{label: 'harness'}`: the new helper is gone within 2 s | AC-33 |
 | 15 | close `k1`, wait for no helper. `userSettings({'remote.SSH.useLocalServer': false})`; open `k1` and `k2` on `harness` | no helper runs while both are connected (per-window mode) | — (setup of AC-21) |
@@ -64,6 +65,9 @@ and its end.
 | 18 | close `k1`; `userSettings` back to the run's base | — | — (teardown) |
 
 The `local` window answers its own `hostPick` entry in step 9 (`window: 'local'`).
+
+Steps 16 and 17 run Kill through `inWindow`, which calls `executeCommand`. That's the path a keybinding takes:
+`cleanLocalServer` has a palette `when` and no `enablement`, so a keybinding runs it whatever the setting.
 
 Kill's `hostPick` entries are written in the order the steps run, one per Kill, each naming the window that runs it.
 The step 12 `filePick` entry names `k1`.
