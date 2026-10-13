@@ -24,8 +24,6 @@ const CONNECTED: Connected = {
   connectionToken: 'token-value',
   extensionHostEnv: {SSH_AUTH_SOCK: '/tmp/agent'},
   environmentTunnels: [{remotePort: 80}],
-  tunnelFeatures: {elevation: false},
-  tunnelFactory: 'factory-of-the-connection',
   trusted: false,
 };
 
@@ -359,16 +357,8 @@ describe('the resolver host: a connection (F-2501)', () => {
     const context = await setup();
     const resolved = await resolve(context);
     deepStrictEqual(
-      [
-        resolved.extensionHostEnv,
-        resolved.environmentTunnels,
-        resolved.tunnelFeatures,
-      ],
-      [
-        CONNECTED.extensionHostEnv,
-        CONNECTED.environmentTunnels,
-        CONNECTED.tunnelFeatures,
-      ],
+      [resolved.extensionHostEnv, resolved.environmentTunnels],
+      [CONNECTED.extensionHostEnv, CONNECTED.environmentTunnels],
     );
   });
 
@@ -389,18 +379,16 @@ describe('the resolver host: a connection (F-2501)', () => {
     deepStrictEqual('isTrusted' in (await resolve(context)), false);
   });
 
-  it('F-8202: the tunnel factory of the connection is the one the editor reads', async () => {
+  it('F-2507 6.3, BR-9: the host gives the editor neither a tunnel factory nor tunnel features', async () => {
     const context = await setup();
-    await resolve(context);
+    const resolved = await resolve(context);
     deepStrictEqual(
-      resolverOf(context.editor).tunnelFactory,
-      'factory-of-the-connection',
+      [
+        'tunnelFactory' in resolverOf(context.editor),
+        'tunnelFeatures' in resolved,
+      ],
+      [false, false],
     );
-  });
-
-  it('F-8202: before a connection there is no tunnel factory', async () => {
-    const context = await setup();
-    deepStrictEqual(resolverOf(context.editor).tunnelFactory, undefined);
   });
 
   it('F-2501: the connector is given the target, the attempt, the window and its workspace', async () => {

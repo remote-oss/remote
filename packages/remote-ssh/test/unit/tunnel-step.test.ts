@@ -116,21 +116,17 @@ describe('the step that opens the window tunnel', () => {
     );
   });
 
-  it('contracts §3.2: the window gets the environment and a tunnel factory with its features', async () => {
+  it('F-2507 6.3, BR-9: the window gets the environment, and neither a tunnel factory nor tunnel features', async () => {
     const result = await stepWith().open();
     deepStrictEqual(
       result.kind === 'done'
         ? [
             result.value.opened.extensionHostEnv,
-            result.value.opened.tunnelFeatures,
-            typeof result.value.opened.tunnelFactory,
+            'tunnelFactory' in result.value.opened,
+            'tunnelFeatures' in result.value.opened,
           ]
         : result,
-      [
-        {SSH_AUTH_SOCK: '/tmp/agent'},
-        {elevation: false, privacy: ['private']},
-        'object',
-      ],
+      [{SSH_AUTH_SOCK: '/tmp/agent'}, false, false],
     );
   });
 

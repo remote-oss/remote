@@ -126,7 +126,6 @@ describe('the connect pipeline, when it works', () => {
           address: {host: '127.0.0.1', port: 50000},
           extensionHostEnv: {FLAG: 'yes'},
           environmentTunnels: [],
-          tunnelFeatures: {elevation: false},
           connectionToken: 'secret-token',
           trusted: false,
         },

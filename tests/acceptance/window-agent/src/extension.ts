@@ -116,6 +116,27 @@ export function activate(context: vscode.ExtensionContext): void {
       });
     }),
     vscode.commands.registerCommand(
+      'acceptance.agent.forwardPort',
+      async (remotePort: number) => {
+        // openTunnel is a proposed API the agent's manifest enables; the types of the proposal are not part of this project.
+        const workspace = vscode.workspace as unknown as {
+          openTunnel(options: {
+            remoteAddress: {host: string; port: number};
+          }): PromiseLike<{
+            localAddress: string | {host: string; port: number};
+          }>;
+        };
+        const tunnel = await workspace.openTunnel({
+          remoteAddress: {host: 'localhost', port: remotePort},
+        });
+        report(runFolder, {
+          event: 'forwarded',
+          localAddress: tunnel.localAddress,
+          remotePort,
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
       'acceptance.agent.writeFile',
       async (name: string, text: string) => {
         const folder = vscode.workspace.workspaceFolders?.[0]?.uri;

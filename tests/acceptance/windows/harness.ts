@@ -15,12 +15,22 @@ const WAIT_MILLISECONDS = 60_000;
 
 /** What a window's agent reports: an event with the time it happened, and the command it concerns. */
 export interface AgentEvent {
-  event: 'activated' | 'deactivated' | 'accepted' | 'done' | 'failed' | 'state';
+  event:
+    | 'activated'
+    | 'deactivated'
+    | 'accepted'
+    | 'done'
+    | 'failed'
+    | 'state'
+    | 'forwarded';
   time: number;
   id?: string;
   message?: string;
   remoteName?: string | null;
   folders?: string[];
+  /** Where a forwarded port is reachable on this machine, as the editor gave it. */
+  localAddress?: string | {host: string; port: number};
+  remotePort?: number;
 }
 
 /** One line of the record the extensions append to. */

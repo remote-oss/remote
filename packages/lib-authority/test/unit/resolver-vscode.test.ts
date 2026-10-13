@@ -112,17 +112,11 @@ const CONNECTION: ResolvedConnection = {
   connectionToken: 'token-1',
   extensionHostEnv: {SSH_AUTH_SOCK: '/run/agent'},
   environmentTunnels: [],
-  tunnelFeatures: undefined,
 };
 
-/** A host resolver that answers `connection`, with a factory a test can replace. */
-function hostResolver(connection: ResolvedConnection): EditorResolver & {
-  tunnelFactory: unknown;
-} {
-  return {
-    resolve: () => Promise.resolve(connection),
-    tunnelFactory: undefined,
-  };
+/** A host resolver that answers `connection`. */
+function hostResolver(connection: ResolvedConnection): EditorResolver {
+  return {resolve: () => Promise.resolve(connection)};
 }
 
 /** Registers `connection`'s resolver and resolves once through what the editor was given. */
@@ -163,38 +157,32 @@ describe('the editor behind the resolver host', () => {
     );
   });
 
-  it('contracts §3.2: no isTrusted and no tunnelFeatures key when the connection has none', async () => {
-    const result = await resolvedThrough(CONNECTION);
-    deepStrictEqual(
-      ['isTrusted' in result, 'tunnelFeatures' in result],
-      [false, false],
-    );
+  it('contracts §3.2: no isTrusted key when the connection has none', async () => {
+    deepStrictEqual('isTrusted' in (await resolvedThrough(CONNECTION)), false);
   });
 
-  it('contracts §3.2: isTrusted and tunnelFeatures pass through when present', async () => {
-    const features = {elevation: false, privacyOptions: []};
-    const result = await resolvedThrough({
-      ...CONNECTION,
-      isTrusted: true,
-      tunnelFeatures: features,
-    });
-    deepStrictEqual(
-      [result.isTrusted, result.tunnelFeatures],
-      [true, features],
-    );
+  it('contracts §3.2: isTrusted passes through when present', async () => {
+    const result = await resolvedThrough({...CONNECTION, isTrusted: true});
+    deepStrictEqual(result.isTrusted, true);
   });
 
-  it('contracts §3.2: the editor reads the factory the host holds now, not the one at registration', () => {
+  it('F-2507 6.3, BR-9: the editor gets neither tunnel features nor a tunnel factory, before and after a resolve', async () => {
     const seen: Seen = {events: []};
-    const host = hostResolver(CONNECTION);
     resolverEditorOf(fakeEditor(seen), {
       detailsCommand: DETAILS,
-    }).registerRemoteAuthorityResolver('ssh-remote', host);
-    function factory(): undefined {
-      return undefined;
-    }
-    host.tunnelFactory = factory;
-    deepStrictEqual(seen.registered?.tunnelFactory, factory);
+    }).registerRemoteAuthorityResolver('ssh-remote', hostResolver(CONNECTION));
+    const before = 'tunnelFactory' in (seen.registered ?? {});
+    const result = await seen.registered?.resolve('ssh-remote+box', {
+      resolveAttempt: 1,
+    });
+    deepStrictEqual(
+      [
+        before,
+        'tunnelFactory' in (seen.registered ?? {}),
+        'tunnelFeatures' in (result ?? {}),
+      ],
+      [false, false, false],
+    );
   });
 
   /** The progress messages for the stages `run` reports, in order. */

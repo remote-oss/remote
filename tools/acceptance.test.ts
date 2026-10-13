@@ -741,6 +741,7 @@ describe('acceptance', () => {
             '--user-data-dir=/run/user-data',
             '--extensions-dir=/run/extensions',
             '--enable-proposed-api=remote-oss.remote-ssh',
+            '--enable-proposed-api=remote-oss.acceptance-window-agent',
             '--disable-workspace-trust',
           ],
         ],

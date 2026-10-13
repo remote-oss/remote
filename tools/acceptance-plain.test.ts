@@ -26,9 +26,10 @@ describe('the editor arguments of a run', () => {
     ]);
   });
 
-  it('D-85: they enable the proposed API of remote-ssh and skip the trust prompt', () => {
+  it('D-85: they enable the proposed API of remote-ssh and of the window agent, and skip the trust prompt', () => {
     deepStrictEqual(editorArguments('/run').slice(2), [
       '--enable-proposed-api=remote-oss.remote-ssh',
+      '--enable-proposed-api=remote-oss.acceptance-window-agent',
       '--disable-workspace-trust',
     ]);
   });
@@ -78,7 +79,10 @@ describe('the plain editor of a launch', () => {
       plainEditorOf('/editor', '/run', LAUNCH, {}).programArguments.filter(
         argument => argument.startsWith('--enable-proposed-api'),
       ),
-      ['--enable-proposed-api=remote-oss.remote-ssh'],
+      [
+        '--enable-proposed-api=remote-oss.remote-ssh',
+        '--enable-proposed-api=remote-oss.acceptance-window-agent',
+      ],
     );
   });
 

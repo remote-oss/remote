@@ -13,7 +13,10 @@ import {type Launch} from './acceptance-launches.ts';
 import {resolveBinary} from './repository.ts';
 
 /** The extensions under test that use proposed API, enabled for them on the command line. */
-const PROPOSED_API_EXTENSIONS: readonly string[] = ['remote-oss.remote-ssh'];
+const PROPOSED_API_EXTENSIONS: readonly string[] = [
+  'remote-oss.remote-ssh',
+  'remote-oss.acceptance-window-agent',
+];
 
 /**
  * What every run's editor is started with: the run's own folders, the proposed API of the extensions unless a launch
