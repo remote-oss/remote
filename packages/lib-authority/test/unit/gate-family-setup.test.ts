@@ -137,39 +137,43 @@ function optionsOf(
   };
 }
 
+/** A record of what the editor showed, with nothing shown yet. */
+function newShown(): Shown {
+  return {warnings: [], informations: [], buttons: []};
+}
+
+/** The setup's ports over a fake editor that lists `commands` and shows to `shown`. */
+function portsOf(
+  changes: Partial<FamilySetupOptions> = {},
+  shown: Shown = newShown(),
+  commands: string[] = [],
+): ReturnType<typeof familySetupPortsOf> {
+  return familySetupPortsOf(
+    fakeEditor(commands, shown, extensionFolder()),
+    contextOf(),
+    optionsOf(changes),
+  );
+}
+
 describe('the family setup over the editor (card explorer-03b)', () => {
   it('contracts.3.4: the views of the extension are probed through their focus commands, granted', async () => {
-    const shown: Shown = {warnings: [], informations: [], buttons: []};
-    const ports = familySetupPortsOf(
-      fakeEditor(['remoteTargets.focus'], shown, extensionFolder()),
-      contextOf(),
-      optionsOf(),
-    );
+    const ports = portsOf({}, newShown(), ['remoteTargets.focus']);
     deepStrictEqual(await ports.probe(), [
       {proposal: 'contribViewsRemote', state: 'granted'},
     ]);
   });
 
   it('contracts.3.4: without the focus command the proposal is missing', async () => {
-    const shown: Shown = {warnings: [], informations: [], buttons: []};
-    const ports = familySetupPortsOf(
-      fakeEditor([], shown, extensionFolder()),
-      contextOf(),
-      optionsOf(),
-    );
+    const ports = portsOf();
     deepStrictEqual(await ports.probe(), [
       {proposal: 'contribViewsRemote', state: 'missing'},
     ]);
   });
 
   it('contracts.3.4: a setup notice is the translated template, filled with the extension and the editor', async () => {
-    const shown: Shown = {warnings: [], informations: [], buttons: []};
+    const shown = newShown();
     const outcome = await runSetup(
-      familySetupPortsOf(
-        fakeEditor([], shown, extensionFolder()),
-        contextOf(),
-        optionsOf({translate: template => `T:${template}`}),
-      ),
+      portsOf({translate: template => `T:${template}`}, shown),
       true,
     );
     await outcome.interaction;
@@ -179,12 +183,8 @@ describe('the family setup over the editor (card explorer-03b)', () => {
   });
 
   it("contracts.3.4: each of the six texts is the extension's template through its translate", async () => {
-    const shown: Shown = {warnings: [], informations: [], buttons: []};
-    const ports = familySetupPortsOf(
-      fakeEditor([], shown, extensionFolder()),
-      contextOf(),
-      optionsOf({translate: template => `T:${template}`}),
-    );
+    const shown = newShown();
+    const ports = portsOf({translate: template => `T:${template}`}, shown);
     await ports.showSetup({kind: 'setup', argvEntries: ['one']});
     await ports.showSetup({kind: 'failedAttempt'});
     await ports.showRestart();
@@ -207,15 +207,7 @@ describe('the family setup over the editor (card explorer-03b)', () => {
 
   it("contracts.3.4: the failure the setup reports goes to the extension's own log", () => {
     const failures: string[] = [];
-    const ports = familySetupPortsOf(
-      fakeEditor(
-        [],
-        {warnings: [], informations: [], buttons: []},
-        extensionFolder(),
-      ),
-      contextOf(),
-      optionsOf({logFailure: message => failures.push(message)}),
-    );
+    const ports = portsOf({logFailure: message => failures.push(message)});
     ports.logFailure('the setup failed');
     deepStrictEqual(failures, ['the setup failed']);
   });
@@ -227,31 +219,14 @@ describe('the family setup over the editor (card explorer-03b)', () => {
       `{"enable-proposed-api": ["${EXTENSION_ID}"]}`,
     );
     await withPortable(portable, async () => {
-      const ports = familySetupPortsOf(
-        fakeEditor(
-          [],
-          {warnings: [], informations: [], buttons: []},
-          extensionFolder(),
-        ),
-        contextOf(),
-        optionsOf(),
-      );
-      deepStrictEqual(await ports.argvEnabled(), [EXTENSION_ID]);
+      deepStrictEqual(await portsOf().argvEnabled(), [EXTENSION_ID]);
     });
   });
 
   it('contracts.3.4: with no runtime-arguments file nothing is enabled and no failure is logged', async () => {
     const failures: string[] = [];
     await withPortable(folderOf('family-argv-'), async () => {
-      const ports = familySetupPortsOf(
-        fakeEditor(
-          [],
-          {warnings: [], informations: [], buttons: []},
-          extensionFolder(),
-        ),
-        contextOf(),
-        optionsOf({logFailure: message => failures.push(message)}),
-      );
+      const ports = portsOf({logFailure: message => failures.push(message)});
       deepStrictEqual([await ports.argvEnabled(), failures], [[], []]);
     });
   });
@@ -262,29 +237,20 @@ describe('the family setup over the editor (card explorer-03b)', () => {
       path.join(portable, 'argv.json'),
       `{"enable-proposed-api": ["${EXTENSION_ID}"]}`,
     );
-    const shown: Shown = {warnings: [], informations: [], buttons: []};
+    const shown = newShown();
     await withPortable(portable, async () => {
-      const outcome = await runSetup(
-        familySetupPortsOf(
-          fakeEditor([], shown, extensionFolder()),
-          contextOf(),
-          optionsOf(),
-        ),
-        true,
-      );
+      const outcome = await runSetup(portsOf({}, shown), true);
       await outcome.interaction;
     });
     deepStrictEqual(shown.informations.length + shown.warnings.length, 1);
   });
 
   it('contracts.3.4: notices given by the extension are the ones shown', async () => {
-    const shown: Shown = {warnings: [], informations: [], buttons: []};
+    const shown = newShown();
     const given: string[] = [];
     const outcome = await runSetup(
-      familySetupPortsOf(
-        fakeEditor([], shown, extensionFolder()),
-        contextOf(),
-        optionsOf({
+      portsOf(
+        {
           notices: {
             showWarning: text => {
               given.push(text);
@@ -292,7 +258,8 @@ describe('the family setup over the editor (card explorer-03b)', () => {
             },
             showInformation: () => Promise.resolve(undefined),
           },
-        }),
+        },
+        shown,
       ),
       true,
     );
