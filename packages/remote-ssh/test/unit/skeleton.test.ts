@@ -777,6 +777,7 @@ describe('the manifest rows of slice 1', () => {
     readFileSync(path.join(PACKAGE, 'package.json'), 'utf8'),
   ) as {
     extensionKind: string[];
+    engines: {vscode: string};
     capabilities: Record<string, unknown>;
     activationEvents: string[];
     contributes: {
@@ -810,9 +811,11 @@ describe('the manifest rows of slice 1', () => {
     ];
   }
 
-  it('F-2001 BR-1, BR-2, BR-7: extensionKind ui, untrusted workspaces supported, no virtual-workspace limit, no * or onStartupFinished', () => {
+  it('F-2001 AC-19: extensionKind ui, untrusted workspaces supported, no virtual-workspace limit, no * or onStartupFinished, and an engines floor of at least 1.133.0 (BR-1, BR-2, BR-7, BR-13)', () => {
+    const floor = /^\^1\.(\d+)\.\d+$/.exec(manifest.engines.vscode);
     deepStrictEqual(
       [
+        Number(floor?.[1] ?? 0) >= 133,
         manifest.extensionKind,
         manifest.capabilities.untrustedWorkspaces,
         'virtualWorkspaces' in manifest.capabilities,
@@ -820,7 +823,7 @@ describe('the manifest rows of slice 1', () => {
           event => event === '*' || event === 'onStartupFinished',
         ),
       ],
-      [['ui'], {supported: true}, false, []],
+      [true, ['ui'], {supported: true}, false, []],
     );
   });
 
