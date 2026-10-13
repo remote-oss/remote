@@ -254,13 +254,34 @@ export function installPlaced(
   return install(input, dependencies, {archivePath: '', removeArchive: false});
 }
 
-/** The host downloads the archive itself. */
+/**
+ * The host downloads the archive itself, then unpacks it in the same run: the install stage begins with the first
+ * unpack progress line, which is when the window says so.
+ */
 function viaHost(
   input: TransferInput,
   dependencies: TransferDependencies,
 ): Promise<TransferOutcome> {
   dependencies.onPhase({kind: 'downloading'});
-  return install(input, dependencies, {archivePath: '', removeArchive: false});
+  let installing = false;
+  return install(
+    input,
+    {
+      ...dependencies,
+      onPhase: phase => {
+        if (
+          !installing &&
+          phase.kind === 'progress' &&
+          phase.step === 'unpack'
+        ) {
+          installing = true;
+          dependencies.onPhase({kind: 'installing'});
+        }
+        dependencies.onPhase(phase);
+      },
+    },
+    {archivePath: '', removeArchive: false},
+  );
 }
 
 /** What tells this transfer's files from every other transfer's: the start time and the caller's token. */

@@ -86,6 +86,57 @@ describe('the remote window of the VSCodium run', () => {
     strictEqual(await isRunning(server.processId), true);
   });
 
+  /** The texts of the connect's progress, title first, and the phases' details flags. */
+  function progress(): Array<{text: string; details: boolean | undefined}> {
+    return recordLines('progress').map(line => ({
+      text: line.question,
+      details: line.details,
+    }));
+  }
+
+  it('F-2304 AC-1: the progress starts as "Setting up SSH Host harness" with "Initializing VS Code Server" and its details link', () => {
+    deepStrictEqual(progress().slice(0, 2), [
+      {text: 'Setting up SSH Host harness', details: undefined},
+      {text: 'Initializing VS Code Server', details: true},
+    ]);
+  });
+
+  it('F-2304 AC-6: the tunnel stage comes after every other stage', () => {
+    const texts = progress().map(line => line.text);
+    const tunnelAt = texts.findIndex(
+      text =>
+        text === 'Setting up SSH tunnel' ||
+        text === 'Waiting for port forwarding to be ready',
+    );
+    deepStrictEqual(
+      tunnelAt > 1 &&
+        texts
+          .slice(tunnelAt + 1)
+          .every(
+            text =>
+              text === 'Setting up SSH tunnel' ||
+              text === 'Waiting for port forwarding to be ready',
+          ),
+      true,
+    );
+  });
+
+  it('F-2304 AC-11: on a host without a server the stages are Initializing, Downloading, then Installing', () => {
+    const texts = progress().map(line => line.text);
+    const order = [
+      'Initializing VS Code Server',
+      'Downloading VS Code Server',
+      'Installing VS Code Server',
+    ].map(text => texts.indexOf(text));
+    deepStrictEqual(
+      order.every(
+        (position, index) =>
+          position >= 0 && (index === 0 || position > (order[index - 1] ?? 0)),
+      ),
+      true,
+    );
+  });
+
   it("D-85: the connect's progress is in the record, title first", () => {
     strictEqual(
       recordLines('progress')[0]?.question.startsWith(
