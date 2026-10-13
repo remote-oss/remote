@@ -219,3 +219,72 @@ export async function windowState(
     .at(-1);
   return {remoteName: last?.remoteName ?? null, folders: last?.folders ?? []};
 }
+
+/** The output of `program` run with the run's agent, or its exit status when it fails. */
+async function withAgent(
+  program: string,
+  programArguments: readonly string[],
+): Promise<{status: number; stdout: string}> {
+  try {
+    const {stdout} = await execFileAsync(program, [...programArguments], {
+      env: {
+        ...process.env,
+        SSH_AUTH_SOCK: variable('HARNESS_AGENT_SOCKET'),
+        SSH_ASKPASS: path.join(
+          variable('HARNESS_RUN_FOLDER'),
+          'askpass-passphrase',
+        ),
+        SSH_ASKPASS_REQUIRE: 'force',
+        DISPLAY: '',
+      },
+    });
+    return {status: 0, stdout};
+  } catch (caught) {
+    const failure = caught as {code?: unknown; stdout?: unknown};
+    return {
+      status: typeof failure.code === 'number' ? failure.code : -1,
+      stdout: typeof failure.stdout === 'string' ? failure.stdout : '',
+    };
+  }
+}
+
+/** The SHA256 fingerprint of a key file, as `ssh-keygen -l` and `ssh-add -l` print it. */
+export async function fingerprintOf(file: string): Promise<string> {
+  const {stdout} = await execFileAsync('ssh-keygen', ['-l', '-f', file]);
+  return stdout.split(' ')[1] ?? '';
+}
+
+/** The fingerprints of the keys the run's agent holds; none when it holds none. */
+export async function agentKeys(): Promise<string[]> {
+  const listed = await withAgent('ssh-add', ['-l']);
+  return listed.status === 0
+    ? listed.stdout
+        .split('\n')
+        .filter(line => line !== '')
+        .map(line => line.split(' ')[1] ?? '')
+    : [];
+}
+
+/**
+ * Adds a key file to the run's agent, with the confirm constraint when asked; a passphrase key's passphrase comes from
+ * `HARNESS_PASSPHRASE_FILE` through the run's askpass script. Fails naming the file when ssh-add does.
+ */
+export async function agentAdd(
+  file: string,
+  options: {confirm: boolean},
+): Promise<void> {
+  const added = await withAgent('ssh-add', [
+    ...(options.confirm ? ['-c'] : []),
+    file,
+  ]);
+  if (added.status !== 0) {
+    throw new Error(
+      `ssh-add ${file} failed with status ${String(added.status)}`,
+    );
+  }
+}
+
+/** Removes every key from the run's agent. */
+export async function agentClear(): Promise<void> {
+  await withAgent('ssh-add', ['-D']);
+}

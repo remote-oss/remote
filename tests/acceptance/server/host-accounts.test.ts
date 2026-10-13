@@ -1,11 +1,17 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import {spawn, spawnSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {chmodSync, existsSync, readFileSync, writeFileSync} from 'node:fs';
 import {connect} from 'node:net';
 import path from 'node:path';
 import {startHost, type RunningHost} from './host-fixture.ts';
 import {freePort} from './support.ts';
 import {startRunAgent} from '../../../tools/acceptance-keys.ts';
+import {
+  agentAdd,
+  agentClear,
+  agentKeys,
+  fingerprintOf,
+} from '../windows/harness.ts';
 
 /** How long a run of `ssh` may take before the test ends it. */
 const BOUND_MILLISECONDS = 30_000;
@@ -283,37 +289,68 @@ describe("tooling-29: the run's further keys and the certificate-only account", 
     strictEqual(await loginStatus('loosekey', askingWith(emptyAskpass)), 255);
   });
 
-  it('tooling-29: an agent given the passphrase key logs passkey in without a question', async () => {
+  /** Runs `body` with a fresh agent of the run on its socket, as the harness's variables name it, then ends it. */
+  async function withRunAgent(body: () => Promise<void>): Promise<void> {
     const socket = path.join(host.runFolder, 'test-agent.sock');
     const agent = startRunAgent(socket);
+    const saved = {
+      socket: process.env.HARNESS_AGENT_SOCKET,
+      folder: process.env.HARNESS_RUN_FOLDER,
+    };
+    process.env.HARNESS_AGENT_SOCKET = socket;
+    process.env.HARNESS_RUN_FOLDER = host.runFolder;
     try {
       for (let attempt = 0; attempt < 50 && !existsSync(socket); attempt++) {
         await pause(100);
       }
-      const added = spawnSync(
-        'ssh-add',
-        [path.join(host.runFolder, 'id_passphrase')],
-        {
-          env: {
-            ...process.env,
-            SSH_AUTH_SOCK: socket,
-            ...askingWith(path.join(host.runFolder, 'askpass-passphrase')),
-          },
-          stdio: 'ignore',
-        },
-      );
-      deepStrictEqual(
-        [
-          added.status,
-          await loginStatus('passkey', {
-            SSH_AUTH_SOCK: socket,
-            ...askingWith(emptyAskpass),
-          }),
-        ],
-        [0, 0],
-      );
+      await body();
     } finally {
+      process.env.HARNESS_AGENT_SOCKET = saved.socket;
+      process.env.HARNESS_RUN_FOLDER = saved.folder;
       agent.stop();
     }
+  }
+
+  it('tooling-29: an agent given the passphrase key logs passkey in without a question', async () => {
+    await withRunAgent(async () => {
+      await agentAdd(path.join(host.runFolder, 'id_passphrase'), {
+        confirm: false,
+      });
+      strictEqual(
+        await loginStatus('passkey', {
+          SSH_AUTH_SOCK: process.env.HARNESS_AGENT_SOCKET ?? '',
+          ...askingWith(emptyAskpass),
+        }),
+        0,
+      );
+    });
+  });
+
+  it('tooling-29: the agent starts empty, lists the passphrase key after agentAdd, and is empty after agentClear', async () => {
+    await withRunAgent(async () => {
+      const before = await agentKeys();
+      await agentAdd(path.join(host.runFolder, 'id_passphrase'), {
+        confirm: false,
+      });
+      const added = await agentKeys();
+      await agentClear();
+      deepStrictEqual(
+        [before, added, await agentKeys()],
+        [
+          [],
+          [await fingerprintOf(path.join(host.runFolder, 'id_passphrase'))],
+          [],
+        ],
+      );
+    });
+  });
+
+  it('tooling-29: a key added with the confirm constraint is listed too', async () => {
+    await withRunAgent(async () => {
+      await agentAdd(path.join(host.runFolder, 'id_second'), {confirm: true});
+      deepStrictEqual(await agentKeys(), [
+        await fingerprintOf(path.join(host.runFolder, 'id_second')),
+      ]);
+    });
   });
 });
