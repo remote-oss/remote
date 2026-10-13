@@ -141,6 +141,13 @@ const CLI_NOT_USED_REASONS: Readonly<
   socketMode: 'the server listens on a socket, which the CLI does not',
 };
 
+/** The line the log says once for a reason the CLI path was not used; the rows that expect it build from it. */
+export function cliNotUsedLine(
+  reason: keyof typeof CLI_NOT_USED_REASONS,
+): string {
+  return `the CLI path was not used: ${CLI_NOT_USED_REASONS[reason]}`;
+}
+
 /** The host's platform as the templates name it: a musl Linux is `alpine`. */
 function templatePlatformOf(host: ProbedHost): {
   operatingSystem: ProbedHost['operatingSystem'] | 'alpine';
@@ -337,8 +344,9 @@ export function createServerSteps(
         placement: dependencies.policy.downloadPlacement,
         useExecServerSetting: dependencies.useExecServer,
         source: sourceOf(resolution),
-        // An unusable template plans the direct install, as no template does.
-        ...(cliAddress === undefined
+        // An unusable template and the direct re-plan plan the direct install with no mode; without a template the
+        // planner still decides the direct install and notes why, so the log says so once per connect.
+        ...(cliSource.kind === 'unusable' || options?.direct === true
           ? {}
           : {
               cliMode: {
@@ -355,9 +363,7 @@ export function createServerSteps(
             }),
       });
       for (const note of 'plan' in result ? result.plan.notes : []) {
-        dependencies.logger.info(
-          `the CLI path was not used: ${CLI_NOT_USED_REASONS[note.reason]}`,
-        );
+        dependencies.logger.info(cliNotUsedLine(note.reason));
       }
       if (
         'plan' in result &&
