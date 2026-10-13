@@ -396,6 +396,12 @@ sh/dash, bash, zsh, mksh, tcsh, csh and fish):
 
 **No secret in any process's command line** (ruled on #412, daedalus's finding for cli-03b; measured with `ps` on
 OpenSSH hosts): a `ScriptRequest`'s `environment` never appears in an argv, on the host or on the client.
+- **The one documented deviation: the server the CLI starts** (#412 after remote-ssh#92; daedalus measured on the
+  harness host). `[cli]` puts `serve`'s connection token into that server's argv (`--connection-token=`), and no
+  `serve` parameter or CLI option avoids it. Accepted because it grants nothing to another user: the server listens
+  only on its socket (`srwxr-xr-x`, so another user gets `EACCES`); the loopback ports belong to `command-shell`
+  (guarded by the control token, in the environment only) and to the CLI's agent-host supervisor, which checks a token
+  of its own and answers the leaked one with 403. Every process we start ourselves keeps this rule strictly.
 - **On a session that reads commands on stdin** (the shared session's `ShellRuns`, terminal mode's runner):
   `commandsFor` writes the environment as an **assignment prefix** on the inner `sh`, each value `posixQuote`d:
   `NAME='value' … sh -c '<script>'`. The session shell reads that line from its stdin and puts the values in the
@@ -691,6 +697,11 @@ commit is the one its release names as its upstream.
 - **Serve:** `serve {socket_id, commit_id, quality, extensions, connection_token, use_local_download, compress}`.
   `commit_id` is the CLI's own commit: a patched CLI expands its server template only for its own release.
   `use_local_download` makes the client download the server; `compress` is `false`.
+  `connection_token` is one token per host (card cli-07; F-2409 BR-11): the first connect creates
+  `<CLI data folder>/connection-token` (0600, under `umask 077`, a temporary file then `ln`, so a racing connect reads
+  the winner's), every connect reads it back from a script's output and passes it, and it stays after close and Kill.
+  The found server then holds the token every window uses. The token lands in the server's argv: S10's documented
+  deviation.
   - While it runs, `serve` streams `serverlog {line, level}` notifications. Levels are 0 trace, 1 debug, 2 info,
     3 warn, 4 error. Every level reaches the caller.
   - It replies `{}` when the server has started.

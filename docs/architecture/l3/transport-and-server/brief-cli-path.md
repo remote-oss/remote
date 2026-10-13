@@ -116,10 +116,11 @@ test resolver), so the extension is the `serve` caller and draws S045 from `serv
   starts the server with `--connection-token=<token>` on its command line, which every host user can read and which
   guards the server's TCP listener on the host's loopback (`--agent-host-bridge-port`), against contracts S10 and the
   register rule. The user declined a change to the patched CLI and asked the dirty side how the reference does it
-  (`remote-oss/remote-ssh#92`). Until that answer, the CLI path is a 0.2 release blocker (#299). It is dormant: no
-  shipped VSCodium `product.json` names `cliDownloadUrlTemplate` (§2 row 2), and a Microsoft build's server source
-  isn't `free` (row 5). Card cli-07 follows the answer; one connection token per host, kept 0600 in the CLI data folder
-  and read by every connect, is the leading shape for the second window.
+  (`remote-oss/remote-ssh#92`: one owner-only token file per host, reused by the second window). **Resolved:** card
+  cli-07 keeps one connection token per host in `<CLI data folder>/connection-token` (contracts V7a). The bridge port
+  turned out to be the CLI's agent-host supervisor, with a token of its own, and the server listens only on its
+  owner-only socket, so the leaked token grants another user nothing (measured); it is S10's one documented
+  deviation, and the release blocker is lifted.
 - **The challenge:** the extension signs only a CLI built **without `vsda`** (`sign_challenge` = base64url, no
   padding, of SHA-256 of the challenge). A `vsda` CLI, which genuine VS Code's is, can be driven only by the editor,
   so the CLI path never applies there. Row 5 already sends Microsoft's sources to direct install. A challenge the
