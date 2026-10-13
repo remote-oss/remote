@@ -919,6 +919,21 @@ describe('progressFor (card tooling-18)', () => {
     );
   });
 
+  it('D-85: with the switch at any value but 1 it is the real port itself', () => {
+    const real = new NotingProgress();
+    strictEqual(
+      progressFor(
+        {
+          REMOTE_OSS_ACCEPTANCE: 'yes',
+          REMOTE_OSS_ACCEPTANCE_RECORD: RECORD_FILE,
+        },
+        real,
+        new AppendedFiles(),
+      ),
+      real,
+    );
+  });
+
   it('D-85: with the switch on and no record file it is the real port itself', () => {
     const real = new NotingProgress();
     strictEqual(
@@ -1085,6 +1100,18 @@ describe('channelPortFor (card tooling-18)', () => {
     strictEqual(
       channelPortFor(
         {REMOTE_OSS_ACCEPTANCE_LOG: LOG_FILE},
+        real,
+        new AppendedFiles(),
+      ),
+      real,
+    );
+  });
+
+  it('D-85: with the switch at any value but 1 it is the real port itself', () => {
+    const real = new NotingChannels();
+    strictEqual(
+      channelPortFor(
+        {REMOTE_OSS_ACCEPTANCE: 'yes', REMOTE_OSS_ACCEPTANCE_LOG: LOG_FILE},
         real,
         new AppendedFiles(),
       ),
