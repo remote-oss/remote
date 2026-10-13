@@ -308,13 +308,7 @@ describe('serverArchiveOf', () => {
 
   it('tooling-27: a cached file whose checksum does not match is downloaded again and replaced', async () => {
     writeFileSync(path.join(folder, serverArchiveName('arm64')), 'tampered');
-    const body = Buffer.from('fresh');
-    const sha256 = createHash('sha256').update(body).digest('hex');
-    const downloads: string[] = [];
-    const result = await serverArchiveOfPinned(sha256, folder, address => {
-      downloads.push(address);
-      return Promise.resolve(body);
-    });
+    const {downloads, result} = await freshDownload();
     deepStrictEqual(
       [downloads.length, readFileSync(result, 'utf8')],
       [1, 'fresh'],
@@ -322,13 +316,7 @@ describe('serverArchiveOf', () => {
   });
 
   it('tooling-27: a missing file is downloaded from the pinned release, checked and written', async () => {
-    const body = Buffer.from('fresh');
-    const sha256 = createHash('sha256').update(body).digest('hex');
-    const downloads: string[] = [];
-    const result = await serverArchiveOfPinned(sha256, folder, address => {
-      downloads.push(address);
-      return Promise.resolve(body);
-    });
+    const {downloads, result} = await freshDownload();
     deepStrictEqual(
       [downloads, readFileSync(result, 'utf8')],
       [
@@ -339,6 +327,21 @@ describe('serverArchiveOf', () => {
       ],
     );
   });
+
+  /** Runs serverArchiveOf with a download that answers `fresh`, pinned to its checksum; gives the addresses asked. */
+  async function freshDownload(): Promise<{
+    downloads: string[];
+    result: string;
+  }> {
+    const body = Buffer.from('fresh');
+    const sha256 = createHash('sha256').update(body).digest('hex');
+    const downloads: string[] = [];
+    const result = await serverArchiveOfPinned(sha256, folder, address => {
+      downloads.push(address);
+      return Promise.resolve(body);
+    });
+    return {downloads, result};
+  }
 
   /** Runs serverArchiveOf with `sha256` as the pinned arm64 checksum. */
   function serverArchiveOfPinned(
