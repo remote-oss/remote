@@ -16,7 +16,7 @@ Each alias is the password account (`harness-pw`, `PASSWORD_LINES`) with its own
 | `master-yes` (new) | `yes` | `<run>/cm-yes-%C` | `600` |
 | `master-autoask` (new) | `autoask` | `<run>/cm-autoask-%C` | `600` |
 
-`server/host-accounts.test.ts`'s rows for the aliases keep passing. Add one row per new alias: its socket appears after a
+`server/host-accounts.test.ts`'s rows for the aliases keep passing. `tools/acceptance.test.ts` expects `ControlPersist 600` for `master` and `master-ask` (today it expects 60) and has rows for the two new blocks. Add one row per new alias: its socket appears after a
 login.
 
 **Helpers** (`windows/harness.ts`):
@@ -41,6 +41,7 @@ to `true`.
 | 5 | `m1`: (pw). `masterExit('master')` | within 30 s `m1` is connected again; exactly one new `maskedInput` line of `m1`; `masterCheck('master')` (a new socket) | AC-30 |
 | 6 | clean (as above). `m2`: (pw), then `{surface: 'maskedInput', match: 'Allow shared connection', answer: {text: 'yes'}}`. Open `m2` on `master-ask` | `m2` connected; `m2`'s second `maskedInput` line's question contains `Allow shared connection to`. If the prompt comes as a `pick` instead, the row fails: report it on the issue, since the AC says an input | AC-39 |
 | 7 | clean. `m3`: (pw), then `hostPick` → `{label: 'master-yes'}`, then (pw). Open `m3` on `master-yes`; in `m3`, Kill; reload `m3` | after the reload `m3` asked for the password again: one more `maskedInput` line; `m3` connected | AC-40 (`yes`) |
+| 7a | clean. `m3`: (pw), `{surface: 'maskedInput', match: 'Allow shared connection', answer: {text: 'yes'}}`, then `hostPick` → `{label: 'master-ask'}`, then (pw), then the same Allow entry. Open `m3` on `master-ask`; in `m3`, Kill; reload `m3` | after the reload `m3` asked for the password again: exactly one more `maskedInput` line with `password` between the Kill and the end of the reload; `m3` connected | AC-40 (`ask`) |
 | 8 | clean. `m3`: (pw), `{surface: 'maskedInput', match: 'Allow shared connection', answer: {text: 'yes'}}`, then `hostPick` → `{label: 'master-autoask'}`. Open `m3` on `master-autoask`; in `m3`, Kill; reload `m3` | the first connect asks `Allow shared connection to` (as row 6); after the reload `m3` is connected with no new `maskedInput` line | AC-39 (`autoask`), AC-40 (`autoask`) |
 
 Entries are matched in order, and a question that doesn't match the next entry is dismissed. So every entry a row
