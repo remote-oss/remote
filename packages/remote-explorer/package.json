@@ -21,6 +21,7 @@
     "Other"
   ],
   "main": "./dist/extension.js",
+  "browser": "./dist/web/extension.js",
   "keywords": [
     "remote development",
     "remote",

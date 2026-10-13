@@ -1,6 +1,7 @@
 {
   "exclude": {
-    "src/extension.ts": "loads the editor"
+    "src/extension.ts": "loads the editor",
+    "src/web-extension.ts": "loads the editor"
   },
   "ratchet": {
     "lines": 100,
