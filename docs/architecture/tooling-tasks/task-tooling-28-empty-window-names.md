@@ -13,7 +13,9 @@ hestia or iris (hermes assigns). Size: S.
 - Every later window without a folder gets `empty-<n>`, with `n` = 1, 2, … in the order the windows' agents start.
 - Windows with a folder keep their folder name.
 
-**How the agent claims a name.** At activation, a window without a folder claims a name by creating
+**How the agent claims a name.** Every window's agent writes its name to the pid file (below) at activation: a
+window with a folder writes its folder name, so a reused pid never carries a stale name and the adapters have one
+source. A window without a folder first claims a name by creating
 `<HARNESS_RUN_FOLDER>/agent/claims/<name>` exclusively (`openSync(…, 'wx')`). It tries `local`, then `empty-1`,
 `empty-2`, … until a creation succeeds. It writes the name it got to `<HARNESS_RUN_FOLDER>/agent/pids/<process.pid>`. The run passes that folder to every launch
 as `REMOTE_OSS_ACCEPTANCE_WINDOWS`, the product's own harness variable: no file under `packages/` reads a `HARNESS_*`
@@ -22,11 +24,17 @@ variable (triton on #575).
 - A reloaded empty window has a new extension host, so it claims a new name. The rows don't reload empty windows; the
   README says so.
 
-**How the adapters know the name.** When `REMOTE_OSS_ACCEPTANCE` is set, the scripted adapters' window name (computed
-lazily at the first question, as now) is the content of `<REMOTE_OSS_ACCEPTANCE_WINDOWS>/<process.pid>` when that file
-exists, and
-`windowNameOf(…)` otherwise. The agent and our extension run in the same local extension host, so they share the pid,
-and the agent activates (`*`) before any question can come.
+**How the adapters know the name.** The scripted adapters' window name is computed lazily at the first question, as
+now. The agent and our extension run in the same local extension host, so they share the pid.
+- **With `REMOTE_OSS_ACCEPTANCE_WINDOWS` set,** the adapters **wait for** `<REMOTE_OSS_ACCEPTANCE_WINDOWS>/<process.pid>`,
+  polling every 50 ms for up to 10 s, and take its content.
+  - A remote window's first questions come during the resolve. Our extension is activated for that by
+    `onResolveRemoteAuthority`, and the resolve doesn't wait for `*` extensions, so the file may not be there yet
+    (athena and triton on #591).
+  - On timeout the window is named `unclaimed-<pid>`, so no other window's entries are used and the record shows it.
+- **With the variable unset,** the name is `windowNameOf(…)`, as today.
+- Measure the order once in the run (how long after the first question the pid file appears, if it isn't there at
+  once) and record it in the README.
 
 ## 2. Helpers (`tests/acceptance/windows/harness.ts`)
 
@@ -47,7 +55,10 @@ time.
 Unit rows:
 - the claim order: `local`, then `empty-1`, `empty-2`;
 - a taken claim is skipped;
-- the adapters read the pid file, and fall back to `windowNameOf` without it.
+- with the variable set, the adapters wait for the pid file and take its name;
+- with the variable set and no file within 10 s, the name is `unclaimed-<pid>` (a fake clock);
+- with the variable unset, the name is `windowNameOf`'s;
+- a folder window's agent writes its folder name to the pid file.
 
 Capability row in `two-windows.test.ts`:
 

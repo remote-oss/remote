@@ -43,14 +43,15 @@ Each row's name starts with its cite.
 | F-2301 AC-14 | in `empty-<n>`, `hostPick` → `{label: 'harness'}` | its `items` equal AC-4's (the client's hosts); a further new window opens; `empty-<n>` stays connected |
 | F-2301 AC-33 | pick `harness` (its block sets `Port`) | the new window's `remoteAuthority` is `ssh-remote+harness`, with no port |
 | F-2301 AC-30 | `hostPick` → `{typed: 'harness'}` | the new window's authority is `ssh-remote+harness`, the same as picking the alias |
-| F-2301 AC-21, F-2202 AC-31 | `hostPick` → `{label: 'nowhere'}` (a listed host ssh can't resolve) | the new window's `failureDialog` reads `Could not establish connection to "nowhere": Could not resolve hostname.`; its `mitigationPick` `items` have `Open Recent...` second; `local` unchanged |
+| F-2202 AC-31 | `hostPick` → `{label: 'nowhere'}` (a listed host ssh can't resolve) | the new window's `failureDialog` reads `Could not establish connection to "nowhere": Could not resolve hostname.`; `local` unchanged |
+| F-2301 AC-21 | `hostPick` → `{typed: 'nowhere.invalid'}` (a typed host) | the new window's `failureDialog` reads `Could not establish connection to "nowhere.invalid": Could not resolve hostname.`; its `mitigationPick` `items` have `Open Recent...` second |
 | F-2301 AC-28 | close that failed window | `local` unchanged; the other `empty-*` windows are unchanged |
 | F-2301 AC-23 | four picks, one at a time, `{typed: …}`: `-oProxyCommand=x`, `a%b.invalid`, `a\b.invalid`, `a b.invalid` | each new window's dialog reason, in order: `SSH host name cannot begin with -`, `SSH host name cannot include the character %`, `SSH host name cannot include the character \`, `Hostname contains invalid characters` |
 | F-2301 AC-31 | `{typed: 'porthost.invalid:99999'}`, then `{typed: 'harness@[fe80::1]:22'}` | dialogs `Could not establish connection to "porthost.invalid".` and `Could not establish connection to "fe80::1".`, without a reason |
 | F-2301 AC-29 | `{typed: '   '}` (three spaces) | the line's `items` (tooling-25 records the initial model) are AC-4's. The new window's authority is `ssh-remote+` followed by three spaces, and its dialog's reason is `Hostname contains invalid characters` |
 | F-2301 AC-32 | three picks in a row, waiting only for each `hostPick` line: `harness`, `nowhere`, `harness` | three new windows, each connected or failed on its own as its host says; `local` unchanged |
 | F-2301 AC-26, F-2202 AC-22, F-2201 AC-17 | write the file with a new block `Host fresh-alias` (`HostName 127.0.0.1` and the `harness` block's other lines) appended; then `hostPick` → `dismiss` | `items` include `fresh-alias` in its file place; no reload happened (`local` unchanged) |
-| F-2301 AC-5, F-2202 AC-33 | write a file holding only `Host *` and `Host *.corp !x` blocks (one option each); `hostPick` → `dismiss` | `items` are exactly `$(plus) Add New SSH Host...` and `Configure SSH Hosts...`; no `notice` line |
+| F-2301 AC-5 | write a file holding only `Host *` and `Host *.corp !x` blocks (one option each); `hostPick` → `dismiss` | `items` are exactly `$(plus) Add New SSH Host...` and `Configure SSH Hosts...`; no `notice` line |
 | F-2301 AC-24 | write a file whose second `Host` line has an unterminated quote (`Host "broken`); in `local`, run the command | `inWindow` fails, and its message holds the parser's detail. No `hostPick` line was written |
 | F-2201 AC-21 | with the same file, `filePick` → `dismiss`; run `opensshremotes.openConfigFile` | the `filePick` line is there (the pick opens normally) |
 | F-2201 AC-22 | with the same file, open a window on `harness` (`openWindow('harness', 'q1')`) | `q1` doesn't connect within 15 s; the record has a `failureDialog` or `notice` line of `q1` whose text names the parse problem; `connectionLog()` has no `Checking ssh client:` line (connect-28 §1) written after the step began. Close `q1` |
@@ -60,15 +61,25 @@ Restore the file after the last row.
 ## 3. The catalogue
 
 `acceptance`:
-- F-2301 AC-4, 5, 6, 14, 15, 19, 21, 23, 24, 26, 28, 29, 30, 31, 32 and 33;
-- F-2202 AC-22, 31 and 33;
+- F-2301 AC-4, 5, 6, 7, 14, 15, 19, 21, 23, 24, 26, 28, 29, 30, 31, 32 and 33;
+- F-2202 AC-22 and 31;
 - F-2201 AC-17, 21 and 22.
 
+F-2202 AC-33 is `deferred`, with the reason `build order slice 1: the Remotes view is remote-explorer's` (athena on #591,
+as for F-2202 AC-20 on #475). Its picker half is the F-2301 AC-5 row.
+
 Core halves, listed in #142:
-- F-2301 AC-7: the title and the Explorer;
+- F-2301 AC-7: the title, the Explorer and the indicator's rendering. The indicator's text is our label, which its unit
+  rows prove;
+- F-2301 AC-15's "not focused";
 - F-2301 AC-24: the modal error's look;
-- F-2202 AC-33: the Remotes view;
+- F-2301 AC-30: which row Enter takes, which is core's focus over our model order;
 - the indicator of AC-33.
+
+Halves that rest on unit rows; name them in the PR:
+- AC-4's "no title, separators or item buttons": the editor adapter's rows;
+- AC-4's focused first row: connect-29's rows;
+- AC-29's typed model (hosts kept, `➤` after them): `pickerModel`'s rows.
 
 F-2201 AC-19 stays `todo` until connect-23's Kill and Uninstall exist. Its Connect to Host half is AC-24's row.
 
