@@ -80,6 +80,11 @@ function onOneLine(text: string, token: string | undefined): string {
   return masked(text, token).replaceAll(new RegExp(LINE_BREAK, 'g'), ' ');
 }
 
+/** The configuration file `ssh` is given with `-F`, as `remote.SSH.configFile` names it once `~` is expanded. */
+export function configFileLine(file: string): string {
+  return `SSH configuration file in use: ${file}`;
+}
+
 /** The value of `remote.SSH.path` as the log shows it: JSON text, `""` when it is unset. */
 export function pathSettingLine(value: string): string {
   return `remote.SSH.path = ${JSON.stringify(value)}`;
