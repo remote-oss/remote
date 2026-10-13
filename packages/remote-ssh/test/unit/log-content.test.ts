@@ -2,6 +2,7 @@ import {deepStrictEqual, ok} from 'node:assert';
 import {
   bannerLine,
   checkingLine,
+  configFileLine,
   hostPlatformLine,
   notValidLine,
   pathSettingLine,
@@ -697,6 +698,13 @@ describe('the lines of the client search and the probed platform (card connect-2
         'remote.SSH.path "/x/ssh" is not a valid SSH binary',
         'Using ssh client: ssh',
       ],
+    );
+  });
+
+  it('F-2201 §9: the configuration file in use has its line', () => {
+    deepStrictEqual(
+      configFileLine('/home/a/cfg'),
+      'SSH configuration file in use: /home/a/cfg',
     );
   });
 

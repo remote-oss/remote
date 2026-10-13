@@ -26,6 +26,7 @@ import type {Logger} from 'lib-log';
 import {
   bannerLine,
   checkingLine,
+  configFileLine,
   notValidLine,
   pathSettingLine,
   rejectedLine,
@@ -257,6 +258,9 @@ export function locateClientStep(
         `remote.SSH.configFile is not an absolute path: "${configured.value}"`,
       );
       return {kind: 'failed', failure: {kind: 'unknown'}};
+    }
+    if (configured.kind === 'file') {
+      dependencies.logger.info(configFileLine(configured.path));
     }
     dependencies.logger.info(pathSettingLine(dependencies.settingValue()));
     for (const candidate of candidates(
