@@ -227,6 +227,8 @@ describe('the server steps: plan, the CLI path', () => {
   function planned(
     cliTemplate: string,
     changes: Parameters<typeof dependencies>[0] = {},
+    host: typeof HOST = HOST,
+    options?: {direct: boolean},
   ) {
     const sink = new MemorySink();
     const steps = createServerSteps(
@@ -236,8 +238,19 @@ describe('the server steps: plan, the CLI path', () => {
         ...changes,
       }),
     );
-    const result = steps.plan(INPUT, HOST);
+    const result = steps.plan(INPUT, host, options);
     return {result, messages: sink.lines.map(line => line.message)};
+  }
+
+  /** The lines about the CLI path that planning with `cliTemplate` on `host` logs. */
+  function cliPathLines(
+    cliTemplate: string,
+    host: typeof HOST = HOST,
+    options?: {direct: boolean},
+  ): string[] {
+    return planned(cliTemplate, {}, host, options).messages.filter(message =>
+      message.startsWith('the CLI path'),
+    );
   }
 
   it('F-3902 rule 5 (ii): a product with a usable CLI template plans the CLI', () => {
@@ -305,21 +318,11 @@ describe('the server steps: plan, the CLI path', () => {
   });
 
   it('brief §2 row 4: a host without a CLI build plans the direct install, logged', () => {
-    const sink = new MemorySink();
-    const steps = createServerSteps(
-      dependencies({
-        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
-        logger: createLogger(sink, {minimumLevel: () => 'info'}),
-      }),
-    );
-    steps.plan(INPUT, {
-      ...HOST,
-      architecture: 'riscv64' as typeof HOST.architecture,
-    });
     deepStrictEqual(
-      sink.lines
-        .map(line => line.message)
-        .filter(message => message.startsWith('the CLI path')),
+      cliPathLines(CLI_TEMPLATE, {
+        ...HOST,
+        architecture: 'riscv64' as typeof HOST.architecture,
+      }),
       ['the CLI path was not used: there is no CLI build for this host'],
     );
   });
@@ -345,36 +348,14 @@ describe('the server steps: plan, the CLI path', () => {
   });
 
   it('F-3902 AC-6: a direct re-plan without a CLI template logs no line', () => {
-    const sink = new MemorySink();
-    const steps = createServerSteps(
-      dependencies({
-        logger: createLogger(sink, {minimumLevel: () => 'info'}),
-      }),
-    );
-    steps.plan(INPUT, HOST, {direct: true});
     deepStrictEqual(
-      sink.lines
-        .map(line => line.message)
-        .filter(message => message.startsWith('the CLI path')),
+      cliPathLines(PROFILE.cliDownloadUrlTemplate, HOST, {direct: true}),
       [],
     );
   });
 
   it('F-3902 AC-6: a direct re-plan with a CLI template logs no line either', () => {
-    const sink = new MemorySink();
-    const steps = createServerSteps(
-      dependencies({
-        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
-        logger: createLogger(sink, {minimumLevel: () => 'info'}),
-      }),
-    );
-    steps.plan(INPUT, HOST, {direct: true});
-    deepStrictEqual(
-      sink.lines
-        .map(line => line.message)
-        .filter(message => message.startsWith('the CLI path')),
-      [],
-    );
+    deepStrictEqual(cliPathLines(CLI_TEMPLATE, HOST, {direct: true}), []);
   });
 
   it('brief §2 row 5: a server source under the terms keeps the CLI out too', () => {

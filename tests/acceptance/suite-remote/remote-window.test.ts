@@ -163,9 +163,9 @@ describe('the remote window of the VSCodium run', () => {
         )
           .split('\n')
           .filter(name => name !== ''),
-        notUsedLines: connectionLog()
-          .filter(line => line === cliNotUsedLine('noCliSource'))
-          .length,
+        notUsedLines: connectionLog().filter(
+          line => line === cliNotUsedLine('noCliSource'),
+        ).length,
       },
       {serverCommits: 1, dataFolderEntries: ['bin'], notUsedLines: 1},
     );
