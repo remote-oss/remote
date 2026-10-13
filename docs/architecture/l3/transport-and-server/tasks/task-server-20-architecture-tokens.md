@@ -1,8 +1,12 @@
 # Task card server-20: the host architecture comes from the variant's builds
 
-Issue: #670. High priority, not 0.2-gating. Ruled by athena (decisions.md, 2026-10-13). Size: M. Builder: assigned by
-hermes. **Don't start before the dirty side's amendment of F-2401 7.E2 (remote-oss/remote-ssh#46) is published.** If it
-changes any rule below, stop and ask.
+Issue: #670. High priority, not 0.2-gating. Ruled by athena (decisions.md, 2026-10-13). Size: M. Builder: hestia,
+after server-19.
+
+**Spec:** F-2401 7.E2 as amended on remote-oss/remote-ssh#46 (F-2401, F-3902 and F-2403 republished 2026-10-13):
+- case (a): a machine name with no token;
+- case (b): a built-in source's 404 for the server archive;
+- the new AC-20 and AC-21.
 
 ## 1. The defect
 
@@ -34,14 +38,19 @@ s390x, riscv64 and loong64. Three places decide by a fixed list:
   download.
 - **R2.** A host with a token is tried against the variant's source. Nothing keeps a per-variant list of the platforms
   it publishes.
-- **R3.** A download that answers **404**:
-  - from a built-in source (resolution step `productTemplate` or `builtInTable`) means the variant has no build for
-    the platform, which gives S146 with `no server build at <url>` in the log;
+- **R3** (7.E2 case (b), AC-20): a request for the **server** archive that answers **404**, or an equivalent "no such
+  file" status:
+  - from a built-in source (F-3902 rules 2 and 4: resolution step `productTemplate` or `builtInTable`) means the variant
+    has no build for the token. It gives S146 after the failed download attempt, with
+    `no server build for <token> at <url>` in the log (the log names the token);
   - from the user's own template (step `override`) stays S043, as F-2403 AC-10 says.
 
-  Any other download failure is unchanged.
-- **R4.** The CLI path (`lib-server/src/cli-path/`) follows R1–R3: the CLI's archive for a token is tried, and a 404
-  from a built-in CLI source gives S146.
+  Every other download failure, a 503 included, is unchanged: S043.
+- **R4** (F-3902 rule 5): a 404 for the **CLI** archive is **not** S146. The CLI path fails, and the connect falls back
+  to the direct install, as it does for any CLI-path failure today (`connect.ts`: "the CLI path failed (…); installing
+  the server directly"). The direct install's server download then follows R3.
+- **R6** (AC-21): a host with a token whose built-in source has the server archive shows no S146. The outcome is the
+  download's and the start's.
 - **R5.** S146 is "The remote host's architecture is not supported" (F-2401 §3.4), the reason of F-2601's dialog:
   `Could not establish connection to "<alias>": The remote host's architecture is not supported.`.
 
@@ -69,13 +78,12 @@ s390x, riscv64 and loong64. Three places decide by a fixed list:
    - the status word stays `ServerDownloadFailed`.
 5. **Client-side download** (`lib-server/src/transfer/`): the client download knows the HTTP status. `localDownload`
    gains `status?: number`, set for an HTTP error answer.
-6. **lib-server failure types:**
-   - `TransferFailure`'s `serverDownload` gains `status?: number`, from `server.downloadStatus`;
-   - the CLI path's download failure carries the status the same way. Name the type you find there in the PR.
+6. **lib-server failure types:** `TransferFailure`'s `serverDownload` gains `status?: number`, from
+   `server.downloadStatus`. The CLI path needs no status: R4 keeps its existing fall-back. Add only the row below.
 7. **remote-ssh** (`pipeline/failure.ts`, and `server-steps.ts` where the resolution's `step` is known):
    - `ofProbe`'s `unsupportedArch` gives `logged('unsupportedPlatform', 'reported: <name>', {id: 'S146'})`;
-   - a download failure with status 404 and a step other than `override` gives
-     `logged('unsupportedPlatform', 'no server build at <url>', {id: 'S146'})`;
+   - a **server** download failure with status 404 and a step other than `override` gives
+     `logged('unsupportedPlatform', 'no server build for <token> at <url>', {id: 'S146'})`;
    - with step `override`, it stays S043. The mapping needs the step: pass it with the failure from where
      `server-steps.ts` already holds `resolution.step`.
 8. **Strings:** S146 joins `surfaces/failure-strings.ts` and every `l10n/bundle.l10n*.json`, in English for now, as
@@ -90,7 +98,8 @@ s390x, riscv64 and loong64. Three places decide by a fixed list:
 | #670 R1 | (each) `uname -m` printing `x86_64`, `aarch64`, `arm64`, `armv7l`, `armv8l`, `ppc64le`, `riscv64`, `loongarch64`, `s390x` | `host.arch` `x64`, `arm64`, `arm64`, `armhf`, `armhf`, `ppc64le`, `riscv64`, `loong64`, `s390x` |
 | #670 R1 | (each) `i686`, `armv6l`, `aarch64_be`, `ppc64` | status `UnsupportedArch`, `host.arch` the name |
 | #670 R3 | `fetch_archive` against the download host's `missing` path (404), with each downloader variant of `fetch-tools.test.ts` | the install ends `ServerDownloadFailed` with `server.downloadStatus` `404` |
-| #670 R3 | the same against a 500 path, if the download host has one; else a refused port | no `server.downloadStatus` |
+| #670 R3 | the same against a 503 path, if the download host has one; else a refused port | no `server.downloadStatus` |
+| F-3902 rule 5 | the CLI install body against the download host's `missing` path | the CLI step fails as today, and the connect logs "installing the server directly" (a connect-level unit row is enough if the real-shell CLI rows need the archive) |
 
 **Unit rows:**
 - **lib-server:** `ProbedHost` takes each of the seven tokens; `x86` is `unsupportedArch`. The client download's 404
@@ -101,8 +110,11 @@ s390x, riscv64 and loong64. Three places decide by a fixed list:
   `server-darwin-arm64`. The existing five give the same URLs as before.
 - **remote-ssh:**
   - `unsupportedArch` gives S146 with `reported: i686`;
-  - a 404 with step `productTemplate` gives S146; with `builtInTable`, S146; with `override`, S043;
-  - a non-404 failure with a built-in step gives S043.
+  - (F-2401.AC-20) a server-archive 404 with step `productTemplate` gives S146, with `builtInTable` S146, and the log
+    detail names the token; with `override`, S043;
+  - a 503, and any non-404 failure, with a built-in step gives S043;
+  - (F-2401.AC-21) a token whose download works: no S146 on the path, the existing install rows;
+  - (F-3902 rule 5) a CLI-path failure caused by a CLI-archive 404 falls back to the direct install.
 
 **Acceptance row** (the VSCodium failure cases):
 - a host account `harness-i686`, like `harness`, whose `~/.profile` puts a folder first on `PATH` with an executable
@@ -125,7 +137,7 @@ themis or triton reviews; athena gives the design check.
 
 ## 6. Open rows (stop and report on #670)
 
-1. The amendment of F-2401 7.E2 says anything other than §2.
+1. The republished F-2401, F-3902 or F-2403 says anything other than §2.
 2. The probe doesn't take `uname` from `PATH`, so the acceptance row's stub can't reach it.
 3. A downloader prints no recognisable 404 text with the flags kept (for example BusyBox wget without `-S`). Report its
    exact stderr, and don't add `-S` to wget by guess.
