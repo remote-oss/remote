@@ -1324,9 +1324,12 @@ describe('acceptance', () => {
       );
     });
 
-    it('#253 Q14: a checked download is unpacked and the executable returned', async () => {
+    /** The linux-x64 build fetched by a download whose checksum is pinned: the executable and the folders unpacked into. */
+    async function fetchedForLinuxX64(): Promise<{
+      executable: string;
+      unpacked: string[];
+    }> {
       const archive = new Uint8Array([1, 2, 3]);
-      const digest = createHash('sha256').update(archive).digest('hex');
       const unpacked: string[] = [];
       const executable = await vscodiumExecutableOf(
         workspace.root,
@@ -1338,15 +1341,23 @@ describe('acceptance', () => {
             unpacked.push(folder);
           },
         },
-        {...VSCODIUM_RELEASE.sha256, 'linux-x64': digest},
+        {
+          ...VSCODIUM_RELEASE.sha256,
+          'linux-x64': createHash('sha256').update(archive).digest('hex'),
+        },
       );
+      return {executable, unpacked};
+    }
+
+    it('#253 Q14: a checked download is unpacked and the executable returned', async () => {
+      const {executable, unpacked} = await fetchedForLinuxX64();
       deepStrictEqual(
         [executable, unpacked.length],
         [
           path.join(
             workspace.root,
             '.vscode-test',
-            `vscodium-${VSCODIUM_RELEASE.tagName}`,
+            `vscodium-${VSCODIUM_RELEASE.tagName}-linux-x64`,
             'codium-insiders',
           ),
           1,
@@ -1356,7 +1367,7 @@ describe('acceptance', () => {
 
     it('#253 Q14: a build that is already there is not downloaded again', async () => {
       workspace.write(
-        `.vscode-test/vscodium-${VSCODIUM_RELEASE.tagName}/codium-insiders`,
+        `.vscode-test/vscodium-${VSCODIUM_RELEASE.tagName}-linux-x64/codium-insiders`,
         '',
       );
       let downloads = 0;
@@ -1368,6 +1379,20 @@ describe('acceptance', () => {
         unpack: () => undefined,
       });
       strictEqual(downloads, 0);
+    });
+
+    it('#657: a build of another architecture is not taken for this one', async () => {
+      workspace.write(
+        `.vscode-test/vscodium-${VSCODIUM_RELEASE.tagName}-linux-arm64/codium-insiders`,
+        '',
+      );
+      deepStrictEqual((await fetchedForLinuxX64()).unpacked, [
+        path.join(
+          workspace.root,
+          '.vscode-test',
+          `vscodium-${VSCODIUM_RELEASE.tagName}-linux-x64`,
+        ),
+      ]);
     });
 
     it('#253 Q14: a platform with no pinned build throws', async () => {
