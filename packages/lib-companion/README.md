@@ -11,5 +11,5 @@ It is bundled into the packages that use it and never published on its own.
 |---|---|
 | Maintainers | remote-oss |
 | Entry points | `lib-companion` (`src/index.ts`) |
-| Allowed imports | none |
+| Allowed imports | `vscode` types in `src/editor-adapter.ts` only (the adapter takes the API as a parameter); no extension, no library |
 | Coverage exclusions | none |
