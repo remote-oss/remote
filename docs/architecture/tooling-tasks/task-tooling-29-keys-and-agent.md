@@ -14,7 +14,7 @@ The run makes these in its folder, with `ssh-keygen`, next to `id_ed25519`:
 
 | File | What |
 |---|---|
-| `id_passphrase` | ed25519, comment `acceptance-passphrase`, protected by the run's passphrase: 24 letters and digits, made as the password is. The passphrase goes to `<run>/passphrase` (mode 600, the harness variable `HARNESS_PASSPHRASE_FILE`) and never onto a command line: `ssh-keygen -N` takes it from a file read by the tool's wrapper, as tooling-17 does for the password (R-26) |
+| `id_passphrase` | ed25519, comment `acceptance-passphrase`, protected by the run's passphrase: 24 letters and digits, made as the password is. The passphrase goes to `<run>/passphrase` (mode 600, the harness variable `HARNESS_PASSPHRASE_FILE`) and never onto a command line, so not `-N` (R-26). `ssh-keygen` runs without `-N`, with `SSH_ASKPASS` set to a script in the run's folder that prints the file and `SSH_ASKPASS_REQUIRE=force`, which answers both of its passphrase prompts. Check once that this works with the client's `ssh-keygen`, and say in the PR which version was used |
 | `id_second` | ed25519, no passphrase (AC-27's second key) |
 | `id_loose` | a copy of `id_ed25519` with mode 0644 (AC-22) |
 | `ca`, `ca.pub` | ed25519 CA key |
