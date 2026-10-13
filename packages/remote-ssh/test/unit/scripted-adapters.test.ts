@@ -73,6 +73,12 @@ const REAL: EditorAdapters = {
   downloadProgress: {
     show: () => ({report: () => undefined, close: () => undefined}),
   },
+  textInput: {showInputBox: () => Promise.resolve('real')},
+  notice: {
+    showInformation: () => Promise.resolve('real'),
+    showWarning: () => Promise.resolve('real'),
+    showError: () => Promise.resolve('real'),
+  },
 };
 
 /** The scripted adapters over `entries`, with the files they wrote to. */
@@ -220,6 +226,14 @@ describe('which adapters the extension uses', () => {
         readFileSync(file, 'utf8').includes('REMOTE_OSS_ACCEPTANCE'),
       ),
       [],
+    );
+  });
+
+  it('card tooling-24: with the switch off the text input and notice are the real ports', () => {
+    const adapters = adaptersFor({}, REAL, files);
+    deepStrictEqual(
+      [adapters.textInput, adapters.notice],
+      [REAL.textInput, REAL.notice],
     );
   });
 });
@@ -649,6 +663,140 @@ describe('the scripted adapters answer from the script only', () => {
         {surface: 'mitigationPick', match: 'More', answer: 'dismiss'},
       ]).adapters.mitigationPick.pick(MITIGATION_PICK),
       undefined,
+    );
+  });
+
+  it('card tooling-24: a matching text input entry answers its text, which the record keeps as typed', async () => {
+    const {adapters, files} = scripted([
+      {
+        surface: 'textInput',
+        match: 'Enter SSH Connection Command',
+        answer: {text: 'the-command'},
+      },
+    ]);
+    deepStrictEqual(
+      [
+        await adapters.textInput.showInputBox({
+          prompt: 'Enter SSH Connection Command',
+        }),
+        files.lines(),
+      ],
+      [
+        'the-command',
+        [
+          {
+            surface: 'textInput',
+            question: 'Enter SSH Connection Command',
+            answer: 'the-command',
+            matched: true,
+          },
+        ],
+      ],
+    );
+  });
+
+  it('card tooling-24: a text input entry that dismisses gives nothing', async () => {
+    deepStrictEqual(
+      await scripted([
+        {surface: 'textInput', match: 'Enter SSH', answer: 'dismiss'},
+      ]).adapters.textInput.showInputBox({
+        prompt: 'Enter SSH Connection Command',
+      }),
+      undefined,
+    );
+  });
+
+  it('card tooling-24: a text input with no prompt is matched by its placeholder', async () => {
+    deepStrictEqual(
+      await scripted([
+        {surface: 'textInput', match: 'a host', answer: {text: 'the-command'}},
+      ]).adapters.textInput.showInputBox({placeholder: 'a host'}),
+      'the-command',
+    );
+  });
+
+  it('card tooling-24: a text input that asks no text is matched by an empty entry', async () => {
+    deepStrictEqual(
+      await scripted([
+        {surface: 'textInput', match: '', answer: {text: 'the-command'}},
+      ]).adapters.textInput.showInputBox({}),
+      'the-command',
+    );
+  });
+
+  it('card tooling-24: a notice with a matching entry answers its button and records it', async () => {
+    const {adapters, files} = scripted([
+      {surface: 'notice', match: 'Host added', answer: {button: 'OK'}},
+    ]);
+    deepStrictEqual(
+      [
+        await adapters.notice.showInformation('Host added to the config', [
+          'OK',
+          'Dismiss',
+        ]),
+        files.lines(),
+      ],
+      [
+        'OK',
+        [
+          {
+            surface: 'notice',
+            question: 'Host added to the config',
+            answer: 'OK',
+            matched: true,
+          },
+        ],
+      ],
+    );
+  });
+
+  it('card tooling-24: a notice entry that dismisses gives nothing', async () => {
+    deepStrictEqual(
+      await scripted([
+        {surface: 'notice', match: 'Host added', answer: 'dismiss'},
+      ]).adapters.notice.showInformation('Host added to the config', [
+        'OK',
+        'Dismiss',
+      ]),
+      undefined,
+    );
+  });
+
+  it('card tooling-24: a notice entry naming a button the notice does not offer gives nothing', async () => {
+    const {adapters, files} = scripted([
+      {surface: 'notice', match: 'Broken', answer: {button: 'Retry'}},
+    ]);
+    deepStrictEqual(
+      [await adapters.notice.showError('Broken', ['OK']), files.lines()],
+      [
+        undefined,
+        [
+          {
+            surface: 'notice',
+            question: 'Broken',
+            answer: 'dismiss',
+            matched: false,
+          },
+        ],
+      ],
+    );
+  });
+
+  it('card tooling-24: an unmatched notice is recorded as dismissed and gives nothing', async () => {
+    const {adapters, files} = scripted([]);
+    deepStrictEqual(
+      [await adapters.notice.showWarning('Something', ['OK']), files.lines()],
+      [
+        undefined,
+        [
+          {
+            surface: 'notice',
+            question: 'Something',
+            answer: 'dismiss',
+            matched: false,
+          },
+        ],
+      ],
     );
   });
 

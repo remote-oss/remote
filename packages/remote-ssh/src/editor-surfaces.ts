@@ -31,7 +31,9 @@ import {
   type MitigationPickPort,
   moreActionsOf,
 } from './surfaces/mitigation-picker.ts';
+import type {NoticePort} from './surfaces/notice.ts';
 import type {PromptEditor} from './surfaces/prompt-surface.ts';
+import type {TextInputPort} from './surfaces/text-input.ts';
 import type {Translate} from './surfaces/strings.ts';
 import type {SettingHost} from 'lib-identifiers';
 
@@ -44,6 +46,10 @@ export interface EditorAdapters {
   platformPick: PlatformPickPort;
   mitigationPick: MitigationPickPort;
   downloadProgress: DownloadProgressPort;
+  /** A plain text input the commands ask. */
+  textInput: TextInputPort;
+  /** The non-modal notices the commands show. */
+  notice: NoticePort;
 }
 
 /** The editor's operations the surfaces' buttons and items run. */

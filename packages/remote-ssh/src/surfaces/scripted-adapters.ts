@@ -23,6 +23,7 @@ const LOG_FILE_VARIABLE = 'REMOTE_OSS_ACCEPTANCE_LOG';
 export type ScriptEntry = (
   | {surface: 'pick'; match: string; answer: 'yes' | 'no' | 'dismiss'}
   | {surface: 'maskedInput'; match: string; answer: {text: string} | 'dismiss'}
+  | {surface: 'textInput'; match: string; answer: {text: string} | 'dismiss'}
   | {
       surface: 'platformPick';
       match: string;
@@ -33,6 +34,7 @@ export type ScriptEntry = (
       match: string;
       answer: {button: string} | 'dismiss';
     }
+  | {surface: 'notice'; match: string; answer: {button: string} | 'dismiss'}
   | {
       surface: 'mitigationPick';
       match: string;
@@ -45,9 +47,9 @@ export type ScriptEntry = (
 export interface RecordLine {
   /** A question's surface, or `progress` or `downloadProgress` for a display-only line. */
   surface: ScriptEntry['surface'] | 'progress' | 'downloadProgress';
-  /** The question's text: a pick's title (or its placeholder when it has none), a masked input's placeholder, a dialog's message. */
+  /** The question's text: a pick's title (or its placeholder when it has none), a masked input's placeholder, a text input's prompt (or its placeholder), a dialog's or a notice's message. */
   question: string;
-  /** The answer given: the entry's answer, `'dismiss'` on fail-closed, and `'<supplied>'` for a masked input's text. */
+  /** The answer given: the entry's answer, `'dismiss'` on fail-closed, a text input's text as typed, and `'<supplied>'` for a masked input's text. */
   answer: string;
   /** Whether a script entry matched (false: failed closed). */
   matched: boolean;
@@ -143,6 +145,25 @@ export function scriptedAdapters(
     return undefined;
   }
 
+  /** The answerer of the three notice kinds: one scripted entry for a message, whatever its kind. */
+  function showNotice(
+    message: string,
+    buttons: readonly string[],
+  ): Promise<string | undefined> {
+    return Promise.resolve(
+      answerFrom('notice', message, entry => {
+        if (entry.answer === 'dismiss') {
+          return {value: undefined, recorded: 'dismiss'};
+        }
+        const button = entry.answer.button;
+        if (buttons.includes(button)) {
+          return {value: button, recorded: button};
+        }
+        return undefined;
+      }),
+    );
+  }
+
   return {
     prompts: {
       pick: request =>
@@ -207,6 +228,25 @@ export function scriptedAdapters(
             recorded: entry.answer,
           })),
         ),
+    },
+    textInput: {
+      showInputBox: request =>
+        Promise.resolve(
+          answerFrom(
+            'textInput',
+            request.prompt ?? request.placeholder ?? '',
+            entry => ({
+              value: entry.answer === 'dismiss' ? undefined : entry.answer.text,
+              recorded:
+                entry.answer === 'dismiss' ? 'dismiss' : entry.answer.text,
+            }),
+          ),
+        ),
+    },
+    notice: {
+      showInformation: showNotice,
+      showWarning: showNotice,
+      showError: showNotice,
     },
     unusedEntries: () => entries.length - cursor,
   };

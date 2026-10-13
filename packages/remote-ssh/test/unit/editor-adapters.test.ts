@@ -8,8 +8,10 @@ import {
   failureDialogOf,
   licenceDialogOf,
   mitigationPickPortOf,
+  noticeOf,
   platformPickPortOf,
   promptEditorOf,
+  textInputOf,
 } from '../../src/surfaces/editor-adapters.ts';
 
 type Editor = Pick<typeof vscode, 'window'>;
@@ -35,21 +37,40 @@ interface Shown {
 function fakeEditor(answer: (shown: Shown) => string | undefined) {
   const picks: FakeQuickPick[] = [];
   const boxes: FakeInputBox[] = [];
+  const inputs: Array<{
+    prompt: string | undefined;
+    placeholder: string | undefined;
+    typed: string | undefined;
+  }> = [];
   const errors: Shown[] = [];
   const warnings: Shown[] = [];
+  const infos: Shown[] = [];
   function messageIn(record: Shown[]) {
     return (
       text: string,
-      options: vscode.MessageOptions,
+      optionsOrItem: vscode.MessageOptions | string | undefined,
       ...items: Array<vscode.MessageItem | string>
-    ): Promise<vscode.MessageItem | undefined> => {
-      const shown = {text, options, items};
+    ): Promise<vscode.MessageItem | string | undefined> => {
+      const modal = typeof optionsOrItem === 'object';
+      const shown: Shown = {
+        text,
+        options: modal ? optionsOrItem : {},
+        items: modal
+          ? items
+          : [optionsOrItem, ...items].filter(
+              (item): item is string => typeof item === 'string',
+            ),
+      };
       record.push(shown);
+      const offered = modal ? items : shown.items;
       const chosen = answer(shown);
+      if (chosen === undefined) {
+        return Promise.resolve(undefined);
+      }
       return Promise.resolve(
-        items.find(
-          item => typeof item !== 'string' && item.title === chosen,
-        ) as vscode.MessageItem | undefined,
+        offered.find(item =>
+          typeof item === 'string' ? item === chosen : item.title === chosen,
+        ),
       );
     };
   }
@@ -65,11 +86,25 @@ function fakeEditor(answer: (shown: Shown) => string | undefined) {
         boxes.push(inputBox);
         return inputBox;
       },
-      showErrorMessage: messageIn(errors),
+      showInputBox: (options: vscode.InputBoxOptions) => {
+        const typed = answer({
+          text: options.prompt ?? options.placeHolder ?? '',
+          options: {},
+          items: [],
+        });
+        inputs.push({
+          prompt: options.prompt,
+          placeholder: options.placeHolder,
+          typed,
+        });
+        return Promise.resolve(typed);
+      },
+      showInformationMessage: messageIn(infos),
       showWarningMessage: messageIn(warnings),
+      showErrorMessage: messageIn(errors),
     },
   } as unknown as Editor;
-  return {editor, picks, boxes, errors, warnings};
+  return {editor, picks, boxes, inputs, errors, warnings, infos};
 }
 
 function same(template: string): string {
@@ -412,6 +447,18 @@ describe('promptEditorOf (the login questions, F-2305 and F-2306)', () => {
     deepStrictEqual(await result, 'no');
   });
 
+  it('F-2305 BR-4: a choice not among the items gives nothing', async () => {
+    const {result, pick} = asked(fakeEditor(() => undefined));
+    pick.accept({label: 'Other'});
+    deepStrictEqual(await result, undefined);
+  });
+
+  it('F-2305 BR-4: an accept with no selection gives nothing', async () => {
+    const {result, pick} = asked(fakeEditor(() => undefined));
+    pick.acceptNothing();
+    deepStrictEqual(await result, undefined);
+  });
+
   it('F-2305 BR-5: a pick hidden without a choice gives nothing', async () => {
     const {result, pick} = asked(fakeEditor(() => undefined));
     pick.hide();
@@ -593,5 +640,62 @@ describe("the editor's server download notification", () => {
     downloadProgressOf(editor).show('S045').report(100);
     await settled();
     deepStrictEqual(finished(), 0);
+  });
+});
+
+describe('textInputOf and noticeOf (card tooling-24)', () => {
+  it('card tooling-24: the text input gets the request, and the typed text is the answer', async () => {
+    const fake = fakeEditor(() => 'the-command');
+    deepStrictEqual(
+      [
+        await textInputOf(fake.editor).showInputBox({
+          prompt: 'Enter SSH Connection Command',
+          placeholder: 'a host',
+        }),
+        fake.inputs,
+      ],
+      [
+        'the-command',
+        [
+          {
+            prompt: 'Enter SSH Connection Command',
+            placeholder: 'a host',
+            typed: 'the-command',
+          },
+        ],
+      ],
+    );
+  });
+
+  it('card tooling-24: a text input with no request and no typed text gives nothing', async () => {
+    const fake = fakeEditor(() => undefined);
+    deepStrictEqual(
+      [await textInputOf(fake.editor).showInputBox({}), fake.inputs],
+      [
+        undefined,
+        [{prompt: undefined, placeholder: undefined, typed: undefined}],
+      ],
+    );
+  });
+
+  it('card tooling-24: the notices are non-modal, and the one answered gives its button', async () => {
+    const fake = fakeEditor(shown =>
+      shown.text === 'Host added' ? 'OK' : undefined,
+    );
+    const notice = noticeOf(fake.editor);
+    deepStrictEqual(
+      [
+        await Promise.all([
+          notice.showInformation('Host added', ['OK', 'Dismiss']),
+          notice.showWarning('Slow', ['Dismiss']),
+          notice.showError('Broken', ['OK']),
+        ]),
+        fake.infos,
+      ],
+      [
+        ['OK', undefined, undefined],
+        [{text: 'Host added', options: {}, items: ['OK', 'Dismiss']}],
+      ],
+    );
   });
 });

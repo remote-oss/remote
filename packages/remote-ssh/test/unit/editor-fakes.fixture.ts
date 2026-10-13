@@ -71,4 +71,9 @@ export class FakeQuickPick extends FakeWidget {
     this.selectedItems = [item];
     this.accepted();
   }
+
+  /** The user accepts without a selection. */
+  acceptNothing(): void {
+    this.accepted();
+  }
 }

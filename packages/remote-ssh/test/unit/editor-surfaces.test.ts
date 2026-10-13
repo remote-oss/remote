@@ -42,6 +42,12 @@ function surfacesWith(
     platformPick: {pick: () => Promise.resolve(changes.platform)},
     mitigationPick: {pick: () => Promise.resolve(changes.mitigation)},
     downloadProgress: SILENT_PROGRESS,
+    textInput: {showInputBox: () => Promise.resolve(undefined)},
+    notice: {
+      showInformation: () => Promise.resolve(undefined),
+      showWarning: () => Promise.resolve(undefined),
+      showError: () => Promise.resolve(undefined),
+    },
   };
   const operations: EditorOperations = {
     reloadWindow: noted('reloadWindow'),
