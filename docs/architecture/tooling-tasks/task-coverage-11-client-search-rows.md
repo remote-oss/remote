@@ -92,10 +92,9 @@ ruled on #546.
 | `F-2101 AC-26 (client-fails): the log gives the setting, the rejection, the search path, the program checked, its banner and the program used, in order` | `connectionLog()` holds connect-28 §1's lines 1, 2, 3, 4 (`exit status 1`), 5, 6, 2, 3, 7, in that order. They name `<run>/clients/fails/ssh`, the launch's `PATH` folders, `ssh`, and the banner `OpenSSH_9.6p1` as the fake prints it. Build the expected lines with connect-28's builders from `log-content.ts`, not from copied text |
 | `F-2101 AC-6 (client-missing): the log says the configured path is not a valid SSH binary` | connect-28 §1's line 5 for `<run>/clients/none/ssh`, from its builder |
 
-Tag F-2101 AC-1, 4–12, 25 and 26 `acceptance` in `coverage-slice1.tsv`. AC-2 is unit (tagged by #481).
-
-AC-3's row runs, but AC-3 stays `todo` until remote-oss/remote-ssh#94 says whether "run exactly twice" counts the
-`-G` lookup. Answer (a) or (b) leaves the row as it is and tags AC-3; only an answer (c) changes the row.
+Tag F-2101 AC-1, 3–12, 25 and 26 `acceptance` in `coverage-slice1.tsv`. AC-2 is unit (tagged by #481). AC-3 as
+answered on remote-oss/remote-ssh#94: the configured program is the only client run, three times in order (the check,
+F-2202's `-G` lookup, the connection), which is `client-absolute`'s expected `check`, `options`, `connect`.
 
 ## 4. Done when
 
