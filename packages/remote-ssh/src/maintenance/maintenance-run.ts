@@ -4,6 +4,8 @@
  * shows anything; the caller turns the result into the notice or the error the command shows.
  */
 
+import type {SshTarget} from 'lib-ssh';
+import {connectTargetOf, payloadOf} from '../connect/connect-commands.ts';
 import type {ConnectInput, ConnectSteps} from '../pipeline/steps.ts';
 import type {StepResult} from './own-host.ts';
 
@@ -24,6 +26,18 @@ export type MaintenanceSteps = Pick<
   | 'probe'
   | 'maintain'
 >;
+
+/** The input of a connect to `target` outside any window: the host as the authority would name it. */
+export function maintenanceInputOf(target: SshTarget): ConnectInput {
+  return {
+    target: connectTargetOf(target),
+    rawHostString: payloadOf(target),
+    attempt: 1,
+    isReconnection: false,
+    windowId: 'maintenance',
+    windowWorkspace: undefined,
+  };
+}
 
 const STEP_RAN: MaintenanceRun = {result: 'stepRan', cause: ''};
 

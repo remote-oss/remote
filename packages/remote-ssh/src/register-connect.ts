@@ -23,6 +23,8 @@ import {
 } from './connect/connect-commands.ts';
 import {commands, runtimeCommands} from './identifiers.generated.ts';
 import {hostAlias, sshTargetOf} from './pipeline/host-settings.ts';
+import {maintenanceHandlers} from './maintenance/maintenance-commands.ts';
+import type {NoticePort} from './surfaces/notice.ts';
 import {registerWindowLabel} from './surfaces/label-formatter.ts';
 import type {Translate} from './surfaces/strings.ts';
 import {openWebUiHandler} from './surfaces/web-ui-command.ts';
@@ -46,6 +48,8 @@ export interface ConnectRegistrationHost {
   globalState: HintStoreState;
   /** The window's log the clear command writes to. */
   logger: Logger;
+  /** The non-modal notices the maintenance commands show. */
+  notice: NoticePort;
 }
 
 /** What the registration gives back: whether the resolver is registered, and the end of everything it registered. */
@@ -106,9 +110,21 @@ export async function registerConnect(
       openEmptyWindowInCurrentWindow: commands.openEmptyWindowInCurrentWindow,
       openEmptyWindowOnCurrentHost: commands.openEmptyWindowOnCurrentHost,
       cleanLocalServer: commands.cleanLocalServer,
+      cleanRemoteServer: commands.cleanRemoteServer,
+      cleanDevBox: commands.cleanDevBox,
     },
     {
       ...connectCommandHandlers(host.connectEditor, connection),
+      ...maintenanceHandlers({
+        editor: host.connectEditor,
+        perform: (action, target) => assembly.maintain(action, target),
+        notice: host.notice,
+        translate: host.translate,
+        revealLog: () => {
+          assembly.connector.revealDetails();
+        },
+        logger: host.logger,
+      }),
       openWebUI: openWebUiHandler({
         serverPort: () => assembly.connector.serverPort(),
         openExternal: address => host.openExternal(address),

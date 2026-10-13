@@ -7,6 +7,8 @@ import {
   type ConnectSurfaces,
   connectAssemblyOf,
 } from '../../src/connect-ports.ts';
+import type {SshTarget} from 'lib-ssh';
+import type {MaintenanceRun} from '../../src/maintenance/maintenance-run.ts';
 import {registerConnect} from '../../src/register-connect.ts';
 import {nodeMachineOf} from '../../src/node-machine.ts';
 import {PROFILE, surfacesOf} from './server-steps.fixture.ts';
@@ -20,6 +22,12 @@ interface Seen {
   revealed: number;
   opened: string[];
   killed: string[];
+  /** The actions run on a host and its target's host, in order. */
+  maintained: string[];
+  /** The notices shown: message and buttons. */
+  notices: Array<[string, readonly string[]]>;
+  /** The button a notice is answered with. */
+  noticeAnswer?: string;
   remote: Array<[string, string]>;
 }
 
@@ -43,6 +51,8 @@ async function registered(
     revealed: 0,
     opened: [],
     killed: [],
+    maintained: [],
+    notices: [],
     remote: [],
   };
   const surfacesInUse =
@@ -77,6 +87,13 @@ async function registered(
   function killLocalServer(hostString: string): Promise<void> {
     seen.killed.push(hostString);
     return Promise.resolve();
+  }
+  function maintain(
+    action: 'kill' | 'uninstall',
+    target: SshTarget,
+  ): Promise<MaintenanceRun> {
+    seen.maintained.push(`${action} ${target.host}`);
+    return Promise.resolve({result: 'stepRan', cause: ''});
   }
   const commands: CommandHost = {
     registerCommand: (commandId, callback) => {
@@ -123,8 +140,16 @@ async function registered(
         },
       },
       logger,
+      notice: {
+        showInformation: (message, buttons) => {
+          seen.notices.push([message, buttons]);
+          return Promise.resolve(seen.noticeAnswer);
+        },
+        showWarning: () => Promise.resolve(undefined),
+        showError: () => Promise.resolve(undefined),
+      },
     },
-    {...assembly, connector, killLocalServer},
+    {...assembly, connector, killLocalServer, maintain},
     resolversGranted,
   );
   return {seen, registration, recording, state, sink};
@@ -165,7 +190,7 @@ describe("the connect's registration", () => {
     );
   });
 
-  it('connect-21: the four connect commands are registered with the resolver', async () => {
+  it('connect-21, connect-23: the connect and maintenance commands are registered with the resolver', async () => {
     const {seen} = await registered(true);
     deepStrictEqual(
       [...seen.commands.keys()]
@@ -174,7 +199,9 @@ describe("the connect's registration", () => {
         )
         .sort(),
       [
+        'opensshremotes.cleanDevBox',
         'opensshremotes.cleanLocalServer',
+        'opensshremotes.cleanRemoteServer',
         'opensshremotes.openEmptyWindow',
         'opensshremotes.openEmptyWindowInCurrentWindow',
         'opensshremotes.openEmptyWindowOnCurrentHost',
@@ -192,6 +219,28 @@ describe("the connect's registration", () => {
     const {seen} = await registered(true);
     await seen.commands.get('opensshremotes.cleanLocalServer')?.();
     deepStrictEqual(seen.killed, ['dev']);
+  });
+
+  it('F-2411.AC-5: Kill VS Code Server on Host... runs the kill on the picked host and says it was killed', async () => {
+    const {seen} = await registered(true);
+    await seen.commands.get('opensshremotes.cleanRemoteServer')?.();
+    deepStrictEqual(
+      [seen.maintained, seen.notices],
+      [['kill dev'], [['Killed VS Code Server on dev.', ['Open Logs']]]],
+    );
+  });
+
+  it('F-2411.AC-8: Open Logs on the notice reveals the log', async () => {
+    const {seen} = await registered(true);
+    seen.noticeAnswer = 'Open Logs';
+    await seen.commands.get('opensshremotes.cleanRemoteServer')?.();
+    deepStrictEqual(seen.revealed, 1);
+  });
+
+  it('F-2412.AC-5: Uninstall VS Code Server from Host... runs the uninstall on the picked host and shows nothing', async () => {
+    const {seen} = await registered(true);
+    await seen.commands.get('opensshremotes.cleanDevBox')?.();
+    deepStrictEqual([seen.maintained, seen.notices], [['uninstall dev'], []]);
   });
 
   it('connect-21: the active-host command opens nothing before the window has a connection', async () => {
@@ -274,6 +323,8 @@ describe("the connect's registration", () => {
           'opensshremotes.openEmptyWindowInCurrentWindow',
           'opensshremotes.openEmptyWindowOnCurrentHost',
           'opensshremotes.cleanLocalServer',
+          'opensshremotes.cleanRemoteServer',
+          'opensshremotes.cleanDevBox',
         ].sort(),
         'unregister ssh-remote',
       ],
