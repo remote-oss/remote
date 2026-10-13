@@ -85,6 +85,7 @@ function surroundings(
     displayName: 'Remote - SSH',
     applicationName: 'VSCodium',
     proposals: ['resolvers'],
+    viewIds: [],
     argv: {
       portableFolder: undefined,
       homeFolder: '/home/user',
@@ -117,6 +118,27 @@ describe('the ports of the proposed-API setup', () => {
         [{proposal: 'resolvers', state: 'missing'}],
       ],
     );
+  });
+
+  it('contracts.3.4: the view ids of the identity reach the probe of contribViewsRemote', async () => {
+    const {editor, identity} = surroundings();
+    const ports = setupPortsOf(
+      {
+        ...editor,
+        probeApi: {
+          ...editor.probeApi,
+          getCommands: () => Promise.resolve(['remoteTargets.focus']),
+        },
+      },
+      {
+        ...identity,
+        proposals: ['contribViewsRemote'],
+        viewIds: ['remoteTargets'],
+      },
+    );
+    deepStrictEqual(await ports.probe(), [
+      {proposal: 'contribViewsRemote', state: 'granted'},
+    ]);
   });
 
   it('reads the enabled ids from the argv file of the install', async () => {

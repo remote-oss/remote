@@ -1,7 +1,8 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
+  profileOf,
   readProfile,
   serverDataFolderNameOrDefault,
   type ProductProfile,
@@ -169,5 +170,24 @@ describe('serverDataFolderNameOrDefault (card product-02 table)', () => {
       ),
       false,
     );
+  });
+});
+
+describe('profileOf', () => {
+  const TEXT = '{"applicationName": "fixture-editor", "version": "1.2.3"}';
+
+  it('lib-product.profile: a readable product.json text gives the profile readProfile gives', () => {
+    const reading = readProfile(TEXT);
+    deepStrictEqual(
+      profileOf(TEXT),
+      reading.kind === 'profile' ? reading.profile : undefined,
+    );
+  });
+
+  it('lib-product.profile: a text that is not JSON throws an error that says product.json cannot be read', () => {
+    throws(() => profileOf('not json'), {
+      name: 'Error',
+      message: /^product\.json cannot be read: /,
+    });
   });
 });
