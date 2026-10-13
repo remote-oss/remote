@@ -729,4 +729,12 @@ describe('listHosts (the host entries of the files in effect)', () => {
       ['.hidden'],
     );
   });
+  it('F-2201 AC-25: a garbage line, an unknown keyword and a quoted pattern list the valid hosts, the pattern unquoted', () => {
+    deepStrictEqual(
+      names(
+        'Host good\n%%% garbage\n  FrobnicateTheWidget yes\nHost "quoted-name" plain',
+      ),
+      ['good', 'quoted-name', 'plain'],
+    );
+  });
 });
