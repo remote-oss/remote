@@ -158,16 +158,16 @@ describe('the remote window of the VSCodium run', () => {
     deepStrictEqual(
       {
         serverCommits: (await hostServer()).commits.length,
-        dataFolderEntries: (
+        cliEntries: (
           await onHost('ls', '-1', '/home/harness/.vscodium-server-insiders')
         )
           .split('\n')
-          .filter(name => name !== ''),
+          .filter(name => name === 'cli' || /^(code|codium)/.test(name)),
         notUsedLines: connectionLog().filter(
           line => line === cliNotUsedLine('noCliSource'),
         ).length,
       },
-      {serverCommits: 1, dataFolderEntries: ['bin'], notUsedLines: 1},
+      {serverCommits: 1, cliEntries: [], notUsedLines: 1},
     );
   });
 });
