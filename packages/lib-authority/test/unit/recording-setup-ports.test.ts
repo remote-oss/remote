@@ -45,7 +45,7 @@ describe('the recording setup ports', () => {
       await ports.showRestart(),
       await ports.argvEnabled(),
       await ports.argvEdited(),
-      ports.installedFamilyIds(),
+      await ports.installedFamilyIds(),
       [ports.flags.dismissed(), ports.flags.attemptPending()],
     ];
     await ports.flags.setDismissed(true);

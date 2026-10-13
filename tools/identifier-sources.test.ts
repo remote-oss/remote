@@ -1,4 +1,5 @@
 import {deepStrictEqual, throws} from 'node:assert';
+import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   needsIdentifiers,
@@ -6,6 +7,7 @@ import {
   readManifest,
   readPackageSources,
 } from './identifier-sources.ts';
+import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
 describe('identifier-sources', () => {
@@ -42,6 +44,7 @@ describe('identifier-sources', () => {
         languages: [],
         activationEvents: [],
         menuEntries: [],
+        enabledApiProposals: [],
         stringReferences: [],
       });
     });
@@ -150,6 +153,49 @@ describe('identifier-sources', () => {
         {menu: 'viewsWelcome', item: 'remote-x.targets', when: 'true'},
         {menu: 'continueEditSession', item: 'remote-x.continue'},
       ]);
+    });
+
+    it('connect-31: reads the proposals the manifest enables, in its order', () => {
+      deepStrictEqual(
+        manifestOf({enabledApiProposals: ['tunnels', 'resolvers']})
+          .enabledApiProposals,
+        ['tunnels', 'resolvers'],
+      );
+    });
+
+    it('connect-31: a manifest without proposals enables none', () => {
+      deepStrictEqual(manifestOf({}).enabledApiProposals, []);
+    });
+
+    it('connect-31: the generated table of remote-ssh carries the proposals of its package.json', () => {
+      const proposals = (
+        JSON.parse(
+          readFileSync(
+            path.join(
+              REPOSITORY_ROOT,
+              'packages',
+              'remote-ssh',
+              'package.json',
+            ),
+            'utf8',
+          ),
+        ) as {enabledApiProposals: string[]}
+      ).enabledApiProposals;
+      const generated = readFileSync(
+        path.join(
+          REPOSITORY_ROOT,
+          'packages',
+          'remote-ssh',
+          'src',
+          'identifiers.generated.ts',
+        ),
+        'utf8',
+      );
+      const listed = /enabledApiProposals = \[([^\]]*)\]/.exec(generated)?.[1];
+      deepStrictEqual(
+        [...(listed ?? '').matchAll(/'([^']+)'/g)].map(match => match[1]),
+        proposals,
+      );
     });
 
     it('collects every %key% reference once, at any depth', () => {
