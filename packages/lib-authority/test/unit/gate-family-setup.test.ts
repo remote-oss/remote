@@ -68,6 +68,8 @@ function folderOf(prefix: string): string {
 interface Shown {
   warnings: string[];
   informations: string[];
+  /** The buttons of each message shown, in the order shown. */
+  buttons: string[][];
 }
 
 function fakeEditor(commands: string[], shown: Shown, extensionPath: string) {
@@ -80,12 +82,14 @@ function fakeEditor(commands: string[], shown: Shown, extensionPath: string) {
     },
     window: {
       onDidWriteTerminalData: () => ({dispose: () => undefined}),
-      showWarningMessage: (text: string) => {
+      showWarningMessage: (text: string, ...buttons: string[]) => {
         shown.warnings.push(text);
+        shown.buttons.push(buttons);
         return Promise.resolve(undefined);
       },
-      showInformationMessage: (text: string) => {
+      showInformationMessage: (text: string, ...buttons: string[]) => {
         shown.informations.push(text);
+        shown.buttons.push(buttons);
         return Promise.resolve(undefined);
       },
     },
@@ -135,7 +139,7 @@ function optionsOf(
 
 describe('the family setup over the editor (card explorer-03b)', () => {
   it('contracts.3.4: the views of the extension are probed through their focus commands, granted', async () => {
-    const shown: Shown = {warnings: [], informations: []};
+    const shown: Shown = {warnings: [], informations: [], buttons: []};
     const ports = familySetupPortsOf(
       fakeEditor(['remoteTargets.focus'], shown, extensionFolder()),
       contextOf(),
@@ -147,7 +151,7 @@ describe('the family setup over the editor (card explorer-03b)', () => {
   });
 
   it('contracts.3.4: without the focus command the proposal is missing', async () => {
-    const shown: Shown = {warnings: [], informations: []};
+    const shown: Shown = {warnings: [], informations: [], buttons: []};
     const ports = familySetupPortsOf(
       fakeEditor([], shown, extensionFolder()),
       contextOf(),
@@ -159,7 +163,7 @@ describe('the family setup over the editor (card explorer-03b)', () => {
   });
 
   it('contracts.3.4: a setup notice is the translated template, filled with the extension and the editor', async () => {
-    const shown: Shown = {warnings: [], informations: []};
+    const shown: Shown = {warnings: [], informations: [], buttons: []};
     const outcome = await runSetup(
       familySetupPortsOf(
         fakeEditor([], shown, extensionFolder()),
@@ -174,6 +178,48 @@ describe('the family setup over the editor (card explorer-03b)', () => {
     ]);
   });
 
+  it("contracts.3.4: each of the six texts is the extension's template through its translate", async () => {
+    const shown: Shown = {warnings: [], informations: [], buttons: []};
+    const ports = familySetupPortsOf(
+      fakeEditor([], shown, extensionFolder()),
+      contextOf(),
+      optionsOf({translate: template => `T:${template}`}),
+    );
+    await ports.showSetup({kind: 'setup', argvEntries: ['one']});
+    await ports.showSetup({kind: 'failedAttempt'});
+    await ports.showRestart();
+    deepStrictEqual(
+      [shown.warnings, shown.informations, shown.buttons],
+      [
+        [
+          "T:Remote Explorer needs VSCodium 'one'",
+          'T:failed Remote Explorer VSCodium',
+        ],
+        ['T:restart VSCodium'],
+        [
+          ['T:Configure', 'T:Not Now'],
+          ['T:Configure', 'T:Not Now'],
+          ['T:Quit VSCodium'],
+        ],
+      ],
+    );
+  });
+
+  it("contracts.3.4: the failure the setup reports goes to the extension's own log", () => {
+    const failures: string[] = [];
+    const ports = familySetupPortsOf(
+      fakeEditor(
+        [],
+        {warnings: [], informations: [], buttons: []},
+        extensionFolder(),
+      ),
+      contextOf(),
+      optionsOf({logFailure: message => failures.push(message)}),
+    );
+    ports.logFailure('the setup failed');
+    deepStrictEqual(failures, ['the setup failed']);
+  });
+
   it('contracts.3.4: the runtime arguments of a portable install are read from its folder', async () => {
     const portable = folderOf('family-argv-');
     writeFileSync(
@@ -182,7 +228,11 @@ describe('the family setup over the editor (card explorer-03b)', () => {
     );
     await withPortable(portable, async () => {
       const ports = familySetupPortsOf(
-        fakeEditor([], {warnings: [], informations: []}, extensionFolder()),
+        fakeEditor(
+          [],
+          {warnings: [], informations: [], buttons: []},
+          extensionFolder(),
+        ),
         contextOf(),
         optionsOf(),
       );
@@ -194,7 +244,11 @@ describe('the family setup over the editor (card explorer-03b)', () => {
     const failures: string[] = [];
     await withPortable(folderOf('family-argv-'), async () => {
       const ports = familySetupPortsOf(
-        fakeEditor([], {warnings: [], informations: []}, extensionFolder()),
+        fakeEditor(
+          [],
+          {warnings: [], informations: [], buttons: []},
+          extensionFolder(),
+        ),
         contextOf(),
         optionsOf({logFailure: message => failures.push(message)}),
       );
@@ -208,7 +262,7 @@ describe('the family setup over the editor (card explorer-03b)', () => {
       path.join(portable, 'argv.json'),
       `{"enable-proposed-api": ["${EXTENSION_ID}"]}`,
     );
-    const shown: Shown = {warnings: [], informations: []};
+    const shown: Shown = {warnings: [], informations: [], buttons: []};
     await withPortable(portable, async () => {
       const outcome = await runSetup(
         familySetupPortsOf(
@@ -224,7 +278,7 @@ describe('the family setup over the editor (card explorer-03b)', () => {
   });
 
   it('contracts.3.4: notices given by the extension are the ones shown', async () => {
-    const shown: Shown = {warnings: [], informations: []};
+    const shown: Shown = {warnings: [], informations: [], buttons: []};
     const given: string[] = [];
     const outcome = await runSetup(
       familySetupPortsOf(
