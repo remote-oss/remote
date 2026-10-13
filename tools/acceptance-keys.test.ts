@@ -5,6 +5,8 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   agentEnvironment,
+  agentSocketPath,
+  SOCKET_PATH_LIMIT,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
   PASSPHRASE_KEY_COMMENT,
@@ -144,6 +146,26 @@ function publicKeyOf(file: string): string {
 
 describe('the run agent', function () {
   this.timeout(30000);
+
+  it("tooling-29: the agent listens in the run's folder when that path is short enough", () => {
+    strictEqual(agentSocketPath('/tmp/run'), '/tmp/run/agent.sock');
+  });
+
+  it('tooling-29: a run folder too deep for a Unix socket moves the agent to a short folder', () => {
+    strictEqual(
+      agentSocketPath(
+        `/${'d'.repeat(SOCKET_PATH_LIMIT)}`,
+        () => '/tmp/agent-x',
+      ),
+      '/tmp/agent-x/agent.sock',
+    );
+  });
+
+  it('tooling-29: the short folder is made under /tmp', () => {
+    const socket = agentSocketPath(`/${'d'.repeat(SOCKET_PATH_LIMIT)}`);
+    rmSync(path.dirname(socket), {recursive: true, force: true});
+    strictEqual(socket.startsWith('/tmp/agent-'), true);
+  });
 
   it('tooling-29: the agent sees no variable through which it could ask', () => {
     deepStrictEqual(

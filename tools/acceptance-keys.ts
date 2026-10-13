@@ -4,7 +4,13 @@
  * reaches `ssh-keygen` through an askpass script that reads it from a file, so no command line ever holds it.
  */
 
-import {chmodSync, copyFileSync, readFileSync, writeFileSync} from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {type CommandRunner, checked, newPassword} from './acceptance-run.ts';
 import {type Started, startDetached} from './acceptance-plain.ts';
@@ -144,4 +150,21 @@ export function startRunAgent(socket: string): Started {
     programArguments: ['-a', socket, '-D'],
     environment: agentEnvironment(process.env),
   });
+}
+
+/** The longest socket path the run uses: below the 104 bytes of the smallest `sun_path` among the platforms. */
+export const SOCKET_PATH_LIMIT = 100;
+
+/**
+ * Where the run's agent listens: `agent.sock` in the run's folder, or, when that path is too long for a Unix socket,
+ * in a short folder `shortFolder` makes (by default a new one under `/tmp`).
+ */
+export function agentSocketPath(
+  runFolder: string,
+  shortFolder: () => string = () => mkdtempSync('/tmp/agent-'),
+): string {
+  const inRunFolder = path.join(runFolder, 'agent.sock');
+  return Buffer.byteLength(inRunFolder) <= SOCKET_PATH_LIMIT
+    ? inRunFolder
+    : path.join(shortFolder(), 'agent.sock');
 }

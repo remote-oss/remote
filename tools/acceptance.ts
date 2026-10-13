@@ -40,6 +40,7 @@ import {
   runCommand,
 } from './acceptance-run.ts';
 import {
+  agentSocketPath,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
   startRunAgent,
@@ -402,7 +403,7 @@ async function prepare(
   }
   const keys =
     editor === 'vscodium' ? makeRunKeys(command, runFolder) : undefined;
-  const agentSocket = path.join(runFolder, 'agent.sock');
+  const agentSocket = agentSocketPath(runFolder);
   if (editor === 'vscodium') {
     const agent = dependencies.startAgent(agentSocket);
     stops.push(() => {
