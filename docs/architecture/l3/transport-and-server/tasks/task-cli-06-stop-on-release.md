@@ -40,6 +40,8 @@ VSCodium build's commit, not upstream vscode's, and the patched CLI expands its 
 | athena on #412 | the connector holding a CLI connection, then `dispose()` | the connection's `release()` ran |
 | athena on #412 | the stop script | it holds `kill "$CLI_STOP_PID"` and no `pkill` |
 | athena on #412 (real host) | a CLI that served the real server, then `stopCli` with its pid | within 5 s the CLI's pid is gone, and the server's process still runs |
+| athena on #518 (real host) | two connects over one session, each `serve`d | exactly one `<cli> --cli-data-dir …` process (the agent-host supervisor) runs, a child of the first `command-shell` |
+| athena on #518 (real host) | the same, then both `command-shell`s stopped, then the session ended | the supervisor still runs (re-parented), one, with the server |
 | F-2103 BR-8 (real host) | the same, then a new CLI and `serve` | the reply is `serving`, a `serverlog` line reads `Found running server`, and a server socket opened with the connection token the second connect hands its editor connects (triton on #519; which token that is waits on athena's ruling, section 4) |
 
 ## 4. Open: the found server's connection token (triton on #519)
