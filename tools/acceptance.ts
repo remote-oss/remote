@@ -760,7 +760,8 @@ function vscodiumCliOf(executable: string): string {
 }
 
 /**
- * The VSCodium executable of the pinned release under `<root>/.vscode-test`. A missing build is downloaded, checked
+ * The VSCodium executable of the pinned release under `<root>/.vscode-test`, in a folder of the release and the
+ * client's platform, so a build of another architecture is never taken for it. A missing build is downloaded, checked
  * against the release's sha256 and unpacked; one already there is used as it is.
  */
 export async function vscodiumExecutableOf(
@@ -770,16 +771,16 @@ export async function vscodiumExecutableOf(
   transfer: VscodiumTransfer,
   checksums: Readonly<Record<string, string>> = VSCODIUM_RELEASE.sha256,
 ): Promise<string> {
+  const key = `${platform}-${architecture}`;
   const folder = path.join(
     root,
     '.vscode-test',
-    `vscodium-${VSCODIUM_RELEASE.tagName}`,
+    `vscodium-${VSCODIUM_RELEASE.tagName}-${key}`,
   );
   const executable = path.join(folder, 'codium-insiders');
   if (existsSync(executable)) {
     return executable;
   }
-  const key = `${platform}-${architecture}`;
   const expected = checksums[key];
   if (expected === undefined) {
     throw new Error(
