@@ -28,6 +28,7 @@ import {
   installExtensions,
   type HostLockLoop,
   installCli,
+  kill,
   type LicenceModal,
   type Plan,
   plan,
@@ -40,6 +41,7 @@ import {
   startOrReuse,
   stopCli,
   transfer,
+  uninstall,
 } from 'lib-server';
 import {validateTarget} from 'lib-ssh';
 import {sshTargetOf, type HostServerSettings} from './host-settings.ts';
@@ -100,6 +102,7 @@ type ServerStepNames =
   | 'start'
   | 'installCli'
   | 'startCli'
+  | 'maintain'
   | 'installExtensions';
 
 /** The archive source the planner reads, from what the resolution found. */
@@ -248,6 +251,12 @@ export function createServerSteps(
     },
     probe: (input, lease, cancellation) =>
       probe(lease.channel, parametersFor({}), cancellation),
+    maintain: (input, lease, action, cancellation) =>
+      (action === 'kill' ? kill : uninstall)(
+        lease.channel,
+        parametersFor({}),
+        cancellation,
+      ),
     plan: (input, host, options) => {
       const platform = templatePlatformOf(host);
       const resolution = resolveServerArchive(

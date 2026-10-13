@@ -471,6 +471,24 @@ describe("the composition's forwarding of the later server steps", () => {
     );
   });
 
+  it("F-2411.BR-2: the maintenance is this connect's server steps' kill, after the client step", async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const channel = channelAnswering(lines('Ok'));
+    const outcome = await steps.maintain(
+      inputFor('dev'),
+      leaseOn(channel),
+      'kill',
+      new AbortController().signal,
+    );
+    const [call] = channel.calls;
+    deepStrictEqual(
+      [outcome.kind, call?.operation === 'runScript'],
+      ['done', true],
+    );
+  });
+
   it("connect-14: the extensions install is this connect's server steps' install", async () => {
     const {ports} = portsOf({server: {defaultExtensions: ['pub.ext']}});
     const steps = stepsOf(ports);
