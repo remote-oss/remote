@@ -10,6 +10,11 @@ The archive reaches the host through a download on the host, a download on the c
 plan gives. The client side is two ports the extension wires: the editor's proxy-aware download, and removal of the
 temporary file. The library makes no request of its own and reads no proxy setting.
 
+On the CLI path, one connection token serves every connect to a host: the first CLI start makes
+`<CLI data folder>/connection-token` (mode 600) and every start reads it, because the server the CLI starts keeps the
+token it was first given. Deleting that file while the server runs makes the next connect's token one the server
+refuses, until that server ends and the next connect starts one with the new token.
+
 It is bundled into the extensions that install a server and never published on its own.
 
 ## For maintainers

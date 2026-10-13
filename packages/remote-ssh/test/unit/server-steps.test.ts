@@ -358,7 +358,12 @@ describe("the server steps: the CLI's install and start", () => {
   async function startScripts() {
     const {steps, cliPlan} = cliSteps();
     const channel = channelAnswering(
-      lines('Ok', 'cli.port=5432', 'cli.pid=88'),
+      lines(
+        'Ok',
+        'cli.port=5432',
+        'cli.pid=88',
+        'cli.connectionToken=abcdefghijklmnopqrstuvwxyz012345',
+      ),
     );
     await steps.startCli(
       INPUT,
@@ -406,7 +411,16 @@ describe("the server steps: the CLI's install and start", () => {
     const {steps, cliPlan} = cliSteps();
     const outcome = await steps.startCli(
       INPUT,
-      leaseOn(channelAnswering(lines('Ok', 'cli.port=5432', 'cli.pid=88'))),
+      leaseOn(
+        channelAnswering(
+          lines(
+            'Ok',
+            'cli.port=5432',
+            'cli.pid=88',
+            'cli.connectionToken=abcdefghijklmnopqrstuvwxyz012345',
+          ),
+        ),
+      ),
       HOST,
       cliPlan,
       'control-token-1',

@@ -1,14 +1,21 @@
 import {deepStrictEqual} from 'node:assert';
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
-import {scriptFor, type ScriptParameters} from '../../src/index.ts';
+import {
+  parseResult,
+  type ResultBlock,
+  scriptFor,
+  type ScriptParameters,
+} from '../../src/index.ts';
 import {
   blockOf,
   fakeHost,
@@ -303,6 +310,168 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
       deepStrictEqual(
         block === 'none' ? block : block.status,
         'ServerFailedToStart',
+      );
+    });
+  });
+
+  describe('the host connection token (card cli-07)', () => {
+    const TOKEN_ENVIRONMENT = {VSCODE_CLI_REQUIRE_TOKEN: 'tok-xyz'};
+
+    function tokenFile(): string {
+      return path.join(dataFolder(host), 'cli', 'connection-token');
+    }
+
+    /** The block of one start with the control token set. */
+    function started(parameters: ScriptParameters): ResultBlock | 'none' {
+      return blockOf(host, single('startCli'), parameters, {
+        environment: TOKEN_ENVIRONMENT,
+      });
+    }
+
+    /** A start run in the background, for two at once: its output lines. */
+    function startedTogether(parameters: ScriptParameters): Promise<string[]> {
+      return new Promise(resolve => {
+        const child = spawn('/bin/sh', ['-s'], {
+          env: {...host.environment, ...TOKEN_ENVIRONMENT},
+        });
+        let output = '';
+        child.stdout.on('data', (chunk: Buffer) => {
+          output += chunk.toString('utf8');
+        });
+        child.on('close', () => {
+          resolve(output.split('\n'));
+        });
+        child.stdin.end(
+          scriptFor(single('startCli'), 'posixShell', parameters),
+        );
+      });
+    }
+
+    /** A token file made by hand with `text` and `mode`, in place of the one the start would make. */
+    function plantedToken(text: string, mode: number): void {
+      mkdirSync(path.dirname(tokenFile()), {recursive: true});
+      writeFileSync(tokenFile(), text);
+      chmodSync(tokenFile(), mode);
+    }
+
+    it('F-2409 BR-11: the first start makes a private token of 32 characters, and reports it', () => {
+      const block = started(placed(host));
+      deepStrictEqual(
+        block === 'none'
+          ? block
+          : [
+              block.status,
+              /^[A-Za-z0-9]{32}$/.test(block.cliFacts.connectionToken ?? ''),
+              block.cliFacts.connectionToken ===
+                readFileSync(tokenFile(), 'utf8'),
+              statSync(tokenFile()).mode & 0o777,
+            ],
+        ['Ok', true, true, 0o600],
+      );
+    });
+
+    it('F-2409 BR-11: a second start reports the same token and leaves the file as it was', () => {
+      const parameters = placed(host);
+      const first = started(parameters);
+      const second = started(parameters);
+      deepStrictEqual(
+        first === 'none' || second === 'none'
+          ? 'none'
+          : second.cliFacts.connectionToken === first.cliFacts.connectionToken,
+        true,
+      );
+    });
+
+    it('athena on #412: two starts at once report the same token', async () => {
+      const parameters = placed(host);
+      const outputs = await Promise.all([
+        startedTogether(parameters),
+        startedTogether(parameters),
+      ]);
+      const tokens = outputs.map(lines => {
+        const parsed = parseResult(lines);
+        return 'block' in parsed ? parsed.block.cliFacts.connectionToken : '';
+      });
+      deepStrictEqual(
+        [
+          tokens[0] !== '' && tokens[0] === tokens[1],
+          tokens[0] === readFileSync(tokenFile(), 'utf8'),
+        ],
+        [true, true],
+      );
+    });
+
+    it('athena on #412: a file that holds no token is refused, never replaced', () => {
+      const parameters = placed(host);
+      plantedToken('bad token!', 0o600);
+      const block = started(parameters);
+      deepStrictEqual(
+        block === 'none'
+          ? block
+          : [
+              block.status,
+              block.cliFacts.tokenInvalid,
+              readFileSync(tokenFile(), 'utf8'),
+            ],
+        ['ServerFailedToStart', 'yes', 'bad token!'],
+      );
+    });
+
+    it('themis on #524: a token file others can read is refused', () => {
+      const parameters = placed(host);
+      plantedToken('abcdefghijklmnopqrstuvwxyz012345', 0o644);
+      const block = started(parameters);
+      deepStrictEqual(
+        block === 'none' ? block : [block.status, block.cliFacts.tokenInvalid],
+        ['ServerFailedToStart', 'yes'],
+      );
+    });
+
+    it('themis on #524: a token file that is a link is refused', () => {
+      const parameters = placed(host);
+      const elsewhere = path.join(
+        path.dirname(host.archive),
+        'elsewhere-token',
+      );
+      writeFileSync(elsewhere, 'abcdefghijklmnopqrstuvwxyz012345');
+      chmodSync(elsewhere, 0o600);
+      mkdirSync(path.dirname(tokenFile()), {recursive: true});
+      symlinkSync(elsewhere, tokenFile());
+      const block = started(parameters);
+      deepStrictEqual(
+        block === 'none' ? block : [block.status, block.cliFacts.tokenInvalid],
+        ['ServerFailedToStart', 'yes'],
+      );
+    });
+
+    it('themis on #524: when no token file can be made, the start fails and reports none', () => {
+      const parameters = placed(host);
+      mkdirSync(path.dirname(tokenFile()), {recursive: true});
+      chmodSync(path.dirname(tokenFile()), 0o500);
+      const block = started(parameters);
+      chmodSync(path.dirname(tokenFile()), 0o700);
+      deepStrictEqual(
+        block === 'none'
+          ? block
+          : [block.status, block.cliFacts.connectionToken],
+        ['ServerFailedToStart', undefined],
+      );
+    });
+
+    it('§S10: the start script makes the folder and the token file under umask 077', () => {
+      const text = scriptFor(
+        single('startCli'),
+        'posixShell',
+        cliParameters(host),
+      );
+      deepStrictEqual(
+        [
+          text.includes('(umask 077; mkdir -p "$CLI_DATA")'),
+          text.includes(
+            "(umask 077; tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32",
+          ),
+        ],
+        [true, true],
       );
     });
   });

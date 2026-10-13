@@ -78,7 +78,15 @@ function started(
 
 describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
   describe('startCli', () => {
-    const STARTED = block('Ok', 'cli.port=41234', 'cli.pid=77', 'cli.log=/l');
+    const HOST_TOKEN = 'abcdefghijklmnopqrstuvwxyz012345';
+
+    const STARTED = block(
+      'Ok',
+      'cli.port=41234',
+      'cli.pid=77',
+      'cli.log=/l',
+      `cli.connectionToken=${HOST_TOKEN}`,
+    );
 
     it('§S10: the run carries the token as VSCODE_CLI_REQUIRE_TOKEN in its environment', async () => {
       const {channel} = await started(STARTED);
@@ -99,17 +107,49 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
       );
     });
 
-    it('V7a: a result block with the port and the process is a started CLI with the token it was given', async () => {
+    it("F-2409 BR-11: a result block with the port, the process and the host's token is a started CLI with that token", async () => {
       const {outcome} = await started(STARTED);
       deepStrictEqual(outcome, {
         kind: 'started',
         server: {
           endpoint: {kind: 'port', port: 41234},
           processId: 77,
-          connectionToken: TOKEN,
+          connectionToken: HOST_TOKEN,
           reused: false,
         },
         notices: [],
+      });
+    });
+
+    it("athena on #412: the started CLI's connection token is the host's, never the control token", async () => {
+      const {outcome} = await started(STARTED);
+      deepStrictEqual(
+        outcome.kind === 'started' && outcome.server.connectionToken !== TOKEN,
+        true,
+      );
+    });
+
+    it('athena on #412: an Ok block without the connection token is unreadable', async () => {
+      const {outcome} = await started(
+        block('Ok', 'cli.port=41234', 'cli.pid=77', 'cli.log=/l'),
+      );
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {kind: 'unreadableServerFacts'},
+      });
+    });
+
+    it("athena on #412: ServerFailedToStart with cli.tokenInvalid is serverStart naming the host's token file", async () => {
+      const {outcome} = await started(
+        block('ServerFailedToStart', 'cli.tokenInvalid=yes'),
+      );
+      deepStrictEqual(outcome, {
+        kind: 'failed',
+        failure: {
+          kind: 'serverStart',
+          detail:
+            "the host's connection token file is not a private file holding a token",
+        },
       });
     });
 
