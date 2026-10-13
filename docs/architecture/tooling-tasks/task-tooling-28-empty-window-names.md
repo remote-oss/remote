@@ -15,13 +15,16 @@ hestia or iris (hermes assigns). Size: S.
 
 **How the agent claims a name.** At activation, a window without a folder claims a name by creating
 `<HARNESS_RUN_FOLDER>/agent/claims/<name>` exclusively (`openSync(…, 'wx')`). It tries `local`, then `empty-1`,
-`empty-2`, … until a creation succeeds. It writes the name it got to `<HARNESS_RUN_FOLDER>/agent/pids/<process.pid>`.
+`empty-2`, … until a creation succeeds. It writes the name it got to `<HARNESS_RUN_FOLDER>/agent/pids/<process.pid>`. The run passes that folder to every launch
+as `REMOTE_OSS_ACCEPTANCE_WINDOWS`, the product's own harness variable: no file under `packages/` reads a `HARNESS_*`
+variable (triton on #575).
 - A window with a folder claims nothing and writes no pid file.
 - A reloaded empty window has a new extension host, so it claims a new name. The rows don't reload empty windows; the
   README says so.
 
 **How the adapters know the name.** When `REMOTE_OSS_ACCEPTANCE` is set, the scripted adapters' window name (computed
-lazily at the first question, as now) is the content of `<run>/agent/pids/<process.pid>` when that file exists, and
+lazily at the first question, as now) is the content of `<REMOTE_OSS_ACCEPTANCE_WINDOWS>/<process.pid>` when that file
+exists, and
 `windowNameOf(…)` otherwise. The agent and our extension run in the same local extension host, so they share the pid,
 and the agent activates (`*`) before any question can come.
 
