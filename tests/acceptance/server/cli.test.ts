@@ -390,9 +390,12 @@ describe('V7a the CLI on a real host', function () {
   }
 
   /** Starts a CLI over `over` and serves the real server through it; the CLI's pid and what `serve` logged. */
-  async function servedBy(
-    over: SharedSession,
-  ): Promise<{processId: number; served: string; lines: string[]}> {
+  async function servedBy(over: SharedSession): Promise<{
+    processId: number;
+    served: string;
+    lines: string[];
+    connectionToken: string;
+  }> {
     const outcome = await startCli(
       over.channel,
       parameters,
@@ -402,6 +405,8 @@ describe('V7a the CLI on a real host', function () {
     );
     const processId =
       outcome.kind === 'started' ? outcome.server.processId : -1;
+    const connectionToken =
+      outcome.kind === 'started' ? outcome.server.connectionToken : '';
     running.push(processId);
     const stream = await socksDialer({
       local: nodeLocalPort(),
@@ -415,7 +420,7 @@ describe('V7a the CLI on a real host', function () {
     const served = await control.serve(
       {
         ...servedRelease(),
-        connectionToken: 'cli06connectiontoken0123456789ab',
+        connectionToken,
         useLocalDownload: false,
       },
       line => {
@@ -423,7 +428,7 @@ describe('V7a the CLI on a real host', function () {
       },
     );
     control.close();
-    return {processId, served: served.kind, lines};
+    return {processId, served: served.kind, lines, connectionToken};
   }
 
   /** The host's processes whose arguments pass `test`. */
@@ -501,5 +506,43 @@ describe('V7a the CLI on a real host', function () {
     await session.stop();
     await new Promise(resolve => setTimeout(resolve, 3000));
     deepStrictEqual([duringBoth, processes(isSupervisor).length], [1, 1]);
+  });
+
+  it("F-2103 BR-8: two connects over one session are handed the host's one token, which the running server holds", async () => {
+    await install();
+    const session = await openSharedSession(host);
+    const first = await servedBy(session);
+    const second = await servedBy(session);
+    const serverArguments = processes(isServer).join('\n');
+    deepStrictEqual(
+      [
+        first.connectionToken !== '' &&
+          first.connectionToken === second.connectionToken,
+        serverArguments.includes(`--connection-token=${first.connectionToken}`),
+      ],
+      [true, true],
+    );
+    await session.stop();
+  });
+
+  it('contracts V7a: F-2409 BR-11, the token file stays, unchanged and private, after the CLIs stopped and the session ended', async () => {
+    await install();
+    const session = await openSharedSession(host);
+    const first = await servedBy(session);
+    await stopCli(
+      session.channel,
+      parameters,
+      first.processId,
+      NEVER_CANCELLED,
+    );
+    await session.stop();
+    const tokenFile = `${dataFolderOf(parameters)}/cli/connection-token`;
+    deepStrictEqual(
+      [
+        host.onHost('cat', tokenFile) === first.connectionToken,
+        host.onHost('stat', '-c', '%a', tokenFile).trim(),
+      ],
+      [true, '600'],
+    );
   });
 });

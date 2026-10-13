@@ -93,7 +93,7 @@ const CLI_STARTED = {
   server: {
     endpoint: {kind: 'port', port: 5432},
     processId: 88,
-    connectionToken: 'control-token',
+    connectionToken: 'host-connection-token',
     reused: false,
   },
   notices: [],

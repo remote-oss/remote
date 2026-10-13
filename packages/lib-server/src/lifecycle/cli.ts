@@ -28,6 +28,10 @@ const MAXIMUM_PORT = 65535;
 /** What a start says when the CLI was refused for want of its token. */
 const TOKEN_MISSING_DETAIL = "the CLI's token did not reach the host";
 
+/** The detail of a host whose connection token file is not one this extension would have made: it's never replaced. */
+const TOKEN_INVALID_DETAIL =
+  "the host's connection token file is not a private file holding a token";
+
 /** Where the CLI goes and where its archive comes from. */
 export interface CliPlacement {
   /** The plan's `cli` kind. */
@@ -94,38 +98,47 @@ function failed(
 }
 
 /** The start outcome of a finished `startCli` run. */
-function outcomeOf(
-  stepRun: StepRun | 'retriesExhausted',
-  token: string,
-): StartOutcome {
+/** Why a start failed, from the facts the script reported. */
+function startFailureOf(
+  facts: Readonly<Record<string, string>>,
+): Extract<StartOutcome, {kind: 'failed'}>['failure'] {
+  if (facts.tokenMissing === 'yes') {
+    return {kind: 'serverStart', detail: TOKEN_MISSING_DETAIL};
+  }
+  if (facts.tokenInvalid === 'yes') {
+    return {kind: 'serverStart', detail: TOKEN_INVALID_DETAIL};
+  }
+  return {kind: 'serverStart'};
+}
+
+/** The start outcome of a finished `startCli` run, with the host's connection token the script reported. */
+function outcomeOf(stepRun: StepRun | 'retriesExhausted'): StartOutcome {
   const read = blockOfStart(stepRun);
   if ('unfinished' in read) {
     return read.unfinished;
   }
   const {block} = read;
   if (block.status === 'ServerFailedToStart') {
-    return failed(
-      block.cliFacts.tokenMissing === 'yes'
-        ? {kind: 'serverStart', detail: TOKEN_MISSING_DETAIL}
-        : {kind: 'serverStart'},
-    );
+    return failed(startFailureOf(block.cliFacts));
   }
   if (block.status !== 'Ok') {
     return failed({kind: 'scriptFailed', status: block.status});
   }
   const port = Number(block.cliFacts.port);
   const processId = Number(block.cliFacts.pid);
+  const connectionToken = block.cliFacts.connectionToken ?? '';
   return Number.isInteger(port) &&
     port >= 1 &&
     port <= MAXIMUM_PORT &&
     Number.isInteger(processId) &&
-    processId > 1
+    processId > 1 &&
+    connectionToken !== ''
     ? {
         kind: 'started',
         server: {
           endpoint: {kind: 'port', port},
           processId,
-          connectionToken: token,
+          connectionToken,
           reused: false,
         },
         notices: [],
@@ -152,7 +165,7 @@ export async function startCli(
       }),
     cancellation,
   );
-  return outcomeOf(stepRun, token);
+  return outcomeOf(stepRun);
 }
 
 /** The outcome of a stop of the CLI: it was ended, it no longer ran as that CLI, or the step could not finish. */

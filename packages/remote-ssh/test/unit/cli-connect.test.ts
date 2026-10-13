@@ -259,6 +259,14 @@ describe("the connect's CLI path: the window resolves", () => {
     deepStrictEqual(connection.connected.address, BRIDGE_ADDRESS);
   });
 
+  it("F-2409 BR-11: serve's connection token is the host's, as the CLI's start reported it", async () => {
+    const {bridged} = await resolved();
+    deepStrictEqual(
+      bridged.serveParams?.connectionToken,
+      'host-connection-token',
+    );
+  });
+
   it("§4a: the window's token is serve's connection token, and not the control token", async () => {
     const {connection, bridged} = await resolved();
     deepStrictEqual(

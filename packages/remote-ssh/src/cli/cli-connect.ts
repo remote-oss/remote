@@ -163,7 +163,7 @@ export async function connectOverCli(
   const serveParams = {
     commit: context.serve.commit,
     quality: context.serve.quality,
-    connectionToken: steps.newSecret(),
+    connectionToken: started.server.connectionToken,
     useLocalDownload: false,
   };
   const bridge = await steps.openBridge(control, serveParams, {

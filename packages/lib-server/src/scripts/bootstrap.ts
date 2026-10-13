@@ -342,9 +342,36 @@ const INSTALL_CLI_BODY: readonly string[] = [
   'leave Ok',
 ];
 
+/**
+ * The check of the host's connection token file: a regular file, not a link, that only its owner can read or write,
+ * holding 1 to 128 characters of the server's token form.
+ */
+const CONNECTION_TOKEN_CHECK: readonly string[] = [
+  'connection_token_usable() {',
+  '  [ -f "$1" ] && [ ! -L "$1" ] || return 1',
+  '  case $(ls -ln "$1" 2>/dev/null) in -rw-------*|-r--------*) ;; *) return 1 ;; esac',
+  '  TOKEN_TEXT=$(cat "$1" 2>/dev/null) || return 1',
+  "  case $TOKEN_TEXT in ''|*[!0-9A-Za-z_-]*) return 1 ;; esac",
+  '  [ "${#TOKEN_TEXT}" -le 128 ]',
+  '}',
+];
+
 const START_CLI_BODY: readonly string[] = [
+  ...CONNECTION_TOKEN_CHECK,
   '[ -x "$CLI_FILE" ] || finish ServerFailedToStart',
   '[ -n "${VSCODE_CLI_REQUIRE_TOKEN:-}" ] || { fact cli.tokenMissing yes; finish ServerFailedToStart; }',
+  'TOKEN_FILE=$CLI_DATA/connection-token',
+  '(umask 077; mkdir -p "$CLI_DATA") || finish ServerFailedToStart',
+  'if [ ! -e "$TOKEN_FILE" ] && [ ! -L "$TOKEN_FILE" ]; then',
+  '  TOKEN_TEMPORARY=$TOKEN_FILE.$$',
+  '  (umask 077; tr -dc \'A-Za-z0-9\' </dev/urandom | head -c 32 >"$TOKEN_TEMPORARY")',
+  '  TOKEN_LENGTH=$(wc -c <"$TOKEN_TEMPORARY" 2>/dev/null)',
+  '  [ "$((TOKEN_LENGTH + 0))" -eq 32 ] && ln "$TOKEN_TEMPORARY" "$TOKEN_FILE" 2>/dev/null',
+  '  rm -f "$TOKEN_TEMPORARY"',
+  'fi',
+  '[ -e "$TOKEN_FILE" ] || [ -L "$TOKEN_FILE" ] || finish ServerFailedToStart',
+  'connection_token_usable "$TOKEN_FILE" || { fact cli.tokenInvalid yes; finish ServerFailedToStart; }',
+  'fact cli.connectionToken "$(cat "$TOKEN_FILE")"',
   'LOG_FILE=$DATA_DIR/.cli.$COMMIT.log',
   '(umask 077; printf \'\' >"$LOG_FILE") || finish ServerFailedToStart',
   'nohup "$CLI_FILE" command-shell --on-host 127.0.0.1 --on-port 0 --cli-data-dir "$CLI_DATA" --parent-process-id "$PPID" </dev/null >"$LOG_FILE" 2>&1 9>&- &',
