@@ -13,7 +13,10 @@ const LAYER_ONE_SECONDS = {minimum: 1, maximum: 600} as const;
 
 /**
  * The script of the bootstrap. The user's login shell runs as a login shell on a command that prints the environment it
- * built; a watchdog kills it after `LAYER1_SECONDS`, and the session always reaches `exec sh`.
+ * built; a watchdog kills it after `LAYER1_SECONDS`. The session reaches `exec sh` unless the login shell outlasts its
+ * bound or ends by itself without starting the command: it then prints one line, `LAYER1-TIMEOUT <seconds>` or
+ * `LAYER1-EXITED <status>`, and ends, so the connect never goes on without the user's environment. Before `exec sh` it
+ * prints `LAYER1-READY`: the connect is set up only when a reader has seen that line.
  */
 const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   'LAYER1_DIR=$(mktemp -d 2>/dev/null) || LAYER1_DIR=',
@@ -30,17 +33,30 @@ const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   '    LAYER1_SLEEP=$!',
   '    trap \'kill -9 "$LAYER1_SLEEP" 2>/dev/null; exit 0\' TERM',
   '    wait "$LAYER1_SLEEP"',
+  '    : >"$LAYER1_DIR/timeout"',
   '    kill -9 -"$LAYER1_PID" "$LAYER1_PID" 2>/dev/null',
   '  ) >/dev/null 2>&1 </dev/null &',
   '  LAYER1_WATCH=$!',
   '  wait "$LAYER1_PID" 2>/dev/null',
+  '  LAYER1_STATUS=$?',
   '  kill -TERM "$LAYER1_WATCH" 2>/dev/null',
   '  wait "$LAYER1_WATCH" 2>/dev/null',
   '  kill -9 -"$LAYER1_PID" 2>/dev/null',
-  '  eval "$(sed -n \'/^LAYER1-START$/,$p\' "$LAYER1_DIR/out" | sed 1d)"',
+  '  if grep -q \'^LAYER1-START$\' "$LAYER1_DIR/out"; then',
+  '    eval "$(sed -n \'/^LAYER1-START$/,$p\' "$LAYER1_DIR/out" | sed 1d)"',
+  '  elif [ -e "$LAYER1_DIR/timeout" ]; then',
+  '    rm -rf "$LAYER1_DIR"',
+  '    printf \'LAYER1-TIMEOUT %s\\n\' "$LAYER1_SECONDS"',
+  '    exit 124',
+  '  else',
+  '    rm -rf "$LAYER1_DIR"',
+  '    printf \'LAYER1-EXITED %s\\n\' "$LAYER1_STATUS"',
+  '    exit 1',
+  '  fi',
   'fi',
   '[ -n "$LAYER1_DIR" ] && rm -rf "$LAYER1_DIR"',
-  'unset LAYER1_DIR LAYER1_PID LAYER1_WATCH LAYER1_SECONDS',
+  'unset LAYER1_DIR LAYER1_PID LAYER1_WATCH LAYER1_STATUS LAYER1_SECONDS',
+  "printf 'LAYER1-READY\\n'",
   'exec sh',
 ];
 
@@ -83,4 +99,36 @@ export function sessionStartFor(settings: ConnectWaitSettings): {
       Math.max(LAYER_ONE_SECONDS.minimum, Math.ceil(seconds)),
     ),
   );
+}
+
+/** What the first lines of a session's output say about the bootstrap. */
+export type BootstrapEvent =
+  | {kind: 'ready'}
+  | {kind: 'timeout'; seconds: number}
+  | {kind: 'exited'; status: number};
+
+const BOOTSTRAP_LINE = /^LAYER1-(READY|TIMEOUT (\d+)|EXITED (\d+))\r?$/;
+
+/** The event a line of a session's output reports, or none for any other line. */
+export function bootstrapEventOf(line: string): BootstrapEvent | undefined {
+  const match = BOOTSTRAP_LINE.exec(line);
+  if (match === null) {
+    return undefined;
+  }
+  if (match[2] !== undefined) {
+    return {kind: 'timeout', seconds: Number(match[2])};
+  }
+  if (match[3] !== undefined) {
+    return {kind: 'exited', status: Number(match[3])};
+  }
+  return {kind: 'ready'};
+}
+
+/** The line the log gets for an event that ends the session before it was ready. */
+export function bootstrapLogLine(
+  event: Exclude<BootstrapEvent, {kind: 'ready'}>,
+): string {
+  return event.kind === 'timeout'
+    ? `the login shell did not finish its startup within ${String(event.seconds)} s`
+    : `the SSH session ended before the host reported its platform: the login shell's startup exited with status ${String(event.status)}`;
 }

@@ -15,14 +15,22 @@ import {resolveBinary} from './repository.ts';
 /** The extensions under test that use proposed API, enabled for them on the command line. */
 const PROPOSED_API_EXTENSIONS: readonly string[] = ['remote-oss.remote-ssh'];
 
-/** What every run's editor is started with: the run's own folders, the proposed API of the extensions, no trust prompt. */
-export function editorArguments(runFolder: string): string[] {
+/**
+ * What every run's editor is started with: the run's own folders, the proposed API of the extensions unless a launch
+ * turns it off, no trust prompt.
+ */
+export function editorArguments(
+  runFolder: string,
+  proposedApi = true,
+): string[] {
   return [
     `--user-data-dir=${path.join(runFolder, 'user-data')}`,
     `--extensions-dir=${path.join(runFolder, 'extensions')}`,
-    ...PROPOSED_API_EXTENSIONS.map(
-      extensionId => `--enable-proposed-api=${extensionId}`,
-    ),
+    ...(proposedApi
+      ? PROPOSED_API_EXTENSIONS.map(
+          extensionId => `--enable-proposed-api=${extensionId}`,
+        )
+      : []),
     '--disable-workspace-trust',
   ];
 }
@@ -116,7 +124,7 @@ export function plainEditorOf(
   return {
     file: executable,
     programArguments: [
-      ...editorArguments(runFolder),
+      ...editorArguments(runFolder, launch.proposedApi !== false),
       '--new-window',
       ...(launch.folderUri === undefined
         ? []

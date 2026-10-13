@@ -258,15 +258,21 @@ describe('F-2409 the start of the server', function () {
       parameters,
       {cancellation: new AbortController().signal},
     );
-    deepStrictEqual(
-      host
-        .onHost(
-          'sh',
-          '-c',
-          `nc -w 1 127.0.0.1 ${String(port)} </dev/null; echo $?`,
-        )
-        .trim() !== '0',
-      true,
-    );
+    // The kill returns once it has signalled the server; the listener may take a moment more to end.
+    function answers(): boolean {
+      return (
+        host
+          .onHost(
+            'sh',
+            '-c',
+            `nc -w 1 127.0.0.1 ${String(port)} </dev/null >/dev/null 2>&1 && echo yes || echo no`,
+          )
+          .trim() === 'yes'
+      );
+    }
+    for (let attempt = 0; attempt < 20 && answers(); attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    deepStrictEqual(answers(), false);
   });
 });

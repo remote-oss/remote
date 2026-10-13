@@ -43,8 +43,11 @@ const RECORD: SharedRecord = {
   connectionToken: 'token',
 };
 
-const AUTHENTICATED =
+const AUTHENTICATED_ONLY =
   'Authenticated to dev ([10.0.0.1]:22) using "publickey".\n';
+
+/** The login line and, after it, the bootstrap's report that the session is ready for the commands. */
+const AUTHENTICATED = `${AUTHENTICATED_ONLY}LAYER1-READY\n`;
 
 function requestFor(socksPort: number | undefined): SshRequest {
   return {
@@ -440,6 +443,48 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
       5000,
     );
     deepStrictEqual(terminal.sent.length, 2);
+  });
+
+  it('card ssh-38: the authenticated line alone does not hand over: the lease waits for the ready line', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    let handedOver = false;
+    void result.then(() => {
+      handedOver = true;
+    });
+    terminal.write(AUTHENTICATED_ONLY);
+    await settled();
+    deepStrictEqual(handedOver, false);
+  });
+
+  it('card ssh-38: the ready line after the login hands over the lease', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    terminal.write('LAYER1-READY\n');
+    deepStrictEqual((await result).kind, 'done');
+  });
+
+  it('F-2704 AC-11: a login shell that outlasted its bound fails the connect as a timeout, and is logged', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(`${AUTHENTICATED_ONLY}LAYER1-TIMEOUT 10\n`);
+    deepStrictEqual(await result, {kind: 'failed', failure: {kind: 'timeout'}});
+  });
+
+  it("F-2704 AC-13: a login shell that ended by itself fails the connect with no reason of ssh's", async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(`${AUTHENTICATED_ONLY}LAYER1-EXITED 1\n`);
+    deepStrictEqual(await result, {kind: 'failed', failure: {kind: 'unknown'}});
+  });
+
+  it('F-2704 AC-11: the wait still runs after the login line, so a session that stays silent times out', async () => {
+    const made = fixture({timeoutSeconds: 10});
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    made.clock.advance(13_000);
+    deepStrictEqual(await result, {kind: 'failed', failure: {kind: 'timeout'}});
   });
 
   it('contracts: the questions are taken down at the handover', async () => {

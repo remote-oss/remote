@@ -938,6 +938,7 @@ describe('acceptance', () => {
         'terminal',
         'slow',
         'windows',
+        'no-proposals',
       ]);
     });
 
@@ -1046,6 +1047,7 @@ describe('acceptance', () => {
         'terminal',
         'slow',
         'windows',
+        'no-proposals',
       ]);
     });
 
@@ -1159,6 +1161,20 @@ describe('acceptance', () => {
           path.join(workspace.root, 'tests', 'acceptance', 'runner'),
           path.join(workspace.root, 'tests', 'acceptance', 'slow-remote'),
         ],
+      );
+    });
+
+    it('F-3903 §5 rule 4: a runner launch with proposedApi false starts the editor without the proposed API', () => {
+      deepStrictEqual(
+        vscodiumConfiguration(
+          workspace.root,
+          CONFIGURATION_ENVIRONMENT,
+          EXECUTABLE,
+          {...LAUNCH, proposedApi: false},
+        ).launchArgs.filter(argument =>
+          argument.startsWith('--enable-proposed-api'),
+        ),
+        [],
       );
     });
 

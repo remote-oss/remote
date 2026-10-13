@@ -7,6 +7,10 @@
 import type {Scheduler} from 'lib-helper';
 import type {SessionRun, SessionRunEnd} from '../connection-server/client.ts';
 import type {SessionRunner} from '../connection-server/shared-channel.ts';
+import {
+  type BootstrapEvent,
+  bootstrapEventOf,
+} from '../connection-server/session-bootstrap.ts';
 import {ShellRuns} from '../connection-server/shell-runs.ts';
 import {LineSplitter} from '../process/line-splitter.ts';
 import type {LoginTerminalSession} from './login-terminal.ts';
@@ -20,6 +24,8 @@ export interface TerminalRunnerOptions {
   prelude: string;
   /** A marker no script can guess and no earlier run used. */
   newMarker(): string;
+  /** Hears the bootstrap's first report: ready, or the end of the login shell's startup. Never a run's output. */
+  onBootstrap(event: BootstrapEvent): void;
 }
 
 /** Runs scripts on a login terminal's `sh`, one at a time, as the helper runs them on its session in shared mode. */
@@ -42,8 +48,15 @@ export class TerminalSessionRunner implements SessionRunner {
       },
     });
     terminal.send(options.prelude);
+    let ready = false;
     const output = new LineSplitter(line => {
-      this.runs.hear(line);
+      const event = ready ? undefined : bootstrapEventOf(line);
+      if (event === undefined) {
+        this.runs.hear(line);
+        return;
+      }
+      ready = event.kind === 'ready';
+      options.onBootstrap(event);
     });
     terminal.onOutput(text => {
       output.push(text);

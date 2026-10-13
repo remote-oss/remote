@@ -284,6 +284,10 @@ export function steps(
     presentLateFailure: failed => {
       recording.presented.push(failed);
     },
+    maintain: (input, lease, action) => {
+      note(action, undefined);
+      return Promise.resolve({kind: 'done'});
+    },
     installExtensions: () => {
       note('installExtensions', undefined);
       return Promise.resolve();

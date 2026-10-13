@@ -1,6 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
-import type {SessionRun, SessionRunEnd} from '../../src/index.ts';
+import type {
+  BootstrapEvent,
+  SessionRun,
+  SessionRunEnd,
+} from '../../src/index.ts';
 import {commandsFor} from '../../src/connection-server/shell-runs.ts';
 import {RecordingTerminals} from '../../src/testing/recording-terminal.ts';
 import {TerminalSessionRunner} from '../../src/terminal/terminal-runs.ts';
@@ -34,6 +38,7 @@ function fixture() {
     throw new Error('no terminal was opened');
   }
   let markers = 0;
+  const bootstrap: BootstrapEvent[] = [];
   const runner = new TerminalSessionRunner({
     terminal: session,
     scheduler: clock.scheduler(),
@@ -42,6 +47,7 @@ function fixture() {
       markers += 1;
       return `m${String(markers)}`;
     },
+    onBootstrap: event => bootstrap.push(event),
   });
   function start(request: SessionRun = SCRIPT, wait: number = WAIT) {
     const lines: string[] = [];
@@ -52,7 +58,7 @@ function fixture() {
     );
     return {lines, ended};
   }
-  return {clock, terminal, runner, start};
+  return {clock, terminal, runner, start, bootstrap};
 }
 
 /** Lets the promises that are ready run. */
@@ -210,5 +216,49 @@ describe('script runs over the login terminal (card ssh-21 table)', () => {
     );
     await attempt.ended;
     deepStrictEqual(attempt.lines, ['hello', 'debug1: inside']);
+  });
+});
+
+describe('the bootstrap lines over the login terminal (card ssh-38, #443)', () => {
+  it('#443: the ready line is reported, once', () => {
+    const {terminal, bootstrap} = fixture();
+    terminal.write('LAYER1-READY\n');
+    terminal.write('LAYER1-READY\n');
+    deepStrictEqual(bootstrap, [{kind: 'ready'}]);
+  });
+
+  it('F-2704 AC-11: the timeout line is reported with its seconds', () => {
+    const {terminal, bootstrap} = fixture();
+    terminal.write('LAYER1-TIMEOUT 5\r\n');
+    deepStrictEqual(bootstrap, [{kind: 'timeout', seconds: 5}]);
+  });
+
+  it('F-2704 AC-13: the exit line is reported with its status', () => {
+    const {terminal, bootstrap} = fixture();
+    terminal.write('LAYER1-EXITED 1\n');
+    deepStrictEqual(bootstrap, [{kind: 'exited', status: 1}]);
+  });
+
+  it('#443: a run after the ready line gets its own lines, not the marker', async () => {
+    const {terminal, start} = fixture();
+    const attempt = start();
+    terminal.write('LAYER1-READY\nm1:start\nhello\nm1:end 0\n');
+    deepStrictEqual(
+      [attempt.lines, await attempt.ended],
+      [['hello'], {kind: 'ended', status: 0}],
+    );
+  });
+
+  it('#443: a run that prints a marker-like line after the ready line gets it as output', () => {
+    const {terminal, start} = fixture();
+    const attempt = start();
+    terminal.write('LAYER1-READY\nm1:start\nLAYER1-EXITED 1\nm1:end 0\n');
+    deepStrictEqual(attempt.lines, ['LAYER1-EXITED 1']);
+  });
+
+  it('#443: the echo of the prelude is not taken for a marker', () => {
+    const {terminal, bootstrap} = fixture();
+    terminal.write("printf 'LAYER1-READY\\n'\r\n");
+    deepStrictEqual(bootstrap, []);
   });
 });

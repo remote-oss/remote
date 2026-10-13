@@ -279,23 +279,24 @@ async function registerConnectOf(
   served: ServedActivation,
 ): Promise<ConnectRegistration> {
   const window = {alias: (): string => ''};
+  const adapters = adaptersFor(
+    process.env,
+    {
+      prompts: promptEditorOf(vscode, translate),
+      terminals: loginTerminalsOf(vscode, homedir()),
+      failureDialog: failureDialogOf(vscode),
+      licenceDialog: licenceDialogOf(vscode),
+      platformPick: platformPickPortOf(vscode, translate),
+      mitigationPick: mitigationPickPortOf(vscode),
+      downloadProgress: downloadProgressOf(vscode),
+      textInput: textInputOf(vscode),
+      notice: noticeOf(vscode),
+    },
+    ACCEPTANCE_FILES,
+    acceptanceWindowName(),
+  );
   const surfaces = editorSurfacesOf(
-    adaptersFor(
-      process.env,
-      {
-        prompts: promptEditorOf(vscode, translate),
-        terminals: loginTerminalsOf(vscode, homedir()),
-        failureDialog: failureDialogOf(vscode),
-        licenceDialog: licenceDialogOf(vscode),
-        platformPick: platformPickPortOf(vscode, translate),
-        mitigationPick: mitigationPickPortOf(vscode),
-        downloadProgress: downloadProgressOf(vscode),
-        textInput: textInputOf(vscode),
-        notice: noticeOf(vscode),
-      },
-      ACCEPTANCE_FILES,
-      acceptanceWindowName(),
-    ),
+    adapters,
     editorOperationsOf(vscode, () => {
       served.revealLog();
     }),
@@ -348,6 +349,7 @@ async function registerConnectOf(
       translate,
       globalState: context.globalState,
       logger: served.logger,
+      notice: adapters.notice,
     },
     connectAssemblyOf(surfaces, machine, served.logger),
     served.resolversGranted,
