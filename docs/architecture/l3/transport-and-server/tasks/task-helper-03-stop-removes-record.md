@@ -14,13 +14,16 @@ claim) on the old record. If `stop` read, compared and removed the record afterw
 record and leave two helpers for one host. So the helper itself removes its record while it still answers. While it
 answers no acquire can call its record stale, and the windows reconnect only after its endpoint has closed.
 
+**One nonce-checked removal, shared.** lib-helper exports `removeOwnRecord(files, recordFile, nonce)`. It reads
+`recordFile` and removes it only when the record there parses and carries `nonce`. A record with another nonce stays,
+and a missing file is fine. Every removal of a helper's record goes through it: `serve`'s, `stop`'s stale path, and
+lib-ssh's connection helper's.
+
 **`serve`** (`packages/lib-helper/src/runtime/serve.ts`):
 - `ServeOptions` gains `recordFile: string` (the helper's own record) and `files: Pick<RegistryFilePort, 'read' |
   'remove'>`. The helper's start passes them, as it already knows the folder, namespace and key.
 - When the helper ends, by a client's `stop`, its control's `stop` or its end policy: after the end action (if any)
-  and **before** it closes any connection and the endpoint, it reads `recordFile`. It removes the file only when the
-  record there parses and carries its own `nonce`. A record with another nonce, from a newer helper, stays; a missing
-  file is fine.
+  and **before** it closes any connection and the endpoint, it calls `removeOwnRecord(files, recordFile, nonce)`.
 - A failing read or remove is logged with `logLine` and doesn't stop the close.
 
 **`stop`** (`packages/lib-helper/src/client/acquire.ts`):
@@ -32,6 +35,17 @@ answers no acquire can call its record stale, and the windows reconnect only aft
    record only when it still carries the nonce it read in step 1: the same tolerance as `replaceStale`.
 
 `stop` never throws: a failing remove is ignored, as a failing connect is today.
+
+**lib-ssh's connection helper** (`packages/lib-ssh/src/connection-server/helper.ts`, triton on #597): its outer
+`finally { await environment.files.remove(options.recordFile) }` runs after `serve` has closed the endpoint, with no
+nonce check. By then the windows have reconnected, and a new helper may own the record, so the old helper deletes it:
+the very race this card removes. The fix:
+- pass `recordFile` and `files` to `serve`, so the removal happens before the close;
+- make the `finally` call `removeOwnRecord(environment.files, options.recordFile, parameters.nonce)`. It still runs when
+  `serve` throws before it listens, and it keeps a newer helper's record.
+
+No other helper of the family removes its record today. A grep for `files.remove(` and `.remove(recordPath` under
+`packages/*/src` lists the places; the PR says what it found.
 
 ## 2. Rows
 
@@ -54,7 +68,23 @@ answers no acquire can call its record stale, and the windows reconnect only aft
 | `contracts X1: stop with no record is done and removes nothing` | no `remove` call |
 | `contracts X1: a failing remove leaves stop done` | `remove` rejects; `stop` resolves |
 
-The existing `stop` and `serve` rows stay green. lib-helper stays at its gates (100/100/100).
+`packages/lib-helper/test/unit/registry.test.ts` (or the file where the registry's rows are):
+
+| Name | Expected |
+|---|---|
+| `contracts X1: removeOwnRecord removes a record with its nonce` | the file is gone |
+| `contracts X1: removeOwnRecord keeps a record with another nonce, and a file that doesn't parse` | no `remove` |
+| `contracts X1: removeOwnRecord with no file is done` | no `remove`, no throw |
+
+`packages/lib-ssh/test/unit/connection-helper.test.ts` (or the file where `helper.ts`'s rows are):
+
+| Name | Expected |
+|---|---|
+| `contracts X2: the connection helper's record is removed before its endpoint closes` | order: `remove`, then the endpoint's `close` |
+| `contracts X2: an ended connection helper keeps a record a newer helper wrote` | the record file holds another nonce when the helper ends; no `remove` |
+| `contracts X2: a connection helper that fails before it listens removes its own record` | `serve` throws; the record with its nonce is removed |
+
+The existing `stop`, `serve` and connection-helper rows stay green. lib-helper and lib-ssh stay at their gates.
 
 ## 3. Review
 
