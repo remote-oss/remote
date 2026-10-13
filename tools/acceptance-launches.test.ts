@@ -7,15 +7,31 @@ import {
   failureCases,
   LABEL_FORM,
   launchesOf,
-  type PortsCase,
-  portsCases,
-  portsHostSetup,
+  HOST_CASE_SUITES,
+  type HostCase,
+  hostCases,
+  hostSetupOf,
   runnerLaunches,
   suitesOf,
+  withHarnessBases,
   withRunTokens,
 } from './acceptance-launches.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
+
+const [PORTS_SUITE, INSTALL_SUITE] = HOST_CASE_SUITES as [
+  (typeof HOST_CASE_SUITES)[number],
+  (typeof HOST_CASE_SUITES)[number],
+];
+
+/** The labels of the host-case launches, in the order of the suites and their cases. */
+function hostLaunchLabels(): string[] {
+  return HOST_CASE_SUITES.flatMap(suite =>
+    hostCases(REPOSITORY_ROOT, suite.suite).map(
+      hostCase => `${suite.prefix}-${hostCase.label}`,
+    ),
+  );
+}
 
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
@@ -39,9 +55,7 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
-        ...portsCases(REPOSITORY_ROOT).map(
-          portsCase => `ports-${portsCase.label}`,
-        ),
+        ...hostLaunchLabels(),
       ],
     );
   });
@@ -125,9 +139,7 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
-        ...portsCases(REPOSITORY_ROOT).map(
-          portsCase => `ports-${portsCase.label}`,
-        ),
+        ...hostLaunchLabels(),
       ],
     );
   });
@@ -253,10 +265,10 @@ describe('the launches of the VSCodium run', () => {
 
 describe('the ports cases', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
-  const cases = portsCases(REPOSITORY_ROOT);
+  const cases = hostCases(REPOSITORY_ROOT, 'suite-ports');
 
   /** The case of the suite by its label; an error when the cases file lacks it. */
-  function caseOf(label: string): PortsCase {
+  function caseOf(label: string): HostCase {
     const current = cases.find(candidate => candidate.label === label);
     if (current === undefined) {
       throw new Error(`no ports case named ${label}`);
@@ -277,7 +289,7 @@ describe('the ports cases', () => {
           settings: current.settings,
           environment: {HARNESS_PORTS_CASE: 'range'},
           ownScript: true,
-          hostSetup: portsHostSetup(current),
+          hostSetup: hostSetupOf(current, PORTS_SUITE),
         },
       ],
     );
@@ -292,7 +304,7 @@ describe('the ports cases', () => {
 
   it('coverage-13: the setup frees the held ports and the server, then holds each port and waits for it', () => {
     const current = caseOf('range-gaps');
-    deepStrictEqual(portsHostSetup(current), [
+    deepStrictEqual(hostSetupOf(current, PORTS_SUITE), [
       {command: "pkill -f 'n[c] -lk -p'; true"},
       {
         command:
@@ -320,13 +332,13 @@ describe('the ports cases', () => {
 
   it('coverage-13: a case that keeps the server gets no kill of it', () => {
     const current = caseOf('reuse');
-    deepStrictEqual(portsHostSetup(current), [
+    deepStrictEqual(hostSetupOf(current, PORTS_SUITE), [
       {command: "pkill -f 'n[c] -lk -p'; true"},
     ]);
   });
 
   it('coverage-13: a case with no holders frees only the server', () => {
-    deepStrictEqual(portsHostSetup(caseOf('range')).length, 2);
+    deepStrictEqual(hostSetupOf(caseOf('range'), PORTS_SUITE).length, 2);
   });
 
   it('coverage-13: a label outside its form is refused', () => {
@@ -335,7 +347,10 @@ describe('the ports cases', () => {
       workspace.write('tests/acceptance/suite-ports/cases.json', {
         cases: [{label: 'A-b', cite: 'c', settings: {}, outcome: 'connected'}],
       });
-      throws(() => portsCases(workspace.root), /label must match/);
+      throws(
+        () => hostCases(workspace.root, 'suite-ports'),
+        /label must match/,
+      );
     } finally {
       workspace.remove();
     }
@@ -350,10 +365,111 @@ describe('the ports cases', () => {
           {label: 'x', cite: 'c', settings: {}, outcome: 'connected'},
         ],
       });
-      throws(() => portsCases(workspace.root), /share the label "x"/);
+      throws(
+        () => hostCases(workspace.root, 'suite-ports'),
+        /share the label "x"/,
+      );
     } finally {
       workspace.remove();
     }
+  });
+});
+
+describe('the install cases (card coverage-17)', () => {
+  const STOP_SERVER =
+    "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
+    'for i in $(seq 1 20); do ' +
+    "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
+    'sleep 0.5; done; exit 1';
+  const REMOVE = 'rm -rf /home/harness/.vscodium-server-insiders /tmp/srv';
+
+  /** An install case of `fields`, with the label and cite every case has. */
+  function installCase(fields: Partial<HostCase>): HostCase {
+    return {label: 'x', cite: 'c', settings: {}, ...fields};
+  }
+
+  it('coverage-17: a case that keeps nothing stops the server and removes the data folder', () => {
+    deepStrictEqual(hostSetupOf(installCase({}), INSTALL_SUITE), [
+      {command: "pkill -f 'n[c] -lk -p'; true"},
+      {command: STOP_SERVER},
+      {command: REMOVE},
+    ]);
+  });
+
+  it('coverage-17: a case that keeps the files stops the server and removes nothing', () => {
+    deepStrictEqual(
+      hostSetupOf(installCase({keepFiles: true}), INSTALL_SUITE),
+      [{command: "pkill -f 'n[c] -lk -p'; true"}, {command: STOP_SERVER}],
+    );
+  });
+
+  it('coverage-17: a case that keeps the server neither stops nor removes it', () => {
+    deepStrictEqual(
+      hostSetupOf(installCase({keepServer: true}), INSTALL_SUITE),
+      [{command: "pkill -f 'n[c] -lk -p'; true"}],
+    );
+  });
+
+  it("coverage-17: a case's own commands run last, in order", () => {
+    deepStrictEqual(
+      hostSetupOf(
+        installCase({keepServer: true, setup: ['true a', 'true b']}),
+        INSTALL_SUITE,
+      ),
+      [
+        {command: "pkill -f 'n[c] -lk -p'; true"},
+        {command: 'true a'},
+        {command: 'true b'},
+      ],
+    );
+  });
+
+  it('coverage-17: each install case is a launch of its own, named install-<label>, with its variable', () => {
+    const install = launchesOf(REPOSITORY_ROOT).filter(launch =>
+      launch.label.startsWith('install-'),
+    );
+    deepStrictEqual(
+      install.map(launch => [
+        launch.label,
+        launch.suite,
+        launch.kind === 'plain' ? undefined : launch.environment,
+      ]),
+      hostCases(REPOSITORY_ROOT, 'suite-install').map(hostCase => [
+        `install-${hostCase.label}`,
+        'suite-install',
+        {HARNESS_INSTALL_CASE: hostCase.label},
+      ]),
+    );
+  });
+
+  it("coverage-17: the download host's bases are put into a launch's settings, at any depth, and nothing else", () => {
+    deepStrictEqual(
+      withHarnessBases(
+        {
+          template: '${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}',
+          nested: [{local: '${HARNESS_DOWNLOADS_LOCAL}/x'}],
+          other: '${HARNESS_RUN_FOLDER}',
+          count: 3,
+        },
+        {
+          HARNESS_DOWNLOADS_HTTP: 'http://downloads:9',
+          HARNESS_DOWNLOADS_LOCAL: 'http://127.0.0.1:9',
+        },
+      ),
+      {
+        template: 'http://downloads:9/ok/${os}-${arch}/${commit}',
+        nested: [{local: 'http://127.0.0.1:9/x'}],
+        other: '${HARNESS_RUN_FOLDER}',
+        count: 3,
+      },
+    );
+  });
+
+  it('coverage-17: a base the run has not got is left as written', () => {
+    deepStrictEqual(
+      withHarnessBases('${HARNESS_DOWNLOADS_HTTPS}/ok', {}),
+      '${HARNESS_DOWNLOADS_HTTPS}/ok',
+    );
   });
 });
 

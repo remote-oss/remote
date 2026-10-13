@@ -219,6 +219,20 @@ busy) and wait until `netstat -ltn` shows it. The harness writes the ports scrip
 launch: dismiss the connect's dialog and its pick of actions. A connected case leaves it unused, which is no
 failure.
 
+### Install cases
+
+The install cases of `suite-install/cases.json` prove F-2403, F-3902 and F-2405's download modes end to end the same
+way: one launch per case, `install-<label>`, after the ports cases, with `HARNESS_INSTALL_CASE` naming the case. Both
+suites are host-case suites (`HOST_CASE_SUITES` in `tools/acceptance-launches.ts`): a case may keep the server
+(`keepServer`), keep only its files (`keepFiles`), add host commands (`setup`) and give its own script (`script`,
+default: dismiss the dialog and its pick). An install case that keeps nothing also removes
+`/home/harness/.vscodium-server-insiders` and `/tmp/srv`. A case's settings may name the download host's bases as
+`${HARNESS_DOWNLOADS_HTTP}`, `${HARNESS_DOWNLOADS_HTTPS}`, `${HARNESS_DOWNLOADS_LICENSED}` and
+`${HARNESS_DOWNLOADS_LOCAL}`; the run puts them in when it writes the launch's settings, and leaves the product's own
+`${…}` placeholders as written. Before each launch the run notes how many requests the download host has logged, in
+`<run>/<label>-requests-start`, so `downloadRequests()` of `suite-install/install.ts` reads only the case's own. The
+host's downloaders send a `Wget` or `curl` user agent, and the editor's download doesn't.
+
 A launch with host setup also waits the helper's grace before it starts: the helper of the previous launch outlives
 its window by `HELPER_GRACE_MILLISECONDS` of the extension, and a live one would be reused by the resolve without any
 check. The run's `FRESH_RESOLVE_WAIT_MILLISECONDS` is that grace, and a unit row keeps the two equal. The cases need

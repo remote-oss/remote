@@ -552,8 +552,22 @@ describe('the scripted adapters answer from the script only', () => {
         answer: 'decline',
         matched: true,
         window: WINDOW,
+        detail: 'd',
       },
     ]);
+  });
+
+  it('F-3902 AC-14: the licence modal line keeps the detail the modal was shown with, also when nothing matches', async () => {
+    const {adapters, files} = scripted([]);
+    await adapters.licenceDialog.showModal(
+      'The licence terms',
+      'Read the terms at https://example.invalid/terms.',
+      ['Accept', 'Cancel'],
+    );
+    deepStrictEqual(
+      files.lines().map(line => line.detail),
+      ['Read the terms at https://example.invalid/terms.'],
+    );
   });
 
   it('S7: a masked input gets the scripted text', async () => {

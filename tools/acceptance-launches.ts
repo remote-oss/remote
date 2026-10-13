@@ -116,6 +116,28 @@ const RUN_FOLDER_TOKEN = '<run>';
 /** The token for the run's `PATH`. */
 const RUN_PATH_TOKEN = '<path>';
 
+/** A value with `replace` applied to each string in it, at any depth; every other value is kept. */
+function withStrings<Value>(
+  value: Value,
+  replace: (text: string) => string,
+): Value {
+  if (typeof value === 'string') {
+    return replace(value) as Value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => withStrings(item as unknown, replace)) as Value;
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        withStrings(item as unknown, replace),
+      ]),
+    ) as Value;
+  }
+  return value;
+}
+
 /**
  * A value with the run's tokens put in: each string in it, at any depth, with the run's folder in place of `<run>` and
  * the run's `PATH` in place of `<path>`.
@@ -125,25 +147,38 @@ export function withRunTokens<Value>(
   runFolder: string,
   searchPath: string,
 ): Value {
-  if (typeof value === 'string') {
-    return value
+  return withStrings(value, text =>
+    text
       .replaceAll(RUN_FOLDER_TOKEN, runFolder)
-      .replaceAll(RUN_PATH_TOKEN, searchPath) as Value;
-  }
-  if (Array.isArray(value)) {
-    return value.map(item =>
-      withRunTokens(item as unknown, runFolder, searchPath),
-    ) as Value;
-  }
-  if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        withRunTokens(item as unknown, runFolder, searchPath),
-      ]),
-    ) as Value;
-  }
-  return value;
+      .replaceAll(RUN_PATH_TOKEN, searchPath),
+  );
+}
+
+/** The harness variables a launch's settings may name, as `${<name>}`: the download host's bases. */
+const HARNESS_BASE_NAMES: readonly string[] = [
+  'HARNESS_DOWNLOADS_HTTP',
+  'HARNESS_DOWNLOADS_HTTPS',
+  'HARNESS_DOWNLOADS_LICENSED',
+  'HARNESS_DOWNLOADS_LOCAL',
+];
+
+/**
+ * A value with the run's download bases put in: each string in it, at any depth, with `${<name>}` replaced by the
+ * value of each name of `HARNESS_BASE_NAMES` that `bases` holds. Every other `${…}` stays as written, so the product's
+ * own placeholders reach the product.
+ */
+export function withHarnessBases<Value>(
+  value: Value,
+  bases: Readonly<Record<string, string | undefined>>,
+): Value {
+  return withStrings(value, text =>
+    HARNESS_BASE_NAMES.reduce((replaced, name) => {
+      const base = bases[name];
+      return base === undefined
+        ? replaced
+        : replaced.replaceAll(`\${${name}}`, base);
+    }, text),
+  );
 }
 
 /** One launch of the client search: the `remote.SSH.path` it sets, what it extra sets, and the calls it must make. */
@@ -214,9 +249,12 @@ export function failureLabel(alias: string): string {
   return `failure-${alias}`;
 }
 
-/** One ports case of the VSCodium run: one launch per case, with its host setup and its expectations. */
-export interface PortsCase {
-  /** The name of the case; the launch is `ports-<label>`. */
+/**
+ * One case of a host-case suite: one launch per case, with its host setup, its settings and its script. The suite's
+ * own rows read the rest of the case's fields from the same cases file.
+ */
+export interface HostCase {
+  /** The name of the case; the launch is `<suite prefix>-<label>`. */
   label: string;
   /** The cite of the case's rows: the criterion of the case and its label, in parentheses. */
   cite: string;
@@ -226,54 +264,88 @@ export interface PortsCase {
   settings: Record<string, unknown>;
   /** The ports a non-product listener holds on the host before the connect. */
   holders?: number[];
-  /** Keeps the previous launch's server on the host, so the case reuses it. */
+  /** Keeps the previous launch's server, running, and its files on the host, so the case reuses them. */
   keepServer?: boolean;
-  /** How the case's connect ends. */
-  outcome: 'connected' | 'connectedOrDialog';
-  /** The port the server listens on, or "random" for a port outside the case's ranges. */
-  port?: number | 'random';
-  /** The address the server listens on, when the case checks it. */
-  address?: string;
-  /** The case checks that another machine of the run reaches the server's port. */
-  reaches?: boolean;
-  /** The port on which nothing new may listen. */
-  noListenerOn?: number;
-  /** The case checks that no notice appeared. */
-  noNotice?: boolean;
+  /** Keeps the previous launch's files on the host but stops its server. */
+  keepFiles?: boolean;
+  /** Further commands the host's `sh` runs, in order, after the suite's own setup. */
+  setup?: string[];
+  /** The script the case's window answers from; the suite's dialog script when absent. */
+  script?: unknown[];
 }
 
-/** The ports cases, in the order the run makes their launches, from tests/acceptance/suite-ports/cases.json. */
-export function portsCases(root: string): PortsCase[] {
+/** A suite of host cases: its folder, the prefix of its launches' labels, and what its setup removes. */
+export interface HostCaseSuite {
+  /** The folder under tests/acceptance; its `cases.json` lists the cases. */
+  suite: string;
+  /** The prefix of the launches' labels. */
+  prefix: string;
+  /** The variable that names the case to the window's rows. */
+  caseVariable: string;
+  /** The folders the setup removes before a case that keeps nothing. */
+  removed: readonly string[];
+}
+
+/** The host-case suites, in the order the run makes their launches. */
+export const HOST_CASE_SUITES: readonly HostCaseSuite[] = [
+  {
+    suite: 'suite-ports',
+    prefix: 'ports',
+    caseVariable: 'HARNESS_PORTS_CASE',
+    removed: [],
+  },
+  {
+    suite: 'suite-install',
+    prefix: 'install',
+    caseVariable: 'HARNESS_INSTALL_CASE',
+    removed: ['/home/harness/.vscodium-server-insiders', '/tmp/srv'],
+  },
+];
+
+/** The cases of a host-case suite, in the order the run makes their launches, from its cases.json. */
+export function hostCases(root: string, suite: string): HostCase[] {
   const {cases} = JSON.parse(
     readFileSync(
-      path.join(root, 'tests', 'acceptance', 'suite-ports', 'cases.json'),
+      path.join(root, 'tests', 'acceptance', suite, 'cases.json'),
       'utf8',
     ),
-  ) as {cases: PortsCase[]};
+  ) as {cases: HostCase[]};
   const labels: string[] = [];
   for (const entry of cases) {
     // The label becomes part of file names, a test-cli label and an extension-host variable.
     if (!LABEL_FORM.test(entry.label)) {
       throw new Error(
-        `a ports case's label must match ${String(LABEL_FORM)}: "${entry.label}"`,
+        `a ${suite} case's label must match ${String(LABEL_FORM)}: "${entry.label}"`,
       );
     }
     if (labels.includes(entry.label)) {
-      throw new Error(`two ports cases share the label "${entry.label}"`);
+      throw new Error(`two ${suite} cases share the label "${entry.label}"`);
     }
     labels.push(entry.label);
   }
   return cases;
 }
 
+/** The label of a host case's launch. */
+export function hostCaseLabel(
+  suite: HostCaseSuite,
+  hostCase: HostCase,
+): string {
+  return `${suite.prefix}-${hostCase.label}`;
+}
+
 /**
- * The host setup of a ports case, in the order the run runs it: free the held ports, free the server unless the case
- * keeps it, then hold the case's ports, each waited on as it starts. The brackets keep `pkill` from matching the
- * `sh -c` that runs it.
+ * The host setup of a host case, in the order the run runs it: free the held ports; stop the server unless the case
+ * keeps it; remove the suite's folders unless the case keeps the server or its files; hold the case's ports, each
+ * waited on as it starts; then the case's own commands. The brackets keep `pkill` from matching the `sh -c` that runs
+ * it.
  */
-export function portsHostSetup(portsCase: PortsCase): HostSetupEntry[] {
+export function hostSetupOf(
+  hostCase: HostCase,
+  suite: HostCaseSuite,
+): HostSetupEntry[] {
   const entries: HostSetupEntry[] = [{command: "pkill -f 'n[c] -lk -p'; true"}];
-  if (portsCase.keepServer !== true) {
+  if (hostCase.keepServer !== true) {
     entries.push({
       command:
         "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
@@ -282,7 +354,14 @@ export function portsHostSetup(portsCase: PortsCase): HostSetupEntry[] {
         'sleep 0.5; done; exit 1',
     });
   }
-  const holders = portsCase.holders ?? [];
+  if (
+    hostCase.keepServer !== true &&
+    hostCase.keepFiles !== true &&
+    suite.removed.length > 0
+  ) {
+    entries.push({command: `rm -rf ${suite.removed.join(' ')}`});
+  }
+  const holders = hostCase.holders ?? [];
   for (const holder of holders) {
     entries.push({
       command: `nc -lk -p ${String(holder)} -s 127.0.0.1 -e /bin/true`,
@@ -296,6 +375,9 @@ export function portsHostSetup(portsCase: PortsCase): HostSetupEntry[] {
         `netstat -ltn | grep -q ' 127.0.0.1:${String(holder)} ' && exit 0; ` +
         'sleep 0.25; done; exit 1',
     });
+  }
+  for (const command of hostCase.setup ?? []) {
+    entries.push({command});
   }
   return entries;
 }
@@ -311,8 +393,8 @@ export function portsHostSetup(portsCase: PortsCase): HostSetupEntry[] {
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
  * same without enabling the proposed API; `explorer`, `explorer-alone` and `explorer-no-proposals` do the same with
  * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
- * proposed API; and each ports case of suite-ports/cases.json runs after every other launch, with its host setup and
- * its own script.
+ * proposed API; and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
+ * with its host setup and its own script.
  */
 export function launchesOf(root: string): Launch[] {
   const launches: Launch[] = [
@@ -398,18 +480,20 @@ export function launchesOf(root: string): Launch[] {
       suite: 'explorer-no-proposals',
       proposedApi: false,
     },
-    ...portsCases(root).map((portsCase): Launch => ({
-      label: `ports-${portsCase.label}`,
-      runner: 'runner-remote',
-      suite: 'suite-ports',
-      folderUri: `vscode-remote://ssh-remote+${
-        portsCase.authority ?? 'harness'
-      }/home/harness`,
-      settings: portsCase.settings,
-      environment: {HARNESS_PORTS_CASE: portsCase.label},
-      ownScript: true,
-      hostSetup: portsHostSetup(portsCase),
-    })),
+    ...HOST_CASE_SUITES.flatMap(suite =>
+      hostCases(root, suite.suite).map((hostCase): Launch => ({
+        label: hostCaseLabel(suite, hostCase),
+        runner: 'runner-remote',
+        suite: suite.suite,
+        folderUri: `vscode-remote://ssh-remote+${
+          hostCase.authority ?? 'harness'
+        }/home/harness`,
+        settings: hostCase.settings,
+        environment: {[suite.caseVariable]: hostCase.label},
+        ownScript: true,
+        hostSetup: hostSetupOf(hostCase, suite),
+      })),
+    ),
   ];
   return launches;
 }

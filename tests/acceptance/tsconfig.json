@@ -12,6 +12,7 @@
     "${configDir}/suite-reconnect",
     "${configDir}/suite-failure",
     "${configDir}/suite-ports",
+    "${configDir}/suite-install",
     "${configDir}/suite-terminal",
     "${configDir}/suite-client",
     "${configDir}/suite-slow",
@@ -19,6 +20,7 @@
     "${configDir}/window-agent/src",
     "${configDir}/suite-failure/cases.json",
     "${configDir}/suite-ports/cases.json",
+    "${configDir}/suite-install/cases.json",
     "${configDir}/suite-client/cases.json"
   ],
   "references": [

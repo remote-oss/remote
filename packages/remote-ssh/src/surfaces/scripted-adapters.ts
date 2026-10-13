@@ -88,6 +88,8 @@ export interface RecordLine {
   buttons?: string[];
   /** The labels of the rows the pick was shown with, in order; only the lines of a `mitigationPick`, a `hostPick` or a `filePick` surface have it. */
   items?: string[];
+  /** The detail text the licence modal was shown with; only the lines of a `licenceModal` surface have it. */
+  detail?: string;
 }
 
 /** The name of a window: the last segment of its first workspace folder's path, or `local` for a window without one. */
@@ -246,7 +248,7 @@ export function scriptedAdapters(
     answerOf: (
       entry: Extract<ScriptEntry, {surface: Kind}>,
     ) => Given<Value> | undefined,
-    shown: Pick<RecordLine, 'buttons' | 'items'> = {},
+    shown: Pick<RecordLine, 'buttons' | 'items' | 'detail'> = {},
   ): Value | undefined {
     const entry = entries[cursor];
     if (entry?.surface === surface && question.includes(entry.match)) {
@@ -404,10 +406,15 @@ export function scriptedAdapters(
     licenceDialog: {
       showModal: (message, detail, buttons) =>
         Promise.resolve(
-          answerFrom('licenceModal', message, entry => ({
-            value: entry.answer === 'decline' ? buttons.at(-1) : undefined,
-            recorded: entry.answer,
-          })),
+          answerFrom(
+            'licenceModal',
+            message,
+            entry => ({
+              value: entry.answer === 'decline' ? buttons.at(-1) : undefined,
+              recorded: entry.answer,
+            }),
+            {detail},
+          ),
         ),
     },
     platformPick: {
