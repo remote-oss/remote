@@ -40,7 +40,14 @@ VSCodium build's commit, not upstream vscode's, and the patched CLI expands its 
 | athena on #412 | the connector holding a CLI connection, then `dispose()` | the connection's `release()` ran |
 | athena on #412 | the stop script | it holds `kill "$CLI_STOP_PID"` and no `pkill` |
 | athena on #412 (real host) | a CLI that served the real server, then `stopCli` with its pid | within 5 s the CLI's pid is gone, and the server's process still runs |
-| F-2103 BR-8 (real host) | the same, then a new CLI and `serve` | the reply is `serving`, and a `serverlog` line reads `Found running server` |
+| F-2103 BR-8 (real host) | the same, then a new CLI and `serve` | the reply is `serving`, a `serverlog` line reads `Found running server`, and a server socket opened with the connection token the second connect hands its editor connects (triton on #519; which token that is waits on athena's ruling, section 4) |
+
+## 4. Open: the found server's connection token (triton on #519)
+
+Measured 2026-10-13: the CLI starts the server with `--connection-token=<the first serve's token>` on its command line,
+and a later `serve` that finds it keeps that token. Two consequences are with athena: a second window is handed a token
+the server refuses, and the token is visible in `ps` (S10). This card builds no token change. Its last row waits for
+the ruling.
 
 ## 3. Gates and review
 
