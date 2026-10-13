@@ -2,6 +2,7 @@ import {deepStrictEqual, doesNotThrow, strictEqual} from 'node:assert';
 import {existsSync, statSync} from 'node:fs';
 import path from 'node:path';
 import {
+  debuggingPortFile,
   editorArguments,
   launchFiles,
   packageWindowAgent,
@@ -12,7 +13,7 @@ import {
   runPlainLaunch,
   startDetached,
 } from './acceptance-plain.ts';
-import {type PlainLaunch} from './acceptance-launches.ts';
+import {launchesOf, type PlainLaunch} from './acceptance-launches.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -32,6 +33,120 @@ describe('the editor arguments of a run', () => {
       '--enable-proposed-api=remote-oss.acceptance-window-agent',
       '--disable-workspace-trust',
     ]);
+  });
+});
+
+describe('the explorer launches (card tooling-30)', () => {
+  const launches = launchesOf(REPOSITORY_ROOT);
+
+  function launchNamed(label: string): PlainLaunch {
+    const found = launches.find(launch => launch.label === label);
+    if (found?.kind !== 'plain') {
+      throw new Error(`no plain launch ${label}`);
+    }
+    return found;
+  }
+
+  it('tooling-30: a launch without extensions of its own uses the run’s folder and the run’s two proposals only', () => {
+    deepStrictEqual(
+      [
+        editorArguments('/run', true),
+        editorArguments('/run', true, launchNamed('windows')),
+      ].map(list =>
+        list.filter(
+          argument =>
+            argument.startsWith('--extensions-dir') ||
+            argument.startsWith('--enable-proposed-api'),
+        ),
+      ),
+      [
+        [
+          '--extensions-dir=/run/extensions',
+          '--enable-proposed-api=remote-oss.remote-ssh',
+          '--enable-proposed-api=remote-oss.acceptance-window-agent',
+        ],
+        [
+          '--extensions-dir=/run/extensions',
+          '--enable-proposed-api=remote-oss.remote-ssh',
+          '--enable-proposed-api=remote-oss.acceptance-window-agent',
+        ],
+      ],
+    );
+  });
+
+  it('tooling-30: the explorer launch has its own extensions folder and the explorer’s proposal after the run’s two', () => {
+    deepStrictEqual(
+      editorArguments('/run', true, launchNamed('explorer')).filter(
+        argument =>
+          argument.startsWith('--extensions-dir') ||
+          argument.startsWith('--enable-proposed-api'),
+      ),
+      [
+        '--extensions-dir=/run/extensions-explorer',
+        '--enable-proposed-api=remote-oss.remote-ssh',
+        '--enable-proposed-api=remote-oss.acceptance-window-agent',
+        '--enable-proposed-api=remote-oss.remote-explorer',
+      ],
+    );
+  });
+
+  it('tooling-30: the explorer launch without proposals keeps its own folder and enables no proposal', () => {
+    deepStrictEqual(
+      editorArguments(
+        '/run',
+        false,
+        launchNamed('explorer-no-proposals'),
+      ).filter(
+        argument =>
+          argument.startsWith('--extensions-dir') ||
+          argument.startsWith('--enable-proposed-api'),
+      ),
+      ['--extensions-dir=/run/extensions-explorer-no-proposals'],
+    );
+  });
+
+  it('tooling-30: explorer-alone starts with a debugging port and remote-ssh disabled, before the new window', () => {
+    const programArguments = plainEditorOf(
+      '/editor',
+      '/run',
+      launchNamed('explorer-alone'),
+      {},
+    ).programArguments;
+    deepStrictEqual(
+      programArguments.slice(
+        editorArguments('/run', true, launchNamed('explorer-alone')).length,
+      ),
+      [
+        '--remote-debugging-port=0',
+        '--disable-extension=remote-oss.remote-ssh',
+        '--new-window',
+      ],
+    );
+  });
+
+  it('tooling-30: the windows and no-proposals launches get no debugging port and disable nothing', () => {
+    deepStrictEqual(
+      ['windows', 'no-proposals'].flatMap(label =>
+        plainEditorOf(
+          '/editor',
+          '/run',
+          launchNamed(label),
+          {},
+        ).programArguments.filter(
+          argument =>
+            argument.startsWith('--remote-debugging-port') ||
+            argument.startsWith('--disable-extension'),
+        ),
+      ),
+      [],
+    );
+  });
+
+  it('tooling-30: the port file is the user-data folder’s DevToolsActivePort', () => {
+    strictEqual(
+      debuggingPortFile('/run'),
+      path.join('/run', 'user-data', 'DevToolsActivePort'),
+    );
   });
 });
 
@@ -183,6 +298,30 @@ describe('runPlainLaunch', () => {
     const {steps, happened} = recordingSteps('pass');
     await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
     deepStrictEqual(happened, ['start', 'tests', 'stop']);
+  });
+
+  it('tooling-30: it removes a port file an earlier launch left before it starts the editor', async () => {
+    const workspace = new TemporaryWorkspace('acceptance-port');
+    try {
+      workspace.write('user-data/DevToolsActivePort', '9222\n/devtools');
+      const {steps} = recordingSteps('pass');
+      const seen: boolean[] = [];
+      await runPlainLaunch(
+        '/repo',
+        {...PLAIN_RUN, runFolder: workspace.root},
+        LAUNCH,
+        {
+          ...steps,
+          start: program => {
+            seen.push(existsSync(debuggingPortFile(workspace.root)));
+            return steps.start(program);
+          },
+        },
+      );
+      deepStrictEqual(seen, [false]);
+    } finally {
+      workspace.remove();
+    }
   });
 
   it('D-85: it stops the editor when the tests fail', async () => {

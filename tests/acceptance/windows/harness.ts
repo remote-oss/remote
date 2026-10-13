@@ -43,7 +43,7 @@ export interface RecordLine {
 }
 
 /** A harness variable of the run; throws when the tests run outside the harness. */
-function variable(name: string): string {
+export function variable(name: string): string {
   const value = process.env[name];
   if (value === undefined || value === '') {
     throw new Error(

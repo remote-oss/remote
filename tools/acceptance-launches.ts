@@ -49,6 +49,15 @@ export interface RunnerLaunch extends LaunchCommon {
 export interface PlainLaunch extends LaunchCommon {
   kind: 'plain';
   suite: string;
+  /**
+   * Extensions of `LAUNCH_EXTENSIONS`, by id, that this launch alone installs, with their proposed API: the launch
+   * gets an extensions folder of its own, `<run>/extensions-<label>`, so the other launches never see them.
+   */
+  withExtensions?: readonly string[];
+  /** Whether the editor opens a debugging port for the run's renderer helpers. */
+  debuggingPort?: boolean;
+  /** Extensions, by id, that the editor starts disabled. */
+  disabledExtensions?: readonly string[];
 }
 
 /** One launch of the VSCodium run, in the order the run makes them. */
@@ -67,6 +76,20 @@ export interface FailureCase {
   /** The bound the dialog's time is checked against: at most `milliseconds` after the first record line whose surface is `from`. */
   bound?: {from: string; milliseconds: number; cite: string};
 }
+
+/** The extensions only some launches install, by id, with their package folders. */
+export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
+  ['remote-oss.remote-explorer', 'remote-explorer'],
+]);
+
+/** What the explorer's launches share: the explorer, its proposed API and the debugging port. */
+const EXPLORER_LAUNCH = {
+  kind: 'plain',
+  withExtensions: ['remote-oss.remote-explorer'],
+  debuggingPort: true,
+  // The renderer helpers find a window by its title: its folder name in brackets, `[]` for a window with none.
+  settings: {'window.title': '[${rootName}]'},
+} as const;
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
@@ -120,7 +143,9 @@ export function failureLabel(alias: string): string {
  * suite-terminal with `remote.SSH.useLocalServer` off; `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; `windows` starts the editor plainly, with no
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
- * same without enabling the proposed API.
+ * same without enabling the proposed API; `explorer`, `explorer-alone` and `explorer-no-proposals` do the same with
+ * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
+ * proposed API.
  */
 export function launchesOf(root: string): Launch[] {
   const launches: Launch[] = [
@@ -166,6 +191,19 @@ export function launchesOf(root: string): Launch[] {
       label: 'no-proposals',
       kind: 'plain',
       suite: 'no-proposals',
+      proposedApi: false,
+    },
+    {...EXPLORER_LAUNCH, label: 'explorer', suite: 'explorer'},
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-alone',
+      suite: 'explorer-alone',
+      disabledExtensions: ['remote-oss.remote-ssh'],
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-no-proposals',
+      suite: 'explorer-no-proposals',
       proposedApi: false,
     },
   ];
