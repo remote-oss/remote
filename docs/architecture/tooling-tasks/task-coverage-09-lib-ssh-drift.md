@@ -20,6 +20,13 @@ Builder: selene.
 "src/config/platform.ts": "declares a type only; nothing in it runs"
 ```
 
+**`packages/lib-ssh/README.md`:** the `Coverage exclusions` row (line 75 on main) names every excluded file, and
+`pnpm coverage` fails on an exclusion the README doesn't list (themis on #528). The row becomes exactly:
+
+```md
+| Coverage exclusions | `src/process/ports.ts` and `src/config/platform.ts`: each declares types only, and nothing in it runs |
+```
+
 **`packages/lib-ssh/test/unit/hosts.test.ts`:** one row at the end of
 `describe('listHosts (the host entries of the files in effect)', …)`:
 
