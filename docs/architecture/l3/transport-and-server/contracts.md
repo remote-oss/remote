@@ -745,6 +745,9 @@ the session outlives the window, so the window's release and the extension's `de
 best effort (#412, triton on #477): the CLI process only, behind the exact two-field guard, never its children, since
 the server it started is the one the other windows' CLIs serve. A CLI a crash leaves ends with the shared session.
 Nothing stops another connect's CLI, and the shared record holds no CLI token.
+The CLI's agent-host supervisor (`<cli> --cli-data-dir …`) is one per host: the first `command-shell` starts it,
+later ones use it, and it outlives every CLI and the shared session, as the server does (daedalus measured, #412).
+The release stop never touches it.
 
 **Logging.** Every `serverlog` line goes to the connect's log. Only the error line (level 4) may reach a failure's
 detail, as text the presenter shows through S031 (contracts R1: no other library text in a dialog).
