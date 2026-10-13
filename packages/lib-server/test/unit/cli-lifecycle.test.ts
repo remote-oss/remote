@@ -388,6 +388,14 @@ describe("the CLI's stop (card cli-04, themis on #458)", () => {
     );
   });
 
+  it('athena on #412: the stop kills the CLI process only, never its children, so the server stays', async () => {
+    const text = await stopScript();
+    deepStrictEqual(
+      [text.includes('kill "$CLI_STOP_PID"'), text.includes('pkill')],
+      [true, false],
+    );
+  });
+
   it('themis on #458: the check compares the first argument with the CLI file and the second with command-shell', async () => {
     const text = await stopScript();
     deepStrictEqual(

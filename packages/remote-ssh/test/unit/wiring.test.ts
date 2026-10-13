@@ -2,6 +2,7 @@ import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
+import {RecordingChannel} from 'lib-host/testing/recording-channel';
 import {openCliControl} from 'lib-server';
 import {
   fakeCli,
@@ -1101,8 +1102,9 @@ describe("the composition's CLI path", () => {
     deepStrictEqual(seen.presented, ['serverInstall']);
   });
 
-  it("connect-14: the CLI's install, start and stop are this connect's server steps'", async () => {
-    const {ports} = portsOf({
+  /** The steps of a located connect whose plan takes the CLI path, with the plan and what the fakes saw. */
+  async function cliPlanned() {
+    const {ports, seen} = portsOf({
       cliTemplate: 'https://example.invalid/cli-${os}-${arch}.tar.gz',
       useExecServer: true,
     });
@@ -1112,6 +1114,11 @@ describe("the composition's CLI path", () => {
     if (!('plan' in planned) || planned.plan.kind !== 'cli') {
       throw new Error('the plan should take the CLI path');
     }
+    return {seen, steps, plan: planned.plan};
+  }
+
+  it("connect-14: the CLI's install, start and stop are this connect's server steps'", async () => {
+    const {steps, plan} = await cliPlanned();
     const channels = [1, 2, 3].map(() => channelAnswering(lines('Ok')));
     const [installOn, startOn, stopOn] = channels.map(leaseOn);
     const signal = new AbortController().signal;
@@ -1119,7 +1126,7 @@ describe("the composition's CLI path", () => {
       inputFor('dev'),
       installOn ?? leaseOn(channelAnswering([])),
       HOST,
-      {...planned.plan, download: false},
+      {...plan, download: false},
       () => undefined,
       signal,
     );
@@ -1127,7 +1134,7 @@ describe("the composition's CLI path", () => {
       inputFor('dev'),
       startOn ?? leaseOn(channelAnswering([])),
       HOST,
-      planned.plan,
+      plan,
       'control-token',
       signal,
     );
@@ -1135,12 +1142,74 @@ describe("the composition's CLI path", () => {
       inputFor('dev'),
       stopOn ?? leaseOn(channelAnswering([])),
       HOST,
-      planned.plan,
+      plan,
       88,
     );
     deepStrictEqual(
       channels.map(channel => channel.calls.length > 0),
       [true, true, true],
+    );
+  });
+
+  /** The steps of a CLI plan and the stop of process 88 over a channel that holds the stop until it's cancelled. */
+  async function heldStop() {
+    const {seen, steps, plan} = await cliPlanned();
+    const channel = new RecordingChannel({
+      identity: 'devbox',
+      platformHint: 'linux',
+      scripts: [
+        {
+          interpreter: 'posixShell',
+          matches: () => true,
+          lines: [],
+          ending: {kind: 'holdUntilCancelled'},
+        },
+      ],
+    });
+    let settled = false;
+    void steps
+      .stopCli(inputFor('dev'), leaseOn(channel), HOST, plan, 88)
+      .then(() => {
+        settled = true;
+      });
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+    return {seen, channel, settled: () => settled};
+  }
+
+  it('athena on #519: a stop the host never answers settles once the 10 s bound passes, not before', async () => {
+    const {seen, settled} = await heldStop();
+    seen.clock.advance(9999);
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+    const before = settled();
+    seen.clock.advance(1);
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+    deepStrictEqual([before, settled()], [false, true]);
+  });
+
+  it("athena on #519: the bound aborts the stop's own signal", async () => {
+    const {seen, channel} = await heldStop();
+    seen.clock.advance(10000);
+    const [call] = channel.calls;
+    deepStrictEqual(
+      call?.operation === 'runScript' && call.request.cancellation.aborted,
+      true,
+    );
+  });
+
+  it('athena on #519: a stop past the bound is logged', async () => {
+    const {seen} = await heldStop();
+    seen.clock.advance(10000);
+    deepStrictEqual(
+      seen.sink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('the CLI was not stopped')),
+      ['the CLI was not stopped within 10000 ms'],
     );
   });
 

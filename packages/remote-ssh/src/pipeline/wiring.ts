@@ -25,6 +25,7 @@ import {
   connectionLimitsFor,
   effectiveConnectTimeoutSeconds,
   FIRST_SERVE_MILLISECONDS,
+  HELPER_REQUEST_MILLISECONDS,
   HOST_ZERO_TIMEOUT_SECONDS,
 } from './bounds.ts';
 import type {PhaseEvent} from './connect.ts';
@@ -318,7 +319,27 @@ export function stepsOf(
     installCli: (input, ...rest) =>
       serverSteps(input).installCli(input, ...rest),
     startCli: (input, ...rest) => serverSteps(input).startCli(input, ...rest),
-    stopCli: (input, ...rest) => serverSteps(input).stopCli(input, ...rest),
+    stopCli: (input, lease, host, plan, processId) =>
+      new Promise<void>(resolve => {
+        const bound = new AbortController();
+        const stopTimer = ports.cliPath.scheduler.setTimer(
+          HELPER_REQUEST_MILLISECONDS,
+          () => {
+            bound.abort();
+            ports.logger.warn(
+              `the CLI was not stopped within ${String(HELPER_REQUEST_MILLISECONDS)} ms`,
+            );
+            resolve();
+          },
+        );
+        function settle(): void {
+          stopTimer();
+          resolve();
+        }
+        void serverSteps(input)
+          .stopCli(input, lease, host, plan, processId, bound.signal)
+          .then(settle, settle);
+      }),
     connectControl: async port => {
       try {
         return await ports.cliPath.local.connect(port);

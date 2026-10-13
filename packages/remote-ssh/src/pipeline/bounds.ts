@@ -59,7 +59,7 @@ export const HOST_LOCK_ATTEMPTS = 30;
 export const HOST_LOCK_INTERVAL_MILLISECONDS = 1000;
 
 /** How long the helper may take to answer one request over its local socket. */
-const HELPER_REQUEST_MILLISECONDS = 10 * 1000;
+export const HELPER_REQUEST_MILLISECONDS = 10 * 1000;
 
 /** The margin of the window's own login wait over the helper's, so the helper's timeout is heard first. */
 const LOGIN_MARGIN_MILLISECONDS = 10 * 1000;

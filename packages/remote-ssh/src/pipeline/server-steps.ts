@@ -83,6 +83,14 @@ export interface ServerStepDependencies {
   logger: Logger;
 }
 
+/** The CLI's stop as the server steps run it: with the cancellation the wiring bounds it by. */
+type BoundedStop = (
+  ...parameters: [
+    ...Parameters<ConnectSteps['stopCli']>,
+    cancellation: AbortSignal,
+  ]
+) => Promise<void>;
+
 type ServerStepNames =
   | 'validate'
   | 'probe'
@@ -92,7 +100,6 @@ type ServerStepNames =
   | 'start'
   | 'installCli'
   | 'startCli'
-  | 'stopCli'
   | 'installExtensions';
 
 /** The archive source the planner reads, from what the resolution found. */
@@ -161,7 +168,7 @@ function cliAddressOf(
 /** The steps that talk to the host and the libraries, for one connect. */
 export function createServerSteps(
   dependencies: ServerStepDependencies,
-): Pick<ConnectSteps, ServerStepNames> {
+): Pick<ConnectSteps, ServerStepNames> & {stopCli: BoundedStop} {
   const {profile, settings} = dependencies;
   const names = serverNamesOf(profile);
   const noLicenceFacts = {
@@ -410,13 +417,12 @@ export function createServerSteps(
         {lockLoop: dependencies.lockLoop},
         cancellation,
       ),
-    stopCli: async (input, lease, host, cliPlan, processId) => {
-      // The stop runs whatever became of the connect's own cancellation: a CLI left running serves any local user.
+    stopCli: async (input, lease, host, cliPlan, processId, cancellation) => {
       const stopped = await stopCli(
         lease.channel,
         cliParametersFor(cliPlan, host),
         processId,
-        new AbortController().signal,
+        cancellation,
       );
       if (stopped.kind === 'failed') {
         dependencies.logger.warn(
