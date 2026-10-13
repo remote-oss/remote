@@ -696,7 +696,9 @@ commit is the one its release names as its upstream.
   - It replies `{}` when the server has started.
 - **Bridge:** each `serve` attaches one bridge for its `socket_id` (`[cli]` `attach_server_bridge`), so every editor
   connection has its own `serve` before its first frame; only the first installs or starts the server. The connection
-  then rides as `servermsg {i, body}` frames in both directions, and `serverclose` ends one. A `servermsg` for an `i`
+  then rides as `servermsg {i, body}` frames in both directions, and `serverclose` ends one. Only the CLI sends
+  `serverclose`; `[cli]` takes none from the client, so a socket the editor closes (even while its `serve` is pending)
+  stops being relayed and its bridge on the CLI goes with the control connection (#477). A `servermsg` for an `i`
   with no bridge fails with `NoAttachedServerError`, unanswered since `servermsg` goes without id.
 
 **The `serverlog` lines of a first install, in order, and S045 (F-2103 5.0 steps 6–8):**
