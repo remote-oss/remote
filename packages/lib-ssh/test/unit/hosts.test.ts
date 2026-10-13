@@ -586,10 +586,10 @@ describe('listHosts (the host entries of the files in effect)', () => {
     });
   }
 
-  it('F-2201.BR-2: a configured setting of white space only is unset, so the files in effect list', () => {
+  it('F-2201.BR-3: a configured setting of white space only is invalid, so it offers no hosts', () => {
     deepStrictEqual(
       names(undefined, [[SYSTEM_FILE, 'Host y']], {configFile: '   '}),
-      ['y'],
+      [],
     );
   });
 

@@ -41,8 +41,25 @@ describe('configFilePath (the one check of the configured file)', () => {
     deepStrictEqual(configFilePath('', '/h', 'linux'), {kind: 'unset'});
   });
 
-  it('F-2201.BR-3: a value of white space only is unset', () => {
-    deepStrictEqual(configFilePath('  ', '/h', 'linux'), {kind: 'unset'});
+  it('F-2201.BR-3: a value of white space only is invalid, as written', () => {
+    deepStrictEqual(configFilePath('  ', '/h', 'linux'), {
+      kind: 'invalid',
+      value: '  ',
+    });
+  });
+
+  it('F-2201.BR-3: a leading space makes the value not absolute, so invalid', () => {
+    deepStrictEqual(configFilePath(' /etc/x', '/h', 'linux'), {
+      kind: 'invalid',
+      value: ' /etc/x',
+    });
+  });
+
+  it('F-2201.BR-3: a trailing space is kept: the file is named with it', () => {
+    deepStrictEqual(configFilePath('/etc/x ', '/h', 'linux'), {
+      kind: 'file',
+      path: '/etc/x ',
+    });
   });
 
   it('F-2201.BR-3: /etc/x on Linux is a file', () => {
@@ -195,10 +212,10 @@ describe('filesInEffect (the configuration files in reading order)', () => {
     });
   }
 
-  it('F-2201.BR-2: a configured setting of white space only is unset, so the default files apply', () => {
+  it('F-2201.BR-3: a configured setting of white space only is invalid, so no file is in effect', () => {
     deepStrictEqual(
       filesInEffect('   ', {...LINUX}, userAndSystem(USER_TEXT)),
-      EXPECTED_FILES,
+      [],
     );
   });
 

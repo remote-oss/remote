@@ -64,7 +64,7 @@ export function expandHome(
 
 /** What `remote.SSH.configFile` names: no file, an absolute file, or an invalid value. */
 export type ConfigFileSetting =
-  | {kind: 'unset'} // '' or only white space
+  | {kind: 'unset'} // ''
   | {kind: 'file'; path: string} // absolute after `~` expansion
   | {kind: 'invalid'; value: string}; // anything else, `value` as written
 
@@ -74,7 +74,7 @@ export function configFilePath(
   homeFolder: string,
   platform: ClientPlatform,
 ): ConfigFileSetting {
-  if (value.trim() === '') {
+  if (value === '') {
     return {kind: 'unset'};
   }
   const expanded = expandHome(value, homeFolder, platform);

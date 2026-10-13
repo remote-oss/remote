@@ -305,11 +305,10 @@ describe('buildInvocation (the arguments of one ssh or scp run)', () => {
     });
   }
 
-  it('F-2201.BR-2: a spaces-only configFile is unset, so no -F', () => {
-    strictEqual(
-      flagPair(buildInvocation(makeRequest({configFile: '   '})), '-F').length,
-      0,
-    );
+  it('F-2201.BR-3: a spaces-only configFile is not absolute, so it is refused', () => {
+    throws(() => buildInvocation(makeRequest({configFile: '   '})), {
+      message: 'remote.SSH.configFile is not absolute',
+    });
   });
 
   it('S2: buildInvocation refuses a configFile that is not absolute', () => {
