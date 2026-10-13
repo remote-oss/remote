@@ -31,6 +31,14 @@ and the agent activates (`*`) before any question can come.
 - `nextEmptyWindow(action)`: notes `emptyWindows()`, runs `action`, and resolves with the one new name once its
   `activated` event is there. It's bounded at 60 s, and fails if no new window or more than one appears.
 
+**The agent's state** (`acceptance.agent.state`) also reports `remoteAuthority` (`vscode.env.remoteAuthority ?? null`),
+and `windowState` returns it, so a row can compare a new window's authority with the one it expects.
+
+**`nextEmptyName()`** gives the name the next empty window will claim: `empty-<n>` with `n` one more than the highest
+claimed. A test that must script a window before it exists (a failure dialog in a window Connect to Host opens) writes
+its entries for that name. Claims are made in order, so the name is right as long as the test opens one window at a
+time.
+
 ## 3. Rows
 
 Unit rows:
