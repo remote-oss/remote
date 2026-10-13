@@ -1,4 +1,4 @@
-import {deepStrictEqual, rejects} from 'node:assert';
+import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import type {RecordingChannel} from 'lib-host/testing/recording-channel';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
@@ -97,6 +97,50 @@ describe('the server steps: probe', () => {
       kind: 'failed',
       failure: {kind: 'unsupportedPlatform', reported: 'FreeBSD'},
     });
+  });
+});
+
+describe('the server steps: maintain', () => {
+  /** The script the step sent to a host that answered `Ok`, and the outcome. */
+  async function maintained(action: 'kill' | 'uninstall') {
+    const channel = channelAnswering(lines('Ok'));
+    const outcome = await createServerSteps(dependencies()).maintain(
+      INPUT,
+      leaseOn(channel),
+      action,
+      new AbortController().signal,
+    );
+    const call = channel.calls[0];
+    return {
+      outcome,
+      script: call?.operation === 'runScript' ? call.request.script : '',
+    };
+  }
+
+  it('F-2411.BR-1: a kill runs the kill script over the lease, which is done on Ok', async () => {
+    deepStrictEqual((await maintained('kill')).outcome, {kind: 'done'});
+  });
+
+  it('F-2412.BR-1: an uninstall runs the uninstall script over the lease, which is done on Ok', async () => {
+    deepStrictEqual((await maintained('uninstall')).outcome, {kind: 'done'});
+  });
+
+  it('F-2411.BR-4: the kill script removes the install folder and keeps the data folder', async () => {
+    strictEqual(
+      (await maintained('kill')).script.includes('rm -rf "${DATA_DIR:?}/bin"'),
+      true,
+    );
+  });
+
+  it('F-2412.BR-3: the uninstall script removes the data folder', async () => {
+    const {script} = await maintained('uninstall');
+    deepStrictEqual(
+      [
+        script.includes('rm -rf "${DATA_DIR:?}"\n'),
+        script.includes('rm -rf "${DATA_DIR:?}/bin"'),
+      ],
+      [true, false],
+    );
   });
 });
 

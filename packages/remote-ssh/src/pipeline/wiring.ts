@@ -391,6 +391,7 @@ export function stepsOf(
     presentLateFailure: failed => {
       void ports.cliPath.presenter.present(failed);
     },
+    maintain: (input, ...rest) => serverSteps(input).maintain(input, ...rest),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
     ...openTunnelStep({
