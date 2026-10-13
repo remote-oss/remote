@@ -89,11 +89,11 @@ describe('the terms of a connection', () => {
     );
   });
 
-  it('fail as cancelled when the user dismisses the picker', async () => {
+  it('F-2304 6.5: a dismissed platform pick fails as cancelled with "Connecting was canceled"', async () => {
     const {steps} = stepsFor({useLocalServer: false});
     deepStrictEqual(await steps.decideTerms(INPUT, SIGNAL), {
       kind: 'failed',
-      failure: {kind: 'cancelled'},
+      failure: {kind: 'cancelled', reason: {id: 'S027'}},
     });
   });
 });

@@ -52,7 +52,11 @@ export function createTermsSteps(
       } else if (decision.kind === 'ask') {
         const picked = await dependencies.pickPlatform(alias, cancellation);
         if (picked === undefined) {
-          return {kind: 'failed', failure: {kind: 'cancelled'}};
+          // The extension's own pick dismissed: the connect was cancelled by the user, as the licence decline.
+          return {
+            kind: 'failed',
+            failure: {kind: 'cancelled', reason: {id: 'S027'}},
+          };
         }
         platform = picked;
       }
