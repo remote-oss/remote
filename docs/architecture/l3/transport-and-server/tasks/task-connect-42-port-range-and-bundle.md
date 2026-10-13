@@ -53,18 +53,46 @@ S073 and S095 are in `surfaces/failure-strings.ts` today, but nothing references
 | F-2104 7.E1 | `reasonText` of A2's reason (`failure-strings.test.ts`) | `Error establishing tunnel (Failed to find a free local port: No free ports in specified range '41060-41061'.  Remove or update the 'Preferred Local Port Range' setting and try again.).`, with the two spaces kept |
 
 **Acceptance row** (VSCodium; a failing connect in `tests/acceptance/suite-failure/cases.json`):
-- **The case:** label `port-range-busy`, alias `harness`, settings `{'remote.SSH.preferredLocalPortRange': '1-2'}`.
-  Ports 1 and 2 can't be bound without root, so every port of the range is busy for the editor;
-- **the dialog:** `Could not establish connection to "harness": Error establishing tunnel (Failed to find a free local
-  port: No free ports in specified range '1-2'. Remove or update the 'Preferred Local Port Range' setting and try
-  again.).`;
+
+**Why the range must be held** (themis on #682): the editor's prober (`lib-forwarding/src/port-search/node-prober.ts`)
+never binds. It makes one TCP connect to `127.0.0.1:<port>`: `ECONNREFUSED` means free, and a connection means taken.
+So the range has to be occupied by real listeners on the **client** (the preferred local port range is the client's,
+and the prober runs there), and they have to exist before the window connects, which is when the launch starts. The
+ports launches' `holders` hold ports on the host container, so they can't be reused here.
+
+**The harness change** (tools):
+- `FailureCase` (`tools/acceptance-launches.ts`) and `LaunchCommon` gain `clientListeners?: readonly number[]`: loopback
+  ports the run holds on the client for the launch's whole attempt. `launchesOf` copies a failure case's
+  `clientListeners` into its launch, as it does `settings`.
+- `runLaunches` (`tools/acceptance.ts`), for each attempt of a launch with `clientListeners`:
+  - before `runLaunch`, opens one `net.createServer()` per port, listening on `127.0.0.1:<port>`, each accepting
+    connections and closing them at once;
+  - closes them all in a `finally` after the attempt, also when it fails;
+  - a port that can't be listened on fails the attempt with
+    `the client listener on 127.0.0.1:<port> could not start: <error>`.
+
+  The listening is behind a small port, `holdClientPorts(ports): Promise<{release(): Promise<void>}>`, which the tools
+  rows replace.
+- Tools rows:
+  - a launch with `clientListeners: [p, q]` (free ports the row picks): during `runLaunch`, a connect to each succeeds,
+    and after the attempt each is refused;
+  - a failing attempt still releases them;
+  - a port already taken fails the attempt with the message above;
+  - a launch without the field opens nothing.
+
+**The case:**
+- label `port-range-busy`, alias `harness`, settings `{'remote.SSH.preferredLocalPortRange': '41060-41061'}`,
+  `clientListeners: [41060, 41061]`;
+- the script answers the failure dialog and the mitigation pick with `dismiss`, as `refused` does;
+- **the dialog**, A2's text: `Could not establish connection to "harness": Error establishing tunnel (Failed to find a
+  free local port: No free ports in specified range '41060-41061'.  Remove or update the 'Preferred Local Port Range'
+  setting and try again.).` The default path is the CLI path, where A3 makes the busy range final with A2's reason, so
+  the dialog is the same on either path;
 - **the cite:** `F-2104 AC-14`;
-- **the guard:** the case's suite row first checks that the run isn't root (`process.getuid?.() !== 0`), and fails with
-  "the port-range case needs a non-root run" otherwise;
 - **it must fail on main**, where the dialog has no reason.
 
-Measure first how the record shows the dialog's text: one space or two after `'1-2'.`, since the dialog may collapse
-them. Write the case with what the record holds.
+Measure first how the record shows the dialog's text: one space or two after `'41060-41061'.`, since the dialog may
+collapse them. Write the case with what the record holds.
 
 ## 2. Part B: every translated string is in the bundle
 
@@ -113,6 +141,7 @@ triton reviews; athena gives the design check of A1–A3 and B2.
 
 ## 4. Open rows (stop and report on #680)
 
-1. The run is root in CI, so ports 1–2 are free. Report it, and don't choose another range by guess.
+1. A port of the range is taken on the test machine, so the client listener can't start. Report it with the error, and
+   don't choose another range by guess.
 2. B2 finds strings beyond the audit's 10 on main. List them in the PR and add them under B1, since they are the same
    defect.
