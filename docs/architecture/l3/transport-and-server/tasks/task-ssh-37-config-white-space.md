@@ -181,8 +181,10 @@ index dd4c612..2ea76c4 100644
 
 ## 2. Done when
 
-- `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test:unit`, `pnpm dupes` and `pnpm coverage` pass, with
-  lib-ssh and remote-ssh at 100/100/100;
+- `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test:unit`, `pnpm dupes` and `pnpm coverage` pass, and
+  the changed files are at 100/100/100. The packages' totals are what main measures, within the gate's half point of
+  each ratchet (selene, 2026-10-13: lib-ssh 99.8/98.92/99.66, remote-ssh 100/99.77/100, the same with and without
+  this change);
 - `pnpm check-coverage` passes.
 
 ## 3. Review
