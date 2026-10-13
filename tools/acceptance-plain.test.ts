@@ -355,6 +355,17 @@ describe('runPlainLaunch', () => {
     );
   });
 
+  it('D-85: the editor and the tests point their windows at the launch’s agent folder', async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
+    deepStrictEqual(
+      programs.map(
+        program => program.environment.REMOTE_OSS_ACCEPTANCE_WINDOWS,
+      ),
+      ['/run/windows/agent/pids', '/run/windows/agent/pids'],
+    );
+  });
+
   it('D-85: a launch’s own environment wins over the run’s', async () => {
     const {steps, programs} = recordingSteps('pass');
     await runPlainLaunch(

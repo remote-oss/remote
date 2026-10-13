@@ -5,7 +5,13 @@
  * this machine.
  */
 
-import {appendFileSync, readFileSync} from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import path from 'node:path';
@@ -63,9 +69,10 @@ import {
 } from './surfaces/editor-adapters.ts';
 import {
   adaptersFor,
+  authorityReportingResolverEditorOf,
   channelPortFor,
   progressFor,
-  windowNameOf,
+  windowNameFor,
 } from './surfaces/scripted-adapters.ts';
 import {PORTS_VIEW_KEY} from './surfaces/label-formatter.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
@@ -126,21 +133,51 @@ const ACCEPTANCE_FILES = {
   },
 };
 
-/** The name of this window for the harness's script and record: its first workspace folder's last segment, or `local`. */
-function acceptanceWindowName(): string {
-  return windowNameOf(vscode.workspace.workspaceFolders?.[0]?.uri.path);
+/**
+ * The name of this window for the harness's script and record: what the window's agent claimed, from the pid file
+ * the launch's windows variable points to; without the variable, the window's folder name as before.
+ */
+async function acceptanceWindowName(): Promise<string> {
+  return windowNameFor(
+    process.env,
+    process.pid,
+    vscode.workspace.workspaceFolders?.[0]?.uri.path,
+    {
+      read: file => (existsSync(file) ? readFileSync(file, 'utf8') : undefined),
+    },
+    milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+    Date.now,
+  );
 }
 
-/** The resolver's editor with its progress recorded when the harness's switch is on; the same editor otherwise. */
-function acceptanceProgressOf(editor: ResolverEditor): ResolverEditor {
+/** Writes the window's authority beside the pid file, where the window's agent reads it. */
+function recordAuthority(file: string, authority: string): void {
+  mkdirSync(path.dirname(file), {recursive: true});
+  writeFileSync(file, authority);
+}
+
+/**
+ * The resolver's editor the harness uses: its progress recorded when the switch is on, and every authority the
+ * resolver resolves written beside the pid file, so the window's agent reports it. The same editor otherwise.
+ */
+function acceptanceResolverEditorOf(
+  editor: ResolverEditor,
+  windowName: string,
+): ResolverEditor {
+  const progress = progressFor(
+    process.env,
+    editor.progress,
+    ACCEPTANCE_FILES,
+    windowName,
+  );
   return {
-    ...editor,
-    progress: progressFor(
+    ...authorityReportingResolverEditorOf(
       process.env,
-      editor.progress,
-      ACCEPTANCE_FILES,
-      acceptanceWindowName(),
+      process.pid,
+      editor,
+      recordAuthority,
     ),
+    progress,
   };
 }
 
@@ -151,7 +188,7 @@ export async function activate(
   const manifest = context.extension.packageJSON as Manifest;
   const host = identifierHost(vscode, manifest);
   // Made once, before the setup: the script is read once per window, and the setup's notices go through the same notice port.
-  const adapters = surfaceAdapters();
+  const adapters = await surfaceAdapters();
   const extension = {
     id: context.extension.id,
     pack: manifest.extensionPack ?? [],
@@ -252,7 +289,8 @@ function translate(template: string): string {
 }
 
 /** The adapters of the editor's surfaces: the real ones, or the harness's scripted ones when its switch is on. */
-function surfaceAdapters(): EditorAdapters {
+async function surfaceAdapters(): Promise<EditorAdapters> {
+  const windowName = await acceptanceWindowName();
   return adaptersFor(
     process.env,
     {
@@ -267,7 +305,7 @@ function surfaceAdapters(): EditorAdapters {
       notice: noticeOf(vscode),
     },
     ACCEPTANCE_FILES,
-    acceptanceWindowName(),
+    windowName,
   );
 }
 
@@ -290,6 +328,7 @@ async function registerConnectOf(
   adapters: EditorAdapters,
 ): Promise<ConnectRegistration> {
   const window = {alias: (): string => ''};
+  const windowName = await acceptanceWindowName();
   const surfaces = editorSurfacesOf(
     adapters,
     editorOperationsOf(vscode, () => {
@@ -321,10 +360,11 @@ async function registerConnectOf(
   );
   const registration = await registerConnect(
     {
-      resolverEditor: acceptanceProgressOf(
+      resolverEditor: acceptanceResolverEditorOf(
         resolverEditorOf(vscode, {
           detailsCommand: runtimeCommands.showDetails,
         }),
+        windowName,
       ),
       labels: vscode.workspace,
       portsView: {

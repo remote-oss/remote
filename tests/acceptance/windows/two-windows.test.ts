@@ -3,12 +3,16 @@ import {promisify} from 'node:util';
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import {
   closeWindow,
+  emptyWindows,
   inWindow,
+  nextEmptyName,
+  nextEmptyWindow,
   onHost,
   openWindow,
   recordLines,
   reloadWindow,
   windowEvents,
+  windowNameOrder,
   windowState,
 } from './harness.ts';
 
@@ -59,5 +63,43 @@ describe('windows of one editor on the same host (the first window is local)', f
       ['b', 'c'].map(window => recordLines('progress', window).length > 0),
       [true, true],
     );
+  });
+
+  it('D-85: an empty window opened from a window gets its own name', async () => {
+    const localBefore = windowEvents('local').filter(
+      each => each.event === 'activated',
+    ).length;
+    const next = nextEmptyName();
+    const name = await nextEmptyWindow(() =>
+      inWindow(
+        'local',
+        'acceptance.agent.openWindow',
+        'vscode-remote://ssh-remote+harness/',
+      ),
+    );
+    deepStrictEqual(
+      {
+        name,
+        next,
+        empty: emptyWindows(),
+        state: await windowState(name),
+        localActivationsGained:
+          windowEvents('local').filter(each => each.event === 'activated')
+            .length - localBefore,
+      },
+      {
+        name: 'empty-1',
+        next: 'empty-1',
+        empty: ['empty-1'],
+        state: {
+          remoteName: 'ssh-remote',
+          remoteAuthority: 'ssh-remote+harness',
+          folders: [],
+        },
+        localActivationsGained: 0,
+      },
+    );
+    console.log(`      window name order: ${windowNameOrder(name)}`);
+    await closeWindow(name);
   });
 });
