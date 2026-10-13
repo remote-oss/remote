@@ -26,6 +26,8 @@ metis to mark that AC-11 case reference-only).
   exist and `"$LAYER1_DIR/out"` holds no line `LAYER1-START`, the prelude prints exactly one line, `LAYER1-EXITED
   <status>`, with layer 1's exit status (from `wait "$LAYER1_PID"`), removes `"$LAYER1_DIR"`, and runs `exit 1` instead
   of `exec sh`.
+- **The working path says it's ready.** When the start line was found, the prelude prints exactly one line,
+  `LAYER1-READY`, just before `exec sh` (hestia's option B on #538).
 - **The other cases are unchanged:** a start line present (the environment is taken, then `exec sh`), `$SHELL`
   unusable, and no temporary folder all go on to `exec sh` as today.
 - The comment above `SESSION_BOOTSTRAP_LINES` says the session reaches `exec sh` **unless** the login shell outlasts
@@ -33,15 +35,22 @@ metis to mark that AC-11 case reference-only).
 
 ## 2. The two readers
 
-**The shared session (helper, `helper.ts` and the runtime that writes `sessionPrelude`):** a session whose first line
-of output is `LAYER1-TIMEOUT <n>` and which then ends doesn't become a working connection. The acquire fails with the
-existing failure for a login that timed out, the same one the helper's own connect wait gives. The connect then fails
-as F-2601's timeout, `Connecting with SSH timed out.`, and the log has one line: `the login shell did not finish its
-startup within <n> s`. Where the helper reads the session's first output, recognise the line there. The marker is not
-a run's output and is never passed to `ShellRuns`.
+**The shared session (helper):** the helper announces `connected`, and stops its connect wait, on the session's
+`LAYER1-READY` line, **not** at ssh's "Authenticated to …" as today (`handler.ts` `setupMarkerOf`). The prelude runs
+after authentication, so only then are `LAYER1-TIMEOUT` and `LAYER1-EXITED` read while every window is still in
+`LoginWait`, and the acquire fails as a login:
+- **`LAYER1-TIMEOUT <n>`:** `loginFailed` with the timeout reason, so the connect fails as F-2601's timeout,
+  `Connecting with SSH timed out.`, and the log has `the login shell did not finish its startup within <n> s`;
+- **`LAYER1-EXITED <n>`:** as below.
 
-**Terminal mode (`terminal/terminal-runs.ts`):** the same line in the terminal's output after the prelude ends the
-connect the same way, with the same log line.
+The helper's own connect wait (the connect timeout + 2 s) keeps running through the shell's startup. A slow but
+finishing startup still connects inside it (F-2704 AC-14: a 25 s pause with a 40 s timeout). The progress stays
+"Initializing VS Code Server" until `connected` (F-2304 AC-4). This moves contract S9's `connected` from
+"authenticated" to "ready to run scripts" (raised with athena on #539). None of the markers is a run's output, and
+none is passed to `ShellRuns`.
+
+**Terminal mode (`terminal/terminal-runs.ts`):** the same three lines in the terminal's output after the prelude: on
+`LAYER1-READY` the runs start, and the other two end the connect the same way, with the same log lines.
 
 **`LAYER1-EXITED <n>`, in both readers:** the connect fails **at once** with F-2601's dialog **without** a reason
 (`Could not establish connection to "<alias>".`, S030, 7.E2's form, not the timeout). The log has one line, AC-25's
@@ -55,7 +64,9 @@ Neither marker names a secret or a path: each is a fixed word, a space and a num
 | Cite | Given | Expected |
 |---|---|---|
 | F-2704 AC-11 | the bootstrap run by `sh` with `SHELL` a script that sleeps past `LAYER1_SECONDS=1` | its output is exactly `LAYER1-TIMEOUT 1`, and it exits 124 |
-| #443 | the same with a shell that prints the start line at once | no `LAYER1-TIMEOUT`, and the session reaches `exec sh` (a following `echo ok` prints `ok`) |
+| #443 | the same with a shell that prints the start line at once | its first output line is `LAYER1-READY`, and the session reaches `exec sh` (a following `echo ok` prints `ok`) |
+| #538 | the helper's session that prints `LAYER1-READY` after authentication | `connected` is announced on that line, not before |
+| F-2704 AC-14 (real host) | a `.profile` that sleeps 25 s, `ConnectTimeout` 40 | the connect succeeds after the pause |
 | F-2704 AC-13 | the bootstrap with a shell that exits 1 at once, with no start line | its output is exactly `LAYER1-EXITED 1`, and it exits 1 |
 | F-2704 AC-25 | the helper's session whose first line is `LAYER1-EXITED 1` | the acquire fails at once with the reasonless failure (no S-id reason, so F-2601 shows S030), and the log has `the SSH session ended before the host reported its platform: the login shell's startup exited with status 1` |
 | F-2704 AC-25 | terminal mode, the same line | the connect fails the same way |
