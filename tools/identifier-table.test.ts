@@ -292,6 +292,39 @@ describe('identifier-table', () => {
     });
   });
 
+  describe('the proposals a manifest ships (card connect-31)', () => {
+    it('connect-31: are written as one constant in the manifest order', () => {
+      strictEqual(
+        tableSource(
+          syntheticSources({
+            manifest: {enabledApiProposals: ['resolvers', 'tunnels']},
+          }),
+        )?.endsWith(
+          '/** The proposed APIs the package\'s manifest enables, in its order: what the build ships, whatever the editor keeps. */\nexport const enabledApiProposals = ["resolvers","tunnels"] as const;\n',
+        ),
+        true,
+      );
+    });
+
+    it('connect-31: a package with proposals and no other identifier still gets a table', () => {
+      strictEqual(
+        tableSource(
+          syntheticSources({manifest: {enabledApiProposals: ['resolvers']}}),
+        )?.includes('enabledApiProposals'),
+        true,
+      );
+    });
+
+    it('connect-31: a package without proposals has no such constant', () => {
+      strictEqual(
+        tableSource(
+          syntheticSources({manifest: {languages: ['ssh_config']}}),
+        )?.includes('enabledApiProposals'),
+        false,
+      );
+    });
+  });
+
   describe('source', () => {
     it('writes one documented constant per kind', () => {
       strictEqual(

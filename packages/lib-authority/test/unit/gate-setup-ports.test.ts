@@ -43,12 +43,14 @@ function surroundings(
   const editor: GateEditor = {
     probeApi,
     installed: () =>
-      options.installed ?? [
-        {id: 'remote-oss.remote-explorer', proposals: ['contribViewsRemote']},
-        {id: 'remote-oss.remote-ssh', proposals: ['resolvers']},
-        {id: 'remote-oss.remote-ssh-edit', proposals: []},
-        {id: 'other.extension', proposals: ['resolvers']},
-      ],
+      Promise.resolve(
+        options.installed ?? [
+          {id: 'remote-oss.remote-explorer', proposals: ['contribViewsRemote']},
+          {id: 'remote-oss.remote-ssh', proposals: ['resolvers']},
+          {id: 'remote-oss.remote-ssh-edit', proposals: []},
+          {id: 'other.extension', proposals: ['resolvers']},
+        ],
+      ),
     readFile: filePath => {
       seen.files.push(filePath);
       return Promise.resolve(options.argvText);
@@ -109,7 +111,7 @@ describe('the ports of the proposed-API setup', () => {
     const {editor, identity} = surroundings({resolversThrow: true});
     const ports = setupPortsOf(editor, identity);
     deepStrictEqual(
-      [ports.installedFamilyIds(), await ports.probe()],
+      [await ports.installedFamilyIds(), await ports.probe()],
       [
         ['remote-oss.remote-explorer', 'remote-oss.remote-ssh'],
         [{proposal: 'resolvers', state: 'missing'}],

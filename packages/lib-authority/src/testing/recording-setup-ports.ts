@@ -33,7 +33,7 @@ export function recordingSetupPorts(
         })),
       );
     },
-    installedFamilyIds: () => [scenario.extensionId],
+    installedFamilyIds: () => Promise.resolve([scenario.extensionId]),
     argvEnabled: () => Promise.resolve([]),
     flags: {
       dismissed: () => false,

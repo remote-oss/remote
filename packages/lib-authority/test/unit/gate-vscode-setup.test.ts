@@ -47,13 +47,66 @@ function fakeEditor(events: string[], registered = false): typeof vscode {
       all: [
         {
           id: 'remote-oss.remote-ssh',
-          packageJSON: {enabledApiProposals: ['resolvers']},
+          extensionPath: '/ext/ssh',
+          // The editor strips the proposals it does not allow from this copy of the manifest.
+          packageJSON: {enabledApiProposals: []},
         },
-        {id: 'other.one', packageJSON: {}},
-        {id: 'other.two'},
+        {id: 'remote-oss.remote-explorer', extensionPath: '/ext/explorer'},
+        {id: 'remote-oss.remote-broken', extensionPath: '/ext/broken'},
+        {id: 'remote-oss.remote-odd', extensionPath: '/ext/odd'},
+        {id: 'other.one', extensionPath: '/ext/one', packageJSON: {}},
       ],
     },
   } as unknown as typeof vscode;
+}
+
+/** The manifest files of the family's extensions in the fake editor, by path. */
+const MANIFESTS = new Map<string, string>([
+  [
+    '/ext/ssh/package.json',
+    '{"enabledApiProposals": ["resolvers", "tunnels"]}',
+  ],
+  ['/ext/explorer/package.json', '{"name": "explorer"}'],
+  ['/ext/broken/package.json', '{not json'],
+  ['/ext/odd/package.json', '{"enabledApiProposals": ["resolvers", 3]}'],
+]);
+
+/** The setup's editor over the fake one, reading the family's manifests, and what its notices and log were told. */
+function setupEditor(
+  events: string[],
+  options: {
+    registered?: boolean;
+    stored?: Map<string, boolean>;
+    subscriptions?: Array<{dispose(): void}>;
+    readFile?: (filePath: string) => Promise<string | undefined>;
+  } = {},
+) {
+  const failures: string[] = [];
+  const read = new Array<string>();
+  const edit = gateEditorOf(
+    fakeEditor(events, options.registered),
+    contextOf(
+      options.stored ?? new Map<string, boolean>(),
+      options.subscriptions ?? [],
+    ),
+    options.readFile ??
+      (filePath => {
+        read.push(filePath);
+        return Promise.resolve(MANIFESTS.get(filePath));
+      }),
+    message => failures.push(message),
+    {
+      showWarning: (text, buttons) => {
+        events.push(`warning ${text} ${buttons.join('|')}`);
+        return Promise.resolve(buttons[0]);
+      },
+      showInformation: (text, buttons) => {
+        events.push(`information ${text} ${buttons.join('|')}`);
+        return Promise.resolve(undefined);
+      },
+    },
+  );
+  return {edit, failures, read};
 }
 
 /** The extension context of a test, with the global state in `stored`. */
@@ -74,21 +127,75 @@ function contextOf(
 }
 
 describe('the editor behind the setup', () => {
-  it('lists the installed extensions with the proposals they declare', () => {
-    const edit = gateEditorOf(fakeEditor([]), contextOf(new Map(), []), () =>
-      Promise.resolve(undefined),
+  it('F-3903 §5 rule 4: a member of the family declares what its own manifest file says, whatever the editor kept', async () => {
+    const {edit} = setupEditor([]);
+    deepStrictEqual(
+      (await edit.installed()).find(
+        each => each.id === 'remote-oss.remote-ssh',
+      ),
+      {id: 'remote-oss.remote-ssh', proposals: ['resolvers', 'tunnels']},
     );
-    deepStrictEqual(edit.installed(), [
-      {id: 'remote-oss.remote-ssh', proposals: ['resolvers']},
-      {id: 'other.one', proposals: []},
-      {id: 'other.two', proposals: []},
+  });
+
+  it('F-3903 §5 rule 4: a member whose manifest declares none declares none', async () => {
+    const {edit} = setupEditor([]);
+    deepStrictEqual(
+      (await edit.installed()).find(
+        each => each.id === 'remote-oss.remote-explorer',
+      ),
+      {id: 'remote-oss.remote-explorer', proposals: []},
+    );
+  });
+
+  it('F-3903 §5 rule 4: a member whose manifest cannot be read declares none, and the log says why', async () => {
+    const {edit, failures} = setupEditor([], {
+      readFile: () => Promise.resolve(undefined),
+    });
+    await edit.installed();
+    deepStrictEqual(failures.slice(0, 1), [
+      'the manifest of remote-oss.remote-ssh cannot be read: /ext/ssh/package.json',
     ]);
   });
 
-  it('keeps the flags in the global state of the extension', async () => {
-    const edit = gateEditorOf(fakeEditor([]), contextOf(new Map(), []), () =>
-      Promise.resolve(undefined),
+  it('F-3903 §5 rule 4: a member whose manifest cannot be parsed declares none, and the log says why', async () => {
+    const {edit, failures} = setupEditor([]);
+    await edit.installed();
+    deepStrictEqual(
+      failures.map(failure =>
+        failure.slice(0, failure.indexOf('cannot be parsed') + 16),
+      ),
+      ['the manifest of remote-oss.remote-broken cannot be parsed'],
     );
+  });
+
+  it('F-3903 §5 rule 4: only the proposals that are text are taken from a manifest', async () => {
+    const {edit} = setupEditor([]);
+    deepStrictEqual(
+      (await edit.installed()).find(each => each.id === 'remote-oss.remote-odd')
+        ?.proposals,
+      ['resolvers'],
+    );
+  });
+
+  it('F-3903 §5 rule 4: the files of other extensions are not read', async () => {
+    const {edit, read} = setupEditor([]);
+    await edit.installed();
+    deepStrictEqual(
+      read.filter(file => file.startsWith('/ext/one')),
+      [],
+    );
+  });
+
+  it('F-3903 §5 rule 4: an extension that is not of the family declares none', async () => {
+    const {edit} = setupEditor([]);
+    deepStrictEqual(
+      (await edit.installed()).find(each => each.id === 'other.one'),
+      {id: 'other.one', proposals: []},
+    );
+  });
+
+  it('keeps the flags in the global state of the extension', async () => {
+    const {edit} = setupEditor([]);
     await edit.state.update('flag', true);
     deepStrictEqual(
       [edit.state.read('flag'), edit.state.read('other')],
@@ -97,40 +204,32 @@ describe('the editor behind the setup', () => {
   });
 
   it('reports the paths of saved and closed documents', () => {
-    const edit = gateEditorOf(fakeEditor([]), contextOf(new Map(), []), () =>
-      Promise.resolve(undefined),
-    );
+    const {edit} = setupEditor([]);
     const paths: string[] = [];
     edit.documents.onSaved(documentPath => paths.push(documentPath));
     edit.documents.onClosed(documentPath => paths.push(documentPath));
     deepStrictEqual(paths, ['/x/argv.json', '/x/argv.json']);
   });
 
-  it('shows messages and runs commands through the editor', async () => {
+  it("card connect-31: the setup's notices go through the notices it was given", async () => {
     const events: string[] = [];
-    const edit = gateEditorOf(
-      fakeEditor(events),
-      contextOf(new Map(), []),
-      () => Promise.resolve(undefined),
-    );
+    const {edit} = setupEditor(events);
     await edit.showWarning('careful', ['Yes', 'No']);
     await edit.showInformation('note', ['Ok']);
+    deepStrictEqual(events, ['warning careful Yes|No', 'information note Ok']);
+  });
+
+  it('runs commands through the editor', async () => {
+    const events: string[] = [];
+    const {edit} = setupEditor(events);
     await edit.runCommand('some.command');
-    deepStrictEqual(events, [
-      'warning careful Yes|No',
-      'information note Ok',
-      'execute some.command',
-    ]);
+    deepStrictEqual(events, ['execute some.command']);
   });
 
   it('claims the window through a command that the extension releases on deactivation', async () => {
     const events: string[] = [];
     const subscriptions: Array<{dispose(): void}> = [];
-    const edit = gateEditorOf(
-      fakeEditor(events),
-      contextOf(new Map(), subscriptions),
-      () => Promise.resolve(undefined),
-    );
+    const {edit} = setupEditor(events, {subscriptions});
     deepStrictEqual(
       [
         await edit.window.claim('remote-oss.remote-ssh'),
@@ -147,11 +246,7 @@ describe('the editor behind the setup', () => {
 
   it('asks the holder when the claim command is registered already', async () => {
     const events: string[] = [];
-    const edit = gateEditorOf(
-      fakeEditor(events, true),
-      contextOf(new Map(), []),
-      () => Promise.resolve(undefined),
-    );
+    const {edit} = setupEditor(events, {registered: true});
     deepStrictEqual(
       [await edit.window.claim('remote-oss.remote-ssh'), events],
       [{holder: 'holder'}, ['execute remote-oss.gate.claim']],
@@ -159,11 +254,9 @@ describe('the editor behind the setup', () => {
   });
 
   it('reads files through the function it was given', async () => {
-    const edit = gateEditorOf(
-      fakeEditor([]),
-      contextOf(new Map(), []),
-      filePath => Promise.resolve(`text of ${filePath}`),
-    );
+    const {edit} = setupEditor([], {
+      readFile: filePath => Promise.resolve(`text of ${filePath}`),
+    });
     deepStrictEqual(await edit.readFile('/x'), 'text of /x');
   });
 });

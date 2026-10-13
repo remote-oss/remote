@@ -45,7 +45,7 @@ export interface SetupPorts {
   extensionId: string;
   probe(): Promise<readonly ProposalProbe[]>;
   /** The installed family extensions that declare proposed APIs. */
-  installedFamilyIds(): readonly string[];
+  installedFamilyIds(): PromiseLike<readonly string[]>;
   /** The extension ids the install's runtime arguments already enable. */
   argvEnabled(): Promise<readonly string[]>;
   flags: SetupFlags;
@@ -140,7 +140,7 @@ export async function runSetup(
       proposal: probe.proposal,
       result: probe.state,
     })),
-    installedFamilyIds: ports.installedFamilyIds(),
+    installedFamilyIds: await ports.installedFamilyIds(),
     argvEnabled: await ports.argvEnabled(),
     // After an attempt of the user's, a failure is told whatever they said before.
     dismissed: ports.flags.dismissed() && !attemptPending,
