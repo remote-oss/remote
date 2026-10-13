@@ -6,7 +6,7 @@
  */
 
 import {spawn, spawnSync} from 'node:child_process';
-import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {build} from 'esbuild';
 import {type Launch} from './acceptance-launches.ts';
@@ -18,24 +18,39 @@ const PROPOSED_API_EXTENSIONS: readonly string[] = [
   'remote-oss.acceptance-window-agent',
 ];
 
+/** The extensions folder of a launch: its own when it installs extensions of its own, the run's otherwise. */
+export function extensionsFolderOf(runFolder: string, launch?: Launch): string {
+  return launch?.kind === 'plain' && launch.withExtensions !== undefined
+    ? path.join(runFolder, `extensions-${launch.label}`)
+    : path.join(runFolder, 'extensions');
+}
+
 /**
  * What every run's editor is started with: the run's own folders, the proposed API of the extensions unless a launch
- * turns it off, no trust prompt.
+ * turns it off, no trust prompt. A launch's own extensions bring their proposed API.
  */
 export function editorArguments(
   runFolder: string,
   proposedApi = true,
+  launch?: Launch,
 ): string[] {
+  const ownExtensions =
+    launch?.kind === 'plain' ? (launch.withExtensions ?? []) : [];
   return [
     `--user-data-dir=${path.join(runFolder, 'user-data')}`,
-    `--extensions-dir=${path.join(runFolder, 'extensions')}`,
+    `--extensions-dir=${extensionsFolderOf(runFolder, launch)}`,
     ...(proposedApi
-      ? PROPOSED_API_EXTENSIONS.map(
+      ? [...PROPOSED_API_EXTENSIONS, ...ownExtensions].map(
           extensionId => `--enable-proposed-api=${extensionId}`,
         )
       : []),
     '--disable-workspace-trust',
   ];
+}
+
+/** The file in which the editor, started with a debugging port of 0, writes the port it chose. */
+export function debuggingPortFile(runFolder: string): string {
+  return path.join(runFolder, 'user-data', 'DevToolsActivePort');
 }
 
 /** The script, record and log files of a launch: the run's own, or a failing connect's. */
@@ -127,7 +142,13 @@ export function plainEditorOf(
   return {
     file: executable,
     programArguments: [
-      ...editorArguments(runFolder, launch.proposedApi !== false),
+      ...editorArguments(runFolder, launch.proposedApi !== false, launch),
+      ...(launch.kind === 'plain' && launch.debuggingPort === true
+        ? ['--remote-debugging-port=0']
+        : []),
+      ...(launch.kind === 'plain' ? (launch.disabledExtensions ?? []) : []).map(
+        extensionId => `--disable-extension=${extensionId}`,
+      ),
       '--new-window',
       ...(launch.folderUri === undefined
         ? []
@@ -218,6 +239,8 @@ export async function runPlainLaunch(
     REMOTE_OSS_ACCEPTANCE_LOG: files.logFile,
     ...launch.environment,
   };
+  // A port file an earlier launch left would name a port nobody listens on.
+  rmSync(debuggingPortFile(session.runFolder), {force: true});
   const editor = steps.start(
     plainEditorOf(session.executable, session.runFolder, launch, environment),
   );

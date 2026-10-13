@@ -26,6 +26,7 @@ import {
   type HarnessDependencies,
   type HarnessVariables,
   mappedPort,
+  installsOf,
   packagedExtensions,
   removeBundles,
   RETRY_PAUSE_MILLISECONDS,
@@ -45,6 +46,7 @@ import {
 import type {RunDownloads} from './acceptance-downloads.ts';
 import {
   failureCases,
+  launchesOf,
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
@@ -406,6 +408,66 @@ describe('acceptance', () => {
 
     it('finds none before anything is packaged', () => {
       deepStrictEqual(packagedExtensions(workspace.root), []);
+    });
+
+    it('tooling-30: the run-wide set leaves the explorer out', () => {
+      workspace.write('dist/remote-ssh-0.0.0.vsix', '');
+      workspace.write('dist/remote-explorer-0.0.0.vsix', '');
+      deepStrictEqual(packagedExtensions(workspace.root), [
+        path.join(workspace.root, 'dist', 'remote-ssh-0.0.0.vsix'),
+      ]);
+    });
+  });
+
+  describe('installsOf (card tooling-30)', () => {
+    it('tooling-30: the run installs once into its folder, and once into each explorer launch’s folder with the explorer', () => {
+      workspace.write('dist/remote-explorer-0.0.0.vsix', '');
+      deepStrictEqual(
+        installsOf(
+          workspace.root,
+          '/run',
+          ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
+          launchesOf(REPOSITORY_ROOT),
+        ),
+        [
+          {
+            folder: path.join('/run', 'extensions'),
+            files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
+          },
+          ...['explorer', 'explorer-alone', 'explorer-no-proposals'].map(
+            label => ({
+              folder: path.join('/run', `extensions-${label}`),
+              files: [
+                '/dist/remote-ssh.vsix',
+                '/run/window-agent.vsix',
+                path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
+              ],
+            }),
+          ),
+        ],
+      );
+    });
+
+    it('tooling-30: an explorer that is not packaged yet is skipped, as the run-wide set skips one', () => {
+      deepStrictEqual(
+        installsOf(
+          workspace.root,
+          '/run',
+          ['/a.vsix'],
+          [
+            {
+              label: 'explorer',
+              kind: 'plain',
+              suite: 'explorer',
+              withExtensions: [
+                'remote-oss.remote-explorer',
+                'remote-oss.unknown',
+              ],
+            },
+          ],
+        )[1]?.files,
+        ['/a.vsix'],
+      );
     });
   });
 
@@ -864,9 +926,13 @@ describe('acceptance', () => {
       workspace.write('dist/remote-ssh-0.0.0.vsix', '');
       await runAcceptance(workspace.root, harness, 'vscodium');
       deepStrictEqual(
-        harness.calls
-          .filter(call => call.includes('--install-extension'))
-          .map(call => call.split(' ')[0]),
+        [
+          ...new Set(
+            harness.calls
+              .filter(call => call.includes('--install-extension'))
+              .map(call => call.split(' ')[0]),
+          ),
+        ],
         [path.join('bin', 'codium-insiders')],
       );
     });
@@ -882,6 +948,9 @@ describe('acceptance', () => {
         'slow',
         'windows',
         'no-proposals',
+        'explorer',
+        'explorer-alone',
+        'explorer-no-proposals',
       ]);
     });
 
@@ -991,6 +1060,9 @@ describe('acceptance', () => {
         'slow',
         'windows',
         'no-proposals',
+        'explorer',
+        'explorer-alone',
+        'explorer-no-proposals',
       ]);
     });
 
