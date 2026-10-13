@@ -26,7 +26,11 @@ import {commands, runtimeCommands} from './identifiers.generated.ts';
 import {hostAlias, sshTargetOf} from './pipeline/host-settings.ts';
 import {maintenanceHandlers} from './maintenance/maintenance-commands.ts';
 import type {NoticePort} from './surfaces/notice.ts';
-import {registerWindowLabel} from './surfaces/label-formatter.ts';
+import {
+  enablePortsViewWhenConnected,
+  type PortsViewHost,
+  registerWindowLabel,
+} from './surfaces/label-formatter.ts';
 import type {Translate} from './surfaces/strings.ts';
 import {openWebUiHandler} from './surfaces/web-ui-command.ts';
 import type {Logger} from 'lib-log';
@@ -39,6 +43,8 @@ import {
 export interface ConnectRegistrationHost {
   resolverEditor: ResolverEditor;
   labels: LabelFormatterHost;
+  /** Core's Ports view, which the connected window enables. */
+  portsView: PortsViewHost;
   commands: CommandHost;
   /** The editor behind the connect commands. */
   connectEditor: ConnectCommandEditor;
@@ -84,6 +90,9 @@ export async function registerConnect(
     resolver === undefined
       ? undefined
       : registerWindowLabel(resolver, host.labels, host.translate);
+  if (resolver !== undefined) {
+    enablePortsViewWhenConnected(resolver, host.portsView, host.logger);
+  }
   const connection = {
     killLocalServer: (hostString: string) =>
       assembly.killLocalServer(hostString),
