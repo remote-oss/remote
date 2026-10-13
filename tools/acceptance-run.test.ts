@@ -388,6 +388,7 @@ describe('cleanRun (card tooling-10)', () => {
     scripted.passes(); // docker rm --force c1
     scripted.passes(); // docker rm --force c2
     scripted.passes(); // pkill
+    scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force
     scripted.passes(''); // docker ps, the second listing
 
@@ -411,6 +412,16 @@ describe('cleanRun (card tooling-10)', () => {
         argv: ['-f', '--', 'acceptance-77-2-[A-Za-z0-9]+/user-data'],
       },
       {
+        program: 'pkill',
+        argv: [
+          '-O',
+          '7200',
+          '-f',
+          '--',
+          'acceptance-[0-9]+-[0-9]+-[A-Za-z0-9_-]+-[A-Za-z0-9]+/user-data',
+        ],
+      },
+      {
         program: 'docker',
         argv: ['image', 'rm', '--force', 'remote-oss-acceptance-host:77-2'],
       },
@@ -431,18 +442,20 @@ describe('cleanRun (card tooling-10)', () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker ps
     scripted.passes(); // pkill
+    scripted.passes(); // pkill, stale editors
     scripted.fails(1, 'No such image'); // docker image rm --force
     scripted.passes(''); // docker ps
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 4);
+    strictEqual(scripted.calls.length, 5);
   });
 
   it("throws naming the container when one still carries the run's label", () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker ps
     scripted.passes(); // pkill
+    scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force
     scripted.passes('c9\n'); // docker ps, the second listing
 
@@ -459,6 +472,7 @@ describe('cleanRun (card tooling-10)', () => {
     scripted.passes('c1\n'); // docker ps
     scripted.passes(); // docker rm --force c1
     scripted.passes(); // pkill
+    scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force
     scripted.passes(''); // docker ps
 
@@ -501,11 +515,12 @@ describe('cleanRun (card tooling-10)', () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker ps
     scripted.fails(1, ''); // pkill matched nothing
+    scripted.fails(1, ''); // pkill, stale editors, matched nothing
     scripted.passes(); // docker image rm --force
     scripted.passes(''); // docker ps
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 4);
+    strictEqual(scripted.calls.length, 5);
   });
 });

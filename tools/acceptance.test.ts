@@ -47,6 +47,7 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
+import {acceptanceRunId} from './acceptance-run.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -427,7 +428,9 @@ describe('acceptance', () => {
       strictEqual(
         path
           .basename(harness.runFolder)
-          .startsWith(`acceptance-local-${String(process.pid)}-`),
+          .startsWith(
+            `acceptance-${acceptanceRunId(process.env, process.pid)}-`,
+          ),
         true,
       );
     });

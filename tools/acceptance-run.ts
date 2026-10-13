@@ -18,6 +18,9 @@ import {isMainModule, messageOf} from './repository.ts';
 /** The label every Docker object of an acceptance run carries; its value is the run's id. */
 export const RUN_LABEL = 'remote-oss.acceptance.run';
 
+/** How old an editor of a CI run is before the opening clean takes it for one a killed job left behind: two hours. */
+const STALE_EDITOR_SECONDS = 7200;
+
 /** The image name of the SSH host; the run's tag keeps each run's build and container its own. */
 export const HOST_IMAGE = 'remote-oss-acceptance-host';
 
@@ -208,6 +211,15 @@ export function cleanRun(command: CommandRunner, runId: string): void {
   }
   // An editor that a killed job left holds the run's user-data folder, named by the run's id; none running is no error.
   command('pkill', ['-f', '--', `acceptance-${runId}-[A-Za-z0-9]+/user-data`]);
+  // So does one that a runner left from an earlier CI run, whose id this run does not know: CI ids are numeric, local
+  // ones are not, and only an editor older than any job's time limit is taken to be left over, not another job's.
+  command('pkill', [
+    '-O',
+    String(STALE_EDITOR_SECONDS),
+    '-f',
+    '--',
+    'acceptance-[0-9]+-[0-9]+-[A-Za-z0-9_-]+-[A-Za-z0-9]+/user-data',
+  ]);
   // The image may already be gone: its removal's status is ignored.
   command('docker', ['image', 'rm', '--force', hostImageOf(runId)]);
   const remaining = containersOf(
