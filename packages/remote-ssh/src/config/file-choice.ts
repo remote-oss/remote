@@ -8,7 +8,7 @@ import type {StringRef} from '../connect/picker-model.ts';
 
 /** The input the picker model reads. */
 export interface FileChoiceInput {
-  /** `remote.SSH.configFile` as written; `''` or whitespace only means unset. */
+  /** `remote.SSH.configFile` as written; only `''` means unset. */
   configFile: string;
   /** The absolute user file, e.g. /home/u/.ssh/config. */
   userFile: string;
@@ -53,7 +53,7 @@ const HELP_ITEM: FileChoiceItem = {
  * rows. With one: the value exactly as written, untrimmed and unexpanded, then the settings and help rows.
  */
 export function buildFileChoice(input: FileChoiceInput): FileChoice {
-  if (input.configFile.trim() !== '') {
+  if (input.configFile !== '') {
     return {
       placeholder: EDIT_PLACEHOLDER,
       items: [

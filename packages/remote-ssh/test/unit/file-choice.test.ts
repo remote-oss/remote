@@ -59,18 +59,14 @@ describe('buildFileChoice (the rows of the configuration file picker)', () => {
     );
   });
 
-  it('F-2203.BR-1: a whitespace-only configured file is the same as unset', () => {
+  it('F-2203.BR-1: a whitespace-only setting is set, so the picker offers it as written', () => {
     deepStrictEqual(
       buildFileChoice({
         configFile: '   ',
         userFile: '/home/u/.ssh/config',
         systemFile: '/etc/ssh/ssh_config',
-      }),
-      buildFileChoice({
-        configFile: '',
-        userFile: '/home/u/.ssh/config',
-        systemFile: '/etc/ssh/ssh_config',
-      }),
+      }).items[0],
+      {kind: 'file', label: '   ', role: 'configured'},
     );
   });
 
