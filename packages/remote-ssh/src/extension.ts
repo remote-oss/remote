@@ -50,8 +50,10 @@ import {
   failureDialogOf,
   licenceDialogOf,
   mitigationPickPortOf,
+  noticeOf,
   platformPickPortOf,
   promptEditorOf,
+  textInputOf,
 } from './surfaces/editor-adapters.ts';
 import {
   adaptersFor,
@@ -274,6 +276,8 @@ async function registerConnectOf(
         platformPick: platformPickPortOf(vscode, translate),
         mitigationPick: mitigationPickPortOf(vscode),
         downloadProgress: downloadProgressOf(vscode),
+        textInput: textInputOf(vscode),
+        notice: noticeOf(vscode),
       },
       ACCEPTANCE_FILES,
     ),

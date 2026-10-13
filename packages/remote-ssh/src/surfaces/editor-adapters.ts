@@ -10,6 +10,8 @@ import type {PlatformPickPort} from '../connect/platform-picker.ts';
 import type {FailureDialogPort} from './failure-presenter.ts';
 import type {LicenceDialogPort} from './licence-modal.ts';
 import type {MitigationPickPort} from './mitigation-picker.ts';
+import type {NoticePort} from './notice.ts';
+import type {TextInputPort} from './text-input.ts';
 import {ownText} from './own-strings.ts';
 import type {PromptEditor} from './prompt-surface.ts';
 import type {Translate} from './strings.ts';
@@ -131,6 +133,34 @@ function modalItems(buttons: readonly string[]): vscode.MessageItem[] {
     title,
     isCloseAffordance: index === buttons.length - 1,
   }));
+}
+
+/** The plain text input: `showInputBox` with the request's prompt and placeholder, or nothing when dismissed. */
+export function textInputOf(editor: Editor): TextInputPort {
+  return {
+    showInputBox: async request => {
+      const options: vscode.InputBoxOptions = {};
+      if (request.prompt !== undefined) {
+        options.prompt = request.prompt;
+      }
+      if (request.placeholder !== undefined) {
+        options.placeHolder = request.placeholder;
+      }
+      return await editor.window.showInputBox(options);
+    },
+  };
+}
+
+/** The non-modal notices: `showInformationMessage`, `showWarningMessage` and `showErrorMessage` without `modal`. */
+export function noticeOf(editor: Editor): NoticePort {
+  return {
+    showInformation: async (message, buttons) =>
+      await editor.window.showInformationMessage(message, ...buttons),
+    showWarning: async (message, buttons) =>
+      await editor.window.showWarningMessage(message, ...buttons),
+    showError: async (message, buttons) =>
+      await editor.window.showErrorMessage(message, ...buttons),
+  };
 }
 
 /** The failure dialog of a connect: a modal error whose last button, "More Actions...", is the cancel. */
