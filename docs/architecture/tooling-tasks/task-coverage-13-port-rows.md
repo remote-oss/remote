@@ -88,14 +88,13 @@ above and the rule that ports cases come last.
 | `bind-all` | `bindHost: {"harness": "0.0.0.0"}` | — | — | connected; listens on `0.0.0.0`; `reaches(containerAddress(), port)` | AC-6 |
 | `bind-all-range` | `useExecServer: false`, `bindHost: {"harness": "0.0.0.0"}`, `serverPickPortsFromRange: {"harness": "46000-46010"}` | — | — | connected; port 46000; listens on `0.0.0.0` | AC-20 |
 | `bind-other-key` | `bindHost: {"other": "not a host!"}` | — | — | connected; no `notice` line | AC-8 |
-| `range-number` | `serverPickPortsFromRange: {"harness": 45030}` | — | `connectedOrDialog` | see below | AC-15 |
 | `bind-number` | `bindHost: {"harness": 5}` | — | `connectedOrDialog` | see below; when connected, listens on `127.0.0.1` | AC-27 |
 | `bind-true` | `bindHost: {"harness": true}` | — | `connectedOrDialog` | as `bind-number` | AC-27 |
 | `bind-null` | `bindHost: {"harness": null}` | — | `connectedOrDialog` | as `bind-number` | AC-27 |
 
 Setting ids are `remote.SSH.<name>`. Every case also expects the user settings file unchanged (AC-17).
 
-**`connectedOrDialog`** (AC-15, AC-27): either the window is on `ssh-remote`, or the record has a `failureDialog` line
+**`connectedOrDialog`** (AC-27): either the window is on `ssh-remote`, or the record has a `failureDialog` line
 whose question starts with `Could not establish connection to "harness"`. In both cases: no `notice` line; no record
 line whose question contains `Error:`, `TypeError`, `ReferenceError` or `    at `; and
 `vscode.workspace.openTextDocument({content: 'usable'})` resolves (the window stays usable).
@@ -124,7 +123,7 @@ Unit rows in `tools/acceptance-launches.test.ts` and `tools/acceptance.test.ts`:
 
 ## 4. The catalogue
 
-In `docs/architecture/catalogue/coverage-slice1.tsv`, F-2409 AC-2, 3, 4, 5, 6, 8, 15, 17, 20, 21, 23 and 27 go from `todo`
+In `docs/architecture/catalogue/coverage-slice1.tsv`, F-2409 AC-2, 3, 4, 5, 6, 8, 17, 20, 21, 23 and 27 go from `todo`
 to `acceptance`. AC-6's "window connects with the indicator" half is core's rendering of our label: list it under
 "Core halves" in #142's tracking comment.
 
@@ -132,21 +131,17 @@ These stay `todo`. List each under "Needs an acceptance row: harness capability 
 
 | AC | Waits for |
 |---|---|
-| AC-7 | STR:S168 at the start of the connect: not built; decision Q1 (remote-oss/remote-ssh#93), then a card |
-| AC-9, 10, 25, 29 | STR:S135 as the reason with `useExecServer` false, the 15 s start wait, and AC-29's unit row: connect-26 (#557) |
-| AC-14 | a malformed range that fails before the start: connect-26 (#557) |
-| AC-13 | the reversed range's reason: decision Q3 (a) (remote-oss/remote-ssh#93) |
+| AC-7, 9, 10, 12, 13, 14, 15, 19, 25, 28, 29, 30 | connect-26 (#557): the decisions of remote-oss/remote-ssh#93, STR:S135, S136 and S168, the range's form and the 15 s wait |
 | AC-26 | a slow stand-in server in the VSCodium run, and tooling-20's Retry |
 | AC-11, 16 | Retry and reload: tooling-20 (#544) |
-| AC-12, 19, 22, 28 | exec-server mode, which needs the CLI path (dormant in 0.2) |
+| AC-22 | closing a window until its connection ends: tooling-20 (#544) |
 | AC-1 | a second fresh host |
 | AC-18 | session hints (F-2605) |
 | AC-24 | a host whose `localhost` is the IPv6 loopback first |
-| AC-30 | decision Q5 (remote-oss/remote-ssh#93) |
 
 ## 5. Done when
 
-- `pnpm test:acceptance:vscodium` passes with the 16 new launches; paste the `suite-ports` summaries;
+- `pnpm test:acceptance:vscodium` passes with the 15 new launches; paste the `suite-ports` summaries;
 - the unit rows of §3 and the repository's gates pass.
 
 If a case behaves otherwise, don't change the table: report it on the issue, as a bug or a spec question.
@@ -154,4 +149,4 @@ If a case behaves otherwise, don't change the table: report it on the issue, as 
 ## 6. Review
 
 PR title `tests: the port and bind-host rows of F-2409 (card coverage-13, #142)`. themis or triton reviews; proteus
-checks the host setup and the 16 launches.
+checks the host setup and the 15 launches.
