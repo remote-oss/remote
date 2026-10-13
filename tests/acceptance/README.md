@@ -87,6 +87,10 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `windows`: a launch with no runner (`kind: 'plain'`). The editor is started plainly, as a user starts it, with no test run in it, one user-data folder and the run's extensions folder, which holds our VSIX files and the window agent's; a Node mocha run of `windows/*.test.ts` drives and observes it. See "Several windows".
 
+- `no-proposals`: the same without the proposed API.
+
+- `explorer`, `explorer-alone` and `explorer-no-proposals`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, and `explorer-no-proposals` without the proposed API.
+
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
 they start in a window whose connect failed. `HARNESS_EDITOR` (`vscode` or `vscodium`)
@@ -127,6 +131,17 @@ ignored, since its extension host may end first), `closeWindow(name)` (resolves 
 `windowEvents(name)` and `recordLines(surface?, window?)`. Every wait is bounded at 60 s and fails naming the window and
 the event. The record's lines name the window that wrote them, and a script entry may name the window that answers it.
 The run's folder is named after the run's id, so that `acceptance:clean` ends an editor a killed job left behind.
+
+### Reading the window
+
+The explorer launches install Remote Explorer and its proposed API into `<run>/extensions-<label>`, so no other launch
+has it, and start the editor with a debugging port that only the run reads (`--remote-debugging-port=0`; the editor
+writes the port it chose into the user-data folder). Each window's title is its folder name in brackets, `[]` for a
+window with none. `windows/renderer.ts` finds a window's page by that title and, over the Chrome DevTools Protocol,
+reads a view's rows (`viewRows`) and clicks a row's inline action (`rowAction`) or a view's title action
+(`titleAction`), as a user does. A test shows the view first with its focus command. The selectors read the workbench
+of the run's pinned VSCodium build; the smoke rows of `explorer/renderer.test.ts`, on the editor's own file explorer,
+show a change there first. Nothing in a product package exists for it.
 
 ### Launches
 
