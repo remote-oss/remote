@@ -64,6 +64,7 @@ import {
   progressFor,
   windowNameOf,
 } from './surfaces/scripted-adapters.ts';
+import {PORTS_VIEW_KEY} from './surfaces/label-formatter.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
 
 /** The page about SSH configuration files that the picker's Help row opens. */
@@ -330,6 +331,10 @@ async function registerConnectOf(
         }),
       ),
       labels: vscode.workspace,
+      portsView: {
+        enablePortsView: () =>
+          vscode.commands.executeCommand('setContext', PORTS_VIEW_KEY, true),
+      },
       commands: host,
       connectEditor: connectCommandEditorOf(vscode, translate, () =>
         listHosts(

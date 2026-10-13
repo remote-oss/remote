@@ -19,6 +19,7 @@ interface Seen {
   commands: Map<string, (...given: unknown[]) => unknown>;
   disposed: string[];
   labels: number;
+  portsViews: number;
   revealed: number;
   opened: string[];
   killed: string[];
@@ -48,6 +49,7 @@ async function registered(
     commands: new Map(),
     disposed: [],
     labels: 0,
+    portsViews: 0,
     revealed: 0,
     opened: [],
     killed: [],
@@ -114,6 +116,12 @@ async function registered(
         registerResourceLabelFormatter: () => {
           seen.labels += 1;
           return {dispose: () => undefined};
+        },
+      },
+      portsView: {
+        enablePortsView: () => {
+          seen.portsViews += 1;
+          return Promise.resolve();
         },
       },
       commands,
@@ -379,6 +387,11 @@ describe("the connect's registration", () => {
       [...seen.disposed].sort(),
       [...seen.commands.keys()].sort(),
     );
+  });
+
+  it('connect-33: without a resolver the Ports view is never enabled', async () => {
+    const {seen} = await registered(false);
+    deepStrictEqual(seen.portsViews, 0);
   });
 
   it('F-2601: the window has no alias before its first resolve', async () => {
