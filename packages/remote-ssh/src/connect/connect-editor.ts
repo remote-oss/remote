@@ -47,10 +47,6 @@ function pickHost(
     const pick = editor.window.createQuickPick();
     let model = initial;
     let items = itemsOf(model, translate);
-    function show(): void {
-      pick.items = items;
-      pick.activeItems = items.slice(0, 1);
-    }
     pick.placeholder = textOfId(
       initial.placeholder.id as FailureStringId,
       translate,
@@ -58,12 +54,15 @@ function pickHost(
     );
     pick.canSelectMany = false;
     pick.ignoreFocusOut = true;
-    show();
+    pick.items = items;
+    // The first row is focused once, before the pick shows. After a change of the text the editor keeps the focus
+    // itself: setting it again would focus a row its own filter hid, and Enter would then pick nothing.
+    pick.activeItems = items.slice(0, 1);
     let answer: PickerItem | undefined;
     pick.onDidChangeValue(typedText => {
       model = modelOf(typedText);
       items = itemsOf(model, translate);
-      show();
+      pick.items = items;
     });
     pick.onDidAccept(() => {
       const [taken] = pick.selectedItems;

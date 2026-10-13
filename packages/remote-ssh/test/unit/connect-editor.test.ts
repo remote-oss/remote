@@ -129,10 +129,17 @@ describe('the host pick of the connect commands (card connect-21)', () => {
     pick.hide();
   });
 
-  it('F-2301 AC-8: the first row is focused again after each change of the text', () => {
+  it('connect-29: the focus is set once, before the pick is shown', () => {
+    const {pick} = started(fakeEditor());
+    deepStrictEqual(pick.focusSets, [false]);
+    pick.hide();
+  });
+
+  it('connect-29: a change of the text sets the rows and not the focus again', () => {
     const {pick} = started(fakeEditor());
     pick.type('d');
-    deepStrictEqual(pick.activeItems, pick.items.slice(0, 1));
+    pick.type('de');
+    deepStrictEqual(pick.focusSets, [false]);
     pick.hide();
   });
 
