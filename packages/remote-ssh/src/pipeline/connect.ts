@@ -20,6 +20,7 @@ import {
   ofTransfer,
 } from './failure.ts';
 import {connectOverCli} from '../cli/cli-connect.ts';
+import {hostPlatformLine} from '../diagnostics/log-content.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -296,6 +297,7 @@ async function runSteps(
     return failure(ofProbe(probed.value.failure));
   }
   const {host} = probed.value;
+  options.logger.info(hostPlatformLine(host));
   let planned = steps.plan(input, host);
   if ('failure' in planned) {
     return failure(ofPlan(planned.failure));

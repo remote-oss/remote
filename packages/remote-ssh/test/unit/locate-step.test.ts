@@ -28,6 +28,7 @@ interface Scenario {
   checks?: Readonly<Record<string, Answer>>;
   lookup?: Answer;
   settingValue?: string;
+  searchPath?: string;
   configFile?: string;
   connectTimeout?: unknown;
   mode?: ConnectionMode;
@@ -40,7 +41,10 @@ async function located(scenario: Scenario = {}): Promise<{
   state: ConnectState;
   seen: Seen;
   lines: LogLine[];
+  /** The lines at warn and error level: what went wrong. */
   logged: string[];
+  /** The lines at info level: the client search. */
+  searched: string[];
 }> {
   const seen: Seen = {started: [], killed: []};
   const state: ConnectState = {};
@@ -50,7 +54,10 @@ async function located(scenario: Scenario = {}): Promise<{
     configFile: () => scenario.configFile ?? '',
     mode: () => scenario.mode ?? 'shared',
     connectTimeout: () => scenario.connectTimeout,
-    environment: {searchPath: '/usr/bin', programFilesFolder: ''},
+    environment: {
+      searchPath: scenario.searchPath ?? '/usr/bin',
+      programFilesFolder: '',
+    },
     platform: 'linux',
     homeFolder: '/home/a',
     spawner: spawnerOf(
@@ -69,7 +76,12 @@ async function located(scenario: Scenario = {}): Promise<{
     state,
     seen,
     lines: sink.lines,
-    logged: sink.lines.map(line => line.message),
+    logged: sink.lines
+      .filter(line => line.level !== 'info')
+      .map(line => line.message),
+    searched: sink.lines
+      .filter(line => line.level === 'info')
+      .map(line => line.message),
   };
 }
 
@@ -375,5 +387,161 @@ describe("the lookup of the host's configuration", () => {
       kind: 'failed',
       failure: {kind: 'unknown', hints: []},
     });
+  });
+});
+
+describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
+  const BANNER = 'OpenSSH_9.6p1, OpenSSL 3.0.13';
+
+  it('F-2101 §9: a configured client that works is logged as set, checked, its banner and used', async () => {
+    const {searched} = await located({
+      settingValue: '/opt/ssh/bin/ssh',
+      checks: {'/opt/ssh/bin/ssh': OPENSSH},
+    });
+    deepStrictEqual(searched, [
+      'remote.SSH.path = "/opt/ssh/bin/ssh"',
+      'Checking ssh client: /opt/ssh/bin/ssh',
+      `ssh client: ${BANNER}`,
+      'Using ssh client: /opt/ssh/bin/ssh',
+    ]);
+  });
+
+  it('F-2101 AC-6: a missing configured file is logged as not a valid SSH binary, then the search path is used', async () => {
+    const {searched} = await located({
+      settingValue: '/nowhere/ssh',
+      checks: {[SSH_PROGRAM]: OPENSSH},
+    });
+    deepStrictEqual(searched, [
+      'remote.SSH.path = "/nowhere/ssh"',
+      'Checking ssh client: /nowhere/ssh',
+      'ssh client: (no banner)',
+      'ssh client /nowhere/ssh was rejected: it could not be started: not found',
+      'remote.SSH.path "/nowhere/ssh" is not a valid SSH binary',
+      'Searched for ssh in: /usr/bin',
+      'Checking ssh client: ssh',
+      `ssh client: ${BANNER}`,
+      'Using ssh client: ssh',
+    ]);
+  });
+
+  it('F-2101 §9: an unset setting goes straight to the search path', async () => {
+    const {searched} = await located();
+    deepStrictEqual(searched, [
+      'remote.SSH.path = ""',
+      'Searched for ssh in: /usr/bin',
+      'Checking ssh client: ssh',
+      `ssh client: ${BANNER}`,
+      'Using ssh client: ssh',
+    ]);
+  });
+
+  it('F-2101 §9: an unset setting is logged as ""', async () => {
+    const {searched} = await located();
+    deepStrictEqual(searched[0], 'remote.SSH.path = ""');
+  });
+
+  it('F-2101 §9: every folder of the search path is a line, in order', async () => {
+    const {searched} = await located({searchPath: '/usr/local/bin:/usr/bin'});
+    deepStrictEqual(searched.slice(1, 3), [
+      'Searched for ssh in: /usr/local/bin',
+      'Searched for ssh in: /usr/bin',
+    ]);
+  });
+
+  it('F-2101 §9: a rejected banner says why', async () => {
+    const {searched} = await located({
+      checks: {
+        [SSH_PROGRAM]: {
+          kind: 'exit',
+          errorOutput: 'PuTTY Release 0.81',
+          status: 0,
+        },
+      },
+    });
+    deepStrictEqual(
+      searched.filter(line => line.includes('was rejected')),
+      ['ssh client ssh was rejected: its banner does not name OpenSSH'],
+    );
+  });
+
+  it('F-2101 §9: a failed check gives its exit status', async () => {
+    const {searched} = await located({
+      checks: {
+        [SSH_PROGRAM]: {kind: 'exit', errorOutput: BANNER, status: 1},
+      },
+    });
+    deepStrictEqual(
+      searched.filter(line => line.includes('was rejected')),
+      ['ssh client ssh was rejected: exit status 1'],
+    );
+  });
+
+  it('F-2101 §9: a check that outlasts its bound says it timed out', async () => {
+    const {searched} = await located({checks: {[SSH_PROGRAM]: {kind: 'hang'}}});
+    deepStrictEqual(
+      searched.filter(line => line.includes('was rejected')),
+      ['ssh client ssh was rejected: it timed out'],
+    );
+  });
+
+  it('F-2101 §9: a check that a signal ended says so', async () => {
+    const {searched} = await located({
+      checks: {
+        [SSH_PROGRAM]: {kind: 'exit', errorOutput: BANNER, status: undefined},
+      },
+    });
+    deepStrictEqual(
+      searched.filter(line => line.includes('was rejected')),
+      ['ssh client ssh was rejected: it was ended by a signal'],
+    );
+  });
+
+  it('F-2101 §9: the banner is read from standard error only', async () => {
+    const {searched} = await located({
+      checks: {[SSH_PROGRAM]: {kind: 'exit', output: BANNER, status: 0}},
+    });
+    deepStrictEqual(
+      searched.filter(line => line.startsWith('ssh client:')),
+      ['ssh client: (no banner)'],
+    );
+  });
+
+  it('F-2101 §9: the candidate whose banner is on standard output only is still used', async () => {
+    const {searched} = await located({
+      checks: {[SSH_PROGRAM]: {kind: 'exit', output: BANNER, status: 0}},
+    });
+    deepStrictEqual(searched.at(-1), 'Using ssh client: ssh');
+  });
+
+  it('F-2101 §9: the first non-empty line of standard error is the banner', async () => {
+    const {searched} = await located({
+      checks: {
+        [SSH_PROGRAM]: {
+          kind: 'exit',
+          errorOutput: `\n\n${BANNER}\nmore\n`,
+          status: 0,
+        },
+      },
+    });
+    deepStrictEqual(
+      searched.filter(line => line.startsWith('ssh client:')),
+      [`ssh client: ${BANNER}`],
+    );
+  });
+
+  it('F-2101 §9: a rejected candidate that did not come from the setting has no "not a valid" line', async () => {
+    const {searched} = await located({checks: {}});
+    deepStrictEqual(
+      searched.filter(line => line.includes('not a valid SSH binary')),
+      [],
+    );
+  });
+
+  it('F-2101 §9: no candidate accepted writes no "Using" line', async () => {
+    const {searched} = await located({checks: {}});
+    deepStrictEqual(
+      searched.filter(line => line.startsWith('Using ssh client')),
+      [],
+    );
   });
 });
