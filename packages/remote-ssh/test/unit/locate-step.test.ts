@@ -29,6 +29,7 @@ interface Scenario {
   lookup?: Answer;
   settingValue?: string;
   searchPath?: string;
+  platform?: 'linux' | 'windows' | 'macOS';
   configFile?: string;
   connectTimeout?: unknown;
   mode?: ConnectionMode;
@@ -58,7 +59,7 @@ async function located(scenario: Scenario = {}): Promise<{
       searchPath: scenario.searchPath ?? '/usr/bin',
       programFilesFolder: '',
     },
-    platform: 'linux',
+    platform: scenario.platform ?? 'linux',
     homeFolder: '/home/a',
     spawner: spawnerOf(
       scenario.checks ?? {[SSH_PROGRAM]: OPENSSH},
@@ -445,6 +446,17 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
     deepStrictEqual(searched.slice(1, 3), [
       'Searched for ssh in: /usr/local/bin',
       'Searched for ssh in: /usr/bin',
+    ]);
+  });
+
+  it('F-2101 §9: the search path of a Windows client is split at semicolons', async () => {
+    const {searched} = await located({
+      platform: 'windows',
+      searchPath: 'C:\\Windows;C:\\Tools',
+    });
+    deepStrictEqual(searched.slice(1, 3), [
+      'Searched for ssh in: C:\\Windows',
+      'Searched for ssh in: C:\\Tools',
     ]);
   });
 

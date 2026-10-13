@@ -23,7 +23,6 @@ import {
   VERSION_ARGUMENTS,
 } from 'lib-ssh';
 import type {Logger} from 'lib-log';
-import path from 'node:path';
 import {
   bannerLine,
   checkingLine,
@@ -267,7 +266,9 @@ export function locateClientStep(
     )) {
       if (candidate.origin === 'path') {
         for (const line of searchedLines(
-          dependencies.environment.searchPath.split(path.delimiter),
+          dependencies.environment.searchPath.split(
+            dependencies.platform === 'windows' ? ';' : ':',
+          ),
         )) {
           dependencies.logger.info(line);
         }
