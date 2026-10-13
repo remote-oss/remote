@@ -287,6 +287,13 @@ function copiesFailing(failure: ChannelFailure): CopyAnswer[] {
   return [{matches: () => true, ending: {kind: 'fail', failure}}];
 }
 
+/** A lock loop's answer after three attempts that all met a held lock. */
+const EXHAUSTED = {
+  kind: 'retriesExhausted' as const,
+  last: {kind: 'noResultBlock' as const, exitStatus: 0},
+  attempts: 3,
+};
+
 describe('a download on the host (F-2403, F-2405.BR-2)', () => {
   it('F-2403: the host downloads and unpacks the archive, and the install folder is reported', async () => {
     deepStrictEqual((await runTransfer()).outcome, {
@@ -677,11 +684,31 @@ describe('failures of the copy and the install (V4)', () => {
     });
   });
 
+  it('#668 R1: a script failure with a written path carries the write failure', async () => {
+    const {outcome} = await runTransfer({
+      installs: [
+        block(
+          'CreateInstallDirFailed',
+          'server.writeFailedPath=/h/.s/bin/abc',
+          'server.writeFailedError=mkdir: Permission denied',
+        ),
+      ],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'scriptFailed',
+      status: 'CreateInstallDirFailed',
+      writeFailure: {path: '/h/.s/bin/abc', error: 'mkdir: Permission denied'},
+    });
+  });
+
   it('F-2408.BR-3: a host lock that stays busy ends in retries exhausted', async () => {
     const {outcome} = await runTransfer({
-      lockLoop: () => Promise.resolve('retriesExhausted'),
+      lockLoop: () => Promise.resolve(EXHAUSTED),
     });
-    deepStrictEqual(failureOf(outcome), {kind: 'retriesExhausted'});
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'retriesExhausted',
+      attempts: 3,
+    });
   });
 });
 
@@ -784,7 +811,7 @@ describe('the copy left on the host is deleted (V4)', () => {
   it('V4: after a host lock that stayed busy through every retry', async () => {
     const {channel} = await runTransfer({
       plan: CLIENT,
-      lockLoop: () => Promise.resolve('retriesExhausted'),
+      lockLoop: () => Promise.resolve(EXHAUSTED),
     });
     deepStrictEqual(deletes(discardsOf(channel)), [true]);
   });

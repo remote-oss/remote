@@ -76,6 +76,17 @@ function statusOf(
   return block === 'none' ? 'none' : block.status;
 }
 
+/** The server facts of a script run, or none when the run gave no result block. */
+function serverFactsOf(
+  host: FakeHost,
+  request: Parameters<typeof blockOf>[1],
+  parameters: ScriptParameters,
+  options: Parameters<typeof blockOf>[3] = {},
+): Record<string, string> {
+  const block = blockOf(host, request, parameters, options);
+  return block === 'none' ? {} : block.serverFacts;
+}
+
 /** Removes any server the test started, so no process outlives it. */
 function stopServers(host: FakeHost): void {
   runScript(host, single('kill'), parametersFor());
@@ -450,6 +461,18 @@ describe('the POSIX bootstrap script', () => {
           environment: {STUB_FLOCK_BUSY: 'yes'},
         }),
         'LockBusy',
+      );
+    });
+
+    it('#668 R4: a busy flock reports the lock file', () => {
+      useHost(['wget', 'flock']);
+      const parameters = parametersFor();
+      parameters.lock.method = 'flock';
+      deepStrictEqual(
+        serverFactsOf(host, single('install'), parameters, {
+          environment: {STUB_FLOCK_BUSY: 'yes'},
+        }).lockPath,
+        path.join(installFolder(host), 'boot-lock.user.abc123'),
       );
     });
 
@@ -1526,6 +1549,17 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
+    it('#668 R1: a start whose token file cannot be written is a write failure naming it', () => {
+      runScript(host, single('install'), parametersFor());
+      chmodSync(dataFolder(), 0o555);
+      const facts = serverFactsOf(host, single('start'), parametersFor());
+      chmodSync(dataFolder(), 0o755);
+      deepStrictEqual(
+        facts.writeFailedPath,
+        path.join(dataFolder(), '.abc123.token'),
+      );
+    });
+
     it('F-2408.BR-3: a start waits on the host lock another window holds', () => {
       runScript(host, single('install'), parametersFor());
       holdLinkLock(host);
@@ -1537,29 +1571,98 @@ describe('the POSIX bootstrap script', () => {
 
     for (const shell of ['/bin/sh', '/bin/dash']) {
       for (const method of ['flock', 'link'] as const) {
-        it(`F-2408.BR-3: a lock that cannot be opened is LockBusy under ${shell}, by ${method}`, () => {
+        it(`#668 R3: a lock that cannot be opened is a write failure naming the lock file under ${shell}, by ${method}`, () => {
           useHost(['wget', 'flock']);
           mkdirSync(installFolder(host), {recursive: true});
           chmodSync(installFolder(host), 0o555);
           const parameters = parametersFor();
           parameters.lock.method = method;
-          const status = statusOf(host, single('install'), parameters, {shell});
+          const block = blockOf(host, single('install'), parameters, {shell});
           chmodSync(installFolder(host), 0o755);
-          deepStrictEqual(status, 'LockBusy');
+          deepStrictEqual(
+            block === 'none'
+              ? block
+              : [
+                  block.status,
+                  block.serverFacts.writeFailedPath,
+                  (block.serverFacts.writeFailedError ?? '') !== '',
+                ],
+            [
+              'CreateInstallDirFailed',
+              path.join(installFolder(host), 'boot-lock.user.abc123'),
+              true,
+            ],
+          );
         });
       }
     }
 
+    it('#668 R3: a lock path that is a directory in a writable install folder is a write failure naming the lock path', () => {
+      const lock = path.join(installFolder(host), 'boot-lock.user.abc123');
+      mkdirSync(lock, {recursive: true});
+      const facts = serverFactsOf(host, single('install'), parametersFor());
+      deepStrictEqual(
+        [
+          facts.writeFailedPath,
+          (facts.writeFailedError ?? '') !== '',
+          facts.lockPath,
+          facts.lockInTemporary,
+        ],
+        [lock, true, lock, 'no'],
+      );
+    });
+
+    it('#668 R3: the same install with the lock in the temporary folder goes through', () => {
+      mkdirSync(path.join(installFolder(host), 'boot-lock.user.abc123'), {
+        recursive: true,
+      });
+      const parameters = parametersFor();
+      lockInTemporaryFolder(host, parameters);
+      deepStrictEqual(statusOf(host, single('install'), parameters), 'Ok');
+    });
+
+    it('#668 R1: an install folder that cannot be made is a write failure naming it', () => {
+      mkdirSync(path.join(host.home, '.server-data', 'bin'), {recursive: true});
+      chmodSync(path.join(host.home, '.server-data', 'bin'), 0o555);
+      const facts = serverFactsOf(host, single('install'), parametersFor());
+      chmodSync(path.join(host.home, '.server-data', 'bin'), 0o755);
+      deepStrictEqual(
+        [
+          facts.writeFailedPath,
+          (facts.writeFailedError ?? '') !== '',
+          facts.lockPath,
+          facts.lockInTemporary,
+        ],
+        [installFolder(host), true, undefined, undefined],
+      );
+    });
+
+    it('#668 R4: a link lock held by another window reports the lock file', () => {
+      const lock = holdLinkLock(host);
+      deepStrictEqual(
+        serverFactsOf(host, single('install'), parametersFor()).lockPath,
+        lock,
+      );
+    });
+
     /** Runs an install whose /tmp lock is a symlink to a file that must stay as it is. */
-    function installOverSymlinkedLock(): {status: string; victim: string} {
+    function installOverSymlinkedLock(): {
+      status: string;
+      facts: Record<string, string>;
+      victim: string;
+    } {
       const victim = path.join(path.dirname(host.callsFile), 'victim.txt');
       writeFileSync(victim, 'keep me');
       const parameters = parametersFor();
       const link = lockInTemporaryFolder(host, parameters);
       symlinkSync(victim, link);
-      const status = statusOf(host, single('install'), parameters);
+      const block = blockOf(host, single('install'), parameters);
       unlinkSync(link);
-      return {status, victim};
+      return {
+        status: block === 'none' ? block : block.status,
+        facts: block === 'none' ? {} : block.serverFacts,
+        victim,
+      };
     }
 
     /** Starts an install whose download takes a while, interrupts the shell with `signal`, and waits for it to end. */
@@ -1605,9 +1708,12 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(existsSync(`${lock}.target`), true);
     });
 
-    it('F-2408.BR-2: a lock in the temporary folder that is a symlink is refused', () => {
+    it('#668 R3: a lock in the temporary folder that is a symlink is refused as not a regular file', () => {
       const outcome = installOverSymlinkedLock();
-      deepStrictEqual(outcome.status, 'LockBusy');
+      deepStrictEqual(
+        [outcome.status, outcome.facts.writeFailedError],
+        ['CreateInstallDirFailed', 'not a regular file'],
+      );
     });
 
     it('F-2408.BR-2: a lock in the temporary folder that is a symlink leaves its target alone', () => {

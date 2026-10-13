@@ -98,13 +98,48 @@ const STATUS_KINDS: ReadonlyMap<string, FailedKind> = new Map<
   ['ServerFailedToStart', 'serverStart'],
 ]);
 
+/** The hint that the host lock can be kept in the temporary folder, for a lock file the host could not use. */
+const LOCK_HINT =
+  "The host lock file can't be used here. On a distributed file system such as NFS or AFS, setting remote.SSH.lockfilesInTmp to true keeps the lock in /tmp.";
+
+/** The log text of a write failure: the path and the error, then the hint when the unusable file is a lock outside /tmp. */
+function writeDetail(failure: {
+  path: string;
+  error: string;
+  lockInTemporary?: boolean;
+}): string {
+  const text = `cannot write ${failure.path}: ${failure.error}`;
+  return failure.lockInTemporary === false ? `${text}\n${LOCK_HINT}` : text;
+}
+
 /** The failure a bootstrap script's status word stands for; a word outside the list is `unknown`. */
-function ofStatus(status: string): FailureDetail {
+function ofStatus(
+  status: string,
+  writeFailure?: {path: string; error: string; lockInTemporary?: boolean},
+): FailureDetail {
   const kind = STATUS_KINDS.get(status) ?? 'unknown';
   if (kind === 'serverDownload') {
     return {kind, reason: DOWNLOAD_FAILED};
   }
-  return kind === 'serverInstall' ? {kind, reason: INSTALL_FAILED} : {kind};
+  if (kind === 'serverInstall') {
+    return writeFailure === undefined
+      ? {kind, reason: INSTALL_FAILED}
+      : logged(kind, writeDetail(writeFailure), INSTALL_FAILED);
+  }
+  return {kind};
+}
+
+/** The failure of a loop that gave up on a busy host lock, with the lock file when the host named it. */
+function ofExhausted(failure: {
+  attempts: number;
+  lockPath?: string;
+}): FailureDetail {
+  return logged(
+    'retriesExhausted',
+    failure.lockPath === undefined
+      ? `the host lock was still held after ${String(failure.attempts)} attempts`
+      : `the host lock ${failure.lockPath} was still held after ${String(failure.attempts)} attempts`,
+  );
 }
 
 /** The failure of the host probe. */
@@ -216,9 +251,9 @@ export function ofTransfer(failure: TransferFailure): FailureDetail {
     case 'cancelled':
       return {kind: 'cancelled'};
     case 'retriesExhausted':
-      return {kind: 'retriesExhausted'};
+      return ofExhausted(failure);
     case 'scriptFailed':
-      return ofStatus(failure.status);
+      return ofStatus(failure.status, failure.writeFailure);
     case 'noResultBlock':
       return {kind: 'channelClosed'};
     default:
@@ -283,9 +318,9 @@ export function ofStart(
     case 'prerequisitesMissing':
       return {kind: 'prerequisiteMissing'};
     case 'retriesExhausted':
-      return {kind: 'retriesExhausted'};
+      return ofExhausted(failure);
     case 'scriptFailed':
-      return ofStatus(failure.status);
+      return ofStatus(failure.status, failure.writeFailure);
     case 'noResultBlock':
       return {kind: 'channelClosed'};
     default:

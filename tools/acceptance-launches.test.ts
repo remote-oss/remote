@@ -151,6 +151,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-stranger',
         'failure-refused-shown',
         'failure-stranger-cancel',
+        'failure-readonly',
       ],
     );
   });
@@ -169,6 +170,7 @@ describe('the launches of the VSCodium run', () => {
         ['failure-stranger', 'stranger'],
         ['failure-refused-shown', 'refused-shown'],
         ['failure-stranger-cancel', 'stranger-cancel'],
+        ['failure-readonly', 'readonly'],
       ],
     );
   });

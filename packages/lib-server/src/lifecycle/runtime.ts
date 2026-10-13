@@ -69,13 +69,77 @@ function causeOf(
     : undefined;
 }
 
+/** The path a script could not write, and the error text the failing command printed. */
+export interface WriteFailure {
+  path: string;
+  error: string;
+  /** Whether the host lock that could not be used was already in the temporary folder; only when the path is the lock file. */
+  lockInTemporary?: boolean;
+}
+
+/** The write failure the facts of a `CreateInstallDirFailed` block name, when they name a path. */
+function writeFailureOf(block: ResultBlock): WriteFailure | undefined {
+  const failedPath = block.serverFacts.writeFailedPath;
+  if (block.status !== 'CreateInstallDirFailed' || failedPath === undefined) {
+    return undefined;
+  }
+  const failure = {
+    path: failedPath,
+    error: block.serverFacts.writeFailedError ?? '',
+  };
+  return block.serverFacts.lockPath === failedPath
+    ? {
+        ...failure,
+        lockInTemporary: block.serverFacts.lockInTemporary === 'yes',
+      }
+    : failure;
+}
+
+/** The failure of a block whose status no step expects, with the write failure its facts name. */
+export function scriptFailure(
+  block: ResultBlock,
+): Extract<StartFailure, {kind: 'scriptFailed'}> {
+  const writeFailure = writeFailureOf(block);
+  return {
+    kind: 'scriptFailed',
+    status: block.status,
+    ...(writeFailure === undefined ? {} : {writeFailure}),
+  };
+}
+
+/** The loop gave up: the last attempt's step, and how many attempts were made. */
+export interface RetriesExhausted {
+  kind: 'retriesExhausted';
+  last: StepRun;
+  attempts: number;
+}
+
+/** The retries-exhausted failure the last attempt's block describes: the lock file it reported, if any. */
+export function exhaustedFailure(
+  exhausted: RetriesExhausted,
+): Extract<StartFailure, {kind: 'retriesExhausted'}> {
+  const lockPath =
+    exhausted.last.kind === 'result'
+      ? exhausted.last.block.serverFacts.lockPath
+      : undefined;
+  return {
+    kind: 'retriesExhausted',
+    attempts: exhausted.attempts,
+    ...(lockPath === undefined ? {} : {lockPath}),
+  };
+}
+
 /** Why no server was started. */
 export type StartFailure =
   | {kind: 'invalidPortRange'}
   | {kind: 'serverStart'; detail?: string; cause?: ServerStartCause}
   | {kind: 'prerequisitesMissing'}
-  | {kind: 'retriesExhausted'}
-  | {kind: 'scriptFailed'; status: ScriptStatus}
+  | {kind: 'retriesExhausted'; attempts: number; lockPath?: string}
+  | {
+      kind: 'scriptFailed';
+      status: ScriptStatus;
+      writeFailure?: WriteFailure;
+    }
   | {kind: 'unreadableServerFacts'}
   | {kind: 'noResultBlock'}
   | {kind: 'channelFailed'; failure: ChannelFailure};
@@ -92,7 +156,7 @@ export type StartOutcome =
 export type HostLockLoop = (
   step: () => Promise<StepRun>,
   cancellation: AbortSignal,
-) => Promise<StepRun | 'retriesExhausted'>;
+) => Promise<StepRun | RetriesExhausted>;
 
 /** What the start needs from its surroundings. */
 export interface RuntimeDependencies {
@@ -158,11 +222,11 @@ function endpointOf(
 
 /** The result block of a finished step, or the failed start that a step with none is. */
 export function blockOfStart(
-  stepRun: StepRun | 'retriesExhausted',
+  stepRun: StepRun | RetriesExhausted,
 ):
   {block: ResultBlock} | {unfinished: Extract<StartOutcome, {kind: 'failed'}>} {
-  if (stepRun === 'retriesExhausted') {
-    return {unfinished: failed({kind: 'retriesExhausted'})};
+  if (stepRun.kind === 'retriesExhausted') {
+    return {unfinished: failed(exhaustedFailure(stepRun))};
   }
   if (stepRun.kind === 'channelFailed') {
     return {
@@ -176,7 +240,7 @@ export function blockOfStart(
 
 /** The start outcome of a finished step run. */
 function outcomeOf(
-  stepRun: StepRun | 'retriesExhausted',
+  stepRun: StepRun | RetriesExhausted,
   notices: readonly StartNotice[],
 ): StartOutcome {
   const read = blockOfStart(stepRun);
@@ -217,7 +281,7 @@ function outcomeOf(
   if (block.status === 'LinuxPrereqs') {
     return failed({kind: 'prerequisitesMissing'});
   }
-  return failed({kind: 'scriptFailed', status: block.status});
+  return failed(scriptFailure(block));
 }
 
 /**

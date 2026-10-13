@@ -199,7 +199,7 @@ const READY_INTERVAL = 500;
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
  * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); and the aliases of the
  * host's other accounts: `password` (login by password only), `noforward` (TCP forwarding refused), `mute` (a
- * login shell that does not answer) and `master` and `master-ask` (the password account behind a ControlMaster).
+ * login shell that does not answer), `readonly` (a server data folder that exists and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster).
  */
 export function harnessSshConfig(port: number, runFolder: string): string {
   return [
@@ -256,6 +256,13 @@ export function harnessSshConfig(port: number, runFolder: string): string {
     ...accountAlias(
       'mute',
       'harness-mute',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'readonly',
+      'harness-ro',
       port,
       runFolder,
       keyLines(runFolder),

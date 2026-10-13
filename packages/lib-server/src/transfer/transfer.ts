@@ -10,7 +10,13 @@ import type {Logger} from 'lib-log';
 import {allowedRedirectHosts} from 'lib-product';
 import type {Plan} from '../install/plan.ts';
 import {runStep, type StepRun} from '../lifecycle/run-step.ts';
-import type {HostLockLoop} from '../lifecycle/runtime.ts';
+import {
+  exhaustedFailure,
+  type HostLockLoop,
+  type RetriesExhausted,
+  scriptFailure,
+  type WriteFailure,
+} from '../lifecycle/runtime.ts';
 import type {Verification} from '../policy/record.ts';
 import type {ScriptParameters} from '../scripts/bootstrap.ts';
 import {
@@ -100,8 +106,12 @@ export type TransferFailure =
   | {kind: 'unpack'}
   | {kind: 'copy'; failure: ChannelFailure}
   | {kind: 'cancelled'}
-  | {kind: 'retriesExhausted'}
-  | {kind: 'scriptFailed'; status: ScriptStatus}
+  | {kind: 'retriesExhausted'; attempts: number; lockPath?: string}
+  | {
+      kind: 'scriptFailed';
+      status: ScriptStatus;
+      writeFailure?: WriteFailure;
+    }
   | {kind: 'noResultBlock'}
   | {kind: 'channelFailed'; failure: ChannelFailure};
 
@@ -132,11 +142,11 @@ function channelFailure(failure: ChannelFailure): TransferFailure {
 
 /** The transfer outcome of a finished install step. */
 function outcomeOf(
-  stepRun: StepRun | 'retriesExhausted',
+  stepRun: StepRun | RetriesExhausted,
   plan: DownloadPlan,
 ): TransferOutcome {
-  if (stepRun === 'retriesExhausted') {
-    return failed({kind: 'retriesExhausted'});
+  if (stepRun.kind === 'retriesExhausted') {
+    return failed(exhaustedFailure(stepRun));
   }
   if (stepRun.kind === 'channelFailed') {
     return failed(channelFailure(stepRun.failure));
@@ -158,7 +168,7 @@ function outcomeOf(
     case 'UnpackFailed':
       return failed({kind: 'unpack'});
     default:
-      return failed({kind: 'scriptFailed', status: block.status});
+      return failed(scriptFailure(block));
   }
 }
 

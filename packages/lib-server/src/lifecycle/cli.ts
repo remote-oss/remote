@@ -14,7 +14,13 @@ import {
   type TransferInput,
 } from '../transfer/transfer.ts';
 import {runStep, type StepRun} from './run-step.ts';
-import {blockOfStart, type HostLockLoop, type StartOutcome} from './runtime.ts';
+import {
+  blockOfStart,
+  type HostLockLoop,
+  type RetriesExhausted,
+  scriptFailure,
+  type StartOutcome,
+} from './runtime.ts';
 
 /** The variable the CLI reads its connection token from. */
 const TOKEN_VARIABLE = 'VSCODE_CLI_REQUIRE_TOKEN';
@@ -112,7 +118,7 @@ function startFailureOf(
 }
 
 /** The start outcome of a finished `startCli` run, with the host's connection token the script reported. */
-function outcomeOf(stepRun: StepRun | 'retriesExhausted'): StartOutcome {
+function outcomeOf(stepRun: StepRun | RetriesExhausted): StartOutcome {
   const read = blockOfStart(stepRun);
   if ('unfinished' in read) {
     return read.unfinished;
@@ -122,7 +128,7 @@ function outcomeOf(stepRun: StepRun | 'retriesExhausted'): StartOutcome {
     return failed(startFailureOf(block.cliFacts));
   }
   if (block.status !== 'Ok') {
-    return failed({kind: 'scriptFailed', status: block.status});
+    return failed(scriptFailure(block));
   }
   const port = Number(block.cliFacts.port);
   const processId = Number(block.cliFacts.pid);
