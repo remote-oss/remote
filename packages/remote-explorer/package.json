@@ -1,8 +1,10 @@
 {
   "name": "remote-explorer",
-  "version": "0.0.0",
+  "displayName": "Remote Explorer",
+  "description": "%description%",
+  "version": "0.1.0",
+  "publisher": "remote-oss",
   "private": true,
-  "description": "Every remote target in one view: SSH hosts, containers and WSL distros, one click away.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -12,9 +14,107 @@
   "bugs": {
     "url": "https://github.com/remote-oss/remote/issues"
   },
+  "engines": {
+    "vscode": "^1.139.0"
+  },
+  "categories": [
+    "Other"
+  ],
   "keywords": [
     "remote development",
     "remote",
     "explorer"
-  ]
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "activationEvents": [
+    "onCommand:remote-internal.setActiveFolders"
+  ],
+  "enabledApiProposals": [
+    "contribViewsRemote",
+    "extensionsAny"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "remote-explorer.refresh",
+        "title": "%commands.refresh.title%",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "remote-explorer.connectToRemoteInNewWindow",
+        "title": "%commands.connectToRemoteInNewWindow.title%",
+        "icon": "$(empty-window)"
+      },
+      {
+        "command": "remote-explorer.connectToRemoteInCurrentWindow",
+        "title": "%commands.connectToRemoteInCurrentWindow.title%",
+        "icon": "$(arrow-right)"
+      }
+    ],
+    "views": {
+      "remote": [
+        {
+          "id": "remoteTargets",
+          "name": "%views.remote.title%",
+          "group": "targets@1",
+          "remoteName": [
+            "tunnel",
+            "ssh-remote"
+          ]
+        }
+      ]
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "remote-explorer.refresh",
+          "when": "false"
+        },
+        {
+          "command": "remote-explorer.connectToRemoteInNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "remote-explorer.connectToRemoteInCurrentWindow",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "remote-explorer.refresh",
+          "group": "navigation",
+          "when": "view == remoteTargets && !remote-explorer.standingDown"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "remote-explorer.connectToRemoteInCurrentWindow",
+          "group": "inline@1",
+          "when": "viewItem == remote-explorer.tunnelRemoteTarget && !remote-explorer.standingDown || viewItem == remote-explorer.sshRemoteTarget && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.connectToRemoteInCurrentWindow",
+          "group": "navigation@1",
+          "when": "viewItem == remote-explorer.tunnelRemoteTarget && !remote-explorer.standingDown || viewItem == remote-explorer.sshRemoteTarget && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.connectToRemoteInNewWindow",
+          "group": "inline@2",
+          "when": "viewItem == remote-explorer.tunnelRemoteTarget && !remote-explorer.standingDown || viewItem == remote-explorer.sshRemoteTarget && !remote-explorer.standingDown"
+        },
+        {
+          "command": "remote-explorer.connectToRemoteInNewWindow",
+          "group": "navigation@2",
+          "when": "viewItem == remote-explorer.tunnelRemoteTarget && !remote-explorer.standingDown || viewItem == remote-explorer.sshRemoteTarget && !remote-explorer.standingDown"
+        }
+      ]
+    }
+  }
 }
