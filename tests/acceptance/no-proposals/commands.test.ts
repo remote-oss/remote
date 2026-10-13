@@ -50,6 +50,14 @@ describe('the commands of an editor that does not enable the proposed API (card 
     );
   });
 
+  it('contracts §3.2: F-3903 §5 rule 4, without the proposals the setup notice offers Configure Runtime Arguments and Not Now', async () => {
+    const notices = await setupNotices();
+    deepStrictEqual(
+      notices.map(notice => notice.buttons),
+      [['Configure Runtime Arguments', 'Not Now']],
+    );
+  });
+
   it('contracts §3.2: F-3903 §5 rule 4, without the proposals the log names them', () => {
     deepStrictEqual(
       connectionLog().filter(line => line.startsWith('Missing proposed APIs')),
