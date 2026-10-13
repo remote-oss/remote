@@ -282,6 +282,7 @@ describe('cleanRun (card tooling-10)', () => {
     scripted.passes('c1\nc2\n'); // docker ps, the first listing
     scripted.passes(); // docker rm --force c1
     scripted.passes(); // docker rm --force c2
+    scripted.passes(); // pkill
     scripted.passes(); // docker image rm --force
     scripted.passes(''); // docker ps, the second listing
 
@@ -300,6 +301,10 @@ describe('cleanRun (card tooling-10)', () => {
       },
       {program: 'docker', argv: ['rm', '--force', 'c1']},
       {program: 'docker', argv: ['rm', '--force', 'c2']},
+      {
+        program: 'pkill',
+        argv: ['-f', '--', 'acceptance-77-2-[A-Za-z0-9]+/user-data'],
+      },
       {
         program: 'docker',
         argv: ['image', 'rm', '--force', 'remote-oss-acceptance-host:77-2'],
@@ -320,17 +325,19 @@ describe('cleanRun (card tooling-10)', () => {
   it('does not throw when the image is already gone', () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker ps
+    scripted.passes(); // pkill
     scripted.fails(1, 'No such image'); // docker image rm --force
     scripted.passes(''); // docker ps
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 3);
+    strictEqual(scripted.calls.length, 4);
   });
 
   it("throws naming the container when one still carries the run's label", () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker ps
+    scripted.passes(); // pkill
     scripted.passes(); // docker image rm --force
     scripted.passes('c9\n'); // docker ps, the second listing
 
@@ -346,6 +353,7 @@ describe('cleanRun (card tooling-10)', () => {
     const scripted = scriptedCommands();
     scripted.passes('c1\n'); // docker ps
     scripted.passes(); // docker rm --force c1
+    scripted.passes(); // pkill
     scripted.passes(); // docker image rm --force
     scripted.passes(''); // docker ps
 
@@ -382,5 +390,17 @@ describe('cleanRun (card tooling-10)', () => {
         ],
       },
     );
+  });
+
+  it('does not throw when no editor of the run is running', () => {
+    const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps
+    scripted.fails(1, ''); // pkill matched nothing
+    scripted.passes(); // docker image rm --force
+    scripted.passes(''); // docker ps
+
+    cleanRun(scripted, RUN_ID);
+
+    strictEqual(scripted.calls.length, 4);
   });
 });

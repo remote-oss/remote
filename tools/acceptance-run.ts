@@ -168,7 +168,8 @@ function containersOf(quiet: string): string[] {
 }
 
 /**
- * Removes the run's containers (by the run's label, forced) and its image tag; what is already gone is not an
+ * Removes the run's containers (by the run's label, forced), ends an editor still on the run's user-data folder, and
+ * removes its image tag; what is already gone is not an
  * error. A container that still carries the run's label afterwards makes it throw, naming the ids, so a failed
  * removal fails the run instead of keeping the run's state on the shared machine.
  */
@@ -179,6 +180,8 @@ export function cleanRun(command: CommandRunner, runId: string): void {
   )) {
     checked(command, 'docker', ['rm', '--force', containerId]);
   }
+  // An editor that a killed job left holds the run's user-data folder, named by the run's id; none running is no error.
+  command('pkill', ['-f', '--', `acceptance-${runId}-[A-Za-z0-9]+/user-data`]);
   // The image may already be gone: its removal's status is ignored.
   command('docker', ['image', 'rm', '--force', hostImageOf(runId)]);
   const remaining = containersOf(

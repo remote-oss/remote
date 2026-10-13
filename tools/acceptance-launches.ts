@@ -9,23 +9,25 @@ import path from 'node:path';
 /** The window the remote launches open: the harness host's home folder over `ssh-remote`. */
 const REMOTE_FOLDER_URI = 'vscode-remote://ssh-remote+harness/home/harness';
 
-/** The development extension every launch loads: it runs commands for the window and reports its activation. */
-const WINDOW_AGENT = 'window-agent';
-
-/** One launch of the VSCodium run, in the order the run makes them. */
-export interface Launch {
-  /** The test-cli label: lower-case letters, digits and hyphens. */
+/** What every launch of the VSCodium run has. */
+interface LaunchCommon {
+  /** The label: lower-case letters, digits and hyphens. */
   label: string;
-  /** The development extension the tests run in: `runner` (a local window) or `runner-remote` (a remote one). */
-  runner: 'runner' | 'runner-remote';
-  /** The suite folder under tests/acceptance, bundled into `dist-<suite without "suite-">`. */
-  suite: string;
   /** The window's folder; none for a local window. */
   folderUri?: string;
   /** Settings merged over the run's base settings for this launch only. */
   settings?: Readonly<Record<string, unknown>>;
   /** Variables added to the extension host's environment for this launch only. */
   environment?: Readonly<Record<string, string>>;
+}
+
+/** A launch whose tests run in a window of the editor, started by test-cli. */
+export interface RunnerLaunch extends LaunchCommon {
+  kind?: undefined;
+  /** The development extension the tests run in: `runner` (a local window) or `runner-remote` (a remote one). */
+  runner: 'runner' | 'runner-remote';
+  /** The suite folder under tests/acceptance, bundled into `dist-<suite without "suite-">`. */
+  suite: string;
   /** Whether the launch answers from its own script and record files (`<label>-script.json`, `<label>-record.jsonl`). */
   ownScript?: boolean;
   /** Further development extensions, folders under tests/acceptance, loaded after the runner. */
@@ -36,9 +38,19 @@ export interface Launch {
    * runs on the host.
    */
   hostExtensions?: readonly string[];
-  /** Folders of the host user's home that exist before the launch, such as the folder of the window it opens. */
-  hostFolders?: readonly string[];
 }
+
+/**
+ * A launch with no test run in the editor: the editor starts plainly, as a user starts it, and a Node mocha run of the
+ * tests in `suite`, a folder under tests/acceptance, drives and observes it through the window agent.
+ */
+export interface PlainLaunch extends LaunchCommon {
+  kind: 'plain';
+  suite: string;
+}
+
+/** One launch of the VSCodium run, in the order the run makes them. */
+export type Launch = RunnerLaunch | PlainLaunch;
 
 /** One failing connect of the VSCodium run: its own launch on `alias`, the script its window answers from. */
 export interface FailureCase {
@@ -87,9 +99,8 @@ export function failureLabel(alias: string): string {
  * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); each
  * failing connect runs suite-failure in a window on its alias, answered from its own script; and `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `slow` runs suite-slow with an extension that takes 15 s to
- * activate in the remote extension host, which the harness copies to the host first; `windows` runs suite-windows in a
- * window on the folder `a`, which opens and drives further windows; `windows-local` does the same from a local window.
- * Every launch loads the window agent.
+ * activate in the remote extension host, which the harness copies to the host first; `windows` starts the editor plainly, with no
+ * runner and no folder, and drives its windows through the window agent from a Node run.
  */
 export function launchesOf(root: string): Launch[] {
   const launches: Launch[] = [
@@ -127,19 +138,9 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
       hostExtensions: ['slow-remote'],
     },
-    {
-      label: 'windows',
-      runner: 'runner-remote',
-      suite: 'suite-windows',
-      folderUri: 'vscode-remote://ssh-remote+harness/home/harness/a',
-      hostFolders: ['a'],
-    },
-    {label: 'windows-local', runner: 'runner', suite: 'suite-windows-local'},
+    {label: 'windows', kind: 'plain', suite: 'windows'},
   ];
-  return launches.map(launch => ({
-    ...launch,
-    extraExtensions: [...(launch.extraExtensions ?? []), WINDOW_AGENT],
-  }));
+  return launches;
 }
 
 /** The folder a suite is bundled into: `dist` for the shared suite, `dist-<name>` for `suite-<name>`. */
@@ -151,7 +152,7 @@ export function bundleFolderOf(suite: string): string {
 export function extensionsOf(launches: readonly Launch[]): string[] {
   return [
     ...new Set(
-      launches.flatMap(launch => [
+      runnerLaunches(launches).flatMap(launch => [
         ...(launch.extraExtensions ?? []),
         ...(launch.hostExtensions ?? []),
       ]),
@@ -164,7 +165,15 @@ export function hostExtensionFolder(extension: string): string {
   return `/home/harness/${extension}`;
 }
 
-/** The suites that are bundled: the shared helpers, then each suite of a launch once. */
+/** The launches that run tests in a window of the editor, by test-cli. */
+export function runnerLaunches(launches: readonly Launch[]): RunnerLaunch[] {
+  return launches.filter(launch => launch.kind === undefined);
+}
+
+/** The suites that are bundled: the shared helpers, then each suite of a launch with a runner once. */
 export function suitesOf(launches: readonly Launch[]): string[] {
-  return ['suite', ...new Set(launches.map(launch => launch.suite))];
+  return [
+    'suite',
+    ...new Set(runnerLaunches(launches).map(launch => launch.suite)),
+  ];
 }

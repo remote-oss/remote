@@ -6,6 +6,7 @@ import {
   failureCases,
   LABEL_FORM,
   launchesOf,
+  runnerLaunches,
   suitesOf,
 } from './acceptance-launches.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -13,7 +14,7 @@ import {REPOSITORY_ROOT} from './repository.ts';
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal and slow', () => {
+  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow and windows', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -25,6 +26,7 @@ describe('the launches of the VSCodium run', () => {
         ),
         'terminal',
         'slow',
+        'windows',
       ],
     );
   });
@@ -62,6 +64,31 @@ describe('the launches of the VSCodium run', () => {
         .filter(launch => launch.settings !== undefined)
         .map(launch => launch.label),
       ['terminal'],
+    );
+  });
+});
+
+describe('the launch with no runner', () => {
+  const launches = launchesOf(REPOSITORY_ROOT);
+
+  it('D-85: the windows launch is plain and has a suite folder of Node tests', () => {
+    deepStrictEqual(
+      launches.filter(launch => launch.kind === 'plain'),
+      [{label: 'windows', kind: 'plain', suite: 'windows'}],
+    );
+  });
+
+  it('D-85: the launches with a runner leave out the plain one', () => {
+    deepStrictEqual(
+      runnerLaunches(launches).filter(launch => launch.label === 'windows'),
+      [],
+    );
+  });
+
+  it('D-85: a plain launch is bundled into no folder', () => {
+    deepStrictEqual(
+      suitesOf(launches).filter(suite => suite === 'windows'),
+      [],
     );
   });
 });

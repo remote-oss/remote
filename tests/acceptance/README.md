@@ -85,6 +85,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   harness copies the extension into `/home/harness/slow-remote` before the launches (`hostExtensions`) and the launch
   loads it with `--extensionDevelopmentPath=vscode-remote://ssh-remote+harness/home/harness/slow-remote`.
 
+- `windows`: a launch with no runner (`kind: 'plain'`). The editor is started plainly, as a user starts it, with no test run in it, one user-data folder and the run's extensions folder, which holds our VSIX files and the window agent's; a Node mocha run of `windows/*.test.ts` drives and observes it. See "Several windows".
+
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
 they start in a window whose connect failed. `HARNESS_EDITOR` (`vscode` or `vscodium`)
@@ -99,6 +101,32 @@ message, with `details` true or false as the message carried the details link. `
 `suite/harness.ts` reads them. `REMOTE_OSS_ACCEPTANCE_LOG` names a file the log channel's lines are appended to, after the
 logger's secret masking: `<run folder>/<label>-log.txt` for each VSCodium launch and `<run folder>/log.txt` for the
 VS Code run. `connectionLog()` reads it, without the time stamps. Nothing of this exists when the switch is unset.
+
+### Several windows
+
+The launches above run their tests in a window of the editor. A test cannot open a second window from there: a window
+it opens would run the launch's tests again, and the end of any such window's run, also by a reload or a close, ends the
+editor. A launch with no runner leaves that mode: `kind: 'plain'` in `acceptance-launches.ts` starts the editor with no
+`--extensionTestsPath` and no `--extensionDevelopmentPath`, so every window shares one main process, one profile and one
+settings file, as users have them (`globalState` and Global settings writes are the same for all windows). The harness
+packages the window agent into a VSIX (`tools/acceptance-plain.ts`), installs it with ours, starts the editor on the
+launch's own script, record and log files, runs the tests of the launch's folder under Node, and then stops the editor
+and everything it started.
+
+The window agent (`window-agent/`) is the only test presence in the windows. Three rules: it does nothing unless
+`HARNESS_RUN_FOLDER` is set; it lives only under `tests/` and never goes into a product VSIX; and a test asks it for
+everything a user does to a window. A window's name is the last segment of its first folder's path, or `local` for a
+window with none. The agent appends `activated`, `deactivated`, `accepted`, `done`, `failed` and `state` events to
+`<run folder>/agent/<name>.events.jsonl`, and polls `<name>.commands.jsonl` every 200 ms for `{id, command, args}`
+lines it has not accepted yet, so a command written while the window starts or reloads is not lost. Its own commands
+are `acceptance.agent.openWindow(uri)`, `acceptance.agent.writeFile(name, text)` and `acceptance.agent.state()`.
+
+`windows/harness.ts` has the Node helpers: `openWindow(alias, folder)`, `inWindow(name, command, ...args)` (resolves on
+`done`, fails on `failed`), `reloadWindow(name)` (resolves on the next `activated`; the reload command's own `failed` is
+ignored, since its extension host may end first), `closeWindow(name)` (resolves on `deactivated`), `windowState(name)`,
+`windowEvents(name)` and `recordLines(surface?, window?)`. Every wait is bounded at 60 s and fails naming the window and
+the event. The record's lines name the window that wrote them, and a script entry may name the window that answers it.
+The run's folder is named after the run's id, so that `acceptance:clean` ends an editor a killed job left behind.
 
 ### Launches
 
