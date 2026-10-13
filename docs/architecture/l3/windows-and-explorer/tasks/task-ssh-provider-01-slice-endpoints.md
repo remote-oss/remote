@@ -269,8 +269,10 @@ export function hostListLine(file: string, reason: string): string;
 | contracts §3.2 | lib-authority `resolver-host.test.ts`: `handle.lastResolve()` before any resolve, after a resolve that succeeded, and after one that failed | `none`; `succeeded`; `failed` |
 | contracts §3.2 | `register-connect.test.ts`: `activeConnection()` before any resolve; after a resolve of `ssh-remote+dev` that succeeded; without the resolvers grant | `undefined`; `{hostKey: 'dev', lastResolve: 'succeeded'}`; `undefined` |
 
-23 rows (an (each) row counts once). The cites are behaviour-rule forms on purpose: F-2503 isn't in
-`coverage-slice1.tsv`, so an `AC-` cite in a test name would fail `check-coverage`. S8 adds the explorer's criteria.
+23 rows (an (each) row counts once). The cites are behaviour-rule forms. An `AC-` cite would pass `check-coverage`
+today, since it checks only the features of its coverage sets and F-2503 is in none of them yet. But coverage-25c
+(#646) tags F-2503 in the explorer set and adds the AC cites the rows prove, so the rule forms keep this card's rows
+out of that judgement.
 
 ### 3.1 Smoke rows in the VSCodium run (`tests/acceptance/suite-local/companion-endpoints.test.ts`)
 

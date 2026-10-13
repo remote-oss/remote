@@ -25,9 +25,11 @@ it. F-2507 AC-21 (`remote-oss/remote-ssh#65`) states this behaviour. Builder: he
 
 | Name | Steps | Assertions |
 |---|---|---|
-| `F-2507 AC-21: a URL a server prints in a terminal of a connected window is forwarded automatically` | `openWindow('harness', 'pf1')`; in `pf1`, `acceptance.agent.runInTerminal` (new: `createTerminal` + `sendText`) with `nc -lk -p 8621 -s 127.0.0.1 -e /bin/echo pf & sleep 1; echo http://localhost:8621/` | within 15 s, `tunnels()` lists `remotePort` 8621. A TCP connect to its local address reads `pf` |
+| `F-2507 AC-21, F-2501 AC-35: a URL a server prints in a terminal of a connected window is forwarded automatically` | `openWindow('harness', 'pf1')`; in `pf1`, `acceptance.agent.runInTerminal` (new: `createTerminal` + `sendText`) with `nc -lk -p 8621 -s 127.0.0.1 -e /bin/echo pf & sleep 1; echo http://localhost:8621/` | within 15 s, `tunnels()` lists `remotePort` 8621. A TCP connect to its local address reads `pf` |
 | `F-2507 AC-21: a server started on the host outside the editor is not forwarded` | the same window: on the host, `onHost('sh', '-c', 'nc -lk -p 8622 -s 127.0.0.1 -e /bin/echo out &')`; wait 10 s | `tunnels()` has no 8622 |
-| `F-2501 AC-35: the Ports view's features are on in a connected window` | the first row's outcome, cited for AC-35's view half: the features run only once core has registered the view through the key | as the first row |
+
+The first row cites F-2501 AC-35 too (triton on #622): the features run only once core has registered the Ports view
+through the key, so the same row proves AC-35's view half. No second window or terminal is needed for it.
 
 **It must fail without the fix.** Run the first row once with connect-33's call disabled (a local edit, not committed):
 it must fail. Say so in the PR, as hestia measured for connect-33.
@@ -36,8 +38,9 @@ End the host listeners and close the terminal in `after`.
 
 ## 3. The catalogue
 
-F-2507 AC-21 goes to `acceptance` (record it on #41 if slice 2 isn't in the catalogue). F-2501 AC-35's view half
-leaves "Needs an acceptance row" in #142. Core halves: the "Your application running on port …" notification's
+F-2507 AC-21 goes to `acceptance` (record it on #41 if slice 2 isn't in the catalogue). The build PR retags
+`F-2501.AC-35` in `coverage-slice1.tsv` from `todo` to `acceptance`, since the first row cites it (triton on #622), and
+moves it out of "Needs an acceptance row" in #142. Core halves: the "Your application running on port …" notification's
 rendering (AC-21), and the view's own rendering.
 
 ## 4. Review
