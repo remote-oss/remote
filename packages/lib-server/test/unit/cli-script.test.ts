@@ -458,7 +458,7 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
       );
     });
 
-    it('§S10: the start script makes the folder and the token file under umask 077', () => {
+    it('§S10: the start script makes the folder and the token file under umask 077, and links only a whole token', () => {
       const text = scriptFor(
         single('startCli'),
         'posixShell',
@@ -470,8 +470,11 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
           text.includes(
             "(umask 077; tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32",
           ),
+          text.includes(
+            '[ "$((TOKEN_LENGTH + 0))" -eq 32 ] && ln "$TOKEN_TEMPORARY" "$TOKEN_FILE"',
+          ),
         ],
-        [true, true],
+        [true, true, true],
       );
     });
   });

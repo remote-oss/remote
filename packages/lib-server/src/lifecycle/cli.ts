@@ -111,6 +111,7 @@ function startFailureOf(
   return {kind: 'serverStart'};
 }
 
+/** The start outcome of a finished `startCli` run, with the host's connection token the script reported. */
 function outcomeOf(stepRun: StepRun | 'retriesExhausted'): StartOutcome {
   const read = blockOfStart(stepRun);
   if ('unfinished' in read) {
