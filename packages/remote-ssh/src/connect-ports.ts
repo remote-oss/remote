@@ -50,6 +50,7 @@ import {
   type ProcessSpawner,
   SharedSessionChannel,
   SshHostChannel,
+  type SshTarget,
   terminalCopierOf,
   type TerminalLogin,
 } from 'lib-ssh';
@@ -80,6 +81,11 @@ import {
 import type {ConnectionRequestEnvironment} from './pipeline/connection-request.ts';
 import {connectorOf, type SshConnector} from './pipeline/connector.ts';
 import {hostAlias} from './pipeline/host-settings.ts';
+import {
+  type MaintenanceRun,
+  maintenanceInputOf,
+  runMaintenance,
+} from './maintenance/maintenance-run.ts';
 import type {ConnectInput} from './pipeline/steps.ts';
 import {stepsOf, type WiringPorts} from './pipeline/wiring.ts';
 import {phaseTitleOf, startTitleOf} from './surfaces/progress-titles.ts';
@@ -149,6 +155,11 @@ export interface ConnectAssembly {
   options: ResolverOptions;
   /** Ends the local connection server of a host string; silent, also when none runs. */
   killLocalServer(hostString: string): Promise<void>;
+  /** Runs the kill or the uninstall on a host in a connection of its own, outside any window. */
+  maintain(
+    action: 'kill' | 'uninstall',
+    target: SshTarget,
+  ): Promise<MaintenanceRun>;
 }
 
 /** The editor environment of the processes of a connect, without the entries the editor leaves unset. */
@@ -383,6 +394,13 @@ export function connectAssemblyOf(
   let shownTitle = '';
   return {
     connector,
+    maintain: (action, target) =>
+      runMaintenance(
+        stepsOf(ports, () => undefined),
+        maintenanceInputOf(target),
+        action,
+        new AbortController().signal,
+      ),
     killLocalServer: hostString =>
       killConnection(
         {helper: machine.helpers, freePort: machine.freeSocksPort},

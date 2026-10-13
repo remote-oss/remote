@@ -12,6 +12,9 @@ export const OWN_TEMPLATES = {
   [SSH_LABEL_PREFIX_ID]: 'SSH: {0}',
   platformPickPlaceholder: 'Select the platform of the remote host "{0}"',
   mitigationReloadWindow: 'Reload Window',
+  S085: 'Killed VS Code Server on {0}.',
+  S076: 'Failed to kill VS Code Server on {0}.',
+  S101: 'Open Logs',
   configFileNotAbsolute:
     'remote.SSH.configFile must be an absolute path or start with ~/: "{0}"',
 } as const;
