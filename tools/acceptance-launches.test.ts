@@ -1,4 +1,4 @@
-import {deepStrictEqual} from 'node:assert';
+import {deepStrictEqual, throws} from 'node:assert';
 import {
   bundleFolderOf,
   CONFIG_FILE_LAUNCHES,
@@ -10,6 +10,7 @@ import {
   suitesOf,
 } from './acceptance-launches.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
+import {TemporaryWorkspace} from './temporary-workspace.ts';
 
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
@@ -22,7 +23,7 @@ describe('the launches of the VSCodium run', () => {
         'remote',
         'reconnect',
         ...failureCases(REPOSITORY_ROOT).map(
-          failure => `failure-${failure.alias}`,
+          failure => `failure-${failure.label ?? failure.alias}`,
         ),
         'terminal',
         'slow',
@@ -58,13 +59,112 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: only the terminal launch has settings of its own', () => {
+  it('D-85: the settings of their own are the terminal launch and the failing connects that name them', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
         .map(launch => launch.label),
-      ['terminal'],
+      ['failure-refused-shown', 'terminal'],
     );
+  });
+
+  it('coverage-10: a failing connect with a label launches on failure-<label>, so one alias runs twice', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.suite === 'suite-failure')
+        .map(launch => launch.label),
+      [
+        'failure-refused',
+        'failure-nowhere',
+        'failure-stranger',
+        'failure-refused-shown',
+        'failure-stranger-cancel',
+      ],
+    );
+  });
+
+  it('coverage-10: each failing connect names its case for the window, by its label or its alias', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.suite === 'suite-failure')
+        .map(launch => [
+          launch.label,
+          launch.environment?.HARNESS_FAILURE_CASE,
+        ]),
+      [
+        ['failure-refused', 'refused'],
+        ['failure-nowhere', 'nowhere'],
+        ['failure-stranger', 'stranger'],
+        ['failure-refused-shown', 'refused-shown'],
+        ['failure-stranger-cancel', 'stranger-cancel'],
+      ],
+    );
+  });
+
+  it('coverage-10: the settings of a failing connect reach its launch', () => {
+    deepStrictEqual(
+      [
+        launches.find(launch => launch.label === 'failure-refused-shown')
+          ?.settings,
+        launches.find(launch => launch.label === 'failure-stranger-cancel')
+          ?.settings,
+      ],
+      [{'remote.SSH.showLoginTerminal': true}, undefined],
+    );
+  });
+
+  it('coverage-10: a label outside its form is refused', () => {
+    const workspace = new TemporaryWorkspace('launches');
+    try {
+      workspace.write('tests/acceptance/suite-failure/cases.json', {
+        cases: [{alias: 'a', cite: 'c', script: [], dialog: 'd', label: 'A-b'}],
+      });
+      throws(() => failureCases(workspace.root), /label must match/);
+    } finally {
+      workspace.remove();
+    }
+  });
+
+  it("coverage-10: a label the same as another connect's alias is refused", () => {
+    const workspace = new TemporaryWorkspace('launches');
+    try {
+      workspace.write('tests/acceptance/suite-failure/cases.json', {
+        cases: [
+          {alias: 'refused', cite: 'c', script: [], dialog: 'd'},
+          {
+            label: 'refused',
+            alias: 'stranger',
+            cite: 'c',
+            script: [],
+            dialog: 'd',
+          },
+        ],
+      });
+      throws(
+        () => failureCases(workspace.root),
+        /two failing connects share the label "refused"/,
+      );
+    } finally {
+      workspace.remove();
+    }
+  });
+
+  it('coverage-10: two connects with the same label are refused', () => {
+    const workspace = new TemporaryWorkspace('launches');
+    try {
+      workspace.write('tests/acceptance/suite-failure/cases.json', {
+        cases: [
+          {label: 'x', alias: 'a', cite: 'c', script: [], dialog: 'd'},
+          {label: 'x', alias: 'b', cite: 'c', script: [], dialog: 'd'},
+        ],
+      });
+      throws(
+        () => failureCases(workspace.root),
+        /two failing connects share the label "x"/,
+      );
+    } finally {
+      workspace.remove();
+    }
   });
 });
 

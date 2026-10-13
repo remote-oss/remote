@@ -485,7 +485,8 @@ export async function runAcceptance(
     const exitCodes: number[] = [];
     for (const failure of editor === 'vscodium' ? failureCases(root) : []) {
       writeFileSync(
-        launchFiles(runFolder, failureLabel(failure.alias)).script,
+        launchFiles(runFolder, failureLabel(failure.label ?? failure.alias))
+          .script,
         JSON.stringify({entries: failure.script}),
       );
     }

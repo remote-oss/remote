@@ -1,11 +1,12 @@
 /**
  * @fileoverview The connect's registration once activation serves: the resolver behind activation's own readiness,
- * and, once it is registered, the window's label, Open Web UI and the progress's details command. Nothing is
+ * and, once it is registered, the window's label, the connect commands, Open Web UI and the progress's details command. Nothing is
  * registered when the editor does not grant the resolvers proposal. Nothing here imports the editor.
  */
 
 import {
   type LabelFormatterHost,
+  type SshTarget,
   type Registration,
   registerResolver,
   type ResolverEditor,
@@ -16,8 +17,12 @@ import {
   registerCommands,
 } from 'lib-identifiers';
 import type {ConnectAssembly} from './connect-ports.ts';
+import {
+  type ConnectCommandEditor,
+  connectCommandHandlers,
+} from './connect/connect-commands.ts';
 import {commands, runtimeCommands} from './identifiers.generated.ts';
-import {hostAlias} from './pipeline/host-settings.ts';
+import {hostAlias, sshTargetOf} from './pipeline/host-settings.ts';
 import {registerWindowLabel} from './surfaces/label-formatter.ts';
 import type {Translate} from './surfaces/strings.ts';
 import {openWebUiHandler} from './surfaces/web-ui-command.ts';
@@ -32,6 +37,8 @@ export interface ConnectRegistrationHost {
   resolverEditor: ResolverEditor;
   labels: LabelFormatterHost;
   commands: CommandHost;
+  /** The editor behind the connect commands. */
+  connectEditor: ConnectCommandEditor;
   /** Opens an address outside the editor. */
   openExternal(address: string): PromiseLike<boolean>;
   translate: Translate;
@@ -75,14 +82,33 @@ export async function registerConnect(
   }
   const {resolver} = registration;
   const label = registerWindowLabel(resolver, host.labels, host.translate);
+  const connection = {
+    killLocalServer: (hostString: string) =>
+      assembly.killLocalServer(hostString),
+    current: () => {
+      const current = resolver.currentConnection();
+      // This resolver serves only ssh-remote authorities, so its target is always an ssh target.
+      return current === undefined
+        ? undefined
+        : {
+            target: sshTargetOf(current.decodedTarget.target as SshTarget),
+            state: current.state,
+          };
+    },
+  };
   const served: CommandRegistration = registerCommands(
     host.commands,
     'serving',
     {
       openWebUI: commands.openWebUI,
       clearAllSessionHints: commands.clearAllSessionHints,
+      openEmptyWindow: commands.openEmptyWindow,
+      openEmptyWindowInCurrentWindow: commands.openEmptyWindowInCurrentWindow,
+      openEmptyWindowOnCurrentHost: commands.openEmptyWindowOnCurrentHost,
+      cleanLocalServer: commands.cleanLocalServer,
     },
     {
+      ...connectCommandHandlers(host.connectEditor, connection),
       openWebUI: openWebUiHandler({
         serverPort: () => assembly.connector.serverPort(),
         openExternal: address => host.openExternal(address),

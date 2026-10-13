@@ -895,6 +895,23 @@ describe('acceptance', () => {
       );
     });
 
+    it('coverage-10: a labeled failing connect gets its script under its label', async () => {
+      workspace.write(
+        'tests/acceptance/suite-failure/cases.json',
+        JSON.stringify({cases: [{...FAILURE, label: 'refused-shown'}]}),
+      );
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        JSON.parse(
+          harness.firstLaunchFiles.get('failure-refused-shown-script.json') ??
+            '',
+        ),
+        {
+          entries: FAILURE.script,
+        },
+      );
+    });
+
     it('ruling 1: a failing connect opens a window on its alias', () => {
       deepStrictEqual(configurations()[3]?.launchArgs.slice(0, 2), [
         '--folder-uri',

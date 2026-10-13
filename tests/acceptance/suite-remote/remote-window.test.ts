@@ -153,3 +153,18 @@ describe('the remote window of the VSCodium run', () => {
     );
   });
 });
+
+describe('the connect commands of the remote window (card connect-21)', () => {
+  it('F-2301 AC-1: Connect to Host... is a registered command, with the other three connect commands', async () => {
+    const registered = new Set(await vscode.commands.getCommands(true));
+    deepStrictEqual(
+      [
+        'opensshremotes.openEmptyWindow',
+        'opensshremotes.openEmptyWindowInCurrentWindow',
+        'opensshremotes.openEmptyWindowOnCurrentHost',
+        'opensshremotes.cleanLocalServer',
+      ].filter(command => !registered.has(command)),
+      [],
+    );
+  });
+});

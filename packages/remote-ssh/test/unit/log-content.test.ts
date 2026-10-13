@@ -1,7 +1,15 @@
 import {deepStrictEqual, ok} from 'node:assert';
 import {
+  bannerLine,
+  checkingLine,
+  hostPlatformLine,
+  notValidLine,
+  pathSettingLine,
+  rejectedLine,
   type ResolveRecord,
   resolveLogLines,
+  searchedLines,
+  usingLine,
 } from '../../src/diagnostics/log-content.ts';
 
 const RULE = '-'.repeat(40);
@@ -662,5 +670,51 @@ describe('resolveLogLines (card connect-04 table)', () => {
         ['[E]: a b'],
       );
     });
+  });
+});
+
+describe('the lines of the client search and the probed platform (card connect-28)', () => {
+  it('F-2101 §9: the setting is shown as JSON text', () => {
+    deepStrictEqual(
+      [pathSettingLine(''), pathSettingLine('/opt/a "b"/ssh')],
+      ['remote.SSH.path = ""', 'remote.SSH.path = "/opt/a \\"b\\"/ssh"'],
+    );
+  });
+
+  it('F-2101 §9: a check, its banner, a rejection and a use each have their line', () => {
+    deepStrictEqual(
+      [
+        checkingLine('ssh'),
+        bannerLine('OpenSSH_9.6p1'),
+        rejectedLine('ssh', 'exit status 1'),
+        notValidLine('/x/ssh'),
+        usingLine('ssh'),
+      ],
+      [
+        'Checking ssh client: ssh',
+        'ssh client: OpenSSH_9.6p1',
+        'ssh client ssh was rejected: exit status 1',
+        'remote.SSH.path "/x/ssh" is not a valid SSH binary',
+        'Using ssh client: ssh',
+      ],
+    );
+  });
+
+  it('F-2101 §9: each folder of the search path is a line, in order', () => {
+    deepStrictEqual(searchedLines(['/b', '/a']), [
+      'Searched for ssh in: /b',
+      'Searched for ssh in: /a',
+    ]);
+  });
+
+  it('F-2101 §9: no folder is no line', () => {
+    deepStrictEqual(searchedLines([]), []);
+  });
+
+  it('F-2206 §9: the host platform is its system and architecture', () => {
+    deepStrictEqual(
+      hostPlatformLine({operatingSystem: 'linux', architecture: 'arm64'}),
+      'Host platform: linux arm64',
+    );
   });
 });

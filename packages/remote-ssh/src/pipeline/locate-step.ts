@@ -23,6 +23,15 @@ import {
   VERSION_ARGUMENTS,
 } from 'lib-ssh';
 import type {Logger} from 'lib-log';
+import {
+  bannerLine,
+  checkingLine,
+  notValidLine,
+  pathSettingLine,
+  rejectedLine,
+  searchedLines,
+  usingLine,
+} from '../diagnostics/log-content.ts';
 import {sshTargetOf} from './host-settings.ts';
 import {connectWaitsFor, effectiveConnectTimeoutSeconds} from './bounds.ts';
 import type {ConnectSteps, ConnectTarget, StepFailure} from './steps.ts';
@@ -71,6 +80,8 @@ interface RunOutcome {
   output: string;
   errorOutput: string;
   status: number | undefined;
+  /** The message of the error that kept the program from starting; empty for any other ending. */
+  startError: string;
 }
 
 /** Runs a program once, bounded, collecting each stream apart. */
@@ -86,13 +97,14 @@ async function runBounded(
       programArguments,
       environment: dependencies.processEnvironment,
     });
-  } catch {
+  } catch (caught) {
     // A program that cannot be started gives no output.
     return {
       ending: 'unstarted',
       output: '',
       errorOutput: '',
       status: undefined,
+      startError: caught instanceof Error ? caught.message : String(caught),
     };
   }
   const started = handle;
@@ -101,6 +113,7 @@ async function runBounded(
     output: '',
     errorOutput: '',
     status: undefined,
+    startError: '',
   };
   started.onOutput(chunk => {
     outcome.output += chunk;
@@ -122,17 +135,56 @@ async function runBounded(
   return outcome;
 }
 
-/** Whether the candidate printed a banner naming OpenSSH, on either stream, and exited cleanly. */
+/** The first non-empty line of what a check printed on standard error, or `(no banner)`. */
+function bannerOf(errorOutput: string): string {
+  return (
+    errorOutput.split(/\r?\n/).find(line => line.trim() !== '') ?? '(no banner)'
+  );
+}
+
+/** Why a check rejected the candidate, in the words of the log. */
+function whyRejected(outcome: RunOutcome): string {
+  if (outcome.ending === 'unstarted') {
+    return `it could not be started: ${outcome.startError}`;
+  }
+  if (outcome.ending === 'outlasted') {
+    return 'it timed out';
+  }
+  if (outcome.status === undefined) {
+    return 'it was ended by a signal';
+  }
+  return outcome.status === 0
+    ? 'its banner does not name OpenSSH'
+    : `exit status ${String(outcome.status)}`;
+}
+
+/**
+ * Checks a candidate once and writes its lines: the check, its banner, and, when it is rejected, why. Gives whether the
+ * candidate printed a banner naming OpenSSH, on either stream, and exited cleanly.
+ */
 async function accepted(
   candidate: ClientCandidate,
   dependencies: LocateStepDependencies,
 ): Promise<boolean> {
+  const {logger} = dependencies;
+  logger.info(checkingLine(candidate.program));
   const outcome = await runBounded(
     candidate.program,
     VERSION_ARGUMENTS,
     dependencies,
   );
-  return judge(outcome.status, `${outcome.output}${outcome.errorOutput}`);
+  logger.info(bannerLine(bannerOf(outcome.errorOutput)));
+  const judged = judge(
+    outcome.status,
+    `${outcome.output}${outcome.errorOutput}`,
+  );
+  if (!judged) {
+    logger.info(rejectedLine(candidate.program, whyRejected(outcome)));
+    if (candidate.origin === 'setting') {
+      logger.info(notValidLine(candidate.program));
+    }
+  }
+  return judged;
 }
 
 /** Reads the host's options with `ssh -G`; a failure is read the way the connection's own run would be. */
@@ -206,12 +258,23 @@ export function locateClientStep(
       );
       return {kind: 'failed', failure: {kind: 'unknown'}};
     }
+    dependencies.logger.info(pathSettingLine(dependencies.settingValue()));
     for (const candidate of candidates(
       dependencies.settingValue(),
       dependencies.environment,
       dependencies.platform,
     )) {
+      if (candidate.origin === 'path') {
+        for (const line of searchedLines(
+          dependencies.environment.searchPath.split(
+            dependencies.platform === 'windows' ? ';' : ':',
+          ),
+        )) {
+          dependencies.logger.info(line);
+        }
+      }
       if (await accepted(candidate, dependencies)) {
+        dependencies.logger.info(usingLine(candidate.program));
         const looked = await lookUp(
           input.target,
           candidate.program,

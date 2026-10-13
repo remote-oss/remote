@@ -4,6 +4,7 @@
  * the server output. The connection token is masked wherever it appears, and no answer is ever written.
  */
 
+import type {ProbedHost} from 'lib-server';
 import {logLinesOf} from 'lib-ssh';
 
 interface WindowStart {
@@ -79,13 +80,55 @@ function onOneLine(text: string, token: string | undefined): string {
   return masked(text, token).replaceAll(new RegExp(LINE_BREAK, 'g'), ' ');
 }
 
+/** The value of `remote.SSH.path` as the log shows it: JSON text, `""` when it is unset. */
+export function pathSettingLine(value: string): string {
+  return `remote.SSH.path = ${JSON.stringify(value)}`;
+}
+
+/** A candidate of the client search is about to be checked. */
+export function checkingLine(program: string): string {
+  return `Checking ssh client: ${program}`;
+}
+
+/** The banner a check printed, or `(no banner)` when it printed none. */
+export function bannerLine(banner: string): string {
+  return `ssh client: ${banner}`;
+}
+
+/** A check rejected the candidate, and why. */
+export function rejectedLine(program: string, reason: string): string {
+  return `ssh client ${program} was rejected: ${reason}`;
+}
+
+/** The setting named a program that was rejected. */
+export function notValidLine(value: string): string {
+  return `remote.SSH.path "${value}" is not a valid SSH binary`;
+}
+
+/** The folders of the search path, one line each, in order. */
+export function searchedLines(folders: readonly string[]): string[] {
+  return folders.map(folder => `Searched for ssh in: ${folder}`);
+}
+
+/** The candidate that was accepted. */
+export function usingLine(program: string): string {
+  return `Using ssh client: ${program}`;
+}
+
+/** The platform the probe found on the host. */
+export function hostPlatformLine(
+  host: Pick<ProbedHost, 'operatingSystem' | 'architecture'>,
+): string {
+  return `Host platform: ${host.operatingSystem} ${host.architecture}`;
+}
+
 function windowLines(start: WindowStart): string[] {
   return [
     `VS Code version: ${start.editorVersion}`,
     `Extension: ${start.extensionName} ${start.extensionVersion}`,
     `Platform: ${start.platform} ${start.architecture}`,
-    ...start.searchedFolders.map(folder => `Searched for ssh in: ${folder}`),
-    `ssh client: ${start.clientBanner}`,
+    ...searchedLines(start.searchedFolders),
+    bannerLine(start.clientBanner),
   ];
 }
 

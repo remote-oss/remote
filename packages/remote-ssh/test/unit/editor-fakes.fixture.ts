@@ -62,9 +62,22 @@ export class FakeWidget {
 /** A quick pick the test drives: what the adapter set on it, and the choice the test makes. */
 export class FakeQuickPick extends FakeWidget {
   items: FakeItem[] = [];
-  activeItems: FakeItem[] = [];
+  /** Every time the adapter set the focus, each with whether the pick was already shown. */
+  readonly focusSets: boolean[] = [];
+  private focused: FakeItem[] = [];
   selectedItems: FakeItem[] = [];
   canSelectMany: boolean | undefined;
+
+  /** The items the adapter focused last. */
+  get activeItems(): FakeItem[] {
+    return this.focused;
+  }
+
+  /** The adapter focuses items; the call is noted with whether the pick was shown. */
+  set activeItems(items: FakeItem[]) {
+    this.focusSets.push(this.shown > 0);
+    this.focused = items;
+  }
 
   /** The user accepts `item`. */
   accept(item: FakeItem): void {

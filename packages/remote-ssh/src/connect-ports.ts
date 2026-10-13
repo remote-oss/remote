@@ -44,6 +44,7 @@ import {
   type ClientEnvironment,
   type ClientPlatform,
   type ConnectionClientEnvironment,
+  killConnection,
   type LocalFiles,
   type LoginTerminals,
   type ProcessSpawner,
@@ -146,6 +147,8 @@ export interface ConnectMachine {
 export interface ConnectAssembly {
   connector: SshConnector;
   options: ResolverOptions;
+  /** Ends the local connection server of a host string; silent, also when none runs. */
+  killLocalServer(hostString: string): Promise<void>;
 }
 
 /** The editor environment of the processes of a connect, without the entries the editor leaves unset. */
@@ -380,6 +383,12 @@ export function connectAssemblyOf(
   let shownTitle = '';
   return {
     connector,
+    killLocalServer: hostString =>
+      killConnection(
+        {helper: machine.helpers, freePort: machine.freeSocksPort},
+        machine.folders.registry,
+        hostString,
+      ),
     options: {
       family: 'ssh-remote',
       connector,

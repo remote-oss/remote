@@ -1096,13 +1096,13 @@ The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
 | `release` | lease | none; closing the lease's connection has the same effect, so a crashed extension host releases by itself | none |
 | `request` | lease, message (plain data) | reply (plain data) | `helperGone`, `timeout` (the caller's limit) |
 | `events` | lease | helper messages, `leaseListChanged`, `helperGone` | none |
-| `stop` | registry folder, namespace, recordKey | done, also when nothing runs | none |
+| `stop` | registry folder, namespace, recordKey | done, also when nothing runs. When it returns, the stopped helper's record is gone, so nothing it stored for the key outlives the call (ruled 2026-10-13, #532 and #597: F-2412 BR-7 and POST-3, F-2411 6.1 step 2). A helper that answers removes its own record before it closes its endpoint (X2), and `stop` waits for that close, bounded by the hello limit. `stop` removes the record itself only when the helper doesn't answer or doesn't end in time, and only while the file holds the stopped helper's nonce: a record a new helper wrote (another nonce) stays | none |
 
 ### X2 helper-runtime (bundled into each helper script)
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `serve` | endpoint, record payload, end policy, message handler | runs until the end policy fires or `stop` arrives | none raised; the helper logs to its own file and exits |
+| `serve` | endpoint, record payload and record path, end policy, message handler | runs until the end policy fires or `stop` arrives. On either orderly end the helper removes its own record, when the file still holds its nonce, **before** it closes its endpoint (ruled 2026-10-13, #597). While it still answers, no acquire may replace its record (a joiner never replaces a live record), so this removal can't delete a newer helper's record, and the windows it served reconnect only after it is gone | none raised; the helper logs to its own file and exits |
 
 End policies (data, no per-consumer branches). The policy is armed at start as if a lease had just closed, so a
 helper that never receives a lease ends by the same rule (ruled 2026-10-08); a joiner never replaces a still-starting
