@@ -60,7 +60,7 @@ describe('the label formatter of a window (F-2502.BR-2)', () => {
     );
   });
 
-  it('F-2502.BR-2: it writes paths with / and ~ for the home folder, and sets no tooltip', () => {
+  it('F-2502 AC-4: it writes paths with / and ~ for the home folder, the given suffix, and no tooltip (BR-2)', () => {
     const {host, formatters} = recordingHost();
     registerAuthorityLabel(host, SSH_ALIAS, 'SSH: my-alias');
     deepStrictEqual(

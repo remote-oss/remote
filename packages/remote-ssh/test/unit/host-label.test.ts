@@ -21,9 +21,23 @@ describe('hostLabel', () => {
     );
   });
 
-  it('{kind:"host", hostName:"my-alias", user:"u", port:2222} is my-alias', () => {
+  it('F-2502 AC-35: {kind:"host", hostName:"my-alias", user:"u", port:2222} is my-alias', () => {
     deepStrictEqual(
       hostLabel({kind: 'host', hostName: 'my-alias', user: 'u', port: 2222}),
+      'my-alias',
+    );
+  });
+
+  it('F-2502 AC-14: {kind:"host", hostName:"my-alias", port:2222} is my-alias', () => {
+    deepStrictEqual(
+      hostLabel({kind: 'host', hostName: 'my-alias', port: 2222}),
+      'my-alias',
+    );
+  });
+
+  it('F-2502 AC-14: {kind:"host", hostName:"my-alias", user:"u"} is my-alias', () => {
+    deepStrictEqual(
+      hostLabel({kind: 'host', hostName: 'my-alias', user: 'u'}),
       'my-alias',
     );
   });
@@ -89,12 +103,24 @@ describe('hostLabel', () => {
     );
   });
 
+  it('F-2502 AC-14: the typed my-alias:22 is my-alias', () => {
+    deepStrictEqual(
+      hostLabel({kind: 'plain', text: 'my-alias:22'}),
+      'my-alias',
+    );
+  });
+
+  it('F-2502 AC-15: the typed u@192.0.2.10, u@192.0.2.10:22 and u@192.0.2.10:2222 show the address and the port as typed', () => {
+    deepStrictEqual(
+      ['u@192.0.2.10', 'u@192.0.2.10:22', 'u@192.0.2.10:2222'].map(text =>
+        hostLabel({kind: 'plain', text}),
+      ),
+      ['192.0.2.10', '192.0.2.10:22', '192.0.2.10:2222'],
+    );
+  });
+
   const plainRows: Array<[string, string]> = [
     ['my-alias', 'my-alias'],
-    ['my-alias:22', 'my-alias'],
-    ['u@192.0.2.10', '192.0.2.10'],
-    ['u@192.0.2.10:22', '192.0.2.10:22'],
-    ['u@192.0.2.10:2222', '192.0.2.10:2222'],
     ['192.0.2.10:2222', '192.0.2.10:2222'],
     ['192.0.2.10', '192.0.2.10'],
     ['u@my-alias', 'my-alias'],
