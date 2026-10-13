@@ -35,15 +35,29 @@ describe('D-85 the host network cut and restored', function () {
     ];
   }
 
-  it('D-85: a session open across the cut gets no reset', async () => {
+  /** The status of a new connection that waits 3 s for the host; 255 and `timed out` when the host does not answer. */
+  function newConnection() {
+    const result = runCommand('ssh', [
+      ...sshArguments('-o', 'ConnectTimeout=3'),
+      'true',
+    ]);
+    return {
+      status: result.status,
+      timedOut: result.stderr.includes('timed out'),
+    };
+  }
+
+  it('D-85: a session open across the cut gets no reset and no echo', async () => {
     const errors: string[] = [];
+    const echoed: string[] = [];
     session = spawn(
       'ssh',
       [...sshArguments('-o', 'ServerAliveInterval=0'), 'cat'],
-      {
-        stdio: ['pipe', 'ignore', 'pipe'],
-      },
+      {stdio: ['pipe', 'pipe', 'pipe']},
     );
+    session.stdout?.on('data', (chunk: Buffer) => {
+      echoed.push(chunk.toString('utf8'));
+    });
     session.stderr?.on('data', (chunk: Buffer) => {
       errors.push(chunk.toString('utf8'));
     });
@@ -51,32 +65,33 @@ describe('D-85 the host network cut and restored', function () {
     cutNetwork(runCommand, host.container);
     session.stdin?.write('after the cut\n');
     await delay(5000);
-    deepStrictEqual([session.exitCode, errors], [null, []]);
+    deepStrictEqual([session.exitCode, errors, echoed], [null, [], []]);
   });
 
   it('D-85: a new connection during the cut gets no answer', () => {
     cutNetwork(runCommand, host.container);
-    const result = runCommand('ssh', [
-      ...sshArguments('-o', 'ConnectTimeout=3'),
-      'true',
-    ]);
-    deepStrictEqual(
-      [result.status, result.stderr.includes('timed out')],
-      [255, true],
-    );
+    deepStrictEqual(newConnection(), {status: 255, timedOut: true});
   });
 
   it('D-85: after the restore a new connection works on the same port', () => {
     cutNetwork(runCommand, host.container);
+    const during = newConnection();
     restoreNetwork(runCommand, host.container);
-    deepStrictEqual(runCommand('ssh', [...sshArguments(), 'true']).status, 0);
+    deepStrictEqual(
+      [during, runCommand('ssh', [...sshArguments(), 'true']).status],
+      [{status: 255, timedOut: true}, 0],
+    );
   });
 
   it('D-85: cutting twice and restoring twice is harmless', () => {
     cutNetwork(runCommand, host.container);
     cutNetwork(runCommand, host.container);
+    const during = newConnection();
     restoreNetwork(runCommand, host.container);
     restoreNetwork(runCommand, host.container);
-    deepStrictEqual(runCommand('ssh', [...sshArguments(), 'true']).status, 0);
+    deepStrictEqual(
+      [during, runCommand('ssh', [...sshArguments(), 'true']).status],
+      [{status: 255, timedOut: true}, 0],
+    );
   });
 });
