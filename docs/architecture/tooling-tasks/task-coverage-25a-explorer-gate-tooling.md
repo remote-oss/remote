@@ -1,53 +1,52 @@
 # Task card coverage-25a: the explorer gate's tooling
 
 Issue: #644. Release 0.3 (#43), explorer slice 1, item S8, part a. Why: the eight gate rows of slice 1 (brief
-`docs/architecture/l3/windows-and-explorer/brief-remote-explorer.md`, "The slice-1 gate") need four things beyond
+`docs/architecture/l3/windows-and-explorer/brief-remote-explorer.md`, "The slice-1 gate") need three things beyond
 tooling-30 (#633):
-- a name for an empty remote window apart from the local window;
-- window titles that tell those two apart;
+- a way for the renderer helpers to find the page of a window named by its claim (tooling-28, #609);
 - the notification toasts a window shows;
 - a coverage file for the explorer's slice-1 criteria.
 
 coverage-25b writes the rows, and coverage-25c tags the criteria. Builder: selene. Size: about 1.5 agent-days.
-**Depends on:** tooling-30 merged (`tests/acceptance/windows/renderer.ts`, the three explorer launches).
+**Depends on:** tooling-30 (#649) and tooling-28 (#609, window claims) merged.
 
 ## 1. Files
 
 | File | Change |
 |---|---|
-| `tests/acceptance/window-agent/src/window-name.ts` | `windowNameOf(firstFolderPath, remoteName)`: §2.1 |
-| `tests/acceptance/window-agent/src/extension.ts` | `windowName()` passes `vscode.env.remoteName` as the second argument |
-| `packages/remote-ssh/src/surfaces/scripted-adapters.ts`, `packages/remote-ssh/src/extension.ts` | remote-ssh's own `windowNameOf`, which names the window in its record lines and matches script entries, changes the same way, and `extension.ts` passes `vscode.env.remoteName`. Otherwise the record would call a window `local` that the agent calls `empty-ssh-remote`. This is the harness adapter only: it runs under `REMOTE_OSS_ACCEPTANCE` alone |
 | `tools/acceptance-launches.ts` | `EXPLORER_LAUNCH.settings` becomes `{'window.title': '[${rootName}]${remoteName}'}` (§2.2) |
-| `tests/acceptance/windows/renderer.ts` | `isWindowTitled` for the new names (§2.2), and the new `notifications(name)` (§2.3) |
+| `tests/acceptance/windows/renderer.ts` | `pageOf` finds a claimed window's page (§2.2), and the new `notifications(name)` (§2.3) |
 | `tools/check-coverage.ts`, `tools/spec-acceptance-criteria.ts`, `tools/seed-coverage.ts` | the coverage sets of §3 |
 | `docs/architecture/catalogue/coverage-explorer-slice1.tsv` | new: seeded by `node tools/seed-coverage.ts explorer` (§3.3), every line `todo` |
-| the matching `*.test.ts` of each changed tools file, and `packages/remote-ssh/test/unit/scripted-adapters.test.ts` for `windowNameOf` (the agent's copy has no unit file; the VSCodium run exercises it) | the rows of §4 |
+| the matching `*.test.ts` of each changed tools file | the rows of §4 |
 
-Nothing else in `packages/` changes.
+Nothing in `packages/` changes.
 
 ## 2. Windows
 
-### 2.1 The name of an empty remote window
+### 2.1 Window names: the claims of tooling-28
 
-`windowNameOf(firstFolderPath: string | undefined, remoteName: string | undefined): string`:
-- with a folder, the last segment of its path, as today;
-- with no folder: `local` when `remoteName` is `undefined`, else `empty-<remoteName>` (for example `empty-ssh-remote`).
+athena's ruling on #648: the explorer launches name their windows as every launch does since tooling-28 (#609).
+- A window with a folder is named by its folder.
+- A window without one claims the first free name of its launch: `local`, then `empty-1`, `empty-2`, and so on.
+- A claim stays for the launch's life, so a reloaded empty window comes back under the next free name.
 
-A window whose folder-less connect fails is still `empty-ssh-remote`, since the editor sets `remoteName` from the
-authority. The only change for the existing launches is that an empty remote window is no longer called `local`.
-Before writing, search `tests/acceptance` for rows that open an empty remote window and then use `local`, and list
-them in the PR. There should be none: `no-proposals`' `opensshremotes.openEmptyWindow` opens a new window and then
-uses only the result of the command. If one exists, stop (§6).
+This card adds no naming rule, and neither the agent nor remote-ssh changes. Check that the three explorer launches
+get `REMOTE_OSS_ACCEPTANCE_WINDOWS`, as every VSCodium launch does after #609, with a tools row. If an explorer launch
+can't use claims, stop and say why on #644.
 
-### 2.2 Titles
+### 2.2 Finding a claimed window's page
 
-In the explorer launches the window title is `[${rootName}]${remoteName}`. It reads `[]` for the local empty window,
-`[]SSH: harness` for an empty window on `harness`, `[smoke]` for a local folder, and
-`[k1 [SSH: harness]]SSH: harness` for a remote folder (core's own label). `isWindowTitled(title, name)` becomes:
-- `local`: `title === '[]'`;
-- a name starting with `empty-`: `title.startsWith('[]')` and `title !== '[]'`;
-- any other name: `title === `[${name}]`` or `title.startsWith(`[${name} [`)`.
+In the explorer launches the window title is `[${rootName}]${remoteName}`. It reads `[]` for a local window without a
+folder, `[]SSH: harness` for one on `harness`, `[smoke]` for a local folder, and `[k1 [SSH: harness]]SSH: harness` for
+a remote folder (core's own label). A claimed name doesn't appear in the title, so `pageOf(name)` first reads the
+window's `state` from its agent (`windowState(name)` of `windows/harness.ts`):
+- **A window with folders:** the page whose title is `[<name>]` or starts with `[<name> [`, as today.
+- **A window without folders and with `remoteName` `null`:** the page whose title is exactly `[]`.
+- **A window without folders on a remote:** the page whose title starts with `[]` and isn't `[]`.
+
+There must be exactly one such page, as today. Two folder-less windows of the same kind at once can't be told apart,
+so the gate rows never have two. `pageOf` fails naming both titles when they do.
 
 ### 2.3 Notifications
 
@@ -123,9 +122,9 @@ Run `node tools/seed-coverage.ts explorer` once, commit the file, and paste its 
 
 | Cite | Given | Expected |
 |---|---|---|
-| tooling coverage-25a | (each) `windowNameOf('/home/harness/k1', 'ssh-remote')`, `windowNameOf(undefined, undefined)`, `windowNameOf(undefined, 'ssh-remote')`, `windowNameOf('/', undefined)` | `k1`, `local`, `empty-ssh-remote`, `local` |
 | tooling coverage-25a | `launchesOf(...)`'s explorer launches | each has `settings` `{'window.title': '[${rootName}]${remoteName}'}` (replace tooling-30's row) |
-| tooling coverage-25a | (each) `isWindowTitled` for (`'[]'`, `local`), (`'[]SSH: harness'`, `empty-ssh-remote`), (`'[]'`, `empty-ssh-remote`), (`'[]SSH: harness'`, `local`), (`'[k1 [SSH: harness]]SSH: harness'`, `k1`), (`'[k10]'`, `k1`) | true, true, false, false, true, false. Export `isWindowTitled` for the row, and keep knip green |
+| tooling coverage-25a | the environment `runPlainLaunch` gives the tests of each explorer launch | it has `REMOTE_OSS_ACCEPTANCE_WINDOWS`, the launch's own pid folder |
+| tooling coverage-25a | (each) the page choice for a state and a list of titles: folders `['/x/k1']` with `['[k1 [SSH: harness]]SSH: harness', '[k10]']`; no folders, `remoteName` `null`, with `['[]', '[]SSH: harness']`; no folders, `ssh-remote`, with the same; no folders, `ssh-remote`, with `['[]SSH: a', '[]SSH: b']` | the first title; `[]`; `[]SSH: harness`; a failure naming both titles. Export the pure choice function for the row, and keep knip green |
 | tooling coverage-25a | a workspace with both files, where a `deferred` line of the explorer file gives `later` | one problem naming the explorer file and the reason |
 | tooling coverage-25a | a workspace with both files, where an acceptance row cites `F-5101.AC-1` and the explorer file lacks it | one problem naming the explorer file |
 | tooling coverage-25a | a workspace with the slice-1 file only | the report has one `counts` entry; the outcome is what it is today |
@@ -141,11 +140,11 @@ The `notifications` helper gets its first use, and its proof, in coverage-25b.
 All gates, including `pnpm check-coverage` (both sets: the explorer file is all `todo`, which passes) and a VSCodium
 run with every launch green (the agent's naming change touches every plain launch). PR title
 `tools, tests: the explorer gate's tooling (card coverage-25a, #644)`. themis or triton reviews; athena gives the design
-check of §2.1 and §3.
+check of §2.2 and §3.
 
 ## 6. Open rows (stop and report on #644)
 
-1. A row on main that opens an empty remote window and then addresses it as `local`.
+1. An explorer launch without `REMOTE_OSS_ACCEPTANCE_WINDOWS` after #609 is merged.
 2. `seed-coverage` can't read a remote-explorer issue with `gh` from the builder's room: report it. daedalus seeds
    the file.
 3. A criterion line that `acceptanceCriteriaOf` misses or doubles for a remote-explorer issue, against the issue's
