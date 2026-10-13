@@ -57,6 +57,10 @@ export interface RecordLine {
   details?: boolean;
   /** The name of the window that wrote the line. */
   window: string;
+  /** The time of the line's append. */
+  time: number;
+  /** The labels the failure dialog was shown with, in order; only the lines of a `failureDialog` surface have it. */
+  buttons?: string[];
 }
 
 /** The name of a window: the last segment of its first workspace folder's path, or `local` for a window without one. */
@@ -114,10 +118,10 @@ export function scriptedAdapters(
   const entries = entriesOf(scriptFile, files, windowName);
   let cursor = 0;
 
-  function record(line: Omit<RecordLine, 'window'>): void {
+  function record(line: Omit<RecordLine, 'window' | 'time'>): void {
     files.append(
       recordFile,
-      `${JSON.stringify({...line, window: windowName})}\n`,
+      `${JSON.stringify({...line, window: windowName, time: Date.now()})}\n`,
     );
   }
 
@@ -131,17 +135,31 @@ export function scriptedAdapters(
     answerOf: (
       entry: Extract<ScriptEntry, {surface: Kind}>,
     ) => Given<Value> | undefined,
+    buttons?: readonly string[],
   ): Value | undefined {
+    const withButtons = buttons === undefined ? {} : {buttons: [...buttons]};
     const entry = entries[cursor];
     if (entry?.surface === surface && question.includes(entry.match)) {
       const given = answerOf(entry as Extract<ScriptEntry, {surface: Kind}>);
       if (given !== undefined) {
         cursor += 1;
-        record({surface, question, answer: given.recorded, matched: true});
+        record({
+          ...withButtons,
+          surface,
+          question,
+          answer: given.recorded,
+          matched: true,
+        });
         return given.value;
       }
     }
-    record({surface, question, answer: 'dismiss', matched: false});
+    record({
+      ...withButtons,
+      surface,
+      question,
+      answer: 'dismiss',
+      matched: false,
+    });
     return undefined;
   }
 
@@ -187,15 +205,20 @@ export function scriptedAdapters(
     failureDialog: {
       showError: (text, buttons) =>
         Promise.resolve(
-          answerFrom('failureDialog', text, entry => {
-            if (entry.answer === 'dismiss') {
-              return {value: undefined, recorded: 'dismiss'};
-            }
-            const {button} = entry.answer;
-            return buttons.includes(button)
-              ? {value: button, recorded: button}
-              : undefined;
-          }),
+          answerFrom(
+            'failureDialog',
+            text,
+            entry => {
+              if (entry.answer === 'dismiss') {
+                return {value: undefined, recorded: 'dismiss'};
+              }
+              const {button} = entry.answer;
+              return buttons.includes(button)
+                ? {value: button, recorded: button}
+                : undefined;
+            },
+            buttons,
+          ),
         ),
     },
     licenceDialog: {
@@ -305,7 +328,7 @@ export function progressFor(
     return real;
   }
   function shown(question: string, details?: boolean): void {
-    const line: RecordLine = {
+    const line: Omit<RecordLine, 'time'> = {
       surface: 'progress',
       question,
       answer: 'shown',
@@ -313,7 +336,10 @@ export function progressFor(
       window: windowName,
       ...(details === undefined ? {} : {details}),
     };
-    files.append(recordFile ?? '', `${JSON.stringify(line)}\n`);
+    files.append(
+      recordFile ?? '',
+      `${JSON.stringify({...line, time: Date.now()})}\n`,
+    );
   }
   return {
     withProgress: (request, task) => {

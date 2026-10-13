@@ -55,9 +55,15 @@ export type Launch = RunnerLaunch | PlainLaunch;
 /** One failing connect of the VSCodium run: its own launch on `alias`, the script its window answers from. */
 export interface FailureCase {
   alias: string;
+  /** The name of the launch, `failure-<label>`; without it the launch is `failure-<alias>`, so one alias can run twice. */
+  label?: string;
   cite: string;
   script: unknown[];
   dialog: string;
+  /** Settings merged over the run's base settings for the connect's launch. */
+  settings?: Record<string, unknown>;
+  /** The bound the dialog's time is checked against: at most `milliseconds` after the first record line whose surface is `from`. */
+  bound?: {from: string; milliseconds: number; cite: string};
 }
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
@@ -77,6 +83,7 @@ export function failureCases(root: string): FailureCase[] {
       'utf8',
     ),
   ) as {cases: FailureCase[]};
+  const labels: string[] = [];
   for (const failure of cases) {
     // The alias becomes part of a file name, a test-cli label and a URI authority.
     if (!LABEL_FORM.test(failure.alias)) {
@@ -84,6 +91,16 @@ export function failureCases(root: string): FailureCase[] {
         `a failing connect's alias must match ${String(LABEL_FORM)}: "${failure.alias}"`,
       );
     }
+    const label = failure.label ?? failure.alias;
+    if (failure.label !== undefined && !LABEL_FORM.test(failure.label)) {
+      throw new Error(
+        `a failing connect's label must match ${String(LABEL_FORM)}: "${failure.label}"`,
+      );
+    }
+    if (labels.includes(label)) {
+      throw new Error(`two failing connects share the label "${label}"`);
+    }
+    labels.push(label);
   }
   return cases;
 }
@@ -118,12 +135,15 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
     },
     ...failureCases(root).map((failure): Launch => ({
-      label: failureLabel(failure.alias),
+      label: failureLabel(failure.label ?? failure.alias),
       runner: 'runner-remote',
       suite: 'suite-failure',
       folderUri: `vscode-remote://ssh-remote+${failure.alias}/home/harness`,
+      ...(failure.settings === undefined ? {} : {settings: failure.settings}),
+      environment: {HARNESS_FAILURE_CASE: failure.label ?? failure.alias},
       ownScript: true,
     })),
+
     {
       label: 'terminal',
       runner: 'runner-remote',
