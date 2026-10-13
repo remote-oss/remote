@@ -1,4 +1,4 @@
-# Task card tooling-25: the harness answers the host pick (Connect to Host..., Kill Local Connection Server)
+# Task card tooling-25: the harness answers the host pick and the configuration-file pick
 
 Issue: #566. Why: the connect commands of connect-21 (#540) ask through a host pick:
 - `opensshremotes.openEmptyWindow` and its two siblings;
@@ -6,7 +6,9 @@ Issue: #566. Why: the connect commands of connect-21 (#540) ask through a host p
 
 The pick is a real quick pick (`connect/connect-editor.ts`, `pickHost`), which the scripted adapters can't answer.
 Without a scripted answer, no acceptance row can drive Kill (F-2102 AC-4–7, 14–18, 29, 31, 33) or Connect to Host...
-(F-2301, batch 3). Builder: hestia or iris (hermes assigns). Size: S. **Depends on connect-21 (#540).**
+(F-2301, batch 3). The configuration-file pick of `config/config-file-editor.ts` (`pickFile`, behind Open SSH
+Configuration File..., Configure SSH Hosts... and Add New SSH Host...) is a real quick pick too, so F-2102 AC-18, F-2203
+and F-2204 can't be driven either. Builder: hestia or iris (hermes assigns). Size: S. **Depends on connect-21 (#540).**
 
 ## 1. The surface
 
@@ -23,6 +25,12 @@ Without a scripted answer, no acceptance row can drive Kill (F-2102 AC-4–7, 14
 **The record line:** `question` is the placeholder; `answer` is the label taken, the typed text, or `dismiss`; `items`
 is the initial model's shown labels, in order. A test reads the hosts and the two fixed rows from `items`.
 
+**`filePick`:** `ScriptEntry {surface: 'filePick'; match: string; answer: {label: string} | 'dismiss'}`, matched on
+the placeholder (`Select SSH configuration file to update`, or `Edit custom SSH configuration file` when one is
+configured). `{label}` takes the row with that shown label: a file's path, `Settings` or `Help`. The record line is like
+`hostPick`'s: placeholder, answer and `items`. `config-file-editor.ts`'s `pickFile` goes through a `FilePickPort` with
+an editor adapter (today's `pickOne` call, moved) and a scripted one.
+
 ## 2. Files
 
 | File | Change |
@@ -31,7 +39,8 @@ is the initial model's shown labels, in order. A test reads the hosts and the tw
 | `packages/remote-ssh/src/connect/connect-editor.ts` | `pickHost` becomes the editor adapter of `HostPickPort` (unchanged behaviour). `labelOf` is exported for the scripted adapter. `connectCommandEditorOf` takes a `HostPickPort` instead of building the pick |
 | `packages/remote-ssh/src/surfaces/editor-adapters.ts`, `scripted-adapters.ts` | the `hostPick` adapter of each kind; `EditorAdapters` gains `hostPick` |
 | `packages/remote-ssh/src/extension.ts` / `register-connect.ts` | pass `adapters.hostPick` to `connectCommandEditorOf` |
-| `tests/acceptance/suite-local/script.ts`, `tests/acceptance/windows/harness.ts` | the `hostPick` entry and the `items` field mirrored |
+| `packages/remote-ssh/src/config/config-file-editor.ts`, `surfaces/editor-adapters.ts`, `scripted-adapters.ts`, `extension.ts` | `FilePickPort` and its two adapters; `configFileEditorOf` takes the port |
+| `tests/acceptance/suite-local/script.ts`, `tests/acceptance/windows/harness.ts` | the `hostPick` and `filePick` entries and the `items` field mirrored |
 | `tests/acceptance/README.md` | the surface, in the record's list |
 
 ## 3. Rows
@@ -43,7 +52,8 @@ Unit rows in `scripted-adapters.test.ts` and `connect-editor.test.ts`:
 - `dismiss` gives nothing;
 - an unknown label fails closed and records `matched: false`;
 - the record line carries `items`;
-- the editor adapter keeps today's rows, moved.
+- the editor adapter keeps today's rows, moved;
+- `filePick` answered by a path, by `Settings`, and by `dismiss`, with the record line's `items`.
 
 One capability row in `tests/acceptance/windows/two-windows.test.ts`:
 
