@@ -4,8 +4,10 @@ Issue: #551. Why: #142's acceptance rows, batch 5. F-2206 decides a host's platf
 pick, the `remote.SSH.remotePlatform` entries, and what is written back. Today unit rows prove the decisions
 (`pipeline/platform.ts`, `terms-steps.ts`). These rows prove them end to end in the VSCodium run. Builder: hestia or
 iris (hermes assigns). Size: about 1.5 agent-days. **Depends on coverage-10 (#546)**, for a case's own label and
-settings and `time` on record lines, **and on tooling-24 (#552)**, whose `notice` surface lets a row show that no notice
-appeared. This card adds record fields, below.
+settings and `time` on record lines, **on tooling-24 (#552, merged)**, whose `notice` surface lets a row show that no
+notice appeared, **on connect-27 (#559)**, which gives the dismissed pick's dialog its `Connecting was canceled`
+(`platform-escape` fails without it), **and on connect-28 (#563)**, which writes the `Host platform:` line the probe
+rows read. This card adds record fields, below.
 
 ## 1. The cases
 
@@ -81,10 +83,10 @@ For a dialog case the script answers the `failureDialog` and then the `mitigatio
 | `F-2206 AC-32 (platform-wildcard-windows): More Actions... offers the resolve picker` | the `mitigationPick` line's question |
 
 **The probe's lines.** The AC-11 row uses a positive control. In `platform-default`, which connects through the
-probe, a row `positive control: the probe's lines are in the log of a default-mode connect` finds the lines that only
-the host's POSIX probe gives: its report of the host's operating system and architecture. The AC-11 row asserts those
-lines are absent. Both rows match one pattern, a constant of the suite read from the probe's own output in lib-server.
-Don't write it from the measured text.
+probe, a row `positive control: the probe's lines are in the log of a default-mode connect` finds connect-28's
+`Host platform:` line, which is written only after the probe has read the host. The AC-11 row asserts that no such line
+is there. Both rows build the line's start with connect-28's `hostPlatformLine` builder from `log-content.ts`; don't
+copy its text.
 
 ## 3. The catalogue
 
