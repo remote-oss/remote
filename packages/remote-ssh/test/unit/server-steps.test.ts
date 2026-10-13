@@ -2,7 +2,10 @@ import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import type {RecordingChannel} from 'lib-host/testing/recording-channel';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {createServerSteps} from '../../src/pipeline/server-steps.ts';
+import {
+  cliNotUsedLine,
+  createServerSteps,
+} from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
 import {
   channelAnswering,
@@ -270,6 +273,24 @@ describe('the server steps: plan, the CLI path', () => {
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
   });
 
+  it('F-3902 AC-6: a product with no CLI template logs the line once, with the no CLI source reason', () => {
+    const {messages} = planned('');
+    deepStrictEqual(
+      messages.filter(message => message.startsWith('the CLI path')),
+      [cliNotUsedLine('noCliSource')],
+    );
+  });
+
+  it('F-3902 AC-6: the direct plan without a CLI source carries the no CLI source note', () => {
+    const {result} = planned('');
+    deepStrictEqual(
+      'plan' in result && result.plan.kind === 'download'
+        ? result.plan.notes
+        : result,
+      [{kind: 'cliNotUsed', reason: 'noCliSource'}],
+    );
+  });
+
   it('brief §2 row 3: a template with an unknown placeholder plans the direct install', () => {
     const {result} = planned('https://example.invalid/${platform}.tar.gz');
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
@@ -323,6 +344,39 @@ describe('the server steps: plan, the CLI path', () => {
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
   });
 
+  it('F-3902 AC-6: a direct re-plan without a CLI template logs no line', () => {
+    const sink = new MemorySink();
+    const steps = createServerSteps(
+      dependencies({
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+      }),
+    );
+    steps.plan(INPUT, HOST, {direct: true});
+    deepStrictEqual(
+      sink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('the CLI path')),
+      [],
+    );
+  });
+
+  it('F-3902 AC-6: a direct re-plan with a CLI template logs no line either', () => {
+    const sink = new MemorySink();
+    const steps = createServerSteps(
+      dependencies({
+        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
+        logger: createLogger(sink, {minimumLevel: () => 'info'}),
+      }),
+    );
+    steps.plan(INPUT, HOST, {direct: true});
+    deepStrictEqual(
+      sink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('the CLI path')),
+      [],
+    );
+  });
+
   it('brief §2 row 5: a server source under the terms keeps the CLI out too', () => {
     const {result} = planned(CLI_TEMPLATE, {
       override: {
@@ -331,6 +385,21 @@ describe('the server steps: plan, the CLI path', () => {
       },
     });
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('cliNotUsedLine: the line of each reason', () => {
+    deepStrictEqual(
+      [
+        cliNotUsedLine('noCliSource'),
+        cliNotUsedLine('noBuildForPlatform'),
+        cliNotUsedLine('termsToAccept'),
+      ],
+      [
+        'the CLI path was not used: the editor names no CLI source',
+        'the CLI path was not used: there is no CLI build for this host',
+        "the CLI path was not used: the server's terms must be accepted first",
+      ],
+    );
   });
 });
 

@@ -1,6 +1,7 @@
 import {deepStrictEqual, notStrictEqual, strictEqual} from 'node:assert';
 import {hostname} from 'node:os';
 import * as vscode from 'vscode';
+import {cliNotUsedLine} from '../../../packages/remote-ssh/src/pipeline/server-steps.ts';
 import {connectionLog, onHost, recordLines} from '../suite/harness.ts';
 import {hostServer, isRunning, keepServer} from '../suite/host-server.ts';
 
@@ -150,6 +151,23 @@ describe('the remote window of the VSCodium run', () => {
     strictEqual(
       connectionLog().some(line => line.startsWith('Log level:')),
       true,
+    );
+  });
+
+  it('F-3902 AC-6: the host has bin/<commit> and no CLI, and the log says once that the CLI was not used', async () => {
+    deepStrictEqual(
+      {
+        serverCommits: (await hostServer()).commits.length,
+        dataFolderEntries: (
+          await onHost('ls', '-1', '/home/harness/.vscodium-server-insiders')
+        )
+          .split('\n')
+          .filter(name => name !== ''),
+        notUsedLines: connectionLog()
+          .filter(line => line === cliNotUsedLine('noCliSource'))
+          .length,
+      },
+      {serverCommits: 1, dataFolderEntries: ['bin'], notUsedLines: 1},
     );
   });
 });
