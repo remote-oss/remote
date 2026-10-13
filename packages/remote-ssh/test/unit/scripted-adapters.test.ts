@@ -2,6 +2,11 @@ import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
+import {
+  buildFileChoice,
+  type FileChoice,
+} from '../../src/config/file-choice.ts';
+import {pickerModel, type PickerModel} from '../../src/connect/picker-model.ts';
 import {licenceModalOf} from '../../src/surfaces/licence-modal.ts';
 import type {EditorAdapters} from '../../src/editor-surfaces.ts';
 import type {ProgressPort, ProgressRequest} from 'lib-authority';
@@ -94,6 +99,8 @@ const REAL: EditorAdapters = {
     showWarning: () => Promise.resolve('real'),
     showError: () => Promise.resolve('real'),
   },
+  hostPick: {pick: () => Promise.resolve(undefined)},
+  filePick: {pick: () => Promise.resolve(undefined)},
 };
 
 /** The scripted adapters over `entries`, with the files they wrote to. */
@@ -133,6 +140,23 @@ const MITIGATION_PICK = {
   placeholder: 'More actions',
   items: [{label: 'Reload', action: 'reloadWindow' as const}],
 };
+
+const HOSTS = {hosts: [{name: 'harness', file: '/f'}]};
+
+/** The host pick's model for a typed text; a parse error is not expected in this test. */
+function hostModel(typedText = ''): PickerModel {
+  const model = pickerModel(HOSTS, typedText);
+  if ('parseError' in model) {
+    throw new Error('no model');
+  }
+  return model;
+}
+
+const FILE_CHOICE: FileChoice = buildFileChoice({
+  configFile: '/run/ssh_config',
+  userFile: '/h/.ssh/config',
+  systemFile: '/etc/ssh/ssh_config',
+});
 
 /** The files of a folder, recursively, as paths. */
 function filesUnder(folder: string): string[] {
@@ -918,6 +942,226 @@ function twoUpdates(
   update('B', false);
   return Promise.resolve(7);
 }
+
+describe('the scripted host pick (card tooling-25)', () => {
+  function hostPickOf(entries: ScriptEntry[]) {
+    const {adapters, files} = scripted(entries);
+    const filesLines = files.lines.bind(files);
+    const pick = adapters.hostPick.pick.bind(adapters.hostPick);
+    return {pick, lines: filesLines};
+  }
+
+  it('a label answer gives the host row', async () => {
+    const {pick, lines} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: {label: 'harness'},
+      },
+    ]);
+    const taken = await pick(hostModel(), typedText => hostModel(typedText));
+    deepStrictEqual(
+      [taken, lines()[0]?.answer, lines()[0]?.matched],
+      [{kind: 'host', label: 'harness', keepVisible: false}, 'harness', true],
+    );
+  });
+
+  it('a label answer gives a fixed row by its text', async () => {
+    const {pick} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: {label: 'Configure SSH Hosts...'},
+      },
+    ]);
+    deepStrictEqual(
+      await pick(hostModel(), typedText => hostModel(typedText)),
+      {
+        kind: 'configure',
+        label: {id: 'S024', values: []},
+        keepVisible: true,
+      },
+    );
+  });
+
+  it('a typed answer gives the typed row of the typed model, the hosts still first', async () => {
+    const {pick} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: {typed: 'harness@127.0.0.1'},
+      },
+    ]);
+    deepStrictEqual(
+      await pick(hostModel(), typedText => hostModel(typedText)),
+      {
+        kind: 'typed',
+        label: '➤ harness@127.0.0.1',
+        text: 'harness@127.0.0.1',
+        keepVisible: true,
+      },
+    );
+  });
+
+  it('a typed answer whose model has no typed row fails closed', async () => {
+    const {pick, lines} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: {typed: 'x'},
+      },
+    ]);
+    const model: PickerModel = {
+      placeholder: {id: 'S127', values: []},
+      items: [{kind: 'host', label: 'harness', keepVisible: false}],
+    };
+    deepStrictEqual(
+      [await pick(model, () => model), lines()[0]?.matched, lines()[0]?.answer],
+      [undefined, false, 'dismiss'],
+    );
+  });
+
+  it('a dismiss answer gives nothing', async () => {
+    const {pick, lines} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: 'dismiss',
+      },
+    ]);
+    deepStrictEqual(
+      [
+        await pick(hostModel(), typedText => hostModel(typedText)),
+        lines()[0]?.answer,
+        lines()[0]?.matched,
+      ],
+      [undefined, 'dismiss', true],
+    );
+  });
+
+  it('a label no row has fails closed and records matched false', async () => {
+    const {pick, lines} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: {label: 'absent'},
+      },
+    ]);
+    deepStrictEqual(
+      [
+        await pick(hostModel(), typedText => hostModel(typedText)),
+        lines()[0]?.matched,
+        lines()[0]?.answer,
+      ],
+      [undefined, false, 'dismiss'],
+    );
+  });
+
+  it('the record line names the question, the answer and the items shown', async () => {
+    const {pick, lines} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: 'dismiss',
+      },
+    ]);
+    await pick(hostModel(), typedText => hostModel(typedText));
+    deepStrictEqual(lines()[0], {
+      surface: 'hostPick',
+      question: 'Select configured SSH host or enter user@host',
+      answer: 'dismiss',
+      matched: true,
+      window: WINDOW,
+      items: [
+        'harness',
+        '$(plus) Add New SSH Host...',
+        'Configure SSH Hosts...',
+      ],
+    });
+  });
+});
+
+describe('the scripted configuration-file pick (card tooling-25)', () => {
+  function filePickOf(entries: ScriptEntry[]) {
+    const {adapters, files} = scripted(entries);
+    const filesLines = files.lines.bind(files);
+    const pick = adapters.filePick.pick.bind(adapters.filePick);
+    return {pick, lines: filesLines};
+  }
+
+  it('a label answer gives the file row by its path', async () => {
+    const {pick} = filePickOf([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: {label: '/run/ssh_config'},
+      },
+    ]);
+    deepStrictEqual(await pick(FILE_CHOICE), {
+      kind: 'file',
+      label: '/run/ssh_config',
+      role: 'configured',
+    });
+  });
+
+  it('a label answer gives the settings row by its text', async () => {
+    const {pick} = filePickOf([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: {label: 'Settings'},
+      },
+    ]);
+    deepStrictEqual(await pick(FILE_CHOICE), FILE_CHOICE.items[1]);
+  });
+
+  it('a label no row has fails closed', async () => {
+    const {pick, lines} = filePickOf([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: {label: 'absent'},
+      },
+    ]);
+    deepStrictEqual(
+      [await pick(FILE_CHOICE), lines()[0]?.matched],
+      [undefined, false],
+    );
+  });
+
+  it('a dismiss answer gives nothing', async () => {
+    const {pick, lines} = filePickOf([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: 'dismiss',
+      },
+    ]);
+    deepStrictEqual(
+      [await pick(FILE_CHOICE), lines()[0]?.answer, lines()[0]?.matched],
+      [undefined, 'dismiss', true],
+    );
+  });
+
+  it('the record line names the placeholder, the answer and the items shown', async () => {
+    const {pick, lines} = filePickOf([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: {label: 'Help'},
+      },
+    ]);
+    await pick(FILE_CHOICE);
+    deepStrictEqual(lines()[0], {
+      surface: 'filePick',
+      question: 'Edit custom SSH configuration file',
+      answer: 'Help',
+      matched: true,
+      window: WINDOW,
+      items: ['/run/ssh_config', 'Settings', 'Help'],
+    });
+  });
+});
 
 describe('progressFor (card tooling-18)', () => {
   const SWITCHED_RECORD = {

@@ -17,6 +17,7 @@ import {
   configFileEditorOf,
   nodeConfigFiles,
 } from '../../src/config/config-file-editor.ts';
+import {filePickPortOf} from '../../src/surfaces/editor-adapters.ts';
 import {FakeQuickPick} from './editor-fakes.fixture.ts';
 
 type Editor = Parameters<typeof configFileEditorOf>[0];
@@ -110,7 +111,10 @@ const CHOICE: FileChoice = buildFileChoice({
 
 describe('the editor adapter of the Open SSH Configuration File command (card remote-ssh-19)', () => {
   function pickShown(fake: ReturnType<typeof fakeEditor>) {
-    const result = configFileEditorOf(fake.editor, translated).pickFile(CHOICE);
+    const result = configFileEditorOf(
+      fake.editor,
+      filePickPortOf(fake.editor, translated),
+    ).pickFile(CHOICE);
     const [pick] = fake.picks;
     if (pick === undefined) {
       throw new Error('no quick pick was created');
@@ -175,7 +179,10 @@ describe('the editor adapter of the Open SSH Configuration File command (card re
 
   it('F-2203 BR-7: opening a file shows its document as a preview', async () => {
     const fake = fakeEditor();
-    await configFileEditorOf(fake.editor, translated).open('/h/.ssh/config');
+    await configFileEditorOf(
+      fake.editor,
+      filePickPortOf(fake.editor, translated),
+    ).open('/h/.ssh/config');
     deepStrictEqual(fake.shownDocuments, [
       {uri: {fsPath: '/h/.ssh/config'}, options: {preview: true}},
     ]);
@@ -183,9 +190,10 @@ describe('the editor adapter of the Open SSH Configuration File command (card re
 
   it('#408 (2): open gives back the editor showTextDocument showed', async () => {
     const fake = fakeEditor();
-    const opened = (await configFileEditorOf(fake.editor, translated).open(
-      '/h/.ssh/config',
-    )) as {file: string; editor: unknown};
+    const opened = (await configFileEditorOf(
+      fake.editor,
+      filePickPortOf(fake.editor, translated),
+    ).open('/h/.ssh/config')) as {file: string; editor: unknown};
     const [shown] = fake.editors;
     deepStrictEqual(
       [opened.file, opened.editor === shown],
@@ -197,10 +205,10 @@ describe('the editor adapter of the Open SSH Configuration File command (card re
     const target = textEditorFor('/h/.ssh/config');
     const fake = fakeEditor();
     const opened = {file: '/h/.ssh/config', editor: target};
-    await configFileEditorOf(fake.editor, translated).insertTemplate(
-      opened,
-      starterTemplate({insertSpaces: true, tabSize: 4}),
-    );
+    await configFileEditorOf(
+      fake.editor,
+      filePickPortOf(fake.editor, translated),
+    ).insertTemplate(opened, starterTemplate({insertSpaces: true, tabSize: 4}));
     deepStrictEqual(
       target.inserted.map(entry => [
         entry.snippet.value,
