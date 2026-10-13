@@ -43,6 +43,7 @@ import {
   writeUserSettings,
 } from './acceptance.ts';
 import type {RunDownloads} from './acceptance-downloads.ts';
+import type {Started} from './acceptance-plain.ts';
 import {
   failureCases,
   type Launch,
@@ -78,9 +79,10 @@ class FakeHarness implements HarnessDependencies {
     if (answer !== undefined) {
       return answer;
     }
-    if (program === 'ssh-keygen') {
+    if (program === 'ssh-keygen' || program === 'env') {
       const keyFile = programArguments.at(-1) ?? '';
       this.runFolder = path.dirname(keyFile);
+      writeFileSync(keyFile, 'private key\n');
       writeFileSync(`${keyFile}.pub`, 'ssh-ed25519 AAAA acceptance\n');
     }
     if (program === 'ssh' && this.sshFailures > 0) {
@@ -110,6 +112,15 @@ class FakeHarness implements HarnessDependencies {
   };
 
   readonly editorCli = (): Promise<string> => Promise.resolve('code');
+
+  readonly startAgent = (socket: string): Started => {
+    this.calls.push(`agent started ${socket}`);
+    return {
+      stop: () => {
+        this.calls.push('agent stopped');
+      },
+    };
+  };
 
   readonly startDownloads = (): Promise<RunDownloads> => {
     this.calls.push('downloads started');
@@ -814,7 +825,54 @@ describe('acceptance', () => {
     it('tooling-27: the download host is stopped when the run ends, also after a failure', async () => {
       harness.bundleSuiteError = new Error('bundle failed');
       await runAcceptance(workspace.root, harness, 'vscodium');
-      strictEqual(harness.calls.at(-1), 'downloads stopped');
+      strictEqual(harness.calls.includes('downloads stopped'), true);
+    });
+
+    it("tooling-29: the VSCodium run gives the host the further keys and the authority, and starts the run's agent", async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      const containerRun =
+        harness.calls.find(call => call.startsWith('docker run')) ?? '';
+      deepStrictEqual(
+        [
+          containerRun.includes('AUTHORIZED_KEYS_FURTHER='),
+          containerRun.includes('CA_PUBLIC_KEY='),
+          harness.calls.some(
+            call =>
+              call.startsWith('agent started ') && call.endsWith('/agent.sock'),
+          ),
+        ],
+        [true, true, true],
+      );
+    });
+
+    it("tooling-29: the agent's socket and the passphrase file reach the launches", async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        [
+          harness.variables?.SSH_AUTH_SOCK?.endsWith('/agent.sock'),
+          harness.variables?.HARNESS_AGENT_SOCKET ===
+            harness.variables?.SSH_AUTH_SOCK,
+          harness.variables?.HARNESS_PASSPHRASE_FILE?.endsWith('/passphrase'),
+        ],
+        [true, true, true],
+      );
+    });
+
+    it("tooling-29: the run's agent is stopped when the run ends, also after a failure", async () => {
+      harness.bundleSuiteError = new Error('bundle failed');
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      strictEqual(harness.calls.includes('agent stopped'), true);
+    });
+
+    it('tooling-29: the VS Code run makes no further keys and starts no agent', async () => {
+      await runAcceptance(workspace.root, harness);
+      deepStrictEqual(
+        [
+          harness.calls.some(call => call.startsWith('agent started')),
+          harness.variables?.SSH_AUTH_SOCK,
+        ],
+        [false, undefined],
+      );
     });
 
     it('tooling-27: the VS Code run starts no download host and gives the harness host no names', async () => {
