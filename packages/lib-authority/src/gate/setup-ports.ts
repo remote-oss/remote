@@ -66,7 +66,7 @@ interface GateState {
 /** What the setup needs from the editor. */
 export interface GateEditor {
   probeApi: ProbeApi;
-  installed(): readonly InstalledExtension[];
+  installed(): PromiseLike<readonly InstalledExtension[]>;
   /** The text of the runtime-arguments file, or nothing when there is none. */
   readFile(filePath: string): PromiseLike<string | undefined>;
   state: GateState;
@@ -100,6 +100,18 @@ export interface GateIdentity {
   platform: string;
   texts: SetupTexts;
   logFailure(message: string): void;
+}
+
+/** The non-modal notices the setup shows: the button taken, or nothing when the notice is closed. */
+export interface GateNotices {
+  showInformation(
+    text: string,
+    buttons: readonly string[],
+  ): PromiseLike<string | undefined>;
+  showWarning(
+    text: string,
+    buttons: readonly string[],
+  ): PromiseLike<string | undefined>;
 }
 
 /** The ids of the installed extensions of the family that declare proposals. */
@@ -154,7 +166,8 @@ export function setupPortsOf(
         proposals: identity.proposals,
         viewIds: [],
       }),
-    installedFamilyIds: () => installedFamilyIds(editor.installed()),
+    installedFamilyIds: async () =>
+      installedFamilyIds(await editor.installed()),
     argvEnabled: async () => {
       const argvFile = await resolvedArgvFile();
       return argvFile === undefined

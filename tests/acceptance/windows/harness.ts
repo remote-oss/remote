@@ -105,6 +105,14 @@ export function recordLines(surface?: string, window?: string): RecordLine[] {
   );
 }
 
+/** The lines of the log the launch's extensions write, without their time stamps. */
+export function connectionLog(): string[] {
+  return readFileSync(variable('REMOTE_OSS_ACCEPTANCE_LOG'), 'utf8')
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => line.slice(line.indexOf('] ') + 2));
+}
+
 /** The output of a command run in the host container as the user harness. */
 export async function onHost(...command: string[]): Promise<string> {
   const {stdout} = await execFileAsync('docker', [

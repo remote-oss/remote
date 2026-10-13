@@ -85,8 +85,8 @@ class FakePorts implements SetupPorts {
     ]);
   }
 
-  installedFamilyIds(): readonly string[] {
-    return [SIBLING_ID, OWN_ID];
+  installedFamilyIds(): Promise<readonly string[]> {
+    return Promise.resolve([SIBLING_ID, OWN_ID]);
   }
 
   argvEnabled(): Promise<readonly string[]> {
