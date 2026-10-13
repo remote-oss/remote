@@ -3,6 +3,12 @@
  * recent resolves, oldest first. Every function returns a new store and changes nothing it is given.
  */
 
+/**
+ * The global-state key the session hints live under: the recorder writes it and the clear command deletes it, so
+ * both name it in one place.
+ */
+export const HINT_STORE_KEY = 'remote.ssh.hints';
+
 type SessionHint =
   | {kind: 'environment'; message: string; details?: string}
   | {

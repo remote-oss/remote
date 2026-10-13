@@ -21,6 +21,11 @@ import {hostAlias} from './pipeline/host-settings.ts';
 import {registerWindowLabel} from './surfaces/label-formatter.ts';
 import type {Translate} from './surfaces/strings.ts';
 import {openWebUiHandler} from './surfaces/web-ui-command.ts';
+import type {Logger} from 'lib-log';
+import {
+  clearHintsHandler,
+  type HintStoreState,
+} from './diagnostics/clear-hints-command.ts';
 
 /** What the connect's registration needs of the editor. */
 export interface ConnectRegistrationHost {
@@ -30,6 +35,10 @@ export interface ConnectRegistrationHost {
   /** Opens an address outside the editor. */
   openExternal(address: string): PromiseLike<boolean>;
   translate: Translate;
+  /** The extension's global state, where the hint store's key lives. */
+  globalState: HintStoreState;
+  /** The window's log the clear command writes to. */
+  logger: Logger;
 }
 
 /** What the registration gives back: whether the resolver is registered, and the end of everything it registered. */
@@ -69,12 +78,16 @@ export async function registerConnect(
   const served: CommandRegistration = registerCommands(
     host.commands,
     'serving',
-    {openWebUI: commands.openWebUI},
+    {
+      openWebUI: commands.openWebUI,
+      clearAllSessionHints: commands.clearAllSessionHints,
+    },
     {
       openWebUI: openWebUiHandler({
         serverPort: () => assembly.connector.serverPort(),
         openExternal: address => host.openExternal(address),
       }),
+      clearAllSessionHints: clearHintsHandler(host.globalState, host.logger),
     },
   );
   const details = host.commands.registerCommand(
