@@ -17,6 +17,41 @@ when remote-ssh-edit ships. The design is in `components.md` (lib-companion, rem
 `contracts.md` §4 (lib-companion) and §3.3 and §3.4 (opener and gate). The ADRs that bind it are 0002, 0003, 0007 and
 the drafts "Identifier tables" and "Stand-down gating".
 
+## Slice 1, the first release, then increments (ruled 2026-10-13, athena; the user asked for a minimum functional slice)
+
+**Slice 1 is the smallest whole job: see your SSH hosts in the Remotes view and connect to one.**
+- **In:**
+  - F-5001 (package, activation, extension kind, trust, localization);
+  - F-5901 (identity, invented ids, the standing-down key);
+  - F-5101's SSH half (registration, the "SSH" group, Refresh, empty states);
+  - F-5102's host list (hosts from the SSH configuration, in F-2202's order);
+  - F-5103 (connect in the current or a new window, and the connected marker);
+  - F-5002 for the commands slice 1 registers, with its out-of-context safety;
+  - lib-companion (companion-01..05);
+  - the proposed-API gate (`contribViewsRemote`) and the stand-down guard.
+- **The interface in slice 1:** three ids only, `remote-internal.getActiveSshRemote`, `getConfiguredHostnames` and `openRemoteSshTarget`. The explorer calls them, and remote-ssh serves them (the slice-1 part of F-2503), each under F-5902 §5's rules (versioned envelope, the 10 s limit, foreign and unknown-major payloads, a companion that is absent).
+- **Increment 2:**
+  - F-5104 (recent folders, after its review);
+  - `getSshFoldersHistory` and `deleteSshFolderFromHistory`;
+  - the `setActiveFolders` push and the `sshHostsChanged` change signal, both directions;
+  - F-5102's two hand-overs, "Open SSH Config File" and "New Remote" (New Remote needs connect-22's `opensshremotes.addNewSshHost`).
+- **Increment 3:** F-5301 (the family installed together), once a second companion family is built.
+- **Out (D-55):** the tunnel rows, as above.
+
+**The catalogue:** every AC of an in-slice behaviour is tagged as usual. Every other AC of the in-features is `deferred` with the reason `explorer slice 1: increment 2` or `explorer slice 1: increment 3`. The coverage tool's reason list gains those two forms in the explorer's coverage card.
+
+**The slice-1 gate, recorded as 0.2's D-65 gate is:** rows in the VSCodium run, in a plain editor with both extensions installed and their proposals enabled:
+1. the Remotes view shows the "SSH" group with the run's `ssh_config` hosts in file order (F-5101, F-5102);
+2. "Connect in New Window" on `harness` opens a new window on `ssh-remote+harness`, and the picking window is unchanged (F-5103);
+3. "Connect in Current Window" turns the window into `ssh-remote+harness` (F-5103);
+4. in that window the `harness` row carries the connected marker, from `getActiveSshRemote` (F-5103 BR-6);
+5. a `Host` added to the file appears after Refresh (F-5101, F-5102);
+6. with remote-ssh absent, the "SSH" group shows F-5902's absent-companion state, and nothing fails (F-5902, F-5101);
+7. with a stand-in carrying the reference explorer's id (the #603 AC-29 rule), the explorer stands down and registers nothing (F-5001, F-5901);
+8. without the proposals, nothing fails, and the setup notice covers the explorer (F-3903's family gate).
+
+Besides the rows, the gate needs `check-coverage` green with the slice-1 tags, and proteus's manual check on the built VSIX (open the Remote Explorer, see the hosts, connect from a row).
+
 ## What is built, in this order
 
 1. **`lib-companion`**:
