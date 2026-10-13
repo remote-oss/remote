@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {
   bundleFolderOf,
   CONFIG_FILE_LAUNCHES,
+  extensionsOf,
   failureCases,
   LABEL_FORM,
   launchesOf,
@@ -12,7 +13,7 @@ import {REPOSITORY_ROOT} from './repository.ts';
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal', () => {
+  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal and slow', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -23,6 +24,7 @@ describe('the launches of the VSCodium run', () => {
           failure => `failure-${failure.alias}`,
         ),
         'terminal',
+        'slow',
       ],
     );
   });
@@ -91,5 +93,26 @@ describe('the suites of the launches', () => {
 
   it('D-85: a launch suite is bundled into dist-<name>', () => {
     deepStrictEqual(bundleFolderOf('suite-terminal'), 'dist-terminal');
+  });
+});
+
+describe('the further extensions of the launches', () => {
+  it('D-85: the repository loads the slow extension once', () => {
+    deepStrictEqual(extensionsOf(launchesOf(REPOSITORY_ROOT)), ['slow-remote']);
+  });
+
+  it('D-85: an extension two launches load is listed once', () => {
+    deepStrictEqual(
+      extensionsOf([
+        {label: 'one', runner: 'runner', suite: 's', extraExtensions: ['a']},
+        {
+          label: 'two',
+          runner: 'runner',
+          suite: 's',
+          extraExtensions: ['a', 'b'],
+        },
+      ]),
+      ['a', 'b'],
+    );
   });
 });

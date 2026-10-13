@@ -332,6 +332,7 @@ describe('acceptance', () => {
         ),
         HARNESS_VSIX_FILES: '',
         HARNESS_EDITOR: 'vscode',
+        REMOTE_OSS_ACCEPTANCE_LOG: path.join(harness.runFolder, 'log.txt'),
       });
     });
 
@@ -671,6 +672,7 @@ describe('acceptance', () => {
         'reconnect',
         'failure-refused',
         'terminal',
+        'slow',
       ]);
     });
 
@@ -760,6 +762,7 @@ describe('acceptance', () => {
         'reconnect',
         'failure-refused',
         'terminal',
+        'slow',
       ]);
     });
 
@@ -787,7 +790,14 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        [EXECUTABLE, EXECUTABLE, EXECUTABLE, EXECUTABLE, EXECUTABLE],
+        [
+          EXECUTABLE,
+          EXECUTABLE,
+          EXECUTABLE,
+          EXECUTABLE,
+          EXECUTABLE,
+          EXECUTABLE,
+        ],
       );
     });
 
@@ -798,7 +808,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        [true, true, true, true, true],
+        [true, true, true, true, true, true],
       );
     });
 
@@ -814,6 +824,7 @@ describe('acceptance', () => {
           ['reconnect', 'dist-reconnect/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
+          ['slow', 'dist-slow/**/*.test.cjs'],
         ],
       );
     });
@@ -868,7 +879,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('D-85: a launch with no environment leaves the harness variables as they are', () => {
+    it('D-85: a launch with no environment adds only its log file to the harness variables', () => {
       deepStrictEqual(
         vscodiumConfiguration(
           workspace.root,
@@ -876,7 +887,65 @@ describe('acceptance', () => {
           EXECUTABLE,
           LAUNCH,
         ).env,
-        CONFIGURATION_ENVIRONMENT,
+        {
+          ...CONFIGURATION_ENVIRONMENT,
+          REMOTE_OSS_ACCEPTANCE_LOG: path.join('/run', 'extra-log.txt'),
+        },
+      );
+    });
+
+    it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
+      deepStrictEqual(
+        configurations()[5]?.launchArgs.filter(argument =>
+          argument.startsWith('--extensionDevelopmentPath='),
+        ),
+        [
+          '--extensionDevelopmentPath=vscode-remote://ssh-remote+harness/home/harness/slow-remote',
+        ],
+      );
+    });
+
+    it('D-85: the run copies the slow extension into the host before the launches', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        harness.calls.filter(call => call.startsWith('docker cp ')),
+        [
+          `docker cp ${path.join(workspace.root, 'tests', 'acceptance', 'slow-remote')} ${CONTAINER}:/home/harness/slow-remote`,
+        ],
+      );
+    });
+
+    it('D-85: the copy of the slow extension belongs to the user harness', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        harness.calls.filter(call => call.includes(' chown ')),
+        [
+          `docker exec --user root ${CONTAINER} chown -R harness:harness /home/harness/slow-remote`,
+        ],
+      );
+    });
+
+    it('D-85: the VS Code run copies no extension', async () => {
+      await runAcceptance(workspace.root, harness);
+      deepStrictEqual(
+        harness.calls.filter(call => call.startsWith('docker cp ')),
+        [],
+      );
+    });
+
+    it('D-85: each launch writes the connection log to a file of its own', () => {
+      deepStrictEqual(
+        configurations().map(
+          configuration => configuration.env.REMOTE_OSS_ACCEPTANCE_LOG,
+        ),
+        [
+          'local',
+          'remote',
+          'reconnect',
+          'failure-refused',
+          'terminal',
+          'slow',
+        ].map(label => path.join('/run', `${label}-log.txt`)),
       );
     });
 
@@ -884,8 +953,10 @@ describe('acceptance', () => {
       deepStrictEqual(
         configurations()
           .slice(1)
-          .map(configuration => configuration.extensionDevelopmentPath),
-        [1, 2, 3, 4].map(() =>
+          .map(
+            configuration => [configuration.extensionDevelopmentPath].flat()[0],
+          ),
+        [1, 2, 3, 4, 5].map(() =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -1084,6 +1155,11 @@ describe('acceptance', () => {
       workspace.write('tests/acceptance/suite-reconnect/window.test.ts', '');
       workspace.write('tests/acceptance/suite-failure/window.test.ts', '');
       workspace.write('tests/acceptance/suite-terminal/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-slow/window.test.ts', '');
+      workspace.write(
+        'tests/acceptance/slow-remote/src/extension.ts',
+        'export function activate(): void {}\n',
+      );
     });
 
     it('bundles each suite test file into one CommonJS file', async () => {
@@ -1126,10 +1202,38 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-slow',
         ].map(folder =>
           existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
         ),
-        [false, false, false, false, false, false],
+        [false, false, false, false, false, false, false],
+      );
+    });
+
+    it('D-85: bundles the slow extension into the extension.cjs beside its package.json', async () => {
+      await bundleSuite(workspace.root);
+      strictEqual(
+        existsSync(
+          path.join(
+            workspace.root,
+            'tests/acceptance/slow-remote/extension.cjs',
+          ),
+        ),
+        true,
+      );
+    });
+
+    it('D-85: removeBundles removes the extension bundle too', async () => {
+      await bundleSuite(workspace.root);
+      removeBundles(workspace.root);
+      strictEqual(
+        existsSync(
+          path.join(
+            workspace.root,
+            'tests/acceptance/slow-remote/extension.cjs',
+          ),
+        ),
+        false,
       );
     });
 
@@ -1142,6 +1246,7 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-slow',
         ].map(folder =>
           existsSync(
             path.join(
@@ -1152,7 +1257,7 @@ describe('acceptance', () => {
             ),
           ),
         ),
-        [true, true, true, true, true],
+        [true, true, true, true, true, true],
       );
     });
   });
@@ -1179,6 +1284,7 @@ describe('acceptance', () => {
           REMOTE_OSS_ACCEPTANCE_RECORD: '',
           HARNESS_VSIX_FILES: '',
           HARNESS_EDITOR: 'vscode',
+          REMOTE_OSS_ACCEPTANCE_LOG: '',
         })
       ).exitCode,
       0,

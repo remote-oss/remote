@@ -1,7 +1,7 @@
 import {deepStrictEqual, notStrictEqual, strictEqual} from 'node:assert';
 import {hostname} from 'node:os';
 import * as vscode from 'vscode';
-import {onHost} from '../suite/harness.ts';
+import {connectionLog, onHost, recordLines} from '../suite/harness.ts';
 import {hostServer, isRunning, keepServer} from '../suite/host-server.ts';
 
 /** The harness host's home folder, as the remote window names it. */
@@ -84,5 +84,21 @@ describe('the remote window of the VSCodium run', () => {
     const server = await hostServer();
     keepServer(server);
     strictEqual(await isRunning(server.processId), true);
+  });
+
+  it("D-85: the connect's progress is in the record, title first", () => {
+    strictEqual(
+      recordLines('progress')[0]?.question.startsWith(
+        'Setting up SSH Host harness',
+      ),
+      true,
+    );
+  });
+
+  it("D-85: the log the tests read holds the connect's lines", () => {
+    strictEqual(
+      connectionLog().some(line => line.startsWith('Log level:')),
+      true,
+    );
   });
 });

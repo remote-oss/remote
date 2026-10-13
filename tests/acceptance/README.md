@@ -79,11 +79,26 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `terminal`: the same window with `remote.SSH.useLocalServer` off, which is terminal mode, with `suite-terminal/`.
 
+- `slow`: the same window with `suite-slow/` and a development extension of the workspace kind that takes 15 s to
+  activate in the remote extension host (`slow-remote/`, which writes `/tmp/acceptance-slow-started` and
+  `/tmp/acceptance-slow-done` on the host). A development extension named by a local path never runs on the host, so the
+  harness copies the extension into `/home/harness/slow-remote` before the launches (`hostExtensions`) and the launch
+  loads it with `--extensionDevelopmentPath=vscode-remote://ssh-remote+harness/home/harness/slow-remote`.
+
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
 they start in a window whose connect failed. `HARNESS_EDITOR` (`vscode` or `vscodium`)
 and, for VSCodium, `HARNESS_VSCODIUM_EXECUTABLE` join the harness variables. In CI the job `acceptance (VSCodium)` runs
 when the workflow is dispatched with the `vscodium` input set to true, and on the tag of a release.
+
+### The record and the log
+
+With `REMOTE_OSS_ACCEPTANCE` set, the extension also writes display-only lines to the record, in the order the calls
+happen: a `progress` line with the title of each progress message (no `details`), then one line per update of its
+message, with `details` true or false as the message carried the details link. `recordLines(surface?)` of
+`suite/harness.ts` reads them. `REMOTE_OSS_ACCEPTANCE_LOG` names a file the log channel's lines are appended to, after the
+logger's secret masking: `<run folder>/<label>-log.txt` for each VSCodium launch and `<run folder>/log.txt` for the
+VS Code run. `connectionLog()` reads it, without the time stamps. Nothing of this exists when the switch is unset.
 
 ### Launches
 
@@ -99,7 +114,8 @@ them: the labels, the configurations and the bundled suites all read it. A launc
 | `settings` | merged over the run's base settings, for this launch only; the base settings are written again before a launch without any |
 | `environment` | added to the extension host's environment for this launch only; a key of the launch overrides the harness variable of the same name |
 | `ownScript` | the launch answers from its own `<label>-script.json` and `<label>-record.jsonl` |
-| `extraExtensions` | further development extensions, folders under `tests/acceptance`, loaded after the runner |
+| `extraExtensions` | further development extensions, folders under `tests/acceptance`, loaded after the runner in the local extension host |
+| `hostExtensions` | development extensions that run in the remote extension host: folders under `tests/acceptance`, copied into the host's home folder before the launches and loaded from there |
 
 To add a launch: add a row to `launchesOf`, put its tests in the suite folder it names, and add that folder to
 `tests/acceptance/tsconfig.json` and to the entries of `knip.jsonc`.
