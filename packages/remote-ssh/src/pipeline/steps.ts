@@ -178,7 +178,10 @@ export interface ConnectSteps {
     controlToken: string,
     cancellation: AbortSignal,
   ): Promise<StartOutcome>;
-  /** Ends the CLI `startCli` started, while that process is still the CLI. */
+  /**
+   * Ends the CLI `startCli` started, while that process is still the CLI, and only that process: the server it started
+   * stays for the host's other connections. It settles within the helper's request bound, whatever the host does.
+   */
   stopCli(
     input: ConnectInput,
     lease: ConnectionLease,

@@ -178,6 +178,10 @@ export async function connectOverCli(
     await abandon();
     return {kind: 'fallback', cause: 'no local port for the bridge'};
   }
+  let released = false;
+  function giveBack(): void {
+    lease.release();
+  }
   return {
     kind: 'connected',
     connected: {
@@ -187,9 +191,14 @@ export async function connectOverCli(
       trusted: false,
     },
     release: () => {
+      if (released) {
+        return;
+      }
+      released = true;
       bridge.close();
       tunnel.close();
-      lease.release();
+      // The lease goes back once the stop has settled, which the step bounds: the stop runs over the lease's channel.
+      void stop().then(giveBack, giveBack);
     },
     onTransport: listener => {
       let active = true;

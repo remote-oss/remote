@@ -437,9 +437,18 @@ describe("the server steps: the CLI's stop", () => {
       throw new Error('the plan should take the CLI path');
     }
     const channel = channelAnswering(output);
-    await steps.stopCli(INPUT, leaseOn(channel), HOST, result.plan, 88);
+    const bound = new AbortController();
+    await steps.stopCli(
+      INPUT,
+      leaseOn(channel),
+      HOST,
+      result.plan,
+      88,
+      bound.signal,
+    );
     return {
       channel,
+      bound: bound.signal,
       messages: sink.lines.map(line => line.message),
     };
   }
@@ -450,6 +459,15 @@ describe("the server steps: the CLI's stop", () => {
     deepStrictEqual(
       call?.operation === 'runScript' &&
         call.request.script.includes("CLI_STOP_PID='88'"),
+      true,
+    );
+  });
+
+  it('athena on #518: the stop runs with the cancellation it is given', async () => {
+    const {channel, bound} = await stopped(lines('Ok', 'cli.stopped=yes'));
+    const [call] = channel.calls;
+    deepStrictEqual(
+      call?.operation === 'runScript' && call.request.cancellation === bound,
       true,
     );
   });

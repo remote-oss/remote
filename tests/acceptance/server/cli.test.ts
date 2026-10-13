@@ -379,4 +379,127 @@ describe('V7a the CLI on a real host', function () {
     host.onHost('sh', '-c', `kill ${String(mention)} 2>/dev/null; true`);
     deepStrictEqual([stop.kind, alive], ['notRunning', true]);
   });
+
+  /** The commit and quality the CLI under test serves: its own, which `--version` prints. */
+  function servedRelease(): {commit: string; quality: string} {
+    const version = host.onHost(cliPath, '--version');
+    return {
+      commit: /\(commit ([0-9a-f]+)\)/.exec(version)?.[1] ?? '',
+      quality: /^\S*-insiders?\b/.test(version) ? 'insider' : 'stable',
+    };
+  }
+
+  /** Starts a CLI over `over` and serves the real server through it; the CLI's pid and what `serve` logged. */
+  async function servedBy(
+    over: SharedSession,
+  ): Promise<{processId: number; served: string; lines: string[]}> {
+    const outcome = await startCli(
+      over.channel,
+      parameters,
+      TOKEN,
+      {lockLoop: lockLoop()},
+      NEVER_CANCELLED,
+    );
+    const processId =
+      outcome.kind === 'started' ? outcome.server.processId : -1;
+    running.push(processId);
+    const stream = await socksDialer({
+      local: nodeLocalPort(),
+      socksPort: over.socksPort,
+      scheduler,
+      handshakeMilliseconds: 10000,
+    }).dial({kind: 'port', port: portOf(outcome)});
+    const control = openCliControl(stream);
+    await control.authenticate(TOKEN);
+    const lines: string[] = [];
+    const served = await control.serve(
+      {
+        ...servedRelease(),
+        connectionToken: 'cli06connectiontoken0123456789ab',
+        useLocalDownload: false,
+      },
+      line => {
+        lines.push(line.text);
+      },
+    );
+    control.close();
+    return {processId, served: served.kind, lines};
+  }
+
+  /** The host's processes whose arguments pass `test`. */
+  function processes(test: (line: string) => boolean): string[] {
+    return host
+      .onHost('ps', '-o', 'pid,args')
+      .split('\n')
+      .filter(line => test(line));
+  }
+
+  function isServer(line: string): boolean {
+    return line.includes('/server/node ');
+  }
+
+  function isSupervisor(line: string): boolean {
+    return line.includes(' --cli-data-dir ') && !line.includes('command-shell');
+  }
+
+  it('athena on #412: stopping a CLI that served leaves the server it started running', async () => {
+    await install();
+    const session = await openSharedSession(host);
+    const first = await servedBy(session);
+    const stop = await stopCli(
+      session.channel,
+      parameters,
+      first.processId,
+      NEVER_CANCELLED,
+    );
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const cliGone =
+      host
+        .onHost(
+          'sh',
+          '-c',
+          `kill -0 ${String(first.processId)} 2>/dev/null && echo alive || echo gone`,
+        )
+        .trim() === 'gone';
+    deepStrictEqual(
+      [first.served, stop.kind, cliGone, processes(isServer).length > 0],
+      ['serving', 'stopped', true, true],
+    );
+    await session.stop();
+  });
+
+  it("F-2103 BR-8: after a CLI was stopped, a new CLI's serve finds the running server", async () => {
+    await install();
+    const session = await openSharedSession(host);
+    const first = await servedBy(session);
+    await stopCli(
+      session.channel,
+      parameters,
+      first.processId,
+      NEVER_CANCELLED,
+    );
+    const second = await servedBy(session);
+    deepStrictEqual(
+      [
+        second.served,
+        second.lines.some(line => line.startsWith('Found running server')),
+      ],
+      ['serving', true],
+    );
+    await session.stop();
+  });
+
+  it('athena on #518: one agent-host supervisor serves two connects, and outlives both stops and the session', async () => {
+    await install();
+    const session = await openSharedSession(host);
+    const first = await servedBy(session);
+    const second = await servedBy(session);
+    const duringBoth = processes(isSupervisor).length;
+    for (const processId of [first.processId, second.processId]) {
+      await stopCli(session.channel, parameters, processId, NEVER_CANCELLED);
+    }
+    await session.stop();
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    deepStrictEqual([duringBoth, processes(isSupervisor).length], [1, 1]);
+  });
 });

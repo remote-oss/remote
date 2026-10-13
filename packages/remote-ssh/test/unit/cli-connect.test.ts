@@ -594,7 +594,8 @@ describe("the connect's CLI path: after the window resolved", () => {
     deepStrictEqual(heard, []);
   });
 
-  it('cli-04 §3: release closes the bridge, then the tunnel, then gives the lease back', async () => {
+  /** A resolved CLI connect whose release steps note their order; `stopCli` replaces the fixture's stop. */
+  async function releasable(stopCli?: ConnectSteps['stopCli']) {
     const order: string[] = [];
     const {recording, options} = setup();
     const lease = leaseOf(recording);
@@ -629,10 +630,50 @@ describe("the connect's CLI path: after the window resolved", () => {
               order.push('bridge');
             },
           }),
+        stopCli:
+          stopCli ??
+          ((...given) => {
+            order.push(`stop ${String(given[4])}`);
+            return Promise.resolve();
+          }),
       })),
       options,
     );
-    connectedOf(result).release();
+    return {connection: connectedOf(result), order};
+  }
+
+  /** Lets the release's stop settle. */
+  async function settled(): Promise<void> {
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+  }
+
+  it("athena on #412: release closes the bridge and the tunnel, stops this connect's CLI, then gives the lease back", async () => {
+    const {connection, order} = await releasable();
+    connection.release();
+    await settled();
+    deepStrictEqual(order, ['bridge', 'tunnel', 'stop 88', 'lease']);
+  });
+
+  it('athena on #412: a stop that rejects still gives the lease back', async () => {
+    const {connection, order} = await releasable(() =>
+      Promise.reject(new Error('the channel is gone')),
+    );
+    connection.release();
+    await settled();
     deepStrictEqual(order, ['bridge', 'tunnel', 'lease']);
+  });
+
+  it('athena on #412: a second release stops nothing more', async () => {
+    let stops = 0;
+    const {connection} = await releasable(() => {
+      stops += 1;
+      return Promise.resolve();
+    });
+    connection.release();
+    connection.release();
+    await settled();
+    deepStrictEqual(stops, 1);
   });
 });
