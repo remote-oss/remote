@@ -102,6 +102,12 @@ const MAINTENANCE_TEXTS = [
   'Open Logs',
 ];
 
+/** The platform notice and its button. */
+const PLATFORM_NOTICE_TEXTS = [
+  'You selected "{0}" as the remote platform - this will be stored in the setting "remote.SSH.remotePlatform" and can be changed there if needed.',
+  "Don't Show Again",
+];
+
 function bundle(file: string): Record<string, string> {
   return JSON.parse(readFileSync(path.join(BUNDLES, file), 'utf8')) as Record<
     string,
@@ -127,6 +133,7 @@ describe('the runtime strings of the extension', () => {
           ...WAITING_TEXTS,
           ...CONFIG_FILE_TEXTS,
           ...MAINTENANCE_TEXTS,
+          ...PLATFORM_NOTICE_TEXTS,
           'SSH: {0}',
         ].map(text => [text, text]),
       ),

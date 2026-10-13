@@ -58,7 +58,10 @@ import {
   type DownloadProgressPort,
   serverDownloadProgress,
 } from './cli/server-download-progress.ts';
+import {announcePlatform} from './connect/platform-notice.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
+import type {AcceptanceState} from './surfaces/acceptance-store.ts';
+import type {NoticePort} from './surfaces/notice.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
   HOST_LOCK_ATTEMPTS,
@@ -111,6 +114,9 @@ export interface ConnectSurfaces {
   ) => Promise<RemotePlatform | undefined>;
   /** Sets the exact key for the alias in `remote.SSH.remotePlatform`, in the user's settings. */
   writePlatform: (alias: string, platform: RemotePlatform) => Promise<void>;
+  /** The non-modal notices, and the profile's record of the answers to them. */
+  notice: NoticePort;
+  noticeState: AcceptanceState;
   licenceModal: LicenceModal;
   acceptances: AcceptanceStore;
   presenter: FailurePresenter;
@@ -247,6 +253,17 @@ export function wiringPortsOf(
       settings: () => termsSettingsOf(settings),
       pickPlatform: surfaces.pickPlatform,
       writePlatform: surfaces.writePlatform,
+      announcePlatform: platform => {
+        announcePlatform(
+          {
+            notice: surfaces.notice,
+            state: surfaces.noticeState,
+            translate: surfaces.translate,
+            logger,
+          },
+          platform,
+        );
+      },
     },
     locate: {
       settingValue: () => textOf(settings, 'path'),
