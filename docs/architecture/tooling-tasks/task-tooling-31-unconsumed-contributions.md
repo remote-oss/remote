@@ -121,7 +121,7 @@ be read (the message names which).
       "package": "remote-ssh",
       "kind": "settings",
       "key": "enableAgentForwarding",
-      "card": "#<W4 issue>",
+      "card": "#676",
       "slice": "0.2 slice 2"
     }
   ]
@@ -144,13 +144,13 @@ Unknown fields are an error (exit 2).
 
 | package | kind | key | card | slice | decision |
 |---|---|---|---|---|---|
-| remote-ssh | settings | `enableAgentForwarding` | `#<W4 issue: F-2311 terminal features>` | 0.2 slice 2 | — |
-| remote-ssh | settings | `enableX11Forwarding` | `#<W4 issue: F-2312 terminal features>` | 0.2 slice 2 | — |
-| remote-ssh | settings | `defaultForwardedPorts` | `#<W4 issue: F-2507 applyDefaults>` | 0.2 slice 2 | — |
+| remote-ssh | settings | `enableAgentForwarding` | `#676` | 0.2 slice 2 | — |
+| remote-ssh | settings | `enableX11Forwarding` | `#676` | 0.2 slice 2 | — |
+| remote-ssh | settings | `defaultForwardedPorts` | `#677` | 0.2 slice 2 | — |
 | remote-ssh | settings | `enhancedSessionLogs` | `#674` | deferred | D-86 |
 | remote-ssh | settings | `suppressWindowsSshWarning` | `#674` | deferred | D-60 |
-| remote-ssh | module | `src/environment/agent-link.ts` | `#<W4 issue: F-2311>` | 0.2 slice 2 | — |
-| remote-ssh | module | `src/environment/display.ts` | `#<W4 issue: F-2312>` | 0.2 slice 2 | — |
+| remote-ssh | module | `src/environment/agent-link.ts` | `#676` | 0.2 slice 2 | — |
+| remote-ssh | module | `src/environment/display.ts` | `#676` | 0.2 slice 2 | — |
 | remote-ssh | settings | `localServerDownload`, `allowLocalServerDownload` (two entries) | `#672` | 0.2 | — (only if connect-38 hasn't merged when this lands; otherwise leave them out) |
 
 The deferred ones name this card as their card, because no wiring card exists while the decision holds.
@@ -200,12 +200,9 @@ athena gives the design check.
 
 ## 6. Open rows (stop and report on #674)
 
-1. **The W4 issue numbers.** daedalus fills the `#<W4 issue>` placeholders in §3.5 with the numbers of the slice-2
-   wiring cards (F-2311, F-2312 terminal features; F-2507 `applyDefaults`) before the build starts. If they're still
-   placeholders when you start, ask daedalus.
-2. **TypeScript doesn't give `valueOf('path')` the contextual type `keyof typeof settings`** in a case on main, for
+1. **TypeScript doesn't give `valueOf('path')` the contextual type `keyof typeof settings`** in a case on main, for
    example through a generic wrapper. Report the call. Don't fall back to text matching.
-3. **`knip --production` reports unused files outside the two modules,** or flags production entries the `!` marking
+2. **`knip --production` reports unused files outside the two modules,** or flags production entries the `!` marking
    missed. Report the list. Don't widen the allowlist by yourself.
-4. **A package's commands are registered some other way than `registerCommands`** (a `vscode.commands.registerCommand`
+3. **A package's commands are registered some other way than `registerCommands`** (a `vscode.commands.registerCommand`
    in `src/`). Report the call site: it's either a defect or a gap in R2, athena's call.
