@@ -16,6 +16,7 @@ import {starterTemplate} from '../../src/config/new-file.ts';
 import {
   configFileEditorOf,
   nodeConfigFiles,
+  nodeHostFiles,
 } from '../../src/config/config-file-editor.ts';
 import {FakeQuickPick} from './editor-fakes.fixture.ts';
 
@@ -249,6 +250,29 @@ describe('the client files of the Open SSH Configuration File command (card remo
     await nodeConfigFiles.makeFolder(folder, 0o755);
     await nodeConfigFiles.createFile(file, 0o644);
     deepStrictEqual([modeOf(folder), modeOf(file)], [0o755, 0o644]);
+  });
+
+  it('F-2204 AC-6: a file is written whole and read back as it was written', async () => {
+    const file = path.join(root, 'config');
+    await nodeHostFiles.createFile(file, 0o600);
+    await nodeHostFiles.write(file, 'Host a\n  HostName a\n');
+    deepStrictEqual(await nodeHostFiles.read(file), 'Host a\n  HostName a\n');
+  });
+
+  it('F-2204 AC-17: writing a file that exists keeps its mode', async () => {
+    const file = path.join(root, 'config');
+    await nodeHostFiles.createFile(file, 0o640);
+    await nodeHostFiles.write(file, 'Host a\n');
+    deepStrictEqual(modeOf(file), 0o640);
+  });
+
+  it('F-2204 AC-26: writing a file whose folder is missing rejects with the system error', async () => {
+    await rejects(
+      Promise.resolve(
+        nodeHostFiles.write(path.join(root, 'none', 'config'), 'x'),
+      ),
+      {code: 'ENOENT'},
+    );
   });
 
   it('F-2203 AC-31: a file whose folder exists has no missing folder', async () => {

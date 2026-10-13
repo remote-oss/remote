@@ -5,6 +5,7 @@
 
 /** What a text input is asked with. */
 interface TextInputRequest {
+  title?: string;
   prompt?: string;
   placeholder?: string;
 }

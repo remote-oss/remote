@@ -135,11 +135,14 @@ function modalItems(buttons: readonly string[]): vscode.MessageItem[] {
   }));
 }
 
-/** The plain text input: `showInputBox` with the request's prompt and placeholder, or nothing when dismissed. */
+/** The plain text input: `showInputBox` with the request's title, prompt and placeholder, or nothing when dismissed. */
 export function textInputOf(editor: Editor): TextInputPort {
   return {
     showInputBox: async request => {
       const options: vscode.InputBoxOptions = {};
+      if (request.title !== undefined) {
+        options.title = request.title;
+      }
       if (request.prompt !== undefined) {
         options.prompt = request.prompt;
       }

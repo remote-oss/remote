@@ -30,6 +30,7 @@ interface Seen {
   /** The button a notice is answered with. */
   noticeAnswer?: string;
   remote: Array<[string, string]>;
+  inputs: number;
 }
 
 /** The registration over fakes; the connector's server port is `serverPort`. */
@@ -56,6 +57,7 @@ async function registered(
     maintained: [],
     notices: [],
     remote: [],
+    inputs: 0,
   };
   const surfacesInUse =
     surfaces ??
@@ -156,6 +158,33 @@ async function registered(
         showWarning: () => Promise.resolve(undefined),
         showError: () => Promise.resolve(undefined),
       },
+      addHost: {
+        editor: {
+          pickFile: () => Promise.resolve(undefined),
+          open: file => Promise.resolve({file}),
+        },
+        input: {
+          showInputBox: () => {
+            seen.inputs += 1;
+            return Promise.resolve(undefined);
+          },
+        },
+        files: {
+          exists: () => Promise.resolve(false),
+          missingFolders: () => Promise.resolve([]),
+          makeFolder: () => Promise.resolve(),
+          createFile: () => Promise.resolve(),
+          read: () => Promise.resolve(''),
+          write: () => Promise.resolve(),
+        },
+        places: {
+          homeFolder: '/home/alex',
+          platform: 'linux',
+          userFile: '/home/alex/.ssh/config',
+          systemFile: '/etc/ssh/ssh_config',
+        },
+        configFile: () => '',
+      },
     },
     {...assembly, connector, killLocalServer, maintain},
     resolversGranted,
@@ -250,6 +279,18 @@ describe("the connect's registration", () => {
         'opensshremotes.openEmptyWindowOnCurrentHost',
       ],
     );
+  });
+
+  it('connect-22: Add New SSH Host... asks for the connection command', async () => {
+    const {seen} = await registered(true);
+    await seen.commands.get('opensshremotes.addNewSshHost')?.();
+    deepStrictEqual(seen.inputs, 1);
+  });
+
+  it('connect-22: Add New SSH Host... asks for the connection command without the resolvers grant', async () => {
+    const {seen} = await registered(false);
+    await seen.commands.get('opensshremotes.addNewSshHost')?.();
+    deepStrictEqual(seen.inputs, 1);
   });
 
   it('connect-21: Connect to Host... picks a host and opens it in a new window', async () => {
@@ -374,6 +415,7 @@ describe("the connect's registration", () => {
           'opensshremotes.cleanLocalServer',
           'opensshremotes.cleanRemoteServer',
           'opensshremotes.cleanDevBox',
+          'opensshremotes.addNewSshHost',
         ].sort(),
         'unregister ssh-remote',
       ],

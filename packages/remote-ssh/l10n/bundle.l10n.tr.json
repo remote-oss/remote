@@ -74,5 +74,9 @@
   "Failed to kill VS Code Server on {0}.": "Failed to kill VS Code Server on {0}.",
   "Open Logs": "Open Logs",
   "You selected \"{0}\" as the remote platform - this will be stored in the setting \"remote.SSH.remotePlatform\" and can be changed there if needed.": "You selected \"{0}\" as the remote platform - this will be stored in the setting \"remote.SSH.remotePlatform\" and can be changed there if needed.",
-  "Don't Show Again": "Don't Show Again"
+  "Don't Show Again": "Don't Show Again",
+  "Connect": "Connect",
+  "Enter SSH Connection Command": "Enter SSH Connection Command",
+  "Host added!": "Host added!",
+  "Open Config": "Open Config"
 }
