@@ -723,6 +723,12 @@ export function vscodiumConfiguration(
   const env: Record<string, string | undefined> = {
     ...environment,
     REMOTE_OSS_ACCEPTANCE_LOG: files.logFile,
+    REMOTE_OSS_ACCEPTANCE_WINDOWS: path.join(
+      runFolder,
+      launch.label,
+      'agent',
+      'pids',
+    ),
     ...(launch.ownScript === true
       ? {
           REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,

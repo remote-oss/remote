@@ -4,15 +4,24 @@ import path from 'node:path';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {licenceModalOf} from '../../src/surfaces/licence-modal.ts';
 import type {EditorAdapters} from '../../src/editor-surfaces.ts';
-import type {ProgressPort, ProgressRequest} from 'lib-authority';
+import type {
+  EditorResolver,
+  ProgressPort,
+  ProgressRequest,
+  ResolvedConnection,
+  ResolverEditor,
+} from 'lib-authority';
 import type {ChannelPort, RevealableChannel} from '../../src/log-channel.ts';
 import {
   adaptersFor,
+  authorityReportingResolverEditorOf,
+  claimedWindowName,
   channelPortFor,
   progressFor,
   type RecordLine,
   type ScriptEntry,
   scriptedAdapters,
+  windowNameFor,
   windowNameOf,
 } from '../../src/surfaces/scripted-adapters.ts';
 
@@ -1327,6 +1336,127 @@ describe('a notice line of the record (card connect-25)', () => {
     deepStrictEqual(
       files.lines().map(line => line.buttons),
       [['OK']],
+    );
+  });
+});
+
+describe('the window name the harness gives a window (card tooling-28)', () => {
+  const WINDOWS = '/run/windows/pids';
+
+  it('with the variable set, the name waits for the pid file and takes its content', async () => {
+    const waits: number[] = [];
+    let reads = 0;
+    let file = '';
+    const name = await claimedWindowName(
+      WINDOWS,
+      42,
+      {
+        read: (each: string): string | undefined => {
+          reads += 1;
+          file = each;
+          return reads >= 2 ? 'empty-1' : undefined;
+        },
+      },
+      milliseconds => {
+        waits.push(milliseconds);
+        return Promise.resolve();
+      },
+      () => 0,
+    );
+    deepStrictEqual(
+      {name, waits, reads, file},
+      {
+        name: 'empty-1',
+        waits: [50],
+        reads: 2,
+        file: path.join(WINDOWS, '42'),
+      },
+    );
+  });
+
+  it('with the variable set and no pid file within the wait, the name is unclaimed-<pid>', async () => {
+    let ticks = 0;
+    const name = await claimedWindowName(
+      WINDOWS,
+      42,
+      {read: (): string | undefined => undefined},
+      () => Promise.resolve(),
+      () => {
+        ticks += 5_001;
+        return ticks;
+      },
+    );
+    strictEqual(name, 'unclaimed-42');
+  });
+
+  it('with the variable unset, the name is the window name as before, without a pid file read', async () => {
+    const name = await windowNameFor(
+      {},
+      42,
+      '/home/harness/b',
+      {
+        read: (each: string): string | undefined => {
+          throw new Error(`no pid file is read without the variable: ${each}`);
+        },
+      },
+      () => Promise.resolve(),
+      () => 0,
+    );
+    strictEqual(name, 'b');
+  });
+});
+
+describe('the authority the resolver reports beside the pid file (card tooling-28)', () => {
+  const WINDOWS = '/run/windows/pids';
+
+  it('without the variable, the resolver editor is the same editor, unwrapped', () => {
+    const editor = {} as unknown as ResolverEditor;
+    strictEqual(
+      authorityReportingResolverEditorOf({}, 42, editor, () => undefined),
+      editor,
+    );
+  });
+
+  it('with the variable set, the resolve reports its authority before resolving', async () => {
+    const authorities: Array<[string, string]> = [];
+    let registered: [string, EditorResolver] | undefined;
+    const editor = {
+      registerRemoteAuthorityResolver: (
+        prefix: string,
+        resolver: EditorResolver,
+      ): {dispose(): void} => {
+        registered = [prefix, resolver];
+        return {dispose: () => undefined};
+      },
+    } as unknown as ResolverEditor;
+    const wrapped = authorityReportingResolverEditorOf(
+      {REMOTE_OSS_ACCEPTANCE_WINDOWS: WINDOWS},
+      42,
+      editor,
+      (file: string, authority: string) => {
+        authorities.push([file, authority]);
+      },
+    );
+    wrapped.registerRemoteAuthorityResolver('ssh-remote', {
+      resolve: (): Promise<ResolvedConnection> =>
+        Promise.resolve({
+          host: 'harness',
+          port: 4000,
+          connectionToken: 'window-token',
+          extensionHostEnv: {},
+          environmentTunnels: [],
+        }),
+    });
+    const resolved = await registered?.[1]?.resolve('ssh-remote+harness', {
+      resolveAttempt: 1,
+    });
+    deepStrictEqual(
+      [authorities, registered?.[0], resolved?.port],
+      [
+        [[path.join(WINDOWS, '42.authority'), 'ssh-remote+harness']],
+        'ssh-remote',
+        4000,
+      ],
     );
   });
 });

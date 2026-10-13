@@ -1503,7 +1503,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('D-85: a launch with no environment adds only its log file to the harness variables', () => {
+    it('D-85: a launch with no environment adds its log file and its windows folder to the harness variables', () => {
       deepStrictEqual(
         vscodiumConfiguration(
           workspace.root,
@@ -1514,6 +1514,12 @@ describe('acceptance', () => {
         {
           ...CONFIGURATION_ENVIRONMENT,
           REMOTE_OSS_ACCEPTANCE_LOG: path.join('/run', 'extra-log.txt'),
+          REMOTE_OSS_ACCEPTANCE_WINDOWS: path.join(
+            '/run',
+            'extra',
+            'agent',
+            'pids',
+          ),
         },
       );
     });
@@ -1572,6 +1578,24 @@ describe('acceptance', () => {
           'client-unset',
           'ports-probe',
         ].map(label => path.join('/run', `${label}-log.txt`)),
+      );
+    });
+
+    it('D-85: each launch points its windows at the agent folder of its own label', () => {
+      deepStrictEqual(
+        configurations().map(
+          configuration => configuration.env.REMOTE_OSS_ACCEPTANCE_WINDOWS,
+        ),
+        [
+          'local',
+          'remote',
+          'reconnect',
+          'failure-refused',
+          'terminal',
+          'slow',
+          'client-unset',
+          'ports-probe',
+        ].map(label => path.join('/run', label, 'agent', 'pids')),
       );
     });
 

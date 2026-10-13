@@ -4,7 +4,8 @@
  * the only file that reads it.
  */
 
-import type {ProgressPort} from 'lib-authority';
+import path from 'node:path';
+import type {ProgressPort, ResolverEditor} from 'lib-authority';
 import type {EditorAdapters} from '../editor-surfaces.ts';
 import type {ChannelPort} from '../log-channel.ts';
 import type {MitigationAction} from './mitigation-picker.ts';
@@ -15,6 +16,15 @@ const SWITCH = 'REMOTE_OSS_ACCEPTANCE';
 const SCRIPT = 'REMOTE_OSS_ACCEPTANCE_SCRIPT';
 const RECORD = 'REMOTE_OSS_ACCEPTANCE_RECORD';
 const LOG_FILE_VARIABLE = 'REMOTE_OSS_ACCEPTANCE_LOG';
+
+/** The variable the run passes to every launch: the folder this launch's windows write their pid files to. */
+const WINDOWS_VARIABLE = 'REMOTE_OSS_ACCEPTANCE_WINDOWS';
+
+/** How often the adapters look for the window's pid file, in milliseconds. */
+const PID_POLL_MILLISECONDS = 50;
+
+/** How long the adapters wait for the window's pid file, in milliseconds. */
+const PID_WAIT_MILLISECONDS = 10_000;
 
 /**
  * One expected question and its answer, in the order the test expects them. An entry with a `window` is answered only
@@ -72,6 +82,90 @@ export function windowNameOf(firstFolderPath: string | undefined): string {
     .filter(part => part !== '')
     .at(-1);
   return segment ?? 'local';
+}
+
+/** Waits the given number of milliseconds. */
+export type Sleeper = (milliseconds: number) => Promise<void>;
+
+/** Reads a window's pid file: the name the window's agent wrote to it, or nothing until the file is there. */
+export interface PidFiles {
+  read(file: string): string | undefined;
+}
+
+/**
+ * The name a window's agent wrote to its pid file, polled every 50 ms. When the file has not arrived within 10 s,
+ * the window is named `unclaimed-<pid>`: a missing file never borrows another window's name, and the record
+ * shows the window as unclaimed.
+ */
+export async function claimedWindowName(
+  windowsFolder: string,
+  processId: number,
+  files: PidFiles,
+  wait: Sleeper,
+  now: () => number,
+): Promise<string> {
+  const deadline = now() + PID_WAIT_MILLISECONDS;
+  for (;;) {
+    const name = files.read(path.join(windowsFolder, String(processId)));
+    if (name !== undefined) {
+      return name;
+    }
+    if (now() >= deadline) {
+      return `unclaimed-${String(processId)}`;
+    }
+    await wait(PID_POLL_MILLISECONDS);
+  }
+}
+
+/**
+ * The name the harness gives this window: what the window's agent claimed, from its pid file, when the launch names
+ * the pid folder; the window's folder name as before when it does not.
+ */
+export async function windowNameFor(
+  environment: Readonly<Record<string, string | undefined>>,
+  processId: number,
+  firstFolderPath: string | undefined,
+  files: PidFiles,
+  wait: Sleeper,
+  now: () => number,
+): Promise<string> {
+  const windowsFolder = namedBy(environment, WINDOWS_VARIABLE);
+  return windowsFolder === undefined
+    ? windowNameOf(firstFolderPath)
+    : claimedWindowName(windowsFolder, processId, files, wait, now);
+}
+
+/** The file beside the launch's pid files that holds the authority a window's extension resolves. */
+function authorityFileOf(windowsFolder: string, processId: number): string {
+  return path.join(windowsFolder, `${String(processId)}.authority`);
+}
+
+/**
+ * The resolver's editor the harness uses: when the launch names the pid folder, every authority the resolver
+ * resolves is handed to `onAuthority`, with the file it belongs to, before the resolve runs; the same editor
+ * otherwise.
+ */
+export function authorityReportingResolverEditorOf(
+  environment: Readonly<Record<string, string | undefined>>,
+  processId: number,
+  editor: ResolverEditor,
+  onAuthority: (file: string, authority: string) => void,
+): ResolverEditor {
+  const windowsFolder = namedBy(environment, WINDOWS_VARIABLE);
+  if (windowsFolder === undefined) {
+    return editor;
+  }
+  return {
+    ...editor,
+    registerRemoteAuthorityResolver: (prefix, resolver) =>
+      editor.registerRemoteAuthorityResolver(prefix, {
+        ...resolver,
+        resolve: (authority, context) => {
+          onAuthority(authorityFileOf(windowsFolder, processId), authority);
+          return resolver.resolve(authority, context);
+        },
+      }),
+  };
 }
 
 /** The files the adapters use: the script is read, the record is appended to. */
