@@ -111,6 +111,9 @@ export {
   type ScriptPlan,
 } from './process/remote-program.ts';
 export {
+  type BootstrapEvent,
+  bootstrapEventOf,
+  bootstrapLogLine,
   sessionStart,
   sessionStartFor,
 } from './connection-server/session-bootstrap.ts';

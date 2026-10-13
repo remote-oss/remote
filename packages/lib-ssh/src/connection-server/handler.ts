@@ -16,7 +16,6 @@ import type {
 import {AskpassEndpoint} from '../askpass/endpoint.ts';
 import type {Invocation} from '../arguments/invocation.ts';
 import {classify} from '../diagnostics/classify.ts';
-import {setupMarkerOf} from '../diagnostics/setup-report.ts';
 import {
   ConnectWait,
   type ConnectWaitSettings,
@@ -32,6 +31,11 @@ import {
   type SharedRecord,
 } from './messages.ts';
 import {LoginOwnership} from './ownership.ts';
+import {
+  type BootstrapEvent,
+  bootstrapEventOf,
+  bootstrapLogLine,
+} from './session-bootstrap.ts';
 import {ShellRuns} from './shell-runs.ts';
 
 /** What the handler needs to run the connection. */
@@ -272,23 +276,32 @@ export class ConnectionHandler implements MessageHandler {
       },
     });
     this.runs = runs;
+    let ready = false;
+    let early: Exclude<BootstrapEvent, {kind: 'ready'}> | undefined;
     const output = new LineSplitter(line => {
-      runs.hear(line);
+      const event = ready ? undefined : bootstrapEventOf(line);
+      if (event === undefined) {
+        runs.hear(line);
+      } else if (event.kind === 'ready') {
+        ready = true;
+        if (this.state === 'connecting') {
+          wait.stop();
+          this.askpass.closeAll();
+          this.state = 'connected';
+          this.ownership.finish();
+          this.tell({type: 'connected', socksPort: this.options.socksPort});
+        }
+      } else {
+        early = event;
+        this.options.logLine(bootstrapLogLine(event));
+      }
     });
     session.onOutput(piece => {
       output.push(piece);
     });
     const lines = new LineSplitter(line => {
-      if (this.state !== 'connecting') {
-        return;
-      }
-      errorLines.push(line);
-      if (setupMarkerOf(line) === 'authenticated') {
-        wait.stop();
-        this.askpass.closeAll();
-        this.state = 'connected';
-        this.ownership.finish();
-        this.tell({type: 'connected', socksPort: this.options.socksPort});
+      if (this.state === 'connecting') {
+        errorLines.push(line);
       }
     });
     session.onError(piece => {
@@ -308,7 +321,7 @@ export class ConnectionHandler implements MessageHandler {
         this.control.stop();
         return;
       }
-      this.loginFailed(errorLines, status, timedOut);
+      this.loginFailed(errorLines, status, timedOut, early);
     });
   }
 
@@ -316,13 +329,22 @@ export class ConnectionHandler implements MessageHandler {
     errorLines: readonly string[],
     status: number | undefined,
     timedOut: boolean,
+    early: Exclude<BootstrapEvent, {kind: 'ready'}> | undefined,
   ): void {
+    if (early?.kind === 'exited') {
+      // The login shell's own startup ended the session: no reason of ssh's, only the log line already written.
+      this.state = 'idle';
+      this.tell({type: 'loginFailed', kind: 'unknown', hints: []});
+      this.ownership.ownerGaveUp();
+      return;
+    }
     const classification = classify(errorLines, status, 'connection', 'shared');
     this.state = 'idle';
     this.tell({
       type: 'loginFailed',
       kind:
-        timedOut && classification.kind === 'unknown'
+        (timedOut || early?.kind === 'timeout') &&
+        classification.kind === 'unknown'
           ? 'timeout'
           : classification.kind,
       ...(classification.reason === undefined

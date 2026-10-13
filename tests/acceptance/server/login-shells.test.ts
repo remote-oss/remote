@@ -5,7 +5,11 @@ import {
   shellVariantsToRun,
 } from '../../../tools/host-variants.ts';
 import {startHost, type RunningHost} from './host-fixture.ts';
-import {openSharedSession, type SharedSession} from './shared-session.ts';
+import {
+  attemptSharedSession,
+  openSharedSession,
+  type SharedSession,
+} from './shared-session.ts';
 
 /** The connect wait the session is opened with: it is also the bound on the login shell's startup. */
 const CONNECT_SECONDS = 5;
@@ -120,15 +124,18 @@ const LAYER_ROWS: Readonly<Record<string, readonly LayerRow[]>> = {
 };
 
 /** The host with its connect timeout set to the rows' wait (the host's own value wins over the setting): the session reads its bound from it. */
-function boundedHost(host: RunningHost): RunningHost {
+function boundedHost(
+  host: RunningHost,
+  seconds: number = CONNECT_SECONDS,
+): RunningHost {
   return {
     ...host,
     base: {
       ...host.base,
-      settings: {...host.base.settings, connectTimeout: CONNECT_SECONDS},
+      settings: {...host.base.settings, connectTimeout: seconds},
       effective: {
         ...host.base.effective,
-        connectTimeout: String(CONNECT_SECONDS),
+        connectTimeout: String(seconds),
       },
     },
   };
@@ -307,46 +314,57 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
         );
       }
 
-      async function twoScripts(host: RunningHost): Promise<{
-        statuses: number[];
-        firstMilliseconds: number;
-        session: SharedSession;
-      }> {
+      /** The attempt to open a session, with the time it took, and the host's leftovers cleaned up. */
+      async function failedAttempt(host: RunningHost, seconds?: number) {
         const started = Date.now();
-        const session = await openSharedSession(boundedHost(host));
-        const statuses: number[] = [];
-        let firstMilliseconds = 0;
-        for (const script of ['echo one', 'echo two']) {
-          const outcome = await session.channel.runScript(
-            {
-              script,
-              interpreter: 'posixShell',
-              environment: {},
-              input: {kind: 'text', text: ''},
-              cancellation: new AbortController().signal,
-            },
-            () => undefined,
-          );
-          statuses.push(outcome.kind === 'exited' ? outcome.status : -1);
-          firstMilliseconds ||= Date.now() - started;
+        const attempt = await attemptSharedSession(boundedHost(host, seconds));
+        const milliseconds = Date.now() - started;
+        if (attempt.kind === 'connected') {
+          await attempt.session.stop();
+          return {
+            kind: 'connected' as const,
+            milliseconds,
+            logged: attempt.logged,
+          };
         }
-        return {statuses, firstMilliseconds, session};
+        await attempt.stop();
+        return {
+          kind: 'failed' as const,
+          failure: attempt.failure,
+          milliseconds,
+          logged: attempt.logged,
+        };
       }
 
-      it('#443: a .bash_profile that sleeps 30 s holds the session for the bound alone; both scripts run', async () => {
+      it('F-2704 AC-11, #443: a .bash_profile that sleeps 30 s fails the connect as a timeout, at the bound', async () => {
         write(bash, '.bash_profile', 'sleep 30\n');
-        const {statuses, firstMilliseconds, session} = await twoScripts(bash);
-        await session.stop();
+        const attempt = await failedAttempt(bash);
         deepStrictEqual(
-          [statuses, firstMilliseconds < BOUND_AND_MARGIN_MILLISECONDS],
-          [[0, 0], true],
+          [
+            attempt.kind,
+            attempt.kind === 'failed' ? attempt.failure : undefined,
+            attempt.milliseconds < BOUND_AND_MARGIN_MILLISECONDS,
+          ],
+          [
+            'failed',
+            {kind: 'loginFailed', failure: 'timeout', hints: []},
+            true,
+          ],
+        );
+      });
+
+      it('F-2704 AC-11, #443: the helper logs that the login shell did not finish its startup', async () => {
+        write(bash, '.bash_profile', 'sleep 30\n');
+        const attempt = await failedAttempt(bash);
+        deepStrictEqual(
+          attempt.logged.filter(line => line.includes('login shell')),
+          ['the login shell did not finish its startup within 5 s'],
         );
       });
 
       it("#443: right after that session ends no sleep is left on the host, the profile's or the watchdog's", async () => {
         write(bash, '.bash_profile', 'sleep 30\n');
-        const {session} = await twoScripts(bash);
-        await session.stop();
+        await failedAttempt(bash);
         deepStrictEqual(
           bash
             .onHost('ps', '-o', 'args')
@@ -354,6 +372,41 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
             .some(line => line.includes('sleep')),
           false,
         );
+      });
+
+      it('F-2704 AC-13: a .bash_profile that ends with exit 1 fails the connect at once, with no reason of ssh', async () => {
+        write(bash, '.bash_profile', 'exit 1\n');
+        const attempt = await failedAttempt(bash);
+        deepStrictEqual(
+          [
+            attempt.kind,
+            attempt.kind === 'failed' ? attempt.failure : undefined,
+            attempt.milliseconds < 3000,
+          ],
+          [
+            'failed',
+            {kind: 'loginFailed', failure: 'unknown', hints: []},
+            true,
+          ],
+        );
+      });
+
+      it('F-2704 AC-25: the helper logs that the login shell exited with its status', async () => {
+        write(bash, '.bash_profile', 'exit 1\n');
+        const attempt = await failedAttempt(bash);
+        deepStrictEqual(
+          attempt.logged.filter(line => line.includes('login shell')),
+          [
+            "the SSH session ended before the host reported its platform: the login shell's startup exited with status 1",
+          ],
+        );
+      });
+
+      it('F-2704 AC-14: a .bash_profile that pauses 25 s still connects when the connect timeout is 40 s', async function () {
+        this.timeout(120000);
+        write(bash, '.bash_profile', 'sleep 25\nexport PAUSED=yes\n');
+        const attempt = await failedAttempt(bash, 40);
+        deepStrictEqual(attempt.kind, 'connected');
       });
 
       it('#443: while the first script runs on zsh the watchdog is gone once the login shell ended', async () => {
@@ -390,36 +443,56 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
         deepStrictEqual(sleeping, false);
       });
 
-      it('#443: a dash .profile that reads standard input and exits 3 leaves both scripts running and LAYER1 empty', async () => {
+      it('F-2704 AC-13, #443: a dash .profile that reads standard input and exits 3 fails the connect with that status', async () => {
         write(dash, '.profile', 'export LAYER1=never\nread x\nexit 3\n');
-        const session = await openSharedSession(boundedHost(dash));
-        const lines: string[] = [];
-        const first = await session.channel.runScript(
-          {
-            script: 'printf \'%s\\n\' "$LAYER1"',
-            interpreter: 'posixShell',
-            environment: {},
-            input: {kind: 'text', text: ''},
-            cancellation: new AbortController().signal,
-          },
-          line => lines.push(line),
-        );
-        const second = await session.channel.runScript(
-          {
-            script: 'true',
-            interpreter: 'posixShell',
-            environment: {},
-            input: {kind: 'text', text: ''},
-            cancellation: new AbortController().signal,
-          },
-          () => undefined,
-        );
-        await session.stop();
+        const attempt = await failedAttempt(dash);
         deepStrictEqual(
-          [first.kind, second.kind, lines],
-          ['exited', 'exited', ['']],
+          [
+            attempt.kind,
+            attempt.logged.filter(line => line.includes('login shell')),
+          ],
+          [
+            'failed',
+            [
+              "the SSH session ended before the host reported its platform: the login shell's startup exited with status 3",
+            ],
+          ],
         );
       });
     },
   );
+});
+
+describe('F-2206 AC-28, #443: a login shell that does not answer fails the connect', function () {
+  this.timeout(120000);
+  let host: RunningHost;
+
+  before(async () => {
+    host = await startHost();
+  });
+
+  after(() => {
+    host.stop();
+  });
+
+  it("F-2206 AC-28: the host's mute shell fails the connect as a timeout, after the connect wait and never before it", async () => {
+    const started = Date.now();
+    const attempt = await attemptSharedSession(
+      boundedHost({...host, base: host.baseOf('mute')}),
+    );
+    const milliseconds = Date.now() - started;
+    if (attempt.kind === 'connected') {
+      await attempt.session.stop();
+    } else {
+      await attempt.stop();
+    }
+    deepStrictEqual(
+      [
+        attempt.kind === 'failed' ? attempt.failure : attempt.kind,
+        milliseconds >= CONNECT_SECONDS * 1000 - 500,
+        milliseconds < BOUND_AND_MARGIN_MILLISECONDS,
+      ],
+      [{kind: 'loginFailed', failure: 'timeout', hints: []}, true, true],
+    );
+  });
 });

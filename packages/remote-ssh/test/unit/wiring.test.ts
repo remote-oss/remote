@@ -892,7 +892,7 @@ describe("a terminal-mode connect's channel", () => {
     );
     await Promise.resolve();
     seen.terminals.opened[0]?.write(
-      'Authenticated to dev ([192.0.2.1]:22) using "publickey".\n',
+      'Authenticated to dev ([192.0.2.1]:22) using "publickey".\nLAYER1-READY\n',
     );
     await result;
     deepStrictEqual(

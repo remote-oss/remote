@@ -7,6 +7,7 @@ import {
   type ConnectionHandlerOptions,
 } from '../../src/index.ts';
 import {ScriptedSpawner, startError} from './fake-client-process.ts';
+import {authenticate} from './connection-fixture.ts';
 
 const INVOCATION = {
   program: 'ssh',
@@ -22,8 +23,6 @@ const RECORD = {
 };
 const ASKPASS_NONCE = 'askpass-nonce';
 const ASKPASS_ENDPOINT = '/run/ra-0123456789abcdef.sock';
-const AUTHENTICATED =
-  'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n';
 
 async function settled(): Promise<void> {
   for (let round = 0; round < 5; round++) {
@@ -151,21 +150,32 @@ describe('connection handler (contracts §4 S9)', () => {
       });
     });
 
-    it('reports the SOCKS port at the authentication line, even when pieces split it', async () => {
+    it('reports the SOCKS port at the ready line, even when pieces split it', async () => {
       await send(1, {type: 'connect'});
       const client = spawner.started[0];
-      client?.error('debug1: Server accepts key\nAuthenticated to 192.0.2.10');
+      client?.error(
+        'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n',
+      );
+      client?.output('LAYER1-REA');
       const before = [...events];
-      client?.error(' ([192.0.2.10]:22) using "publickey".\n');
+      client?.output('DY\n');
       deepStrictEqual(
         [before, events],
         [[], [{type: 'connected', socksPort: 41000}]],
       );
     });
 
+    it('card ssh-38: authentication alone does not report the connection', async () => {
+      await send(1, {type: 'connect'});
+      spawner.started[0]?.error(
+        'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n',
+      );
+      deepStrictEqual(eventTypes(), []);
+    });
+
     it('refuses a connect once the connection is set up, and ignores the lines after it', async () => {
       await send(1, {type: 'connect'});
-      spawner.started[0]?.error(AUTHENTICATED);
+      authenticate(spawner.started[0]);
       spawner.started[0]?.error('debug1: Entering interactive session.\n');
       const reply = await send(2, {type: 'connect'});
       deepStrictEqual(
@@ -176,7 +186,7 @@ describe('connection handler (contracts §4 S9)', () => {
 
     it('keeps the login with the owner once the connection is set up', async () => {
       await send(1, {type: 'connect'});
-      spawner.started[0]?.error(AUTHENTICATED);
+      authenticate(spawner.started[0]);
       handler.onLeasesChanged([2]);
       deepStrictEqual(eventTypes(), ['connected']);
     });
@@ -210,6 +220,45 @@ describe('connection handler (contracts §4 S9)', () => {
         },
         {type: 'ownerChanged', owner: 2},
       ]);
+    });
+
+    it('card ssh-38: a login shell that outlasted its bound fails the login as a timeout, and is logged', async () => {
+      spawner.started[0]?.output('LAYER1-TIMEOUT 5\n');
+      spawner.started[0]?.exit(124);
+      await settled();
+      deepStrictEqual(
+        [events, logged],
+        [
+          [
+            {type: 'loginFailed', kind: 'timeout', hints: []},
+            {type: 'ownerChanged', owner: 2},
+          ],
+          ['the login shell did not finish its startup within 5 s'],
+        ],
+      );
+    });
+
+    it("card ssh-38: a login shell that ended by itself fails the login with no reason of ssh's, and is logged", async () => {
+      spawner.started[0]?.output('LAYER1-EXITED 1\n');
+      spawner.started[0]?.exit(1);
+      await settled();
+      deepStrictEqual(
+        [events, logged],
+        [
+          [
+            {type: 'loginFailed', kind: 'unknown', hints: []},
+            {type: 'ownerChanged', owner: 2},
+          ],
+          [
+            "the SSH session ended before the host reported its platform: the login shell's startup exited with status 1",
+          ],
+        ],
+      );
+    });
+
+    it('card ssh-38: the bootstrap lines are never passed to the runs', () => {
+      spawner.started[0]?.output('LAYER1-TIMEOUT 5\n');
+      deepStrictEqual(eventTypes(), []);
     });
 
     it('lets the new owner connect again with a new ssh', async () => {
@@ -247,7 +296,7 @@ describe('connection handler (contracts §4 S9)', () => {
     });
 
     it('does not time out after the setup report', () => {
-      spawner.started[0]?.error(AUTHENTICATED);
+      authenticate(spawner.started[0]);
       clock.advance(60000);
       deepStrictEqual(
         [spawner.started[0]?.killed, eventTypes()],
@@ -285,7 +334,7 @@ describe('connection handler (contracts §4 S9)', () => {
     beforeEach(async () => {
       handler.onLeasesChanged([1]);
       await send(1, {type: 'connect'});
-      spawner.started[0]?.error(AUTHENTICATED);
+      authenticate(spawner.started[0]);
       events.length = 0;
     });
 
@@ -314,7 +363,7 @@ describe('connection handler (contracts §4 S9)', () => {
 
     it('ends ssh without a lost-connection event after the connection was set up', async () => {
       await send(1, {type: 'connect'});
-      spawner.started[0]?.error(AUTHENTICATED);
+      authenticate(spawner.started[0]);
       events.length = 0;
       await send(1, {type: 'kill'});
       await settled();
@@ -586,7 +635,7 @@ describe('connection handler (contracts §4 S9)', () => {
     async function connected(): Promise<void> {
       handler.onLeasesChanged([1, 2]);
       await send(1, {type: 'connect'});
-      spawner.started[0]?.error(AUTHENTICATED);
+      authenticate(spawner.started[0]);
       events.length = 0;
     }
 
@@ -722,7 +771,7 @@ describe('connection handler (contracts §4 S9)', () => {
     it('is kept in memory once set, and given to a later window', async () => {
       handler.onLeasesChanged([1]);
       await send(1, {type: 'connect'});
-      spawner.started[0]?.error(AUTHENTICATED);
+      authenticate(spawner.started[0]);
       const stored = await send(1, {type: 'setSharedRecord', record: RECORD});
       const shared = await send(2, {type: 'sharedRecord'});
       deepStrictEqual(
