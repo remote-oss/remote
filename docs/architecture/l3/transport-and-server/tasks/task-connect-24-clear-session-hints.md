@@ -1,5 +1,8 @@
 # Task card connect-24: Clear previous session metadata, registered (F-2605 6.6)
 
+> **Built by #541 (merged).** main has `HINT_STORE_KEY = 'remote.ssh.hints'` in `hint-store.ts` and
+> `clear-hints-command.ts`. This card stays as the record of what was asked; don't build it again.
+
 Issue: #533. Why: the user put `opensshremotes.clearAllSessionHints` into 0.2 (hermes, 2026-10-13). F-2605
 (`remote-oss/remote-ssh#72`, still `spec:draft`) §6.6 says what it does. The hint store's pure model exists
 (`diagnostics/hint-store.ts`), but nothing persists or records hints yet: the recording is the rest of F-2605, which

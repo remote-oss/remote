@@ -1,5 +1,9 @@
 # Task card tooling-24: the harness answers text inputs and records notices
 
+> **Built by #552 (merged).** As built, `textInput` matches `prompt ?? placeholder`. F-2204's input has a title and no
+> prompt (triton on #535), so connect-22 adds `title` to the request and matches `title ?? prompt ?? placeholder`, with
+> the title as the record's `question`.
+
 Issue: #534. Why: the slice-3 commands the user put into 0.2 (connect-22, connect-23) ask through two surfaces the
 scripted adapters don't cover: a plain text input ("Enter SSH Connection Command", F-2204) and non-modal notices with
 buttons (F-2204's "added" notice, F-2411's and F-2412's notices). D-85's capabilities don't include them. Builder:
@@ -9,7 +13,7 @@ hestia or selene. Size: S. Depends on tooling-18 (#511, the record's shape).
 
 In `packages/remote-ssh/src/surfaces/scripted-adapters.ts`, beside the existing ones:
 - **`textInput`:** `ScriptEntry {surface: 'textInput'; match: string; answer: {text: string} | 'dismiss'}`, matched
-  on the input's prompt or placeholder. The record keeps the text as typed: it's not a secret field, unlike
+  on the input's title, else its prompt, else its placeholder (the title part comes with connect-22). The record keeps the text as typed: it's not a secret field, unlike
   `maskedInput`;
 - **`notice`:** `ScriptEntry {surface: 'notice'; match: string; answer: {button: string} | 'dismiss'}`, for an
   information, warning or error message that isn't modal. The record line is `{surface: 'notice', question: <message>,

@@ -19,21 +19,38 @@ file) or iris. Size: M. Depends on connect-21 (#529).
 
 `src/config/add-host-command.ts`, a handler over ports, registered in `register-connect.ts` as connect-21's are. The
 flow is F-2204 §5 and §6, step for step:
-1. the input "Enter SSH Connection Command";
+1. the input (5.0 step 2): title `Enter SSH Connection Command` (STR:S063), the spec's placeholder, an empty value,
+   and no prompt of our own;
 2. the parse, with a problem shown as the spec says;
 3. the file pick;
 4. the write (create when missing, as `planCreation` says);
-5. the notification the spec gives, with its button, which opens the host through connect-21's flow.
+5. the information notice (5.0 step 6), shown at once: `Host added!` (STR:S078) with two buttons, in this order:
+   `Open Config` (STR:S099, primary) and `Connect` (STR:S025). Pressing either removes the notice; that is core's
+   doing once the button resolves the promise. It goes through `NoticePort.showInformation`;
+6. `Open Config` (step 7): the file just written opens in the **current** window as a preview editor
+   (`vscode.window.showTextDocument(uri, {preview: true})` with no selection, so the cursor isn't moved);
+7. `Connect` (step 8): a **new** window opens on `ssh-remote+<alias>`, where `<alias>` is the `Host` value just written,
+   encoded as F-2301 encodes authorities, through connect-21's open-in-new-window path.
 
 Follow the spec's strings by id, and ask on #142 for anything the spec leaves open.
+
+**The text input's title.** tooling-24 (#552, merged) built `TextInputPort.showInputBox({prompt?, placeholder?})`, and
+the scripted adapter matches `prompt ?? placeholder`. This input has a title and no prompt. This card adds `title?` to
+the request; the editor adapter passes it to `showInputBox`. The scripted adapter matches and records
+`title ?? prompt ?? placeholder` as the line's `question`. A unit row for each adapter covers it.
 
 ## 3. Rows
 
 - **Unit rows,** one per step and each error path, over fakes (a recording file port, a scripted input and pick, a
   recording opener), named by F-2204's ACs where an AC states the case.
-- **Acceptance rows:** F-2204's ACs observable through the harness: the file's content after the command, and the
-  notification and its button. They need tooling-24's `textInput` and `notice` surfaces; until tooling-24 merges, list
-  them in the PR as open.
+- **Acceptance rows:** the F-2204 ACs observable through the harness (tooling-24's `textInput` and `notice` surfaces,
+  merged in #552):
+  - the file's content after the command;
+  - the `textInput` line's question `Enter SSH Connection Command`;
+  - the `notice` line `Host added!` with `buttons` `["Open Config", "Connect"]`;
+  - `Open Config` taken: the active editor in the current window is the written file, as a preview;
+  - `Connect` taken: a new window on `ssh-remote+<alias>`. This needs tooling-20's windows suite (#544, merged); write
+    the row there.
 
 ## 4. Gates and review
 
