@@ -13,8 +13,11 @@ Builder: hestia or iris (hermes assigns). Size: M. Depends on nothing beyond mai
 made. A test may append entries at any time; they count from the next question on.
 
 **A window's cursor is the number of its answered entries.** At each question, the cursor is the count of this
-window's record lines with `matched: true` on a question surface (every surface but `progress` and
-`downloadProgress`). A reload then continues where the window left off. The in-memory `cursor` variable goes.
+window's record lines with `matched: true` whose surface is one of `ScriptEntry`'s surfaces. Derive that list once,
+from the type (for example a `const SCRIPT_SURFACES = [...] as const satisfies readonly ScriptEntry['surface'][]`, with
+a type-level check that it covers the union). Don't count "every surface but the display-only ones": each new
+display-only surface would silently move every cursor (athena on #575). A record line that doesn't parse is skipped.
+Only another window's append in flight can be partial. A reload then continues where the window left off. The in-memory `cursor` variable goes.
 
 **A held entry.** Any `ScriptEntry` may carry `after: string`, a signal name of letters, digits and hyphens. When such an
 entry matches a question:
@@ -29,8 +32,11 @@ cursor counts lines with `matched: true` and no `held: true`. Surfaces without a
 `notice`, `licenceModal`, `mitigationPick`, `hostPick`, `filePick`) wait for their signal only. The wait is bounded by
 the run's own end.
 
-**`signal(name)`** in `tests/acceptance/windows/harness.ts` creates `<run>/signals/<name>`. **`appendScript(entries)`**
-appends entries to the launch's script file, keeping its JSON form. **`heldLines(window?)`** returns the record's held
+**`signal(name)`** in `tests/acceptance/windows/harness.ts` creates `<run>/signals/<name>`. It refuses `never`, a
+reserved name for an answer that must never come. **`appendScript(entries)`** adds entries to the launch's script file
+**atomically**: it writes the whole new JSON to a temporary file in the same folder, then renames it over the script.
+The adapter reads the script at every question, so an in-place rewrite could be read half-written and fail closed at
+random; with a rename a reader sees the old list or the new one. **`heldLines(window?)`** returns the record's held
 lines.
 
 ## 2. The run's `ssh_config` (`tools/acceptance.ts`, `harnessSshConfig`)
@@ -49,7 +55,10 @@ Unit rows (`scripted-adapters.test.ts`, with a fake file port and a fake clock):
 - a held entry writes its `held` line, waits, and answers once the signal file exists;
 - a held entry whose cancellation ends writes `withdrawn` and gives nothing;
 - a held entry counts once for the cursor;
-- a held failure dialog waits for its signal.
+- a held failure dialog waits for its signal;
+- a line of a display-only surface (`progress`) doesn't move the cursor; an unparseable record line is skipped;
+- `appendScript` leaves no partial file: a reader during the write sees the old or the new list (tools row with a
+  reader loop).
 
 Capability rows in `tests/acceptance/windows/two-windows.test.ts`:
 
