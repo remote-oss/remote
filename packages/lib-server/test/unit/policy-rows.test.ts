@@ -1,5 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
-import {CONTAINERS_POLICY, SSH_POLICY, wslPolicy} from '../../src/index.ts';
+import {
+  CONTAINERS_POLICY,
+  SSH_POLICY,
+  sshPolicyFor,
+  wslPolicy,
+} from '../../src/index.ts';
 
 describe('policy rows (card server-01 table)', () => {
   it('wslPolicy({scriptLessStartup: true}) -> installMode stepwise, cleanup {kind: onlyCurrentRemoveLeftovers}', () => {
@@ -55,6 +60,26 @@ describe('policy rows (card server-01 table)', () => {
         Object.isFrozen(CONTAINERS_POLICY.verification),
       ],
       [true, true, true, true, true, true, true, true],
+    );
+  });
+});
+
+describe('the SSH policy of a download mode (card connect-38)', () => {
+  it('F-2405.AC-3: each mode gives hostFirst with that mode and the SSH policy otherwise', () => {
+    deepStrictEqual(
+      (['auto', 'always', 'off'] as const).map(mode => sshPolicyFor(mode)),
+      (['auto', 'always', 'off'] as const).map(mode => ({
+        ...SSH_POLICY,
+        downloadPlacement: {kind: 'hostFirst', mode},
+      })),
+    );
+  });
+
+  it('F-2405 BR-1: the record of a mode is frozen like the shipped rows', () => {
+    const record = sshPolicyFor('off');
+    deepStrictEqual(
+      [Object.isFrozen(record), Object.isFrozen(record.downloadPlacement)],
+      [true, true],
     );
   });
 });

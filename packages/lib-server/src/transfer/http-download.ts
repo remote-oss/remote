@@ -91,6 +91,16 @@ async function writeBody(
   return state.ending;
 }
 
+/** Whether an error came from the client's file system (it names the system call and the path), not the network. */
+function isFileError(caught: unknown): boolean {
+  return (
+    typeof caught === 'object' &&
+    caught !== null &&
+    'syscall' in caught &&
+    'path' in caught
+  );
+}
+
 /** The download port over `httpGet`. */
 export function downloadPortOf(httpGet: HttpGet): DownloadPort {
   return {
@@ -102,7 +112,12 @@ export function downloadPortOf(httpGet: HttpGet): DownloadPort {
         }
         const {response} = final;
         if (!response.ok || response.body === null) {
-          return {kind: 'failed', detail: `HTTP ${String(response.status)}`};
+          return {
+            kind: 'failed',
+            detail: `HTTP ${String(response.status)}`,
+            cause: 'httpStatus',
+            status: response.status,
+          };
         }
         const announcedLength = announcedLengthOf(
           response.headers.get('content-length'),
@@ -126,6 +141,7 @@ export function downloadPortOf(httpGet: HttpGet): DownloadPort {
           : {
               kind: 'failed',
               detail: caught instanceof Error ? caught.message : String(caught),
+              ...(isFileError(caught) ? {cause: 'clientFile' as const} : {}),
             };
       }
     },

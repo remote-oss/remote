@@ -519,14 +519,48 @@ describe('a download on the client (F-2405.BR-3, BR-5)', () => {
     deepStrictEqual(removed, [LOCAL_FILE]);
   });
 
-  it('F-2405.7.E3: a failed client download carries the text of the failure', async () => {
+  it('F-2405.7.E3: a failed client download on the network carries its text and the cause network', async () => {
     const {outcome} = await runTransfer({
       plan: CLIENT,
-      downloadResults: [{kind: 'failed', detail: 'Server returned 404'}],
+      downloadResults: [{kind: 'failed', detail: 'fetch failed'}],
     });
     deepStrictEqual(failureOf(outcome), {
       kind: 'localDownload',
-      detail: 'Server returned 404',
+      cause: 'network',
+      detail: 'fetch failed',
+    });
+  });
+
+  it('F-2405.7.E4: a client download answered with an HTTP error carries its status', async () => {
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      downloadResults: [
+        {kind: 'failed', detail: 'HTTP 404', cause: 'httpStatus', status: 404},
+      ],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'localDownload',
+      cause: 'httpStatus',
+      detail: 'HTTP 404',
+      status: 404,
+    });
+  });
+
+  it('F-2405.7.E5: a client download whose file could not be written carries the cause clientFile', async () => {
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      downloadResults: [
+        {
+          kind: 'failed',
+          detail: 'EACCES: permission denied',
+          cause: 'clientFile',
+        },
+      ],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'localDownload',
+      cause: 'clientFile',
+      detail: 'EACCES: permission denied',
     });
   });
 
@@ -969,6 +1003,7 @@ describe('the kept cache (F-6301.BR-4, BR-5, BR-14)', () => {
     });
     deepStrictEqual(failureOf(outcome), {
       kind: 'localDownload',
+      cause: 'clientFile',
       detail: 'disk is read-only',
     });
   });

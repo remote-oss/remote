@@ -100,7 +100,13 @@ export type TransferFailure =
       kind: 'serverDownload';
       cause: 'downloadFailed' | 'noDownloader' | 'tooLarge' | 'redirectHost';
     }
-  | {kind: 'localDownload'; detail: string}
+  | {
+      kind: 'localDownload';
+      /** What failed: the request on the network, an HTTP error status, or the client's file for the archive. */
+      cause: 'network' | 'httpStatus' | 'clientFile';
+      detail: string;
+      status?: number;
+    }
   | {kind: 'downloadTimeout'; reason: 'deadline' | 'stalled'}
   | {kind: 'verification'; mismatch: 'checksum' | 'length'}
   | {kind: 'unpack'}
@@ -358,7 +364,11 @@ async function keep(
     // Another window that renamed first left a complete entry, which is as good.
     return undefined;
   }
-  return failed({kind: 'localDownload', detail: renamed.detail});
+  return failed({
+    kind: 'localDownload',
+    cause: 'clientFile',
+    detail: renamed.detail,
+  });
 }
 
 /** Deletes a client file. A file that cannot be deleted now is left to the temporary folder's own clean-up. */
@@ -383,7 +393,15 @@ function downloadFailure(
   if (failure.cause === 'deadline' || failure.cause === 'stalled') {
     return failed({kind: 'downloadTimeout', reason: failure.cause});
   }
-  return failed({kind: 'localDownload', detail: failure.detail});
+  return failed({
+    kind: 'localDownload',
+    cause:
+      failure.cause === 'httpStatus' || failure.cause === 'clientFile'
+        ? failure.cause
+        : 'network',
+    detail: failure.detail,
+    ...(failure.status === undefined ? {} : {status: failure.status}),
+  });
 }
 
 /**

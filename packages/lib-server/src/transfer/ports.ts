@@ -7,7 +7,8 @@ export interface DownloadFacts {
 }
 
 /** Why a download failed when a bound of the request ended it, rather than the network. */
-export type DownloadFailureCause = 'stalled' | 'deadline' | 'tooLarge';
+export type DownloadFailureCause =
+  'stalled' | 'deadline' | 'tooLarge' | 'httpStatus' | 'clientFile';
 
 /** What a download on the client ended with. */
 export type DownloadResult =
@@ -17,7 +18,13 @@ export type DownloadResult =
       /** The address of the final response, after any redirects. */
       finalAddress: string;
     }
-  | {kind: 'failed'; detail: string; cause?: DownloadFailureCause}
+  | {
+      kind: 'failed';
+      detail: string;
+      cause?: DownloadFailureCause;
+      /** The HTTP status of an error answer, with the cause `httpStatus`. */
+      status?: number;
+    }
   | {kind: 'cancelled'};
 
 /** The limits of one download, which the policy gives and the port enforces. */
