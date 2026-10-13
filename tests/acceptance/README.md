@@ -192,7 +192,9 @@ show a change there first. Nothing in a product package exists for it.
 ### Launches
 
 `tools/acceptance-launches.ts` holds the table of launches, in the order the run makes them, and nothing else lists
-them: the labels, the configurations and the bundled suites all read it. A launch has these fields:
+them: the labels, the configurations and the bundled suites all read it. Every runner launch's window stays open 2 s
+after its last row, because the editor crashes on exit when it closes within moments of a connect. A launch has these
+fields:
 
 | Field | Meaning |
 |---|---|

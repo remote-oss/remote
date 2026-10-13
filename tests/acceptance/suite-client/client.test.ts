@@ -67,9 +67,6 @@ function inOrder(
   return found;
 }
 
-/** How long the window stays open after its rows, in milliseconds: an editor closed within moments of its connect crashes on exit. */
-const SETTLE_MILLISECONDS = 2000;
-
 /** A line as the log shows it: the log redacts a run of 32 or more word characters, which a run folder's name can hold. */
 function logged(line: string): string {
   return redact(line, []);
@@ -86,13 +83,6 @@ if (launched === undefined) {
 const {cite, label, checked, used} = launched;
 
 describe(`the client search of ${label}`, () => {
-  after(
-    () =>
-      new Promise<void>(resolve => {
-        setTimeout(resolve, SETTLE_MILLISECONDS);
-      }),
-  );
-
   it(`${cite} (${label}): the window connected`, () => {
     strictEqual(vscode.env.remoteName, 'ssh-remote');
   });

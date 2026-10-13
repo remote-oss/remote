@@ -896,7 +896,10 @@ export async function bundleSuite(root: string): Promise<void> {
   }
 }
 
-/** Bundles every `*.test.ts` of tests/acceptance/`source` into tests/acceptance/`output`. */
+/** Where the hold that every suite's bundle folder gets is written, relative to the repository. */
+const SETTLE_ENTRY = 'tests/acceptance/suite/settle.ts';
+
+/** Bundles every `*.test.ts` of tests/acceptance/`source` into tests/acceptance/`output`, and the hold beside them. */
 async function bundleFolder(
   root: string,
   source: string,
@@ -907,9 +910,14 @@ async function bundleFolder(
   // A bundle a former run left behind would run with these; a shared runner keeps its checkout between jobs.
   rmSync(outputFolder, {recursive: true, force: true});
   await build({
-    entryPoints: sortedEntries(suite)
-      .filter(entry => entry.name.endsWith('.test.ts'))
-      .map(entry => path.join(suite, entry.name)),
+    entryPoints: [
+      ...sortedEntries(suite)
+        .filter(entry => entry.name.endsWith('.test.ts'))
+        .map(entry => path.join(suite, entry.name)),
+      // The hold after a window's last row, which every suite's run loads beside its own files.
+      // eslint-disable-next-line id-length -- esbuild's entry point fields
+      {in: path.join(root, SETTLE_ENTRY), out: 'settle.test'},
+    ],
     outdir: outputFolder,
     bundle: true,
     platform: 'node',
