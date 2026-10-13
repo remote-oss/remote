@@ -247,6 +247,7 @@ const LAUNCH_ORDER = [
   'terminal',
   'slow',
   'client-unset',
+  'terminal-pick',
   'windows',
   'no-proposals',
   'explorer',

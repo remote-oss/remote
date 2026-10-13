@@ -39,6 +39,7 @@
         "slow-remote/src/extension.ts",
         "windows/*.test.ts",
         "no-proposals/*.test.ts",
+        "terminal-pick/*.test.ts",
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
         "explorer-no-proposals/*.test.ts",
