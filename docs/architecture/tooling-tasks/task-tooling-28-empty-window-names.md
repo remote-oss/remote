@@ -33,8 +33,11 @@ now. The agent and our extension run in the same local extension host, so they s
     (athena and triton on #591).
   - On timeout the window is named `unclaimed-<pid>`, so no other window's entries are used and the record shows it.
 - **With the variable unset,** the name is `windowNameOf(…)`, as today.
-- Measure the order once in the run (how long after the first question the pid file appears, if it isn't there at
-  once) and record it in the README.
+- **The agent activates early** (deviation 3 of #609, accepted by athena): `*` fires only at workbench-ready, which
+  on a first connect is more than 10 s after our extension starts its wait. So the agent declares `onStartupFinished`
+  and `onResolveRemoteAuthority:ssh-remote` as well. It registers no resolver and changes nothing of ours, and the
+  activation rows (F-2001, F-2501) read our extension's activation, not the agent's. The README records the measured
+  order: the pid file is there 16 ms before the window's first record line.
 
 ## 2. Helpers (`tests/acceptance/windows/harness.ts`)
 
@@ -42,8 +45,14 @@ now. The agent and our extension run in the same local extension host, so they s
 - `nextEmptyWindow(action)`: notes `emptyWindows()`, runs `action`, and resolves with the one new name once its
   `activated` event is there. It's bounded at 60 s, and fails if no new window or more than one appears.
 
-**The agent's state** (`acceptance.agent.state`) also reports `remoteAuthority` (`vscode.env.remoteAuthority ?? null`),
-and `windowState` returns it, so a row can compare a new window's authority with the one it expects.
+**The agent's state** (`acceptance.agent.state`) also reports `remoteAuthority`, and `windowState` returns it, so a row
+can compare a new window's authority with the one it expects. `vscode.env.remoteAuthority` isn't stable API (deviation
+4 of #609, accepted by athena), so:
+- our extension writes the authority its resolver resolved to `<REMOTE_OSS_ACCEPTANCE_WINDOWS>/<pid>.authority`, beside
+  the pid file, only when that variable names the folder. The payload holds no secret;
+- the agent's `state` reads that file, and reports `null` when there is none.
+
+coverage-19 (#590) and coverage-18 (#588) read `remoteAuthority` this way.
 
 **`nextEmptyName()`** gives the name the next empty window will claim: `empty-<n>` with `n` one more than the highest
 claimed. A test that must script a window before it exists (a failure dialog in a window Connect to Host opens) writes
