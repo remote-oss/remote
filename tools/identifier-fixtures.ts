@@ -29,6 +29,7 @@ export function syntheticSources(
       languages: [],
       activationEvents: [],
       menuEntries: [],
+      enabledApiProposals: [],
       stringReferences: [],
       ...overrides.manifest,
     },

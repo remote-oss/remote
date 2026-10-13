@@ -12,7 +12,6 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import {
   gateEditorOf,
-  type ProposalName,
   type ResolverEditor,
   resolverEditorOf,
   setupPortsOf,
@@ -32,7 +31,7 @@ import {connectCommandEditorOf} from './connect/connect-editor.ts';
 import {nodeConfigReader} from './connect/node-config-reader.ts';
 import {connectAssemblyOf} from './connect-ports.ts';
 import {editorOperationsOf} from './editor-operations.ts';
-import {editorSurfacesOf} from './editor-surfaces.ts';
+import {type EditorAdapters, editorSurfacesOf} from './editor-surfaces.ts';
 import {
   type HelpEditor,
   type HelpHandlers,
@@ -41,6 +40,7 @@ import {
 } from './help-commands.ts';
 import {
   commands,
+  enabledApiProposals,
   runtimeCommands,
   settings,
   standDown,
@@ -96,7 +96,6 @@ interface Manifest {
   displayName: string;
   version: string;
   extensionPack?: string[];
-  enabledApiProposals?: ProposalName[];
   contributes?: {
     commands?: Array<{command: string; title: string}>;
     remoteHelp?: Record<string, unknown>;
@@ -161,6 +160,8 @@ export async function activate(
 ): Promise<void> {
   const manifest = context.extension.packageJSON as Manifest;
   const host = identifierHost(vscode, manifest);
+  // Made once, before the setup: the script is read once per window, and the setup's notices go through the same notice port.
+  const adapters = surfaceAdapters();
   const extension = {
     id: context.extension.id,
     pack: manifest.extensionPack ?? [],
@@ -213,27 +214,38 @@ export async function activate(
     channels: channelPortFor(process.env, vscode.window, ACCEPTANCE_FILES),
     clock: Date.now,
     gate: logFailure =>
-      setupPortsOf(gateEditorOf(vscode, context, readArgvFile), {
-        extensionId: context.extension.id,
-        displayName: manifest.displayName,
-        applicationName: vscode.env.appName,
-        proposals: manifest.enabledApiProposals ?? [],
-        argv: {
-          portableFolder: process.env.VSCODE_PORTABLE,
-          homeFolder: homedir(),
-          dataFolderName: dataFolderNameOfEditor,
+      setupPortsOf(
+        gateEditorOf(
+          vscode,
+          context,
+          readArgvFile,
+          logFailure,
+          adapters.notice,
+        ),
+        {
+          extensionId: context.extension.id,
+          displayName: manifest.displayName,
+          applicationName: vscode.env.appName,
+          proposals: enabledApiProposals,
+          argv: {
+            portableFolder: process.env.VSCODE_PORTABLE,
+            homeFolder: homedir(),
+            dataFolderName: dataFolderNameOfEditor,
+          },
+          platform: process.platform,
+          texts: {
+            setup: vscode.l10n.t(SETUP_TEXT_TEMPLATES.setup),
+            failedAttempt: vscode.l10n.t(SETUP_TEXT_TEMPLATES.failedAttempt),
+            restart: vscode.l10n.t(SETUP_TEXT_TEMPLATES.restart),
+            configureButton: vscode.l10n.t(
+              SETUP_TEXT_TEMPLATES.configureButton,
+            ),
+            notNowButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.notNowButton),
+            quitButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.quitButton),
+          },
+          logFailure,
         },
-        platform: process.platform,
-        texts: {
-          setup: vscode.l10n.t(SETUP_TEXT_TEMPLATES.setup),
-          failedAttempt: vscode.l10n.t(SETUP_TEXT_TEMPLATES.failedAttempt),
-          restart: vscode.l10n.t(SETUP_TEXT_TEMPLATES.restart),
-          configureButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.configureButton),
-          notNowButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.notNowButton),
-          quitButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.quitButton),
-        },
-        logFailure,
-      }),
+      ),
   });
   if (result.kind !== 'serving') {
     return;
@@ -243,14 +255,20 @@ export async function activate(
       result.dispose();
     },
   });
-  const connect = await registerConnectOf(context, manifest, host, {
-    revealLog: () => {
-      result.revealLog();
+  const connect = await registerConnectOf(
+    context,
+    manifest,
+    host,
+    {
+      revealLog: () => {
+        result.revealLog();
+      },
+      logger: result.logger,
+      help: helpHandlers(help, helpLinksOf(manifest), extension),
+      resolversGranted: result.proposals.granted.includes('resolvers'),
     },
-    logger: result.logger,
-    help: helpHandlers(help, helpLinksOf(manifest), extension),
-    resolversGranted: result.proposals.granted.includes('resolvers'),
-  });
+    adapters,
+  );
   context.subscriptions.push({
     dispose: () => {
       connect.dispose();
@@ -261,6 +279,26 @@ export async function activate(
 /** A template in the display language. */
 function translate(template: string): string {
   return vscode.l10n.t(template);
+}
+
+/** The adapters of the editor's surfaces: the real ones, or the harness's scripted ones when its switch is on. */
+function surfaceAdapters(): EditorAdapters {
+  return adaptersFor(
+    process.env,
+    {
+      prompts: promptEditorOf(vscode, translate),
+      terminals: loginTerminalsOf(vscode, homedir()),
+      failureDialog: failureDialogOf(vscode),
+      licenceDialog: licenceDialogOf(vscode),
+      platformPick: platformPickPortOf(vscode, translate),
+      mitigationPick: mitigationPickPortOf(vscode),
+      downloadProgress: downloadProgressOf(vscode),
+      textInput: textInputOf(vscode),
+      notice: noticeOf(vscode),
+    },
+    ACCEPTANCE_FILES,
+    acceptanceWindowName(),
+  );
 }
 
 /** What the connect takes from the activation that served. */
@@ -277,25 +315,11 @@ async function registerConnectOf(
   manifest: Manifest,
   host: ReturnType<typeof identifierHost>,
   served: ServedActivation,
+  adapters: EditorAdapters,
 ): Promise<ConnectRegistration> {
   const window = {alias: (): string => ''};
   const surfaces = editorSurfacesOf(
-    adaptersFor(
-      process.env,
-      {
-        prompts: promptEditorOf(vscode, translate),
-        terminals: loginTerminalsOf(vscode, homedir()),
-        failureDialog: failureDialogOf(vscode),
-        licenceDialog: licenceDialogOf(vscode),
-        platformPick: platformPickPortOf(vscode, translate),
-        mitigationPick: mitigationPickPortOf(vscode),
-        downloadProgress: downloadProgressOf(vscode),
-        textInput: textInputOf(vscode),
-        notice: noticeOf(vscode),
-      },
-      ACCEPTANCE_FILES,
-      acceptanceWindowName(),
-    ),
+    adapters,
     editorOperationsOf(vscode, () => {
       served.revealLog();
     }),
