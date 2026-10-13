@@ -27,9 +27,10 @@ install the VS Code Server.`. Setting names are `remote.SSH.<name>`.
 | Label | Settings | Setup | Expected | AC |
 |---|---|---|---|---|
 | `install-fresh` | `serverDownloadUrlTemplate: T(ok)` | — | connected. `progress` lines `Downloading VS Code Server`, then `Installing VS Code Server`, in that order. The host has `bin/<commit>/`. `downloadRequests()` has exactly one request, for `/ok/…` | F-2403 AC-1, AC-2, AC-5; F-3902 AC-3 |
-| `install-present` | the same | `keep` | connected; neither stage line; no new request | F-2403 AC-7 |
+| `install-present` | the same | `keep` | connected; neither stage line; no new request | F-2403 AC-7 (running) |
+| `install-present-stopped` | the same | `keep` the files, but stop the server (coverage-13's kill command, without the `rm`) | connected; neither stage line; no new request | F-2403 AC-7 (not running) |
 | `install-fresh-legacy` | `T(ok)`, `useExecServer: false` | — | connected; the two stages in order; no `downloadProgress` line | F-2403 AC-6 |
-| `download-unreachable` | `serverDownloadUrlTemplate: http://downloads:1/x/${commit}` (a closed port), `localServerDownload: off` | — | S043 dialog | F-2403 AC-9; F-3902 AC-7 (`off`) |
+| `download-unreachable` | `serverDownloadUrlTemplate: http://downloads:1/x/${commit}` (a closed port), `localServerDownload: off` | — | S043 dialog; no record line holds `Failed to download VS Code Server` | F-2403 AC-9, AC-26 (BusyBox `wget` connection error); F-3902 AC-7 (`off`) |
 | `download-404` | `T(missing)`, `localServerDownload: off` | — | S043 dialog. No record line holds `404` | F-2403 AC-10 |
 | `download-503` | `T(busy)`, `localServerDownload: off` | — | S043 dialog. No record line holds `503` | F-2403 AC-10 |
 | `download-local` | `serverDownloadUrlTemplate: T(ok, local)`, `localServerDownload: auto` | — | connected. A `progress` line `Downloading VS Code Server locally`, and no S043 or S075 line. The host has `bin/<commit>/`. No file the size of the archive is left in the client's temporary folder or under `<run>/user-data` (searched before and after the case) | F-2403 AC-11; F-3902 AC-7 (`auto`) |
@@ -65,7 +66,7 @@ That launch connects with exec server on by default and with no CLI source, sinc
 | `` `${cite}: the stages are the case's` `` (cases that name them) | the `progress` lines, in order |
 | `` `${cite}: the host holds what the case says` `` | `onHost('test', '-d', …)` |
 | `` `${cite}: the download host saw the case's requests` `` | `downloadRequests()` since the case began |
-| `` `F-2403 AC-21 (${label}): no text of the list appears` `` (every dialog case) | none of STR:S040, S054, S055, S061, S080, S124, S154 (their texts from F-2403's string table, `remote-oss/remote-ssh#48` §2) is in the dialog's question or in the `mitigationPick` line's `items` (connect-26 adds `items`) |
+| `` `F-2403 AC-21 (${label}): no text of the list appears` `` (every dialog case) | none of STR:S040, S054, S055, S061, S080, S124, S154 (their texts from F-2403's string table, `remote-oss/remote-ssh#48` §2) is in the dialog's question, in the `mitigationPick` line's `items` (connect-26 adds `items`), or in any `notice` line of the launch (AC-21 includes the notification centre) |
 
 ## 3. The catalogue
 
@@ -87,10 +88,10 @@ They stay `todo`, each listed with what it waits for:
 
 ## 4. Done when
 
-`pnpm test:acceptance:vscodium` passes with the 16 new launches; paste the `suite-install` summaries. The repository's
+`pnpm test:acceptance:vscodium` passes with the 17 new launches; paste the `suite-install` summaries. The repository's
 gates pass. Report a row that fails on the issue; don't change the row.
 
 ## 5. Review
 
 PR title `tests: the server install rows of F-2403 and F-3902 (card coverage-17, #142)`. themis or triton reviews;
-proteus checks the 16 launches' time; athena gives the tag check.
+proteus checks the 17 launches' time; athena gives the tag check.
