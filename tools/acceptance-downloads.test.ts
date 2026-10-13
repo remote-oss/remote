@@ -338,7 +338,7 @@ describe('serverArchiveOf', () => {
 });
 
 describe('the download host in the run', () => {
-  it("tooling-27: a run's download host serves the cached archive on the loopback and the gateway, and stops", async () => {
+  it("tooling-27: a run's download host serves the cached archive on the loopback and the gateway only, and stops", async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'downloads-root-'));
     const runFolder = mkdtempSync(path.join(tmpdir(), 'downloads-run-'));
     try {
@@ -361,6 +361,10 @@ describe('the download host in the run', () => {
           (await getFrom(address, port, '/ok/x')).toString(),
         ),
       );
+      const elsewhere = await getFrom('127.0.0.3', port, '/ok/x').then(
+        () => 'answered',
+        () => 'refused',
+      );
       const hung = getFrom('127.0.0.1', port, '/hang/x').then(
         () => 'ended',
         () => 'ended',
@@ -370,6 +374,7 @@ describe('the download host in the run', () => {
       const hungEnd = await hung;
       deepStrictEqual(
         [
+          elsewhere,
           hungEnd,
           bodies,
           readFileSync(
@@ -377,7 +382,7 @@ describe('the download host in the run', () => {
             'utf8',
           ).split('\n').length - 1,
         ],
-        ['ended', ['cached', 'cached'], 3],
+        ['refused', 'ended', ['cached', 'cached'], 3],
       );
     } finally {
       rmSync(root, {recursive: true, force: true});
