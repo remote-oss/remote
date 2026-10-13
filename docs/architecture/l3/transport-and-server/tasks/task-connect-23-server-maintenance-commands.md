@@ -24,9 +24,30 @@ connection steps), or iris after #492. Size: L.
 - **The three handlers,** registered as connect-21's are: the pick (`maintenanceStep`), the own-host branch (Kill
   Current reloads or closes the window as `own-host.ts` plans), the notices, and the log lines the specs give.
 
+## 2a. Servers of the CLI path (athena's ruling on #532)
+
+lib-server's scripts today reach only a direct install's servers: `stop_servers` matches a recorded process only when its
+command line holds `$DATA_DIR/bin/`, and uninstall's clean-up removes `bin` and the pid files.
+- **Kill (F-2411 BR-3):** stop the user's server processes, never the launcher. `stop_servers` also matches servers
+  under `$DATA_DIR/cli/servers/`, with the same guard. The CLI's `command-shell` and its agent-host supervisor keep
+  running.
+- **Kill's layout rule (F-2411 BR-4):**
+  - a direct install (`bin/`) is removed, as today;
+  - a CLI install stays: `cli/servers/…`, `cli/connection-token`, data, extensions and logs.
+- **Uninstall (F-2412):** already removes the whole data folder, the CLI's included. No change.
+- **Recovery:** a deleted token file is recovered by Kill. It ends the server holding the old token, and the next
+  connect makes a fresh token and a fresh server. lib-server's README says so in this card's PR.
+
 ## 3. Rows
 
 - **Unit rows** over fakes, per step and error path, named by the ACs.
+- **The CLI path's rows (athena on #532):**
+  - unit, over the shell fake host: Kill stops a server process under `cli/servers/`; it leaves a process named
+    `<cli> command-shell …` and a process `<cli> --cli-data-dir …` running; it keeps `cli/servers/` and
+    `cli/connection-token`;
+  - real host, opt-in on `REMOTE_OSS_CLI_ARCHIVE` in `tests/acceptance/server/cli.test.ts`: after a CLI served the real
+    server, Kill ends the server's `node`, the CLI and the supervisor still run, and `cli/servers/` and
+    `cli/connection-token` are still there.
 - **Acceptance rows:**
   - on the harness host: the server's processes gone after Kill, and its folder gone after Uninstall, observed with
     `onHost`;
