@@ -71,7 +71,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
   }
 
   describe('F-2102 one connection server for every window of a host', () => {
-    it('F-2102 AC-13: two windows share one ssh login and one SOCKS port', async () => {
+    it('contracts S9: two windows share one ssh login and one SOCKS port', async () => {
       const before = host.logins();
       const first = await connected();
       const second = await connected();
@@ -117,7 +117,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       );
     });
 
-    it('F-2102 AC-6: killing the server ends its ssh session on the host and its record', async () => {
+    it('contracts S9: killing the server ends its ssh session on the host and its record', async () => {
       await connected();
       const recordsBefore = windows.records().length;
       await windows.kill('harness');
@@ -130,7 +130,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       deepStrictEqual([recordsBefore, gone, windows.records()], [1, true, []]);
     });
 
-    it('F-2102 AC-16: killing a server that does not run is a success, silently', async () => {
+    it('contracts S9: killing a server that does not run is a success, silently', async () => {
       await windows.kill('harness');
       deepStrictEqual(windows.records(), []);
     });
@@ -159,7 +159,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
   });
 
   describe('F-2101 a client that is missing', () => {
-    it('F-2101 AC-19: a program that is not there is told as a failed start of a vanished client', async () => {
+    it('contracts S3: a program that is not there is told as a failed start of a vanished client', async () => {
       const base = host.baseOf('harness');
       const acquired = await windows.acquire({
         ...base,
@@ -212,7 +212,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       );
     });
 
-    it('F-2102 AC-10: the question closes for every window once it is answered', async () => {
+    it('contracts S9: the question closes for every window once it is answered', async () => {
       const first = await window('locked');
       const second = await window('locked');
       const waiting = first.connection.connect(new AbortController().signal);

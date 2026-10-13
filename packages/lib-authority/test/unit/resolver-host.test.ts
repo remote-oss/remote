@@ -505,7 +505,7 @@ describe('the resolver host: progress (F-2304)', () => {
     );
   });
 
-  it('F-2304.BR-2: the progress of the ssh family has no Cancel', async () => {
+  it('F-2304.AC-2: BR-2, the progress of the ssh family has no Cancel', async () => {
     const context = await setup();
     await resolve(context);
     deepStrictEqual(
