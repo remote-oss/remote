@@ -193,7 +193,15 @@ const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
   ],
   ['install path', ofPlan({kind: 'invalidInstallPath', reason: 'relative'})],
   ['download', ofTransfer({kind: 'serverDownload', cause: 'downloadFailed'})],
-  ['local download', ofTransfer({kind: 'localDownload', detail: '404'})],
+  [
+    'local download',
+    ofTransfer({
+      kind: 'localDownload',
+      cause: 'httpStatus',
+      detail: 'HTTP 404',
+      status: 404,
+    }),
+  ],
   [
     'download timeout',
     ofTransfer({kind: 'downloadTimeout', reason: 'stalled'}),
@@ -467,12 +475,53 @@ describe('the reading of each library failure (no library text is shown)', () =>
     });
   });
 
-  it('F-2403 7.E1: a local download that failed gives S043 and logs the detail', () => {
-    deepStrictEqual(ofTransfer({kind: 'localDownload', detail: '404'}), {
-      kind: 'serverDownload',
-      reason: {id: 'S043'},
-      logDetail: '404',
-    });
+  it('F-2405 AC-11: a client download that failed on the network gives S071 with "Failed to fetch"', () => {
+    deepStrictEqual(
+      ofTransfer({
+        kind: 'localDownload',
+        cause: 'network',
+        detail: 'fetch failed',
+      }),
+      {
+        kind: 'serverDownload',
+        reason: {id: 'S071', values: ['Failed to fetch']},
+        logDetail: 'fetch failed',
+      },
+    );
+  });
+
+  it('F-2405 AC-12: a client download answered 404 gives S071 with "Server returned 404"', () => {
+    deepStrictEqual(
+      ofTransfer({
+        kind: 'localDownload',
+        cause: 'httpStatus',
+        detail: 'HTTP 404',
+        status: 404,
+      }),
+      {
+        kind: 'serverDownload',
+        reason: {id: 'S071', values: ['Server returned 404']},
+        logDetail: 'HTTP 404',
+      },
+    );
+  });
+
+  it("F-2405 AC-13: a client file that could not be written gives S071 with the file system's text", () => {
+    deepStrictEqual(
+      ofTransfer({
+        kind: 'localDownload',
+        cause: 'clientFile',
+        detail: "EACCES: permission denied, open '/tmp/x'",
+      }),
+      {
+        kind: 'serverDownload',
+        reason: {
+          id: 'S071',
+          values: ["EACCES: permission denied, open '/tmp/x'"],
+        },
+        logDetail: "EACCES: permission denied, open '/tmp/x'",
+      },
+    );
   });
 
   it('F-2403 7.E1: a download that timed out gives S043 and logs the reason', () => {

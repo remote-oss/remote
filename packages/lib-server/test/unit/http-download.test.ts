@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {createServer, type Server} from 'node:http';
 import type {AddressInfo} from 'node:net';
 import {tmpdir} from 'node:os';
@@ -169,9 +169,50 @@ describe('the download of a server archive over fetch (V4)', () => {
       async (address, folder) => {
         deepStrictEqual(
           await fetchDownloadPort.download(requestFor(address, folder)),
-          {kind: 'failed', detail: 'HTTP 404'},
+          {
+            kind: 'failed',
+            detail: 'HTTP 404',
+            cause: 'httpStatus',
+            status: 404,
+          },
         );
       },
+    );
+  });
+
+  it("F-2405.7.E5: a destination the client can't write fails with the cause clientFile and the file system's text", async () => {
+    await serving(
+      (ignored, response) => {
+        response.end('archive');
+      },
+      async (address, folder) => {
+        const blocker = path.join(folder, 'blocker');
+        writeFileSync(blocker, '');
+        const result = await fetchDownloadPort.download(
+          requestFor(address, folder, {
+            destination: path.join(blocker, 'part', 'archive'),
+          }),
+        );
+        deepStrictEqual(
+          result.kind === 'failed'
+            ? [result.cause, result.detail.includes(blocker)]
+            : result.kind,
+          ['clientFile', true],
+        );
+      },
+    );
+  });
+
+  it('F-2405.7.E3: a request that fails on the network has no cause of its own', async () => {
+    const result = await fetchDownloadPort.download(
+      requestFor(
+        'http://127.0.0.1:1/archive',
+        mkdtempSync(path.join(tmpdir(), 'download-')),
+      ),
+    );
+    deepStrictEqual(
+      result.kind === 'failed' ? result.cause : result.kind,
+      undefined,
     );
   });
 

@@ -35,7 +35,6 @@ import {
   type DownloadPort,
   hostLockLoopOf,
   type LicenceModal,
-  SSH_POLICY,
   type AcceptanceStore,
 } from 'lib-server';
 import {
@@ -72,6 +71,7 @@ import {
 } from './pipeline/bounds.ts';
 import {
   connectionSettingsOf,
+  localDownloadModeOf,
   overrideOf,
   serverSettingsOf,
   switchOf,
@@ -250,6 +250,7 @@ export function wiringPortsOf(
       connection: () => connectionSettingsOf(settings),
       override: () => overrideOf(settings),
       useExecServer: () => switchOf(settings, 'useExecServer'),
+      localDownloadMode: () => localDownloadModeOf(settings),
     },
     terms: {
       settings: () => termsSettingsOf(settings),
@@ -329,7 +330,6 @@ export function wiringPortsOf(
     },
     server: {
       profile: machine.profile,
-      policy: SSH_POLICY,
       overridePolicy: sshOverridePolicy(),
       clock: () => machine.clock.now(),
       bounds: SERVER_BOUNDS,

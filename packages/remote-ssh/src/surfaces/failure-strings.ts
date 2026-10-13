@@ -24,6 +24,7 @@ export type FailureStringId =
   | 'S045'
   | 'S047'
   | 'S067'
+  | 'S071'
   | 'S073'
   | 'S075'
   | 'S077'
@@ -85,6 +86,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S045: 'Downloading VS Code Server...',
   S047: 'Edit custom SSH configuration file',
   S067: 'Error establishing tunnel ({0}).',
+  S071: 'Failed to download VS Code Server ({0})',
   S073: 'Failed to find a free local port: {0}',
   S075: 'Failed to install the VS Code Server',
   S077: 'Help',

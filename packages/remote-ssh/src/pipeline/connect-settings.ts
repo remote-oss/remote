@@ -6,6 +6,7 @@
 
 import {effectiveUseLocalServer, type TunnelSettings} from 'lib-forwarding';
 import {readSetting, type SettingHost} from 'lib-identifiers';
+import type {LocalDownloadMode} from 'lib-server';
 import type {OverrideValue} from 'lib-product';
 import {settings} from '../identifiers.generated.ts';
 import type {ConnectionRequestSettings} from './connection-request.ts';
@@ -35,6 +36,18 @@ export function textOf(
 ): string {
   const value = valueOf(host, entry);
   return typeof value === 'string' ? value : '';
+}
+
+/**
+ * Where a connect may download the server archive: `off` when `remote.SSH.allowLocalServerDownload` is
+ * false, else `remote.SSH.localServerDownload` when it is `always` or `off`, else `auto`.
+ */
+export function localDownloadModeOf(host: SettingHost): LocalDownloadMode {
+  if (valueOf(host, 'allowLocalServerDownload') === false) {
+    return 'off';
+  }
+  const mode = valueOf(host, 'localServerDownload');
+  return mode === 'always' || mode === 'off' ? mode : 'auto';
 }
 
 /** The per-host server settings, as written. */

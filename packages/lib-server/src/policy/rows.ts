@@ -28,6 +28,17 @@ export const SSH_POLICY: ServerPolicyRecord = frozen({
   prefetch: {kind: 'none'},
 });
 
+/** Where Remote - SSH may download the server archive: `remote.SSH.localServerDownload`'s values. */
+export type LocalDownloadMode = 'auto' | 'always' | 'off';
+
+/** The SSH policy with the download placement of `mode`; every other field is the SSH policy's. */
+export function sshPolicyFor(mode: LocalDownloadMode): ServerPolicyRecord {
+  return frozen({
+    ...SSH_POLICY,
+    downloadPlacement: {kind: 'hostFirst', mode},
+  });
+}
+
 /** The containers policy: the client downloads and copies the archive into the container. */
 export const CONTAINERS_POLICY: ServerPolicyRecord = frozen({
   downloadPlacement: {kind: 'clientOnly'},
