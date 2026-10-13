@@ -24,6 +24,7 @@ reloads (current window) is remote-ssh's behaviour (ssh-provider-01) and coverag
 | `packages/remote-explorer/test/unit/companion-calls.test.ts` | the §3 rows on `open` |
 | `packages/remote-explorer/test/unit/connect.test.ts` | new |
 | `packages/remote-explorer/test/unit/window-activation.test.ts` | the §3 row on the registered command |
+| `packages/remote-explorer/test/unit/manifest.test.ts` | lines 125 and 128 (from 03a): the computed keys `['url']` become plain `url` keys, each preceded by `// eslint-disable-next-line id-length -- the manifest's field name` (athena's ruling on #700: a name fixed by someone else takes the documented disable, never a computed key). No assertion changes |
 
 Nothing else may change.
 
