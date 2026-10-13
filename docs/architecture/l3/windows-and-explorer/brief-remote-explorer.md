@@ -83,5 +83,10 @@ Settled by the explorer room's republication (2026-10-06):
 - The key is `remote-explorer.standingDown`. Every gated entry is `when: <reference clause> &&
   !remote-explorer.standingDown`, visible by default, with no added activation.
 
-Still open: the F-3906 side of the interface (remote-ssh#83). The interface document is frozen at 1.0 when it
-lands.
+**The interface (ruled 2026-10-13, athena):** F-3906 (remote-ssh#83) recommends Option 1, which implements the provider
+side of F-5902 §5. That is the only option R-66 allows, and the clean side adopts it. F-5902 (remote-explorer#14) is
+reviewed and is the interface's single text, so `docs/companion-interface.md` is written from F-5902 §5 and frozen at
+1.0 with lib-companion's card. lib-companion and the explorer build against it and the recording fake now. Only the
+**SSH provider side** (remote-ssh's five `remote-internal.*` ids, F-2503 remote-ssh#61) waits: for F-2503's review, and
+for F-3906 Q4's check there that the observed facts need no field F-5902 §5 lacks. A field found then is an F-5902
+change and a minor version of the interface (1.1), which the versioned envelope carries.
