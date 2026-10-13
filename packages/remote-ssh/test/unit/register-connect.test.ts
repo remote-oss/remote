@@ -3,7 +3,10 @@ import {recordingResolverEditor} from 'lib-authority/testing/recording-resolver-
 import type {CommandHost} from 'lib-identifiers';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {connectAssemblyOf} from '../../src/connect-ports.ts';
+import {
+  type ConnectSurfaces,
+  connectAssemblyOf,
+} from '../../src/connect-ports.ts';
 import {registerConnect} from '../../src/register-connect.ts';
 import {nodeMachineOf} from '../../src/node-machine.ts';
 import {PROFILE, surfacesOf} from './server-steps.fixture.ts';
@@ -22,10 +25,13 @@ interface Seen {
 async function registered(
   resolversGranted: boolean,
   serverPort: number | 'none' = 'none',
+  surfaces?: ConnectSurfaces,
 ): Promise<{
   seen: Seen;
   registration: Awaited<ReturnType<typeof registerConnect>>;
   recording: ReturnType<typeof recordingResolverEditor>;
+  state: Array<[string, undefined]>;
+  sink: MemorySink;
 }> {
   const seen: Seen = {
     events: [],
@@ -35,13 +41,18 @@ async function registered(
     revealed: 0,
     opened: [],
   };
-  const surfaces = surfacesOf(
-    {inspectSetting: () => ({})},
-    template => template,
-    () => {
-      seen.revealed += 1;
-    },
-  );
+  const surfacesInUse =
+    surfaces ??
+    surfacesOf(
+      {inspectSetting: () => ({})},
+      template => template,
+      () => {
+        seen.revealed += 1;
+      },
+    );
+  const state: Array<[string, undefined]> = [];
+  const sink = new MemorySink();
+  const logger = createLogger(sink, {minimumLevel: (): Level => 'info'});
   const machine = nodeMachineOf(
     {
       extensionFolder: '/extension',
@@ -57,11 +68,7 @@ async function registered(
       temporaryFolder: '/tmp',
     },
   );
-  const assembly = connectAssemblyOf(
-    surfaces,
-    machine,
-    createLogger(new MemorySink(), {minimumLevel: (): Level => 'info'}),
-  );
+  const assembly = connectAssemblyOf(surfacesInUse, machine, logger);
   const connector = {...assembly.connector, serverPort: () => serverPort};
   const commands: CommandHost = {
     registerCommand: (commandId, callback) => {
@@ -90,11 +97,18 @@ async function registered(
         return Promise.resolve(true);
       },
       translate: template => template,
+      globalState: {
+        update: (key, value) => {
+          state.push([key, value]);
+          return Promise.resolve();
+        },
+      },
+      logger,
     },
     {...assembly, connector},
     resolversGranted,
   );
-  return {seen, registration, recording};
+  return {seen, registration, recording, state, sink};
 }
 
 describe("the connect's registration", () => {
@@ -114,11 +128,15 @@ describe("the connect's registration", () => {
     );
   });
 
-  it('F-2304, F-2405: Open Web UI and the details command are registered with the resolver', async () => {
+  it('F-2304, F-2405, F-2605: Open Web UI, Clear and the details command are registered with the resolver', async () => {
     const {seen} = await registered(true);
     deepStrictEqual(
       [...seen.commands.keys()],
-      ['opensshremotes.openWebUI', 'opensshremotes.showDetails'],
+      [
+        'opensshremotes.openWebUI',
+        'opensshremotes.clearAllSessionHints',
+        'opensshremotes.showDetails',
+      ],
     );
   });
 
@@ -134,13 +152,54 @@ describe("the connect's registration", () => {
     deepStrictEqual(seen.opened, ['http://localhost:4321/']);
   });
 
+  it('F-2605.AC-20: the clear command shows nothing: no notification, dialog, pick or progress', async () => {
+    const shown: string[] = [];
+    const surfaces: ConnectSurfaces = {
+      ...surfacesOf(
+        {inspectSetting: () => ({})},
+        template => template,
+        () => undefined,
+      ),
+      prompts: {
+        pick: () => {
+          shown.push('pick');
+          return Promise.resolve(undefined);
+        },
+        maskedInput: () => {
+          shown.push('pick');
+          return Promise.resolve(undefined);
+        },
+        translate: template => template,
+      },
+      presenter: {
+        present: () => {
+          shown.push('failure');
+          return Promise.resolve('handled');
+        },
+      },
+      downloadProgress: {
+        show: () => {
+          shown.push('progress');
+          return {report: () => undefined, close: () => undefined};
+        },
+      },
+    };
+    const {seen} = await registered(true, 'none', surfaces);
+    await seen.commands.get('opensshremotes.clearAllSessionHints')?.();
+    deepStrictEqual(shown, []);
+  });
+
   it('contracts §3.2: disposing undoes the commands and unregisters the resolver', async () => {
     const {seen, registration} = await registered(true);
     registration.dispose();
     deepStrictEqual(
       [seen.disposed, seen.events.at(-1)],
       [
-        ['opensshremotes.showDetails', 'opensshremotes.openWebUI'],
+        [
+          'opensshremotes.showDetails',
+          'opensshremotes.openWebUI',
+          'opensshremotes.clearAllSessionHints',
+        ],
         'unregister ssh-remote',
       ],
     );

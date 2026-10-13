@@ -296,6 +296,8 @@ async function registerConnectOf(
       openExternal: address =>
         vscode.env.openExternal(vscode.Uri.parse(address)),
       translate,
+      globalState: context.globalState,
+      logger: served.logger,
     },
     connectAssemblyOf(surfaces, machine, served.logger),
     served.resolversGranted,
