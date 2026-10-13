@@ -293,7 +293,7 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5001.AC-16: the runtime strings are the eight texts, in the default bundle and the 14 locales, as English', () => {
+  it('F-5001.AC-16: the runtime strings are the nine texts, in the default bundle and the 14 locales, as English', () => {
     const texts = Object.keys(jsonOf('l10n/bundle.l10n.json'));
     deepStrictEqual(
       [
@@ -301,7 +301,7 @@ describe('the manifest of the Remote Explorer package', () => {
         ...LOCALES.map(locale => jsonOf(`l10n/bundle.l10n.${locale}.json`)),
       ],
       [
-        8,
+        9,
         ...LOCALES.map(() =>
           Object.fromEntries(texts.map(text => [text, text])),
         ),

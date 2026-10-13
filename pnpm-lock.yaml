@@ -282,6 +282,9 @@ importers:
       lib-authority:
         specifier: workspace:*
         version: link:../lib-authority
+      lib-companion:
+        specifier: workspace:*
+        version: link:../lib-companion
       lib-identifiers:
         specifier: workspace:*
         version: link:../lib-identifiers
