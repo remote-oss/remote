@@ -6,6 +6,10 @@
     ".": {
       "types": "./.tsc/src/index.d.ts",
       "default": "./src/index.ts"
+    },
+    "./testing/recording-fake": {
+      "types": "./.tsc/src/testing/recording-fake.d.ts",
+      "default": "./src/testing/recording-fake.ts"
     }
   }
 }

@@ -4,7 +4,9 @@
  * a command bus and a clock that the extension passes in; only the editor adapter knows the editor's API.
  */
 
+export * from './detector.ts';
 export * from './editor-adapter.ts';
+export * from './endpoints.ts';
 export * from './payloads.ts';
 export * from './protocol.ts';
 export {hostKeyOfAuthority, isConfiguredAlias} from './host-key.ts';
