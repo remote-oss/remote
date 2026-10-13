@@ -444,6 +444,13 @@ describe('acceptance', () => {
     );
   });
 
+  it('#668: Host readonly logs in to harness-ro with the run key', () => {
+    strictEqual(
+      accountBlock('readonly'),
+      [...sharedLines('readonly', 'harness-ro'), ...KEY_ALIAS_LINES].join('\n'),
+    );
+  });
+
   it('D-85: Host master is the password account behind a ControlMaster that starts on demand', () => {
     strictEqual(
       accountBlock('master'),

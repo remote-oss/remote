@@ -4,6 +4,7 @@ import {
   type RecordLine,
   type ScriptEntry,
 } from '../suite-local/script.ts';
+import {connectionLog} from '../suite/harness.ts';
 import casesFile from './cases.json' with {type: 'json'};
 
 /** One failing connect of the run, as tests/acceptance/suite-failure/cases.json lists it. */
@@ -18,6 +19,8 @@ interface FailureCase {
   settings?: Record<string, unknown>;
   /** The bound the dialog's time is checked against. */
   bound?: {from: string; milliseconds: number; cite: string};
+  /** A text the connection log holds in a line. */
+  logIncludes?: string;
 }
 
 /** The failing connects, bundled from the file the harness reads to launch them. */
@@ -92,6 +95,16 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
           ? Number.POSITIVE_INFINITY
           : dialog.time - from.time;
       strictEqual(gapMs <= bound.milliseconds, true);
+    });
+  }
+
+  if (failure?.logIncludes !== undefined) {
+    const wanted = failure.logIncludes;
+    it(`${failure.cite}: the log has a line with "${wanted}"`, () => {
+      strictEqual(
+        connectionLog().some(line => line.includes(wanted)),
+        true,
+      );
     });
   }
 

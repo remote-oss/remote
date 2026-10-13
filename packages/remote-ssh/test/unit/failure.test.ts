@@ -509,19 +509,13 @@ describe('the reading of each library failure (no library text is shown)', () =>
     deepStrictEqual(
       [
         ofTransfer({kind: 'cancelled'}),
-        ofTransfer({kind: 'retriesExhausted'}),
         ofTransfer({kind: 'noResultBlock'}),
         ofTransfer({
           kind: 'channelFailed',
           failure: {kind: 'channelClosed', detail: ''},
         }),
       ],
-      [
-        {kind: 'cancelled'},
-        {kind: 'retriesExhausted'},
-        {kind: 'channelClosed'},
-        {kind: 'channelClosed'},
-      ],
+      [{kind: 'cancelled'}, {kind: 'channelClosed'}, {kind: 'channelClosed'}],
     );
   });
 
@@ -532,7 +526,6 @@ describe('the reading of each library failure (no library text is shown)', () =>
         ofStart({kind: 'serverStart'}, EXEC_SERVER),
         ofStart({kind: 'unreadableServerFacts'}, EXEC_SERVER),
         ofStart({kind: 'prerequisitesMissing'}, EXEC_SERVER),
-        ofStart({kind: 'retriesExhausted'}, EXEC_SERVER),
         ofStart({kind: 'scriptFailed', status: 'LockBusy'}, EXEC_SERVER),
         ofStart({kind: 'noResultBlock'}, EXEC_SERVER),
         ofStart(
@@ -549,12 +542,94 @@ describe('the reading of each library failure (no library text is shown)', () =>
         {kind: 'serverStart'},
         {kind: 'prerequisiteMissing'},
         {kind: 'retriesExhausted'},
-        {kind: 'retriesExhausted'},
         {kind: 'channelClosed'},
         {kind: 'cancelled'},
       ],
     );
   });
+
+  it('#668 R2: a script failure with a write failure logs the path and the error, with the install reason', () => {
+    const failure = {
+      kind: 'scriptFailed' as const,
+      status: 'CreateInstallDirFailed' as const,
+      writeFailure: {path: '/p', error: 'Permission denied'},
+    };
+    deepStrictEqual(
+      [ofTransfer(failure), ofStart(failure, EXEC_SERVER)],
+      Array.from({length: 2}, () => ({
+        kind: 'serverInstall',
+        reason: {id: 'S075'},
+        logDetail: 'cannot write /p: Permission denied',
+      })),
+    );
+  });
+
+  for (const [name, lockInTemporary, hinted] of [
+    ['false', false, true],
+    ['true', true, false],
+    ['absent', undefined, false],
+  ] as const) {
+    it(`#668 R7: a write failure with lockInTemporary ${name} ${hinted ? 'adds' : 'leaves out'} the lockfilesInTmp hint`, () => {
+      const detail = ofStart(
+        {
+          kind: 'scriptFailed',
+          status: 'CreateInstallDirFailed',
+          writeFailure: {
+            path: '/h/lock',
+            error: 'Is a directory',
+            ...(lockInTemporary === undefined ? {} : {lockInTemporary}),
+          },
+        },
+        EXEC_SERVER,
+      );
+      deepStrictEqual(
+        [detail.reason, detail.logDetail?.split('\n')],
+        [
+          {id: 'S075'},
+          hinted
+            ? [
+                'cannot write /h/lock: Is a directory',
+                "The host lock file can't be used here. On a distributed file system such as NFS or AFS, setting remote.SSH.lockfilesInTmp to true keeps the lock in /tmp.",
+              ]
+            : ['cannot write /h/lock: Is a directory'],
+        ],
+      );
+    });
+  }
+
+  it('#668 R2: CreateInstallDirFailed without a write failure keeps the install reason alone', () => {
+    deepStrictEqual(
+      ofStart(
+        {kind: 'scriptFailed', status: 'CreateInstallDirFailed'},
+        EXEC_SERVER,
+      ),
+      {kind: 'serverInstall', reason: {id: 'S075'}},
+    );
+  });
+
+  for (const [name, lockPath, text] of [
+    [
+      'with the lock file',
+      '/h/lock',
+      'the host lock /h/lock was still held after 30 attempts',
+    ],
+    ['without it', undefined, 'the host lock was still held after 30 attempts'],
+  ] as const) {
+    it(`#668 R5: retries exhausted ${name} logs the attempts`, () => {
+      const exhausted = {
+        kind: 'retriesExhausted' as const,
+        attempts: 30,
+        ...(lockPath === undefined ? {} : {lockPath}),
+      };
+      deepStrictEqual(
+        [ofTransfer(exhausted), ofStart(exhausted, EXEC_SERVER)],
+        Array.from({length: 2}, () => ({
+          kind: 'retriesExhausted',
+          logDetail: text,
+        })),
+      );
+    });
+  }
 
   it('#253 Q10: a lease on the helper: cancelled, unreachable endpoint, helper that did not start', () => {
     deepStrictEqual(

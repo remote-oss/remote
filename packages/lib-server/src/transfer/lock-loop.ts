@@ -8,25 +8,36 @@ import type {StepRun} from '../lifecycle/run-step.ts';
 import type {Clock} from '../locks/client-lock.ts';
 import {hostLockLoop} from '../locks/host-lock-loop.ts';
 
-/** The loop over `clock`: `attempts` tries, `intervalMilliseconds` apart, ending as `retriesExhausted`. */
+/** The loop over `clock`: `attempts` tries, `intervalMilliseconds` apart, ending as `retriesExhausted` with the last busy step and the attempts made. */
 export function hostLockLoopOf(
   clock: Clock,
   attempts: number,
   intervalMilliseconds: number,
 ): HostLockLoop {
   return async step => {
+    let made = 0;
+    let lastBusy: StepRun = {kind: 'noResultBlock', exitStatus: 0};
     const outcome = await hostLockLoop<StepRun>(
       async () => {
+        made += 1;
         const stepRun = await step();
-        return stepRun.kind === 'result' && stepRun.block.status === 'LockBusy'
-          ? {kind: 'lockBusy'}
-          : {kind: 'result', value: stepRun};
+        if (stepRun.kind === 'result' && stepRun.block.status === 'LockBusy') {
+          lastBusy = stepRun;
+          return {kind: 'lockBusy'};
+        }
+        return {kind: 'result', value: stepRun};
       },
       clock,
       () => undefined,
       attempts,
       intervalMilliseconds,
     );
-    return outcome.kind === 'done' ? outcome.value : 'retriesExhausted';
+    return outcome.kind === 'done'
+      ? outcome.value
+      : {
+          kind: 'retriesExhausted',
+          last: lastBusy,
+          attempts: made,
+        };
   };
 }

@@ -115,6 +115,13 @@ function scriptOf(channel: RecordingChannel): string {
   return call?.operation === 'runScript' ? call.request.script : '';
 }
 
+/** A lock loop's answer after three attempts that all met a held lock. */
+const EXHAUSTED = {
+  kind: 'retriesExhausted' as const,
+  last: {kind: 'noResultBlock' as const, exitStatus: 0},
+  attempts: 3,
+};
+
 describe('the bind host check (F-2409 7.E1)', () => {
   const ACCEPTED = [
     '0.0.0.0',
@@ -364,6 +371,111 @@ describe('startOrReuse (V7), answers mapped', () => {
     );
   });
 
+  it('#668 R1: a start whose script could not write a path carries the write failure', async () => {
+    const outcome = await start(
+      recording(
+        lines(
+          'CreateInstallDirFailed',
+          'server.writeFailedPath=/h/.s/.abc.token',
+          'server.writeFailedError=Permission denied',
+        ),
+      ),
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {
+        kind: 'scriptFailed',
+        status: 'CreateInstallDirFailed',
+        writeFailure: {path: '/h/.s/.abc.token', error: 'Permission denied'},
+      },
+    );
+  });
+
+  for (const [answer, flag] of [
+    ['yes', true],
+    ['no', false],
+  ] as const) {
+    it(`#668 R7: a write failure on the lock file with the lock in the temporary folder ${answer} says so`, async () => {
+      const outcome = await start(
+        recording(
+          lines(
+            'CreateInstallDirFailed',
+            'server.writeFailedPath=/h/lock',
+            'server.writeFailedError=Is a directory',
+            'server.lockPath=/h/lock',
+            `server.lockInTemporary=${answer}`,
+          ),
+        ),
+      );
+      deepStrictEqual(
+        outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+        {
+          kind: 'scriptFailed',
+          status: 'CreateInstallDirFailed',
+          writeFailure: {
+            path: '/h/lock',
+            error: 'Is a directory',
+            lockInTemporary: flag,
+          },
+        },
+      );
+    });
+  }
+
+  it('#668 R7: a write failure on another path says nothing of the lock', async () => {
+    const outcome = await start(
+      recording(
+        lines(
+          'CreateInstallDirFailed',
+          'server.writeFailedPath=/h/bin/abc',
+          'server.writeFailedError=denied',
+          'server.lockPath=/h/lock',
+          'server.lockInTemporary=no',
+        ),
+      ),
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {
+        kind: 'scriptFailed',
+        status: 'CreateInstallDirFailed',
+        writeFailure: {path: '/h/bin/abc', error: 'denied'},
+      },
+    );
+  });
+
+  it('#668 R1: a CreateInstallDirFailed block with no path has no write failure', async () => {
+    const outcome = await start(recording(lines('CreateInstallDirFailed')));
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'scriptFailed', status: 'CreateInstallDirFailed'},
+    );
+  });
+
+  it('#668 R4: a loop that gave up after a busy lock carries the lock file and the attempts', async () => {
+    const outcome = await start(recording(STARTED), {}, [], () =>
+      Promise.resolve({
+        kind: 'retriesExhausted',
+        attempts: 30,
+        last: {
+          kind: 'result',
+          exitStatus: 0,
+          block: {
+            status: 'LockBusy',
+            hostFacts: {},
+            serverFacts: {lockPath: '/h/.s/bin/abc/lock'},
+            cliFacts: {},
+            timings: {},
+          },
+        },
+      }),
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'retriesExhausted', attempts: 30, lockPath: '/h/.s/bin/abc/lock'},
+    );
+  });
+
   it('F-2409.BR-9: a block of ServerFailedToStart is serverStart', async () => {
     const outcome = await start(recording(lines('ServerFailedToStart')));
     deepStrictEqual(
@@ -451,11 +563,11 @@ describe('startOrReuse (V7), answers mapped', () => {
 
   it('F-2408.BR-5: a loop that gives up is retriesExhausted', async () => {
     const outcome = await start(recording(STARTED), {}, [], () =>
-      Promise.resolve('retriesExhausted'),
+      Promise.resolve(EXHAUSTED),
     );
     deepStrictEqual(
       outcome.kind === 'failed' ? outcome.failure : outcome.kind,
-      {kind: 'retriesExhausted'},
+      {kind: 'retriesExhausted', attempts: 3},
     );
   });
 

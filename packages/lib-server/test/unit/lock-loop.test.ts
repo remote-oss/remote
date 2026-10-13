@@ -54,7 +54,14 @@ describe('hostLockLoopOf (V5)', () => {
       100,
       5000,
     );
-    deepStrictEqual([outcome, runs], ['retriesExhausted', 3]);
+    deepStrictEqual(
+      [
+        outcome.kind,
+        outcome.kind === 'retriesExhausted' ? outcome.attempts : undefined,
+        runs,
+      ],
+      ['retriesExhausted', 3, 3],
+    );
   });
 
   it('V5: a step that does not report a result block is passed on, not retried', async () => {

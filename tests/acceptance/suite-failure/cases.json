@@ -109,6 +109,29 @@
         }
       ],
       "dialog": "Could not establish connection to \"stranger\"."
+    },
+    {
+      "alias": "readonly",
+      "cite": "#668",
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"readonly\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"readonly\": Failed to install the VS Code Server.",
+      "bound": {
+        "from": "progress",
+        "milliseconds": 15000,
+        "cite": "#668"
+      },
+      "logIncludes": "cannot write /home/harness-ro/.vscodium-server-insiders/bin/"
     }
   ]
 }

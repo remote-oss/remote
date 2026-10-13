@@ -76,6 +76,13 @@ function started(
   ).then(outcome => ({outcome, channel}));
 }
 
+/** A lock loop's answer after three attempts that all met a held lock. */
+const EXHAUSTED = {
+  kind: 'retriesExhausted' as const,
+  last: {kind: 'noResultBlock' as const, exitStatus: 0},
+  attempts: 3,
+};
+
 describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
   describe('startCli', () => {
     const HOST_TOKEN = 'abcdefghijklmnopqrstuvwxyz012345';
@@ -215,12 +222,12 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
         startingChannel(STARTED),
         baseParameters(),
         TOKEN,
-        {lockLoop: () => Promise.resolve('retriesExhausted')},
+        {lockLoop: () => Promise.resolve(EXHAUSTED)},
         NEVER_CANCELLED,
       );
       deepStrictEqual(outcome, {
         kind: 'failed',
-        failure: {kind: 'retriesExhausted'},
+        failure: {kind: 'retriesExhausted', attempts: 3},
       });
     });
 
