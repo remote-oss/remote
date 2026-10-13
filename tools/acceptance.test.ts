@@ -454,12 +454,14 @@ describe('acceptance', () => {
       );
     });
 
-    it("D-85: a launch's settings cannot replace the run's ssh_config", async () => {
+    it("D-85: a launch's own remote.SSH.configFile is the one written", async () => {
       const seen = await settingsSeen({
         ...REMOTE,
         settings: {'remote.SSH.configFile': '/elsewhere'},
       });
-      deepStrictEqual(seen.get('remote'), BASE);
+      deepStrictEqual(seen.get('remote'), {
+        'remote.SSH.configFile': '/elsewhere',
+      });
     });
 
     it('D-85: a retried launch finds the base settings again, not what the failed attempt left', async () => {

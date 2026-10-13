@@ -40,6 +40,12 @@ export interface FailureCase {
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
 
+/**
+ * The launches that may set `remote.SSH.configFile` themselves, by label: none yet. Every other launch uses the run's
+ * ssh_config, which the harness hosts reach.
+ */
+export const CONFIG_FILE_LAUNCHES: readonly string[] = [];
+
 /** The failing connects, from tests/acceptance/suite-failure/cases.json, which the failure suite also reads. */
 export function failureCases(root: string): FailureCase[] {
   const {cases} = JSON.parse(

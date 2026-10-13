@@ -203,7 +203,7 @@ export function writeUserSettings(
   mkdirSync(folder, {recursive: true});
   writeFileSync(
     path.join(folder, 'settings.json'),
-    `${JSON.stringify({...extra, 'remote.SSH.configFile': configFile}, null, 2)}\n`,
+    `${JSON.stringify({'remote.SSH.configFile': configFile, ...extra}, null, 2)}\n`,
   );
 }
 
@@ -292,7 +292,6 @@ function launchFiles(
 /**
  * Runs each launch in order and returns their exit codes. The VS Code run has one configuration and needs no label;
  * each attempt of a VSCodium launch finds the run's base settings plus the launch's own, so none inherits another's.
- * The ssh_config of the run always wins over a launch's setting of the same name.
  */
 export async function runLaunches(
   runFolder: string,
