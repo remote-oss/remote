@@ -10,6 +10,7 @@ import type {
   CliInstallOutcome,
   CliServeParams,
   GateOutcome,
+  MaintenanceOutcome,
   Plan,
   PlanFailure,
   ProbeOutcome,
@@ -204,6 +205,13 @@ export interface ConnectSteps {
   newSecret(): string;
   /** Shows the failure of a connect that had already given the window its connection. */
   presentLateFailure(failed: Failed): void;
+  /** Kills the host's servers or uninstalls them, over the lease's session; the server stays untouched on any failure. */
+  maintain(
+    input: ConnectInput,
+    lease: ConnectionLease,
+    action: 'kill' | 'uninstall',
+    cancellation: AbortSignal,
+  ): Promise<MaintenanceOutcome>;
   /** Installs the default extensions on a server that was already running; a failure never fails the connect. */
   installExtensions(
     input: ConnectInput,
