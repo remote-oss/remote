@@ -460,6 +460,40 @@ describe('the lines of the client search (card connect-28, F-2101 §9)', () => {
     ]);
   });
 
+  it('F-2201 §9: a non-empty setting logs the configuration file in use, expanded', async () => {
+    const {searched} = await located({configFile: '~/cfg'});
+    deepStrictEqual(searched[0], 'SSH configuration file in use: /home/a/cfg');
+  });
+
+  it('F-2201 §9: an absolute setting is logged as typed', async () => {
+    const {searched} = await located({configFile: '/etc/ssh/custom'});
+    deepStrictEqual(
+      searched[0],
+      'SSH configuration file in use: /etc/ssh/custom',
+    );
+  });
+
+  it('F-2201 §9: the configuration file line comes before the client search', async () => {
+    const {searched} = await located({configFile: '~/cfg'});
+    deepStrictEqual(searched.slice(0, 2), [
+      'SSH configuration file in use: /home/a/cfg',
+      'remote.SSH.path = ""',
+    ]);
+  });
+
+  it('F-2201 §9: an empty setting logs no configuration file line', async () => {
+    const {searched} = await located();
+    deepStrictEqual(
+      searched.filter(line => line.startsWith('SSH configuration file')),
+      [],
+    );
+  });
+
+  it('F-2201 §9: an invalid setting logs no configuration file line', async () => {
+    const {searched} = await located({configFile: 'relative/cfg'});
+    deepStrictEqual(searched, []);
+  });
+
   it('F-2101 §9: a rejected banner says why', async () => {
     const {searched} = await located({
       checks: {
