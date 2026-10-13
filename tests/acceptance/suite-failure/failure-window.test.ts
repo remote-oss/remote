@@ -43,7 +43,9 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
   let record: RecordLine[] = [];
 
   before(async () => {
-    record = await recordAfterDialog();
+    record = (await recordAfterDialog()).filter(
+      line => !['progress', 'downloadProgress'].includes(line.surface),
+    );
   });
 
   it('contracts harness: the window is one of the failing connects', () => {

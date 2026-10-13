@@ -12,6 +12,8 @@
     "${configDir}/suite-reconnect",
     "${configDir}/suite-failure",
     "${configDir}/suite-terminal",
+    "${configDir}/suite-slow",
+    "${configDir}/slow-remote/src",
     "${configDir}/suite-failure/cases.json"
   ],
   "references": [

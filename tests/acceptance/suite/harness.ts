@@ -3,7 +3,9 @@
  */
 
 import {execFile} from 'node:child_process';
+import {readFileSync} from 'node:fs';
 import {promisify} from 'node:util';
+import {readRecord, type RecordLine} from '../suite-local/script.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -39,4 +41,19 @@ export async function onHost(...command: string[]): Promise<string> {
     ...command,
   ]);
   return stdout;
+}
+
+/** The lines of the log the harness reads, `REMOTE_OSS_ACCEPTANCE_LOG`, without their time stamps. */
+export function connectionLog(): string[] {
+  return readFileSync(harnessVariable('REMOTE_OSS_ACCEPTANCE_LOG'), 'utf8')
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => line.slice(line.indexOf('] ') + 2));
+}
+
+/** The lines of the record this window's adapters wrote, optionally of one surface. */
+export function recordLines(surface?: string): RecordLine[] {
+  return readRecord(harnessVariable('REMOTE_OSS_ACCEPTANCE_RECORD')).filter(
+    line => surface === undefined || line.surface === surface,
+  );
 }

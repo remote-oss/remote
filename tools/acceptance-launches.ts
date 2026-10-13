@@ -27,6 +27,12 @@ export interface Launch {
   ownScript?: boolean;
   /** Further development extensions, folders under tests/acceptance, loaded after the runner. */
   extraExtensions?: readonly string[];
+  /**
+   * Development extensions that run in the remote extension host: folders under tests/acceptance, copied into the
+   * host's home folder before the launch and loaded from there. A development extension named by a local path never
+   * runs on the host.
+   */
+  hostExtensions?: readonly string[];
 }
 
 /** One failing connect of the VSCodium run: its own launch on `alias`, the script its window answers from. */
@@ -75,7 +81,8 @@ export function failureLabel(alias: string): string {
  * window on `ssh-remote+harness`, where the runner is an extension of the workspace kind; `reconnect` runs
  * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); each
  * failing connect runs suite-failure in a window on its alias, answered from its own script; and `terminal` runs
- * suite-terminal with `remote.SSH.useLocalServer` off.
+ * suite-terminal with `remote.SSH.useLocalServer` off; and `slow` runs suite-slow with an extension that takes 15 s to
+ * activate in the remote extension host, which the harness copies to the host first.
  */
 export function launchesOf(root: string): Launch[] {
   return [
@@ -106,12 +113,36 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
       settings: {'remote.SSH.useLocalServer': false},
     },
+    {
+      label: 'slow',
+      runner: 'runner-remote',
+      suite: 'suite-slow',
+      folderUri: REMOTE_FOLDER_URI,
+      hostExtensions: ['slow-remote'],
+    },
   ];
 }
 
 /** The folder a suite is bundled into: `dist` for the shared suite, `dist-<name>` for `suite-<name>`. */
 export function bundleFolderOf(suite: string): string {
   return suite === 'suite' ? 'dist' : `dist-${suite.slice('suite-'.length)}`;
+}
+
+/** The development extensions that are bundled, each once: folders under tests/acceptance with a `src/extension.ts`. */
+export function extensionsOf(launches: readonly Launch[]): string[] {
+  return [
+    ...new Set(
+      launches.flatMap(launch => [
+        ...(launch.extraExtensions ?? []),
+        ...(launch.hostExtensions ?? []),
+      ]),
+    ),
+  ];
+}
+
+/** Where a host extension is on the harness host: the user's home folder, which the remote window can load it from. */
+export function hostExtensionFolder(extension: string): string {
+  return `/home/harness/${extension}`;
 }
 
 /** The suites that are bundled: the shared helpers, then each suite of a launch once. */
