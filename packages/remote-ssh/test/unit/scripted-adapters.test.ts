@@ -245,7 +245,7 @@ describe('which adapters the extension uses', () => {
   });
 
   it('card tooling-24: with the switch off the text input and notice are the real ports', () => {
-    const adapters = adaptersFor({}, REAL, files);
+    const adapters = adaptersFor({}, REAL, files, WINDOW);
     deepStrictEqual(
       [adapters.textInput, adapters.notice],
       [REAL.textInput, REAL.notice],
@@ -704,6 +704,7 @@ describe('the scripted adapters answer from the script only', () => {
             question: 'Enter SSH Connection Command',
             answer: 'the-command',
             matched: true,
+            window: WINDOW,
           },
         ],
       ],
@@ -759,6 +760,7 @@ describe('the scripted adapters answer from the script only', () => {
             question: 'Host added to the config',
             answer: 'OK',
             matched: true,
+            window: WINDOW,
           },
         ],
       ],
@@ -791,6 +793,7 @@ describe('the scripted adapters answer from the script only', () => {
             question: 'Broken',
             answer: 'dismiss',
             matched: false,
+            window: WINDOW,
           },
         ],
       ],
@@ -809,6 +812,7 @@ describe('the scripted adapters answer from the script only', () => {
             question: 'Something',
             answer: 'dismiss',
             matched: false,
+            window: WINDOW,
           },
         ],
       ],
@@ -944,6 +948,7 @@ describe('progressFor (card tooling-18)', () => {
         },
         real,
         new AppendedFiles(),
+        WINDOW,
       ),
       real,
     );
