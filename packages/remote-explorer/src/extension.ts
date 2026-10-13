@@ -1,27 +1,15 @@
 /**
- * @fileoverview The entry of Remote Explorer in the desktop editor: it hands the editor to the activation, with the
- * strings of the stand-down warning and of the proposed-API setup.
+ * @fileoverview The entry of Remote Explorer in the desktop editor: it hands the editor to the activation of the
+ * window, with the proposed-API setup and its strings.
  */
 
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {familySetupPortsOf, runSetup} from 'lib-authority';
-import {identifierHost} from 'lib-identifiers';
 import {profileOf} from 'lib-product';
-import {standDownHost} from 'lib-standdown';
-import {activateExplorer, silentHandlers} from './activation.ts';
-import {
-  commands,
-  enabledApiProposals,
-  standDown,
-  views,
-} from './identifiers.generated.ts';
-
-/** The warning of a window where the other Remote Explorer runs, and its button. */
-const STAND_DOWN_WARNING =
-  'Remote Explorer stays inactive in this window because another Remote Explorer extension is enabled. Both use the same commands, settings and views. Disable one of the two and reload the window.';
-const STAND_DOWN_BUTTON = 'Show Remote Explorer Extension';
+import {enabledApiProposals, views} from './identifiers.generated.ts';
+import {activateInWindow} from './window-activation.ts';
 
 /** The English templates of the proposed-API setup notices; the placeholders are filled by the setup. */
 const SETUP_TEXT_TEMPLATES = {
@@ -38,7 +26,6 @@ const SETUP_TEXT_TEMPLATES = {
 /** What the editor tells about the extension, as far as activation reads it. */
 interface Manifest {
   displayName: string;
-  contributes?: {commands?: Array<{command: string; title: string}>};
 }
 
 function translate(template: string): string {
@@ -53,38 +40,20 @@ async function dataFolderName(): Promise<string> {
 }
 
 /** Called by the editor when the extension activates. */
-export async function activate(
-  context: vscode.ExtensionContext,
-): Promise<void> {
+export function activate(context: vscode.ExtensionContext): Promise<void> {
   const manifest = context.extension.packageJSON as Manifest;
-  const result = await activateExplorer({
-    table: {commands, standDown},
-    standDownTexts: {
-      warning: translate(STAND_DOWN_WARNING),
-      button: translate(STAND_DOWN_BUTTON),
-    },
-    standDown: standDownHost(vscode),
-    commands: identifierHost(vscode, manifest),
-    handlers: silentHandlers(commands),
-    setup: () =>
-      runSetup(
-        familySetupPortsOf(vscode, context, {
-          displayName: manifest.displayName,
-          proposals: enabledApiProposals,
-          viewIds: [views.remoteTargets],
-          templates: SETUP_TEXT_TEMPLATES,
-          translate,
-          dataFolderName,
-          logFailure: () => undefined,
-        }),
-        true,
-      ),
-  });
-  if (result.kind === 'serving') {
-    context.subscriptions.push({
-      dispose: () => {
-        result.dispose();
-      },
-    });
-  }
+  return activateInWindow(vscode, context, () =>
+    runSetup(
+      familySetupPortsOf(vscode, context, {
+        displayName: manifest.displayName,
+        proposals: enabledApiProposals,
+        viewIds: [views.remoteTargets],
+        templates: SETUP_TEXT_TEMPLATES,
+        translate,
+        dataFolderName,
+        logFailure: () => undefined,
+      }),
+      true,
+    ),
+  );
 }

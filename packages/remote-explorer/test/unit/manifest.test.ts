@@ -102,6 +102,7 @@ describe('the manifest of the Remote Explorer package', () => {
           'engines',
           'categories',
           'main',
+          'browser',
           'keywords',
           'extensionKind',
           'capabilities',
@@ -153,6 +154,10 @@ describe('the manifest of the Remote Explorer package', () => {
       [MANIFEST.main, MANIFEST.l10n],
       ['./dist/extension.js', './l10n'],
     );
+  });
+
+  it('F-5001.AC-15: the web entry is the web bundle', () => {
+    deepStrictEqual(MANIFEST.browser, './dist/web/extension.js');
   });
 
   it('F-5101.3.3: the proposals are contribViewsRemote and extensionsAny', () => {

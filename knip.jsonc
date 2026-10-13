@@ -57,9 +57,14 @@
       "project": ["src/**/*.ts", "test/**/*.ts"],
       "includeEntryExports": false,
     },
-    // Each package's entry point is the one tools/build.ts bundles; its tests are entries of their own.
+    // Each package's entry points are the ones tools/build.ts bundles; its tests are entries of their own.
     "packages/*": {
-      "entry": ["src/extension.ts", "src/programs/*.ts", "test/**/*.test.ts"],
+      "entry": [
+        "src/extension.ts",
+        "src/web-extension.ts",
+        "src/programs/*.ts",
+        "test/**/*.test.ts",
+      ],
       "project": ["src/**/*.ts", "test/**/*.ts"],
     },
   },
@@ -70,6 +75,7 @@
     "tests/acceptance/vscode-test.mjs": ["exports"],
     // The editor calls an extension's activate().
     "packages/*/src/extension.ts": ["exports"],
+    "packages/*/src/web-extension.ts": ["exports"],
   },
   "ignoreBinaries": ["shellcheck"],
   "ignoreDependencies": [

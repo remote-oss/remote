@@ -6,7 +6,8 @@
  *
  * A package without an entry point is skipped. Each `src/programs/<name>.ts` of a package is bundled on its own into
  * `dist/<name>.js`: a program that runs outside the editor, so nothing in it may import `vscode`. Types are checked
- * by `pnpm typecheck`, not here.
+ * by `pnpm typecheck`, not here. A package's `src/web-extension.ts` is bundled for the web extension host into
+ * `dist/web/extension.js`; nothing in it may import a `node:` module.
  */
 
 import {existsSync, readdirSync} from 'node:fs';
@@ -26,6 +27,11 @@ const ENTRY_PATH = 'src/extension.ts';
 
 /** Where a package's bundle goes. */
 const BUNDLE_PATH = 'dist/extension.js';
+
+/** Where a package keeps the entry point for the web extension host, and where its bundle goes. */
+const WEB_ENTRY_PATH = 'src/web-extension.ts';
+
+const WEB_BUNDLE_PATH = 'dist/web/extension.js';
 
 /** Where a package keeps the entry points of its programs, and where their bundles go. */
 const PROGRAMS_PATH = 'src/programs';
@@ -79,6 +85,21 @@ export async function buildPackages(
       logLevel: 'warning',
     });
     outcomes.push(`${folder}: ${BUNDLE_PATH}`);
+    const webEntry = path.join(directory, WEB_ENTRY_PATH);
+    if (existsSync(webEntry)) {
+      await build({
+        entryPoints: [webEntry],
+        outfile: path.join(directory, WEB_BUNDLE_PATH),
+        bundle: true,
+        platform: 'browser',
+        format: 'cjs',
+        target: 'es2022',
+        external: ['vscode'],
+        sourcemap: true,
+        logLevel: 'warning',
+      });
+      outcomes.push(`${folder}: ${WEB_BUNDLE_PATH}`);
+    }
     const programs = programEntries(directory);
     if (programs.length > 0) {
       await build({
