@@ -3,7 +3,7 @@
 Issue: #584. **Priority: high.** Why: when the editor doesn't grant the `resolvers` proposal (an editor started without
 `--enable-proposed-api` for us), every connect command reports "command not found". `registerConnect`
 (`packages/remote-ssh/src/register-connect.ts`) returns before it registers any command when `registerResolver` gives
-`proposalMissing`. F-3903 §5 rule 4 (`remote-oss/remote-ssh#81`) says the extension's own commands keep working after
+`proposalMissing`. F-3903 §5 rule 4 (`remote-oss/remote-ssh#80`) says the extension's own commands keep working after
 a failed probe. A connect command still opens its `ssh-remote` window, whose own activation fails its probe and shows
 the setup notification. athena ruled the early return "not intended" and amended contracts windows-and-explorer §3.2
 on main (3ecd82e): **a missing proposal holds back the resolver alone.** Builder: hestia, after #540 merges (it's that
