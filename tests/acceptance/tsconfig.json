@@ -11,11 +11,13 @@
     "${configDir}/suite-remote",
     "${configDir}/suite-reconnect",
     "${configDir}/suite-failure",
+    "${configDir}/suite-ports",
     "${configDir}/suite-terminal",
     "${configDir}/suite-slow",
     "${configDir}/slow-remote/src",
     "${configDir}/window-agent/src",
-    "${configDir}/suite-failure/cases.json"
+    "${configDir}/suite-failure/cases.json",
+    "${configDir}/suite-ports/cases.json"
   ],
   "references": [
     {

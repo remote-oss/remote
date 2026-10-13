@@ -46,9 +46,11 @@ import {
   hostExtensionFolder,
   failureLabel,
   LAUNCH_EXTENSIONS,
+  type HostSetupEntry,
   type Launch,
   type RunnerLaunch,
   launchesOf,
+  portsCases,
   runnerLaunches,
   suitesOf,
 } from './acceptance-launches.ts';
@@ -73,6 +75,23 @@ export type {CommandResult} from './acceptance-run.ts';
 
 /** The editor version the tests run on: the floor of ADR-0007. */
 const EDITOR_VERSION = '1.139.1';
+
+/**
+ * How long the run waits before a launch whose resolve must find no live helper: the extension's helper outlives
+ * its last window by HELPER_GRACE_MILLISECONDS (packages/remote-ssh/src/pipeline/bounds.ts), so the run waits the
+ * grace out instead of reaching into the run's helpers. A row in acceptance.test.ts keeps this equal to the
+ * extension's constant.
+ */
+export const FRESH_RESOLVE_WAIT_MILLISECONDS = 3000;
+
+/**
+ * The script every ports launch answers from: dismiss the connect's dialog and its pick of actions. A connected
+ * case never asks them.
+ */
+const PORTS_SCRIPT = [
+  {surface: 'failureDialog', match: '"', answer: 'dismiss'},
+  {surface: 'mitigationPick', match: 'Pick an action', answer: 'dismiss'},
+];
 
 /** The editor a run uses: VS Code at the floor of ADR-0007, or the pinned VSCodium Insiders. */
 export type EditorChoice = 'vscode' | 'vscodium';
@@ -132,7 +151,7 @@ export interface HarnessVariables {
 }
 
 /** Waits the given number of milliseconds. */
-type Sleeper = (milliseconds: number) => Promise<void>;
+export type Sleeper = (milliseconds: number) => Promise<void>;
 
 /** The steps of a run that touch more than the run's folder: what a test replaces. */
 export interface HarnessDependencies {
@@ -180,6 +199,17 @@ export function harnessSshConfig(port: number, runFolder: string): string {
   return [
     'Host harness',
     '  HostName 127.0.0.1',
+    `  Port ${String(port)}`,
+    '  User harness',
+    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    '  IdentitiesOnly yes',
+    '  IdentityAgent none',
+    '  StrictHostKeyChecking accept-new',
+    '  BatchMode yes',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    '',
+    'Host 127.0.0.1',
     `  Port ${String(port)}`,
     '  User harness',
     `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
@@ -299,19 +329,22 @@ export function packagedExtensions(
 
 /**
  * The editor's user settings of the run: the extensions under test read the harness's ssh_config, and `extra` is a
- * launch's own settings.
+ * launch's own settings. With `label`, the same bytes go to `<run folder>/<label>-settings.json`, so a row compares
+ * the file the editor read with the one its launch got.
  */
 export function writeUserSettings(
   runFolder: string,
   configFile: string,
   extra: Readonly<Record<string, unknown>> = {},
+  label?: string,
 ): void {
+  const bytes = `${JSON.stringify({'remote.SSH.configFile': configFile, ...extra}, null, 2)}\n`;
   const folder = path.join(runFolder, 'user-data', 'User');
   mkdirSync(folder, {recursive: true});
-  writeFileSync(
-    path.join(folder, 'settings.json'),
-    `${JSON.stringify({'remote.SSH.configFile': configFile, ...extra}, null, 2)}\n`,
-  );
+  writeFileSync(path.join(folder, 'settings.json'), bytes);
+  if (label !== undefined) {
+    writeFileSync(path.join(runFolder, `${label}-settings.json`), bytes);
+  }
 }
 
 async function waitForHost(
@@ -477,22 +510,68 @@ function prepareHost(
 }
 
 /**
+ * Runs a launch's host setup in order, as root, in the host container. A command that exits non-zero fails the
+ * attempt with its command and its output.
+ */
+function runHostSetup(
+  command: CommandRunner,
+  container: string,
+  entries: readonly HostSetupEntry[],
+): void {
+  for (const entry of entries) {
+    const result = command('docker', [
+      'exec',
+      ...(entry.detach === true ? ['-d'] : []),
+      '--user',
+      'root',
+      container,
+      'sh',
+      '-c',
+      entry.command,
+    ]);
+    if (result.status !== 0) {
+      throw new Error(
+        `host setup failed: ${entry.command}\n${result.stderr.trim()}`,
+      );
+    }
+  }
+}
+
+/**
  * Runs each launch in order and returns their exit codes. The VS Code run has one configuration and needs no label;
  * each attempt of a VSCodium launch finds the run's base settings plus the launch's own, so none inherits another's.
+ * A launch with host setup runs it before each attempt, and waits the helper's grace after the launch before it,
+ * so its resolve finds no live helper of the run.
  */
 export async function runLaunches(
   runFolder: string,
   configFile: string,
   launches: ReadonlyArray<Launch | undefined>,
+  command: CommandRunner,
+  container: string,
+  sleep: Sleeper,
   runLaunch: (launch?: Launch) => Promise<AttemptResult>,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
+    if (launch?.hostSetup !== undefined) {
+      // The helper of the previous launch ends HELPER_GRACE_MILLISECONDS after its window; a live one would be
+      // reused by this resolve without any check, so the run waits the grace out.
+      await sleep(FRESH_RESOLVE_WAIT_MILLISECONDS);
+    }
     exitCodes.push(
-      await runWithRetry(() => {
+      await runWithRetry(async () => {
         // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
         if (launch !== undefined) {
-          writeUserSettings(runFolder, configFile, launch.settings);
+          if (launch.hostSetup !== undefined) {
+            runHostSetup(command, container, launch.hostSetup);
+          }
+          writeUserSettings(
+            runFolder,
+            configFile,
+            launch.settings,
+            launch.label,
+          );
         }
         return runLaunch(launch);
       }, console.log.bind(console)),
@@ -536,6 +615,13 @@ export async function runAcceptance(
         JSON.stringify({entries: failure.script}),
       );
     }
+    for (const portsCase of editor === 'vscodium' ? portsCases(root) : []) {
+      // A connected case leaves the script unused, which is no failure; a failed one is answered from it.
+      writeFileSync(
+        launchFiles(runFolder, `ports-${portsCase.label}`).script,
+        JSON.stringify({entries: PORTS_SCRIPT}),
+      );
+    }
     const launches = editor === 'vscodium' ? launchesOf(root) : [];
     prepareHost(
       dependencies.command,
@@ -548,6 +634,9 @@ export async function runAcceptance(
         runFolder,
         variables.HARNESS_SSH_CONFIG,
         editor === 'vscodium' ? launches : [undefined],
+        dependencies.command,
+        variables.HARNESS_CONTAINER,
+        dependencies.sleep,
         launch =>
           launch?.kind === 'plain'
             ? dependencies.runPlain(root, variables, launch)

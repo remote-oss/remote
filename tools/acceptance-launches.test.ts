@@ -1,4 +1,4 @@
-import {deepStrictEqual, throws} from 'node:assert';
+import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {
   bundleFolderOf,
   CONFIG_FILE_LAUNCHES,
@@ -6,6 +6,9 @@ import {
   failureCases,
   LABEL_FORM,
   launchesOf,
+  type PortsCase,
+  portsCases,
+  portsHostSetup,
   runnerLaunches,
   suitesOf,
 } from './acceptance-launches.ts';
@@ -15,7 +18,7 @@ import {TemporaryWorkspace} from './temporary-workspace.ts';
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow, windows, no-proposals and the three explorer launches', () => {
+  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow, windows, no-proposals, the three explorer launches and the ports cases in the order of theirs', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -32,6 +35,9 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
+        ...portsCases(REPOSITORY_ROOT).map(
+          portsCase => `ports-${portsCase.label}`,
+        ),
       ],
     );
   });
@@ -101,7 +107,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are the terminal launch, the failing connects that name them and the explorer launches', () => {
+  it('D-85: the settings of their own are the terminal launch, the failing connects that name them, the explorer launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -112,6 +118,9 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
+        ...portsCases(REPOSITORY_ROOT).map(
+          portsCase => `ports-${portsCase.label}`,
+        ),
       ],
     );
   });
@@ -219,6 +228,112 @@ describe('the launches of the VSCodium run', () => {
         () => failureCases(workspace.root),
         /two failing connects share the label "x"/,
       );
+    } finally {
+      workspace.remove();
+    }
+  });
+});
+
+describe('the ports cases', () => {
+  const launches = launchesOf(REPOSITORY_ROOT);
+  const cases = portsCases(REPOSITORY_ROOT);
+
+  /** The case of the suite by its label; an error when the cases file lacks it. */
+  function caseOf(label: string): PortsCase {
+    const current = cases.find(candidate => candidate.label === label);
+    if (current === undefined) {
+      throw new Error(`no ports case named ${label}`);
+    }
+    return current;
+  }
+
+  it('coverage-13: a ports launch opens its case on the default authority', () => {
+    const current = caseOf('range');
+    deepStrictEqual(
+      launches.filter(launch => launch.label === 'ports-range'),
+      [
+        {
+          label: 'ports-range',
+          runner: 'runner-remote',
+          suite: 'suite-ports',
+          folderUri: 'vscode-remote://ssh-remote+harness/home/harness',
+          settings: current.settings,
+          environment: {HARNESS_PORTS_CASE: 'range'},
+          ownScript: true,
+          hostSetup: portsHostSetup(current),
+        },
+      ],
+    );
+  });
+
+  it('coverage-13: a ports launch named by an authority opens it', () => {
+    strictEqual(
+      launches.find(launch => launch.label === 'ports-address')?.folderUri,
+      'vscode-remote://ssh-remote+harness@127.0.0.1/home/harness',
+    );
+  });
+
+  it('coverage-13: the setup frees the held ports and the server, then holds each port and waits for it', () => {
+    const current = caseOf('range-gaps');
+    deepStrictEqual(portsHostSetup(current), [
+      {command: "pkill -f 'n[c] -lk -p'; true"},
+      {
+        command:
+          "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
+          'for i in $(seq 1 20); do ' +
+          "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
+          'sleep 0.5; done; exit 1',
+      },
+      {command: 'nc -lk -p 45000 -s 127.0.0.1 -e /bin/true', detach: true},
+      {command: 'nc -lk -p 45002 -s 127.0.0.1 -e /bin/true', detach: true},
+      {
+        command:
+          'for i in $(seq 1 20); do ' +
+          "netstat -ltn | grep -q ' 127.0.0.1:45000 ' && exit 0; " +
+          'sleep 0.25; done; exit 1',
+      },
+      {
+        command:
+          'for i in $(seq 1 20); do ' +
+          "netstat -ltn | grep -q ' 127.0.0.1:45002 ' && exit 0; " +
+          'sleep 0.25; done; exit 1',
+      },
+    ]);
+  });
+
+  it('coverage-13: a case that keeps the server gets no kill of it', () => {
+    const current = caseOf('reuse');
+    deepStrictEqual(portsHostSetup(current), [
+      {command: "pkill -f 'n[c] -lk -p'; true"},
+    ]);
+  });
+
+  it('coverage-13: a case with no holders frees only the server', () => {
+    deepStrictEqual(portsHostSetup(caseOf('range')).length, 2);
+  });
+
+  it('coverage-13: a label outside its form is refused', () => {
+    const workspace = new TemporaryWorkspace('ports');
+    try {
+      workspace.write('tests/acceptance/suite-ports/cases.json', {
+        cases: [{label: 'A-b', cite: 'c', settings: {}, outcome: 'connected'}],
+      });
+      throws(() => portsCases(workspace.root), /label must match/);
+    } finally {
+      workspace.remove();
+    }
+  });
+
+  it('coverage-13: two cases with the same label are refused', () => {
+    const workspace = new TemporaryWorkspace('ports');
+    try {
+      workspace.write('tests/acceptance/suite-ports/cases.json', {
+        cases: [
+          {label: 'x', cite: 'c', settings: {}, outcome: 'connected'},
+          {label: 'x', cite: 'c', settings: {}, outcome: 'connected'},
+        ],
+      });
+      throws(() => portsCases(workspace.root), /share the label "x"/);
     } finally {
       workspace.remove();
     }

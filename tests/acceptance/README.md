@@ -13,7 +13,7 @@ The command packages the extensions, then `tools/acceptance.ts`:
 1. builds the host image from `host/` (Alpine with OpenSSH's server and libstdc++, key login only, the user `harness` with the
    POSIX `sh` login shell, TCP forwarding allowed);
 2. makes an Ed25519 key pair for the run and starts the host with its public key on a free local port;
-3. writes an `ssh_config` whose `Host harness` reaches the host with that key, its own known-hosts file and no agent,
+3. writes an `ssh_config` whose `Host harness` reaches the host with that key, its own known-hosts file and no agent (and whose `Host 127.0.0.1` block reaches it by the address as typed),
    sets it as `remote.SSH.configFile` in the editor's user settings, and waits until the host accepts SSH;
 4. bundles `suite/*.test.ts` into `dist/` and starts `@vscode/test-cli` with `vscode-test.mjs`: VS Code 1.139.1, a
    fresh user-data and extensions folder, the packaged VSIX of each extension under test, and the proposed API
@@ -157,11 +157,42 @@ them: the labels, the configurations and the bundled suites all read it. A launc
 | `settings` | merged over the run's base settings, for this launch only; the base settings are written again before a launch without any |
 | `environment` | added to the extension host's environment for this launch only; a key of the launch overrides the harness variable of the same name |
 | `ownScript` | the launch answers from its own `<label>-script.json` and `<label>-record.jsonl` |
+| `hostSetup` | commands the run runs on the host container, as root, before each attempt of the launch, in order; a command started with `detach` does not block the attempt |
 | `extraExtensions` | further development extensions, folders under `tests/acceptance`, loaded after the runner in the local extension host |
 | `hostExtensions` | development extensions that run in the remote extension host: folders under `tests/acceptance`, copied into the host's home folder before the launches and loaded from there |
 
 To add a launch: add a row to `launchesOf`, put its tests in the suite folder it names, and add that folder to
 `tests/acceptance/tsconfig.json` and to the entries of `knip.jsonc`.
+
+### Ports cases
+
+The ports cases of `suite-ports/cases.json` prove F-2409 end to end: one launch per case, `ports-<label>`, a window on
+the case's authority (`harness` by default, `harness@127.0.0.1` for the `address` case), the case's settings over the
+run's base, `HARNESS_PORTS_CASE` naming the case for the window, its own script and record, and its host setup. They
+come after every other launch, in the file's order, and a launch's host setup runs before each attempt of it, in
+order, as root in the host container. The setup of a case, in this order, is: free the ports a holder holds
+(`pkill` on the `nc` pattern, the brackets kept from matching the `sh -c` that runs it); free the server, unless the
+case keeps it, and wait for it to be gone; then per held port, start a BusyBox `nc -lk … -e /bin/true` holder on
+`127.0.0.1` (it keeps listening after each connection, so the server's port test, which listens to probe, finds it
+busy) and wait until `netstat -ltn` shows it. The harness writes the ports script for every case before the first
+launch: dismiss the connect's dialog and its pick of actions. A connected case leaves it unused, which is no
+failure.
+
+A launch with host setup also waits the helper's grace before it starts: the helper of the previous launch outlives
+its window by `HELPER_GRACE_MILLISECONDS` of the extension, and a live one would be reused by the resolve without any
+check. The run's `FRESH_RESOLVE_WAIT_MILLISECONDS` is that grace, and a unit row keeps the two equal. The cases need
+the wait: F-2409 AC-3 names "no live connection from the client to the host", and `reuse` keeps its range's server on
+the host while its connection is still fresh.
+
+When the run writes a launch's settings, it writes the same bytes to `<run folder>/<label>-settings.json`, and a row
+compares the user settings file the window read with that copy (F-2409 AC-17).
+
+The rows read back what the connect left on the host: `serverPort()` is the local port of the one `LISTEN` line of
+`netstat -ltnp` whose program is `node` (as `harness`, BusyBox `netstat -p` names only the user's own processes, so a
+root's holder shows `-`); `listenAddress(port)` is the address of the `LISTEN` line that ends in `:<port>`, undefined
+when there is none; `containerAddress()` is the host container's own address; `reaches(address, port)` is a
+`net.connect` bounded at five seconds. The log has no line with the port: nothing writes F-2003's "Remote server
+listening on port" line yet.
 
 ## Cutting the host's network
 
