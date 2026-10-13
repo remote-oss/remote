@@ -17,7 +17,7 @@ Builder: hestia or iris (hermes assigns). Size: S. Design check: athena.
 F-2507 says how a hand-forwarded port is carried: "on the host the connection to the application is opened by a VS
 Code Server process, not by sshd", with one "Creating a socket (renderer-Tunnel-<id>)" line in the extension host's log
 per connection (6.3 step 4). §16 adds that core builds the tunnel itself. athena ruled this way on #617 (contracts §3.2,
-f3f4aee).
+40115a2).
 
 That is core's own tunnel through the server connection, which core uses when the resolver gives no `tunnelFactory`. Our
 `factoryFor` dials the port through the SSH forward, so sshd would open the connection: not what 6.3 step 4 observes.
@@ -25,14 +25,15 @@ That is core's own tunnel through the server connection, which core uses when th
 So:
 - **`editorResolverOf` gives the editor no `tunnelFactory`.** The getter goes, and `EditorResolver.tunnelFactory`,
   `Memory.tunnelFactory` and `ConnectedResult.tunnelFactory` go with it (`lib-authority`'s host and connector results).
-- **The result's tunnel features are the editor's shape**: `{elevation: false, public: false, privacyOptions: [],
-  protocol: true}` (athena on #617). Core offers "Change Port Visibility" when `privacyOptions.length > 0` ([oss]
-  `src/vs/platform/tunnel/common/tunnel.ts`, `canChangePrivacy`), so the empty list gives no visibility choice (F-2507
-  BR-9, AC-19). `protocol: true` keeps "Change Port Protocol" (F-2501 AC-35). `lib-authority` takes them as plain data:
-  `ResolvedConnection.tunnelFeatures: {elevation: boolean; public: boolean; privacyOptions: never[]; protocol: boolean}`,
-  with no cast.
-- **The tunnel step** (`remote-ssh/src/pipeline/tunnel-step.ts`) no longer makes a `factoryFor`. It returns the features
-  above, a constant beside the step, and its `close` closes only the window tunnel.
+- **The result carries no tunnel features either** (athena on #617). Core reads `tunnelFeatures` only together with a
+  factory: `$setTunnelProvider` runs only inside `if (tunnelFactory)` ([oss] `extHostTunnelService.ts`). Without one,
+  core keeps its defaults: `_canElevate` false, `_canChangeProtocol` true, `_privacyOptions` `[]` ([oss]
+  `src/vs/platform/tunnel/common/tunnel.ts`). That is F-2507 BR-9 exactly: no elevation, no "Change Port Visibility",
+  and "Change Port Protocol" stays (F-2501 AC-35). So `resultOf` sets no `tunnelFeatures`, and
+  `ResolvedConnection.tunnelFeatures`, `ConnectedResult.tunnelFeatures` and the tunnel step's `tunnelFeatures` go,
+  along with every field that only carried them.
+- **The tunnel step** (`remote-ssh/src/pipeline/tunnel-step.ts`) no longer makes a `factoryFor`, and returns no features.
+  Its `close` closes only the window tunnel.
 - **lib-forwarding's `factoryFor`** (and `TunnelFactory`, `ForwardRequest`, `ForwardedPort`, `ReviveReport` and
   `TunnelFeatures`) then has no user in the product. Under ADR-0003 (no dead code) it is removed, with its unit rows and
   `tests/acceptance/server/tunnel-factory.test.ts`. The relay tunnel it was built on (`openRelayTunnel`) stays: the window
@@ -48,8 +49,7 @@ Unit rows:
 
 | Name | Expected |
 |---|---|
-| `F-2507 6.3: the editor's resolver has no tunnel factory` | `editorResolverOf(...)`'s `tunnelFactory` is `undefined` before and after a connected resolve |
-| `F-2507 BR-9, F-2501 AC-35: the result offers no visibility choice, protocol and no elevation` | the connected result's `tunnelFeatures` equal the object above, with `privacyOptions` empty |
+| `F-2507 6.3, BR-9: the editor gets neither a tunnel factory nor tunnel features` | `editorResolverOf(...)` has no `tunnelFactory` before and after a connected resolve, and the connected result has no `tunnelFeatures` key |
 | `the tunnel step's close ends the window tunnel` | as today, with no factory |
 
 **Acceptance rows** (windows suite):
@@ -64,8 +64,9 @@ Unit rows:
 | `F-2507 AC-18: a port forwarded in a connected window reaches the host's port` | on the host, a BusyBox `nc -lk -p 8613 -s 127.0.0.1 -e /bin/echo forwarded-8613` listener (harness user, ended in `after`); `openWindow('harness', 'f1')`; `inWindow('f1', 'acceptance.agent.forwardPort', 8613)` | a `forwarded` event whose `localAddress` names a local port; a TCP connect to it reads `forwarded-8613` |
 | `F-2507 6.3: the host-side connection is opened by the VS Code Server, not by sshd` | while a connection through the forward is held open, `netstat -tnp` on the host, run as harness | the established connection to 127.0.0.1:8613 belongs to a `node` process under the server's folder, not `sshd` |
 
-The row menu's lack of "Change Port Visibility" (F-2507 AC-19, F-2501 AC-35) is core's rendering of
-`privacyOptions: []` (`canChangePrivacy`): a core half, resting on the unit row above. Name it in the PR.
+F-2507 BR-9 and AC-19, and F-2501 AC-35's menu half (no "Change Port Visibility", "Change Port Protocol" present, no
+elevation) are core halves: core's defaults in `tunnel.ts` when no provider is set, cited in contracts §3.2 (40115a2). The
+unit row above proves we set no provider. Name them in the PR.
 
 Tag F-2507 AC-18 `acceptance`. F-2507 is slice 2; record the tag in the TSV and in #142 only if the catalogue holds
 slice 2's rows, otherwise list it on #41.
