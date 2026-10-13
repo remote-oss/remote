@@ -291,7 +291,7 @@ function launchFiles(
 
 /**
  * Runs each launch in order and returns their exit codes. The VS Code run has one configuration and needs no label;
- * each VSCodium launch finds the run's base settings plus its own, so none inherits another's.
+ * each attempt of a VSCodium launch finds the run's base settings plus the launch's own, so none inherits another's.
  */
 export async function runLaunches(
   runFolder: string,
@@ -301,14 +301,14 @@ export async function runLaunches(
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
-    if (launch !== undefined) {
-      writeUserSettings(runFolder, configFile, launch.settings);
-    }
     exitCodes.push(
-      await runWithRetry(
-        () => runTests(launch?.label),
-        console.log.bind(console),
-      ),
+      await runWithRetry(() => {
+        // Each attempt starts from the base settings plus the launch's own, not from what a failed attempt left.
+        if (launch !== undefined) {
+          writeUserSettings(runFolder, configFile, launch.settings);
+        }
+        return runTests(launch?.label);
+      }, console.log.bind(console)),
     );
   }
   return exitCodes;

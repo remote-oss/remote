@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   bundleFolderOf,
+  CONFIG_FILE_LAUNCHES,
   failureCases,
   LABEL_FORM,
   launchesOf,
@@ -37,6 +38,19 @@ describe('the launches of the VSCodium run', () => {
     deepStrictEqual(
       launches.find(launch => launch.label === 'terminal')?.settings,
       {'remote.SSH.useLocalServer': false},
+    );
+  });
+
+  it('D-85: no launch outside the list sets remote.SSH.configFile', () => {
+    deepStrictEqual(
+      launches
+        .filter(
+          launch =>
+            launch.settings?.['remote.SSH.configFile'] !== undefined &&
+            !CONFIG_FILE_LAUNCHES.includes(launch.label),
+        )
+        .map(launch => launch.label),
+      [],
     );
   });
 
