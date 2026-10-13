@@ -38,6 +38,42 @@ a fresh window. Builder: selene. Size: about 1.5 agent-days. **Depends on:**
 | F-2001 AC-15, AC-13 | `openWindow('harness', 'r1')` | `r1` connected; one activation line for `r1`, `onResolveRemoteAuthority:ssh-remote`; `remoteSshKind` is `1` (`ExtensionKind.UI`); `onHost('ls', '/home/harness/.vscodium-server-insiders/extensions')` lists no `remote-oss.remote-ssh` folder |
 | F-2001 AC-20 | `userSettings({'remote.extensionKind': {'remote-oss.remote-ssh': ['workspace']}})`. Note the record's and the log's sizes, the helper registry, `globalStorageOf()` and the user settings file. `openWindow` on `harness` for `r2`, without waiting for a connect; wait 20 s | no activation line for `r2`; no record or log line written since; no connection helper; `globalStorageOf()` and the settings file (apart from the row's own `remote.extensionKind`) unchanged; `inWindow('r2', 'acceptance.agent.writeFile', …)` fails (no remote folder). Set the setting back and close `r2` |
 
+**F-2001 AC-29, the stand-in.** athena ruled on #603 that a stand-in carrying the reference's id may be used, within
+these limits:
+- The test writes it at run time into the run's extensions folder as a `package.json` only, with nothing else. It holds:
+  - the reference's publisher and name, the ids F-3901's detection reads (from our stand-down table, `standDown.standsDownFor`);
+  - a version and `engines`;
+  - a `displayName` of `Acceptance stand-in (not the reference)`.
+
+  There is no code and no contribution beyond what the detection reads.
+- Nothing in it comes from the reference. It is never committed as a package, packaged, published, or left outside the
+  run folder.
+- It is removed at the end of the row.
+- The rows assert only our side.
+
+**The warning in the record.** lib-standdown's editor adapter shows its warning with `vscode.window.showWarningMessage`,
+which the record doesn't see. connect-31 (#586) makes the adapters before activation. This card passes the stand-down
+guard `{...standDownHost(vscode), showWarning: (text, button) => adapters.notice.showWarning(text, [button])}` in
+`extension.ts`, so in the harness the warning goes through the notice port. A user's editor uses the same
+`showWarningMessage`. Add a unit row in `extension.test.ts` (or the activation's) that the guard's warning reaches the
+notice port. **This card therefore depends on connect-31 (#586) too.**
+
+The row:
+- write the stand-in;
+- open a fresh local folder window `l9` (`openLocalFolder`), so the editor scans the extensions folder anew;
+- run `opensshremotes.showLog` in it.
+
+Assert:
+- exactly one `notice` line of `l9`, whose question is our stand-down warning (`standDownTexts.warning`) and whose
+  `buttons` are `["Show Other Extension"]`;
+- `vscode.commands.getCommands(true)` in `l9` (the agent's state gains `ourCommands`, the `opensshremotes.*` ones it
+  lists) holds no `opensshremotes.openEmptyWindow`;
+- no `progress` line of `l9`.
+
+The context key `opensshremotes.standingDown` has no public reader; it rests on lib-standdown's unit rows. Name them in
+the PR. If the editor needs a restart to see a new extension folder, say so in the PR and use the restart the windows
+suite allows (close every window but `local`, reopen).
+
 Close every window a row opened before the next row.
 
 ## 3. Every AC of F-2001
@@ -52,7 +88,7 @@ Close every window a row opened before the next row.
 | 8, 18 | `deferred` | `build order slice 1: the Remotes view is remote-explorer's` (as F-2202 AC-20 and AC-33) |
 | 17 | `todo` | core's URI consent dialog stands before the activation. Wait: a way to answer core's dialog from the harness. Its "empty path shows no further UI" half rests on the URI handler's unit row: name it |
 | 22 | `todo` | a virtual-workspace window, which needs a file system provider the run doesn't have |
-| 29 | `todo` | a second extension with the reference's id. Installing the reference is out of bounds (AGENTS.md). Whether a stand-in carrying its id may be used is a question for athena, not this card |
+| 29 | `acceptance` | the stand-in row below (athena's ruling on #603) |
 
 ## 4. Done when
 
