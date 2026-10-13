@@ -334,8 +334,13 @@ Rulings of 2026-10-08 for S9 and S10 (the process side):
   local OpenSSH supports it (verified once against the local client and recorded as a fixture); otherwise pick a
   free loopback port by binding port 0 and closing (allowed here; W1's "never probe by binding" is about the
   forwarding search).
-- The first setup report that ends the connect wait is the `ssh -v` authentication line ("Authenticated to ... using
-  ..."), exposed by S5 as the marker `authenticated` (added to S5's rules; a one-row card).
+- The connect wait runs until the session is **ready to run scripts**, not until authentication (ssh-38, #443, option B,
+  2026-10-13): after the `ssh -v` authentication line (S5's marker `authenticated`), the session's prelude runs the
+  login shell's startup (layer 1) and prints `LAYER1-READY` just before `exec sh`; only then does the helper announce
+  `connected` and stop the wait. `LAYER1-TIMEOUT <n>` ends the attempt as `loginFailed` (timeout, F-2704 AC-11,
+  F-2206 AC-28) and `LAYER1-EXITED <status>` as `loginFailed` without a reason (S030, F-2704 AC-13 and AC-25), both
+  while the windows are still in `LoginWait`; terminal mode reads the same lines. The wait still pauses while a prompt
+  is open and starts over after each answer, so the time a user takes at a prompt never shortens the startup's budget.
 - S10 runs a script with input as `sh -c '<quoted>'` and a script without input as `sh -s` on standard input; the
   quoting assumes a POSIX-reading login shell, which slice 1's harness provides; a fish or csh login shell is the
   slice-3 variant of the harness, with the room's two-mode bootstrap answer.
