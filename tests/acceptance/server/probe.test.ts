@@ -57,7 +57,7 @@ describe('F-2401 the probe of a host', function () {
     return outcome.host;
   }
 
-  it('F-2401 AC-2: finds an Alpine host to be a musl Linux with the tools of BusyBox', async () => {
+  it('contracts V2: finds an Alpine host to be a musl Linux with the tools of BusyBox', async () => {
     const {operatingSystem, libc, release, tools, busyboxWget} = await probed();
     deepStrictEqual(
       {operatingSystem, libc, release, tools, busyboxWget},

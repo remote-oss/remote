@@ -188,7 +188,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       );
     });
 
-    it('F-2307 AC-3: the question is shown as a masked input, and the answer lets the login finish', async () => {
+    it('contracts S9: the question is shown as a masked input, and the answer lets the login finish', async () => {
       const {connection, notices} = await window('locked');
       const waiting = connection.connect(new AbortController().signal);
       const asked = await eventually(() =>
@@ -230,7 +230,7 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       strictEqual(closed, true);
     });
 
-    it('F-2307 AC-24: the passphrase is kept in no record and no file the helper wrote', async () => {
+    it('contracts S9: the passphrase is kept in no record and no file the helper wrote', async () => {
       const {connection, notices} = await window('locked');
       const waiting = connection.connect(new AbortController().signal);
       await eventually(() => notices.some(notice => notice.type === 'prompt'));

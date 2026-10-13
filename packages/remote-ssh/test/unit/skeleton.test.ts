@@ -448,7 +448,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
     );
   });
 
-  it('resourceLabelFormatters: the one entry, exact', () => {
+  it('F-2502 AC-1: resourceLabelFormatters: the one entry, exact', () => {
     deepStrictEqual(manifest().contributes?.resourceLabelFormatters, [
       {
         scheme: 'vscode-remote',

@@ -284,7 +284,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       host.stop();
     });
 
-    it('F-2403 AC-5: the host downloads the archive itself and unpacks it where the plan says', () => {
+    it('contracts V4: the host downloads the archive itself and unpacks it where the plan says', () => {
       deepStrictEqual(
         [
           installation.transferred.kind === 'failed'
@@ -313,14 +313,14 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       );
     });
 
-    it('F-2401 AC-2: the real server starts on musl and reports its port', () => {
+    it('contracts V7: the real server starts on musl and reports its port', () => {
       strictEqual(
         started.kind === 'started' && portOfStarted(started.server) > 0,
         true,
       );
     });
 
-    it('F-3902 AC-1: the server answers with the commit it was built from', () => {
+    it('contracts V4: the server answers with the commit it was built from', () => {
       strictEqual(
         started.kind === 'started'
           ? versionOf(host, portOfStarted(started.server))
@@ -360,7 +360,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       host.stop();
     });
 
-    it('F-2403 AC-11: the host cannot download, so the client downloads and the archive is copied to the host', () => {
+    it('contracts V4: the host cannot download, so the client downloads and the archive is copied to the host', () => {
       deepStrictEqual(
         [
           installation.transferred.kind,
@@ -373,7 +373,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       );
     });
 
-    it('F-3902 AC-1: the archive the client kept is the one the product published', async () => {
+    it('contracts V4: the archive the client kept is the one the product published', async () => {
       const published = await fetch(`${installation.plan.address}.sha256`, {
         signal: AbortSignal.timeout(30_000),
       });
@@ -388,7 +388,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       );
     });
 
-    it('F-2403 AC-11: the server installed from the copy starts and answers with its commit', () => {
+    it('contracts V4: the server installed from the copy starts and answers with its commit', () => {
       strictEqual(
         started.kind === 'started'
           ? versionOf(host, portOfStarted(started.server))
