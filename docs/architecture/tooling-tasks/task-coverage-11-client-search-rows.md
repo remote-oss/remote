@@ -58,7 +58,7 @@ checked nor used.
 | `client-directory` | `<run>/clients/adir` | — | `path/ssh` | `path/ssh` | `F-2101 AC-7` |
 | `client-not-executable` | `<run>/clients/notexec/ssh` | — | `path/ssh` | `path/ssh` | `F-2101 AC-7` |
 | `client-not-on-path` | `nosuchclient` | — | `path/ssh` | `path/ssh` | `F-2101 AC-7` |
-| `client-tilde` | `~/clients-copy/ssh` (see below) | — | `path/ssh` | `path/ssh` | `F-2101 AC-7` |
+| `client-tilde` | `~/clients-copy/ssh` (see below) | environment `HOME=<run>/home` | `path/ssh` | `path/ssh` | `F-2101 AC-7` |
 | `client-fails` | `<run>/clients/fails/ssh` | — | `fails/ssh`, `path/ssh` | `path/ssh` | `F-2101 AC-8` |
 | `client-putty` | `<run>/clients/putty/ssh` | — | `putty/ssh`, `path/ssh` | `path/ssh` | `F-2101 AC-9` |
 | `client-lower` | `<run>/clients/lower/ssh` | — | `lower/ssh` | `lower/ssh` | `F-2101 AC-10` |
@@ -67,13 +67,14 @@ checked nor used.
 | `client-windows` | `<run>/clients/windows/ssh` | `remote.SSH.suppressWindowsSshWarning: false` | `windows/ssh` | `windows/ssh` | `F-2101 AC-25` |
 | `client-windows-suppressed` | the same | `…: true` | `windows/ssh` | `windows/ssh` | `F-2101 AC-25` |
 
-`client-tilde`: the run copies `configured/ssh` to `~/clients-copy/ssh` in the editor user's home, with its logged name
-changed to `tilde/ssh`. No `tilde/ssh` line is expected: AC-7 says the configured `~/...` value isn't used even when
-its expansion exists.
+`client-tilde` (athena on #549): the launch's `environment` sets `HOME=<run>/home` through tooling-16's per-launch
+environment, so `~` (from `os.homedir()`) is a folder of the run and nothing is written into the real home. Before the
+launch, the run copies `configured/ssh` to `<run>/home/clients-copy/ssh`, mode 755, with its logged name changed to
+`tilde/ssh`. No `tilde/ssh` line is expected: AC-7 says the configured `~/...` value isn't used even when its expansion
+exists. The other `HOME` change is harmless: the run's `ssh_config` already names the configuration file (`-F`), the
+known-hosts file and the identity file, so `ssh` reads nothing from `HOME`.
 
-`client-tilde` writes into the editor user's real home folder: the run removes `~/clients-copy` at its end, whatever
-happens. The connections are to the harness host, so every connected launch runs real `ssh` with the run's
-`ssh_config`.
+The connections are to the harness host, so every connected launch runs real `ssh` with the run's `ssh_config`.
 
 The table adds 18 launches to the VSCodium run, roughly 6 to 8 minutes. proteus decides whether they run in every
 VSCodium run or in a dispatch of their own (`-f client-search=true`). Say which in the README.
@@ -108,4 +109,4 @@ bug or a spec question.
 ## 5. Review
 
 PR title `tests: the client-search rows of F-2101 (card coverage-11, #142)`. themis or triton; proteus for the run's new
-files and the home-folder copy.
+files and the launch's own `HOME`.
