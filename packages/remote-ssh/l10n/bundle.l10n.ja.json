@@ -69,5 +69,8 @@
   "Open Settings": "Open Settings",
   "Pick an action to help resolve the problem.": "Pick an action to help resolve the problem.",
   "Waiting for other windows to connect": "Waiting for other windows to connect",
-  "remote.SSH.configFile must be an absolute path or start with ~/: \"{0}\"": "remote.SSH.configFile must be an absolute path or start with ~/: \"{0}\""
+  "remote.SSH.configFile must be an absolute path or start with ~/: \"{0}\"": "remote.SSH.configFile must be an absolute path or start with ~/: \"{0}\"",
+  "Killed VS Code Server on {0}.": "Killed VS Code Server on {0}.",
+  "Failed to kill VS Code Server on {0}.": "Failed to kill VS Code Server on {0}.",
+  "Open Logs": "Open Logs"
 }

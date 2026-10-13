@@ -95,6 +95,13 @@ const LICENCE_TEXTS = [
   'Accept and Continue',
 ];
 
+/** The notices of the server maintenance commands and their button. */
+const MAINTENANCE_TEXTS = [
+  'Killed VS Code Server on {0}.',
+  'Failed to kill VS Code Server on {0}.',
+  'Open Logs',
+];
+
 function bundle(file: string): Record<string, string> {
   return JSON.parse(readFileSync(path.join(BUNDLES, file), 'utf8')) as Record<
     string,
@@ -119,6 +126,7 @@ describe('the runtime strings of the extension', () => {
           ...MITIGATION_TEXTS,
           ...WAITING_TEXTS,
           ...CONFIG_FILE_TEXTS,
+          ...MAINTENANCE_TEXTS,
           'SSH: {0}',
         ].map(text => [text, text]),
       ),

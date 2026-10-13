@@ -987,6 +987,18 @@ describe('application-scope settings ignore workspace values', () => {
   });
 });
 
+describe("the assembly's maintenance run (card connect-23)", () => {
+  it('F-2411.BR-2: a run on a host that cannot be reached is a failed connection, with the cause', async () => {
+    const {surfaces, machine, recorded} = assemblyInputs();
+    const outcome = await connectAssemblyOf(
+      surfaces,
+      machine,
+      loggerOf(recorded),
+    ).maintain('kill', {host: 'dev'});
+    deepStrictEqual(outcome.result, 'connectionFailed');
+  });
+});
+
 describe("the assembled ports' CLI path", () => {
   it('F-2103 5.0 step 6: the S045 notification has its own text, translated', () => {
     const {surfaces, machine, recorded} = assemblyInputs();

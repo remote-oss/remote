@@ -7,6 +7,7 @@
 import {sshRemoteCodec} from 'lib-authority';
 import type {HostListResult, SshTarget} from 'lib-ssh';
 import {commands} from '../identifiers.generated.ts';
+import type {ConnectTarget} from '../pipeline/steps.ts';
 import {
   outcomeOfPick,
   type PickerItem,
@@ -63,18 +64,21 @@ export interface ConnectCommandHandlers {
   cleanLocalServer: {execute(): Promise<void>};
 }
 
+/** The target as an authority names it: the plain host text, or the host with its user and port. */
+export function connectTargetOf(target: SshTarget): ConnectTarget {
+  return target.user === undefined && target.port === undefined
+    ? {kind: 'plain', text: target.host}
+    : {
+        kind: 'host',
+        hostName: target.host,
+        ...(target.user === undefined ? {} : {user: target.user}),
+        ...(target.port === undefined ? {} : {port: target.port}),
+      };
+}
+
 /** The text of an authority's payload for a target: plain as written, or the hex form the codec chooses. */
-function payloadOf(target: SshTarget): string {
-  return sshRemoteCodec.encode(
-    target.user === undefined && target.port === undefined
-      ? {kind: 'plain', text: target.host}
-      : {
-          kind: 'host',
-          hostName: target.host,
-          ...(target.user === undefined ? {} : {user: target.user}),
-          ...(target.port === undefined ? {} : {port: target.port}),
-        },
-  );
+export function payloadOf(target: SshTarget): string {
+  return sshRemoteCodec.encode(connectTargetOf(target));
 }
 
 /** The rows for a typed text over a host list that parsed; a list that did not parse stops the command. */
@@ -91,8 +95,8 @@ function modelFor(listing: HostListResult, typedText: string): PickerModel {
  * and gives nothing. A configuration file that cannot be parsed shows no pick: the command fails with the parser's
  * message, which the editor shows as its own error.
  */
-async function pickedTarget(
-  editor: ConnectCommandEditor,
+export async function pickedTarget(
+  editor: Pick<ConnectCommandEditor, 'listHosts' | 'pickHost' | 'runCommand'>,
 ): Promise<SshTarget | undefined> {
   const listing = editor.listHosts();
   const item = await editor.pickHost(modelFor(listing, ''), typedText =>

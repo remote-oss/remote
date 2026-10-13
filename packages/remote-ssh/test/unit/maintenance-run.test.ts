@@ -1,5 +1,8 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
-import {runMaintenance} from '../../src/maintenance/maintenance-run.ts';
+import {
+  maintenanceInputOf,
+  runMaintenance,
+} from '../../src/maintenance/maintenance-run.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
   emptyRecording,
@@ -140,5 +143,49 @@ describe('a maintenance run (F-2411, F-2412)', () => {
       maintain: () => Promise.reject(new Error('the channel broke')),
     }).catch(() => undefined);
     strictEqual(recording.releases, 1);
+  });
+});
+
+describe('the input of a maintenance run (F-2411.6.3)', () => {
+  it('F-2411.6.3: a host with no user and no port is the plain host string', () => {
+    const input = maintenanceInputOf({host: 'dev'});
+    deepStrictEqual(
+      [input.target, input.rawHostString],
+      [{kind: 'plain', text: 'dev'}, 'dev'],
+    );
+  });
+
+  it('F-2411.6.3: a host with a user and a port keeps both, and names the host in the raw string', () => {
+    const input = maintenanceInputOf({host: 'box', user: 'me', port: 2222});
+    deepStrictEqual(input.target, {
+      kind: 'host',
+      hostName: 'box',
+      user: 'me',
+      port: 2222,
+    });
+  });
+
+  it('F-2411.6.3: a host with only a user has no port', () => {
+    deepStrictEqual(maintenanceInputOf({host: 'box', user: 'me'}).target, {
+      kind: 'host',
+      hostName: 'box',
+      user: 'me',
+    });
+  });
+
+  it('F-2411.6.3: a host with only a port has no user', () => {
+    deepStrictEqual(maintenanceInputOf({host: 'box', port: 22}).target, {
+      kind: 'host',
+      hostName: 'box',
+      port: 22,
+    });
+  });
+
+  it('F-2411.BR-2: the run is no window, no reconnection and the first attempt', () => {
+    const input = maintenanceInputOf({host: 'dev'});
+    deepStrictEqual(
+      [input.attempt, input.isReconnection, input.windowWorkspace],
+      [1, false, undefined],
+    );
   });
 });
