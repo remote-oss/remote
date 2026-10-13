@@ -386,8 +386,9 @@ export function hostSetupOf(
  * The launches of the VSCodium run: `local` runs suite-local in a plain window; `remote` runs suite-remote in a
  * window on `ssh-remote+harness`, where the runner is an extension of the workspace kind; `reconnect` runs
  * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); each
- * failing connect runs suite-failure in a window on its alias, answered from its own script; and `terminal` runs
- * suite-terminal with `remote.SSH.useLocalServer` off; `slow` runs suite-slow with an extension that takes 15 s to
+ * failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
+ * suite-terminal with `remote.SSH.useLocalServer` off; `socket` runs suite-socket with
+ * `remote.SSH.remoteServerListenOnSocket` on; `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
  * suite-client with a `remote.SSH.path` of its own and fake clients on the run's `PATH`; `windows` starts the editor plainly, with no
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
@@ -428,6 +429,16 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
       settings: {
         'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
+    },
+    {
+      label: 'socket',
+      runner: 'runner-remote',
+      suite: 'suite-socket',
+      folderUri: REMOTE_FOLDER_URI,
+      settings: {
+        'remote.SSH.remoteServerListenOnSocket': true,
         'remote.SSH.remotePlatform': {harness: 'linux'},
       },
     },

@@ -127,7 +127,12 @@ export interface WiringPorts {
   /** The server steps' dependencies, apart from what depends on the connect's host. */
   server: Omit<
     ServerStepDependencies,
-    'settings' | 'remoteUser' | 'override' | 'useExecServer' | 'policy'
+    | 'settings'
+    | 'remoteUser'
+    | 'override'
+    | 'useExecServer'
+    | 'policy'
+    | 'socketMode'
   >;
   /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
   tunnel: Omit<
@@ -221,6 +226,7 @@ export function stepsOf(
       useExecServer: ports.settings.useExecServer(),
       policy: sshPolicyFor(ports.settings.localDownloadMode()),
       remoteUser: () => lookedUp(state).user,
+      socketMode: () => tunnelStep.tunnelPath() === 'socket',
     });
     return held.server;
   }
@@ -295,6 +301,32 @@ export function stepsOf(
         connectionSettings().connectTimeout,
       ),
     logger: ports.logger,
+  });
+  const tunnelStep = openTunnelStep({
+    ...ports.tunnel,
+    connectWait: () =>
+      terminalWaitOf(
+        lookedUp(state).connectTimeout,
+        connectionSettings().connectTimeout,
+      ),
+    tunnelInvocation: forward => {
+      if (held.opening === undefined) {
+        throw new Error('the tunnel was asked for before the connection');
+      }
+      return buildInvocation({
+        ...runBaseOf(
+          held.opening.input,
+          held.opening.terms,
+          state,
+          connectionSettings(),
+          ports.requestEnvironment,
+        ),
+        purpose: 'tunnel',
+        forwards: [forward],
+      });
+    },
+    environment: () =>
+      windowEnvironment(lookedUp(state).localForwards, ports.logger),
   });
   return {
     validate: input => serverSteps(input).validate(input),
@@ -398,32 +430,7 @@ export function stepsOf(
     maintain: (input, ...rest) => serverSteps(input).maintain(input, ...rest),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
-    ...openTunnelStep({
-      ...ports.tunnel,
-      connectWait: () =>
-        terminalWaitOf(
-          lookedUp(state).connectTimeout,
-          connectionSettings().connectTimeout,
-        ),
-      tunnelInvocation: forward => {
-        if (held.opening === undefined) {
-          throw new Error('the tunnel was asked for before the connection');
-        }
-        return buildInvocation({
-          ...runBaseOf(
-            held.opening.input,
-            held.opening.terms,
-            state,
-            connectionSettings(),
-            ports.requestEnvironment,
-          ),
-          purpose: 'tunnel',
-          forwards: [forward],
-        });
-      },
-      environment: () =>
-        windowEnvironment(lookedUp(state).localForwards, ports.logger),
-    }),
+    ...tunnelStep,
     rememberPlatform: terms.rememberPlatform,
   };
 }

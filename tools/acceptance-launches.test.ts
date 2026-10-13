@@ -36,7 +36,7 @@ function hostLaunchLabels(): string[] {
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow, the client searches, terminal-pick, windows, no-proposals, the three explorer launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, no-proposals, the three explorer launches and the ports cases in the order of theirs', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -47,6 +47,7 @@ describe('the launches of the VSCodium run', () => {
           failure => `failure-${failure.label ?? failure.alias}`,
         ),
         'terminal',
+        'socket',
         'slow',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
@@ -112,6 +113,16 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('F-2410 AC-2: the socket launch turns the listen-on-socket setting on and names the platform of the host', () => {
+    deepStrictEqual(
+      launches.find(launch => launch.label === 'socket')?.settings,
+      {
+        'remote.SSH.remoteServerListenOnSocket': true,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
+    );
+  });
+
   it('D-85: no launch outside the list sets remote.SSH.configFile', () => {
     deepStrictEqual(
       launches
@@ -125,7 +136,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are the terminal launch, the failing connects that name them, the client searches, the explorer launches and every ports case', () => {
+  it('D-85: the settings of their own are the terminal and socket launches, the failing connects that name them, the client searches, the explorer launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -134,6 +145,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-refused-shown',
         'failure-platform-escape',
         'terminal',
+        'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'explorer',

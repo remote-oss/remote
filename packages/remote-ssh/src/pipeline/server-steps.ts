@@ -75,6 +75,8 @@ export interface ServerStepDependencies {
   rejectBindHost: (alias: string, configured: string) => void;
   /** The user name on the host, from the effective ssh config; read when a step needs it, once the lookup has run. */
   remoteUser: () => string;
+  /** Whether this connect's server listens on a socket; the tunnel step's path decides it, once per connect. */
+  socketMode: () => boolean;
   clock: () => number;
   bounds: ServerBounds;
   store: AcceptanceStore;
@@ -136,6 +138,7 @@ const CLI_NOT_USED_REASONS: Readonly<
   noCliSource: 'the editor names no CLI source',
   noBuildForPlatform: 'there is no CLI build for this host',
   termsToAccept: "the server's terms must be accepted first",
+  socketMode: 'the server listens on a socket, which the CLI does not',
 };
 
 /** The host's platform as the templates name it: a musl Linux is `alpine`. */
@@ -203,6 +206,7 @@ export function createServerSteps(
       archiveUrl: '',
       epochMilliseconds: dependencies.clock(),
       bounds: dependencies.bounds,
+      socketMode: dependencies.socketMode(),
       ...changes,
     });
   }
@@ -341,6 +345,7 @@ export function createServerSteps(
                 useExecServerSetting: dependencies.useExecServer,
                 // `localServerDownload` has no manual bootstrap value in this extension.
                 manualBootstrap: false,
+                socketMode: dependencies.socketMode(),
                 cliTemplate: profile.cliDownloadUrlTemplate,
                 sourcesFree: serverFree && cliFree,
               },
@@ -412,7 +417,12 @@ export function createServerSteps(
       startOrReuse(
         lease.channel,
         parametersFor({hostOperatingSystem: host.operatingSystem}),
-        runtimeOptionsFor(settings, dependencies.bounds, licenceAccepted),
+        runtimeOptionsFor(
+          settings,
+          dependencies.bounds,
+          licenceAccepted,
+          dependencies.socketMode(),
+        ),
         dependencies.policy.allowedExtraStartOptions,
         {lockLoop: dependencies.lockLoop, logger: dependencies.logger},
         cancellation,

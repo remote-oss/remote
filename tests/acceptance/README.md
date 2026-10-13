@@ -78,6 +78,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   harness writes before the launch. The tests check the record.
 
 - `terminal`: the same window with `remote.SSH.useLocalServer` off, which is terminal mode, with `suite-terminal/`.
+- `socket`: the same window with `remote.SSH.remoteServerListenOnSocket` on, so the server listens on a socket, with `suite-socket/`.
 
 - `slow`: the same window with `suite-slow/` and a development extension of the workspace kind that takes 15 s to
   activate in the remote extension host (`slow-remote/`, which writes `/tmp/acceptance-slow-started` and

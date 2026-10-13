@@ -265,6 +265,21 @@ describe('the server steps: plan, the CLI path', () => {
     );
   });
 
+  it('F-2410 AC-3: a socket-mode connect plans the direct install even when the CLI could be used', () => {
+    const {result} = planned(CLI_TEMPLATE, {socketMode: () => true});
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('F-2410 AC-3: a socket-mode connect logs why the CLI was not used', () => {
+    const {messages} = planned(CLI_TEMPLATE, {socketMode: () => true});
+    deepStrictEqual(
+      messages.filter(message => message.startsWith('the CLI path')),
+      [
+        'the CLI path was not used: the server listens on a socket, which the CLI does not',
+      ],
+    );
+  });
+
   it('brief §2 row 2: no CLI template plans the direct install', () => {
     const {result} = planned('');
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');

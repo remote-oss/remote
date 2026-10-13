@@ -815,6 +815,32 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     deepStrictEqual(recording.records, []);
   });
 
+  it('F-2410 AC-2: a server on a socket connects with port 0, stores no shared record and warns of nothing', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        start: () =>
+          Promise.resolve({
+            ...STARTED,
+            server: {
+              ...STARTED.server,
+              endpoint: {kind: 'socket', path: '/tmp/code-x'},
+            },
+          }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result ? result.serverPort : result,
+        recording.records,
+        logSink.lines.filter(line => line.level === 'warn'),
+      ],
+      [0, [], []],
+    );
+  });
+
   it('goes on when the shared record cannot be stored', async () => {
     const {recording, options} = setup();
     const result = await connect(
