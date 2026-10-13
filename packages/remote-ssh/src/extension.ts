@@ -21,6 +21,7 @@ import {
   type ResolverEditor,
   resolverEditorOf,
 } from 'lib-authority';
+import {commandBus, createProtocol, systemTimers} from 'lib-companion';
 import {identifierHost} from 'lib-identifiers';
 import {listHosts} from 'lib-ssh';
 import type {Logger} from 'lib-log';
@@ -39,7 +40,12 @@ import {
 import {
   connectCommandEditorOf,
   hostPickPortOf,
+  openerHostOf,
 } from './connect/connect-editor.ts';
+import {
+  mismatchLine,
+  serveSliceEndpoints,
+} from './companion/slice-endpoints.ts';
 import {nodeConfigReader} from './connect/node-config-reader.ts';
 import {connectAssemblyOf} from './connect-ports.ts';
 import {editorOperationsOf} from './editor-operations.ts';
@@ -285,6 +291,40 @@ export async function activate(
       connect.dispose();
     },
   });
+  const companion = createProtocol({
+    // eslint-disable-next-line id-length -- the protocol's option is named bus
+    bus: commandBus(vscode),
+    timers: systemTimers,
+    onVersionMismatch: mismatch => {
+      result.logger.warn(mismatchLine(mismatch));
+    },
+  });
+  const endpoints = serveSliceEndpoints(companion, {
+    listHosts: () => configuredHosts(host),
+    activeConnection: () => connect.activeConnection(),
+    opener: openerHostOf(vscode),
+    logger: result.logger,
+  });
+  context.subscriptions.push({
+    dispose: () => {
+      endpoints.dispose();
+    },
+  });
+}
+
+/** The hosts of the files in effect, read at each call: the host pick's and the companion commands' one reading. */
+function configuredHosts(host: ReturnType<typeof identifierHost>) {
+  return listHosts(
+    textOf(host, 'configFile'),
+    {
+      homeFolder: homedir(),
+      platform: clientPlatformOf(process.platform),
+      ...(process.env.ProgramData === undefined
+        ? {}
+        : {programDataFolder: process.env.ProgramData}),
+    },
+    nodeConfigReader,
+  );
 }
 
 /** A template in the display language. */
@@ -380,18 +420,7 @@ async function registerConnectOf(
       commands: host,
       connectEditor: connectCommandEditorOf(
         vscode,
-        () =>
-          listHosts(
-            textOf(host, 'configFile'),
-            {
-              homeFolder: homedir(),
-              platform: clientPlatformOf(process.platform),
-              ...(process.env.ProgramData === undefined
-                ? {}
-                : {programDataFolder: process.env.ProgramData}),
-            },
-            nodeConfigReader,
-          ),
+        () => configuredHosts(host),
         adapters.hostPick,
       ),
       openExternal: address =>

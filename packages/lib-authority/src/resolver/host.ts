@@ -9,7 +9,11 @@
 import {decodeAuthority} from '../codecs/registry.ts';
 import type {DecodedTarget, Family} from '../codecs/types.ts';
 import type {Connected, Failed} from '../connector/results.ts';
-import {type ConnectionState, ConnectionTracker} from './connection-state.ts';
+import {
+  type ConnectionState,
+  ConnectionTracker,
+  type LastResolve,
+} from './connection-state.ts';
 import {mapFailure} from './failure-mapping.ts';
 
 /** The stages of a connect the user is shown, named by the connector. */
@@ -144,6 +148,8 @@ export interface ResolverHandle {
   /** The window's connection, or nothing before the first resolve starts. */
   currentConnection():
     {decodedTarget: DecodedTarget; state: ConnectionState} | undefined;
+  /** How the last settled resolve of this window ended, from the tracker. */
+  lastResolve(): LastResolve;
   /** Calls `listener` once, when the first resolve of this extension host settles. */
   onFirstResolveSettled(listener: () => void): void;
   /** Stops following the connector, unregisters the resolver and cancels the connect: the window is torn down. */
@@ -371,6 +377,7 @@ export async function registerResolver(
           ? undefined
           : {decodedTarget: current.target, state: current.state};
       },
+      lastResolve: () => tracker.lastResolve(),
       onFirstResolveSettled: listener => {
         if (memory.settled) {
           listener();

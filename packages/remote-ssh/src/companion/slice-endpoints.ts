@@ -1,0 +1,124 @@
+/**
+ * @fileoverview The commands Remote - SSH serves to Remote Explorer: the configured hosts, the window's active remote
+ * and the opening of a window on a host. Each is answered from what the window already knows, shows nothing and
+ * writes no history; a foreign or newer-version argument never reaches a handler. The other commands of the
+ * interface are not registered.
+ */
+
+import {type LastResolve, type OpenerHost, openRemote} from 'lib-authority';
+import {
+  type Protocol,
+  readEnvelope,
+  readOpenRequest,
+  type Registration,
+  SSH_ENDPOINTS,
+  type VersionMismatch,
+  writeActiveRemote,
+  writeEnvelope,
+  writeHostnames,
+} from 'lib-companion';
+import type {Logger} from 'lib-log';
+import type {HostListResult} from 'lib-ssh';
+
+/** What the three endpoints take from the editor and the window. */
+export interface SliceEndpointPorts {
+  /** The hosts of the files in effect, read at each call: the host pick's own reading. */
+  listHosts(): HostListResult;
+  /** The window's connection, as `ConnectRegistration.activeConnection` gives it. */
+  activeConnection(): {hostKey: string; lastResolve: LastResolve} | undefined;
+  /** The editor's commands, for the window opener. */
+  opener: OpenerHost;
+  /** The Remote - SSH log. */
+  logger: Logger;
+}
+
+/** The one log line of a version mismatch. */
+export function mismatchLine(mismatch: VersionMismatch): string {
+  return `${mismatch.commandId}: the other extension uses interface version ${String(mismatch.receivedMajor)}, and Remote - SSH uses version ${String(mismatch.ownMajor)}. Update Remote - SSH and Remote Explorer to matching versions.`;
+}
+
+/** The log line of a host list that couldn't be read. */
+export function hostListLine(file: string, reason: string): string {
+  return `The Remotes view gets no hosts: ${file}: ${reason}`;
+}
+
+/** The names of the configured hosts, or a rejection with the parser's message after one log line. */
+function hostnamesOf(ports: SliceEndpointPorts) {
+  const listing = ports.listHosts();
+  if ('parseError' in listing) {
+    const {file, reason} = listing.parseError;
+    ports.logger.warn(hostListLine(file, reason));
+    throw new Error(`${file}: ${reason}`);
+  }
+  return writeHostnames({hostnames: listing.hosts.map(entry => entry.name)});
+}
+
+/** The window's active remote: connected from the first successful resolve until a resolve fails. */
+function activeRemoteOf(ports: SliceEndpointPorts) {
+  const connection = ports.activeConnection();
+  return connection?.lastResolve === 'succeeded'
+    ? writeActiveRemote({connected: true, hostKey: connection.hostKey})
+    : writeActiveRemote({connected: false});
+}
+
+/** Registers the three endpoints through `protocol`; the result disposes all three. */
+export function serveSliceEndpoints(
+  protocol: Protocol,
+  ports: SliceEndpointPorts,
+): Registration {
+  const registrations = [
+    protocol.serve({
+      commandId: SSH_ENDPOINTS.getConfiguredHostnames.commandId,
+      kind: 'query',
+      read: readEnvelope,
+      handle: () => hostnamesOf(ports),
+      empty: () => writeHostnames({hostnames: []}),
+    }),
+    protocol.serve({
+      commandId: SSH_ENDPOINTS.getActiveSshRemote.commandId,
+      kind: 'query',
+      read: readEnvelope,
+      handle: () => activeRemoteOf(ports),
+      empty: () => writeActiveRemote({connected: false}),
+    }),
+    protocol.serve({
+      commandId: SSH_ENDPOINTS.openRemoteSshTarget.commandId,
+      kind: 'change',
+      read: readOpenRequest,
+      handle: async request => {
+        if (request.hostKey === '') {
+          throw new Error('the host key is empty');
+        }
+        if (request.path !== undefined && request.kind === undefined) {
+          throw new Error('a path needs its kind');
+        }
+        const outcome = await openRemote(
+          ports.opener,
+          `ssh-remote+${request.hostKey}`,
+          request.path !== undefined && request.kind !== undefined
+            ? {
+                path: request.path,
+                pathKind: request.kind,
+                target: request.window,
+              }
+            : {pathKind: 'folder', target: request.window},
+        );
+        if (outcome.kind === 'rejected') {
+          throw new Error(outcome.reason);
+        }
+        return writeEnvelope();
+      },
+    }),
+  ];
+  let disposed = false;
+  return {
+    dispose: () => {
+      if (!disposed) {
+        disposed = true;
+        for (const registration of registrations) {
+          registration.dispose();
+        }
+      }
+    },
+  };
+}

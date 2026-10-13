@@ -500,6 +500,7 @@
   },
   "dependencies": {
     "lib-authority": "workspace:*",
+    "lib-companion": "workspace:*",
     "lib-forwarding": "workspace:*",
     "lib-helper": "workspace:*",
     "lib-host": "workspace:*",
