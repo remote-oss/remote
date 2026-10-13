@@ -29,7 +29,9 @@ is the initial model's shown labels, in order. A test reads the hosts and the tw
 
 **`filePick`:** `ScriptEntry {surface: 'filePick'; match: string; answer: {label: string} | 'dismiss'}`, matched on
 the placeholder (`Select SSH configuration file to update`, or `Edit custom SSH configuration file` when one is
-configured). `{label}` takes the row with that shown label: a file's path, `Settings` or `Help`. The record line is like
+configured). The run always sets `remote.SSH.configFile` to its `ssh_config`, so in the run the pick is always the
+custom-file one: S047 `Edit custom SSH configuration file`, with the rows [the configured file, `Settings`, `Help`].
+`{label}` takes the row with that shown label: a file's path, `Settings` or `Help`. The record line is like
 `hostPick`'s: placeholder, answer and `items`. `config-file-editor.ts`'s `pickFile` goes through a `FilePickPort` with
 an editor adapter (today's `pickOne` call, moved) and a scripted one.
 
@@ -63,11 +65,11 @@ Two capability rows in `tests/acceptance/windows/two-windows.test.ts`:
 
 | Name | Expected |
 |---|---|
-| `D-85: the configuration-file pick of Open SSH Configuration File... is answered from the script` | with the entry `{surface: 'filePick', match: 'Select SSH configuration file', answer: 'dismiss', window: 'c'}`, `inWindow('c', 'opensshremotes.openConfigFile')` resolves; the record has one `filePick` line of window `c` whose `items` include the run's `<run>/ssh_config` path, `Settings` and `Help` |
+| `D-85: the configuration-file pick of Open SSH Configuration File... is answered from the script` | with the entry `{surface: 'filePick', match: 'Edit custom SSH configuration file', answer: 'dismiss', window: 'c'}`, `inWindow('c', 'opensshremotes.openConfigFile')` resolves; the record has one `filePick` line of window `c` whose `items` include the run's `<run>/ssh_config` path, `Settings` and `Help` |
 | `D-85: the host pick of Kill Local Connection Server is answered from the script` | with the entry `{surface: 'hostPick', match: 'Select configured SSH host', answer: 'dismiss', window: 'c'}`, `inWindow('c', 'opensshremotes.cleanLocalServer')` resolves; the record has one `hostPick` line of window `c` whose `items` include `harness`, `Add New SSH Host...` and `Configure SSH Hosts...` |
 
 remote-ssh stays at 100/100/100.
 
 ## 4. Review
 
-PR title `tests: the harness answers the host pick (card tooling-25)`. themis or triton reviews; athena checks the port.
+PR title `tests: the harness answers the host pick and the configuration-file pick (card tooling-25)`. themis or triton reviews; athena checks the port.
