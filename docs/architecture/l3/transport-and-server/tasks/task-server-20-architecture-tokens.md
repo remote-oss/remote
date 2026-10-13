@@ -113,7 +113,10 @@ s390x, riscv64 and loong64. Three places decide by a fixed list:
   - (F-2401.AC-20) a server-archive 404 with step `productTemplate` gives S146, with `builtInTable` S146, and the log
     detail names the token; with `override`, S043;
   - a 503, and any non-404 failure, with a built-in step gives S043;
-  - (F-2401.AC-21) a token whose download works: no S146 on the path, the existing install rows;
+  - (F-2401.AC-21) a connect over the pipeline fixture whose host reports `ppc64le` and whose server download succeeds:
+    the connect proceeds to the start step, and no failure with S146 is produced (a unit row in `connect.test.ts`);
+  - (F-2401.AC-20) the same connect with the server download failing 404 from step `builtInTable`: the failure has
+    reason S146, the start step never runs, and the log detail names `ppc64le`;
   - (F-3902 rule 5) a CLI-path failure caused by a CLI-archive 404 falls back to the direct install.
 
 **Acceptance row** (the VSCodium failure cases):
@@ -141,4 +144,3 @@ themis or triton reviews; athena gives the design check.
 2. The probe doesn't take `uname` from `PATH`, so the acceptance row's stub can't reach it.
 3. A downloader prints no recognisable 404 text with the flags kept (for example BusyBox wget without `-S`). Report its
    exact stderr, and don't add `-S` to wget by guess.
-4. The CLI path has no download-status channel at all. Report what it has.
