@@ -15,6 +15,12 @@ On the CLI path, one connection token serves every connect to a host: the first 
 token it was first given. Deleting that file while the server runs makes the next connect's token one the server
 refuses, until that server ends and the next connect starts one with the new token.
 
+Kill and uninstall stop the user's server processes, those of a direct install under `bin/` and those of the CLI path
+under `cli/servers/`, and never the CLI's own processes (`command-shell`, its supervisor), which run the CLI file. Kill
+removes `bin/` and keeps `cli/servers/`, `cli/connection-token` (and the CLI's own `cli/agent-host-token`), the data folder's other contents, the extensions and
+the logs; uninstall removes the whole data folder. A deleted `cli/connection-token` is recovered by kill: it ends the
+server that holds the old token, and the next connect makes a fresh token and a fresh server.
+
 It is bundled into the extensions that install a server and never published on its own.
 
 ## For maintainers

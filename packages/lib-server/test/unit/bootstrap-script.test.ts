@@ -1634,6 +1634,218 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(existsSync(marker), false);
     });
 
+    /** The marker file a process writes when it is sent TERM. */
+    function markerOf(name: string): string {
+      return path.join(path.dirname(host.callsFile), `got-signal-${name}`);
+    }
+
+    /** The script of a process that records the TERM it gets and otherwise waits. */
+    function trapScript(marker: string): string {
+      return `trap 'echo got >"${marker}"; exit 0' TERM; while :; do sleep 1; done`;
+    }
+
+    /** Starts a shell as `program` with these arguments after its script; returns the marker its TERM writes. */
+    function started(
+      name: string,
+      program: string,
+      commandArguments: readonly string[] = [],
+    ): string {
+      const marker = markerOf(name);
+      const child = spawn(
+        '/bin/sh',
+        ['-c', trapScript(marker), ...commandArguments],
+        {
+          env: host.environment,
+          stdio: 'ignore',
+          detached: true,
+          argv0: program,
+        },
+      );
+      children.push(child);
+      return marker;
+    }
+
+    /** The launcher's script, under cli/servers/, as the server's own is. */
+    function launcherScript(): string {
+      return path.join(
+        dataFolder(),
+        'cli',
+        'servers',
+        'Stable-abc123',
+        'server',
+        'bin',
+        'launcher',
+      );
+    }
+
+    /**
+     * Starts `script` with a shell, named `program` in the command line, so that the script is its argv[1]; the script
+     * records the TERM it gets. Returns the marker.
+     */
+    function startedScript(
+      name: string,
+      program: string,
+      script: string,
+    ): string {
+      const marker = markerOf(name);
+      mkdirSync(path.dirname(script), {recursive: true});
+      writeFileSync(script, trapScript(marker));
+      children.push(
+        spawn('/bin/sh', [script], {
+          env: host.environment,
+          stdio: 'ignore',
+          detached: true,
+          argv0: program,
+        }),
+      );
+      return marker;
+    }
+
+    /** Runs a kill, gives the signals time to arrive, and says which of the markers were written. */
+    function afterKill(markers: Record<string, string>): string[] {
+      runScript(host, single('kill'), parametersFor());
+      spawnSync('/bin/sleep', ['1.5']);
+      return Object.keys(markers).filter(name =>
+        existsSync(markers[name] ?? ''),
+      );
+    }
+
+    function serverFile(): string {
+      return `${dataFolder()}/cli/servers/Stable-abc123/server/node`;
+    }
+
+    it('F-2411.BR-3: kill stops the server of the CLI path, which runs a file under cli/servers/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {server: started('server', serverFile())};
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), ['server']);
+    });
+
+    it("F-2411.BR-3: kill stops the server's launcher, a shell running a script under cli/servers/", () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        launcher: startedScript('launcher', 'sh', launcherScript()),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), ['launcher']);
+    });
+
+    it('F-2412 AC-27: kill leaves a sleep that only names a path under cli/servers/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        sleeper: started('sleeper', 'sleep', ['30', serverFile()]),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2412 AC-27: kill leaves an editor that only names a path under cli/servers/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {editor: started('editor', 'vim', [serverFile()])};
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2412 AC-27: kill leaves a program that is not a shell and has a script under cli/servers/ as its first argument', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        editor: startedScript('editor', 'vim', launcherScript()),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2412 AC-27: kill leaves a shell that is not one of the four, running a script under cli/servers/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        fish: startedScript('fish', '/usr/bin/fish', launcherScript()),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2412 AC-27: kill leaves a program whose file only contains the path under cli/servers/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        copy: started('copy', `/copy${serverFile()}`),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2412 AC-27: kill leaves a shell whose script only contains the path under cli/servers/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        copy: startedScript(
+          'copy',
+          'sh',
+          path.join(dataFolder(), 'copy', launcherScript()),
+        ),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2412 AC-27: kill leaves a node that runs another file', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        other: started('other', '/usr/bin/node', ['/home/user/app.js']),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it("F-2411.BR-3: kill leaves the CLI's command-shell and its supervisor", () => {
+      runScript(host, single('install'), parametersFor());
+      const cliFile = `${dataFolder()}/codium-cli`;
+      const markers = {
+        shell: started('shell', cliFile, [
+          'command-shell',
+          '--cli-data-dir',
+          `${dataFolder()}/cli`,
+        ]),
+        supervisor: started('supervisor', cliFile, [
+          '--cli-data-dir',
+          `${dataFolder()}/cli`,
+          'agent',
+          'host',
+        ]),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2411.BR-4: kill keeps cli/servers/, the connection token and the agent-host token, and removes bin/', () => {
+      runScript(host, single('install'), parametersFor());
+      mkdirSync(path.join(dataFolder(), 'cli', 'servers', 'Stable-abc123'), {
+        recursive: true,
+      });
+      for (const token of ['connection-token', 'agent-host-token']) {
+        writeFileSync(path.join(dataFolder(), 'cli', token), 'token');
+      }
+      runScript(host, single('kill'), parametersFor());
+      deepStrictEqual(
+        [
+          existsSync(
+            path.join(dataFolder(), 'cli', 'servers', 'Stable-abc123'),
+          ),
+          existsSync(path.join(dataFolder(), 'cli', 'connection-token')),
+          existsSync(path.join(dataFolder(), 'cli', 'agent-host-token')),
+          existsSync(path.join(dataFolder(), 'bin')),
+        ],
+        [true, true, true, false],
+      );
+    });
+
+    it('F-2412.BR-3: uninstall stops the server of the CLI path too', () => {
+      runScript(host, single('install'), parametersFor());
+      const marker = started('server', serverFile());
+      spawnSync('/bin/sleep', ['0.5']);
+      runScript(host, single('uninstall'), parametersFor());
+      spawnSync('/bin/sleep', ['1.5']);
+      deepStrictEqual(existsSync(marker), true);
+    });
+
     it('V1: a fact value with a line end cannot forge a result line', () => {
       const block = blockOf(host, single('probe'), parametersFor(), {
         environment: {DISPLAY: ':0\nstatus=Ok\nserver.port=1'},

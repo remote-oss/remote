@@ -240,13 +240,53 @@ export const PROCESS_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
-/** Stop the servers whose process ids are recorded in the data folder; a process that is not a server is left alone. */
+/**
+ * Whether a process is a server of the CLI path: the file it runs is under `cli/servers/`, or it is a POSIX shell
+ * running a script there, as the server's launcher does. The arguments of the command line are read as fields, so that a
+ * program that only names a path under `cli/servers/`, such as `tail -f` or an editor, is not taken for a server.
+ */
+export const CLI_PROCESS_FUNCTIONS: readonly string[] = [
+  'is_cli_server_process() {',
+  "  case $1 in ''|*[!0-9]*|0|1) return 1 ;; esac",
+  '  [ -r "/proc/$1/cmdline" ] || return 1',
+  "  CLI_FIELDS=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | head -n 2)",
+  '  CLI_PROGRAM=$(printf \'%s\\n\' "$CLI_FIELDS" | sed -n 1p)',
+  '  CLI_FIRST=$(printf \'%s\\n\' "$CLI_FIELDS" | sed -n 2p)',
+  '  case $CLI_PROGRAM in',
+  '    "$DATA_DIR/cli/servers/"*) return 0 ;;',
+  '  esac',
+  '  case ${CLI_PROGRAM##*/} in',
+  '    sh|bash|dash|ash)',
+  '      case $CLI_FIRST in',
+  '        "$DATA_DIR/cli/servers/"*) return 0 ;;',
+  '      esac',
+  '      ;;',
+  '  esac',
+  '  return 1',
+  '}',
+];
+
+/**
+ * Stop the servers of the data folder: those of a direct install, whose process ids are recorded in it and whose command
+ * lines hold `bin/`, and those of the CLI path, which record nothing and are found by their command lines holding
+ * `cli/servers/`. A process that is not a server, such as the CLI's `command-shell` and its supervisor, which run the
+ * CLI file, is left alone.
+ */
 export const STOP_FUNCTIONS: readonly string[] = [
   'stop_servers() {',
   '  for PID_FILE in "$DATA_DIR"/.*.pid; do',
   '    [ -f "$PID_FILE" ] || continue',
   '    SERVER_PID=$(cat "$PID_FILE" 2>/dev/null)',
   '    is_server_process "$SERVER_PID" "$DATA_DIR/bin/" || continue',
+  '    if have pkill; then',
+  '      pkill -P "$SERVER_PID" 2>/dev/null',
+  '    fi',
+  '    kill "$SERVER_PID" 2>/dev/null',
+  '  done',
+  '  for PROC_DIR in /proc/[0-9]*; do',
+  '    SERVER_PID=${PROC_DIR#/proc/}',
+  '    [ "$SERVER_PID" != "$$" ] || continue',
+  '    is_cli_server_process "$SERVER_PID" || continue',
   '    if have pkill; then',
   '      pkill -P "$SERVER_PID" 2>/dev/null',
   '    fi',
