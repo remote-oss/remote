@@ -273,6 +273,8 @@ describe('startHostContainer (card tooling-10)', () => {
               'AUTHORIZED_KEY=ssh-ed25519 AAAA acceptance',
               '--env-file',
               path.join(runFolder, 'host.env'),
+              '--cap-add',
+              'NET_ADMIN',
               '--publish',
               '127.0.0.1::22',
               'remote-oss-acceptance-host:77-2',
