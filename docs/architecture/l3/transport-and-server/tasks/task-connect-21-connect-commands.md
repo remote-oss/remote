@@ -33,8 +33,9 @@ editor adapters live with the existing ones (`surfaces/editor-adapters.ts`).
    <client locations>, <the node reader>), typedText)`. The rows and the placeholder are the model's string ids,
    resolved through the string table. The quick pick stays open when focus moves (`ignoreFocusOut: true`), as F-2301
    §3.1 says; check the spec's 5.0 for anything this card leaves out, and follow the spec.
-3. A listing that is a parse error shows F-2201's parse-error notice (the spec's string) and the picker with the fixed
-   rows only.
+3. A listing that is a parse error opens **no picker** (F-2301 7.E7, F-2201 AC-19 and AC-32). The handler throws an
+   `Error` whose message is the parser's `<file>: <reason>`, so core shows its "Command '<title>' resulted in an
+   error" dialog, one of the two forms the spec allows (hestia on #529).
 4. `outcomeOfPick(item)`:
    - `{connect: target}` opens `ssh-remote+<encodeAuthority(target)>` with lib-authority's `openRemote`, an empty
      window (no folder), in the window `windowTargetOf(source)` gives;
@@ -60,7 +61,7 @@ Unit rows (`test/unit/connect-commands.test.ts`), one assertion each, named by t
   - `{host}` argument → no pick;
   - typed `user@host` → its target;
   - the configure row → `openConfigFile`;
-  - parse error → the notice and the fixed rows;
+  - parse error → the handler throws `<file>: <reason>` and no pick opens;
   - Escape → nothing.
 - **The active-host command:** available → the active host in a new window; unavailable → nothing.
 - **Kill:** the picked host's `killConnection`; its notices; terminal mode → nothing.
