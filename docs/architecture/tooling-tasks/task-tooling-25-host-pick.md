@@ -18,8 +18,10 @@ and F-2204 can't be driven either. Builder: hestia or iris (hermes assigns). Siz
 
 - **`{label}`:** the row of the initial model whose shown label is `label`; a fixed row (`Add New SSH Host...`,
   `Configure SSH Hosts...`) is matched by its translated text. No such row fails closed.
-- **`{typed}`:** the first row of `modelOf(typed)`. That's what Enter takes in the real pick, whose first row is
-  focused after every change of the text.
+- **`{typed}`:** the `typed` row (`➤ <text>`) of `modelOf(typed)`. F-2301 6.1 step 2 says the row focused after typing
+  is the first one after core's filter and match sort. `modelOf` is unfiltered and lists the hosts first, so its first
+  row can be a host such as `harness` for `harness@127.0.0.1`. The script doesn't model core's filter: a `{typed}`
+  answer always takes the typed row, and fails closed when there's none (athena on #567).
 - **`'dismiss'`:** nothing, as Escape gives.
 
 **The record line:** `question` is the placeholder; `answer` is the label taken, the typed text, or `dismiss`; `items`
@@ -48,17 +50,20 @@ an editor adapter (today's `pickOne` call, moved) and a scripted one.
 Unit rows in `scripted-adapters.test.ts` and `connect-editor.test.ts`:
 - a `{label}` answer gives the host row;
 - a `{label}` answer gives a fixed row by its translated text;
-- a `{typed}` answer gives `modelOf(typed)`'s first row;
+- a `{typed}` answer gives `modelOf(typed)`'s `typed` row even when a host row comes first (`harness@127.0.0.1` with
+  `harness` listed);
+- a `{typed}` answer whose model has no typed row fails closed;
 - `dismiss` gives nothing;
 - an unknown label fails closed and records `matched: false`;
 - the record line carries `items`;
 - the editor adapter keeps today's rows, moved;
 - `filePick` answered by a path, by `Settings`, and by `dismiss`, with the record line's `items`.
 
-One capability row in `tests/acceptance/windows/two-windows.test.ts`:
+Two capability rows in `tests/acceptance/windows/two-windows.test.ts`:
 
 | Name | Expected |
 |---|---|
+| `D-85: the configuration-file pick of Open SSH Configuration File... is answered from the script` | with the entry `{surface: 'filePick', match: 'Select SSH configuration file', answer: 'dismiss', window: 'c'}`, `inWindow('c', 'opensshremotes.openConfigFile')` resolves; the record has one `filePick` line of window `c` whose `items` include the run's `<run>/ssh_config` path, `Settings` and `Help` |
 | `D-85: the host pick of Kill Local Connection Server is answered from the script` | with the entry `{surface: 'hostPick', match: 'Select configured SSH host', answer: 'dismiss', window: 'c'}`, `inWindow('c', 'opensshremotes.cleanLocalServer')` resolves; the record has one `hostPick` line of window `c` whose `items` include `harness`, `Add New SSH Host...` and `Configure SSH Hosts...` |
 
 remote-ssh stays at 100/100/100.
