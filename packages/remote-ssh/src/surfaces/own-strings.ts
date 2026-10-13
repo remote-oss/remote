@@ -22,6 +22,7 @@ export const OWN_TEMPLATES = {
   S063: 'Enter SSH Connection Command',
   S078: 'Host added!',
   S099: 'Open Config',
+  S168: '{1} is not a valid host to bind',
   configFileNotAbsolute:
     'remote.SSH.configFile must be an absolute path or start with ~/: "{0}"',
 } as const;

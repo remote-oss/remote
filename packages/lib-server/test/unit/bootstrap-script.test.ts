@@ -1250,8 +1250,10 @@ describe('the POSIX bootstrap script', () => {
     });
 
     it('F-2409.7.E3: a server that exits with another code is ServerFailedToStart', () => {
+      const parameters = parametersFor();
+      parameters.start.readySeconds = 1;
       deepStrictEqual(
-        statusOf(host, single('start'), parametersFor(), {
+        statusOf(host, single('start'), parameters, {
           environment: {SERVER_EXIT: '1'},
         }),
         'ServerFailedToStart',

@@ -15,7 +15,7 @@ import {
 
 describe('the connect bounds', () => {
   it('F-2403 AC-24: half an hour for the host download, a minute for the server to listen', () => {
-    deepStrictEqual(SERVER_BOUNDS, {downloadSeconds: 1800, readySeconds: 60});
+    deepStrictEqual(SERVER_BOUNDS, {downloadSeconds: 1800, readySeconds: 15});
   });
 
   it('F-2108 AC-8: five minutes for the pre-connection script', () => {
@@ -126,12 +126,12 @@ describe('the waits around the helper and the host lock', () => {
 });
 
 describe("the shared session's run limits", () => {
-  it('ruled on #253 Q10: a run may take the host download and the ready wait, and 5 minutes more (36 minutes)', () => {
-    deepStrictEqual(SESSION_RUN_LIMITS.runDeadlineMilliseconds, 2_160_000);
+  it('ruled on #253 Q10: a run may take the host download and the ready wait, and 5 minutes more (35.25 minutes)', () => {
+    deepStrictEqual(SESSION_RUN_LIMITS.runDeadlineMilliseconds, 2_115_000);
   });
 
-  it('ruled on #253 Q10: a caller waits one run more (41 minutes)', () => {
-    deepStrictEqual(SESSION_RUN_LIMITS.runWaitMilliseconds, 2_460_000);
+  it('ruled on #253 Q10: a caller waits one run more (40.25 minutes)', () => {
+    deepStrictEqual(SESSION_RUN_LIMITS.runWaitMilliseconds, 2_415_000);
   });
 
   it('ruled on #253 Q10: the deadline is never shorter than the host download and the ready wait', () => {

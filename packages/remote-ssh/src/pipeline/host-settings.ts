@@ -5,6 +5,7 @@
  * none of them writes a setting.
  */
 
+import {isAcceptedBindHost, rangeProblem} from 'lib-server';
 import type {SshTarget} from 'lib-ssh';
 import {parseTypedHost} from '../connect/typed-input.ts';
 import type {ConnectTarget} from './steps.ts';
@@ -85,6 +86,32 @@ export function entryText(setting: unknown, alias: string): string {
   return typeof entry === 'string' ? entry : '';
 }
 
+/** The bind host a host's entry decides, and the entry as written when it was refused and the user is told. */
+export interface BindHostChoice {
+  bindHost: string;
+  /** The configured value, as text, of an entry that was replaced by the loopback address with a notice. */
+  rejected?: string;
+}
+
+const LOOPBACK = '127.0.0.1';
+
+/**
+ * The bind host for the alias. No entry, and an entry that is a number, a boolean, `null` or an array, give the loopback
+ * address in silence. A text the library accepts is used as written. Any other text, the empty one included, and an
+ * object give the loopback address and are reported as written, an object as its JSON text.
+ */
+export function bindHostOf(setting: unknown, alias: string): BindHostChoice {
+  const entry = exactEntry(setting, alias);
+  if (typeof entry === 'string') {
+    return isAcceptedBindHost(entry)
+      ? {bindHost: entry}
+      : {bindHost: LOOPBACK, rejected: entry};
+  }
+  return isMap(entry)
+    ? {bindHost: LOOPBACK, rejected: JSON.stringify(entry)}
+    : {bindHost: LOOPBACK};
+}
+
 /** The proxy entry that applies: a text for all hosts, or the alias entry, else the `*` entry; empty means none. */
 export function effectiveProxyText(setting: unknown, alias: string): string {
   if (typeof setting === 'string') {
@@ -126,10 +153,12 @@ export interface RawServerSettings {
 /** What the settings say about one host, in the form the server steps use. */
 export interface HostServerSettings {
   installFolder: InstallFolder;
-  /** The bind host for the alias, or `127.0.0.1`. */
-  bindHost: string;
+  /** The bind host for the alias, or `127.0.0.1`, and the entry that was refused. */
+  bindHost: BindHostChoice;
   /** The port range text for the alias, or the empty text for a random free port. */
   portRange: string;
+  /** What is wrong with the range entry as written, if anything. */
+  rangeProblem: 'reversed' | 'malformed' | undefined;
   httpProxy: string;
   httpsProxy: string;
   graceSeconds: number;
@@ -139,8 +168,6 @@ export interface HostServerSettings {
   lockfilesInTmp: boolean;
   useConfigurationFiles: boolean;
 }
-
-const LOOPBACK = '127.0.0.1';
 
 /** The extension entries that are texts, in the order written; any other value is no entry. */
 function extensionEntries(setting: unknown): string[] {
@@ -156,8 +183,11 @@ export function hostServerSettings(
 ): HostServerSettings {
   return {
     installFolder: installFolderFor(reported.serverInstallPath, alias),
-    bindHost: entryText(reported.bindHost, alias) || LOOPBACK,
+    bindHost: bindHostOf(reported.bindHost, alias),
     portRange: entryText(reported.serverPickPortsFromRange, alias),
+    rangeProblem: rangeProblem(
+      exactEntry(reported.serverPickPortsFromRange, alias),
+    ),
     httpProxy: effectiveProxyText(reported.httpProxy, alias),
     httpsProxy: effectiveProxyText(reported.httpsProxy, alias),
     graceSeconds: graceSecondsOf(reported.reconnectionGraceTime),

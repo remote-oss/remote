@@ -703,6 +703,99 @@ describe('the server steps: validate and the names', () => {
     });
   });
 
+  it('F-2409 7.E1: validate shows the notice for a refused bind host and goes on', () => {
+    const rejected: Array<[string, string]> = [];
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({bindHost: {devbox: 'not a host!'}}),
+        rejectBindHost: (alias, configured) => {
+          rejected.push([alias, configured]);
+        },
+      }),
+    );
+    deepStrictEqual(
+      [steps.validate(INPUT), rejected],
+      [{kind: 'done', value: undefined}, [['devbox', 'not a host!']]],
+    );
+  });
+
+  it('F-2409 7.E1: validate shows no notice for an accepted bind host', () => {
+    const rejected: string[] = [];
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({bindHost: {devbox: '10.99.99.99'}}),
+        rejectBindHost: configured => {
+          rejected.push(configured);
+        },
+      }),
+    );
+    steps.validate(INPUT);
+    deepStrictEqual(rejected, []);
+  });
+
+  it('F-2409 7.E6: a reversed range fails before ssh with the reference reason', () => {
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({
+          serverPickPortsFromRange: {devbox: '5000-4000'},
+        }),
+      }),
+    );
+    deepStrictEqual(steps.validate(INPUT), {
+      kind: 'failed',
+      failure: {
+        kind: 'invalidSetting',
+        reason: {id: 'reversedPortRange', values: []},
+      },
+    });
+  });
+
+  for (const entry of ['45030', 'abc', 70000, null, {}]) {
+    it(`F-2409 7.E7: the range ${JSON.stringify(entry)} fails with no reason`, () => {
+      const steps = createServerSteps(
+        dependencies({
+          settings: settingsWith({
+            serverPickPortsFromRange: {devbox: entry},
+          }),
+        }),
+      );
+      deepStrictEqual(steps.validate(INPUT), {
+        kind: 'failed',
+        failure: {kind: 'invalidSetting'},
+      });
+    });
+  }
+
+  for (const entry of ['45000-45010', '', undefined]) {
+    it(`F-2409 BR-2: the range ${JSON.stringify(entry)} passes validate`, () => {
+      const steps = createServerSteps(
+        dependencies({
+          settings: settingsWith({
+            serverPickPortsFromRange: {devbox: entry},
+          }),
+        }),
+      );
+      deepStrictEqual(steps.validate(INPUT), {kind: 'done', value: undefined});
+    });
+  }
+
+  it('F-2409 7.E6: a range with a problem is reported before a bind host is announced', () => {
+    const rejected: string[] = [];
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({
+          bindHost: {devbox: 'not a host!'},
+          serverPickPortsFromRange: {devbox: 'abc'},
+        }),
+        rejectBindHost: configured => {
+          rejected.push(configured);
+        },
+      }),
+    );
+    steps.validate(INPUT);
+    deepStrictEqual(rejected, []);
+  });
+
   it('F-2205 7.E1: a host that is an option name fails as an invalid setting', () => {
     const steps = createServerSteps(dependencies());
     deepStrictEqual(

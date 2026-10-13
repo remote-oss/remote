@@ -122,6 +122,7 @@ export function dependencies(
       acceptsBaseUrl: false,
       placeholders: BASE_PLACEHOLDERS,
     },
+    rejectBindHost: () => undefined,
     remoteUser: () => 'alex',
     clock: () => 1700000000000,
     bounds: {downloadSeconds: 60, readySeconds: 20},
@@ -221,5 +222,6 @@ export function surfacesOf(
     presenter: {present: () => Promise.resolve('handled')},
     downloadProgress: SILENT_PROGRESS,
     revealLog,
+    rejectBindHost: () => undefined,
   };
 }

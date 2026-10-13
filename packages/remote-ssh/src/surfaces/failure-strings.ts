@@ -51,6 +51,8 @@ export type FailureStringId =
   | 'S127'
   | 'S129'
   | 'S130'
+  | 'S135'
+  | 'S136'
   | 'S131'
   | 'S137'
   | 'S140'
@@ -61,6 +63,7 @@ export type FailureStringId =
   | 'S166'
   | 'S167'
   | 'installPathProvided'
+  | 'reversedPortRange'
   | 'templateNotHttp'
   | 'templateUnknownPlaceholder'
   | 'trustRefused';
@@ -110,6 +113,8 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S129: 'Setting up SSH Host {0}',
   S130: 'Setting up SSH tunnel',
   S131: 'Settings',
+  S135: 'The VS Code Server failed to start',
+  S136: 'The VS Code Server terminated due to presence of CVE-2020-1416. Check the Remote-SSH output channel for more details.',
   S137: 'The connection timed out',
   S140: 'The operation timed out',
   S142: 'The process tried to write to a nonexistent pipe',
@@ -119,6 +124,8 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S166: 'specify a custom configuration file',
   S167: '{0} Add New SSH Host...',
   installPathProvided: 'Provided: "{0}"',
+  // The fixed text of this dialog reason; its misspelling is kept on purpose.
+  reversedPortRange: 'Invaid port range set',
   templateNotHttp: 'it does not give an http or https address',
   templateUnknownPlaceholder: 'the placeholder {0} is not known',
   trustRefused: 'Got bad result from install script',

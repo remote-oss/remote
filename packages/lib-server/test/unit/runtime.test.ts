@@ -9,7 +9,7 @@ import {
   type HostLockLoop,
   isAcceptedBindHost,
   isExtensionIdentifier,
-  isReversedRange,
+  rangeProblem,
   RESULT_BEGIN,
   RESULT_END,
   type RuntimeOptions,
@@ -157,22 +157,48 @@ describe('the bind host check (F-2409 7.E1)', () => {
   }
 });
 
-describe('the port range check (F-2409 7.E6, 7.E7)', () => {
-  it('F-2409.7.E6: 5000-4000 is reversed', () => {
-    deepStrictEqual(isReversedRange('5000-4000'), true);
-  });
+describe('the port range check (F-2409 7.E6 to 7.E8)', () => {
+  const REVERSED = ['5000-4000', '10-5', '65535-1'];
+  for (const range of REVERSED) {
+    it(`F-2409.7.E6: ${range} is reversed`, () => {
+      deepStrictEqual(rangeProblem(range), 'reversed');
+    });
+  }
 
-  for (const range of [
-    '4000-5000',
-    '5000-5000',
-    '8080',
-    '',
+  const MALFORMED: unknown[] = [
+    'abc',
+    '45030',
+    '70000-70010',
+    '0-10',
+    '1-65536',
     'x-y',
     '5-',
     '1-2-3',
-  ]) {
-    it(`F-2409.7.E7: ${JSON.stringify(range)} is not reversed, and goes to the host as written`, () => {
-      deepStrictEqual(isReversedRange(range), false);
+    '-5',
+    45030,
+    true,
+    null,
+    {},
+    [],
+  ];
+  for (const entry of MALFORMED) {
+    it(`F-2409.7.E7: ${JSON.stringify(entry)} is malformed`, () => {
+      deepStrictEqual(rangeProblem(entry), 'malformed');
+    });
+  }
+
+  const WELL_FORMED: unknown[] = [
+    '4000-5000',
+    '5000-5000',
+    '1-1',
+    '65535-65535',
+    '1-65535',
+    '',
+    undefined,
+  ];
+  for (const entry of WELL_FORMED) {
+    it(`F-2409.BR-2: ${JSON.stringify(entry)} passes`, () => {
+      deepStrictEqual(rangeProblem(entry), undefined);
     });
   }
 });
@@ -340,6 +366,36 @@ describe('startOrReuse (V7), answers mapped', () => {
 
   it('F-2409.BR-9: a block of ServerFailedToStart is serverStart', async () => {
     const outcome = await start(recording(lines('ServerFailedToStart')));
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'serverStart'},
+    );
+  });
+
+  it('F-2409.6.2: a server that found no free port in its range is serverStart with that cause', async () => {
+    const outcome = await start(
+      recording(lines('ServerFailedToStart', 'server.failure=noFreePort')),
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'serverStart', cause: 'noFreePort'},
+    );
+  });
+
+  it('F-2409.AC-30: a server that ended for CVE-2020-1416 is serverStart with that cause', async () => {
+    const outcome = await start(
+      recording(lines('ServerFailedToStart', 'server.failure=cveTerminated')),
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'serverStart', cause: 'cveTerminated'},
+    );
+  });
+
+  it('F-2409.BR-9: another value of the failure fact gives no cause', async () => {
+    const outcome = await start(
+      recording(lines('ServerFailedToStart', 'server.failure=something')),
+    );
     deepStrictEqual(
       outcome.kind === 'failed' ? outcome.failure : outcome.kind,
       {kind: 'serverStart'},

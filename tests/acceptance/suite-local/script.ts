@@ -41,6 +41,8 @@ export interface RecordLine {
   time: number;
   /** The labels the failure dialog was shown with, in order; only the lines of a `failureDialog` surface have it. */
   buttons?: string[];
+  /** The labels of the rows the mitigation pick was shown with, in order; only the lines of a `mitigationPick` surface have it. */
+  items?: string[];
 }
 
 /** The lines of a record file; a record not written yet is empty. */

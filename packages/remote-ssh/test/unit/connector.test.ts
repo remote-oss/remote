@@ -25,6 +25,7 @@ function connectorOptions(
     preconnectMilliseconds: options.preconnectMilliseconds,
     logger: options.logger,
     serve: options.serve,
+    useExecServer: options.useExecServer,
   };
 }
 

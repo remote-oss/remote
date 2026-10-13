@@ -78,5 +78,9 @@
   "Connect": "Connect",
   "Enter SSH Connection Command": "Enter SSH Connection Command",
   "Host added!": "Host added!",
-  "Open Config": "Open Config"
+  "Open Config": "Open Config",
+  "The VS Code Server failed to start": "The VS Code Server failed to start",
+  "The VS Code Server terminated due to presence of CVE-2020-1416. Check the Remote-SSH output channel for more details.": "The VS Code Server terminated due to presence of CVE-2020-1416. Check the Remote-SSH output channel for more details.",
+  "Invaid port range set": "Invaid port range set",
+  "{1} is not a valid host to bind": "{1} is not a valid host to bind"
 }

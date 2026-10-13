@@ -60,6 +60,8 @@ export interface CliConnectContext {
   logger: Logger;
   /** The editor's commit and quality, which `serve` names: the CLI expands its server template only for its own. */
   serve: {commit: string; quality: string};
+  /** The value of `remote.SSH.useExecServer`, which the reason of a failed start depends on. */
+  useExecServer: boolean;
   /** Builds the window's failure from a detail, as the connect does for its own failures. */
   failedOf: (detail: FailureDetail) => Failed;
   cancellation: AbortSignal;
@@ -101,7 +103,12 @@ export async function connectOverCli(
     cancellation,
   );
   if (started.kind === 'failed') {
-    return {kind: 'fallback', cause: causeOf(ofStart(started.failure))};
+    return {
+      kind: 'fallback',
+      cause: causeOf(
+        ofStart(started.failure, {useExecServer: context.useExecServer}),
+      ),
+    };
   }
   const processId = started.server.processId;
   function stop(): Promise<void> {

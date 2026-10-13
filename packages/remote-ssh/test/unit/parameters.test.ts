@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {SSH_POLICY} from 'lib-server';
 import {
+  bindHostOf,
   hostServerSettings,
   type HostServerSettings,
   type RawServerSettings,
@@ -59,8 +60,9 @@ describe('the settings for a host', () => {
   it('are the manifest defaults when nothing is set', () => {
     deepStrictEqual(settingsOf(), {
       installFolder: {kind: 'default'},
-      bindHost: '127.0.0.1',
+      bindHost: {bindHost: '127.0.0.1'},
       portRange: '',
+      rangeProblem: undefined,
       httpProxy: '',
       httpsProxy: '',
       graceSeconds: 0,
@@ -87,8 +89,9 @@ describe('the settings for a host', () => {
       }),
       {
         installFolder: {kind: 'folder', folder: '/data/servers'},
-        bindHost: '0.0.0.0',
+        bindHost: {bindHost: '0.0.0.0'},
         portRange: '4000-5000',
+        rangeProblem: undefined,
         httpProxy: 'http://star:1',
         httpsProxy: 'http://all:2',
         graceSeconds: 300,
@@ -316,5 +319,65 @@ describe('the server names of a profile', () => {
       serverNamesOf({...PROFILE, serverDataFolderName: ''}).dataFolderName,
       '.fixture-server',
     );
+  });
+});
+
+describe('the bind host of a host (F-2409 7.E1, 7.E11)', () => {
+  const REJECTED = [
+    'not a host!',
+    '127.0.0.1 ',
+    '::1',
+    '1.2.3.4:5',
+    'my_host',
+    'ho$t',
+    'host/x',
+    'héllo',
+    '[::1',
+    '[1.2.3.4]',
+    '-a',
+    '',
+  ];
+  for (const entry of REJECTED) {
+    it(`F-2409 7.E1: ${JSON.stringify(entry)} is replaced by the loopback address and reported as written`, () => {
+      deepStrictEqual(bindHostOf({devbox: entry}, 'devbox'), {
+        bindHost: '127.0.0.1',
+        rejected: entry,
+      });
+    });
+  }
+
+  it('F-2409 7.E1: an object bind host is reported as its JSON text', () => {
+    deepStrictEqual(
+      bindHostOf({devbox: JSON.parse('{"a":1}') as object}, 'devbox'),
+      {
+        bindHost: '127.0.0.1',
+        rejected: '{"a":1}',
+      },
+    );
+  });
+
+  for (const entry of [
+    '0.0.0.0',
+    '10.99.99.99',
+    '1.2.3',
+    'myhost',
+    '[::1]',
+    'localhost',
+  ]) {
+    it(`F-2409 7.E1: ${entry} is used as written`, () => {
+      deepStrictEqual(bindHostOf({devbox: entry}, 'devbox'), {bindHost: entry});
+    });
+  }
+
+  for (const entry of [5, true, null, ['a'], undefined]) {
+    it(`F-2409 7.E11: ${JSON.stringify(entry)} is ignored`, () => {
+      deepStrictEqual(bindHostOf({devbox: entry}, 'devbox'), {
+        bindHost: '127.0.0.1',
+      });
+    });
+  }
+
+  it('F-2409 7.E1: a bind host that is no map of hosts is ignored', () => {
+    deepStrictEqual(bindHostOf('10.0.0.1', 'devbox'), {bindHost: '127.0.0.1'});
   });
 });
