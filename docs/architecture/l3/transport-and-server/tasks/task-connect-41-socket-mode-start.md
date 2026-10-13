@@ -32,13 +32,19 @@ for the connection's `serverPort`. `portOf` throws for a socket endpoint ("a soc
   `socketMode`. The server steps take `socketMode: () => boolean` in their dependencies. `wiring.ts` passes
   `() => tunnelStep.tunnelPath() === 'socket'`, from the same tunnel step object the connect uses: make it once per
   connect and spread it as today. `scriptParametersFor` passes the same value to `start.socketMode`.
-- **R3. No CLI path in socket mode.**
-  - The `command-shell` CLI listens on a loopback TCP port (`--on-host 127.0.0.1 --on-port 0`), which F-2410 AC-3 and
-    AC-9 exclude ("no loopback TCP listener belongs to the extension's server endpoint").
+- **R3. No CLI path in socket mode, in 0.2** (athena, register 1440a86).
+  - The reason is scope, not the CLI:
+    - [cli] `command-shell` has `--on-socket` (`cli/src/commands/args.rs` at 07f806f999), and the reference's socket
+      mode uses it (F-2410 5.0 step 5);
+    - but our CLI path is dormant in 0.2, and CLI over a socket needs the bridge's control connection forwarded to a
+      socket, which is later work.
   - So in socket mode the plan installs directly: `CliModeInput` gains `socketMode: boolean`, and `decideCliMode`
     answers `{kind: 'direct', reason: 'socketMode'}` right after the `settingOff` check. `DirectReason` gains
     `'socketMode'`.
   - The plan's log line names the reason, as it does for the others.
+  - **0.2 release notes:** "With `remote.SSH.remoteServerListenOnSocket` on, Remote - SSH always installs and starts
+    the server directly, not through the VS Code CLI." Add the line to the release-notes draft the 0.2 notes card
+    keeps, or, if there's none yet, to this card's PR description for hermes to carry.
 - **R4. A socket endpoint in the connect** (`connect.ts`):
   - the shared record is stored only for a port endpoint. A socket-mode connect is in terminal mode, whose lease
     stores nothing, so skip the `storeSharedRecord` call for a socket endpoint rather than call it with a bogus port;
@@ -102,9 +108,7 @@ connect-41, #679)`. themis or triton reviews; athena gives the design check. pro
 
 ## 6. Open rows (stop and report on #679)
 
-1. **R3 is a design point for athena:**
-   - the card plans the direct install in socket mode, because the CLI's `command-shell` listens on TCP;
-   - if F-2410 or athena wants the CLI path over a socket instead, stop: that's a different card;
-   - if the harness host can't run the direct install (no downloader for the stand-in), report it.
+1. **The harness host can't run the direct install** in socket mode (no downloader for the stand-in). Report it. R3
+   itself is ruled (direct in 0.2; CLI over a socket is later work).
 2. **The server's argument list in socket mode** carries something other than `--socket-path` on the harness host's
    server. Report it, and assert on the `.socket.pid` file's process instead.

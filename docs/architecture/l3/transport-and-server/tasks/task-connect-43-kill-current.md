@@ -52,9 +52,8 @@ the whole of F-2412 6.1 (athena and daedalus on #532, 2026-10-13). Spec: F-2411 
   connection, as today.
 - **R5.** No setting is written in any branch (F-2411 AC-23).
 
-**A question for athena, F-2411 Q1:** R2's default mode copies the reference (the window turns local, and the server
-keeps running), as connect-11 decided. If Q1 is ruled (b), stop the server over a new connection first, and only the
-plan changes.
+**F-2411 Q1 (athena, register 1440a86):** build (a), the reference (AC-19 and AC-29 as written, R-60), until the spec
+rules. If the spec picks (b), only `killCurrentPlan` changes.
 
 ## 3. Changes
 

@@ -1,6 +1,8 @@
 # Task card connect-42: a full preferred port range shows S095, and every translated string is in the bundle
 
-Issue: #680. Release 0.2, not gating. Size: S–M (about 1.5 agent-days). Builder: assigned by hermes. Found by the
+Issue: #680. Release 0.2. **Part A (the busy port range) gates 0.2**: F-2104 is a 0.2 P0 row, and AC-14's dialog has
+no reason on main (athena, register 1440a86). **Part B (the bundle keys) doesn't gate, but ships with it.** Size: S–M
+(about 1.5 agent-days). Builder: assigned by hermes. Found by the
 unwired-contribution audit (2026-10-13).
 
 ## 1. Part A: a full port range (F-2104 7.E1, remote-oss/remote-ssh#22)
@@ -31,9 +33,13 @@ S073 and S095 are in `surfaces/failure-strings.ts` today, but nothing references
   `{kind: 'unknown', reason: {id: 'S067', values: [{id: 'S073', values: [{id: 'S095', values: [<first>, <last>]}]}]}}`.
   The values are decimal strings, and the nesting is the one `MAX_WAIT_EXHAUSTED` already uses. For `noPort` it stays
   `NOT_OPENED`: 7.E9's OS-error text is `[inferred]` in the spec and stays out.
-- **A3.** The CLI path's `openBridge`, given `busyRange`, ends the CLI attempt as it does for any bridge failure today.
-  The direct install's tunnel then reports A2. Check that the connect doesn't run the direct install for nothing. If
-  the CLI path's failure is final rather than a fall-back, report it (§4).
+- **A3. On the CLI path a busy range is final** (athena, register 1440a86). A fall-back would install a server and
+  then fail on the same range.
+  - `openBridge` (`pipeline/wiring.ts`), given `busyRange`, returns `{busyRange}` instead of `undefined`.
+    `steps.ts`'s `openBridge` type gains that answer.
+  - `connectOverCli` (`cli/cli-connect.ts`) answers it with `abandon()`, then
+    `{kind: 'failed', failure: <A2's failure>}`, not `{kind: 'fallback'}`.
+  - A bridge that can't open for any other reason stays a fall-back, as today.
 
 **Rows:**
 
@@ -43,6 +49,7 @@ S073 and S095 are in `surfaces/failure-strings.ts` today, but nothing references
 | F-2104 7.E1 | the same with no range set and the random search failing | `{noPort: true}` |
 | F-2104.AC-14 | the tunnel step's socks path with `busyRange` 41060–41061 | the failure has A2's reason, values `'41060'`, `'41061'` |
 | F-2104.AC-14 | the secondSsh path, the same | the same reason |
+| F-2104.AC-14 | the connect (`connect.test.ts`) on the CLI path with `openBridge` answering `{busyRange: {first: 41060, last: 41061}}` | the connect fails with A2's reason; `plan(…, {direct: true})`, `transfer` and `start` were never called (no direct install) |
 | F-2104 7.E1 | `reasonText` of A2's reason (`failure-strings.test.ts`) | `Error establishing tunnel (Failed to find a free local port: No free ports in specified range '41060-41061'.  Remove or update the 'Preferred Local Port Range' setting and try again.).`, with the two spaces kept |
 
 **Acceptance row** (VSCodium; a failing connect in `tests/acceptance/suite-failure/cases.json`):
@@ -77,6 +84,8 @@ and the 14 locale bundles, so no translation can ever reach them:
   - every string-literal property value of a top-level `const` whose name ends in `_TEMPLATES`;
   - the string-literal first argument of `l10n.t(...)` (any receiver), and an identifier argument there that names a
     same-file `const` with a string-literal initializer;
+  - the same for a call of a same-file function named `translate` (a wrapper over `l10n.t`, as remote-explorer's
+    `extension.ts` translates `STAND_DOWN_WARNING` and `STAND_DOWN_BUTTON`);
   - the string-literal second argument of `filled(...)`.
 
   A miss is a problem: `<package>/<file>:<line>: "<text>" is translated but not a key of l10n/bundle.l10n.json`.
@@ -87,6 +96,8 @@ and the 14 locale bundles, so no translation can ever reach them:
 **Rows** (`tools/string-tables.test.ts`, temporary workspaces as the file's other rows):
 - a `FOO_TEMPLATES` value missing from the bundle → one problem naming the file and line;
 - a `l10n.t('x')` literal missing → a problem;
+- `translate(WARNING)`, where `translate` is a same-file function and `const WARNING = 'w'` with `w` missing → a
+  problem;
 - `l10n.t(WARNING)` with `const WARNING = 'w'` in the same file and `w` missing → a problem;
 - `filled(translate, 'y {0}', [])` missing → a problem;
 - all present → no problem;
@@ -103,6 +114,5 @@ triton reviews; athena gives the design check of A1–A3 and B2.
 ## 4. Open rows (stop and report on #680)
 
 1. The run is root in CI, so ports 1–2 are free. Report it, and don't choose another range by guess.
-2. The CLI path's busy range ends the connect instead of falling back (A3).
-3. B2 finds strings beyond the audit's 10 on main. List them in the PR and add them under B1, since they are the same
+2. B2 finds strings beyond the audit's 10 on main. List them in the PR and add them under B1, since they are the same
    defect.
