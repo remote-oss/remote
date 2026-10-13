@@ -331,6 +331,24 @@ export default defineConfig(
     rules: {'comments/public-surface': 'error'},
   },
   {
+    // Test doubles live under src/testing/ and are imported only by tests, so no bundle can carry one.
+    files: ['packages/*/src/**/*.ts'],
+    ignores: ['packages/*/src/testing/**', '**/*.test.ts', '**/*.fixture.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(^|/)testing/',
+              message: 'Test doubles under src/testing/ are for tests only.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.{js,mjs,cjs}'],
     extends: [tseslint.configs.disableTypeChecked],
   },

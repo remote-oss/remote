@@ -32,12 +32,16 @@ describe('the lib-companion package skeleton', () => {
     );
   });
 
-  it('F-5902.5.table: the manifest exports only the entry point', () => {
+  it('F-5902.5.table: the manifest exports the entry point and the recording fake', () => {
     const manifest = JSON.parse(fileAt(PACKAGE_ROOT, 'package.json')) as {
       exports?: unknown;
     };
     deepStrictEqual(manifest.exports, {
       '.': {types: './.tsc/src/index.d.ts', default: './src/index.ts'},
+      './testing/recording-fake': {
+        types: './.tsc/src/testing/recording-fake.d.ts',
+        default: './src/testing/recording-fake.ts',
+      },
     });
   });
 
