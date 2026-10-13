@@ -2,6 +2,7 @@ import {deepStrictEqual, strictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
+import {redact} from 'lib-log';
 import {
   bannerLine,
   checkingLine,
@@ -69,6 +70,11 @@ function inOrder(
 /** How long the window stays open after its rows, in milliseconds: an editor closed within moments of its connect crashes on exit. */
 const SETTLE_MILLISECONDS = 2000;
 
+/** A line as the log shows it: the log redacts a run of 32 or more word characters, which a run folder's name can hold. */
+function logged(line: string): string {
+  return redact(line, []);
+}
+
 /** The banner the fake client `fails` prints, as the log shows it. */
 const FAILS_BANNER = 'OpenSSH_9.6p1';
 
@@ -122,7 +128,7 @@ describe(`the client search of ${label}`, () => {
         checkingLine(found),
         bannerLine('OpenSSH_9.6p1, OpenSSL 3.0.13'),
         usingLine(found),
-      ];
+      ].map(logged);
       deepStrictEqual(inOrder(connectionLog(), expected), expected);
     });
   }
@@ -130,7 +136,7 @@ describe(`the client search of ${label}`, () => {
   if (label === 'client-missing') {
     it('F-2101 AC-6 (client-missing): the log says the configured path is not a valid SSH binary', () => {
       strictEqual(
-        connectionLog().includes(notValidLine(program('none/ssh'))),
+        connectionLog().includes(logged(notValidLine(program('none/ssh')))),
         true,
       );
     });
