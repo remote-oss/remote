@@ -19,6 +19,8 @@ interface LaunchCommon {
   settings?: Readonly<Record<string, unknown>>;
   /** Variables added to the extension host's environment for this launch only. */
   environment?: Readonly<Record<string, string>>;
+  /** Whether the editor is started with the proposed API enabled for the extensions under test; true when absent. */
+  proposedApi?: boolean;
 }
 
 /** A launch whose tests run in a window of the editor, started by test-cli. */
@@ -117,7 +119,8 @@ export function failureLabel(alias: string): string {
  * failing connect runs suite-failure in a window on its alias, answered from its own script; and `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; `windows` starts the editor plainly, with no
- * runner and no folder, and drives its windows through the window agent from a Node run.
+ * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
+ * same without enabling the proposed API.
  */
 export function launchesOf(root: string): Launch[] {
   const launches: Launch[] = [
@@ -159,6 +162,12 @@ export function launchesOf(root: string): Launch[] {
       hostExtensions: ['slow-remote'],
     },
     {label: 'windows', kind: 'plain', suite: 'windows'},
+    {
+      label: 'no-proposals',
+      kind: 'plain',
+      suite: 'no-proposals',
+      proposedApi: false,
+    },
   ];
   return launches;
 }

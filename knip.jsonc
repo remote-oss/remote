@@ -36,6 +36,7 @@
         "suite-slow/*.test.ts",
         "slow-remote/src/extension.ts",
         "windows/*.test.ts",
+        "no-proposals/*.test.ts",
         "window-agent/src/extension.ts",
         "server/*.test.ts",
       ],

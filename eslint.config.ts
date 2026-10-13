@@ -104,6 +104,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/tsconfig.json',
   './tests/acceptance/server/tsconfig.json',
   './tests/acceptance/windows/tsconfig.json',
+  './tests/acceptance/no-proposals/tsconfig.json',
 ];
 
 const DEFAULT_EXPORT_BAN = {
