@@ -57,13 +57,23 @@ The server tests a port by listening on it ([oss] `src/server-main.ts`, `findFre
 it. The server's `.<commit>.pid` file stays after the kill. A next start that doesn't start a new server for it is a
 bug: report it on the issue.
 
+**Every ports case is a fresh resolve** (as coverage-11 §2): when its launch starts, no connection helper of the run is
+left for `harness`. A live helper is reused with no check (F-2101 AC-14), and F-2409 AC-3 names "no live connection
+from the client to the host". Use the mechanism coverage-11 chose, either waiting out `HELPER_GRACE_MILLISECONDS` after
+the previous launch or ending the run's helpers through their registry, so the run has one rule. If coverage-11 hasn't
+merged yet, pick it here and say which in the README. `reuse` is the exception: it keeps `range`'s server on the host
+(`keepServer`), but its connection is fresh too.
+
 `tests/acceptance/README.md`: `hostSetup` goes in the launches table, and a "Ports cases" paragraph gives the setup
 above and the rule that ports cases come last.
 
 ### 1.5 Suite helpers (`tests/acceptance/suite-ports/ports.ts`)
 
-- `serverPort()`: the number of the last `connectionLog()` line `Remote server listening on port <n>`. It throws when
-  there's none.
+- `serverPort()`: the port the server listens on, read on the host. It's the local port of the one `LISTEN` line of
+  `onHost('netstat', '-ltnp')` whose program is `node`. As `harness`, BusyBox `netstat -p` names only `harness`'s own
+  processes, so root's `nc` holders show `-` (measured on the host's image). It throws when there's no such line, or
+  more than one. The log has no line with the port: nothing writes F-2003's `Remote server listening on port` line
+  yet.
 - `listenAddress(port)`: from `onHost('netstat', '-ltn')`, the address part of the local address of the `LISTEN`
   line that ends in `:<port>`. It's `undefined` when there's none.
 - `containerAddress()`: `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
@@ -131,8 +141,9 @@ These stay `todo`. List each under "Needs an acceptance row: harness capability 
 
 | AC | Waits for |
 |---|---|
-| AC-7, 9, 10, 12, 13, 14, 15, 19, 25, 28, 29, 30 | connect-26 (#557): the decisions of remote-oss/remote-ssh#93, STR:S135, S136 and S168, the range's form and the 15 s wait |
+| AC-7, 9, 10, 12, 13, 14, 15, 19, 25, 28, 29 | connect-26 (#557): the decisions of remote-oss/remote-ssh#93, STR:S135, S136 and S168, the range's form and the 15 s wait |
 | AC-26 | a slow stand-in server in the VSCodium run, and tooling-20's Retry |
+| AC-30 | a window case over a stand-in server that ends for CVE-2020-1416 (connect-26 builds the source and its unit and real-shell rows) |
 | AC-11, 16 | Retry and reload: tooling-20 (#544) |
 | AC-22 | closing a window until its connection ends: tooling-20 (#544) |
 | AC-1 | a second fresh host |

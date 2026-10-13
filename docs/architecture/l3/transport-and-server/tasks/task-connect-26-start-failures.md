@@ -1,7 +1,7 @@
 # Task card connect-26: F-2409's start failures and setting checks (S135, S136, S168, the range's form, the 15 s wait)
 
 Issue: #557. Why: F-2409 as republished after remote-oss/remote-ssh#93 (`remote-oss/remote-ssh#54`): 7.E1–7.E4, 7.E6–7.E9,
-BR-9, BR-10 and AC-7, 9, 10, 12, 13, 14, 15, 19, 25, 28, 29, 30. Card coverage-13 (#556) found the gaps, metis decided
+BR-9, BR-10 and AC-7, 9, 10, 12, 13, 14, 15, 19, 25, 28, 29, and the source of AC-30. Card coverage-13 (#556) found the gaps, metis decided
 Q1, Q2, Q3 (a, b) and Q5 on #93, and athena ruled a 15 s ready wait on #253 (contracts "Bounds", a898d5c). Today:
 
 - a failed server start never shows STR:S135 or STR:S136: `ofStart` gives `serverStart` no reason;
@@ -172,7 +172,7 @@ Rows, in each of these launches (`cite` as in coverage-13):
 |---|---|
 | `` `${cite}: the connect ended as the case says` `` | connected, or the `failureDialog` line's question |
 | `` `${cite}: the notice is the case's` `` | the `notice` lines: exactly the case's one, or none |
-| `` `F-2409 AC-7 (${label}): the notice came before the tunnel` `` (the `bind-rejected-*` cases) | the `notice` line's `time` is before the `progress` line `Setting up SSH tunnel`, which follows any download or install stage |
+| `` `F-2409 AC-7 (${label}): the notice came before the download progress` `` (the `bind-rejected-*` cases) | the `notice` line's `time` is before that of the second `progress` line, the first stage after the title. `validate` shows the notice before any stage is reported, so this holds whether or not the host downloads. A download stage, when there is one, is always later than that first stage |
 | `` `F-2409 AC-29 (${label}): neither the dialog nor More Actions... offers the Output Log's mitigation steps` `` (every dialog case) | neither the question nor the `mitigationPick` line's `items` contains `View the Output Log to see mitigation steps` |
 | `` `${cite}: the window stays usable` `` (AC-14 and AC-15 cases) | `vscode.workspace.openTextDocument({content: 'usable'})` resolves |
 | `F-2409 AC-25 (start-bind-absent): the dialog comes 13 to 21 s after the server's launch` | the `failureDialog` line's `time` minus the launch time is within 13 000–21 000 ms. The launch time is the mtime of the server's pid file: `onHost('stat', '-c', '%Y', '/home/harness/.vscodium-server-insiders/.<commit>.pid')` × 1000, where `<commit>` is `hostServer().commits[0]`. The script writes the file right after the launch. The mtime has whole seconds, hence 21. Host and client share the machine's clock |
@@ -181,14 +181,17 @@ A server that failed to listen may stay alive without a port (7.E3). The next ca
 
 ## 4. The catalogue
 
-F-2409 AC-7, 9, 10, 12, 13, 14, 15, 19, 25, 28, 29 and 30 go to `acceptance`. In #142's tracking comment:
+F-2409 AC-7, 9, 10, 12, 13, 14, 15, 19, 25, 28 and 29 go to `acceptance`. AC-30 stays `todo`: its outcome is the
+window's dialog, and no window case can make the real server end for CVE-2020-1416 (its check runs on Windows only). The
+unit row proves the dialog's text and the real-shell row proves the cause, but by athena's reading on #481 and #522 a
+server-level row doesn't carry `acceptance` for a window outcome. List AC-30 under "harness capability missing" in #142:
+a window case over a stand-in server. In #142's tracking comment:
 - **core halves:** the indicator and title of AC-9 and AC-13; the notice's toolbar in AC-7;
 - **the three buttons of AC-12:** F-2601 AC-2's row proves them for every dialog.
 
 For athena, in the PR:
 - AC-12, 19 and 28 are exec-server mode. In 0.2 that is `useExecServer` true with the direct start, because the CLI
   path is dormant. The rows prove the outcomes the ACs name;
-- AC-30's double is the stand-in server, and its dialog text is proven by the unit row.
 
 AC-26 waits for a slow stand-in in the VSCodium run and tooling-20's Retry.
 
