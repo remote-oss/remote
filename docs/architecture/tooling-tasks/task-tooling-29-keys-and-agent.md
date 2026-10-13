@@ -26,7 +26,9 @@ one per line, for the users `start-sshd` installs keys for.
 
 ## 2. The host image (`tests/acceptance/host/Dockerfile`, `start-sshd`)
 
-- A user `harness-cert` with no `authorized_keys`.
+- A user `harness-cert` with no `authorized_keys`, made with `adduser -D` and then unlocked as the other key accounts are
+  (`sed -i 's/^harness-cert:!/harness-cert:*/' /etc/shadow`): `adduser -D` leaves `!` in its shadow entry, and sshd
+  rejects a locked account (triton on #603).
 - A `Match User harness-cert` block with `AuthorizedKeysFile none` and `TrustedUserCAKeys /etc/ssh/ca.pub`.
 - `start-sshd` writes `CA_PUBLIC_KEY` (a new `--env`) to `/etc/ssh/ca.pub`.
 - The comment at the top lists the new account.
