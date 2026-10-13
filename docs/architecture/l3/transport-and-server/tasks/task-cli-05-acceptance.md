@@ -21,8 +21,11 @@ When §11 is ruled (option (a) or (c)), a follow-up card adds the CI job and the
 ## 2. The editor under test
 
 The patched CLI expands its server template only for its own release (V7a), so the editor's commit must be the CLI's.
-The archives are built from VSCodium `1.140.06729-insider` (`[cli]` at vscode 07f806f999). The run therefore uses that
-release, not the VSCodium run's pinned `1.140.06829-insider`:
+The archives are built from VSCodium `1.140.06729-insider` (`[cli]` at vscode 07f806f999). The CLI reports its own commit
+as `b969547887c4497ab088897c3f77de0bde849b83` (`--version`, measured 2026-10-13): VSCodium's build commit, not upstream
+vscode's, and its `serve` expands the template for no other. The run therefore uses that release, not the VSCodium
+run's pinned `1.140.06829-insider`, and first checks that the unpacked editor's `product.json` `commit` equals the CLI's
+`--version` commit, failing with both values if not:
 
 | Constant (`tools/acceptance.ts`) | Value |
 |---|---|
