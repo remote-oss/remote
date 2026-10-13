@@ -41,9 +41,18 @@ import {
   hostExtensionFolder,
   failureLabel,
   type Launch,
+  type RunnerLaunch,
   launchesOf,
+  runnerLaunches,
   suitesOf,
 } from './acceptance-launches.ts';
+import {
+  editorArguments,
+  launchFiles,
+  packageWindowAgent,
+  runPlainLaunch,
+  startDetached,
+} from './acceptance-plain.ts';
 import {
   isMainModule,
   REPOSITORY_ROOT,
@@ -79,9 +88,6 @@ const EXTENSIONS_UNDER_TEST = new Map([
   ['remote-oss.remote-ssh', 'remote-ssh'],
   ['remote-oss.remote-ssh-edit', 'remote-ssh-edit'],
 ]);
-
-/** The extensions under test that use proposed API, enabled for them on the command line. */
-const PROPOSED_API_EXTENSIONS: readonly string[] = ['remote-oss.remote-ssh'];
 
 /**
  * The variables the harness passes to the extension host. `REMOTE_OSS_ACCEPTANCE` is the one switch with which a
@@ -132,6 +138,14 @@ export interface HarnessDependencies {
     root: string,
     variables: HarnessVariables,
     label?: string,
+  ) => Promise<AttemptResult>;
+  /** Packages the window agent into a VSIX in the run's folder and returns the file. */
+  windowAgentVsix: (root: string, runFolder: string) => Promise<string>;
+  /** Runs a launch with no runner: the editor started plainly, and the Node tests against it. */
+  runPlain: (
+    root: string,
+    variables: HarnessVariables,
+    launch: Launch,
   ) => Promise<AttemptResult>;
 }
 
@@ -325,6 +339,12 @@ async function prepare(
   const vscodium =
     editor === 'vscodium' ? await dependencies.vscodiumExecutable() : undefined;
   const vsixFiles = packagedExtensions(root);
+  if (
+    editor === 'vscodium' &&
+    launchesOf(root).some(launch => launch.kind === 'plain')
+  ) {
+    vsixFiles.push(await dependencies.windowAgentVsix(root, runFolder));
+  }
   if (vsixFiles.length > 0) {
     checked(
       command,
@@ -353,27 +373,15 @@ async function prepare(
   };
 }
 
-/** The script, record and log files of a launch: the run's own, or a failing connect's. */
-function launchFiles(
-  runFolder: string,
-  label: string,
-): {script: string; record: string; logFile: string} {
-  return {
-    script: path.join(runFolder, `${label}-script.json`),
-    record: path.join(runFolder, `${label}-record.jsonl`),
-    logFile: path.join(runFolder, `${label}-log.txt`),
-  };
-}
-
-/** Copies the host extensions of the launches into the host's home folder, owned by the user harness. */
-function copyHostExtensions(
+/** Copies the host extensions of the launches into the host's home folder of the user harness. */
+function prepareHost(
   command: CommandRunner,
   root: string,
   container: string,
   launches: readonly Launch[],
 ): void {
   for (const extension of new Set(
-    launches.flatMap(launch => launch.hostExtensions ?? []),
+    runnerLaunches(launches).flatMap(launch => launch.hostExtensions ?? []),
   )) {
     const folder = hostExtensionFolder(extension);
     checked(command, 'docker', [
@@ -402,7 +410,7 @@ export async function runLaunches(
   runFolder: string,
   configFile: string,
   launches: ReadonlyArray<Launch | undefined>,
-  runTests: (label?: string) => Promise<AttemptResult>,
+  runLaunch: (launch?: Launch) => Promise<AttemptResult>,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -412,7 +420,7 @@ export async function runLaunches(
         if (launch !== undefined) {
           writeUserSettings(runFolder, configFile, launch.settings);
         }
-        return runTests(launch?.label);
+        return runLaunch(launch);
       }, console.log.bind(console)),
     );
   }
@@ -428,7 +436,13 @@ export async function runAcceptance(
   dependencies: HarnessDependencies,
   editor: EditorChoice = 'vscode',
 ): Promise<number> {
-  const runFolder = mkdtempSync(path.join(tmpdir(), 'acceptance-'));
+  // The run id in the name lets the clean-up find the editor of a run that was killed.
+  const runFolder = mkdtempSync(
+    path.join(
+      tmpdir(),
+      `acceptance-${acceptanceRunId(process.env, process.pid)}-`,
+    ),
+  );
   const started: string[] = [];
   try {
     const variables = await prepare(
@@ -446,7 +460,7 @@ export async function runAcceptance(
       );
     }
     const launches = editor === 'vscodium' ? launchesOf(root) : [];
-    copyHostExtensions(
+    prepareHost(
       dependencies.command,
       root,
       variables.HARNESS_CONTAINER,
@@ -457,7 +471,10 @@ export async function runAcceptance(
         runFolder,
         variables.HARNESS_SSH_CONFIG,
         editor === 'vscodium' ? launches : [undefined],
-        label => dependencies.runTests(root, variables, label),
+        launch =>
+          launch?.kind === 'plain'
+            ? dependencies.runPlain(root, variables, launch)
+            : dependencies.runTests(root, variables, launch?.label),
       )),
     );
     return exitCodes.find(exitCode => exitCode !== 0) ?? 0;
@@ -471,18 +488,6 @@ export async function runAcceptance(
     rmSync(runFolder, {recursive: true, force: true});
     removeBundles(root);
   }
-}
-
-/** What every run's editor is started with: the run's own folders, the proposed API of the extensions, no trust prompt. */
-function editorArguments(runFolder: string): string[] {
-  return [
-    `--user-data-dir=${path.join(runFolder, 'user-data')}`,
-    `--extensions-dir=${path.join(runFolder, 'extensions')}`,
-    ...PROPOSED_API_EXTENSIONS.map(
-      extensionId => `--enable-proposed-api=${extensionId}`,
-    ),
-    '--disable-workspace-trust',
-  ];
 }
 
 /** The `@vscode/test-cli` configuration of a run, from the harness variables in `environment`. */
@@ -516,7 +521,7 @@ export function vscodiumConfiguration(
   root: string,
   environment: Readonly<Record<string, string | undefined>>,
   executable: string,
-  launch: Launch,
+  launch: RunnerLaunch,
 ) {
   const runFolder = environment.HARNESS_RUN_FOLDER ?? '';
   const files = launchFiles(runFolder, launch.label);
@@ -567,7 +572,7 @@ export function vscodiumConfigurations(
   environment: Readonly<Record<string, string | undefined>>,
   executable: string,
 ) {
-  return launchesOf(root).map(launch =>
+  return runnerLaunches(launchesOf(root)).map(launch =>
     vscodiumConfiguration(root, environment, executable, launch),
   );
 }
@@ -924,6 +929,25 @@ if (isMainModule(import.meta.url)) {
           {download: downloadWithRetry, unpack: unpackArchive},
         ),
         runTests: runTestCli,
+        windowAgentVsix: packageWindowAgent,
+        runPlain: (root, variables, launch) =>
+          runPlainLaunch(
+            root,
+            {
+              runFolder: variables.HARNESS_RUN_FOLDER,
+              executable: variables.HARNESS_VSCODIUM_EXECUTABLE ?? '',
+              environment: {...process.env, ...variables},
+            },
+            launch,
+            {
+              start: startDetached,
+              runTests: program =>
+                runAndCollect(program.file, program.programArguments, {
+                  cwd: root,
+                  env: program.environment,
+                }),
+            },
+          ),
       },
       editor,
     );

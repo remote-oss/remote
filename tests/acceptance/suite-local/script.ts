@@ -6,7 +6,7 @@
 import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 
 /** One expected question and its answer, in the order the test expects them. */
-export type ScriptEntry =
+export type ScriptEntry = (
   | {surface: 'pick'; match: string; answer: 'yes' | 'no' | 'dismiss'}
   | {surface: 'maskedInput'; match: string; answer: {text: string} | 'dismiss'}
   | {
@@ -20,7 +20,11 @@ export type ScriptEntry =
       answer: {button: string} | 'dismiss';
     }
   | {surface: 'mitigationPick'; match: string; answer: string}
-  | {surface: 'licenceModal'; match: string; answer: 'decline' | 'dismiss'};
+  | {surface: 'licenceModal'; match: string; answer: 'decline' | 'dismiss'}
+) & {
+  /** The window that answers; an entry without one is answered once by each window. */
+  window?: string;
+};
 
 /** One line of the record: the question as asked, and what the adapter answered. */
 export interface RecordLine {
@@ -31,6 +35,8 @@ export interface RecordLine {
   matched: boolean;
   /** Whether the progress message carried the details link; only the phase lines of a `progress` surface have it. */
   details?: boolean;
+  /** The name of the window that wrote the line. */
+  window: string;
 }
 
 /** The lines of a record file; a record not written yet is empty. */

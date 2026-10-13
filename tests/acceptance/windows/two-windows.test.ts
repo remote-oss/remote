@@ -1,0 +1,63 @@
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {deepStrictEqual, strictEqual} from 'node:assert';
+import {
+  closeWindow,
+  inWindow,
+  onHost,
+  openWindow,
+  recordLines,
+  reloadWindow,
+  windowEvents,
+  windowState,
+} from './harness.ts';
+
+const execFileAsync = promisify(execFile);
+
+/** How many connection-helper processes of this run's extensions folder run on this machine. */
+async function connectionHelpers(): Promise<number> {
+  try {
+    const {stdout} = await execFileAsync('pgrep', [
+      '-fc',
+      `${process.env.HARNESS_RUN_FOLDER ?? ''}/extensions/.*connection-helper`,
+    ]);
+    return Number(stdout.trim());
+  } catch {
+    return 0;
+  }
+}
+
+describe('windows of one editor on the same host (the first window is local)', function () {
+  this.timeout(180000);
+
+  it('D-85: a window on the host opens and connects', async () => {
+    await openWindow('harness', 'b');
+    strictEqual((await windowState('b')).remoteName, 'ssh-remote');
+  });
+
+  it('D-85: a second window on the same host shares the connection server', async () => {
+    await openWindow('harness', 'c');
+    strictEqual(await connectionHelpers(), 1);
+  });
+
+  it('D-85: reloading a window activates its agent again', async () => {
+    await reloadWindow('b');
+    strictEqual(
+      windowEvents('b').filter(each => each.event === 'activated').length,
+      2,
+    );
+  });
+
+  it('D-85: closing the window that started the server leaves the other connected', async () => {
+    await closeWindow('b');
+    await inWindow('c', 'acceptance.agent.writeFile', 'still-here.txt', 'c');
+    strictEqual(await onHost('cat', '/home/harness/c/still-here.txt'), 'c');
+  });
+
+  it("D-85: both windows' progress is in one record, by window", () => {
+    deepStrictEqual(
+      ['b', 'c'].map(window => recordLines('progress', window).length > 0),
+      [true, true],
+    );
+  });
+});

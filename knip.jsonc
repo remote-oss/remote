@@ -35,6 +35,8 @@
         "suite-terminal/*.test.ts",
         "suite-slow/*.test.ts",
         "slow-remote/src/extension.ts",
+        "windows/*.test.ts",
+        "window-agent/src/extension.ts",
         "server/*.test.ts",
       ],
       "project": ["**/*.ts", "vscode-test.mjs"],
