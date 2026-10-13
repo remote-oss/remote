@@ -2045,6 +2045,13 @@ describe('acceptance', () => {
         'tests/acceptance/suite/helper.ts',
         'export function helper(): void {}\n',
       );
+      workspace.write(
+        'tests/acceptance/suite/settle.ts',
+        readFileSync(
+          path.join(REPOSITORY_ROOT, 'tests/acceptance/suite/settle.ts'),
+          'utf8',
+        ),
+      );
       workspace.write('tests/acceptance/suite-local/window.test.ts', '');
       workspace.write('tests/acceptance/suite-remote/window.test.ts', '');
       workspace.write('tests/acceptance/suite-reconnect/window.test.ts', '');
@@ -2071,6 +2078,61 @@ describe('acceptance', () => {
           ),
         ],
         [true, false],
+      );
+    });
+
+    it('tooling-32: each output folder holds the settle bundle beside the suites own', async () => {
+      await bundleSuite(workspace.root);
+      deepStrictEqual(
+        ['dist', 'dist-local', 'dist-remote'].map(folder =>
+          existsSync(
+            path.join(
+              workspace.root,
+              'tests/acceptance',
+              folder,
+              'settle.test.cjs',
+            ),
+          ),
+        ),
+        [true, true, true],
+      );
+    });
+
+    it('tooling-32: the settle bundle holds a plain mocha run open for 2000 ms after its last test, and the run passes', async () => {
+      await bundleSuite(workspace.root);
+      const folder = path.join(workspace.root, 'tests/acceptance/dist-local');
+      const stamp = path.join(workspace.root, 'last-row.txt');
+      writeFileSync(
+        path.join(folder, 'row.test.cjs'),
+        `it('row', () => { require('node:fs').writeFileSync(${JSON.stringify(stamp)}, String(Date.now())); });\n`,
+      );
+      const result = runCommand(process.execPath, [
+        path.join(REPOSITORY_ROOT, 'node_modules/mocha/bin/mocha.js'),
+        '--no-config',
+        '--timeout',
+        '10000',
+        path.join(folder, 'row.test.cjs'),
+        path.join(folder, 'settle.test.cjs'),
+      ]);
+      deepStrictEqual(
+        [
+          result.status,
+          Date.now() - Number(readFileSync(stamp, 'utf8')) >= 2000,
+        ],
+        [0, true],
+      );
+    });
+
+    it('tooling-32: the suite-client source defines no hold of its own', () => {
+      strictEqual(
+        readFileSync(
+          path.join(
+            REPOSITORY_ROOT,
+            'tests/acceptance/suite-client/client.test.ts',
+          ),
+          'utf8',
+        ).includes('SETTLE_MILLISECONDS'),
+        false,
       );
     });
 

@@ -28,6 +28,7 @@
       "entry": [
         "vscode-test.mjs",
         "suite/*.test.ts",
+        "suite/settle.ts",
         "suite-local/*.test.ts",
         "suite-remote/*.test.ts",
         "suite-reconnect/*.test.ts",
