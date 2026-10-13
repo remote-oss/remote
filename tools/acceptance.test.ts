@@ -5,6 +5,7 @@ import {
   strictEqual,
   throws,
 } from 'node:assert';
+import type {PortHolder} from './acceptance-occupy.ts';
 import {createHash} from 'node:crypto';
 import {
   existsSync,
@@ -43,6 +44,7 @@ import {
   vscodiumConfigurations,
   vscodiumExecutableOf,
   withOneRetry,
+  markDownloadRequests,
   writeUserSettings,
 } from './acceptance.ts';
 import type {RunDownloads} from './acceptance-downloads.ts';
@@ -256,14 +258,17 @@ const LAUNCH_ORDER = [
   'reconnect',
   'failure-refused',
   'terminal',
+  'socket',
   'slow',
   'client-unset',
+  'terminal-pick',
   'windows',
   'no-proposals',
   'explorer',
   'explorer-alone',
   'explorer-no-proposals',
   'ports-probe',
+  'install-probe',
 ];
 
 const CLIENT_CASE = {
@@ -293,6 +298,22 @@ describe('acceptance', () => {
             label: 'probe',
             cite: 'F-2409 AC-2 (probe)',
             settings: {},
+            outcome: 'connected',
+          },
+        ],
+      }),
+    );
+    workspace.write(
+      'tests/acceptance/suite-install/cases.json',
+      JSON.stringify({
+        cases: [
+          {
+            label: 'probe',
+            cite: 'F-2403 AC-1 (probe)',
+            settings: {
+              'remote.SSH.serverDownloadUrlTemplate':
+                '${HARNESS_DOWNLOADS_HTTP}/ok/${commit}',
+            },
             outcome: 'connected',
           },
         ],
@@ -438,6 +459,23 @@ describe('acceptance', () => {
     );
   });
 
+  it('D-85: Host password-ask is the password account whose host key is asked, against its own known hosts', () => {
+    strictEqual(
+      accountBlock('password-ask'),
+      [
+        'Host password-ask',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness-pw',
+        '  IdentityAgent none',
+        '  StrictHostKeyChecking ask',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts_password_ask',
+        ...PASSWORD_ALIAS_LINES,
+      ].join('\n'),
+    );
+  });
+
   it('D-85: Host noforward logs in to harness-nofwd with the run key', () => {
     strictEqual(
       accountBlock('noforward'),
@@ -451,6 +489,13 @@ describe('acceptance', () => {
     strictEqual(
       accountBlock('mute'),
       [...sharedLines('mute', 'harness-mute'), ...KEY_ALIAS_LINES].join('\n'),
+    );
+  });
+
+  it('#668: Host readonly logs in to harness-ro with the run key', () => {
+    strictEqual(
+      accountBlock('readonly'),
+      [...sharedLines('readonly', 'harness-ro'), ...KEY_ALIAS_LINES].join('\n'),
     );
   });
 
@@ -491,6 +536,43 @@ describe('acceptance', () => {
       ),
       {'remote.SSH.configFile': '/run/ssh_config'},
     );
+  });
+
+  describe('markDownloadRequests (card coverage-17)', () => {
+    it('coverage-17: a launch notes how many requests the download host had logged when it began', () => {
+      workspace.write('requests.log', 'a GET /ok/x\nb GET /missing/y\n');
+      markDownloadRequests(workspace.root, 'install-probe', {
+        HARNESS_DOWNLOADS_LOG: path.join(workspace.root, 'requests.log'),
+      });
+      strictEqual(
+        readFileSync(
+          path.join(workspace.root, 'install-probe-requests-start'),
+          'utf8',
+        ),
+        '2\n',
+      );
+    });
+
+    it('coverage-17: a log not written yet counts no request', () => {
+      markDownloadRequests(workspace.root, 'install-probe', {
+        HARNESS_DOWNLOADS_LOG: path.join(workspace.root, 'none.log'),
+      });
+      strictEqual(
+        readFileSync(
+          path.join(workspace.root, 'install-probe-requests-start'),
+          'utf8',
+        ),
+        '0\n',
+      );
+    });
+
+    it('coverage-17: a run without a download host notes nothing', () => {
+      markDownloadRequests(workspace.root, 'install-probe', {});
+      strictEqual(
+        existsSync(path.join(workspace.root, 'install-probe-requests-start')),
+        false,
+      );
+    });
   });
 
   describe('packagedExtensions', () => {
@@ -623,6 +705,7 @@ describe('acceptance', () => {
           harness.runFolder,
           'record.jsonl',
         ),
+        REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(harness.runFolder, 'signals'),
         HARNESS_VSIX_FILES: '',
         HARNESS_EDITOR: 'vscode',
         REMOTE_OSS_ACCEPTANCE_LOG: path.join(harness.runFolder, 'log.txt'),
@@ -816,6 +899,101 @@ describe('acceptance', () => {
       deepStrictEqual(seen[1], seen[0]);
     });
 
+    /** A holder of ports that records what it was asked and what it let go, and fails for a port it is told is taken. */
+    function recordingHolder(taken: readonly number[] = []): {
+      events: string[];
+      holdPorts: PortHolder;
+    } {
+      const events: string[] = [];
+      return {
+        events,
+        holdPorts: ports => {
+          const blocked = ports.find(port => taken.includes(port));
+          if (blocked !== undefined) {
+            return Promise.reject(
+              new Error(
+                `the client listener on 127.0.0.1:${String(blocked)} could not start: in use`,
+              ),
+            );
+          }
+          events.push(`hold ${ports.join(',')}`);
+          return Promise.resolve({
+            release: () => {
+              events.push('release');
+              return Promise.resolve();
+            },
+          });
+        },
+      };
+    }
+
+    /** Runs `launches` with the recording holder; `during` runs inside each attempt. */
+    async function withHolder(
+      launches: Launch[],
+      holder: ReturnType<typeof recordingHolder>,
+      during: () => AttemptResult | Promise<AttemptResult> = () => ({
+        exitCode: 0,
+        output: '',
+      }),
+    ): Promise<void> {
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        launches,
+        command,
+        '',
+        sleep,
+        () => {
+          holder.events.push('attempt');
+          return Promise.resolve(during());
+        },
+        () => Promise.resolve(),
+        {},
+        holder.holdPorts,
+      );
+    }
+
+    it('#680: a launch with client listeners holds them during the attempt and lets them go after', async () => {
+      const holder = recordingHolder();
+      await withHolder([{...REMOTE, clientListeners: [41060, 41061]}], holder);
+      deepStrictEqual(holder.events, [
+        'hold 41060,41061',
+        'attempt',
+        'release',
+      ]);
+    });
+
+    it('#680: an attempt that fails still lets the client listeners go', async () => {
+      const holder = recordingHolder();
+      await withHolder([{...REMOTE, clientListeners: [41060]}], holder, () => {
+        throw new Error('the attempt broke');
+      }).catch(() => undefined);
+      deepStrictEqual(holder.events, ['hold 41060', 'attempt', 'release']);
+    });
+
+    it('#680: a client port that is taken fails the attempt with a message naming it, and starts no editor', async () => {
+      const holder = recordingHolder([41061]);
+      let message = '';
+      await withHolder(
+        [{...REMOTE, clientListeners: [41060, 41061]}],
+        holder,
+      ).catch((caught: unknown) => {
+        message = caught instanceof Error ? caught.message : String(caught);
+      });
+      deepStrictEqual(
+        [message, holder.events],
+        ['the client listener on 127.0.0.1:41061 could not start: in use', []],
+      );
+    });
+
+    it('#680: a launch without client listeners opens nothing', async () => {
+      const holder = recordingHolder();
+      await withHolder([REMOTE], holder);
+      deepStrictEqual(holder.events, ['hold ', 'attempt', 'release']);
+    });
+
     it('D-85: the VS Code run starts its one configuration without a label and writes no settings', async () => {
       const labels: Array<string | undefined> = [];
       const {command} = recordingCommand();
@@ -951,6 +1129,42 @@ describe('acceptance', () => {
           path.join(workspace.root, 'ports-probe-settings.json'),
           'utf8',
         ),
+      );
+    });
+
+    it("coverage-17: a launch's settings get the download host's bases, and the product's placeholders stay", async () => {
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [
+          {
+            ...PORTS,
+            label: 'install-probe',
+            settings: {
+              'remote.SSH.serverDownloadUrlTemplate':
+                '${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}',
+            },
+          },
+        ],
+        command,
+        '',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+        () => Promise.resolve(),
+        {HARNESS_DOWNLOADS_LOCAL: 'http://127.0.0.1:9'},
+      );
+      strictEqual(
+        (
+          JSON.parse(
+            readFileSync(
+              path.join(workspace.root, 'install-probe-settings.json'),
+              'utf8',
+            ),
+          ) as Record<string, string>
+        )['remote.SSH.serverDownloadUrlTemplate'],
+        'http://127.0.0.1:9/ok/${os}-${arch}/${commit}',
       );
     });
 
@@ -1390,9 +1604,9 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11: the run waits for the helper of the launch before to end, 5 s before a client-search launch and the grace before a ports launch', async () => {
+    it('coverage-11: the run waits for the helper of the launch before to end, 5 s before a client-search launch and the grace before each host-case launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [5000, 3000]);
+      deepStrictEqual(harness.sleeps, [5000, 3000, 3000]);
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {
@@ -1463,7 +1677,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 8}, () => EXECUTABLE),
+        Array.from({length: 10}, () => EXECUTABLE),
       );
     });
 
@@ -1474,7 +1688,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 8}, () => true),
+        Array.from({length: 10}, () => true),
       );
     });
 
@@ -1490,9 +1704,11 @@ describe('acceptance', () => {
           ['reconnect', 'dist-reconnect/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
+          ['socket', 'dist-socket/**/*.test.cjs'],
           ['slow', 'dist-slow/**/*.test.cjs'],
           ['client-unset', 'dist-client/**/*.test.cjs'],
           ['ports-probe', 'dist-ports/**/*.test.cjs'],
+          ['install-probe', 'dist-install/**/*.test.cjs'],
         ],
       );
     });
@@ -1561,7 +1777,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('D-85: a launch with no environment adds only its log file to the harness variables', () => {
+    it('D-85: a launch with no environment adds its log file and its windows folder to the harness variables', () => {
       deepStrictEqual(
         vscodiumConfiguration(
           workspace.root,
@@ -1572,13 +1788,19 @@ describe('acceptance', () => {
         {
           ...CONFIGURATION_ENVIRONMENT,
           REMOTE_OSS_ACCEPTANCE_LOG: path.join('/run', 'extra-log.txt'),
+          REMOTE_OSS_ACCEPTANCE_WINDOWS: path.join(
+            '/run',
+            'extra',
+            'agent',
+            'pids',
+          ),
         },
       );
     });
 
     it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
       deepStrictEqual(
-        configurations()[5]?.launchArgs.filter(argument =>
+        configurations()[6]?.launchArgs.filter(argument =>
           argument.startsWith('--extensionDevelopmentPath='),
         ),
         [
@@ -1626,10 +1848,32 @@ describe('acceptance', () => {
           'reconnect',
           'failure-refused',
           'terminal',
+          'socket',
           'slow',
           'client-unset',
           'ports-probe',
+          'install-probe',
         ].map(label => path.join('/run', `${label}-log.txt`)),
+      );
+    });
+
+    it('D-85: each launch points its windows at the agent folder of its own label', () => {
+      deepStrictEqual(
+        configurations().map(
+          configuration => configuration.env.REMOTE_OSS_ACCEPTANCE_WINDOWS,
+        ),
+        [
+          'local',
+          'remote',
+          'reconnect',
+          'failure-refused',
+          'terminal',
+          'socket',
+          'slow',
+          'client-unset',
+          'ports-probe',
+          'install-probe',
+        ].map(label => path.join('/run', label, 'agent', 'pids')),
       );
     });
 
@@ -1640,7 +1884,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        [1, 2, 3, 4, 5, 6, 7].map(() =>
+        [1, 2, 3, 4, 5, 6, 7, 8, 9].map(() =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -1859,11 +2103,19 @@ describe('acceptance', () => {
         'tests/acceptance/suite/helper.ts',
         'export function helper(): void {}\n',
       );
+      workspace.write(
+        'tests/acceptance/suite/settle.ts',
+        readFileSync(
+          path.join(REPOSITORY_ROOT, 'tests/acceptance/suite/settle.ts'),
+          'utf8',
+        ),
+      );
       workspace.write('tests/acceptance/suite-local/window.test.ts', '');
       workspace.write('tests/acceptance/suite-remote/window.test.ts', '');
       workspace.write('tests/acceptance/suite-reconnect/window.test.ts', '');
       workspace.write('tests/acceptance/suite-failure/window.test.ts', '');
       workspace.write('tests/acceptance/suite-terminal/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-socket/window.test.ts', '');
       workspace.write('tests/acceptance/suite-slow/window.test.ts', '');
       workspace.write('tests/acceptance/suite-ports/window.test.ts', '');
       workspace.write(
@@ -1884,6 +2136,61 @@ describe('acceptance', () => {
           ),
         ],
         [true, false],
+      );
+    });
+
+    it('tooling-32: each output folder holds the settle bundle beside the suites own', async () => {
+      await bundleSuite(workspace.root);
+      deepStrictEqual(
+        ['dist', 'dist-local', 'dist-remote'].map(folder =>
+          existsSync(
+            path.join(
+              workspace.root,
+              'tests/acceptance',
+              folder,
+              'settle.test.cjs',
+            ),
+          ),
+        ),
+        [true, true, true],
+      );
+    });
+
+    it('tooling-32: the settle bundle holds a plain mocha run open for 2000 ms after its last test, and the run passes', async () => {
+      await bundleSuite(workspace.root);
+      const folder = path.join(workspace.root, 'tests/acceptance/dist-local');
+      const stamp = path.join(workspace.root, 'last-row.txt');
+      writeFileSync(
+        path.join(folder, 'row.test.cjs'),
+        `it('row', () => { require('node:fs').writeFileSync(${JSON.stringify(stamp)}, String(Date.now())); });\n`,
+      );
+      const result = runCommand(process.execPath, [
+        path.join(REPOSITORY_ROOT, 'node_modules/mocha/bin/mocha.js'),
+        '--no-config',
+        '--timeout',
+        '10000',
+        path.join(folder, 'row.test.cjs'),
+        path.join(folder, 'settle.test.cjs'),
+      ]);
+      deepStrictEqual(
+        [
+          result.status,
+          Date.now() - Number(readFileSync(stamp, 'utf8')) >= 2000,
+        ],
+        [0, true],
+      );
+    });
+
+    it('tooling-32: the suite-client source defines no hold of its own', () => {
+      strictEqual(
+        readFileSync(
+          path.join(
+            REPOSITORY_ROOT,
+            'tests/acceptance/suite-client/client.test.ts',
+          ),
+          'utf8',
+        ).includes('SETTLE_MILLISECONDS'),
+        false,
       );
     });
 
@@ -1912,12 +2219,13 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-socket',
           'dist-slow',
           'dist-ports',
         ].map(folder =>
           existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
         ),
-        [false, false, false, false, false, false, false, false],
+        [false, false, false, false, false, false, false, false, false],
       );
     });
 
@@ -1957,6 +2265,7 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-socket',
           'dist-slow',
           'dist-ports',
         ].map(folder =>
@@ -1969,7 +2278,7 @@ describe('acceptance', () => {
             ),
           ),
         ),
-        [true, true, true, true, true, true, true],
+        [true, true, true, true, true, true, true, true],
       );
     });
   });
@@ -1995,6 +2304,7 @@ describe('acceptance', () => {
           HARNESS_PASSWORD_FILE: '',
           REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
           REMOTE_OSS_ACCEPTANCE_RECORD: '',
+          REMOTE_OSS_ACCEPTANCE_SIGNALS: '',
           HARNESS_VSIX_FILES: '',
           HARNESS_EDITOR: 'vscode',
           REMOTE_OSS_ACCEPTANCE_LOG: '',

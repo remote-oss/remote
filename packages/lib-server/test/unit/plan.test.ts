@@ -323,6 +323,7 @@ describe('install planner (card server-04 table)', () => {
 const cliMode: NonNullable<PlanInput['cliMode']> = {
   useExecServerSetting: true,
   manualBootstrap: false,
+  socketMode: false,
   cliTemplate: 'https://x/${version}/cli-${os}-${arch}.tar.gz',
   sourcesFree: true,
 };
@@ -409,6 +410,16 @@ describe('install planner, the CLI mode (card cli-02 table)', () => {
       plan(cliInput({cliMode: {...cliMode, manualBootstrap: true}})),
     );
     deepStrictEqual([planned.kind, planned.notes], ['download', []]);
+  });
+
+  it('F-2410 AC-3: a socket-mode start gets a direct plan that notes why', () => {
+    const planned = asPlan(
+      plan(cliInput({cliMode: {...cliMode, socketMode: true}})),
+    );
+    deepStrictEqual(
+      [planned.kind, planned.notes],
+      ['download', [{kind: 'cliNotUsed', reason: 'socketMode'}]],
+    );
   });
 
   it('brief §2 row 3: a platform without a CLI build gets a direct plan that notes why', () => {

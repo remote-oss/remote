@@ -1,5 +1,8 @@
 {
-  "exclude": {},
+  "exclude": {
+    "src/extension.ts": "loads the editor",
+    "src/web-extension.ts": "loads the editor"
+  },
   "ratchet": {
     "lines": 100,
     "branches": 100,

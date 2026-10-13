@@ -64,6 +64,19 @@ const INSTALL_FAILED: FailureReason = {id: 'S075'};
 /** The reason of a server download that failed: the extension's own text. */
 const DOWNLOAD_FAILED: FailureReason = {id: 'S043'};
 
+/**
+ * What a failed client download's reason names: `Failed to fetch` for the network, `Server returned <status>` for an
+ * HTTP error status, and the file system's own text for the client's file.
+ */
+function localDownloadValue(
+  failure: Extract<TransferFailure, {kind: 'localDownload'}>,
+): string {
+  if (failure.cause === 'httpStatus') {
+    return `Server returned ${String(failure.status)}`;
+  }
+  return failure.cause === 'clientFile' ? failure.detail : 'Failed to fetch';
+}
+
 /** The failure of a host channel: a closed or timed out connection, a cancel, or a copy that did not work. */
 export function ofChannel(failure: ChannelFailure): FailureDetail {
   switch (failure.kind) {
@@ -98,13 +111,48 @@ const STATUS_KINDS: ReadonlyMap<string, FailedKind> = new Map<
   ['ServerFailedToStart', 'serverStart'],
 ]);
 
+/** The hint that the host lock can be kept in the temporary folder, for a lock file the host could not use. */
+const LOCK_HINT =
+  "The host lock file can't be used here. On a distributed file system such as NFS or AFS, setting remote.SSH.lockfilesInTmp to true keeps the lock in /tmp.";
+
+/** The log text of a write failure: the path and the error, then the hint when the unusable file is a lock outside /tmp. */
+function writeDetail(failure: {
+  path: string;
+  error: string;
+  lockInTemporary?: boolean;
+}): string {
+  const text = `cannot write ${failure.path}: ${failure.error}`;
+  return failure.lockInTemporary === false ? `${text}\n${LOCK_HINT}` : text;
+}
+
 /** The failure a bootstrap script's status word stands for; a word outside the list is `unknown`. */
-function ofStatus(status: string): FailureDetail {
+function ofStatus(
+  status: string,
+  writeFailure?: {path: string; error: string; lockInTemporary?: boolean},
+): FailureDetail {
   const kind = STATUS_KINDS.get(status) ?? 'unknown';
   if (kind === 'serverDownload') {
     return {kind, reason: DOWNLOAD_FAILED};
   }
-  return kind === 'serverInstall' ? {kind, reason: INSTALL_FAILED} : {kind};
+  if (kind === 'serverInstall') {
+    return writeFailure === undefined
+      ? {kind, reason: INSTALL_FAILED}
+      : logged(kind, writeDetail(writeFailure), INSTALL_FAILED);
+  }
+  return {kind};
+}
+
+/** The failure of a loop that gave up on a busy host lock, with the lock file when the host named it. */
+function ofExhausted(failure: {
+  attempts: number;
+  lockPath?: string;
+}): FailureDetail {
+  return logged(
+    'retriesExhausted',
+    failure.lockPath === undefined
+      ? `the host lock was still held after ${String(failure.attempts)} attempts`
+      : `the host lock ${failure.lockPath} was still held after ${String(failure.attempts)} attempts`,
+  );
 }
 
 /** The failure of the host probe. */
@@ -204,7 +252,10 @@ export function ofTransfer(failure: TransferFailure): FailureDetail {
     case 'serverDownload':
       return logged('serverDownload', failure.cause, DOWNLOAD_FAILED);
     case 'localDownload':
-      return logged('serverDownload', failure.detail, DOWNLOAD_FAILED);
+      return logged('serverDownload', failure.detail, {
+        id: 'S071',
+        values: [localDownloadValue(failure)],
+      });
     case 'downloadTimeout':
       return logged('serverDownload', failure.reason, DOWNLOAD_FAILED);
     case 'verification':
@@ -216,9 +267,9 @@ export function ofTransfer(failure: TransferFailure): FailureDetail {
     case 'cancelled':
       return {kind: 'cancelled'};
     case 'retriesExhausted':
-      return {kind: 'retriesExhausted'};
+      return ofExhausted(failure);
     case 'scriptFailed':
-      return ofStatus(failure.status);
+      return ofStatus(failure.status, failure.writeFailure);
     case 'noResultBlock':
       return {kind: 'channelClosed'};
     default:
@@ -283,9 +334,9 @@ export function ofStart(
     case 'prerequisitesMissing':
       return {kind: 'prerequisiteMissing'};
     case 'retriesExhausted':
-      return {kind: 'retriesExhausted'};
+      return ofExhausted(failure);
     case 'scriptFailed':
-      return ofStatus(failure.status);
+      return ofStatus(failure.status, failure.writeFailure);
     case 'noResultBlock':
       return {kind: 'channelClosed'};
     default:

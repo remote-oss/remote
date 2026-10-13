@@ -111,7 +111,6 @@ export async function packageWindowAgent(
       '--no-dependencies',
       '--skip-license',
       '--allow-missing-repository',
-      '--allow-star-activation',
       '--out',
       vsix,
     ],
@@ -237,6 +236,13 @@ export async function runPlainLaunch(
     REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,
     REMOTE_OSS_ACCEPTANCE_RECORD: files.record,
     REMOTE_OSS_ACCEPTANCE_LOG: files.logFile,
+    REMOTE_OSS_ACCEPTANCE_WINDOWS: path.join(
+      session.runFolder,
+      launch.label,
+      'agent',
+      'pids',
+    ),
+    REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(session.runFolder, 'signals'),
     ...launch.environment,
   };
   // A port file an earlier launch left would name a port nobody listens on.

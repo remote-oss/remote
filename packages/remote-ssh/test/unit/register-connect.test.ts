@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {recordingResolverEditor} from 'lib-authority/testing/recording-resolver-editor';
+import type {Connected, Failed} from 'lib-authority';
 import type {CommandHost} from 'lib-identifiers';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
@@ -38,6 +39,7 @@ async function registered(
   resolversGranted: boolean,
   serverPort: number | 'none' = 'none',
   surfaces?: ConnectSurfaces,
+  connectResult?: Connected | Failed,
 ): Promise<{
   seen: Seen;
   registration: Awaited<ReturnType<typeof registerConnect>>;
@@ -186,11 +188,35 @@ async function registered(
         configFile: () => '',
       },
     },
-    {...assembly, connector, killLocalServer, maintain},
+    {
+      ...assembly,
+      options:
+        connectResult === undefined
+          ? assembly.options
+          : {
+              ...assembly.options,
+              connector: {
+                ...assembly.options.connector,
+                connect: () => Promise.resolve(connectResult),
+              },
+            },
+      connector,
+      killLocalServer,
+      maintain,
+    },
     resolversGranted,
   );
   return {seen, registration, recording, state, sink};
 }
+
+/** A connect that succeeds. */
+const CONNECTED: Connected = {
+  address: {host: '127.0.0.1', port: 4321},
+  connectionToken: 'token',
+  extensionHostEnv: {},
+  environmentTunnels: [],
+  trusted: false,
+};
 
 describe("the connect's registration", () => {
   it('contracts §3.2: the resolver of ssh-remote is registered when the editor grants the proposal', async () => {
@@ -434,6 +460,32 @@ describe("the connect's registration", () => {
   it('connect-33: without a resolver the Ports view is never enabled', async () => {
     const {seen} = await registered(false);
     deepStrictEqual(seen.portsViews, 0);
+  });
+
+  it('contracts §3.2: the active connection is nothing before any resolve', async () => {
+    const {registration} = await registered(true);
+    deepStrictEqual(registration.activeConnection(), undefined);
+  });
+
+  it('contracts §3.2: the active connection after a resolve that succeeded names the host key and the success', async () => {
+    const {registration, recording} = await registered(
+      true,
+      'none',
+      undefined,
+      CONNECTED,
+    );
+    await recording
+      .registered()
+      ?.resolve('ssh-remote+dev', {resolveAttempt: 1});
+    deepStrictEqual(registration.activeConnection(), {
+      hostKey: 'dev',
+      lastResolve: 'succeeded',
+    });
+  });
+
+  it('contracts §3.2: without the resolvers grant there is no active connection', async () => {
+    const {registration} = await registered(false);
+    deepStrictEqual(registration.activeConnection(), undefined);
   });
 
   it('F-2601: the window has no alias before its first resolve', async () => {

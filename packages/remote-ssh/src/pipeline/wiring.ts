@@ -10,6 +10,7 @@ import type {Scheduler} from 'lib-helper';
 import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {OverrideValue} from 'lib-product';
+import {type LocalDownloadMode, sshPolicyFor} from 'lib-server';
 import {buildInvocation, connectWaitMilliseconds} from 'lib-ssh';
 import type {
   AcquireConnectionOutcome,
@@ -58,6 +59,7 @@ import {
   openTerminalConnectionStep,
   type TerminalConnectionDependencies,
 } from './terminal-connection-step.ts';
+import type {PortChoice} from './port-choice.ts';
 import {openTunnelStep, type TunnelStepDependencies} from './tunnel-step.ts';
 
 /** The settings a connect reads, each when the step that needs it runs. */
@@ -72,6 +74,8 @@ interface WiringSettings {
   override: () => OverrideValue | undefined;
   /** `remote.SSH.useExecServer`. */
   useExecServer: () => boolean;
+  /** Where the connect may download the server archive, from `remote.SSH.localServerDownload`. */
+  localDownloadMode: () => LocalDownloadMode;
 }
 
 /** What the channel of one connect is made from: the host as written, the runs' shared part, and the terms. */
@@ -90,7 +94,7 @@ interface CliWiring {
   local: LocalPort;
   scheduler: Scheduler;
   /** The bridge's loopback port, chosen as the tunnel's is; nothing when none is free. */
-  chooseLocalPort(): Promise<number | undefined>;
+  chooseLocalPort(): Promise<PortChoice>;
   newSecret(): string;
   presenter: FailurePresenter;
   /** The driver of the server download's notification of one bridge's first `serve`. */
@@ -124,7 +128,12 @@ export interface WiringPorts {
   /** The server steps' dependencies, apart from what depends on the connect's host. */
   server: Omit<
     ServerStepDependencies,
-    'settings' | 'remoteUser' | 'override' | 'useExecServer'
+    | 'settings'
+    | 'remoteUser'
+    | 'override'
+    | 'useExecServer'
+    | 'policy'
+    | 'socketMode'
   >;
   /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
   tunnel: Omit<
@@ -216,7 +225,9 @@ export function stepsOf(
       ),
       override: ports.settings.override(),
       useExecServer: ports.settings.useExecServer(),
+      policy: sshPolicyFor(ports.settings.localDownloadMode()),
       remoteUser: () => lookedUp(state).user,
+      socketMode: () => tunnelStep.tunnelPath() === 'socket',
     });
     return held.server;
   }
@@ -292,6 +303,32 @@ export function stepsOf(
       ),
     logger: ports.logger,
   });
+  const tunnelStep = openTunnelStep({
+    ...ports.tunnel,
+    connectWait: () =>
+      terminalWaitOf(
+        lookedUp(state).connectTimeout,
+        connectionSettings().connectTimeout,
+      ),
+    tunnelInvocation: forward => {
+      if (held.opening === undefined) {
+        throw new Error('the tunnel was asked for before the connection');
+      }
+      return buildInvocation({
+        ...runBaseOf(
+          held.opening.input,
+          held.opening.terms,
+          state,
+          connectionSettings(),
+          ports.requestEnvironment,
+        ),
+        purpose: 'tunnel',
+        forwards: [forward],
+      });
+    },
+    environment: () =>
+      windowEnvironment(lookedUp(state).localForwards, ports.logger),
+  });
   return {
     validate: input => serverSteps(input).validate(input),
     preconnect: preconnectStep({
@@ -351,10 +388,14 @@ export function stepsOf(
       }
     },
     openBridge: async (control, serveParams, events) => {
-      const port = await ports.cliPath.chooseLocalPort();
-      if (port === undefined) {
+      const chosen = await ports.cliPath.chooseLocalPort();
+      if ('busyRange' in chosen) {
+        return {busyRange: chosen.busyRange};
+      }
+      if ('noPort' in chosen) {
         return undefined;
       }
+      const {port} = chosen;
       const progress = ports.cliPath.downloadProgress();
       return openCliBridge(
         control,
@@ -394,32 +435,7 @@ export function stepsOf(
     maintain: (input, ...rest) => serverSteps(input).maintain(input, ...rest),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
-    ...openTunnelStep({
-      ...ports.tunnel,
-      connectWait: () =>
-        terminalWaitOf(
-          lookedUp(state).connectTimeout,
-          connectionSettings().connectTimeout,
-        ),
-      tunnelInvocation: forward => {
-        if (held.opening === undefined) {
-          throw new Error('the tunnel was asked for before the connection');
-        }
-        return buildInvocation({
-          ...runBaseOf(
-            held.opening.input,
-            held.opening.terms,
-            state,
-            connectionSettings(),
-            ports.requestEnvironment,
-          ),
-          purpose: 'tunnel',
-          forwards: [forward],
-        });
-      },
-      environment: () =>
-        windowEnvironment(lookedUp(state).localForwards, ports.logger),
-    }),
+    ...tunnelStep,
     rememberPlatform: terms.rememberPlatform,
   };
 }

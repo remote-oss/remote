@@ -320,6 +320,13 @@ describe("the connect's CLI path: the window resolves", () => {
     deepStrictEqual(recording.calls.includes('rememberPlatform'), true);
   });
 
+  it('#664: a connect over the CLI resolves though the platform write never settles', async () => {
+    const {result} = await connectOverCli(undefined, () => ({
+      rememberPlatform: () => new Promise<void>(() => undefined),
+    }));
+    deepStrictEqual(kindOf(result), 'connected');
+  });
+
   it('V7a: the lines the CLI logs go to the log at their level', async () => {
     const {bridged, messages} = await resolved();
     bridged.onServeLog?.({text: 'Server setup complete', level: 1});
@@ -458,6 +465,42 @@ describe("the connect's CLI path: the fallback before the window resolves", () =
         recording.calls.includes('plan direct'),
       ],
       [true, true],
+    );
+  });
+
+  it('F-2104.AC-14: a bridge whose preferred range was busy stops the CLI and fails with the reason, with no direct install', async () => {
+    const {recording, result} = await connectOverCli(undefined, () => ({
+      openBridge: () =>
+        Promise.resolve({busyRange: {first: 41060, last: 41061}}),
+    }));
+    deepStrictEqual(
+      [
+        recording.calls.includes('stopCli 88'),
+        recording.calls.some(call => call.startsWith('plan direct')),
+        recording.calls.includes('transfer'),
+        recording.calls.includes('start'),
+        'onTransport' in result ? 'connected' : result,
+      ],
+      [
+        true,
+        false,
+        false,
+        false,
+        {
+          kind: 'unknown',
+          reason: {
+            id: 'S067',
+            values: [
+              {id: 'S073', values: [{id: 'S095', values: ['41060', '41061']}]},
+            ],
+          },
+          retryable: false,
+          silent: false,
+          userAlreadyNotified: false,
+          hints: [],
+          diagnostics: [],
+        },
+      ],
     );
   });
 

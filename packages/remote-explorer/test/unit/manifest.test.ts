@@ -101,12 +101,16 @@ describe('the manifest of the Remote Explorer package', () => {
           'bugs',
           'engines',
           'categories',
+          'main',
+          'browser',
           'keywords',
           'extensionKind',
           'capabilities',
           'activationEvents',
           'enabledApiProposals',
+          'l10n',
           'contributes',
+          'dependencies',
         ],
         identity: [
           'remote-explorer',
@@ -143,6 +147,17 @@ describe('the manifest of the Remote Explorer package', () => {
         {untrustedWorkspaces: {supported: true}},
       ],
     );
+  });
+
+  it('F-5001.AC-15: the entry is the built extension file and the runtime strings are in l10n', () => {
+    deepStrictEqual(
+      [MANIFEST.main, MANIFEST.l10n],
+      ['./dist/extension.js', './l10n'],
+    );
+  });
+
+  it('F-5001.AC-15: the web entry is the web bundle', () => {
+    deepStrictEqual(MANIFEST.browser, './dist/web/extension.js');
   });
 
   it('F-5101.3.3: the proposals are contribViewsRemote and extensionsAny', () => {
@@ -275,6 +290,22 @@ describe('the manifest of the Remote Explorer package', () => {
     deepStrictEqual(
       LOCALES.map(locale => jsonOf(`package.nls.${locale}.json`)),
       LOCALES.map(() => STRINGS_TABLE),
+    );
+  });
+
+  it('F-5001.AC-16: the runtime strings are the nine texts, in the default bundle and the 14 locales, as English', () => {
+    const texts = Object.keys(jsonOf('l10n/bundle.l10n.json'));
+    deepStrictEqual(
+      [
+        texts.length,
+        ...LOCALES.map(locale => jsonOf(`l10n/bundle.l10n.${locale}.json`)),
+      ],
+      [
+        9,
+        ...LOCALES.map(() =>
+          Object.fromEntries(texts.map(text => [text, text])),
+        ),
+      ],
     );
   });
 

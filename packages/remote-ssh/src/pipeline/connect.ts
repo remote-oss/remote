@@ -329,7 +329,7 @@ async function runSteps(
       cancellation,
     });
     if (overCli.kind === 'connected') {
-      await quietly('the platform setting', () =>
+      void quietly('the platform setting', () =>
         steps.rememberPlatform(input, host.operatingSystem),
       );
       return {
@@ -417,16 +417,19 @@ async function runSteps(
   if ('failed' in tunnel) {
     return tunnel.failed;
   }
-  await quietly('the shared record', () =>
-    lease.storeSharedRecord({
-      remotePort: portOf(started.server),
-      operatingSystem: host.operatingSystem,
-      architecture: host.architecture,
-      temporaryFolder: host.temporaryFolder,
-      connectionToken: started.server.connectionToken,
-    }),
-  );
-  await quietly('the platform setting', () =>
+  const {endpoint} = started.server;
+  if (endpoint.kind === 'port') {
+    await quietly('the shared record', () =>
+      lease.storeSharedRecord({
+        remotePort: endpoint.port,
+        operatingSystem: host.operatingSystem,
+        architecture: host.architecture,
+        temporaryFolder: host.temporaryFolder,
+        connectionToken: started.server.connectionToken,
+      }),
+    );
+  }
+  void quietly('the platform setting', () =>
     steps.rememberPlatform(input, host.operatingSystem),
   );
   const {opened} = tunnel.value;
@@ -436,7 +439,7 @@ async function runSteps(
       connectionToken: started.server.connectionToken,
       trusted: false,
     },
-    serverPort: portOf(started.server),
+    serverPort: endpoint.kind === 'port' ? endpoint.port : 0,
     release: () => {
       tunnel.value.close();
       lease.release();

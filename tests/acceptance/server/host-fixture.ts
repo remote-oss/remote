@@ -44,6 +44,8 @@ export interface RunningHost {
   base: RunBase;
   /** The same for another `Host` of the run's ssh_config, such as one added with `appendConfig`. */
   baseOf(alias: string): RunBase;
+  /** The channel to another `Host` of the run's ssh_config, such as `readonly`. */
+  channelOf(alias: string): SshHostChannel;
   /** Adds text to the run's ssh_config. */
   appendConfig(text: string): void;
   /** Makes an Ed25519 key pair at `keyFile`, its private key protected by `passphrase`. */
@@ -108,10 +110,10 @@ function baseFor(configFile: string, alias: string): RunBase {
   };
 }
 
-/** The channel to `Host harness` over the `ssh` and `scp` clients. */
-function channelTo(base: RunBase): SshHostChannel {
+/** The channel to a host of the run's ssh_config over the `ssh` and `scp` clients. */
+function channelTo(base: RunBase, alias = 'harness'): SshHostChannel {
   return new SshHostChannel({
-    hostString: 'harness',
+    hostString: alias,
     platform: 'linux',
     base,
     spawner: nodeProcessSpawner,
@@ -183,6 +185,7 @@ export async function startHost(
       channel,
       base,
       baseOf: alias => baseFor(configFile, alias),
+      channelOf: alias => channelTo(baseFor(configFile, alias), alias),
       appendConfig: text => {
         appendFileSync(configFile, text);
       },

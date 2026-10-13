@@ -2,7 +2,10 @@ import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import type {RecordingChannel} from 'lib-host/testing/recording-channel';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {createServerSteps} from '../../src/pipeline/server-steps.ts';
+import {
+  cliNotUsedLine,
+  createServerSteps,
+} from '../../src/pipeline/server-steps.ts';
 import type {ConnectInput} from '../../src/pipeline/steps.ts';
 import {
   channelAnswering,
@@ -220,10 +223,12 @@ describe('the server steps: plan, the CLI path', () => {
   const CLI_TEMPLATE =
     'https://example.invalid/cli-${os}-${arch}-${version}.tar.gz';
 
-  /** The plan and the log lines of a plan step for a product with `cliTemplate`. */
+  /** The plan and the log lines of a plan step for a product with `cliTemplate`, planning `host` with `options`. */
   function planned(
     cliTemplate: string,
     changes: Parameters<typeof dependencies>[0] = {},
+    host: typeof HOST = HOST,
+    options: {direct: boolean} = {direct: false},
   ) {
     const sink = new MemorySink();
     const steps = createServerSteps(
@@ -233,8 +238,13 @@ describe('the server steps: plan, the CLI path', () => {
         ...changes,
       }),
     );
-    const result = steps.plan(INPUT, HOST);
+    const result = steps.plan(INPUT, host, options);
     return {result, messages: sink.lines.map(line => line.message)};
+  }
+
+  /** The log's lines about the CLI path, for a row to compare. */
+  function cliPathLines(messages: string[]) {
+    return messages.filter(message => message.startsWith('the CLI path'));
   }
 
   it('F-3902 rule 5 (ii): a product with a usable CLI template plans the CLI', () => {
@@ -259,15 +269,42 @@ describe('the server steps: plan, the CLI path', () => {
 
   it('brief §2 row 1: useExecServer off logs no reason', () => {
     const {messages} = planned(CLI_TEMPLATE, {useExecServer: false});
+    deepStrictEqual(cliPathLines(messages), []);
+  });
+
+  it('F-2410 AC-3: a socket-mode connect plans the direct install even when the CLI could be used', () => {
+    const {result} = planned(CLI_TEMPLATE, {socketMode: () => true});
+    deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('F-2410 AC-3: a socket-mode connect logs why the CLI was not used', () => {
+    const {messages} = planned(CLI_TEMPLATE, {socketMode: () => true});
     deepStrictEqual(
       messages.filter(message => message.startsWith('the CLI path')),
-      [],
+      [
+        'the CLI path was not used: the server listens on a socket, which the CLI does not',
+      ],
     );
   });
 
   it('brief §2 row 2: no CLI template plans the direct install', () => {
     const {result} = planned('');
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('F-3902 AC-6: a product with no CLI template logs the line once, with the no CLI source reason', () => {
+    const {messages} = planned('');
+    deepStrictEqual(cliPathLines(messages), [cliNotUsedLine('noCliSource')]);
+  });
+
+  it('F-3902 AC-6: the direct plan without a CLI source carries the no CLI source note', () => {
+    const {result} = planned('');
+    deepStrictEqual(
+      'plan' in result && result.plan.kind === 'download'
+        ? result.plan.notes
+        : result,
+      [{kind: 'cliNotUsed', reason: 'noCliSource'}],
+    );
   });
 
   it('brief §2 row 3: a template with an unknown placeholder plans the direct install', () => {
@@ -277,40 +314,32 @@ describe('the server steps: plan, the CLI path', () => {
 
   it('brief §2 row 3: an unusable template is logged once, with its reason', () => {
     const {messages} = planned('not a url ${os}');
-    deepStrictEqual(
-      messages.filter(message => message.startsWith('the CLI path')),
-      ['the CLI path was not used: the CLI template is unusable'],
-    );
+    deepStrictEqual(cliPathLines(messages), [
+      'the CLI path was not used: the CLI template is unusable',
+    ]);
   });
 
   it('brief §2 row 4: a host without a CLI build plans the direct install, logged', () => {
-    const sink = new MemorySink();
-    const steps = createServerSteps(
-      dependencies({
-        profile: {...PROFILE, cliDownloadUrlTemplate: CLI_TEMPLATE},
-        logger: createLogger(sink, {minimumLevel: () => 'info'}),
-      }),
+    const {messages} = planned(
+      CLI_TEMPLATE,
+      {},
+      {
+        ...HOST,
+        architecture: 'riscv64' as typeof HOST.architecture,
+      },
     );
-    steps.plan(INPUT, {
-      ...HOST,
-      architecture: 'riscv64' as typeof HOST.architecture,
-    });
-    deepStrictEqual(
-      sink.lines
-        .map(line => line.message)
-        .filter(message => message.startsWith('the CLI path')),
-      ['the CLI path was not used: there is no CLI build for this host'],
-    );
+    deepStrictEqual(cliPathLines(messages), [
+      'the CLI path was not used: there is no CLI build for this host',
+    ]);
   });
 
   it('brief §2 row 5: a CLI source under the terms plans the direct install, logged', () => {
     const {messages} = planned(
       'https://update.code.visualstudio.com/cli-${os}-${arch}',
     );
-    deepStrictEqual(
-      messages.filter(message => message.startsWith('the CLI path')),
-      ["the CLI path was not used: the server's terms must be accepted first"],
-    );
+    deepStrictEqual(cliPathLines(messages), [
+      "the CLI path was not used: the server's terms must be accepted first",
+    ]);
   });
 
   it("§6: the fallback's plan, asked for the direct install, never takes the CLI path", () => {
@@ -323,6 +352,16 @@ describe('the server steps: plan, the CLI path', () => {
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
   });
 
+  it('F-3902 AC-6: a direct re-plan without a CLI template logs no line', () => {
+    const {messages} = planned('', {}, HOST, {direct: true});
+    deepStrictEqual(cliPathLines(messages), []);
+  });
+
+  it('F-3902 AC-6: a direct re-plan with a CLI template logs no line either', () => {
+    const {messages} = planned(CLI_TEMPLATE, {}, HOST, {direct: true});
+    deepStrictEqual(cliPathLines(messages), []);
+  });
+
   it('brief §2 row 5: a server source under the terms keeps the CLI out too', () => {
     const {result} = planned(CLI_TEMPLATE, {
       override: {
@@ -331,6 +370,21 @@ describe('the server steps: plan, the CLI path', () => {
       },
     });
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'download');
+  });
+
+  it('cliNotUsedLine: the line of each reason', () => {
+    deepStrictEqual(
+      [
+        cliNotUsedLine('noCliSource'),
+        cliNotUsedLine('noBuildForPlatform'),
+        cliNotUsedLine('termsToAccept'),
+      ],
+      [
+        'the CLI path was not used: the editor names no CLI source',
+        'the CLI path was not used: there is no CLI build for this host',
+        "the CLI path was not used: the server's terms must be accepted first",
+      ],
+    );
   });
 });
 

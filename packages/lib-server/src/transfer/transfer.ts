@@ -10,7 +10,13 @@ import type {Logger} from 'lib-log';
 import {allowedRedirectHosts} from 'lib-product';
 import type {Plan} from '../install/plan.ts';
 import {runStep, type StepRun} from '../lifecycle/run-step.ts';
-import type {HostLockLoop} from '../lifecycle/runtime.ts';
+import {
+  exhaustedFailure,
+  type HostLockLoop,
+  type RetriesExhausted,
+  scriptFailure,
+  type WriteFailure,
+} from '../lifecycle/runtime.ts';
 import type {Verification} from '../policy/record.ts';
 import type {ScriptParameters} from '../scripts/bootstrap.ts';
 import {
@@ -94,14 +100,24 @@ export type TransferFailure =
       kind: 'serverDownload';
       cause: 'downloadFailed' | 'noDownloader' | 'tooLarge' | 'redirectHost';
     }
-  | {kind: 'localDownload'; detail: string}
+  | {
+      kind: 'localDownload';
+      /** What failed: the request on the network, an HTTP error status, or the client's file for the archive. */
+      cause: 'network' | 'httpStatus' | 'clientFile';
+      detail: string;
+      status?: number;
+    }
   | {kind: 'downloadTimeout'; reason: 'deadline' | 'stalled'}
   | {kind: 'verification'; mismatch: 'checksum' | 'length'}
   | {kind: 'unpack'}
   | {kind: 'copy'; failure: ChannelFailure}
   | {kind: 'cancelled'}
-  | {kind: 'retriesExhausted'}
-  | {kind: 'scriptFailed'; status: ScriptStatus}
+  | {kind: 'retriesExhausted'; attempts: number; lockPath?: string}
+  | {
+      kind: 'scriptFailed';
+      status: ScriptStatus;
+      writeFailure?: WriteFailure;
+    }
   | {kind: 'noResultBlock'}
   | {kind: 'channelFailed'; failure: ChannelFailure};
 
@@ -132,11 +148,11 @@ function channelFailure(failure: ChannelFailure): TransferFailure {
 
 /** The transfer outcome of a finished install step. */
 function outcomeOf(
-  stepRun: StepRun | 'retriesExhausted',
+  stepRun: StepRun | RetriesExhausted,
   plan: DownloadPlan,
 ): TransferOutcome {
-  if (stepRun === 'retriesExhausted') {
-    return failed({kind: 'retriesExhausted'});
+  if (stepRun.kind === 'retriesExhausted') {
+    return failed(exhaustedFailure(stepRun));
   }
   if (stepRun.kind === 'channelFailed') {
     return failed(channelFailure(stepRun.failure));
@@ -158,7 +174,7 @@ function outcomeOf(
     case 'UnpackFailed':
       return failed({kind: 'unpack'});
     default:
-      return failed({kind: 'scriptFailed', status: block.status});
+      return failed(scriptFailure(block));
   }
 }
 
@@ -348,7 +364,11 @@ async function keep(
     // Another window that renamed first left a complete entry, which is as good.
     return undefined;
   }
-  return failed({kind: 'localDownload', detail: renamed.detail});
+  return failed({
+    kind: 'localDownload',
+    cause: 'clientFile',
+    detail: renamed.detail,
+  });
 }
 
 /** Deletes a client file. A file that cannot be deleted now is left to the temporary folder's own clean-up. */
@@ -373,7 +393,15 @@ function downloadFailure(
   if (failure.cause === 'deadline' || failure.cause === 'stalled') {
     return failed({kind: 'downloadTimeout', reason: failure.cause});
   }
-  return failed({kind: 'localDownload', detail: failure.detail});
+  return failed({
+    kind: 'localDownload',
+    cause:
+      failure.cause === 'httpStatus' || failure.cause === 'clientFile'
+        ? failure.cause
+        : 'network',
+    detail: failure.detail,
+    ...(failure.status === undefined ? {} : {status: failure.status}),
+  });
 }
 
 /**

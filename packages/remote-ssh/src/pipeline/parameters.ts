@@ -55,6 +55,8 @@ export interface ParameterInput {
   archiveUrl: string;
   epochMilliseconds: number;
   bounds: ServerBounds;
+  /** Whether the server listens on a socket; the tunnel's path decides it. */
+  socketMode: boolean;
 }
 
 /** The start options for a server: the settings' values, with the licence flag as the licence gate left it. */
@@ -62,6 +64,7 @@ export function runtimeOptionsFor(
   settings: HostServerSettings,
   bounds: ServerBounds,
   licenceAccepted = false,
+  socketMode = false,
 ): RuntimeOptions {
   return {
     bindHost: settings.bindHost.bindHost,
@@ -71,14 +74,19 @@ export function runtimeOptionsFor(
     defaultExtensions: settings.defaultExtensions,
     fileWatcherPollingMilliseconds: 0,
     readySeconds: bounds.readySeconds,
-    socketMode: false,
+    socketMode,
   };
 }
 
 /** The parameters of every script of one connect. */
 export function scriptParametersFor(input: ParameterInput): ScriptParameters {
   const {settings, policy} = input;
-  const options = runtimeOptionsFor(settings, input.bounds);
+  const options = runtimeOptionsFor(
+    settings,
+    input.bounds,
+    false,
+    input.socketMode,
+  );
   return {
     installRoot:
       settings.installFolder.kind === 'folder'

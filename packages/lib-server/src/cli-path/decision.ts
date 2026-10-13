@@ -10,6 +10,7 @@ import {CLI_PLATFORMS} from './platforms.ts';
 export type DirectReason =
   | 'settingOff'
   | 'manualBootstrap'
+  | 'socketMode'
   | 'noCliSource'
   | 'noBuildForPlatform'
   | 'termsToAccept';
@@ -20,6 +21,8 @@ export interface CliModeInput {
   useExecServerSetting: boolean;
   /** Whether the user chose the manual bootstrap for the server download. */
   manualBootstrap: boolean;
+  /** Whether the server starts in socket mode, which the CLI's loopback listener cannot serve. */
+  socketMode: boolean;
   /** The product's `cliDownloadUrlTemplate`; empty when it names none. */
   cliTemplate: string;
   /** The host's operating system (`linux`, `alpine`, `darwin`, `win32`) and architecture (`x64`, `arm64`, `armhf`). */
@@ -39,12 +42,15 @@ interface CliProfile {
 }
 
 /**
- * The install mode of one connect, judged in this order: the setting, a manual bootstrap, the product's CLI source,
+ * The install mode of one connect, judged in this order: the setting, a socket-mode start, a manual bootstrap, the product's CLI source,
  * the host's platform, and the terms. What is already installed does not decide it: reuse is judged within the mode.
  */
 export function decideCliMode(input: CliModeInput): CliMode {
   if (!input.useExecServerSetting) {
     return {kind: 'direct', reason: 'settingOff'};
+  }
+  if (input.socketMode) {
+    return {kind: 'direct', reason: 'socketMode'};
   }
   if (input.manualBootstrap) {
     return {kind: 'direct', reason: 'manualBootstrap'};

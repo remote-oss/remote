@@ -3,7 +3,7 @@ import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
 import {RecordingChannel} from 'lib-host/testing/recording-channel';
-import {openCliControl} from 'lib-server';
+import {type LocalDownloadMode, openCliControl} from 'lib-server';
 import {
   fakeCli,
   type CliScript,
@@ -105,9 +105,10 @@ function portsOf(
     connection?: SharedConnection;
     mode?: ConnectionMode;
     cliLocal?: FakeLocalPort;
-    bridgePort?: number | 'none';
+    bridgePort?: number | 'none' | 'busy';
     cliTemplate?: string;
     useExecServer?: boolean;
+    localDownloadMode?: LocalDownloadMode;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
@@ -140,6 +141,7 @@ function portsOf(
         layer: 'defaultProfileUser',
       }),
       useExecServer: () => changes.useExecServer ?? false,
+      localDownloadMode: () => changes.localDownloadMode ?? 'auto',
     },
     terms: {
       settings: () => ({
@@ -230,7 +232,7 @@ function portsOf(
         heldBytesMaximum: 8,
       },
       dialerFor: () => new FakeDialer(['work']),
-      chooseLocalPort: () => Promise.resolve(50000),
+      chooseLocalPort: () => Promise.resolve({port: 50000}),
       logger,
     },
     cliPath: {
@@ -239,8 +241,10 @@ function portsOf(
       chooseLocalPort: () =>
         Promise.resolve(
           changes.bridgePort === 'none'
-            ? undefined
-            : (changes.bridgePort ?? BRIDGE_PORT),
+            ? {noPort: true}
+            : changes.bridgePort === 'busy'
+              ? {busyRange: {first: 41060, last: 41061}}
+              : {port: changes.bridgePort ?? BRIDGE_PORT},
         ),
       newSecret: () => 'fresh-secret',
       presenter: {
@@ -415,6 +419,56 @@ describe("the composition's forwarding to this connect's server steps", () => {
   });
 });
 
+describe("the download mode reaches this connect's plan (card connect-38)", () => {
+  /** Where the plan of a connect over `ports` downloads the server for a host with none installed, and its fallback. */
+  async function placementOf(
+    ports: WiringPorts,
+  ): Promise<{where: string; clientFallback: boolean}> {
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const planned = steps.plan(inputFor('dev'), HOST);
+    if (!('plan' in planned) || planned.plan.kind !== 'download') {
+      throw new Error('the plan should download');
+    }
+    return {
+      where: planned.plan.where,
+      clientFallback: planned.plan.clientFallback,
+    };
+  }
+
+  it('F-2405 BR-1: each mode reaches the placement of the plan', async () => {
+    deepStrictEqual(
+      await Promise.all(
+        (['auto', 'always', 'off'] as const).map(
+          async localDownloadMode =>
+            await placementOf(portsOf({localDownloadMode}).ports),
+        ),
+      ),
+      [
+        {where: 'host', clientFallback: true},
+        {where: 'client', clientFallback: false},
+        {where: 'host', clientFallback: false},
+      ],
+    );
+  });
+
+  it('F-2405 BR-1: a connect reads the mode as it is when it starts', async () => {
+    const changes: {localDownloadMode: LocalDownloadMode} = {
+      localDownloadMode: 'auto',
+    };
+    const {ports} = portsOf(changes);
+    const first = await placementOf(ports);
+    changes.localDownloadMode = 'off';
+    deepStrictEqual(
+      [first, await placementOf(ports)],
+      [
+        {where: 'host', clientFallback: true},
+        {where: 'host', clientFallback: false},
+      ],
+    );
+  });
+});
+
 describe("the composition's forwarding of the later server steps", () => {
   /** The fixture's host with no server installed, so the plan downloads. */
   const fresh = HOST;
@@ -527,6 +581,100 @@ describe("the composition's forwarding of the later server steps", () => {
       new AbortController().signal,
     );
     deepStrictEqual(seen.logins, ['dev']);
+  });
+});
+
+describe("a connect's socket mode (card connect-41)", () => {
+  const SOCKET = {
+    listenOnSocket: true,
+    useLocalServer: true,
+    enableDynamicForwarding: true,
+  };
+
+  const SOCKS = {...SOCKET, listenOnSocket: false};
+
+  const SECOND_SSH = {
+    listenOnSocket: false,
+    useLocalServer: false,
+    enableDynamicForwarding: false,
+  };
+
+  /** What the start ran and the path asked for once it had, with tunnel settings as `readings` gives them in turn. */
+  async function startedWith(
+    readings: Array<typeof SOCKET>,
+    pathFirst = false,
+  ): Promise<{socketMode: boolean; pathAfter: string}> {
+    let reads = 0;
+    const {ports} = portsOf();
+    const steps = stepsOf({
+      ...ports,
+      tunnel: {
+        ...ports.tunnel,
+        settings: () =>
+          readings[Math.min(reads++, readings.length - 1)] ?? SOCKS,
+      },
+    });
+    await steps.locateClient(inputFor('dev'));
+    if (pathFirst) {
+      steps.tunnelPath();
+    }
+    const channel = channelAnswering(
+      lines(
+        'Ok',
+        'server.port=4321',
+        'server.pid=77',
+        'server.token=abcdefghijklmnopqrstuvwxyz012345',
+      ),
+    );
+    await steps.start(
+      inputFor('dev'),
+      leaseOn(channel),
+      HOST,
+      false,
+      new AbortController().signal,
+    );
+    const [call] = channel.calls;
+    return {
+      socketMode:
+        call?.operation === 'runScript' &&
+        /SOCKET_MODE='?yes/.test(call.request.script),
+      pathAfter: steps.tunnelPath(),
+    };
+  }
+
+  it('F-2410 BR-4: with the tunnel on a socket the start is a socket-mode start', async () => {
+    deepStrictEqual(await startedWith([SOCKET]), {
+      socketMode: true,
+      pathAfter: 'socket',
+    });
+  });
+
+  it('F-2410 BR-4: with the tunnel on socks the start is not', async () => {
+    deepStrictEqual(await startedWith([SOCKS]), {
+      socketMode: false,
+      pathAfter: 'socks',
+    });
+  });
+
+  it('F-2410 BR-4: with the tunnel on a second ssh the start is not', async () => {
+    deepStrictEqual(await startedWith([SECOND_SSH]), {
+      socketMode: false,
+      pathAfter: 'secondSsh',
+    });
+  });
+
+  it('F-2410 BR-4: the path asked for before the start decides it, even if the setting changes after', async () => {
+    deepStrictEqual(await startedWith([SOCKET, SOCKS], true), {
+      socketMode: true,
+      pathAfter: 'socket',
+    });
+  });
+
+  it('F-2410 BR-4: the start asked for before the path decides it, and the path then agrees', async () => {
+    deepStrictEqual(await startedWith([SOCKET, SOCKS]), {
+      socketMode: true,
+      pathAfter: 'socket',
+    });
   });
 });
 
@@ -1063,12 +1211,20 @@ describe("the composition's CLI path", () => {
 
   it('cli-04 §4: the bridge gives the window that port on 127.0.0.1', async () => {
     const {bridge} = await bridged();
-    deepStrictEqual(bridge?.address, {host: '127.0.0.1', port: BRIDGE_PORT});
+    deepStrictEqual(
+      bridge !== undefined && 'address' in bridge ? bridge.address : undefined,
+      {host: '127.0.0.1', port: BRIDGE_PORT},
+    );
   });
 
   it('cli-04 §4: with no free port there is no bridge', async () => {
     const {bridge} = await bridged({bridgePort: 'none'});
     deepStrictEqual(bridge, undefined);
+  });
+
+  it('F-2104.AC-14: with every port of the preferred range busy the bridge answers the range', async () => {
+    const {bridge} = await bridged({bridgePort: 'busy'});
+    deepStrictEqual(bridge, {busyRange: {first: 41060, last: 41061}});
   });
 
   it('cli-04 §4: a port that cannot be listened on gives no bridge', async () => {

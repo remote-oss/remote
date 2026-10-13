@@ -1,12 +1,12 @@
 #!/bin/sh
 # Installs the run's public key, given in AUTHORIZED_KEY, and the further keys of AUTHORIZED_KEYS_FURTHER (one per line,
-# may be empty) for the users harness, harness-nofwd and harness-mute, writes CA_PUBLIC_KEY (may be empty) to
-# /etc/ssh/ca.pub for the certificate-only user harness-cert, sets
+# may be empty) for the users harness, harness-nofwd, harness-mute and harness-ro, writes CA_PUBLIC_KEY (may be empty)
+# to /etc/ssh/ca.pub for the certificate-only user harness-cert, sets
 # the password HOST_PASSWORD (from the run's env file) for harness-pw and forgets it, leaves the host with the download tool
 # HOST_FETCH names (busybox-wget, the default; gnu-wget; curl; none), then runs sshd in the foreground.
 # The tools are removed with rm: apk del would put BusyBox's wget link back.
 set -eu
-for account in harness harness-nofwd harness-mute; do
+for account in harness harness-nofwd harness-mute harness-ro; do
   install -d -m 700 -o "$account" -g "$account" "/home/$account/.ssh"
   printf '%s\n' "$AUTHORIZED_KEY" "${AUTHORIZED_KEYS_FURTHER:-}" > "/home/$account/.ssh/authorized_keys"
   chown "$account:$account" "/home/$account/.ssh/authorized_keys"

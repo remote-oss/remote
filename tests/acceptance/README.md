@@ -41,10 +41,14 @@ The extension host sees these variables:
 | `HARNESS_CONTAINER` | The host container's id. |
 | `HARNESS_RUN_FOLDER` | The run's folder: keys, known hosts, user data, extensions. |
 | `HARNESS_VSIX_FILES` | The VSIX files installed, separated by the platform's path delimiter. |
-| `REMOTE_OSS_ACCEPTANCE_SCRIPT` | The JSON file `{"entries": [...]}` that remote-ssh's scripted adapters answer from. Each entry names a surface, a text the question must contain, and the answer; the adapters answer only the next entry in order, dismiss anything else, and the licence modal can only be declined. |
-| `REMOTE_OSS_ACCEPTANCE_RECORD` | The file the adapters append one JSON line per question to: the surface, the question, the answer (a masked input's text is `<supplied>`) and whether an entry matched. |
+| `REMOTE_OSS_ACCEPTANCE_SCRIPT` | The JSON file `{"entries": [...]}` that remote-ssh's scripted adapters answer from. Each entry names a surface, a text the question must contain, and the answer; the adapters answer only the next entry in order, dismiss anything else, and the licence modal can only be declined. An entry with an `after` is a held one: it answers only after the signal file of that name in `REMOTE_OSS_ACCEPTANCE_SIGNALS` exists. |
+| `REMOTE_OSS_ACCEPTANCE_RECORD` | The file the adapters append one JSON line per question to: the surface, the question, the answer (a masked input's text is `<supplied>`, a held entry's waiting line is `held` and its withdrawal `withdrawn`) and whether an entry matched. |
+| `REMOTE_OSS_ACCEPTANCE_SIGNALS` | The folder the signal files of held entries live in: the harness's `signal(name)` creates `<folder>/<name>` in it, and a held entry whose question ends first records `withdrawn` and gives nothing. |
 
-The extension reads the script when it activates, once per window. A test that needs its own script writes it before it opens the window that connects.
+The extension reads the script at every question, so a test may append entries at any time — they count from the next
+question on — and a window's place in the script, its cursor, is the count of its matched record lines, so a reloaded
+window continues where it left off. A test that needs its own script writes it before it opens the window that
+connects, and `appendScript` of `windows/harness.ts` adds entries to the launch's script, atomically, between steps.
 
 ## The server lifecycle without the editor
 
@@ -78,6 +82,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   harness writes before the launch. The tests check the record.
 
 - `terminal`: the same window with `remote.SSH.useLocalServer` off, which is terminal mode, with `suite-terminal/`.
+- `socket`: the same window with `remote.SSH.remoteServerListenOnSocket` on, so the server listens on a socket, with `suite-socket/`.
 
 - `slow`: the same window with `suite-slow/` and a development extension of the workspace kind that takes 15 s to
   activate in the remote extension host (`slow-remote/`, which writes `/tmp/acceptance-slow-started` and
@@ -97,6 +102,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 - `windows`: a launch with no runner (`kind: 'plain'`). The editor is started plainly, as a user starts it, with no test run in it, one user-data folder and the run's extensions folder, which holds our VSIX files and the window agent's; a Node mocha run of `windows/*.test.ts` drives and observes it. See "Several windows".
 
 - `no-proposals`: the same without the proposed API.
+
+- `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.
 
 - `explorer`, `explorer-alone` and `explorer-no-proposals`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, and `explorer-no-proposals` without the proposed API.
 
@@ -127,19 +134,49 @@ launch's own script, record and log files, runs the tests of the launch's folder
 and everything it started.
 
 The window agent (`window-agent/`) is the only test presence in the windows. Three rules: it does nothing unless
-`HARNESS_RUN_FOLDER` is set; it lives only under `tests/` and never goes into a product VSIX; and a test asks it for
-everything a user does to a window. A window's name is the last segment of its first folder's path, or `local` for a
-window with none. The agent appends `activated`, `deactivated`, `accepted`, `done`, `failed` and `state` events to
-`<run folder>/agent/<name>.events.jsonl`, and polls `<name>.commands.jsonl` every 200 ms for `{id, command, args}`
-lines it has not accepted yet, so a command written while the window starts or reloads is not lost. Its own commands
-are `acceptance.agent.openWindow(uri)`, `acceptance.agent.writeFile(name, text)` and `acceptance.agent.state()`.
+`REMOTE_OSS_ACCEPTANCE_WINDOWS` is set; it lives only under `tests/` and never goes into a product VSIX; and a test
+asks it for everything a user does to a window. The run sets the variable for every launch of a VSCodium run, pointing
+it at the launch's own pid folder, `<run folder>/<label>/agent/pids`, so each launch's windows keep their own agent
+files and two launches never mix their windows. The agent appends `activated`, `deactivated`, `accepted`, `done`,
+`failed` and `state` events to `<run folder>/<label>/agent/<name>.events.jsonl`, and polls `<name>.commands.jsonl`
+every 200 ms for `{id, command, args}` lines it has not accepted yet, so a command written while the window starts or
+reloads is not lost. The deactivation is reported once, by the first of the extension's deactivate or the process's
+own end that reaches it, so a window the harness ends still reports it. Its own commands are
+`acceptance.agent.openWindow(uri)`, `acceptance.agent.writeFile(name, text)` and `acceptance.agent.state()`; an
+`openWindow` whose uri names an authority but no folder opens an empty window on it, the way the connect commands do,
+and one with a folder opens a folder window.
+
+A window's name is the last segment of its first folder's path, or a claim for a window with none. At every
+activation, a window without a folder claims the first free name of its launch, `local` then `empty-1`, `empty-2`, …,
+by creating the launch's claim file for it exclusively, and a window with a folder keeps its folder name and claims
+nothing. The claim file stays for the launch's life, so a reloaded empty window comes back under the next free name,
+and the rows that script an empty window do not reload it. The agent writes the name it has to the launch's pid file
+for the window's process, `<pids>/<pid>`, rewriting it at every activation so a reused process id never carries the
+name of the window that ran in it before.
+
+The pid file is the one source the window's own product extension reads: when the launch's variable names a pid
+folder, the remote-ssh extension's script and record name the window from the file, polled every 50 ms until a 10 s
+bound, and a window whose file has not arrived shows as `unclaimed-<pid>` in the record. The agent activates on
+startup and, on a remote window, when the window resolves its authority, so the file is there well before the bound;
+in the measured run it was written 16 ms before the window's first record line. An empty window on a remote authority
+has no folder to name it, and the editor API has no name of the authority a window is on, so the extension writes the
+authority its resolver resolves to `<pids>/<pid>.authority`, and the agent's `state` reports it.
 
 `windows/harness.ts` has the Node helpers: `openWindow(alias, folder)`, `inWindow(name, command, ...args)` (resolves on
 `done`, fails on `failed`), `reloadWindow(name)` (resolves on the next `activated`; the reload command's own `failed` is
 ignored, since its extension host may end first), `closeWindow(name)` (resolves on `deactivated`), `windowState(name)`,
-`windowEvents(name)` and `recordLines(surface?, window?)`. Every wait is bounded at 60 s and fails naming the window and
-the event. The record's lines name the window that wrote them, and a script entry may name the window that answers it.
-The run's folder is named after the run's id, so that `acceptance:clean` ends an editor a killed job left behind.
+which re-asks a remote window until its authority has arrived, `windowEvents(name)`, `recordLines(surface?, window?)`
+and `scriptEntries(entries)`, which writes the launch's script for the windows that activate after the write. For the script and its held entries: `appendScript(entries)` (adds them to the launch's script atomically, so an adapter reading mid-write sees the old list or the new one), `signal(name)` (creates the run's signal file of that name; `never` is refused, the reserved name of an answer that must never come), `heldLines(window?)` (the record's waiting lines), `acceptedPasswords()` (the host's `Accepted password` lines for `harness-pw`, read from both of the container's streams, since sshd logs to its stderr with `-e`) and `hostPassword()` (the run's bare password, from `HARNESS_PASSWORD_FILE`).For the
+empty windows: `emptyWindows()` lists the names their agents have activated with, in the order of their numbers,
+`nextEmptyName()` the name the next empty window will claim, and `nextEmptyWindow(action)` runs `action` and resolves
+with the one empty window it opens once that window's agent has activated, failing when it opens none or more than
+one. `windowNameOrder(name)` measures the order the window's name reached its adapters: the milliseconds between the
+window's pid file and its first record line, the row that opens the first empty window logs it. Every wait is bounded
+at 60 s and fails naming the window and the event. The record's lines name the window that wrote them and carry the
+time of their writing, and a script entry may name the window that answers it. The `hostPick` and `filePick` lines
+record the pick's placeholder as the question, the answer taken or `dismiss`, and `items`, the labels the pick
+showed, so a row reads the hosts and the fixed rows from the record. The run's folder is named after the run's id, so
+that `acceptance:clean` ends an editor a killed job left behind.
 
 ### Reading the window
 
@@ -155,7 +192,9 @@ show a change there first. Nothing in a product package exists for it.
 ### Launches
 
 `tools/acceptance-launches.ts` holds the table of launches, in the order the run makes them, and nothing else lists
-them: the labels, the configurations and the bundled suites all read it. A launch has these fields:
+them: the labels, the configurations and the bundled suites all read it. Every runner launch's window stays open 2 s
+after its last row, because the editor crashes on exit when it closes within moments of a connect. A launch has these
+fields:
 
 | Field | Meaning |
 |---|---|
@@ -186,6 +225,20 @@ case keeps it, and wait for it to be gone; then per held port, start a BusyBox `
 busy) and wait until `netstat -ltn` shows it. The harness writes the ports script for every case before the first
 launch: dismiss the connect's dialog and its pick of actions. A connected case leaves it unused, which is no
 failure.
+
+### Install cases
+
+The install cases of `suite-install/cases.json` prove F-2403, F-3902 and F-2405's download modes end to end the same
+way: one launch per case, `install-<label>`, after the ports cases, with `HARNESS_INSTALL_CASE` naming the case. Both
+suites are host-case suites (`HOST_CASE_SUITES` in `tools/acceptance-launches.ts`): a case may keep the server
+(`keepServer`), keep only its files (`keepFiles`), add host commands (`setup`) and give its own script (`script`,
+default: dismiss the dialog and its pick). An install case that keeps nothing also removes
+`/home/harness/.vscodium-server-insiders` and `/tmp/srv`. A case's settings may name the download host's bases as
+`${HARNESS_DOWNLOADS_HTTP}`, `${HARNESS_DOWNLOADS_HTTPS}`, `${HARNESS_DOWNLOADS_LICENSED}` and
+`${HARNESS_DOWNLOADS_LOCAL}`; the run puts them in when it writes the launch's settings, and leaves the product's own
+`${…}` placeholders as written. Before each launch the run notes how many requests the download host has logged, in
+`<run>/<label>-requests-start`, so `downloadRequests()` of `suite-install/install.ts` reads only the case's own. The
+host's downloaders send a `Wget` or `curl` user agent, and the editor's download doesn't.
 
 A launch with host setup also waits the helper's grace before it starts: the helper of the previous launch outlives
 its window by `HELPER_GRACE_MILLISECONDS` of the extension, and a live one would be reused by the resolve without any
@@ -281,7 +334,9 @@ Besides `harness`, the host image has three users, and the run's `ssh_config` ha
 | Alias | User | What it is for |
 |---|---|---|
 | `password` | `harness-pw` | login by password only (no public key); the password is the run's own, 24 letters and digits |
+| `password-ask` | `harness-pw` | `password`, but its host key is asked against its own `known_hosts_password_ask`, which a test deletes to make the key unknown again |
 | `noforward` | `harness-nofwd` | the run's key; sshd refuses TCP forwarding (`AllowTcpForwarding no`) |
+| `readonly` | `harness-ro` | the run's key; its `.vscodium-server-insiders` and `bin` folders exist, are owned by root and cannot be written by the user |
 | `mute` | `harness-mute` | the run's key; the login shell `/usr/local/bin/mute-shell` runs a command given with `-c` and otherwise never answers |
 | `master` | `harness-pw` | `password`, behind `ControlMaster auto` (socket `cm-%C` in the run's folder, `ControlPersist 60`) |
 | `master-ask` | `harness-pw` | `password`, behind `ControlMaster ask` (socket `cm-ask-%C`) |

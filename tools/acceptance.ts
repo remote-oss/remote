@@ -10,12 +10,14 @@
  * folder are removed at the end, whatever the outcome. Run `pnpm package` first; `pnpm test:acceptance` does both.
  */
 
+import {holdClientPorts, type PortHolder} from './acceptance-occupy.ts';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -61,9 +63,12 @@ import {
   type Launch,
   type RunnerLaunch,
   launchesOf,
-  portsCases,
+  HOST_CASE_SUITES,
+  hostCaseLabel,
+  hostCases,
   runnerLaunches,
   suitesOf,
+  withHarnessBases,
   withRunTokens,
 } from './acceptance-launches.ts';
 import {
@@ -101,7 +106,7 @@ export const FRESH_RESOLVE_WAIT_MILLISECONDS = 3000;
  * The script every ports launch answers from: dismiss the connect's dialog and its pick of actions. A connected
  * case never asks them.
  */
-const PORTS_SCRIPT = [
+const DIALOG_SCRIPT = [
   {surface: 'failureDialog', match: '"', answer: 'dismiss'},
   {surface: 'mitigationPick', match: 'Pick an action', answer: 'dismiss'},
 ];
@@ -149,6 +154,8 @@ export interface HarnessVariables {
   REMOTE_OSS_ACCEPTANCE_SCRIPT: string;
   /** The file the scripted adapters append their record to, in the run's folder. */
   REMOTE_OSS_ACCEPTANCE_RECORD: string;
+  /** The folder the signal files of held entries live in, one per run: the harness's `signal` creates a file in it. */
+  REMOTE_OSS_ACCEPTANCE_SIGNALS: string;
   /** The editor of the run. */
   HARNESS_EDITOR: EditorChoice;
   /** The file the log channel's lines are appended to, in the run's folder. */
@@ -212,8 +219,10 @@ const READY_INTERVAL = 500;
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
  * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); and the aliases of the
- * host's other accounts: `password` (login by password only), `noforward` (TCP forwarding refused), `mute` (a
- * login shell that does not answer) and `master` and `master-ask` (the password account behind a ControlMaster).
+ * host's other accounts: `password` (login by password only), `password-ask` (the same account whose host key is
+ * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
+ * forwarding refused), `mute` (a login shell that does not answer), `readonly` (a server data folder that exists
+ * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster).
  */
 export function harnessSshConfig(port: number, runFolder: string): string {
   return [
@@ -260,6 +269,16 @@ export function harnessSshConfig(port: number, runFolder: string): string {
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_stranger')}`,
     '',
     ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
+    'Host password-ask',
+    '  HostName 127.0.0.1',
+    `  Port ${String(port)}`,
+    '  User harness-pw',
+    '  IdentityAgent none',
+    '  StrictHostKeyChecking ask',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_password_ask')}`,
+    ...PASSWORD_LINES.map(line => `  ${line}`),
+    '',
     ...accountAlias(
       'noforward',
       'harness-nofwd',
@@ -270,6 +289,13 @@ export function harnessSshConfig(port: number, runFolder: string): string {
     ...accountAlias(
       'mute',
       'harness-mute',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
+      'readonly',
+      'harness-ro',
       port,
       runFolder,
       keyLines(runFolder),
@@ -537,6 +563,7 @@ async function prepare(
     HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
+    REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(runFolder, 'signals'),
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
@@ -624,6 +651,8 @@ export async function runLaunches(
   sleep: Sleeper,
   runLaunch: (launch?: Launch) => Promise<AttemptResult>,
   beforeAttempt: (launch: Launch) => Promise<void> = () => Promise.resolve(),
+  bases: Readonly<Record<string, string | undefined>> = {},
+  holdPorts: PortHolder = holdClientPorts,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -642,16 +671,50 @@ export async function runLaunches(
           writeUserSettings(
             runFolder,
             configFile,
-            withRunTokens(launch.settings, runFolder, process.env.PATH ?? ''),
+            withRunTokens(
+              withHarnessBases(launch.settings, bases),
+              runFolder,
+              process.env.PATH ?? '',
+            ),
             launch.label,
           );
           await beforeAttempt(launch);
         }
-        return runLaunch(launch);
+        const held = await holdPorts(launch?.clientListeners ?? []);
+        try {
+          return await runLaunch(launch);
+        } finally {
+          await held.release();
+        }
       }, console.log.bind(console)),
     );
   }
   return exitCodes;
+}
+
+/**
+ * Notes, for a launch, how many requests the download host had logged when it began, in
+ * `<run folder>/<label>-requests-start`, so that its rows read only the requests of their own case. A run without a
+ * download host notes nothing.
+ */
+export function markDownloadRequests(
+  runFolder: string,
+  label: string,
+  variables: Pick<HarnessVariables, 'HARNESS_DOWNLOADS_LOG'>,
+): void {
+  const requestLog = variables.HARNESS_DOWNLOADS_LOG;
+  if (requestLog === undefined) {
+    return;
+  }
+  const logged = existsSync(requestLog)
+    ? readFileSync(requestLog, 'utf8')
+        .split('\n')
+        .filter(line => line !== '').length
+    : 0;
+  writeFileSync(
+    path.join(runFolder, `${label}-requests-start`),
+    `${String(logged)}\n`,
+  );
 }
 
 /**
@@ -695,12 +758,14 @@ export async function runAcceptance(
         JSON.stringify({entries: failure.script}),
       );
     }
-    for (const portsCase of editor === 'vscodium' ? portsCases(root) : []) {
-      // A connected case leaves the script unused, which is no failure; a failed one is answered from it.
-      writeFileSync(
-        launchFiles(runFolder, `ports-${portsCase.label}`).script,
-        JSON.stringify({entries: PORTS_SCRIPT}),
-      );
+    for (const suite of editor === 'vscodium' ? HOST_CASE_SUITES : []) {
+      for (const hostCase of hostCases(root, suite.suite)) {
+        // A connected case leaves the script unused, which is no failure; a failed one is answered from it.
+        writeFileSync(
+          launchFiles(runFolder, hostCaseLabel(suite, hostCase)).script,
+          JSON.stringify({entries: hostCase.script ?? DIALOG_SCRIPT}),
+        );
+      }
     }
     const launches = editor === 'vscodium' ? launchesOf(root) : [];
     if (editor === 'vscodium') {
@@ -730,7 +795,9 @@ export async function runAcceptance(
             await dependencies.sleep(HELPER_GONE_MILLISECONDS);
             clearCalls(runFolder);
           }
+          markDownloadRequests(runFolder, launch.label, variables);
         },
+        {...variables},
       )),
     );
     return exitCodes.find(exitCode => exitCode !== 0) ?? 0;
@@ -789,6 +856,12 @@ export function vscodiumConfiguration(
   const env: Record<string, string | undefined> = {
     ...environment,
     REMOTE_OSS_ACCEPTANCE_LOG: files.logFile,
+    REMOTE_OSS_ACCEPTANCE_WINDOWS: path.join(
+      runFolder,
+      launch.label,
+      'agent',
+      'pids',
+    ),
     ...(launch.ownScript === true
       ? {
           REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,
@@ -889,7 +962,10 @@ export async function bundleSuite(root: string): Promise<void> {
   }
 }
 
-/** Bundles every `*.test.ts` of tests/acceptance/`source` into tests/acceptance/`output`. */
+/** Where the hold that every suite's bundle folder gets is written, relative to the repository. */
+const SETTLE_ENTRY = 'tests/acceptance/suite/settle.ts';
+
+/** Bundles every `*.test.ts` of tests/acceptance/`source` into tests/acceptance/`output`, and the hold beside them. */
 async function bundleFolder(
   root: string,
   source: string,
@@ -900,9 +976,14 @@ async function bundleFolder(
   // A bundle a former run left behind would run with these; a shared runner keeps its checkout between jobs.
   rmSync(outputFolder, {recursive: true, force: true});
   await build({
-    entryPoints: sortedEntries(suite)
-      .filter(entry => entry.name.endsWith('.test.ts'))
-      .map(entry => path.join(suite, entry.name)),
+    entryPoints: [
+      ...sortedEntries(suite)
+        .filter(entry => entry.name.endsWith('.test.ts'))
+        .map(entry => path.join(suite, entry.name)),
+      // The hold after a window's last row, which every suite's run loads beside its own files.
+      // eslint-disable-next-line id-length -- esbuild's entry point fields
+      {in: path.join(root, SETTLE_ENTRY), out: 'settle.test'},
+    ],
     outdir: outputFolder,
     bundle: true,
     platform: 'node',

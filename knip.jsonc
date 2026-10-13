@@ -28,17 +28,21 @@
       "entry": [
         "vscode-test.mjs",
         "suite/*.test.ts",
+        "suite/settle.ts",
         "suite-local/*.test.ts",
         "suite-remote/*.test.ts",
         "suite-reconnect/*.test.ts",
         "suite-failure/*.test.ts",
         "suite-ports/*.test.ts",
+        "suite-install/*.test.ts",
         "suite-terminal/*.test.ts",
+        "suite-socket/*.test.ts",
         "suite-client/*.test.ts",
         "suite-slow/*.test.ts",
         "slow-remote/src/extension.ts",
         "windows/*.test.ts",
         "no-proposals/*.test.ts",
+        "terminal-pick/*.test.ts",
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
         "explorer-no-proposals/*.test.ts",
@@ -56,9 +60,14 @@
       "project": ["src/**/*.ts", "test/**/*.ts"],
       "includeEntryExports": false,
     },
-    // Each package's entry point is the one tools/build.ts bundles; its tests are entries of their own.
+    // Each package's entry points are the ones tools/build.ts bundles; its tests are entries of their own.
     "packages/*": {
-      "entry": ["src/extension.ts", "src/programs/*.ts", "test/**/*.test.ts"],
+      "entry": [
+        "src/extension.ts",
+        "src/web-extension.ts",
+        "src/programs/*.ts",
+        "test/**/*.test.ts",
+      ],
       "project": ["src/**/*.ts", "test/**/*.ts"],
     },
   },
@@ -69,6 +78,7 @@
     "tests/acceptance/vscode-test.mjs": ["exports"],
     // The editor calls an extension's activate().
     "packages/*/src/extension.ts": ["exports"],
+    "packages/*/src/web-extension.ts": ["exports"],
   },
   // System tools the tests run, which no package provides.
   "ignoreBinaries": ["shellcheck", "ssh-add"],

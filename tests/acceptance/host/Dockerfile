@@ -1,8 +1,9 @@
 # The SSH host of the acceptance tests: OpenSSH's server, key login only, and one user whose login shell is POSIX sh
-# unless HOST_SHELL names another of the shells installed here. Three more users serve tests that need another kind of account:
-# harness-pw (password login only), harness-nofwd (TCP forwarding refused) and harness-mute (a login shell that
-# answers only a command given with -c), and harness-cert, which accepts only a certificate signed by the run's own
-# authority (CA_PUBLIC_KEY, written to /etc/ssh/ca.pub by start-sshd).
+# unless HOST_SHELL names another of the shells installed here. Five more users serve tests that need another kind of account:
+# harness-pw (password login only), harness-nofwd (TCP forwarding refused), harness-mute (a login shell that
+# answers only a command given with -c), harness-ro (a server data folder that exists and cannot be written), and
+# harness-cert, which accepts only a certificate signed by the run's own authority (CA_PUBLIC_KEY, written to
+# /etc/ssh/ca.pub by start-sshd).
 # libstdc++ is what a musl server's node needs to start on Alpine (F-6302). curl and GNU wget are installed so that
 # start-sshd can leave the host with the one download tool a run asks for (HOST_FETCH). iptables lets a test drop the
 # packets of port 22 and bring them back (the container runs with NET_ADMIN).
@@ -19,6 +20,11 @@ RUN apk add --no-cache openssh-server iptables libstdc++ curl wget bash zsh dash
   && adduser -D -s /bin/sh harness-pw \
   && adduser -D -s /bin/sh harness-nofwd \
   && sed -i 's/^harness-nofwd:!/harness-nofwd:*/' /etc/shadow \
+  && adduser -D -s /bin/sh harness-ro \
+  && sed -i 's/^harness-ro:!/harness-ro:*/' /etc/shadow \
+  && mkdir -p /home/harness-ro/.vscodium-server-insiders/bin \
+  && chown -R root:root /home/harness-ro/.vscodium-server-insiders \
+  && chmod -R 755 /home/harness-ro/.vscodium-server-insiders \
   && printf '%s\n' \
     'PasswordAuthentication no' \
     'KbdInteractiveAuthentication no' \

@@ -676,6 +676,24 @@ describe("the resolver host: the window's connection (F-8201.BR-3)", () => {
     deepStrictEqual(handleOf(registration).currentConnection(), undefined);
   });
 
+  it('contracts §3.2: before any resolve nothing has settled', async () => {
+    const {registration} = await setup();
+    deepStrictEqual(handleOf(registration).lastResolve(), 'none');
+  });
+
+  it('contracts §3.2: after a resolve that succeeded the last resolve succeeded', async () => {
+    const context = await setup();
+    await resolve(context);
+    deepStrictEqual(handleOf(context.registration).lastResolve(), 'succeeded');
+  });
+
+  it('contracts §3.2: after a resolve that failed the last resolve failed', async () => {
+    const context = await setup();
+    context.connector.failure = new Error('the connector broke');
+    await resolve(context).catch(() => undefined);
+    deepStrictEqual(handleOf(context.registration).lastResolve(), 'failed');
+  });
+
   it('F-8201.BR-3: while the connector works the connection is resolving', async () => {
     const context = await setup();
     let seen: string | undefined;

@@ -2,22 +2,47 @@ import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
+import {
+  buildFileChoice,
+  type FileChoice,
+} from '../../src/config/file-choice.ts';
+import {pickerModel, type PickerModel} from '../../src/connect/picker-model.ts';
 import {licenceModalOf} from '../../src/surfaces/licence-modal.ts';
 import type {EditorAdapters} from '../../src/editor-surfaces.ts';
-import type {ProgressPort, ProgressRequest} from 'lib-authority';
+import type {
+  EditorResolver,
+  ProgressPort,
+  ProgressRequest,
+  ResolvedConnection,
+  ResolverEditor,
+} from 'lib-authority';
 import type {ChannelPort, RevealableChannel} from '../../src/log-channel.ts';
 import {
   adaptersFor,
+  authorityReportingResolverEditorOf,
+  claimedWindowName,
   channelPortFor,
   progressFor,
   type RecordLine,
   type ScriptEntry,
   scriptedAdapters,
+  windowNameFor,
   windowNameOf,
 } from '../../src/surfaces/scripted-adapters.ts';
 
 const SCRIPT_FILE = '/run/script.json';
 const RECORD_FILE = '/run/record.jsonl';
+const SIGNALS_FOLDER = '/run/signals';
+
+/**
+ * A poll that ends at once but yields to the event loop, so a test's own timers still run: the tests create the
+ * signal files themselves.
+ */
+function immediateSleep(): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, 0);
+  });
+}
 const NEVER = new AbortController().signal;
 const WINDOW = 'main';
 
@@ -52,6 +77,7 @@ class MemoryFiles {
   readonly append = (file: string, text: string): void => {
     deepStrictEqual(file, RECORD_FILE);
     this.appended.push(text);
+    this.contents.set(file, (this.contents.get(file) ?? '') + text);
   };
 
   /** The record as parsed lines, without their append times. */
@@ -94,10 +120,16 @@ const REAL: EditorAdapters = {
     showWarning: () => Promise.resolve('real'),
     showError: () => Promise.resolve('real'),
   },
+  hostPick: {pick: () => Promise.resolve(undefined)},
+  filePick: {pick: () => Promise.resolve(undefined)},
 };
 
-/** The scripted adapters over `entries`, with the files they wrote to. */
-function scripted(entries: ScriptEntry[], windowName = WINDOW) {
+/** The scripted adapters over `entries`, with the files they wrote to and, for a held entry, the signals folder. */
+function scripted(
+  entries: ScriptEntry[],
+  windowName = WINDOW,
+  signalsFolder?: string,
+) {
   const files = filesWith(entries);
   const adapters = scriptedAdapters(
     SCRIPT_FILE,
@@ -105,6 +137,8 @@ function scripted(entries: ScriptEntry[], windowName = WINDOW) {
     REAL,
     files,
     windowName,
+    signalsFolder,
+    immediateSleep,
   );
   return {adapters, files};
 }
@@ -133,6 +167,23 @@ const MITIGATION_PICK = {
   placeholder: 'More actions',
   items: [{label: 'Reload', action: 'reloadWindow' as const}],
 };
+
+const HOSTS = {hosts: [{name: 'harness', file: '/f'}]};
+
+/** The host pick's model for a typed text; a parse error is not expected in this test. */
+function hostModel(typedText = ''): PickerModel {
+  const model = pickerModel(HOSTS, typedText);
+  if ('parseError' in model) {
+    throw new Error('no model');
+  }
+  return model;
+}
+
+const FILE_CHOICE: FileChoice = buildFileChoice({
+  configFile: '/run/ssh_config',
+  userFile: '/h/.ssh/config',
+  systemFile: '/etc/ssh/ssh_config',
+});
 
 /** The files of a folder, recursively, as paths. */
 function filesUnder(folder: string): string[] {
@@ -324,6 +375,8 @@ describe('the scripted adapters answer from the script only', () => {
         REAL,
         new MemoryFiles(),
         WINDOW,
+        undefined,
+        immediateSleep,
       ).prompts.pick(FINGERPRINT, NEVER),
       undefined,
     );
@@ -338,6 +391,8 @@ describe('the scripted adapters answer from the script only', () => {
         REAL,
         files,
         WINDOW,
+        undefined,
+        immediateSleep,
       ).prompts.pick(FINGERPRINT, NEVER),
       undefined,
     );
@@ -352,6 +407,8 @@ describe('the scripted adapters answer from the script only', () => {
         REAL,
         files,
         WINDOW,
+        undefined,
+        immediateSleep,
       ).prompts.pick(FINGERPRINT, NEVER),
       undefined,
     );
@@ -519,8 +576,22 @@ describe('the scripted adapters answer from the script only', () => {
         answer: 'decline',
         matched: true,
         window: WINDOW,
+        detail: 'd',
       },
     ]);
+  });
+
+  it('F-3902 AC-14: the licence modal line keeps the detail the modal was shown with, also when nothing matches', async () => {
+    const {adapters, files} = scripted([]);
+    await adapters.licenceDialog.showModal(
+      'The licence terms',
+      'Read the terms at https://example.invalid/terms.',
+      ['Accept', 'Cancel'],
+    );
+    deepStrictEqual(
+      files.lines().map(line => line.detail),
+      ['Read the terms at https://example.invalid/terms.'],
+    );
   });
 
   it('S7: a masked input gets the scripted text', async () => {
@@ -948,6 +1019,226 @@ function twoUpdates(
   return Promise.resolve(7);
 }
 
+describe('the scripted host pick (card tooling-25)', () => {
+  function hostPickOf(entries: ScriptEntry[]) {
+    const {adapters, files} = scripted(entries);
+    const filesLines = files.lines.bind(files);
+    const pick = adapters.hostPick.pick.bind(adapters.hostPick);
+    return {pick, lines: filesLines};
+  }
+
+  it('a label answer gives the host row', async () => {
+    const {pick, lines} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: {label: 'harness'},
+      },
+    ]);
+    const taken = await pick(hostModel(), typedText => hostModel(typedText));
+    deepStrictEqual(
+      [taken, lines()[0]?.answer, lines()[0]?.matched],
+      [{kind: 'host', label: 'harness', keepVisible: false}, 'harness', true],
+    );
+  });
+
+  it('a label answer gives a fixed row by its text', async () => {
+    const {pick} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: {label: 'Configure SSH Hosts...'},
+      },
+    ]);
+    deepStrictEqual(
+      await pick(hostModel(), typedText => hostModel(typedText)),
+      {
+        kind: 'configure',
+        label: {id: 'S024', values: []},
+        keepVisible: true,
+      },
+    );
+  });
+
+  it('a typed answer gives the typed row of the typed model, the hosts still first', async () => {
+    const {pick} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: {typed: 'harness@127.0.0.1'},
+      },
+    ]);
+    deepStrictEqual(
+      await pick(hostModel(), typedText => hostModel(typedText)),
+      {
+        kind: 'typed',
+        label: '➤ harness@127.0.0.1',
+        text: 'harness@127.0.0.1',
+        keepVisible: true,
+      },
+    );
+  });
+
+  it('a typed answer whose model has no typed row fails closed', async () => {
+    const {pick, lines} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: {typed: 'x'},
+      },
+    ]);
+    const model: PickerModel = {
+      placeholder: {id: 'S127', values: []},
+      items: [{kind: 'host', label: 'harness', keepVisible: false}],
+    };
+    deepStrictEqual(
+      [await pick(model, () => model), lines()[0]?.matched, lines()[0]?.answer],
+      [undefined, false, 'dismiss'],
+    );
+  });
+
+  it('a dismiss answer gives nothing', async () => {
+    const {pick, lines} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: 'dismiss',
+      },
+    ]);
+    deepStrictEqual(
+      [
+        await pick(hostModel(), typedText => hostModel(typedText)),
+        lines()[0]?.answer,
+        lines()[0]?.matched,
+      ],
+      [undefined, 'dismiss', true],
+    );
+  });
+
+  it('a label no row has fails closed and records matched false', async () => {
+    const {pick, lines} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: {label: 'absent'},
+      },
+    ]);
+    deepStrictEqual(
+      [
+        await pick(hostModel(), typedText => hostModel(typedText)),
+        lines()[0]?.matched,
+        lines()[0]?.answer,
+      ],
+      [undefined, false, 'dismiss'],
+    );
+  });
+
+  it('the record line names the question, the answer and the items shown', async () => {
+    const {pick, lines} = hostPickOf([
+      {
+        surface: 'hostPick',
+        match: 'Select configured SSH host',
+        answer: 'dismiss',
+      },
+    ]);
+    await pick(hostModel(), typedText => hostModel(typedText));
+    deepStrictEqual(lines()[0], {
+      surface: 'hostPick',
+      question: 'Select configured SSH host or enter user@host',
+      answer: 'dismiss',
+      matched: true,
+      window: WINDOW,
+      items: [
+        'harness',
+        '$(plus) Add New SSH Host...',
+        'Configure SSH Hosts...',
+      ],
+    });
+  });
+});
+
+describe('the scripted configuration-file pick (card tooling-25)', () => {
+  function filePickOf(entries: ScriptEntry[]) {
+    const {adapters, files} = scripted(entries);
+    const filesLines = files.lines.bind(files);
+    const pick = adapters.filePick.pick.bind(adapters.filePick);
+    return {pick, lines: filesLines};
+  }
+
+  it('a label answer gives the file row by its path', async () => {
+    const {pick} = filePickOf([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: {label: '/run/ssh_config'},
+      },
+    ]);
+    deepStrictEqual(await pick(FILE_CHOICE), {
+      kind: 'file',
+      label: '/run/ssh_config',
+      role: 'configured',
+    });
+  });
+
+  it('a label answer gives the settings row by its text', async () => {
+    const {pick} = filePickOf([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: {label: 'Settings'},
+      },
+    ]);
+    deepStrictEqual(await pick(FILE_CHOICE), FILE_CHOICE.items[1]);
+  });
+
+  it('a label no row has fails closed', async () => {
+    const {pick, lines} = filePickOf([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: {label: 'absent'},
+      },
+    ]);
+    deepStrictEqual(
+      [await pick(FILE_CHOICE), lines()[0]?.matched],
+      [undefined, false],
+    );
+  });
+
+  it('a dismiss answer gives nothing', async () => {
+    const {pick, lines} = filePickOf([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: 'dismiss',
+      },
+    ]);
+    deepStrictEqual(
+      [await pick(FILE_CHOICE), lines()[0]?.answer, lines()[0]?.matched],
+      [undefined, 'dismiss', true],
+    );
+  });
+
+  it('the record line names the placeholder, the answer and the items shown', async () => {
+    const {pick, lines} = filePickOf([
+      {
+        surface: 'filePick',
+        match: 'Edit custom SSH configuration file',
+        answer: {label: 'Help'},
+      },
+    ]);
+    await pick(FILE_CHOICE);
+    deepStrictEqual(lines()[0], {
+      surface: 'filePick',
+      question: 'Edit custom SSH configuration file',
+      answer: 'Help',
+      matched: true,
+      window: WINDOW,
+      items: ['/run/ssh_config', 'Settings', 'Help'],
+    });
+  });
+});
+
 describe('progressFor (card tooling-18)', () => {
   const SWITCHED_RECORD = {
     REMOTE_OSS_ACCEPTANCE: '1',
@@ -1328,5 +1619,444 @@ describe('a notice line of the record (card connect-25)', () => {
       files.lines().map(line => line.buttons),
       [['OK']],
     );
+  });
+});
+
+describe('the window name the harness gives a window (card tooling-28)', () => {
+  const WINDOWS = '/run/windows/pids';
+
+  it('with the variable set, the name waits for the pid file and takes its content', async () => {
+    const waits: number[] = [];
+    let reads = 0;
+    let file = '';
+    const name = await claimedWindowName(
+      WINDOWS,
+      42,
+      {
+        read: (each: string): string | undefined => {
+          reads += 1;
+          file = each;
+          return reads >= 2 ? 'empty-1' : undefined;
+        },
+      },
+      milliseconds => {
+        waits.push(milliseconds);
+        return Promise.resolve();
+      },
+      () => 0,
+    );
+    deepStrictEqual(
+      {name, waits, reads, file},
+      {
+        name: 'empty-1',
+        waits: [50],
+        reads: 2,
+        file: path.join(WINDOWS, '42'),
+      },
+    );
+  });
+
+  it('with the variable set and no pid file within the wait, the name is unclaimed-<pid>', async () => {
+    let ticks = 0;
+    const name = await claimedWindowName(
+      WINDOWS,
+      42,
+      {read: (): string | undefined => undefined},
+      () => Promise.resolve(),
+      () => {
+        ticks += 5_001;
+        return ticks;
+      },
+    );
+    strictEqual(name, 'unclaimed-42');
+  });
+
+  it('with the variable unset, the name is the window name as before, without a pid file read', async () => {
+    const name = await windowNameFor(
+      {},
+      42,
+      '/home/harness/b',
+      {
+        read: (each: string): string | undefined => {
+          throw new Error(`no pid file is read without the variable: ${each}`);
+        },
+      },
+      () => Promise.resolve(),
+      () => 0,
+    );
+    strictEqual(name, 'b');
+  });
+});
+
+describe('the authority the resolver reports beside the pid file (card tooling-28)', () => {
+  const WINDOWS = '/run/windows/pids';
+
+  it('without the variable, the resolver editor is the same editor, unwrapped', () => {
+    const editor = {} as unknown as ResolverEditor;
+    strictEqual(
+      authorityReportingResolverEditorOf({}, 42, editor, () => undefined),
+      editor,
+    );
+  });
+
+  it('with the variable set, the resolve reports its authority before resolving', async () => {
+    const authorities: Array<[string, string]> = [];
+    let registered: [string, EditorResolver] | undefined;
+    const editor = {
+      registerRemoteAuthorityResolver: (
+        prefix: string,
+        resolver: EditorResolver,
+      ): {dispose(): void} => {
+        registered = [prefix, resolver];
+        return {dispose: () => undefined};
+      },
+    } as unknown as ResolverEditor;
+    const wrapped = authorityReportingResolverEditorOf(
+      {REMOTE_OSS_ACCEPTANCE_WINDOWS: WINDOWS},
+      42,
+      editor,
+      (file: string, authority: string) => {
+        authorities.push([file, authority]);
+      },
+    );
+    wrapped.registerRemoteAuthorityResolver('ssh-remote', {
+      resolve: (): Promise<ResolvedConnection> =>
+        Promise.resolve({
+          host: 'harness',
+          port: 4000,
+          connectionToken: 'window-token',
+          extensionHostEnv: {},
+          environmentTunnels: [],
+        }),
+    });
+    const resolved = await registered?.[1]?.resolve('ssh-remote+harness', {
+      resolveAttempt: 1,
+    });
+    deepStrictEqual(
+      [authorities, registered?.[0], resolved?.port],
+      [
+        [[path.join(WINDOWS, '42.authority'), 'ssh-remote+harness']],
+        'ssh-remote',
+        4000,
+      ],
+    );
+  });
+});
+
+describe('the script read per question, the cursor from the record and the held answers (card tooling-26)', () => {
+  const PASSWORD = {placeholder: "harness-pw@dev's password:"};
+
+  /** The entry a row holds behind its signal. */
+  function heldEntry(): ScriptEntry {
+    return {
+      surface: 'maskedInput',
+      match: 'password',
+      answer: {text: 'secret'},
+      after: 'go',
+    };
+  }
+
+  /** The line a held entry writes while it waits, without its append time. */
+  function heldLine(question: string): Omit<RecordLine, 'time'> {
+    return {
+      surface: 'maskedInput',
+      question,
+      answer: 'held',
+      matched: true,
+      held: true,
+      window: WINDOW,
+    };
+  }
+
+  /** The line a held entry that cannot be signalled writes, without its append time. */
+  function dismissedLine(): Omit<RecordLine, 'time'> {
+    return {
+      surface: 'maskedInput',
+      question: PASSWORD.placeholder,
+      answer: 'dismiss',
+      matched: false,
+      window: WINDOW,
+    };
+  }
+
+  /** Creates the run's signal file `name`. */
+  function signal(files: MemoryFiles, name: string): void {
+    files.contents.set(path.join(SIGNALS_FOLDER, name), '');
+  }
+
+  it('D-85: an entry appended after the first question is used by the next question', async () => {
+    const first: ScriptEntry = {
+      surface: 'pick',
+      match: 'authenticity',
+      answer: 'yes',
+    };
+    const second: ScriptEntry = {
+      surface: 'pick',
+      match: 'authenticity',
+      answer: 'no',
+    };
+    const {adapters, files} = scripted([first]);
+    const answered1 = await adapters.prompts.pick(FINGERPRINT, NEVER);
+    // The append lands between the two questions: the next question reads the new list.
+    files.contents.set(SCRIPT_FILE, JSON.stringify({entries: [first, second]}));
+    const answered2 = await adapters.prompts.pick(FINGERPRINT, NEVER);
+    deepStrictEqual([answered1, answered2], ['yes', 'no']);
+  });
+
+  it('D-85: a new adapter set for the same window continues at the count of its record lines', async () => {
+    const entries: ScriptEntry[] = [
+      {surface: 'pick', match: 'authenticity', answer: 'yes'},
+      {surface: 'pick', match: 'sure', answer: 'no'},
+    ];
+    const files = filesWith(entries);
+    const firstSet = scriptedAdapters(
+      SCRIPT_FILE,
+      RECORD_FILE,
+      REAL,
+      files,
+      WINDOW,
+      undefined,
+      immediateSleep,
+    );
+    const firstPick = firstSet.prompts.pick(FINGERPRINT, NEVER);
+    // A reload gives a new adapter set over the same script and record.
+    const secondSet = scriptedAdapters(
+      SCRIPT_FILE,
+      RECORD_FILE,
+      REAL,
+      files,
+      WINDOW,
+      undefined,
+      immediateSleep,
+    );
+    const secondPick = secondSet.prompts.pick(
+      {placeholder: 'Are you sure?', items: FINGERPRINT.items},
+      NEVER,
+    );
+    deepStrictEqual(
+      [await firstPick, await secondPick, secondSet.unusedEntries()],
+      ['yes', 'no', 0],
+    );
+  });
+
+  it('D-85: a held entry writes its held line, waits, and answers once the signal file exists', async () => {
+    const {adapters, files} = scripted([heldEntry()], WINDOW, SIGNALS_FOLDER);
+    const done = adapters.prompts.maskedInput(PASSWORD, NEVER);
+    const heldFirst = files.lines();
+    setTimeout(() => {
+      signal(files, 'go');
+    }, 10);
+    deepStrictEqual(
+      [heldFirst, await done, files.lines()],
+      [
+        [heldLine(PASSWORD.placeholder)],
+        'secret',
+        [
+          heldLine(PASSWORD.placeholder),
+          {
+            surface: 'maskedInput',
+            question: PASSWORD.placeholder,
+            answer: '<supplied>',
+            matched: true,
+            window: WINDOW,
+          },
+        ],
+      ],
+    );
+  });
+
+  it('D-85: the default sleep is the real one, so a held entry answers once its signal lands', async () => {
+    const files = filesWith([heldEntry()]);
+    const adapters = scriptedAdapters(
+      SCRIPT_FILE,
+      RECORD_FILE,
+      REAL,
+      files,
+      WINDOW,
+      SIGNALS_FOLDER,
+    );
+    const done = adapters.prompts.maskedInput(PASSWORD, NEVER);
+    setTimeout(() => {
+      signal(files, 'go');
+    }, 150);
+    deepStrictEqual(await done, 'secret');
+  });
+
+  it('D-85: a held entry whose cancellation ends writes withdrawn and gives nothing', async () => {
+    const {adapters, files} = scripted([heldEntry()], WINDOW, SIGNALS_FOLDER);
+    const controller = new AbortController();
+    const done = adapters.prompts.maskedInput(PASSWORD, controller.signal);
+    const heldFirst = files.lines();
+    controller.abort();
+    deepStrictEqual(
+      [heldFirst, await done, files.lines()],
+      [
+        [heldLine(PASSWORD.placeholder)],
+        undefined,
+        [
+          heldLine(PASSWORD.placeholder),
+          {
+            surface: 'maskedInput',
+            question: PASSWORD.placeholder,
+            answer: 'withdrawn',
+            matched: true,
+            window: WINDOW,
+          },
+        ],
+      ],
+    );
+  });
+
+  it('D-85: a held entry counts once for the cursor', async () => {
+    const entries: ScriptEntry[] = [
+      heldEntry(),
+      {surface: 'pick', match: 'authenticity', answer: 'yes'},
+    ];
+    const {adapters, files} = scripted(entries, WINDOW, SIGNALS_FOLDER);
+    const done = adapters.prompts.maskedInput(PASSWORD, NEVER);
+    signal(files, 'go');
+    const afterReload = scriptedAdapters(
+      SCRIPT_FILE,
+      RECORD_FILE,
+      REAL,
+      files,
+      WINDOW,
+      SIGNALS_FOLDER,
+      immediateSleep,
+    );
+    // The held line does not count: one entry is answered, one stays unused.
+    deepStrictEqual(
+      [
+        await done,
+        adapters.unusedEntries(),
+        await afterReload.prompts.pick(FINGERPRINT, NEVER),
+        afterReload.unusedEntries(),
+      ],
+      ['secret', 1, 'yes', 0],
+    );
+  });
+
+  it('D-85: a held failure dialog waits for its signal', async () => {
+    const {adapters, files} = scripted(
+      [
+        {
+          surface: 'failureDialog',
+          match: 'Failed',
+          answer: {button: 'Retry'},
+          after: 'go',
+        },
+      ],
+      WINDOW,
+      SIGNALS_FOLDER,
+    );
+    const done = adapters.failureDialog.showError('Failed', [
+      'Retry',
+      'Close Remote',
+    ]);
+    const heldFirst = files.lines();
+    signal(files, 'go');
+    deepStrictEqual(
+      [heldFirst, await done, files.lines().at(-1)?.answer],
+      [
+        [
+          {
+            surface: 'failureDialog',
+            question: 'Failed',
+            answer: 'held',
+            matched: true,
+            held: true,
+            window: WINDOW,
+            buttons: ['Retry', 'Close Remote'],
+          },
+        ],
+        'Retry',
+        'Retry',
+      ],
+    );
+  });
+
+  it('D-85: a display-only line and an unparseable line do not move the cursor', async () => {
+    const entries: ScriptEntry[] = [
+      {surface: 'pick', match: 'authenticity', answer: 'yes'},
+      {surface: 'pick', match: 'sure', answer: 'no'},
+    ];
+    const files = new MemoryFiles(
+      new Map([
+        [SCRIPT_FILE, JSON.stringify({entries})],
+        [
+          RECORD_FILE,
+          [
+            JSON.stringify({
+              surface: 'progress',
+              question: 'Connecting',
+              answer: 'shown',
+              matched: true,
+              window: WINDOW,
+              time: 1,
+            }),
+            'not a line of the record',
+            JSON.stringify({
+              surface: 'pick',
+              question: 'The authenticity of host',
+              answer: 'no',
+              matched: true,
+              window: 'b',
+              time: 2,
+            }),
+            JSON.stringify({
+              surface: 'pick',
+              question: 'The authenticity of host',
+              answer: 'yes',
+              matched: true,
+              window: WINDOW,
+              time: 3,
+            }),
+          ].join('\n'),
+        ],
+      ]),
+    );
+    const adapters = scriptedAdapters(
+      SCRIPT_FILE,
+      RECORD_FILE,
+      REAL,
+      files,
+      WINDOW,
+      undefined,
+      immediateSleep,
+    );
+    // The cursor counts the window's own answered entry line: not the progress line, not the unparseable one, not another window's.
+    const unusedBefore = adapters.unusedEntries();
+    const pick2 = adapters.prompts.pick(
+      {placeholder: 'Are you sure?', items: FINGERPRINT.items},
+      NEVER,
+    );
+    deepStrictEqual([unusedBefore, await pick2], [1, 'no']);
+  });
+
+  it('D-85: a held entry in a run that names no signals folder is dismissed and leaves the entry', async () => {
+    const {adapters, files} = scripted([heldEntry()]);
+    const dismissed = adapters.prompts.maskedInput(PASSWORD, NEVER);
+    deepStrictEqual(
+      [await dismissed, files.lines(), adapters.unusedEntries()],
+      [undefined, [dismissedLine()], 1],
+    );
+  });
+
+  it('D-85: a held entry that names no signal fails closed the same way', async () => {
+    const {adapters, files} = scripted(
+      [
+        {
+          surface: 'maskedInput',
+          match: 'password',
+          answer: {text: 'secret'},
+          after: 'go/never',
+        },
+      ],
+      WINDOW,
+      SIGNALS_FOLDER,
+    );
+    const dismissed = adapters.prompts.maskedInput(PASSWORD, NEVER);
+    const outcome = [await dismissed, files.lines(), adapters.unusedEntries()];
+    deepStrictEqual(outcome, [undefined, [dismissedLine()], 1]);
   });
 });

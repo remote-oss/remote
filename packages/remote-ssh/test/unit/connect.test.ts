@@ -815,6 +815,32 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     deepStrictEqual(recording.records, []);
   });
 
+  it('F-2410 AC-2: a server on a socket connects with port 0, stores no shared record and warns of nothing', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        start: () =>
+          Promise.resolve({
+            ...STARTED,
+            server: {
+              ...STARTED.server,
+              endpoint: {kind: 'socket', path: '/tmp/code-x'},
+            },
+          }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result ? result.serverPort : result,
+        recording.records,
+        logSink.lines.filter(line => line.level === 'warn'),
+      ],
+      [0, [], []],
+    );
+  });
+
   it('goes on when the shared record cannot be stored', async () => {
     const {recording, options} = setup();
     const result = await connect(
@@ -848,6 +874,49 @@ describe('the connect pipeline, what it keeps and gives back', () => {
       options,
     );
     deepStrictEqual(reported, ['linux']);
+  });
+
+  it('#664: the connect resolves though the platform write never settles, and asked for the host platform once', async () => {
+    const {recording, options} = setup();
+    const reported: string[] = [];
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        rememberPlatform: (input, platform) => {
+          reported.push(platform);
+          return new Promise<void>(() => undefined);
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(
+      ['connected' in result ? 'connected' : 'failed', reported],
+      ['connected', ['linux']],
+    );
+  });
+
+  it('#664: a platform write that fails is logged at warn once it has settled, and the connect still resolves', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        rememberPlatform: () => Promise.reject(new Error('locked')),
+      }),
+      options,
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(
+      [
+        'connected' in result ? 'connected' : 'failed',
+        logSink.lines
+          .filter(line => line.message.includes('the platform setting'))
+          .map(line => [line.level, line.message]),
+      ],
+      [
+        'connected',
+        [['warn', 'the platform setting did not work: Error: locked']],
+      ],
+    );
   });
 
   it('closes the tunnel and gives the lease back when the window ends', async () => {

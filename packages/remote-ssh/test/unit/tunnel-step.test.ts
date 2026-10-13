@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import type {PortChoice} from '../../src/pipeline/port-choice.ts';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import type {TunnelSettings} from 'lib-forwarding';
 import {
@@ -50,6 +51,7 @@ function stepWith(
     settings?: TunnelSettings;
     dialScript?: readonly DialAnswer[];
     port?: number | undefined;
+    busyRange?: {first: number; last: number};
     onWaiting?: () => void;
   } = {},
 ): {
@@ -66,6 +68,12 @@ function stepWith(
   const socksPorts: number[] = [];
   const sink = new MemorySink();
   const port = 'port' in options ? options.port : 50000;
+  const choice: PortChoice =
+    options.busyRange !== undefined
+      ? {busyRange: options.busyRange}
+      : port === undefined
+        ? {noPort: true}
+        : {port};
   const step = openTunnelStep({
     settings: () => options.settings ?? SOCKS_SETTINGS,
     local,
@@ -75,7 +83,7 @@ function stepWith(
       socksPorts.push(socksPort);
       return dialer;
     },
-    chooseLocalPort: () => Promise.resolve(port),
+    chooseLocalPort: () => Promise.resolve(choice),
     environment: () => ENVIRONMENT,
     ...TERMINAL_NOT_USED,
     logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
@@ -168,6 +176,24 @@ describe('the step that opens the window tunnel', () => {
   it('F-2104 7.E1: no free local port fails without a reason', async () => {
     const result = await stepWith({port: undefined}).open();
     deepStrictEqual(result, {kind: 'failed', failure: {kind: 'unknown'}});
+  });
+
+  it('F-2104.AC-14: a busy preferred range fails with the reason of its text, over the relay', async () => {
+    const result = await stepWith({
+      busyRange: {first: 41060, last: 41061},
+    }).open();
+    deepStrictEqual(result, {
+      kind: 'failed',
+      failure: {
+        kind: 'unknown',
+        reason: {
+          id: 'S067',
+          values: [
+            {id: 'S073', values: [{id: 'S095', values: ['41060', '41061']}]},
+          ],
+        },
+      },
+    });
   });
 
   it('F-2104 BR-10: a tunnel that never becomes ready fails without a reason', async () => {

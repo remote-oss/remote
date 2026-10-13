@@ -277,7 +277,23 @@ importers:
 
   packages/remote-containers: {}
 
-  packages/remote-explorer: {}
+  packages/remote-explorer:
+    dependencies:
+      lib-authority:
+        specifier: workspace:*
+        version: link:../lib-authority
+      lib-companion:
+        specifier: workspace:*
+        version: link:../lib-companion
+      lib-identifiers:
+        specifier: workspace:*
+        version: link:../lib-identifiers
+      lib-product:
+        specifier: workspace:*
+        version: link:../lib-product
+      lib-standdown:
+        specifier: workspace:*
+        version: link:../lib-standdown
 
   packages/remote-extensionpack: {}
 
@@ -288,6 +304,9 @@ importers:
       lib-authority:
         specifier: workspace:*
         version: link:../lib-authority
+      lib-companion:
+        specifier: workspace:*
+        version: link:../lib-companion
       lib-forwarding:
         specifier: workspace:*
         version: link:../lib-forwarding

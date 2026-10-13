@@ -29,6 +29,7 @@ export {
 export {
   type ProductProfile,
   type ProfileReading,
+  profileOf,
   readProfile,
   serverDataFolderNameOrDefault,
 } from './profile.ts';

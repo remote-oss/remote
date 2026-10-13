@@ -75,6 +75,8 @@ export interface ServerStepDependencies {
   rejectBindHost: (alias: string, configured: string) => void;
   /** The user name on the host, from the effective ssh config; read when a step needs it, once the lookup has run. */
   remoteUser: () => string;
+  /** Whether this connect's server listens on a socket; the tunnel step's path decides it, once per connect. */
+  socketMode: () => boolean;
   clock: () => number;
   bounds: ServerBounds;
   store: AcceptanceStore;
@@ -136,7 +138,15 @@ const CLI_NOT_USED_REASONS: Readonly<
   noCliSource: 'the editor names no CLI source',
   noBuildForPlatform: 'there is no CLI build for this host',
   termsToAccept: "the server's terms must be accepted first",
+  socketMode: 'the server listens on a socket, which the CLI does not',
 };
+
+/** The line the log says once for a reason the CLI path was not used; the rows that expect it build from it. */
+export function cliNotUsedLine(
+  reason: keyof typeof CLI_NOT_USED_REASONS,
+): string {
+  return `the CLI path was not used: ${CLI_NOT_USED_REASONS[reason]}`;
+}
 
 /** The host's platform as the templates name it: a musl Linux is `alpine`. */
 function templatePlatformOf(host: ProbedHost): {
@@ -203,6 +213,7 @@ export function createServerSteps(
       archiveUrl: '',
       epochMilliseconds: dependencies.clock(),
       bounds: dependencies.bounds,
+      socketMode: dependencies.socketMode(),
       ...changes,
     });
   }
@@ -333,14 +344,16 @@ export function createServerSteps(
         placement: dependencies.policy.downloadPlacement,
         useExecServerSetting: dependencies.useExecServer,
         source: sourceOf(resolution),
-        // An unusable template plans the direct install, as no template does.
-        ...(cliAddress === undefined
+        // An unusable template and the direct re-plan plan the direct install with no mode; without a template the
+        // planner still decides the direct install and notes why, so the log says so once per connect.
+        ...(cliSource.kind === 'unusable' || options?.direct === true
           ? {}
           : {
               cliMode: {
                 useExecServerSetting: dependencies.useExecServer,
                 // `localServerDownload` has no manual bootstrap value in this extension.
                 manualBootstrap: false,
+                socketMode: dependencies.socketMode(),
                 cliTemplate: profile.cliDownloadUrlTemplate,
                 sourcesFree: serverFree && cliFree,
               },
@@ -350,9 +363,7 @@ export function createServerSteps(
             }),
       });
       for (const note of 'plan' in result ? result.plan.notes : []) {
-        dependencies.logger.info(
-          `the CLI path was not used: ${CLI_NOT_USED_REASONS[note.reason]}`,
-        );
+        dependencies.logger.info(cliNotUsedLine(note.reason));
       }
       if (
         'plan' in result &&
@@ -412,7 +423,12 @@ export function createServerSteps(
       startOrReuse(
         lease.channel,
         parametersFor({hostOperatingSystem: host.operatingSystem}),
-        runtimeOptionsFor(settings, dependencies.bounds, licenceAccepted),
+        runtimeOptionsFor(
+          settings,
+          dependencies.bounds,
+          licenceAccepted,
+          dependencies.socketMode(),
+        ),
         dependencies.policy.allowedExtraStartOptions,
         {lockLoop: dependencies.lockLoop, logger: dependencies.logger},
         cancellation,

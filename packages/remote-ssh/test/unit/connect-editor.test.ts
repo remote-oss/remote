@@ -2,6 +2,7 @@ import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import type {HostListResult} from 'lib-ssh';
 import {
   connectCommandEditorOf,
+  hostPickPortOf,
   openerHostOf,
 } from '../../src/connect/connect-editor.ts';
 import {pickerModel} from '../../src/connect/picker-model.ts';
@@ -69,15 +70,14 @@ function fakeEditor(remoteName?: string, refuse?: Error) {
 function adapterOf(fake: ReturnType<typeof fakeEditor>) {
   return connectCommandEditorOf(
     fake.editor,
-    template => template,
     () => HOSTS,
+    hostPickPortOf(fake.editor, template => template),
   );
 }
 
-/** Starts a pick over `HOSTS` and gives it with the promise of its answer. */
+/** Starts a pick over `HOSTS` through the editor's host pick and gives it with the promise of its answer. */
 function started(fake: ReturnType<typeof fakeEditor>) {
-  const adapter = adapterOf(fake);
-  const answer = adapter.pickHost(
+  const answer = hostPickPortOf(fake.editor, template => template).pick(
     pickerModel(HOSTS, '') as never,
     typedText => pickerModel(HOSTS, typedText) as never,
   );
@@ -198,6 +198,24 @@ describe('the host pick of the connect commands (card connect-21)', () => {
 describe('the opening and the commands of the connect commands (card connect-21)', () => {
   it('connect-21: the host list is the one the adapter was given', () => {
     strictEqual(adapterOf(fakeEditor()).listHosts(), HOSTS);
+  });
+
+  it('connect-21: the pick the commands show is the port they were given', async () => {
+    const fake = fakeEditor();
+    const answer = adapterOf(fake).pickHost(
+      pickerModel(HOSTS, '') as never,
+      typedText => pickerModel(HOSTS, typedText) as never,
+    );
+    const pick = fake.picks[0];
+    if (pick === undefined) {
+      throw new Error('no pick');
+    }
+    pick.accept(pick.items[1] as never);
+    deepStrictEqual(await answer, {
+      kind: 'host',
+      label: 'prod',
+      keepVisible: false,
+    });
   });
 
   it('connect-21: a new window opens an empty window on the authority', async () => {

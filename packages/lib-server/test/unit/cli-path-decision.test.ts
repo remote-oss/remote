@@ -10,6 +10,7 @@ function inputWith(overrides: Partial<CliModeInput> = {}): CliModeInput {
   return {
     useExecServerSetting: true,
     manualBootstrap: false,
+    socketMode: false,
     cliTemplate: 'https://example.invalid/${commit}/${os}-${arch}.tar.gz',
     hostPlatform: {operatingSystem: 'linux', architecture: 'x64'},
     sourcesFree: true,
@@ -30,6 +31,20 @@ describe('decideCliMode (card cli-02 table)', () => {
       kind: 'direct',
       reason: 'manualBootstrap',
     });
+  });
+
+  it('F-2410 AC-3: a socket-mode start chooses the direct install, because the CLI listens on a loopback port', () => {
+    deepStrictEqual(decideCliMode(inputWith({socketMode: true})), {
+      kind: 'direct',
+      reason: 'socketMode',
+    });
+  });
+
+  it('F-2410 AC-3: the setting that is off keeps its reason in socket mode', () => {
+    deepStrictEqual(
+      decideCliMode(inputWith({useExecServerSetting: false, socketMode: true})),
+      {kind: 'direct', reason: 'settingOff'},
+    );
   });
 
   it('brief §2 row 2: a product without a CLI source chooses the direct install', () => {

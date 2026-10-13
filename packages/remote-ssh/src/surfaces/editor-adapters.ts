@@ -1,10 +1,13 @@
 /**
  * @fileoverview The editor adapters of the connect's surfaces: the failure dialog, the licence modal, the platform pick,
- * the "More Actions..." pick and the server download's notification, each a small function over the editor it is given. `vscode` is imported for its types
+ * the "More Actions..." pick, the SSH configuration file pick and the server download's notification, each a small
+ * function over the editor it is given. `vscode` is imported for its types
  * only, so every adapter is tested with a fake editor.
  */
 
 import type * as vscode from 'vscode';
+import type {FileChoiceItem, FilePickPort} from '../config/file-choice.ts';
+import {fileChoiceLabelOf, fileChoiceTextOf} from '../config/file-choice.ts';
 import type {DownloadProgressPort} from '../cli/server-download-progress.ts';
 import type {PlatformPickPort} from '../connect/platform-picker.ts';
 import type {FailureDialogPort} from './failure-presenter.ts';
@@ -29,7 +32,7 @@ interface Choice<Answer> {
 }
 
 /** What a quick pick is made from. */
-export interface PickOptions<Answer> {
+interface PickOptions<Answer> {
   title?: string;
   placeholder: string;
   choices: ReadonlyArray<Choice<Answer>>;
@@ -42,7 +45,7 @@ export interface PickOptions<Answer> {
  * nothing when it is hidden without one or `cancellation` ends. A cancellation that has ended already shows nothing.
  * The pick is disposed after.
  */
-export function pickOne<Answer>(
+function pickOne<Answer>(
   editor: Editor,
   options: PickOptions<Answer>,
   cancellation: AbortSignal,
@@ -212,6 +215,34 @@ export function platformPickPortOf(
           ignoreFocusOut: false,
         },
         cancellation,
+      ),
+  };
+}
+
+/** The SSH configuration file pick: the rows of `choice` as a quick pick without a title, open when the focus moves away. */
+export function filePickPortOf(
+  editor: Editor,
+  translate: Translate,
+): FilePickPort {
+  return {
+    pick: choice =>
+      pickOne<FileChoiceItem>(
+        editor,
+        {
+          placeholder: fileChoiceTextOf(choice.placeholder, translate),
+          choices: choice.items.map(item =>
+            item.kind === 'file'
+              ? {label: fileChoiceLabelOf(item, translate), answer: item}
+              : {
+                  label: fileChoiceLabelOf(item, translate),
+                  description: fileChoiceTextOf(item.description, translate),
+                  alwaysShow: true,
+                  answer: item,
+                },
+          ),
+          ignoreFocusOut: true,
+        },
+        new AbortController().signal,
       ),
   };
 }

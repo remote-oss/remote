@@ -4,6 +4,7 @@
   "description": "Runs the commands a test writes for this window and reports its own activation; a test tool that does nothing outside the harness and never goes into a product VSIX.",
   "version": "0.0.0",
   "publisher": "remote-oss",
+  "type": "module",
   "private": true,
   "engines": {
     "vscode": "^1.139.0"
@@ -12,7 +13,8 @@
     "ui"
   ],
   "activationEvents": [
-    "*"
+    "onStartupFinished",
+    "onResolveRemoteAuthority:ssh-remote"
   ],
   "enabledApiProposals": [
     "tunnels"

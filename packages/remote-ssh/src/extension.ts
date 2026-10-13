@@ -5,21 +5,27 @@
  * this machine.
  */
 
-import {appendFileSync, readFileSync} from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {
-  gateEditorOf,
+  familySetupPortsOf,
   type ResolverEditor,
   resolverEditorOf,
-  setupPortsOf,
 } from 'lib-authority';
+import {commandBus, createProtocol, systemTimers} from 'lib-companion';
 import {identifierHost} from 'lib-identifiers';
 import {listHosts} from 'lib-ssh';
 import type {Logger} from 'lib-log';
-import {type ProductProfile, readProfile} from 'lib-product';
+import {type ProductProfile, profileOf} from 'lib-product';
 import {standDownHost} from 'lib-standdown';
 import {activateRemoteSsh} from './activation.ts';
 import {
@@ -31,7 +37,15 @@ import {
   type ConfigFilePlaces,
   openConfigFileHandler,
 } from './config/open-config-file.ts';
-import {connectCommandEditorOf} from './connect/connect-editor.ts';
+import {
+  connectCommandEditorOf,
+  hostPickPortOf,
+  openerHostOf,
+} from './connect/connect-editor.ts';
+import {
+  mismatchLine,
+  serveSliceEndpoints,
+} from './companion/slice-endpoints.ts';
 import {nodeConfigReader} from './connect/node-config-reader.ts';
 import {connectAssemblyOf} from './connect-ports.ts';
 import {editorOperationsOf} from './editor-operations.ts';
@@ -55,6 +69,7 @@ import {type ConnectRegistration, registerConnect} from './register-connect.ts';
 import {
   downloadProgressOf,
   failureDialogOf,
+  filePickPortOf,
   licenceDialogOf,
   mitigationPickPortOf,
   noticeOf,
@@ -64,9 +79,10 @@ import {
 } from './surfaces/editor-adapters.ts';
 import {
   adaptersFor,
+  authorityReportingResolverEditorOf,
   channelPortFor,
   progressFor,
-  windowNameOf,
+  windowNameFor,
 } from './surfaces/scripted-adapters.ts';
 import {PORTS_VIEW_KEY} from './surfaces/label-formatter.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
@@ -109,28 +125,14 @@ interface Manifest {
 
 /** The editor's product, as its `product.json` describes it. */
 async function editorProfile(): Promise<ProductProfile> {
-  const reading = readProfile(
+  return profileOf(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
-  if (reading.kind === 'unreadable') {
-    throw new Error(`product.json cannot be read: ${reading.reason}`);
-  }
-  return reading.profile;
 }
 
 /** The `dataFolderName` of the editor's product, which names the folder of its runtime arguments. */
 async function dataFolderNameOfEditor(): Promise<string> {
   return (await editorProfile()).dataFolderName;
-}
-
-/** The text of a file, or nothing when it cannot be read. */
-async function readArgvFile(filePath: string): Promise<string | undefined> {
-  try {
-    return await readFile(filePath, 'utf8');
-  } catch {
-    // No runtime-arguments file yet, or one the user cannot read: the same as none.
-    return undefined;
-  }
 }
 
 /** The files the harness's adapters read and append to: the script, the record and the log. */
@@ -141,21 +143,51 @@ const ACCEPTANCE_FILES = {
   },
 };
 
-/** The name of this window for the harness's script and record: its first workspace folder's last segment, or `local`. */
-function acceptanceWindowName(): string {
-  return windowNameOf(vscode.workspace.workspaceFolders?.[0]?.uri.path);
+/**
+ * The name of this window for the harness's script and record: what the window's agent claimed, from the pid file
+ * the launch's windows variable points to; without the variable, the window's folder name as before.
+ */
+async function acceptanceWindowName(): Promise<string> {
+  return windowNameFor(
+    process.env,
+    process.pid,
+    vscode.workspace.workspaceFolders?.[0]?.uri.path,
+    {
+      read: file => (existsSync(file) ? readFileSync(file, 'utf8') : undefined),
+    },
+    milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+    Date.now,
+  );
 }
 
-/** The resolver's editor with its progress recorded when the harness's switch is on; the same editor otherwise. */
-function acceptanceProgressOf(editor: ResolverEditor): ResolverEditor {
+/** Writes the window's authority beside the pid file, where the window's agent reads it. */
+function recordAuthority(file: string, authority: string): void {
+  mkdirSync(path.dirname(file), {recursive: true});
+  writeFileSync(file, authority);
+}
+
+/**
+ * The resolver's editor the harness uses: its progress recorded when the switch is on, and every authority the
+ * resolver resolves written beside the pid file, so the window's agent reports it. The same editor otherwise.
+ */
+function acceptanceResolverEditorOf(
+  editor: ResolverEditor,
+  windowName: string,
+): ResolverEditor {
+  const progress = progressFor(
+    process.env,
+    editor.progress,
+    ACCEPTANCE_FILES,
+    windowName,
+  );
   return {
-    ...editor,
-    progress: progressFor(
+    ...authorityReportingResolverEditorOf(
       process.env,
-      editor.progress,
-      ACCEPTANCE_FILES,
-      acceptanceWindowName(),
+      process.pid,
+      editor,
+      recordAuthority,
     ),
+    progress,
   };
 }
 
@@ -166,7 +198,7 @@ export async function activate(
   const manifest = context.extension.packageJSON as Manifest;
   const host = identifierHost(vscode, manifest);
   // Made once, before the setup: the script is read once per window, and the setup's notices go through the same notice port.
-  const adapters = surfaceAdapters();
+  const adapters = await surfaceAdapters();
   const extension = {
     id: context.extension.id,
     pack: manifest.extensionPack ?? [],
@@ -206,7 +238,7 @@ export async function activate(
     settings: host,
     help,
     openConfigFile: openConfigFileHandler(
-      configFileEditorOf(vscode, translate),
+      configFileEditorOf(vscode, adapters.filePick),
       nodeConfigFiles,
       {
         openSettings: filter => help.openSettings(filter),
@@ -220,38 +252,16 @@ export async function activate(
     channels: channelPortFor(process.env, vscode.window, ACCEPTANCE_FILES),
     clock: Date.now,
     gate: logFailure =>
-      setupPortsOf(
-        gateEditorOf(
-          vscode,
-          context,
-          readArgvFile,
-          logFailure,
-          adapters.notice,
-        ),
-        {
-          extensionId: context.extension.id,
-          displayName: manifest.displayName,
-          applicationName: vscode.env.appName,
-          proposals: enabledApiProposals,
-          argv: {
-            portableFolder: process.env.VSCODE_PORTABLE,
-            homeFolder: homedir(),
-            dataFolderName: dataFolderNameOfEditor,
-          },
-          platform: process.platform,
-          texts: {
-            setup: vscode.l10n.t(SETUP_TEXT_TEMPLATES.setup),
-            failedAttempt: vscode.l10n.t(SETUP_TEXT_TEMPLATES.failedAttempt),
-            restart: vscode.l10n.t(SETUP_TEXT_TEMPLATES.restart),
-            configureButton: vscode.l10n.t(
-              SETUP_TEXT_TEMPLATES.configureButton,
-            ),
-            notNowButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.notNowButton),
-            quitButton: vscode.l10n.t(SETUP_TEXT_TEMPLATES.quitButton),
-          },
-          logFailure,
-        },
-      ),
+      familySetupPortsOf(vscode, context, {
+        displayName: manifest.displayName,
+        proposals: enabledApiProposals,
+        viewIds: [],
+        templates: SETUP_TEXT_TEMPLATES,
+        translate,
+        dataFolderName: dataFolderNameOfEditor,
+        logFailure,
+        notices: adapters.notice,
+      }),
   });
   if (result.kind !== 'serving') {
     return;
@@ -281,6 +291,40 @@ export async function activate(
       connect.dispose();
     },
   });
+  const companion = createProtocol({
+    // eslint-disable-next-line id-length -- the protocol's option is named bus
+    bus: commandBus(vscode),
+    timers: systemTimers,
+    onVersionMismatch: mismatch => {
+      result.logger.warn(mismatchLine(mismatch));
+    },
+  });
+  const endpoints = serveSliceEndpoints(companion, {
+    listHosts: () => configuredHosts(host),
+    activeConnection: () => connect.activeConnection(),
+    opener: openerHostOf(vscode),
+    logger: result.logger,
+  });
+  context.subscriptions.push({
+    dispose: () => {
+      endpoints.dispose();
+    },
+  });
+}
+
+/** The hosts of the files in effect, read at each call: the host pick's and the companion commands' one reading. */
+function configuredHosts(host: ReturnType<typeof identifierHost>) {
+  return listHosts(
+    textOf(host, 'configFile'),
+    {
+      homeFolder: homedir(),
+      platform: clientPlatformOf(process.platform),
+      ...(process.env.ProgramData === undefined
+        ? {}
+        : {programDataFolder: process.env.ProgramData}),
+    },
+    nodeConfigReader,
+  );
 }
 
 /** A template in the display language. */
@@ -289,7 +333,8 @@ function translate(template: string): string {
 }
 
 /** The adapters of the editor's surfaces: the real ones, or the harness's scripted ones when its switch is on. */
-function surfaceAdapters(): EditorAdapters {
+async function surfaceAdapters(): Promise<EditorAdapters> {
+  const windowName = await acceptanceWindowName();
   return adaptersFor(
     process.env,
     {
@@ -302,9 +347,11 @@ function surfaceAdapters(): EditorAdapters {
       downloadProgress: downloadProgressOf(vscode),
       textInput: textInputOf(vscode),
       notice: noticeOf(vscode),
+      hostPick: hostPickPortOf(vscode, translate),
+      filePick: filePickPortOf(vscode, translate),
     },
     ACCEPTANCE_FILES,
-    acceptanceWindowName(),
+    windowName,
   );
 }
 
@@ -327,6 +374,7 @@ async function registerConnectOf(
   adapters: EditorAdapters,
 ): Promise<ConnectRegistration> {
   const window = {alias: (): string => ''};
+  const windowName = await acceptanceWindowName();
   const surfaces = editorSurfacesOf(
     adapters,
     editorOperationsOf(vscode, () => {
@@ -358,10 +406,11 @@ async function registerConnectOf(
   );
   const registration = await registerConnect(
     {
-      resolverEditor: acceptanceProgressOf(
+      resolverEditor: acceptanceResolverEditorOf(
         resolverEditorOf(vscode, {
           detailsCommand: runtimeCommands.showDetails,
         }),
+        windowName,
       ),
       labels: vscode.workspace,
       portsView: {
@@ -369,18 +418,10 @@ async function registerConnectOf(
           vscode.commands.executeCommand('setContext', PORTS_VIEW_KEY, true),
       },
       commands: host,
-      connectEditor: connectCommandEditorOf(vscode, translate, () =>
-        listHosts(
-          textOf(host, 'configFile'),
-          {
-            homeFolder: homedir(),
-            platform: clientPlatformOf(process.platform),
-            ...(process.env.ProgramData === undefined
-              ? {}
-              : {programDataFolder: process.env.ProgramData}),
-          },
-          nodeConfigReader,
-        ),
+      connectEditor: connectCommandEditorOf(
+        vscode,
+        () => configuredHosts(host),
+        adapters.hostPick,
       ),
       openExternal: address =>
         vscode.env.openExternal(vscode.Uri.parse(address)),
@@ -389,7 +430,7 @@ async function registerConnectOf(
       logger: served.logger,
       notice: adapters.notice,
       addHost: {
-        editor: configFileEditorOf(vscode, translate),
+        editor: configFileEditorOf(vscode, adapters.filePick),
         input: adapters.textInput,
         files: nodeHostFiles,
         places: served.configPlaces,

@@ -10,6 +10,9 @@ import type {DecodedTarget} from '../codecs/types.ts';
 export type ConnectionState =
   'resolving' | 'connected' | 'failed' | 'transportLost' | 'transportClosed';
 
+/** How the last resolve that settled ended: none settled yet, success, or failure. */
+export type LastResolve = 'none' | 'succeeded' | 'failed';
+
 /** What happens to the connection, as the resolver host and the connector report it. */
 export type ConnectionEvent =
   | {kind: 'resolveStarted'; target: DecodedTarget; attempt: number}
@@ -60,6 +63,7 @@ const TARGETS: Readonly<
 export class ConnectionTracker {
   private connection: CurrentConnection | undefined;
   private settled = false;
+  private last: LastResolve = 'none';
   private readonly listeners = new Set<
     (current: CurrentConnection | undefined) => void
   >();
@@ -67,6 +71,11 @@ export class ConnectionTracker {
   /** The connection, or nothing before the first resolve starts. */
   current(): Readonly<CurrentConnection> | undefined {
     return this.connection;
+  }
+
+  /** How the last settled resolve of this window ended; `none` until one settles. */
+  lastResolve(): LastResolve {
+    return this.last;
   }
 
   /** Applies an event, ignoring one that does not follow the current state, and tells the listeners of a change. */
@@ -91,6 +100,9 @@ export class ConnectionTracker {
       event.kind === 'resolveSucceeded' || event.kind === 'resolveFailed';
     const first = settling && !this.settled;
     this.settled ||= settling;
+    if (settling) {
+      this.last = event.kind === 'resolveSucceeded' ? 'succeeded' : 'failed';
+    }
     return this.announce(first);
   }
 

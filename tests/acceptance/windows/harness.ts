@@ -1,12 +1,27 @@
 /**
  * @fileoverview The Node side of the multi-window launch: the helpers with which a test drives the windows of a plainly
- * started editor through the window agent, and observes them from the agent's events, the record and the host.
+ * started editor through the window agent, and observes them from the agent's events, the record and the host. It
+ * also writes the script the launch's scripted adapters answer from, so a test may append entries, hold one
+ * behind a signal, and read back what was held and what the host accepted.
  */
 
 import {execFile} from 'node:child_process';
-import {appendFileSync, existsSync, mkdirSync, readFileSync} from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {
+  appendScriptTo,
+  signalFile,
+  type AppendedEntry,
+} from '../../../tools/script-file.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -27,6 +42,7 @@ export interface AgentEvent {
   id?: string;
   message?: string;
   remoteName?: string | null;
+  remoteAuthority?: string | null;
   folders?: string[];
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
@@ -37,11 +53,26 @@ export interface AgentEvent {
 export interface RecordLine {
   surface: string;
   question: string;
+  /** The answer given: `'held'` on the waiting line of a held entry, `'withdrawn'` when its question ended while it waited. */
   answer: string;
   matched: boolean;
+  /** The waiting line of a held entry: the answer or withdrawal line that follows it counts for the cursor, not this one. */
+  held?: boolean;
   window: string;
   /** The labels a failure dialog or a notice was shown with, in order. */
   buttons?: string[];
+  /** The labels the pick was shown with, in order; only the lines of a `hostPick` or a `filePick` surface have it. */
+  items?: string[];
+  time: number;
+}
+
+/** A question the scripted adapters of the launch's windows answer from the script, in the order the windows ask them. */
+export interface WindowScriptEntry {
+  surface: 'hostPick' | 'filePick';
+  match: string;
+  answer: {label: string} | {typed: string} | 'dismiss';
+  /** The window that answers; an entry without one is answered by every window. */
+  window?: string;
 }
 
 /** A harness variable of the run; throws when the tests run outside the harness. */
@@ -65,18 +96,31 @@ function linesOf<Line>(file: string): Line[] {
     : [];
 }
 
-/** A file of a window's agent in the run's folder: its `events` or its `commands`. */
+/** The launch's agent folder: the one the launch's variable points its pid files to. */
+function agentFolder(): string {
+  return path.dirname(variable('REMOTE_OSS_ACCEPTANCE_WINDOWS'));
+}
+
+/** A file of a window's agent in the launch's folder: its `events` or its `commands`. */
 function agentFile(name: string, kind: 'events' | 'commands'): string {
-  return path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    'agent',
-    `${name}.${kind}.jsonl`,
-  );
+  return path.join(agentFolder(), `${name}.${kind}.jsonl`);
 }
 
 /** The events the agent of window `name` has reported, in order. */
 export function windowEvents(name: string): AgentEvent[] {
   return linesOf<AgentEvent>(agentFile(name, 'events'));
+}
+
+/**
+ * Writes the launch's script with `entries`, which the extensions read when they activate: a window that opens after
+ * the write answers its questions from it. A window that activated before the write keeps the entries it read, so an
+ * entry names the window it prepares for.
+ */
+export function scriptEntries(entries: readonly WindowScriptEntry[]): void {
+  writeFileSync(
+    variable('REMOTE_OSS_ACCEPTANCE_SCRIPT'),
+    JSON.stringify({entries}),
+  );
 }
 
 /** The lines of the record, optionally of one surface and one window. */
@@ -96,6 +140,11 @@ export function connectionLog(): string[] {
     .map(line => line.slice(line.indexOf('] ') + 2));
 }
 
+/** The waiting lines of the record, optionally of one window: a held entry's line while it waits for its signal. */
+export function heldLines(window?: string): RecordLine[] {
+  return recordLines(undefined, window).filter(line => line.held === true);
+}
+
 /** The output of a command run in the host container as the user harness. */
 export async function onHost(...command: string[]): Promise<string> {
   const {stdout} = await execFileAsync('docker', [
@@ -106,6 +155,43 @@ export async function onHost(...command: string[]): Promise<string> {
     ...command,
   ]);
   return stdout;
+}
+
+/** The bare password of the host's user `harness-pw`, from the run's file. */
+export function hostPassword(): string {
+  return readFileSync(variable('HARNESS_PASSWORD_FILE'), 'utf8');
+}
+
+/**
+ * Creates the run's signal file `<signals>/<name>`: a held entry that names it answers from then on. The name is
+ * letters, digits and hyphens, never the reserved one.
+ */
+export function signal(name: string): void {
+  signalFile(variable('REMOTE_OSS_ACCEPTANCE_SIGNALS'), name);
+}
+
+/**
+ * Adds `entries` to the launch's script, atomically: the adapters read it at every question, so they count from the
+ * next question on.
+ */
+export function appendScript(entries: readonly AppendedEntry[]): void {
+  appendScriptTo(variable('REMOTE_OSS_ACCEPTANCE_SCRIPT'), entries);
+}
+
+/**
+ * The number of logins the host's sshd counted for the password account: the `Accepted password` lines of the
+ * container's log, which sshd gets with `-e` — read from both of the container's streams, since its log is its
+ * stderr.
+ */
+export async function acceptedPasswords(): Promise<number> {
+  const {stdout, stderr} = await execFileAsync(
+    'docker',
+    ['logs', variable('HARNESS_CONTAINER')],
+    {encoding: 'utf8'},
+  );
+  return `${stdout}\n${stderr}`
+    .split('\n')
+    .filter(line => line.includes('Accepted password for harness-pw')).length;
 }
 
 /** Polls until `ready` holds, for up to a minute; it fails naming what it waited for. */
@@ -181,6 +267,110 @@ export async function openWindow(alias: string, folder: string): Promise<void> {
   );
 }
 
+/** The names of the empty windows that have an events file, in the order of their numbers. */
+export function emptyWindows(): string[] {
+  const folder = agentFolder();
+  const files = existsSync(folder) ? readdirSync(folder) : [];
+  const numbers: number[] = [];
+  for (const file of files) {
+    const match = /^empty-(\d+)\.events\.jsonl$/.exec(file);
+    if (match !== null) {
+      const digits = match[1];
+      if (digits !== undefined) {
+        numbers.push(Number(digits));
+      }
+    }
+  }
+  return numbers
+    .sort((first, second) => first - second)
+    .map(number => `empty-${String(number)}`);
+}
+
+/**
+ * The name the next empty window will claim: `empty-1` when none is claimed yet, and one more than the highest
+ * claimed when some are. A test that must script a window before it exists writes its entries for this name.
+ */
+export function nextEmptyName(): string {
+  const folder = path.join(agentFolder(), 'claims');
+  const files = existsSync(folder) ? readdirSync(folder) : [];
+  let highest = 0;
+  for (const file of files) {
+    const match = /^empty-(\d+)$/.exec(file);
+    if (match !== null) {
+      const digits = match[1];
+      if (digits !== undefined && Number(digits) > highest) {
+        highest = Number(digits);
+      }
+    }
+  }
+  return `empty-${String(highest + 1)}`;
+}
+
+/**
+ * Runs `action` and resolves with the one empty window it opens, once that window's agent has activated. Fails when
+ * the action opens no empty window within the bound, and names the windows when it opens more than one.
+ */
+export async function nextEmptyWindow(
+  action: () => void | Promise<void>,
+): Promise<string> {
+  const before = new Set(emptyWindows());
+  await action();
+  function fresh(): string[] {
+    return emptyWindows().filter(name => !before.has(name));
+  }
+  let opened: string | undefined;
+  await waitUntil(
+    () =>
+      `exactly one new empty window (new names: ${JSON.stringify(fresh())})`,
+    () => {
+      const names = fresh();
+      if (names.length > 1) {
+        throw new Error(
+          `the action opened more than one empty window: ${names.join(', ')}`,
+        );
+      }
+      const name = names.length === 1 ? names[0] : undefined;
+      if (
+        name !== undefined &&
+        windowEvents(name).some(each => each.event === 'activated')
+      ) {
+        opened = name;
+        return true;
+      }
+      return false;
+    },
+  );
+  if (opened === undefined) {
+    throw new Error('the action opened no empty window');
+  }
+  return opened;
+}
+
+/**
+ * The order in which the window's name reached its adapters, for the run's record: the milliseconds between the
+ * writing of the window's pid file and the window's first record line, negative when the file was already there, so
+ * a negative number means the adapters' wait did not fire.
+ */
+export function windowNameOrder(name: string): string {
+  const pids = variable('REMOTE_OSS_ACCEPTANCE_WINDOWS');
+  let written: number | undefined;
+  for (const file of readdirSync(pids)) {
+    const read = readFileSync(path.join(pids, file), 'utf8');
+    if (read === name) {
+      const mtime = statSync(path.join(pids, file)).mtimeMs;
+      written = written === undefined ? mtime : Math.max(written, mtime);
+    }
+  }
+  const first = recordLines(undefined, name)[0];
+  if (written === undefined || first === undefined) {
+    return `the pid file or the first record line of window ${name} is missing`;
+  }
+  const delta = written - first.time;
+  return delta < 0
+    ? `the pid file is ${String(Math.round(-delta))} ms before the window's first record line`
+    : `the pid file is ${String(Math.round(delta))} ms after the window's first record line; the adapters waited`;
+}
+
 /**
  * Reloads window `name` and resolves on its next `activated`. The reload command's own `failed` is ignored: the
  * extension host may end before it can answer.
@@ -204,20 +394,41 @@ export async function closeWindow(name: string): Promise<void> {
   );
 }
 
-/** What window `name` reports of itself: the remote it is on and its folders. */
-export async function windowState(
-  name: string,
-): Promise<{remoteName: string | null; folders: string[]}> {
-  const before = countOf(name, 'state');
-  await inWindow(name, 'acceptance.agent.state');
-  await waitUntil(
-    `window ${name} to report its state`,
-    () => countOf(name, 'state') > before,
-  );
-  const last = windowEvents(name)
-    .filter(each => each.event === 'state')
-    .at(-1);
-  return {remoteName: last?.remoteName ?? null, folders: last?.folders ?? []};
+/**
+ * What window `name` reports of itself: the remote it is on, the authority it is on and its folders. A remote
+ * window's authority is written by its own extension when it resolves, which may lag the window's agent, so a
+ * remote window's state is re-asked until the authority is there; a local window reports once.
+ */
+export async function windowState(name: string): Promise<{
+  remoteName: string | null;
+  remoteAuthority: string | null;
+  folders: string[];
+}> {
+  const deadline = Date.now() + WAIT_MILLISECONDS;
+  for (;;) {
+    const before = countOf(name, 'state');
+    await inWindow(name, 'acceptance.agent.state');
+    await waitUntil(
+      `window ${name} to report its state`,
+      () => countOf(name, 'state') > before,
+    );
+    const last = windowEvents(name)
+      .filter(each => each.event === 'state')
+      .at(-1);
+    const state = {
+      remoteName: last?.remoteName ?? null,
+      remoteAuthority: last?.remoteAuthority ?? null,
+      folders: last?.folders ?? [],
+    };
+    if (
+      state.remoteName === null ||
+      state.remoteAuthority !== null ||
+      Date.now() > deadline
+    ) {
+      return state;
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
 }
 
 /** The output of `program` run with the run's agent, or its exit status when it fails. */

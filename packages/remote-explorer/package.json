@@ -20,6 +20,8 @@
   "categories": [
     "Other"
   ],
+  "main": "./dist/extension.js",
+  "browser": "./dist/web/extension.js",
   "keywords": [
     "remote development",
     "remote",
@@ -40,6 +42,7 @@
     "contribViewsRemote",
     "extensionsAny"
   ],
+  "l10n": "./l10n",
   "contributes": {
     "commands": [
       {
@@ -116,5 +119,12 @@
         }
       ]
     }
+  },
+  "dependencies": {
+    "lib-authority": "workspace:*",
+    "lib-companion": "workspace:*",
+    "lib-identifiers": "workspace:*",
+    "lib-product": "workspace:*",
+    "lib-standdown": "workspace:*"
   }
 }

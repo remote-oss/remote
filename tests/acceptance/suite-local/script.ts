@@ -15,6 +15,12 @@ export type ScriptEntry = (
       answer: {button: string} | 'dismiss';
     }
   | {
+      surface: 'hostPick';
+      match: string;
+      answer: {label: string} | {typed: string} | 'dismiss';
+    }
+  | {surface: 'filePick'; match: string; answer: {label: string} | 'dismiss'}
+  | {
       surface: 'platformPick';
       match: string;
       answer: 'linux' | 'windows' | 'macOS' | 'dismiss';
@@ -29,6 +35,8 @@ export type ScriptEntry = (
 ) & {
   /** The window that answers; an entry without one is answered once by each window. */
   window?: string;
+  /** The signal a held entry waits for before it answers: the run's signal file of that name must exist. */
+  after?: string;
 };
 
 /** One line of the record: the question as asked, and what the adapter answered. */
@@ -36,8 +44,11 @@ export interface RecordLine {
   /** A question's surface, or `progress` or `downloadProgress` for a display-only line. */
   surface: ScriptEntry['surface'] | 'progress' | 'downloadProgress';
   question: string;
+  /** The answer given, `'held'` on a held entry's waiting line and `'withdrawn'` when its question ended while it waited. */
   answer: string;
   matched: boolean;
+  /** The waiting line of a held entry: the answer or withdrawal line that follows it counts, not this one. */
+  held?: boolean;
   /** Whether the progress message carried the details link; only the phase lines of a `progress` surface have it. */
   details?: boolean;
   /** The name of the window that wrote the line. */
@@ -46,8 +57,10 @@ export interface RecordLine {
   time: number;
   /** The labels the failure dialog was shown with, in order; only the lines of a `failureDialog` surface have it. */
   buttons?: string[];
-  /** The labels of the rows the mitigation pick was shown with, in order; only the lines of a `mitigationPick` surface have it. */
+  /** The labels of the rows the pick was shown with, in order; only the lines of a `mitigationPick`, a `hostPick` or a `filePick` surface have it. */
   items?: string[];
+  /** The detail text the licence modal was shown with; only the lines of a `licenceModal` surface have it. */
+  detail?: string;
 }
 
 /** The lines of a record file; a record not written yet is empty. */
@@ -85,7 +98,10 @@ function runOf(entries: readonly ScriptEntry[], recordFile: string): ScriptRun {
   return {
     record,
     assertAllUsed: () => {
-      const used = record().filter(line => line.matched).length;
+      // The held line of a waiting entry does not count: its answer or withdrawal line does.
+      const used = record().filter(
+        line => line.matched && line.held !== true,
+      ).length;
       if (used < entries.length) {
         throw new Error(
           `${String(entries.length - used)} of ${String(entries.length)} script entries were not used`,

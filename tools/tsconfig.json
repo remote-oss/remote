@@ -8,6 +8,11 @@
     "rootDir": "..",
     "types": ["node", "mocha"]
   },
-  "include": ["**/*.ts", "../eslint.config.ts", "../prettier.config.ts"],
+  "include": [
+    "**/*.ts",
+    "../eslint.config.ts",
+    "../prettier.config.ts",
+    "../tests/acceptance/window-agent/src/window-name.ts"
+  ],
   "exclude": ["**/fixtures"]
 }

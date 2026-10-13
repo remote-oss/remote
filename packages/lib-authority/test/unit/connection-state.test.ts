@@ -210,3 +210,61 @@ describe('the connection of a window (card authority-04)', () => {
     deepStrictEqual(calls, 1);
   });
 });
+
+describe('how the last settled resolve ended (card ssh-provider-01)', () => {
+  const STEPS: Array<[string, ConnectionEvent[], string]> = [
+    ['a), a first resolve under way', [start()], 'none'],
+    ['b), a first success', [start(), SUCCEEDED], 'succeeded'],
+    ['c), a lost transport', [start(), SUCCEEDED, LOST], 'succeeded'],
+    [
+      'd), the reconnect resolving',
+      [start(), SUCCEEDED, LOST, start(FIRST, 2)],
+      'succeeded',
+    ],
+    [
+      'e), a successful reconnect',
+      [start(), SUCCEEDED, LOST, start(FIRST, 2), SUCCEEDED],
+      'succeeded',
+    ],
+    [
+      'f), a failed reconnect',
+      [
+        start(),
+        SUCCEEDED,
+        LOST,
+        start(FIRST, 2),
+        SUCCEEDED,
+        LOST,
+        start(FIRST, 3),
+        FAILED,
+      ],
+      'failed',
+    ],
+    [
+      'g), a new resolve after the failure',
+      [
+        start(),
+        SUCCEEDED,
+        LOST,
+        start(FIRST, 2),
+        SUCCEEDED,
+        LOST,
+        start(FIRST, 3),
+        FAILED,
+        start(FIRST, 4),
+      ],
+      'failed',
+    ],
+    ['a closed transport', [start(), SUCCEEDED, CLOSED], 'succeeded'],
+    ['a success before any start, ignored', [SUCCEEDED], 'none'],
+  ];
+  for (const [step, events, expected] of STEPS) {
+    it(`F-5902.AC-27: ${step} gives ${expected}`, () => {
+      deepStrictEqual(after(...events).tracker.lastResolve(), expected);
+    });
+  }
+
+  it('F-5902.AC-27: a fresh tracker gives none', () => {
+    deepStrictEqual(new ConnectionTracker().lastResolve(), 'none');
+  });
+});

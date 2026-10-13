@@ -59,6 +59,7 @@
   "SSH: {0}": "SSH: {0}",
   "Downloading VS Code Server failed. Please try again later.": "Downloading VS Code Server failed. Please try again later.",
   "Failed to install the VS Code Server": "Failed to install the VS Code Server",
+  "Failed to download VS Code Server ({0})": "Failed to download VS Code Server ({0})",
   "Provided: \"{0}\"": "Provided: \"{0}\"",
   "it does not give an http or https address": "it does not give an http or https address",
   "the placeholder {0} is not known": "the placeholder {0} is not known",
@@ -82,5 +83,15 @@
   "The VS Code Server failed to start": "The VS Code Server failed to start",
   "The VS Code Server terminated due to presence of CVE-2020-1416. Check the Remote-SSH output channel for more details.": "The VS Code Server terminated due to presence of CVE-2020-1416. Check the Remote-SSH output channel for more details.",
   "Invaid port range set": "Invaid port range set",
-  "{1} is not a valid host to bind": "{1} is not a valid host to bind"
+  "{1} is not a valid host to bind": "{1} is not a valid host to bind",
+  "Select configured SSH host or enter user@host": "Select configured SSH host or enter user@host",
+  "{0} Add New SSH Host...": "{0} Add New SSH Host...",
+  "Configure SSH Hosts...": "Configure SSH Hosts...",
+  "\"{0}\" has fingerprint \"{1}\".": "\"{0}\" has fingerprint \"{1}\".",
+  "Are you sure you want to continue connecting?": "Are you sure you want to continue connecting?",
+  "Are you sure you want to continue?": "Are you sure you want to continue?",
+  "Continue": "Continue",
+  "Enter passphrase for ssh key {0}": "Enter passphrase for ssh key {0}",
+  "Enter password": "Enter password",
+  "Enter password for {0}": "Enter password for {0}"
 }

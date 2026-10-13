@@ -56,6 +56,7 @@ export {
   type ConnectionState,
   ConnectionTracker,
   type CurrentConnection,
+  type LastResolve,
 } from './resolver/connection-state.ts';
 export {
   type InteractionOutcome,
@@ -115,6 +116,10 @@ export {
   setupPortsOf,
 } from './gate/setup-ports.ts';
 export {gateEditorOf} from './gate/vscode-setup.ts';
+export {
+  familySetupPortsOf,
+  type FamilySetupOptions,
+} from './gate/family-setup.ts';
 export {phaseMessage} from './resolver/progress-message.ts';
 export {
   resolverEditorOf,
