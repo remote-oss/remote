@@ -47,14 +47,17 @@ editor adapters live with the existing ones (`surfaces/editor-adapters.ts`).
 ## 3. Kill Local Connection Server (F-2102 §6.4)
 
 - **The pick:** the same picker (F-2102 6.4 step 2 names it).
-- **The kill:** `killConnection` (lib-ssh `connection-server/client.ts`) for the picked host string **exactly as
-  written** in the picked row or the typed text (F-2102 AC-17: `<user>@<address>` of a window's alias target is another
-  host string, and that window's server stays).
+- **The kill:** `killConnection` (lib-ssh `connection-server/client.ts`) for the **payload of the authority the connect
+  command would open for the same pick**, the key the registry uses (`rawHostString`, `connection-step.ts`). `dev`
+  stays `dev`; a typed `alex@10.0.0.5` becomes its hex payload. So a window connected by typing `alex@10.0.0.5` is
+  ended by typing the same text (AC-31), and a window connected by the alias `dev` keeps its server when the user types
+  its `<user>@<address>` (AC-17) (hestia on #529).
 - **Silent:** no notice for a server that ended or wasn't running (F-2102 AC-6, AC-16, 6.3); `killConnection` is
   silent by design.
-- **Terminal mode** (`useLocalServer` off): the command isn't in the palette (manifest). A call by keybinding opens the
-  picker, and the pick creates, changes and removes nothing (F-2102 AC-21, as written: "invoked by a keybinding and a
-  host is picked").
+- **Terminal mode** (`useLocalServer` off): the command isn't in the palette (manifest), and a call by keybinding runs
+  the same picker and the same kill, with no branch of its own. A server started while the setting was on still ends
+  (AC-22), and with no server running `killConnection` is a silent no-op, so nothing is created, changed or removed
+  (AC-21) (hestia on #529).
 
 Follow F-2102's 6.4 and ACs; ask on #142 for anything they leave open.
 
@@ -71,10 +74,11 @@ Unit rows (`test/unit/connect-commands.test.ts`), one assertion each, named by t
   - Escape → nothing.
 - **The active-host command:** available → the active host in a new window; unavailable → nothing.
 - **Kill:**
-  - the picked host string reaches `killConnection` as written (AC-17: `alex@10.0.0.5` and `dev` are different
-    strings);
+  - two picks, `alex@10.0.0.5` and `dev`, reach `killConnection` as two different strings (AC-17);
+  - the string equals the payload of the authority the same pick opens (AC-31);
   - no notice is shown, whatever `killConnection` reports (AC-6, AC-16);
-  - in terminal mode, the picker opens and the pick calls nothing (AC-21).
+  - terminal mode, no server: nothing is created, changed or removed (AC-21);
+  - terminal mode, a running server: it's ended (AC-22).
 
 Acceptance rows, in the VSCodium run (`suite-remote`):
 - `F-2301 AC-1: Connect to Host... is a registered command`: `vscode.commands.getCommands(true)` holds all four ids;
