@@ -11,12 +11,24 @@ import {openSharedSession, type SharedSession} from './shared-session.ts';
 type HostChannel = SshHostChannel | SharedSessionChannel;
 type ScriptRequest = Parameters<HostChannel['runScript']>[0];
 
-const SLEEP_SECONDS = 3;
 const POLL_MILLISECONDS = 100;
 const POLL_ATTEMPTS = 100;
 
 /** How long the control's own child on the client lives: it must still run when the ps reads run. */
 const LOCAL_CHILD_SECONDS = 30;
+
+/** How many tenths of a second a script waits for its release before it ends anyway: a lost release can't hang the run. */
+const RELEASE_TENTHS = 600;
+
+/** Where on the host the test releases the script, once it has read the process lists. */
+function releaseFile(token: string): string {
+  return `/tmp/release-${fileId(token)}`;
+}
+
+/** The shell that waits on the host until the test releases the script, or the bound passes. */
+function waitForRelease(token: string): string {
+  return `n=0; while [ ! -e ${releaseFile(token)} ] && [ "$n" -lt ${String(RELEASE_TENTHS)} ]; do sleep 0.1; n=$((n + 1)); done`;
+}
 
 /** Where on the host the script writes the value it received. */
 function receivedFile(token: string): string {
@@ -69,7 +81,7 @@ describe('contracts §S10: a script environment is in no process command line, o
     };
   }
 
-  /** Runs the script and lists the processes of the host and of the client while the script sleeps. */
+  /** Runs the script and lists the processes of the host and of the client while the script waits, then releases it. */
   async function watched(
     channel: HostChannel,
     token: string,
@@ -97,6 +109,7 @@ describe('contracts §S10: a script environment is in no process command line, o
     }
     const hostLines = host.onHost('ps', '-o', 'args').split('\n');
     const clientLines = listProcesses(['ps', '-eo', 'args']);
+    host.onHost('touch', releaseFile(token));
     const outcome = await running;
     return {
       hostLines,
@@ -110,13 +123,13 @@ describe('contracts §S10: a script environment is in no process command line, o
     return `marker-${randomBytes(8).toString('hex')}`;
   }
 
-  function sleeping(token: string, readsInput: boolean): string {
-    return `${readsInput ? 'cat >/dev/null; ' : ''}echo "$MARKER" >${receivedFile(token)}; sleep ${String(SLEEP_SECONDS)}; true`;
+  function waiting(token: string, readsInput: boolean): string {
+    return `${readsInput ? 'cat >/dev/null; ' : ''}echo "$MARKER" >${receivedFile(token)}; ${waitForRelease(token)}; true`;
   }
 
-  /** The positive control's script: it reads its input, starts a child whose command line carries the marker, then sleeps for the reads. */
+  /** The positive control's script: it reads its input, starts a child whose command line carries the marker, then waits for the release. */
   function controlScript(token: string): string {
-    return `cat >/dev/null; echo "$MARKER" >${receivedFile(token)}; sh -c 'sleep ${String(SLEEP_SECONDS)}; true' ${token} & sleep ${String(SLEEP_SECONDS)}; true`;
+    return `cat >/dev/null; echo "$MARKER" >${receivedFile(token)}; sh -c '${waitForRelease(token)}; true' ${token} & ${waitForRelease(token)}; true`;
   }
 
   async function leaks(
@@ -134,7 +147,7 @@ describe('contracts §S10: a script environment is in no process command line, o
       token,
       request(
         token,
-        sleeping(token, input.kind !== 'text' || input.text !== ''),
+        waiting(token, input.kind !== 'text' || input.text !== ''),
         input,
       ),
     );
