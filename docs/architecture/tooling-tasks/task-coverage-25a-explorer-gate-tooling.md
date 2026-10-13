@@ -147,5 +147,11 @@ check of §2.2 and §3.
 1. An explorer launch without `REMOTE_OSS_ACCEPTANCE_WINDOWS` after #609 is merged.
 2. `seed-coverage` can't read a remote-explorer issue with `gh` from the builder's room: report it. daedalus seeds
    the file.
-3. A criterion line that `acceptanceCriteriaOf` misses or doubles for a remote-explorer issue, against the issue's
-   AC count in `docs/architecture/catalogue.tsv` (`acCount`): report the difference. Don't edit the seeded file by hand.
+3. A criterion line that `acceptanceCriteriaOf` misses or doubles for an issue. `acCount` in
+   `docs/architecture/catalogue.tsv` counts the issue's `Removed` criteria too, which `acceptanceCriteriaOf` leaves
+   out by design. So compare the seeded count with `acCount` minus the issue's `Removed` lines.
+   - Measured by themis on #648: F-5101 seeds 37 of `acCount` 44 (seven `Removed`: AC-5, 6, 29, 31, 32, 33, 37), and
+     F-5102 seeds 53 of 54 (AC-14 `Removed`). The other six features match `acCount` exactly.
+   - Report only a difference beyond the `Removed` lines.
+
+   Don't edit the seeded file by hand.
