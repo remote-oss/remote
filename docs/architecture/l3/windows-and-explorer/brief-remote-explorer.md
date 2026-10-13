@@ -8,6 +8,10 @@
 
 # Coding brief (draft): remote-explorer and lib-companion
 
+**0.3 cut (athena, 2026-10-13, D-55):** the tunnel rows are out. F-5201 and F-5202 aren't built, there is no
+`explorer.tunnels-group`, and no WSL row per online tunnel machine. Every AC of the other features that needs a tunnel
+row or the tunnels companion is `deferred` with the reason `D-55: no tunnel rows`. F-5101 is built for its SSH half.
+
 Status: draft by `remote-architect-worker-2`, 2026-10-06. It is ready for the lead's review and is meant to start
 when remote-ssh-edit ships. The design is in `components.md` (lib-companion, remote-explorer), and the contracts are
 `contracts.md` §4 (lib-companion) and §3.3 and §3.4 (opener and gate). The ADRs that bind it are 0002, 0003, 0007 and
@@ -26,7 +30,7 @@ the drafts "Identifier tables" and "Stand-down gating".
    - the recording fake, as a test fixture only.
 
    It owns F-5902 (36 ACs).
-2. **`remote-explorer`**, seven components that own nine features:
+2. **`remote-explorer`**, six components that own eight features:
 
 | Feature | Component | ACs |
 |---|---|---|
@@ -35,7 +39,6 @@ the drafts "Identifier tables" and "Stand-down gating".
 | F-5102 | `explorer.ssh-group` | 54 |
 | F-5103 | `explorer.connect-actions` | 40 |
 | F-5104 | `explorer.recent-folders` | 52 |
-| F-5201, F-5202 | `explorer.tunnels-group` | 39, 46 |
 
 The seventh component, `explorer.inbox`, owns no feature: it serves `setActiveFolders` and `sshHostsChanged`.
 
@@ -59,21 +62,22 @@ I propose removing both edges.
 
 ## Acceptance
 
-- **No conformance suite exists yet** for remote-explorer. The target is the ACs above (403 as numbered, including F-5902; a few are marked removed in their issues), proved by
-  integration tests in the editor's harness against the recording fake. The fake can play both the SSH companion
-  and the tunnels companion. The cases come when the room publishes its suite.
-- **The real companions do not exist yet.** Our remote-ssh is not built, and the tunnels client is frozen pending
-  the user. Every group is therefore built and tested against the fake only. That is the design: the explorer never
+- **No conformance suite exists yet** for remote-explorer. The target is the ACs above, without the tunnel rows (D-55), proved by
+  integration tests in the editor's harness against the recording fake. The fake plays the SSH companion (the
+  tunnels companion is out with D-55). The cases come when the room publishes its suite.
+- **The real companions do not exist yet.** Remote - Tunnels is out (D-55). Every group is therefore built and tested against the fake only. That is the design: the explorer never
   depends on a companion's code.
-- **Blocking for conformance later:** the runner enables no proposed API, and the explorer needs
-  `contribViewsRemote` for its view to exist at all. This is with `remote-development` for the kit owner.
+- **The proposed API (ruled 2026-10-13):** the explorer needs `contribViewsRemote` (and asks for `extensionsAny`) for
+  its view to exist at all. It goes through the family's gate, as remote-ssh does: F-3903's route (Option B,
+  `--enable-proposed-api` or `argv.json`). connect-31's setup reads every installed `remote-oss.` member's own manifest,
+  so the one setup notice covers the explorer too. No new decision: the id is the family's (D-14), and the route is
+  decided. The harness's launches enable it for `remote-oss.remote-explorer` as they do for remote-ssh.
 
 ## Open before coding (through the lead)
 
 Settled by the explorer room's republication (2026-10-06):
 
-- WSL rows follow F-5202 3.3: one "WSL" row per online Windows tunnel machine. The generic connect pair uses the
-  default distro, and the distro pair asks for one. F-5104, F-5002, F-5201 and F-5301 are aligned.
+- WSL rows per online Windows tunnel machine (F-5202 3.3) come from the tunnels group and are out with it (D-55).
 - The companion interface, explorer side: see `contracts.md` §6 (two `setActiveFolders` callers, host key, no
   configFile signal, first-recorded tunnel history, the `folder-active` mark from `getActiveRemote`).
 - The key is `remote-explorer.standingDown`. Every gated entry is `when: <reference clause> &&
