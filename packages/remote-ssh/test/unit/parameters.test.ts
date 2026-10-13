@@ -52,6 +52,7 @@ function input(
     archiveUrl: 'https://example.invalid/server.tar.gz',
     epochMilliseconds: 1700000000000,
     bounds: BOUNDS,
+    socketMode: false,
     ...changes,
   };
 }
@@ -189,6 +190,17 @@ describe('the script parameters', () => {
     );
   });
 
+  it('F-2410 BR-4: carry the socket mode of the connect to the start', () => {
+    deepStrictEqual(
+      [false, true].map(
+        socketMode =>
+          scriptParametersFor(input(settingsOf(), {socketMode})).start
+            .socketMode,
+      ),
+      [false, true],
+    );
+  });
+
   it('use the install folder as the install root and the range as the port', () => {
     const parameters = scriptParametersFor(
       input(
@@ -263,6 +275,18 @@ describe('the start options', () => {
         readySeconds: 20,
         socketMode: false,
       },
+    );
+  });
+});
+
+describe('the start options of a socket-mode connect', () => {
+  it('F-2410 BR-4: are the default with the socket mode off, and socket mode when asked', () => {
+    deepStrictEqual(
+      [
+        runtimeOptionsFor(settingsOf(), BOUNDS, false, true).socketMode,
+        runtimeOptionsFor(settingsOf(), BOUNDS).socketMode,
+      ],
+      [true, false],
     );
   });
 });

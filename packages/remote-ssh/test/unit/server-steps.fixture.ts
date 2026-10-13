@@ -124,6 +124,7 @@ export function dependencies(
     },
     rejectBindHost: () => undefined,
     remoteUser: () => 'alex',
+    socketMode: () => false,
     clock: () => 1700000000000,
     bounds: {downloadSeconds: 60, readySeconds: 20},
     store: storeOf(),

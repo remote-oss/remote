@@ -35,6 +35,7 @@
         "suite-ports/*.test.ts",
         "suite-install/*.test.ts",
         "suite-terminal/*.test.ts",
+        "suite-socket/*.test.ts",
         "suite-client/*.test.ts",
         "suite-slow/*.test.ts",
         "slow-remote/src/extension.ts",

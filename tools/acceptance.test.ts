@@ -246,6 +246,7 @@ const LAUNCH_ORDER = [
   'reconnect',
   'failure-refused',
   'terminal',
+  'socket',
   'slow',
   'client-unset',
   'terminal-pick',
@@ -1504,7 +1505,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 9}, () => EXECUTABLE),
+        Array.from({length: 10}, () => EXECUTABLE),
       );
     });
 
@@ -1515,7 +1516,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 9}, () => true),
+        Array.from({length: 10}, () => true),
       );
     });
 
@@ -1531,6 +1532,7 @@ describe('acceptance', () => {
           ['reconnect', 'dist-reconnect/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
+          ['socket', 'dist-socket/**/*.test.cjs'],
           ['slow', 'dist-slow/**/*.test.cjs'],
           ['client-unset', 'dist-client/**/*.test.cjs'],
           ['ports-probe', 'dist-ports/**/*.test.cjs'],
@@ -1626,7 +1628,7 @@ describe('acceptance', () => {
 
     it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
       deepStrictEqual(
-        configurations()[5]?.launchArgs.filter(argument =>
+        configurations()[6]?.launchArgs.filter(argument =>
           argument.startsWith('--extensionDevelopmentPath='),
         ),
         [
@@ -1674,6 +1676,7 @@ describe('acceptance', () => {
           'reconnect',
           'failure-refused',
           'terminal',
+          'socket',
           'slow',
           'client-unset',
           'ports-probe',
@@ -1693,6 +1696,7 @@ describe('acceptance', () => {
           'reconnect',
           'failure-refused',
           'terminal',
+          'socket',
           'slow',
           'client-unset',
           'ports-probe',
@@ -1708,7 +1712,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        [1, 2, 3, 4, 5, 6, 7, 8].map(() =>
+        [1, 2, 3, 4, 5, 6, 7, 8, 9].map(() =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -1932,6 +1936,7 @@ describe('acceptance', () => {
       workspace.write('tests/acceptance/suite-reconnect/window.test.ts', '');
       workspace.write('tests/acceptance/suite-failure/window.test.ts', '');
       workspace.write('tests/acceptance/suite-terminal/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-socket/window.test.ts', '');
       workspace.write('tests/acceptance/suite-slow/window.test.ts', '');
       workspace.write('tests/acceptance/suite-ports/window.test.ts', '');
       workspace.write(
@@ -1980,12 +1985,13 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-socket',
           'dist-slow',
           'dist-ports',
         ].map(folder =>
           existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
         ),
-        [false, false, false, false, false, false, false, false],
+        [false, false, false, false, false, false, false, false, false],
       );
     });
 
@@ -2025,6 +2031,7 @@ describe('acceptance', () => {
           'dist-reconnect',
           'dist-failure',
           'dist-terminal',
+          'dist-socket',
           'dist-slow',
           'dist-ports',
         ].map(folder =>
@@ -2037,7 +2044,7 @@ describe('acceptance', () => {
             ),
           ),
         ),
-        [true, true, true, true, true, true, true],
+        [true, true, true, true, true, true, true, true],
       );
     });
   });

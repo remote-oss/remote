@@ -582,6 +582,100 @@ describe("the composition's forwarding of the later server steps", () => {
   });
 });
 
+describe("a connect's socket mode (card connect-41)", () => {
+  const SOCKET = {
+    listenOnSocket: true,
+    useLocalServer: true,
+    enableDynamicForwarding: true,
+  };
+
+  const SOCKS = {...SOCKET, listenOnSocket: false};
+
+  const SECOND_SSH = {
+    listenOnSocket: false,
+    useLocalServer: false,
+    enableDynamicForwarding: false,
+  };
+
+  /** What the start ran and the path asked for once it had, with tunnel settings as `readings` gives them in turn. */
+  async function startedWith(
+    readings: Array<typeof SOCKET>,
+    pathFirst = false,
+  ): Promise<{socketMode: boolean; pathAfter: string}> {
+    let reads = 0;
+    const {ports} = portsOf();
+    const steps = stepsOf({
+      ...ports,
+      tunnel: {
+        ...ports.tunnel,
+        settings: () =>
+          readings[Math.min(reads++, readings.length - 1)] ?? SOCKS,
+      },
+    });
+    await steps.locateClient(inputFor('dev'));
+    if (pathFirst) {
+      steps.tunnelPath();
+    }
+    const channel = channelAnswering(
+      lines(
+        'Ok',
+        'server.port=4321',
+        'server.pid=77',
+        'server.token=abcdefghijklmnopqrstuvwxyz012345',
+      ),
+    );
+    await steps.start(
+      inputFor('dev'),
+      leaseOn(channel),
+      HOST,
+      false,
+      new AbortController().signal,
+    );
+    const [call] = channel.calls;
+    return {
+      socketMode:
+        call?.operation === 'runScript' &&
+        /SOCKET_MODE='?yes/.test(call.request.script),
+      pathAfter: steps.tunnelPath(),
+    };
+  }
+
+  it('F-2410 BR-4: with the tunnel on a socket the start is a socket-mode start', async () => {
+    deepStrictEqual(await startedWith([SOCKET]), {
+      socketMode: true,
+      pathAfter: 'socket',
+    });
+  });
+
+  it('F-2410 BR-4: with the tunnel on socks the start is not', async () => {
+    deepStrictEqual(await startedWith([SOCKS]), {
+      socketMode: false,
+      pathAfter: 'socks',
+    });
+  });
+
+  it('F-2410 BR-4: with the tunnel on a second ssh the start is not', async () => {
+    deepStrictEqual(await startedWith([SECOND_SSH]), {
+      socketMode: false,
+      pathAfter: 'secondSsh',
+    });
+  });
+
+  it('F-2410 BR-4: the path asked for before the start decides it, even if the setting changes after', async () => {
+    deepStrictEqual(await startedWith([SOCKET, SOCKS], true), {
+      socketMode: true,
+      pathAfter: 'socket',
+    });
+  });
+
+  it('F-2410 BR-4: the start asked for before the path decides it, and the path then agrees', async () => {
+    deepStrictEqual(await startedWith([SOCKET, SOCKS]), {
+      socketMode: true,
+      pathAfter: 'socket',
+    });
+  });
+});
+
 describe('the connection step by mode (card connect-17)', () => {
   /** Opens the connection of a connect in `mode`, and what the shared and the terminal steps were asked for. */
   async function connectIn(mode: ConnectionMode) {
