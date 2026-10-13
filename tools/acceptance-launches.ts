@@ -372,6 +372,12 @@ export function launchesOf(root: string): Launch[] {
         ...each.environment,
       },
     })),
+    {
+      label: 'terminal-pick',
+      kind: 'plain',
+      suite: 'terminal-pick',
+      settings: {'remote.SSH.useLocalServer': false},
+    },
     {label: 'windows', kind: 'plain', suite: 'windows'},
     {
       label: 'no-proposals',

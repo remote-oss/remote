@@ -98,6 +98,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `no-proposals`: the same without the proposed API.
 
+- `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.
+
 - `explorer`, `explorer-alone` and `explorer-no-proposals`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, and `explorer-no-proposals` without the proposed API.
 
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
@@ -127,19 +129,46 @@ launch's own script, record and log files, runs the tests of the launch's folder
 and everything it started.
 
 The window agent (`window-agent/`) is the only test presence in the windows. Three rules: it does nothing unless
-`HARNESS_RUN_FOLDER` is set; it lives only under `tests/` and never goes into a product VSIX; and a test asks it for
-everything a user does to a window. A window's name is the last segment of its first folder's path, or `local` for a
-window with none. The agent appends `activated`, `deactivated`, `accepted`, `done`, `failed` and `state` events to
-`<run folder>/agent/<name>.events.jsonl`, and polls `<name>.commands.jsonl` every 200 ms for `{id, command, args}`
-lines it has not accepted yet, so a command written while the window starts or reloads is not lost. Its own commands
-are `acceptance.agent.openWindow(uri)`, `acceptance.agent.writeFile(name, text)` and `acceptance.agent.state()`.
+`REMOTE_OSS_ACCEPTANCE_WINDOWS` is set; it lives only under `tests/` and never goes into a product VSIX; and a test
+asks it for everything a user does to a window. The run sets the variable for every launch of a VSCodium run, pointing
+it at the launch's own pid folder, `<run folder>/<label>/agent/pids`, so each launch's windows keep their own agent
+files and two launches never mix their windows. The agent appends `activated`, `deactivated`, `accepted`, `done`,
+`failed` and `state` events to `<run folder>/<label>/agent/<name>.events.jsonl`, and polls `<name>.commands.jsonl`
+every 200 ms for `{id, command, args}` lines it has not accepted yet, so a command written while the window starts or
+reloads is not lost. The deactivation is reported once, by the first of the extension's deactivate or the process's
+own end that reaches it, so a window the harness ends still reports it. Its own commands are
+`acceptance.agent.openWindow(uri)`, `acceptance.agent.writeFile(name, text)` and `acceptance.agent.state()`; an
+`openWindow` whose uri names an authority but no folder opens an empty window on it, the way the connect commands do,
+and one with a folder opens a folder window.
+
+A window's name is the last segment of its first folder's path, or a claim for a window with none. At every
+activation, a window without a folder claims the first free name of its launch, `local` then `empty-1`, `empty-2`, …,
+by creating the launch's claim file for it exclusively, and a window with a folder keeps its folder name and claims
+nothing. The claim file stays for the launch's life, so a reloaded empty window comes back under the next free name,
+and the rows that script an empty window do not reload it. The agent writes the name it has to the launch's pid file
+for the window's process, `<pids>/<pid>`, rewriting it at every activation so a reused process id never carries the
+name of the window that ran in it before.
+
+The pid file is the one source the window's own product extension reads: when the launch's variable names a pid
+folder, the remote-ssh extension's script and record name the window from the file, polled every 50 ms until a 10 s
+bound, and a window whose file has not arrived shows as `unclaimed-<pid>` in the record. The agent activates on
+startup and, on a remote window, when the window resolves its authority, so the file is there well before the bound;
+in the measured run it was written 16 ms before the window's first record line. An empty window on a remote authority
+has no folder to name it, and the editor API has no name of the authority a window is on, so the extension writes the
+authority its resolver resolves to `<pids>/<pid>.authority`, and the agent's `state` reports it.
 
 `windows/harness.ts` has the Node helpers: `openWindow(alias, folder)`, `inWindow(name, command, ...args)` (resolves on
 `done`, fails on `failed`), `reloadWindow(name)` (resolves on the next `activated`; the reload command's own `failed` is
 ignored, since its extension host may end first), `closeWindow(name)` (resolves on `deactivated`), `windowState(name)`,
-`windowEvents(name)` and `recordLines(surface?, window?)`. Every wait is bounded at 60 s and fails naming the window and
-the event. The record's lines name the window that wrote them, and a script entry may name the window that answers it.
-The run's folder is named after the run's id, so that `acceptance:clean` ends an editor a killed job left behind.
+which re-asks a remote window until its authority has arrived, `windowEvents(name)` and `recordLines(surface?,
+window?)`. For the empty windows: `emptyWindows()` lists the names their agents have activated with, in the order of
+their numbers, `nextEmptyName()` the name the next empty window will claim, and `nextEmptyWindow(action)` runs
+`action` and resolves with the one empty window it opens once that window's agent has activated, failing when it
+opens none or more than one. `windowNameOrder(name)` measures the order the window's name reached its adapters: the
+milliseconds between the window's pid file and its first record line, the row that opens the first empty window logs
+it. Every wait is bounded at 60 s and fails naming the window and the event. The record's lines name the window that
+wrote them and carry the time of their writing, and a script entry may name the window that answers it. The run's
+folder is named after the run's id, so that `acceptance:clean` ends an editor a killed job left behind.
 
 ### Reading the window
 

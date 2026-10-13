@@ -320,6 +320,13 @@ describe("the connect's CLI path: the window resolves", () => {
     deepStrictEqual(recording.calls.includes('rememberPlatform'), true);
   });
 
+  it('#664: a connect over the CLI resolves though the platform write never settles', async () => {
+    const {result} = await connectOverCli(undefined, () => ({
+      rememberPlatform: () => new Promise<void>(() => undefined),
+    }));
+    deepStrictEqual(kindOf(result), 'connected');
+  });
+
   it('V7a: the lines the CLI logs go to the log at their level', async () => {
     const {bridged, messages} = await resolved();
     bridged.onServeLog?.({text: 'Server setup complete', level: 1});
