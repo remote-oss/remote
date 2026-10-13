@@ -5,6 +5,7 @@ import {
   strictEqual,
   throws,
 } from 'node:assert';
+import type {PortHolder} from './acceptance-occupy.ts';
 import {createHash} from 'node:crypto';
 import {
   existsSync,
@@ -867,6 +868,101 @@ describe('acceptance', () => {
         },
       );
       deepStrictEqual(seen[1], seen[0]);
+    });
+
+    /** A holder of ports that records what it was asked and what it let go, and fails for a port it is told is taken. */
+    function recordingHolder(taken: readonly number[] = []): {
+      events: string[];
+      holdPorts: PortHolder;
+    } {
+      const events: string[] = [];
+      return {
+        events,
+        holdPorts: ports => {
+          const blocked = ports.find(port => taken.includes(port));
+          if (blocked !== undefined) {
+            return Promise.reject(
+              new Error(
+                `the client listener on 127.0.0.1:${String(blocked)} could not start: in use`,
+              ),
+            );
+          }
+          events.push(`hold ${ports.join(',')}`);
+          return Promise.resolve({
+            release: () => {
+              events.push('release');
+              return Promise.resolve();
+            },
+          });
+        },
+      };
+    }
+
+    /** Runs `launches` with the recording holder; `during` runs inside each attempt. */
+    async function withHolder(
+      launches: Launch[],
+      holder: ReturnType<typeof recordingHolder>,
+      during: () => AttemptResult | Promise<AttemptResult> = () => ({
+        exitCode: 0,
+        output: '',
+      }),
+    ): Promise<void> {
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        launches,
+        command,
+        '',
+        sleep,
+        () => {
+          holder.events.push('attempt');
+          return Promise.resolve(during());
+        },
+        () => Promise.resolve(),
+        {},
+        holder.holdPorts,
+      );
+    }
+
+    it('#680: a launch with client listeners holds them during the attempt and lets them go after', async () => {
+      const holder = recordingHolder();
+      await withHolder([{...REMOTE, clientListeners: [41060, 41061]}], holder);
+      deepStrictEqual(holder.events, [
+        'hold 41060,41061',
+        'attempt',
+        'release',
+      ]);
+    });
+
+    it('#680: an attempt that fails still lets the client listeners go', async () => {
+      const holder = recordingHolder();
+      await withHolder([{...REMOTE, clientListeners: [41060]}], holder, () => {
+        throw new Error('the attempt broke');
+      }).catch(() => undefined);
+      deepStrictEqual(holder.events, ['hold 41060', 'attempt', 'release']);
+    });
+
+    it('#680: a client port that is taken fails the attempt with a message naming it, and starts no editor', async () => {
+      const holder = recordingHolder([41061]);
+      let message = '';
+      await withHolder(
+        [{...REMOTE, clientListeners: [41060, 41061]}],
+        holder,
+      ).catch((caught: unknown) => {
+        message = caught instanceof Error ? caught.message : String(caught);
+      });
+      deepStrictEqual(
+        [message, holder.events],
+        ['the client listener on 127.0.0.1:41061 could not start: in use', []],
+      );
+    });
+
+    it('#680: a launch without client listeners opens nothing', async () => {
+      const holder = recordingHolder();
+      await withHolder([REMOTE], holder);
+      deepStrictEqual(holder.events, ['hold ', 'attempt', 'release']);
     });
 
     it('D-85: the VS Code run starts its one configuration without a label and writes no settings', async () => {

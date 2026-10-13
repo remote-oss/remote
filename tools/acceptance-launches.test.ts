@@ -144,6 +144,7 @@ describe('the launches of the VSCodium run', () => {
       [
         'failure-refused-shown',
         'failure-platform-escape',
+        'failure-port-range-busy',
         'terminal',
         'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
@@ -178,6 +179,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-stranger-cancel',
         'failure-readonly',
         'failure-platform-escape',
+        'failure-port-range-busy',
       ],
     );
   });
@@ -198,6 +200,25 @@ describe('the launches of the VSCodium run', () => {
         ['failure-stranger-cancel', 'stranger-cancel'],
         ['failure-readonly', 'readonly'],
         ['failure-platform-escape', 'platform-escape'],
+        ['failure-port-range-busy', 'port-range-busy'],
+      ],
+    );
+  });
+
+  it('#680: the client listeners of a failing connect reach its launch, and a case without them has none', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.suite === 'suite-failure')
+        .map(launch => [launch.label, launch.clientListeners]),
+      [
+        ['failure-refused', undefined],
+        ['failure-nowhere', undefined],
+        ['failure-stranger', undefined],
+        ['failure-refused-shown', undefined],
+        ['failure-stranger-cancel', undefined],
+        ['failure-readonly', undefined],
+        ['failure-platform-escape', undefined],
+        ['failure-port-range-busy', [41060, 41061]],
       ],
     );
   });

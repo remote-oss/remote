@@ -23,6 +23,8 @@ interface LaunchCommon {
   proposedApi?: boolean;
   /** Commands the run runs on the host container, as root, before each attempt of the launch, in order. */
   hostSetup?: readonly HostSetupEntry[];
+  /** Ports of the client's loopback the run listens on while each attempt of the launch runs, to make a configured range busy. */
+  clientListeners?: readonly number[];
 }
 
 /** One command of a launch's host setup, run on the host container through `docker exec`, in order. */
@@ -83,6 +85,8 @@ export interface FailureCase {
   dialog: string;
   /** Settings merged over the run's base settings for the connect's launch. */
   settings?: Record<string, unknown>;
+  /** Ports of the client's loopback the run listens on while each attempt of the case's launch runs. */
+  clientListeners?: readonly number[];
   /** The bound the dialog's time is checked against: at most `milliseconds` after the first record line whose surface is `from`. */
   bound?: {from: string; milliseconds: number; cite: string};
 }
@@ -420,6 +424,9 @@ export function launchesOf(root: string): Launch[] {
       ...(failure.settings === undefined ? {} : {settings: failure.settings}),
       environment: {HARNESS_FAILURE_CASE: failure.label ?? failure.alias},
       ownScript: true,
+      ...(failure.clientListeners === undefined
+        ? {}
+        : {clientListeners: failure.clientListeners}),
     })),
 
     {

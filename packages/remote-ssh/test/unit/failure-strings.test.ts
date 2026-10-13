@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {busyRangeReason} from '../../src/pipeline/port-choice.ts';
 import {
   FAILURE_TEMPLATES,
   reasonText,
@@ -94,6 +95,13 @@ describe('the texts of the failure dialog and the progress', () => {
     deepStrictEqual(
       reasonText({id: 'trustRefused'}, text => text),
       'Got bad result from install script',
+    );
+  });
+
+  it('F-2104 7.E1: the busy preferred range has the tunnel text with the search and the range, two spaces kept', () => {
+    deepStrictEqual(
+      reasonText(busyRangeReason({first: 41060, last: 41061}), text => text),
+      "Error establishing tunnel (Failed to find a free local port: No free ports in specified range '41060-41061'.  Remove or update the 'Preferred Local Port Range' setting and try again.).",
     );
   });
 

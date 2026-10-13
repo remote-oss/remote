@@ -59,6 +59,7 @@ import {
   openTerminalConnectionStep,
   type TerminalConnectionDependencies,
 } from './terminal-connection-step.ts';
+import type {PortChoice} from './port-choice.ts';
 import {openTunnelStep, type TunnelStepDependencies} from './tunnel-step.ts';
 
 /** The settings a connect reads, each when the step that needs it runs. */
@@ -93,7 +94,7 @@ interface CliWiring {
   local: LocalPort;
   scheduler: Scheduler;
   /** The bridge's loopback port, chosen as the tunnel's is; nothing when none is free. */
-  chooseLocalPort(): Promise<number | undefined>;
+  chooseLocalPort(): Promise<PortChoice>;
   newSecret(): string;
   presenter: FailurePresenter;
   /** The driver of the server download's notification of one bridge's first `serve`. */
@@ -387,10 +388,14 @@ export function stepsOf(
       }
     },
     openBridge: async (control, serveParams, events) => {
-      const port = await ports.cliPath.chooseLocalPort();
-      if (port === undefined) {
+      const chosen = await ports.cliPath.chooseLocalPort();
+      if ('busyRange' in chosen) {
+        return {busyRange: chosen.busyRange};
+      }
+      if ('noPort' in chosen) {
         return undefined;
       }
+      const {port} = chosen;
       const progress = ports.cliPath.downloadProgress();
       return openCliBridge(
         control,

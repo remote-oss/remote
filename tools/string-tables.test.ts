@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {rmSync} from 'node:fs';
 import path from 'node:path';
+import {REPOSITORY_ROOT} from './repository.ts';
 import {checkStringTables} from './string-tables.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -195,5 +196,116 @@ describe('string-tables', () => {
       'packages/remote-x/l10n/bundle.l10n.it.json',
       'packages/remote-x/package.nls.it.json',
     ]);
+  });
+
+  describe('the strings the code translates', () => {
+    beforeEach(() => {
+      write('l10n/bundle.l10n.json', {Label: 'Label', Text: 'Text'});
+    });
+
+    function source(file: string, text: string): void {
+      write(file, text);
+    }
+
+    it('reports a templates value that is not a key of the bundle, with its file and line', () => {
+      source(
+        'src/texts.ts',
+        "export const FOO_TEMPLATES = {\n  label: 'Label',\n  other: 'Missing',\n} as const;\n",
+      );
+      deepStrictEqual(problems(), [
+        'packages/remote-x/src/texts.ts:3: "Missing" is translated but not a key of l10n/bundle.l10n.json',
+      ]);
+    });
+
+    it('reports a literal given to l10n.t that is not a key', () => {
+      source('src/extension.ts', "vscode.l10n.t('Missing');\n");
+      deepStrictEqual(problems(), [
+        'packages/remote-x/src/extension.ts:1: "Missing" is translated but not a key of l10n/bundle.l10n.json',
+      ]);
+    });
+
+    it('reports a same-file constant given to a same-file translate that is not a key', () => {
+      source(
+        'src/extension.ts',
+        "const WARNING = 'w';\nfunction translate(text: string): string {\n  return text;\n}\ntranslate(WARNING);\n",
+      );
+      deepStrictEqual(problems(), [
+        'packages/remote-x/src/extension.ts:5: "w" is translated but not a key of l10n/bundle.l10n.json',
+      ]);
+    });
+
+    it('reports a same-file constant given to l10n.t that is not a key', () => {
+      source('src/extension.ts', "const WARNING = 'w';\nl10n.t(WARNING);\n");
+      deepStrictEqual(problems(), [
+        'packages/remote-x/src/extension.ts:2: "w" is translated but not a key of l10n/bundle.l10n.json',
+      ]);
+    });
+
+    it('reports the template given to filled that is not a key', () => {
+      source('src/texts.ts', "filled(translate, 'y {0}', []);\n");
+      deepStrictEqual(problems(), [
+        'packages/remote-x/src/texts.ts:1: "y {0}" is translated but not a key of l10n/bundle.l10n.json',
+      ]);
+    });
+
+    it('passes when every translated string is a key', () => {
+      source(
+        'src/texts.ts',
+        "export const FOO_TEMPLATES = {label: 'Label'} as const;\nl10n.t('Text');\n",
+      );
+      deepStrictEqual(problems(), []);
+    });
+
+    it('ignores the strings of a test file, a fixture and a test double', () => {
+      source('src/texts.test.ts', "l10n.t('Missing');\n");
+      source('src/texts.fixture.ts', "l10n.t('Missing');\n");
+      source('src/testing/fake.ts', "l10n.t('Missing');\n");
+      deepStrictEqual(problems(), []);
+    });
+
+    it('ignores a call of translate when the file declares no such function, and a call of another name', () => {
+      source(
+        'src/texts.ts',
+        "translate('Missing');\nother.t('Missing');\nl10n.u('Missing');\n",
+      );
+      deepStrictEqual(problems(), []);
+    });
+
+    it('ignores a constant that is not a string and an argument that is neither a literal nor a constant', () => {
+      source(
+        'src/texts.ts',
+        "const COUNT = 3;\nconst name = 'x';\nl10n.t(COUNT);\nl10n.t(name + 'y');\nl10n.t(name);\n",
+      );
+      deepStrictEqual(problems().length, 1);
+    });
+
+    it('reads the templates of a table wrapped in satisfies, parentheses and a template literal', () => {
+      source(
+        'src/texts.ts',
+        'export const A_TEMPLATES = ({one: `Missing one`, two: 3, ...rest} satisfies object);\n',
+      );
+      deepStrictEqual(problems(), [
+        'packages/remote-x/src/texts.ts:1: "Missing one" is translated but not a key of l10n/bundle.l10n.json',
+      ]);
+    });
+
+    it('ignores the source of a package without a default bundle', () => {
+      remove('l10n/bundle.l10n.json');
+      source('src/extension.ts', "l10n.t('Missing');\n");
+      deepStrictEqual(problems(), []);
+    });
+
+    it('passes a package with a default bundle and no src folder', () => {
+      deepStrictEqual(problems(), []);
+    });
+  });
+
+  it('#680: the packages of the repository translate nothing their bundle lacks', () => {
+    deepStrictEqual(
+      ['remote-ssh', 'remote-explorer', 'remote-ssh-edit'].flatMap(folder =>
+        checkStringTables(REPOSITORY_ROOT, folder),
+      ),
+      [],
+    );
   });
 });
