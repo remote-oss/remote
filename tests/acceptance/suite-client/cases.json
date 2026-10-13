@@ -1,0 +1,145 @@
+{
+  "cases": [
+    {
+      "label": "client-unset",
+      "cite": "F-2101 AC-1",
+      "setting": null,
+      "checked": ["path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-empty",
+      "cite": "F-2101 AC-12",
+      "setting": "",
+      "checked": ["path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-absolute",
+      "cite": "F-2101 AC-3",
+      "setting": "<run>/clients/configured/ssh",
+      "checked": ["configured/ssh"],
+      "used": "configured/ssh"
+    },
+    {
+      "label": "client-space",
+      "cite": "F-2101 AC-4",
+      "setting": "<run>/clients/with space/ssh",
+      "checked": ["with space/ssh"],
+      "used": "with space/ssh"
+    },
+    {
+      "label": "client-space-terminal",
+      "cite": "F-2101 AC-4",
+      "setting": "<run>/clients/with space/ssh",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "harness": "linux"
+        }
+      },
+      "checked": ["with space/ssh"],
+      "used": "with space/ssh"
+    },
+    {
+      "label": "client-bare",
+      "cite": "F-2101 AC-5",
+      "setting": "ssh",
+      "checked": ["path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-missing",
+      "cite": "F-2101 AC-6",
+      "setting": "<run>/clients/none/ssh",
+      "checked": ["path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-directory",
+      "cite": "F-2101 AC-7",
+      "setting": "<run>/clients/adir",
+      "checked": ["path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-not-executable",
+      "cite": "F-2101 AC-7",
+      "setting": "<run>/clients/notexec/ssh",
+      "checked": ["path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-not-on-path",
+      "cite": "F-2101 AC-7",
+      "setting": "nosuchclient",
+      "checked": ["path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-tilde",
+      "cite": "F-2101 AC-7",
+      "setting": "~/clients-copy/ssh",
+      "environment": {
+        "HOME": "<run>/home"
+      },
+      "checked": ["path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-fails",
+      "cite": "F-2101 AC-8",
+      "setting": "<run>/clients/fails/ssh",
+      "checked": ["fails/ssh", "path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-putty",
+      "cite": "F-2101 AC-9",
+      "setting": "<run>/clients/putty/ssh",
+      "checked": ["putty/ssh", "path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-lower",
+      "cite": "F-2101 AC-10",
+      "setting": "<run>/clients/lower/ssh",
+      "checked": ["lower/ssh"],
+      "used": "lower/ssh"
+    },
+    {
+      "label": "client-stdout",
+      "cite": "F-2101 AC-10",
+      "setting": "<run>/clients/stdout/ssh",
+      "checked": ["stdout/ssh"],
+      "used": "stdout/ssh"
+    },
+    {
+      "label": "client-old",
+      "cite": "F-2101 AC-11",
+      "setting": "<run>/clients/old/ssh",
+      "checked": ["old/ssh"],
+      "used": "old/ssh"
+    },
+    {
+      "label": "client-windows",
+      "cite": "F-2101 AC-25",
+      "setting": "<run>/clients/windows/ssh",
+      "settings": {
+        "remote.SSH.suppressWindowsSshWarning": false
+      },
+      "checked": ["windows/ssh"],
+      "used": "windows/ssh"
+    },
+    {
+      "label": "client-windows-suppressed",
+      "cite": "F-2101 AC-25",
+      "setting": "<run>/clients/windows/ssh",
+      "settings": {
+        "remote.SSH.suppressWindowsSshWarning": true
+      },
+      "checked": ["windows/ssh"],
+      "used": "windows/ssh"
+    }
+  ]
+}

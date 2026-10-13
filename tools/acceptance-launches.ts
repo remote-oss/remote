@@ -110,6 +110,75 @@ export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
  */
 export const CONFIG_FILE_LAUNCHES: readonly string[] = [];
 
+/** The token for the run's folder, which a launch's settings and environment may name. */
+const RUN_FOLDER_TOKEN = '<run>';
+
+/** The token for the run's `PATH`. */
+const RUN_PATH_TOKEN = '<path>';
+
+/**
+ * A value with the run's tokens put in: each string in it, at any depth, with the run's folder in place of `<run>` and
+ * the run's `PATH` in place of `<path>`.
+ */
+export function withRunTokens<Value>(
+  value: Value,
+  runFolder: string,
+  searchPath: string,
+): Value {
+  if (typeof value === 'string') {
+    return value
+      .replaceAll(RUN_FOLDER_TOKEN, runFolder)
+      .replaceAll(RUN_PATH_TOKEN, searchPath) as Value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(item =>
+      withRunTokens(item as unknown, runFolder, searchPath),
+    ) as Value;
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        withRunTokens(item as unknown, runFolder, searchPath),
+      ]),
+    ) as Value;
+  }
+  return value;
+}
+
+/** One launch of the client search: the `remote.SSH.path` it sets, what it extra sets, and the calls it must make. */
+export interface ClientCase {
+  label: string;
+  /** The criteria the case proves. */
+  cite: string;
+  /** The value of `remote.SSH.path`; null leaves the setting unset. */
+  setting: string | null;
+  settings?: Readonly<Record<string, unknown>>;
+  environment?: Readonly<Record<string, string>>;
+  /** The programs checked, in order, by their name under `clients/`. */
+  checked: readonly string[];
+  /** The program the lookup and the connection run. */
+  used: string;
+}
+
+/** The client-search launches, from tests/acceptance/suite-client/cases.json, which the client suite also reads. */
+export function clientCases(root: string): ClientCase[] {
+  const {cases} = JSON.parse(
+    readFileSync(
+      path.join(root, 'tests', 'acceptance', 'suite-client', 'cases.json'),
+      'utf8',
+    ),
+  ) as {cases: ClientCase[]};
+  for (const each of cases) {
+    if (!LABEL_FORM.test(each.label)) {
+      throw new Error(
+        `a client case's label must match ${String(LABEL_FORM)}: "${each.label}"`,
+      );
+    }
+  }
+  return cases;
+}
+
 /** The failing connects, from tests/acceptance/suite-failure/cases.json, which the failure suite also reads. */
 export function failureCases(root: string): FailureCase[] {
   const {cases} = JSON.parse(
@@ -237,7 +306,8 @@ export function portsHostSetup(portsCase: PortsCase): HostSetupEntry[] {
  * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); each
  * failing connect runs suite-failure in a window on its alias, answered from its own script; and `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `slow` runs suite-slow with an extension that takes 15 s to
- * activate in the remote extension host, which the harness copies to the host first; `windows` starts the editor plainly, with no
+ * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
+ * suite-client with a `remote.SSH.path` of its own and fake clients on the run's `PATH`; `windows` starts the editor plainly, with no
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
  * same without enabling the proposed API; `explorer`, `explorer-alone` and `explorer-no-proposals` do the same with
  * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
@@ -286,6 +356,22 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
       hostExtensions: ['slow-remote'],
     },
+    ...clientCases(root).map((each): Launch => ({
+      label: each.label,
+      runner: 'runner-remote',
+      suite: 'suite-client',
+      folderUri: REMOTE_FOLDER_URI,
+      ownScript: true,
+      settings: {
+        ...(each.setting === null ? {} : {'remote.SSH.path': each.setting}),
+        ...each.settings,
+      },
+      environment: {
+        PATH: `${RUN_FOLDER_TOKEN}/clients/path:${RUN_PATH_TOKEN}`,
+        HARNESS_CLIENT_CASE: each.label,
+        ...each.environment,
+      },
+    })),
     {label: 'windows', kind: 'plain', suite: 'windows'},
     {
       label: 'no-proposals',

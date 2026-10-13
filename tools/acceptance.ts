@@ -40,6 +40,11 @@ import {
   runCommand,
 } from './acceptance-run.ts';
 import {
+  clearCalls,
+  writeClients,
+  writeTildeCopy,
+} from './acceptance-clients.ts';
+import {
   bundleFolderOf,
   extensionsOf,
   failureCases,
@@ -53,6 +58,7 @@ import {
   portsCases,
   runnerLaunches,
   suitesOf,
+  withRunTokens,
 } from './acceptance-launches.ts';
 import {
   editorArguments,
@@ -551,6 +557,7 @@ export async function runLaunches(
   container: string,
   sleep: Sleeper,
   runLaunch: (launch?: Launch) => Promise<AttemptResult>,
+  beforeAttempt: (launch: Launch) => Promise<void> = () => Promise.resolve(),
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -569,9 +576,10 @@ export async function runLaunches(
           writeUserSettings(
             runFolder,
             configFile,
-            launch.settings,
+            withRunTokens(launch.settings, runFolder, process.env.PATH ?? ''),
             launch.label,
           );
+          await beforeAttempt(launch);
         }
         return runLaunch(launch);
       }, console.log.bind(console)),
@@ -579,6 +587,12 @@ export async function runLaunches(
   }
   return exitCodes;
 }
+
+/**
+ * How long the run waits before a client-search launch, in milliseconds: the connection helper of the launch before it
+ * ends when its grace after the last window has passed (3 s), and a live helper would be reused without a check.
+ */
+const HELPER_GONE_MILLISECONDS = 5000;
 
 /**
  * Runs the acceptance tests and returns the exit code for the process: the first failing run's test-cli code, or 1
@@ -623,6 +637,10 @@ export async function runAcceptance(
       );
     }
     const launches = editor === 'vscodium' ? launchesOf(root) : [];
+    if (editor === 'vscodium') {
+      writeClients(runFolder);
+      writeTildeCopy(runFolder);
+    }
     prepareHost(
       dependencies.command,
       root,
@@ -641,6 +659,12 @@ export async function runAcceptance(
           launch?.kind === 'plain'
             ? dependencies.runPlain(root, variables, launch)
             : dependencies.runTests(root, variables, launch?.label),
+        async launch => {
+          if (launch.label.startsWith('client-')) {
+            await dependencies.sleep(HELPER_GONE_MILLISECONDS);
+            clearCalls(runFolder);
+          }
+        },
       )),
     );
     return exitCodes.find(exitCode => exitCode !== 0) ?? 0;
@@ -705,7 +729,7 @@ export function vscodiumConfiguration(
           REMOTE_OSS_ACCEPTANCE_RECORD: files.record,
         }
       : {}),
-    ...launch.environment,
+    ...withRunTokens(launch.environment, runFolder, environment.PATH ?? ''),
   };
   return {
     label: launch.label,
