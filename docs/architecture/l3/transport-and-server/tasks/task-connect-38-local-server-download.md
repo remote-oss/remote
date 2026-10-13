@@ -1,7 +1,7 @@
 # Task card connect-38: remote.SSH.localServerDownload is read, and a failed client download shows S071
 
-Issue: #672. Release 0.2 (F-2403 and F-2405 are in the D-65 gate's paths). Size: S–M. Builder: daedalus, before
-coverage-17 (#581), whose `off` and `auto` rows need it.
+Issue: #672. Release 0.2, **gating** (athena, register df25f89). Size: S–M. Builder: daedalus, before coverage-17
+(#581), whose `off` and `auto` rows need it.
 
 ## 1. The defect
 
@@ -22,11 +22,14 @@ already exist (`surfaces/progress-titles.ts`).
 
 ## 2. The rules (F-2405, remote-oss/remote-ssh#50)
 
-- **R1** (BR-1, AC-5, AC-6, AC-7): the mode for a connect is read when the connect starts, from the settings as they
-  are then:
+- **R1** (BR-1, AC-5, AC-6, AC-7): each connect (window open, Retry, reload) reads the effective mode when it starts,
+  through the configuration port the connect already uses for the other `remote.SSH.*` settings, never frozen at
+  activation:
   - `allowLocalServerDownload` `false` → `off`, whatever `localServerDownload` says;
   - otherwise `localServerDownload`'s value when it's `auto`, `always` or `off`;
   - any other value, or none → `auto`.
+  - `manual-bootstrap` (F-2406, not in 0.2 and not declared) counts as `auto` under this rule. It goes in the 0.2 release
+    notes, not in code (athena).
 - **R2** (6.2, AC-3, AC-27): `always` gives `{kind: 'hostFirst', mode: 'always'}`. The host makes no download attempt
   of its own for the artifact. In exec mode, the client fetches only the CLI and the host then downloads the full
   server itself, which is the planner's behaviour today.
@@ -50,8 +53,9 @@ S146 (F-2401 7.E2 (b), AC-20 "with local download off"). F-2405 AC-12 says a cli
 ## 3. Changes
 
 1. **lib-server** (`policy/rows.ts`): `SSH_POLICY` stays as the `auto` record. Add
-   `sshPolicyFor(mode: 'auto' | 'always' | 'off'): ServerPolicyRecord`, the same frozen record with
-   `downloadPlacement: {kind: 'hostFirst', mode}`. Export it beside `SSH_POLICY`.
+   `sshPolicyFor(mode: 'auto' | 'always' | 'off'): ServerPolicyRecord`: `SSH_POLICY` with
+   `downloadPlacement: {kind: 'hostFirst', mode}`, the rest of the row unchanged. That's what contracts
+   (transport-and-server, `downloadPlacement`) already say, so no contract changes. Export it beside `SSH_POLICY`.
 2. **remote-ssh** (`pipeline/connect-settings.ts`): `localDownloadModeOf(settings)` applies R1 through the existing
    `valueOf` and `switchOf` helpers.
 3. **remote-ssh** (`connect-ports.ts`): the server dependencies' `policy` becomes a function of the connect:
@@ -85,16 +89,22 @@ S146 (F-2401 7.E2 (b), AC-20 "with local download off"). F-2405 AC-12 says a cli
 | F-2405.AC-12 | `localDownload` `status` 404 | S071 with `Server returned 404` |
 | F-2405.AC-13 | `localDownload` `clientFile` with detail `EACCES: …/x` | S071 with that detail |
 | F-2405 BR-1 | two connects with the setting changed between them (the settings fake) | the second connect's policy has the new mode |
+| F-2405 BR-1 | a connect over the pipeline fixture with the settings fake at `always` | the mode reaches the planner: the plan the server steps make is a client download (the connect-level row athena asked for) |
 
 **Acceptance rows** (VSCodium, failure cases or a launch of their own, with tooling-27's download host; `T(<segment>)`
 is the template whose address is the download host's path, as coverage-17 writes it):
 
 | Case | Settings | Expected | Cite |
 |---|---|---|---|
-| `local-always` | `serverDownloadUrlTemplate: T(ok, local)`, `localServerDownload: always` | connected; the record has a `progress` line `Downloading VS Code Server locally` and one `Copying VS Code Server to host with scp`; the download host saw no request from the host container's address (its request log, by peer address) | F-2405.AC-3 |
-| `local-off` | `T(missing)` for the host and the client, `localServerDownload: off` | the S043 dialog; no `Downloading VS Code Server locally` line | F-2405.AC-4 |
+| `local-always` | `serverDownloadUrlTemplate: T(ok, local)`, `localServerDownload: always` | connected; the record has a `progress` line `Downloading VS Code Server locally` and one `Copying VS Code Server to host with scp`; the download host saw no request from the host container's address (its request log, by peer address). The run disables workspace trust, so no trust dialog came before the copy: this re-observes F-2405 AC-9's trusted half, which athena's 2026-10-12 record on #406 took with the setting ignored | F-2405.AC-3, AC-9 |
+| `local-off` | `serverDownloadUrlTemplate: http://downloads:1/x/${commit}` (a closed port, so the host's download is unreachable), `localServerDownload: off` | the S043 dialog; **no** `Downloading VS Code Server locally` progress line. **It must fail on main** (there, `auto`'s client fall-back shows that line) and pass with the fix: paste both | F-2403.AC-9, F-2405.AC-4 |
 | `local-allow-false` | the same as `local-off`, with `localServerDownload: always` and `allowLocalServerDownload: false` | as `local-off` | F-2405.AC-5 |
 | `local-404` | the host can't download (`T(missing)` reachable only from the client, or the host's download tools removed), `localServerDownload: auto`, the client's request answered 404 | the dialog `…: Failed to download VS Code Server (Server returned 404).` | F-2405.AC-12 |
+
+**Re-run on the fix**, and paste the outcomes in the PR:
+- coverage-17's install rows, which set `off` and `auto`, citing F-2403 AC-9, 10, 11, 12, 16, 25 and 26. If coverage-17
+  isn't merged yet, the build order (§ header) puts it right after this card;
+- cli-05's `always` row.
 
 **Before writing the rows, measure** how the download host tells the host's requests from the client's: the peer
 address on the bridge gateway versus loopback. If it can't, add a query parameter per side to the template, and keep the
