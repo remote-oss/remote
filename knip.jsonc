@@ -33,6 +33,7 @@
         "suite-reconnect/*.test.ts",
         "suite-failure/*.test.ts",
         "suite-ports/*.test.ts",
+        "suite-install/*.test.ts",
         "suite-terminal/*.test.ts",
         "suite-client/*.test.ts",
         "suite-slow/*.test.ts",

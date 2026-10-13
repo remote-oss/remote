@@ -48,6 +48,8 @@ export interface RecordLine {
   buttons?: string[];
   /** The labels of the rows the mitigation pick was shown with, in order; only the lines of a `mitigationPick` surface have it. */
   items?: string[];
+  /** The detail text the licence modal was shown with; only the lines of a `licenceModal` surface have it. */
+  detail?: string;
 }
 
 /** The lines of a record file; a record not written yet is empty. */

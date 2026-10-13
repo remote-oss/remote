@@ -1,0 +1,264 @@
+{
+  "cases": [
+    {
+      "label": "install-fresh",
+      "cite": "F-2403 AC-1, AC-2, AC-5, F-3902 AC-3 (install-fresh)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}"
+      },
+      "outcome": "connected",
+      "stages": ["Downloading VS Code Server", "Installing VS Code Server"],
+      "installedIn": "/home/harness/.vscodium-server-insiders",
+      "requests": {
+        "count": 1,
+        "path": "/ok/"
+      }
+    },
+    {
+      "label": "install-present",
+      "cite": "F-2403 AC-7 (install-present)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}"
+      },
+      "keepServer": true,
+      "outcome": "connected",
+      "noStages": ["Downloading VS Code Server", "Installing VS Code Server"],
+      "requests": {
+        "count": 0
+      }
+    },
+    {
+      "label": "install-present-stopped",
+      "cite": "F-2403 AC-7 (install-present-stopped)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}"
+      },
+      "keepFiles": true,
+      "outcome": "connected",
+      "noStages": ["Downloading VS Code Server", "Installing VS Code Server"],
+      "requests": {
+        "count": 0
+      }
+    },
+    {
+      "label": "install-fresh-legacy",
+      "cite": "F-2403 AC-6 (install-fresh-legacy)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.useExecServer": false
+      },
+      "outcome": "connected",
+      "stages": ["Downloading VS Code Server", "Installing VS Code Server"],
+      "noDownloadProgress": true
+    },
+    {
+      "label": "download-unreachable",
+      "cite": "F-2403 AC-9, AC-26, F-3902 AC-7 (download-unreachable)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "http://downloads:1/x/${commit}",
+        "remote.SSH.localServerDownload": "off"
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Downloading VS Code Server failed. Please try again later.",
+      "noRecordText": ["Failed to download VS Code Server"],
+      "noStages": ["Downloading VS Code Server locally"]
+    },
+    {
+      "label": "download-404",
+      "cite": "F-2403 AC-10 (download-404)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/missing/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "off"
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Downloading VS Code Server failed. Please try again later.",
+      "noRecordText": ["404"]
+    },
+    {
+      "label": "download-503",
+      "cite": "F-2403 AC-10 (download-503)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/busy/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "off"
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Downloading VS Code Server failed. Please try again later.",
+      "noRecordText": ["503"]
+    },
+    {
+      "label": "download-local",
+      "cite": "F-2403 AC-11, F-3902 AC-7 (download-local)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "auto"
+      },
+      "outcome": "connected",
+      "stages": ["Downloading VS Code Server locally"],
+      "noRecordText": [
+        "Downloading VS Code Server failed",
+        "Failed to install the VS Code Server"
+      ],
+      "installedIn": "/home/harness/.vscodium-server-insiders",
+      "noArchiveLeft": true
+    },
+    {
+      "label": "download-junk",
+      "cite": "F-2403 AC-13 (download-junk)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/junk/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "off"
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Failed to install the VS Code Server."
+    },
+    {
+      "label": "download-cut",
+      "cite": "F-2403 AC-26 (download-cut)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/cut/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "off"
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Downloading VS Code Server failed. Please try again later.",
+      "noRecordText": ["Failed to download VS Code Server"]
+    },
+    {
+      "label": "download-untrusted",
+      "cite": "F-2403 AC-26 (download-untrusted)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTPS}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "off"
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Downloading VS Code Server failed. Please try again later.",
+      "noRecordText": ["Failed to download VS Code Server"]
+    },
+    {
+      "label": "wgetrc-proxy",
+      "cite": "F-2403 AC-17 (wgetrc-proxy)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.useCurlAndWgetConfigurationFiles": true
+      },
+      "setup": [
+        "printf 'use_proxy = on\\nhttp_proxy = http://10.255.255.1:3128/\\n' > /home/harness/.wgetrc && chown harness /home/harness/.wgetrc"
+      ],
+      "outcome": "connected"
+    },
+    {
+      "label": "install-broken",
+      "cite": "F-2403 AC-22 (install-broken)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/junk/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "off"
+      },
+      "setup": ["rm -f /home/harness/.wgetrc"],
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Failed to install the VS Code Server.",
+      "leftovers": "/home/harness/.vscodium-server-insiders"
+    },
+    {
+      "label": "install-repaired",
+      "cite": "F-2403 AC-22 (install-repaired)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}"
+      },
+      "keepFiles": true,
+      "outcome": "connected",
+      "installedIn": "/home/harness/.vscodium-server-insiders"
+    },
+    {
+      "label": "licence-update-service",
+      "cite": "F-3902 AC-14 (licence-update-service)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LICENSED}/ok/${os}-${arch}/${commit}"
+      },
+      "script": [
+        {
+          "surface": "licenceModal",
+          "match": "",
+          "answer": "decline"
+        },
+        {
+          "surface": "failureDialog",
+          "match": "\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action",
+          "answer": "dismiss"
+        }
+      ],
+      "outcome": "any",
+      "licenceDetail": "https://aka.ms/vscode-server-license",
+      "requests": {
+        "count": 0
+      }
+    },
+    {
+      "label": "template-placeholder",
+      "cite": "F-3902 AC-5 (template-placeholder)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${platform}"
+      },
+      "outcome": "dialog",
+      "dialogIncludes": ["remote.SSH.serverDownloadUrlTemplate", "${platform}"],
+      "requests": {
+        "count": 0
+      },
+      "hostLacks": ["/home/harness/.vscodium-server-insiders"]
+    },
+    {
+      "label": "install-path",
+      "cite": "F-3902 AC-18 (install-path)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.serverInstallPath": {
+          "harness": "/tmp/srv"
+        }
+      },
+      "outcome": "connected",
+      "installedIn": "/tmp/srv/.vscodium-server-insiders"
+    },
+    {
+      "label": "local-always",
+      "cite": "F-2405 AC-3, AC-9 (local-always)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "always"
+      },
+      "outcome": "connected",
+      "stages": [
+        "Downloading VS Code Server locally",
+        "Copying VS Code Server to host with scp"
+      ],
+      "requests": {
+        "clientOnly": true
+      },
+      "installedIn": "/home/harness/.vscodium-server-insiders"
+    },
+    {
+      "label": "local-allow-false",
+      "cite": "F-2405 AC-5 (local-allow-false)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "http://downloads:1/x/${commit}",
+        "remote.SSH.localServerDownload": "always",
+        "remote.SSH.allowLocalServerDownload": false
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Downloading VS Code Server failed. Please try again later.",
+      "noStages": ["Downloading VS Code Server locally"]
+    },
+    {
+      "label": "local-404",
+      "cite": "F-2405 AC-12 (local-404)",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_LOCAL}/missing/${os}-${arch}/${commit}",
+        "remote.SSH.localServerDownload": "auto"
+      },
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Failed to download VS Code Server (Server returned 404)."
+    }
+  ]
+}

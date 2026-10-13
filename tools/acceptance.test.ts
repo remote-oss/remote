@@ -43,6 +43,7 @@ import {
   vscodiumConfigurations,
   vscodiumExecutableOf,
   withOneRetry,
+  markDownloadRequests,
   writeUserSettings,
 } from './acceptance.ts';
 import type {RunDownloads} from './acceptance-downloads.ts';
@@ -254,6 +255,7 @@ const LAUNCH_ORDER = [
   'explorer-alone',
   'explorer-no-proposals',
   'ports-probe',
+  'install-probe',
 ];
 
 const CLIENT_CASE = {
@@ -283,6 +285,22 @@ describe('acceptance', () => {
             label: 'probe',
             cite: 'F-2409 AC-2 (probe)',
             settings: {},
+            outcome: 'connected',
+          },
+        ],
+      }),
+    );
+    workspace.write(
+      'tests/acceptance/suite-install/cases.json',
+      JSON.stringify({
+        cases: [
+          {
+            label: 'probe',
+            cite: 'F-2403 AC-1 (probe)',
+            settings: {
+              'remote.SSH.serverDownloadUrlTemplate':
+                '${HARNESS_DOWNLOADS_HTTP}/ok/${commit}',
+            },
             outcome: 'connected',
           },
         ],
@@ -481,6 +499,43 @@ describe('acceptance', () => {
       ),
       {'remote.SSH.configFile': '/run/ssh_config'},
     );
+  });
+
+  describe('markDownloadRequests (card coverage-17)', () => {
+    it('coverage-17: a launch notes how many requests the download host had logged when it began', () => {
+      workspace.write('requests.log', 'a GET /ok/x\nb GET /missing/y\n');
+      markDownloadRequests(workspace.root, 'install-probe', {
+        HARNESS_DOWNLOADS_LOG: path.join(workspace.root, 'requests.log'),
+      });
+      strictEqual(
+        readFileSync(
+          path.join(workspace.root, 'install-probe-requests-start'),
+          'utf8',
+        ),
+        '2\n',
+      );
+    });
+
+    it('coverage-17: a log not written yet counts no request', () => {
+      markDownloadRequests(workspace.root, 'install-probe', {
+        HARNESS_DOWNLOADS_LOG: path.join(workspace.root, 'none.log'),
+      });
+      strictEqual(
+        readFileSync(
+          path.join(workspace.root, 'install-probe-requests-start'),
+          'utf8',
+        ),
+        '0\n',
+      );
+    });
+
+    it('coverage-17: a run without a download host notes nothing', () => {
+      markDownloadRequests(workspace.root, 'install-probe', {});
+      strictEqual(
+        existsSync(path.join(workspace.root, 'install-probe-requests-start')),
+        false,
+      );
+    });
   });
 
   describe('packagedExtensions', () => {
@@ -944,6 +999,42 @@ describe('acceptance', () => {
       );
     });
 
+    it("coverage-17: a launch's settings get the download host's bases, and the product's placeholders stay", async () => {
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [
+          {
+            ...PORTS,
+            label: 'install-probe',
+            settings: {
+              'remote.SSH.serverDownloadUrlTemplate':
+                '${HARNESS_DOWNLOADS_LOCAL}/ok/${os}-${arch}/${commit}',
+            },
+          },
+        ],
+        command,
+        '',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+        () => Promise.resolve(),
+        {HARNESS_DOWNLOADS_LOCAL: 'http://127.0.0.1:9'},
+      );
+      strictEqual(
+        (
+          JSON.parse(
+            readFileSync(
+              path.join(workspace.root, 'install-probe-settings.json'),
+              'utf8',
+            ),
+          ) as Record<string, string>
+        )['remote.SSH.serverDownloadUrlTemplate'],
+        'http://127.0.0.1:9/ok/${os}-${arch}/${commit}',
+      );
+    });
+
     it('coverage-13: the fresh-resolve wait is the extension helper grace', () => {
       const bounds = readFileSync(
         path.join(
@@ -1333,9 +1424,9 @@ describe('acceptance', () => {
       );
     });
 
-    it('coverage-11: the run waits for the helper of the launch before to end, 5 s before a client-search launch and the grace before a ports launch', async () => {
+    it('coverage-11: the run waits for the helper of the launch before to end, 5 s before a client-search launch and the grace before each host-case launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [5000, 3000]);
+      deepStrictEqual(harness.sleeps, [5000, 3000, 3000]);
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {
@@ -1406,7 +1497,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 8}, () => EXECUTABLE),
+        Array.from({length: 9}, () => EXECUTABLE),
       );
     });
 
@@ -1417,7 +1508,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 8}, () => true),
+        Array.from({length: 9}, () => true),
       );
     });
 
@@ -1436,6 +1527,7 @@ describe('acceptance', () => {
           ['slow', 'dist-slow/**/*.test.cjs'],
           ['client-unset', 'dist-client/**/*.test.cjs'],
           ['ports-probe', 'dist-ports/**/*.test.cjs'],
+          ['install-probe', 'dist-install/**/*.test.cjs'],
         ],
       );
     });
@@ -1578,6 +1670,7 @@ describe('acceptance', () => {
           'slow',
           'client-unset',
           'ports-probe',
+          'install-probe',
         ].map(label => path.join('/run', `${label}-log.txt`)),
       );
     });
@@ -1596,6 +1689,7 @@ describe('acceptance', () => {
           'slow',
           'client-unset',
           'ports-probe',
+          'install-probe',
         ].map(label => path.join('/run', label, 'agent', 'pids')),
       );
     });
@@ -1607,7 +1701,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        [1, 2, 3, 4, 5, 6, 7].map(() =>
+        [1, 2, 3, 4, 5, 6, 7, 8].map(() =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );

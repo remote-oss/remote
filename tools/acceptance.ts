@@ -16,6 +16,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -55,9 +56,12 @@ import {
   type Launch,
   type RunnerLaunch,
   launchesOf,
-  portsCases,
+  HOST_CASE_SUITES,
+  hostCaseLabel,
+  hostCases,
   runnerLaunches,
   suitesOf,
+  withHarnessBases,
   withRunTokens,
 } from './acceptance-launches.ts';
 import {
@@ -94,7 +98,7 @@ export const FRESH_RESOLVE_WAIT_MILLISECONDS = 3000;
  * The script every ports launch answers from: dismiss the connect's dialog and its pick of actions. A connected
  * case never asks them.
  */
-const PORTS_SCRIPT = [
+const DIALOG_SCRIPT = [
   {surface: 'failureDialog', match: '"', answer: 'dismiss'},
   {surface: 'mitigationPick', match: 'Pick an action', answer: 'dismiss'},
 ];
@@ -558,6 +562,7 @@ export async function runLaunches(
   sleep: Sleeper,
   runLaunch: (launch?: Launch) => Promise<AttemptResult>,
   beforeAttempt: (launch: Launch) => Promise<void> = () => Promise.resolve(),
+  bases: Readonly<Record<string, string | undefined>> = {},
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -576,7 +581,11 @@ export async function runLaunches(
           writeUserSettings(
             runFolder,
             configFile,
-            withRunTokens(launch.settings, runFolder, process.env.PATH ?? ''),
+            withRunTokens(
+              withHarnessBases(launch.settings, bases),
+              runFolder,
+              process.env.PATH ?? '',
+            ),
             launch.label,
           );
           await beforeAttempt(launch);
@@ -586,6 +595,31 @@ export async function runLaunches(
     );
   }
   return exitCodes;
+}
+
+/**
+ * Notes, for a launch, how many requests the download host had logged when it began, in
+ * `<run folder>/<label>-requests-start`, so that its rows read only the requests of their own case. A run without a
+ * download host notes nothing.
+ */
+export function markDownloadRequests(
+  runFolder: string,
+  label: string,
+  variables: Pick<HarnessVariables, 'HARNESS_DOWNLOADS_LOG'>,
+): void {
+  const requestLog = variables.HARNESS_DOWNLOADS_LOG;
+  if (requestLog === undefined) {
+    return;
+  }
+  const logged = existsSync(requestLog)
+    ? readFileSync(requestLog, 'utf8')
+        .split('\n')
+        .filter(line => line !== '').length
+    : 0;
+  writeFileSync(
+    path.join(runFolder, `${label}-requests-start`),
+    `${String(logged)}\n`,
+  );
 }
 
 /**
@@ -629,12 +663,14 @@ export async function runAcceptance(
         JSON.stringify({entries: failure.script}),
       );
     }
-    for (const portsCase of editor === 'vscodium' ? portsCases(root) : []) {
-      // A connected case leaves the script unused, which is no failure; a failed one is answered from it.
-      writeFileSync(
-        launchFiles(runFolder, `ports-${portsCase.label}`).script,
-        JSON.stringify({entries: PORTS_SCRIPT}),
-      );
+    for (const suite of editor === 'vscodium' ? HOST_CASE_SUITES : []) {
+      for (const hostCase of hostCases(root, suite.suite)) {
+        // A connected case leaves the script unused, which is no failure; a failed one is answered from it.
+        writeFileSync(
+          launchFiles(runFolder, hostCaseLabel(suite, hostCase)).script,
+          JSON.stringify({entries: hostCase.script ?? DIALOG_SCRIPT}),
+        );
+      }
     }
     const launches = editor === 'vscodium' ? launchesOf(root) : [];
     if (editor === 'vscodium') {
@@ -664,7 +700,9 @@ export async function runAcceptance(
             await dependencies.sleep(HELPER_GONE_MILLISECONDS);
             clearCalls(runFolder);
           }
+          markDownloadRequests(runFolder, launch.label, variables);
         },
+        {...variables},
       )),
     );
     return exitCodes.find(exitCode => exitCode !== 0) ?? 0;
