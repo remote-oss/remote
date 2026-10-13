@@ -77,11 +77,32 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   `ssh_config` has `refused`, `nowhere` and `stranger`), and its window answers from the entry's own script, which the
   harness writes before the launch. The tests check the record.
 
+- `terminal`: the same window with `remote.SSH.useLocalServer` off, which is terminal mode, with `suite-terminal/`.
+
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
 they start in a window whose connect failed. `HARNESS_EDITOR` (`vscode` or `vscodium`)
 and, for VSCodium, `HARNESS_VSCODIUM_EXECUTABLE` join the harness variables. In CI the job `acceptance (VSCodium)` runs
 when the workflow is dispatched with the `vscodium` input set to true, and on the tag of a release.
+
+### Launches
+
+`tools/acceptance-launches.ts` holds the table of launches, in the order the run makes them, and nothing else lists
+them: the labels, the configurations and the bundled suites all read it. A launch has these fields:
+
+| Field | Meaning |
+|---|---|
+| `label` | the test-cli label: lower-case letters, digits and hyphens |
+| `runner` | `runner` (a local window) or `runner-remote` (a remote one) |
+| `suite` | the folder under `tests/acceptance`, bundled into `dist-<name without "suite-">` |
+| `folderUri` | the window's folder; none for a local window |
+| `settings` | merged over the run's base settings, for this launch only; the base settings are written again before a launch without any |
+| `environment` | added to the extension host's environment for this launch only; a key of the launch overrides the harness variable of the same name |
+| `ownScript` | the launch answers from its own `<label>-script.json` and `<label>-record.jsonl` |
+| `extraExtensions` | further development extensions, folders under `tests/acceptance`, loaded after the runner |
+
+To add a launch: add a row to `launchesOf`, put its tests in the suite folder it names, and add that folder to
+`tests/acceptance/tsconfig.json` and to the entries of `knip.jsonc`.
 
 ## Host variants
 

@@ -21,7 +21,6 @@ import {
   downloadWithRetry,
   editorChoiceOf,
   type CommandResult,
-  failureCases,
   failureText,
   harnessSshConfig,
   type HarnessDependencies,
@@ -32,15 +31,18 @@ import {
   RETRY_PAUSE_MILLISECONDS,
   runAcceptance,
   runCommand,
+  runLaunches,
   runTestCli,
   unpackArchive,
   USAGE,
   VSCODIUM_RELEASE,
+  vscodiumConfiguration,
   vscodiumConfigurations,
   vscodiumExecutableOf,
   withOneRetry,
   writeUserSettings,
 } from './acceptance.ts';
+import {failureCases, type Launch} from './acceptance-launches.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -166,6 +168,13 @@ function scriptedStep(outcomes: unknown[]) {
   return {step, called};
 }
 
+const FAILURE = {
+  alias: 'refused',
+  cite: 'F-2601 AC-1',
+  script: [{surface: 'failureDialog', match: 'refused', answer: 'dismiss'}],
+  dialog: 'Could not establish connection to "refused".',
+};
+
 describe('acceptance', () => {
   let workspace: TemporaryWorkspace;
   let harness: FakeHarness;
@@ -173,6 +182,10 @@ describe('acceptance', () => {
   beforeEach(() => {
     workspace = new TemporaryWorkspace('acceptance');
     harness = new FakeHarness();
+    workspace.write(
+      'tests/acceptance/suite-failure/cases.json',
+      JSON.stringify({cases: [FAILURE]}),
+    );
   });
 
   afterEach(() => {
@@ -391,6 +404,72 @@ describe('acceptance', () => {
     });
   });
 
+  describe('runLaunches', () => {
+    const BASE = {'remote.SSH.configFile': '/run/ssh_config'};
+    const TERMINAL: Launch = {
+      label: 'terminal',
+      runner: 'runner-remote',
+      suite: 'suite-terminal',
+      settings: {'remote.SSH.useLocalServer': false},
+    };
+    const REMOTE: Launch = {
+      label: 'remote',
+      runner: 'runner-remote',
+      suite: 'suite-remote',
+    };
+
+    /** The user settings each launch found when it started, by label. */
+    async function settingsSeen(
+      ...launches: Launch[]
+    ): Promise<Map<string, unknown>> {
+      const seen = new Map<string, unknown>();
+      await runLaunches(workspace.root, '/run/ssh_config', launches, label => {
+        seen.set(
+          label ?? '',
+          JSON.parse(
+            readFileSync(
+              path.join(workspace.root, 'user-data', 'User', 'settings.json'),
+              'utf8',
+            ),
+          ),
+        );
+        return Promise.resolve({exitCode: 0, output: ''});
+      });
+      return seen;
+    }
+
+    it('D-85: a launch with settings finds them over the base settings', async () => {
+      deepStrictEqual((await settingsSeen(TERMINAL, REMOTE)).get('terminal'), {
+        ...BASE,
+        'remote.SSH.useLocalServer': false,
+      });
+    });
+
+    it('D-85: the launch after one with settings finds only the base settings', async () => {
+      deepStrictEqual(
+        (await settingsSeen(TERMINAL, REMOTE)).get('remote'),
+        BASE,
+      );
+    });
+
+    it('D-85: the VS Code run starts its one configuration without a label and writes no settings', async () => {
+      const labels: Array<string | undefined> = [];
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [undefined],
+        label => {
+          labels.push(label);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+      );
+      deepStrictEqual(
+        [labels, existsSync(path.join(workspace.root, 'user-data', 'User'))],
+        [[undefined], false],
+      );
+    });
+  });
+
   describe('withOneRetry', () => {
     it('returns the step result without sleeping or reporting when the step resolves', async () => {
       const recorder = new RetryRecorder();
@@ -518,20 +597,12 @@ describe('acceptance', () => {
 
   describe('the VSCodium run', () => {
     const EXECUTABLE = '/vscodium/codium-insiders';
-    const CONFIGURATION_ENVIRONMENT = {HARNESS_RUN_FOLDER: '/run'};
-    const FAILURE = {
-      alias: 'refused',
-      cite: 'F-2601 AC-1',
-      script: [{surface: 'failureDialog', match: 'refused', answer: 'dismiss'}],
-      dialog: 'Could not establish connection to "refused".',
+    const LAUNCH: Launch = {
+      label: 'extra',
+      runner: 'runner',
+      suite: 'suite-extra',
     };
-
-    beforeEach(() => {
-      workspace.write(
-        'tests/acceptance/suite-failure/cases.json',
-        JSON.stringify({cases: [FAILURE]}),
-      );
-    });
+    const CONFIGURATION_ENVIRONMENT = {HARNESS_RUN_FOLDER: '/run'};
 
     /** The configurations of the run, from the workspace's failure cases. */
     function configurations() {
@@ -572,6 +643,7 @@ describe('acceptance', () => {
         'remote',
         'reconnect',
         'failure-refused',
+        'terminal',
       ]);
     });
 
@@ -660,6 +732,7 @@ describe('acceptance', () => {
         'remote',
         'reconnect',
         'failure-refused',
+        'terminal',
       ]);
     });
 
@@ -687,7 +760,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        [EXECUTABLE, EXECUTABLE, EXECUTABLE, EXECUTABLE],
+        [EXECUTABLE, EXECUTABLE, EXECUTABLE, EXECUTABLE, EXECUTABLE],
       );
     });
 
@@ -698,7 +771,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        [true, true, true, true],
+        [true, true, true, true, true],
       );
     });
 
@@ -713,7 +786,70 @@ describe('acceptance', () => {
           ['remote', 'dist-remote/**/*.test.cjs'],
           ['reconnect', 'dist-reconnect/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
+          ['terminal', 'dist-terminal/**/*.test.cjs'],
         ],
+      );
+    });
+
+    it('D-85: the terminal launch opens the folder on ssh-remote+harness', () => {
+      deepStrictEqual(configurations()[4]?.launchArgs.slice(0, 2), [
+        '--folder-uri',
+        'vscode-remote://ssh-remote+harness/home/harness',
+      ]);
+    });
+
+    it('D-85: a launch with an environment adds it to the extension host', () => {
+      strictEqual(
+        vscodiumConfiguration(
+          workspace.root,
+          CONFIGURATION_ENVIRONMENT,
+          EXECUTABLE,
+          {...LAUNCH, environment: {EXTRA: '1'}},
+        ).env.EXTRA,
+        '1',
+      );
+    });
+
+    it("D-85: a launch's environment wins over the harness variable of the same name", () => {
+      strictEqual(
+        vscodiumConfiguration(
+          workspace.root,
+          {...CONFIGURATION_ENVIRONMENT, REMOTE_OSS_ACCEPTANCE_RECORD: 'run'},
+          EXECUTABLE,
+          {
+            ...LAUNCH,
+            ownScript: true,
+            environment: {REMOTE_OSS_ACCEPTANCE_RECORD: 'launch'},
+          },
+        ).env.REMOTE_OSS_ACCEPTANCE_RECORD,
+        'launch',
+      );
+    });
+
+    it('D-85: a launch with further extensions loads them after the runner', () => {
+      deepStrictEqual(
+        vscodiumConfiguration(
+          workspace.root,
+          CONFIGURATION_ENVIRONMENT,
+          EXECUTABLE,
+          {...LAUNCH, extraExtensions: ['slow-remote']},
+        ).extensionDevelopmentPath,
+        [
+          path.join(workspace.root, 'tests', 'acceptance', 'runner'),
+          path.join(workspace.root, 'tests', 'acceptance', 'slow-remote'),
+        ],
+      );
+    });
+
+    it('D-85: a launch with no environment leaves the harness variables as they are', () => {
+      deepStrictEqual(
+        vscodiumConfiguration(
+          workspace.root,
+          CONFIGURATION_ENVIRONMENT,
+          EXECUTABLE,
+          LAUNCH,
+        ).env,
+        CONFIGURATION_ENVIRONMENT,
       );
     });
 
@@ -722,7 +858,7 @@ describe('acceptance', () => {
         configurations()
           .slice(1)
           .map(configuration => configuration.extensionDevelopmentPath),
-        [1, 2, 3].map(() =>
+        [1, 2, 3, 4].map(() =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -920,6 +1056,7 @@ describe('acceptance', () => {
       workspace.write('tests/acceptance/suite-remote/window.test.ts', '');
       workspace.write('tests/acceptance/suite-reconnect/window.test.ts', '');
       workspace.write('tests/acceptance/suite-failure/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-terminal/window.test.ts', '');
     });
 
     it('bundles each suite test file into one CommonJS file', async () => {
@@ -961,28 +1098,34 @@ describe('acceptance', () => {
           'dist-remote',
           'dist-reconnect',
           'dist-failure',
+          'dist-terminal',
         ].map(folder =>
           existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
         ),
-        [false, false, false, false, false],
+        [false, false, false, false, false, false],
       );
     });
 
-    it('bundles the local, remote, reconnection and failure suites into their own folders', async () => {
+    it('bundles the suite of each launch into its own folder', async () => {
       await bundleSuite(workspace.root);
       deepStrictEqual(
-        ['dist-local', 'dist-remote', 'dist-reconnect', 'dist-failure'].map(
-          folder =>
-            existsSync(
-              path.join(
-                workspace.root,
-                'tests/acceptance',
-                folder,
-                'window.test.cjs',
-              ),
+        [
+          'dist-local',
+          'dist-remote',
+          'dist-reconnect',
+          'dist-failure',
+          'dist-terminal',
+        ].map(folder =>
+          existsSync(
+            path.join(
+              workspace.root,
+              'tests/acceptance',
+              folder,
+              'window.test.cjs',
             ),
+          ),
         ),
-        [true, true, true, true],
+        [true, true, true, true, true],
       );
     });
   });

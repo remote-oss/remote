@@ -32,6 +32,7 @@
         "suite-remote/*.test.ts",
         "suite-reconnect/*.test.ts",
         "suite-failure/*.test.ts",
+        "suite-terminal/*.test.ts",
         "server/*.test.ts",
       ],
       "project": ["**/*.ts", "vscode-test.mjs"],
