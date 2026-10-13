@@ -110,6 +110,16 @@ test resolver), so the extension is the `serve` caller and draws S045 from `serv
     second loss rule for one path. And `resolveExecServer` / `getRemoteExecServer`, which is the editor's contract for
     *other* extensions that run processes on the host (F-1302's nested authorities, slice 3). It isn't the window's
     route to its own server, and when slice 3 builds it, it can be served over this same control client.
+- **Correction (athena, 2026-10-13, #412; daedalus measured, triton on #477): the connection token.** The bullet above
+  assumed each window's `serve` gets a server holding that window's token. It doesn't: a second window's `serve` finds
+  the running server (BR-8), which keeps the first window's token, so a per-connect token is refused. And the CLI
+  starts the server with `--connection-token=<token>` on its command line, which every host user can read and which
+  guards the server's TCP listener on the host's loopback (`--agent-host-bridge-port`), against contracts S10 and the
+  register rule. The user declined a change to the patched CLI and asked the dirty side how the reference does it
+  (`remote-oss/remote-ssh#92`). Until that answer, the CLI path is a 0.2 release blocker (#299). It is dormant: no
+  shipped VSCodium `product.json` names `cliDownloadUrlTemplate` (§2 row 2), and a Microsoft build's server source
+  isn't `free` (row 5). Card cli-07 follows the answer; one connection token per host, kept 0600 in the CLI data folder
+  and read by every connect, is the leading shape for the second window.
 - **The challenge:** the extension signs only a CLI built **without `vsda`** (`sign_challenge` = base64url, no
   padding, of SHA-256 of the challenge). A `vsda` CLI, which genuine VS Code's is, can be driven only by the editor,
   so the CLI path never applies there. Row 5 already sends Microsoft's sources to direct install. A challenge the
