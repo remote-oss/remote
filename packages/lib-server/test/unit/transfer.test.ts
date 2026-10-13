@@ -15,6 +15,7 @@ import {
   type DownloadRequest,
   type DownloadResult,
   type HostLockLoop,
+  PROGRESS_PREFIX,
   RESULT_BEGIN,
   RESULT_END,
   transfer,
@@ -310,6 +311,24 @@ describe('a download on the host (F-2403, F-2405.BR-2)', () => {
     deepStrictEqual((await runTransfer()).phases, [{kind: 'downloading'}]);
   });
 
+  /** A host install whose script reports `download 50`, then `unpack 10` and `unpack 100`, then its block. */
+  const REPORTING = [
+    `${PROGRESS_PREFIX} download 50`,
+    `${PROGRESS_PREFIX} unpack 10`,
+    `${PROGRESS_PREFIX} unpack 100`,
+    ...INSTALLED,
+  ];
+
+  it('F-2304 AC-11: a host download reports the install stage when the unpack starts', async () => {
+    deepStrictEqual((await runTransfer({installs: [REPORTING]})).phases, [
+      {kind: 'downloading'},
+      {kind: 'progress', step: 'download', percent: 50},
+      {kind: 'installing'},
+      {kind: 'progress', step: 'unpack', percent: 10},
+      {kind: 'progress', step: 'unpack', percent: 100},
+    ]);
+  });
+
   it('F-3902.6: the script gets the plan address as the archive URL', async () => {
     const {channel} = await runTransfer();
     deepStrictEqual(
@@ -342,7 +361,7 @@ describe('a download on the host (F-2403, F-2405.BR-2)', () => {
         ],
       ],
     });
-    deepStrictEqual(phases.slice(1), [
+    deepStrictEqual(phases.slice(2), [
       {kind: 'progress', step: 'unpack', percent: 50},
       {kind: 'progress', step: 'unpack', percent: 100},
     ]);
