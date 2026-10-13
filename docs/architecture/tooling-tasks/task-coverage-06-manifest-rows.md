@@ -151,9 +151,9 @@ describe('the manifest rows of slice 1', () => {
 
 ## 3. Notes for the review
 
-- F-2001 AC-19 says `engines.vscode` is `^1.133.0`. Ours is `^1.139.0` by ADR-0007 (the editor floor), already pinned
-  by the row `manifest top-level fields: the card values, one by one`. So the row cites the BRs it checks, not AC-19
-  (triton on #475), and AC-19 stays `todo` until the spec answers the question on `remote-oss/remote-ssh#11`.
+- F-2001 AC-19 is a lower bound since metis's answer on `remote-oss/remote-ssh#11` (2026-10-12, new BR-13):
+  `engines.vscode` requires at least `1.133.0`, and ours is `^1.139.0` by ADR-0007. The row cites AC-19 and checks the
+  bound; the exact change is in daedalus's comment on #497.
 - The Settings editor's display (the "checked" box, the all-profiles marker) is core's. These rows check the manifest
   values core shows.
 
