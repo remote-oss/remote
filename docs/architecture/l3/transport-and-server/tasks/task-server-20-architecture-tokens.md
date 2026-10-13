@@ -3,6 +3,8 @@
 Issue: #670. High priority, not 0.2-gating. Ruled by athena (decisions.md, 2026-10-13). Size: M. Builder: hestia,
 after server-19.
 
+**Depends on connect-38 (#672)**, which makes `remote.SSH.localServerDownload` take effect, so `off` exists.
+
 **Spec:** F-2401 7.E2 as amended on remote-oss/remote-ssh#46 (F-2401, F-3902 and F-2403 republished 2026-10-13):
 - case (a): a machine name with no token;
 - case (b): a built-in source's 404 for the server archive;
@@ -38,14 +40,16 @@ s390x, riscv64 and loong64. Three places decide by a fixed list:
   download.
 - **R2.** A host with a token is tried against the variant's source. Nothing keeps a per-variant list of the platforms
   it publishes.
-- **R3** (7.E2 case (b), AC-20): a request for the **server** archive that answers **404**, or an equivalent "no such
-  file" status:
-  - from a built-in source (F-3902 rules 2 and 4: resolution step `productTemplate` or `builtInTable`) means the variant
-    has no build for the token. It gives S146 after the failed download attempt, with
-    `no server build for <token> at <url>` in the log (the log names the token);
-  - from the user's own template (step `override`) stays S043, as F-2403 AC-10 says.
+- **R3** (7.E2 case (b), AC-20; athena, register 8baac0d): S146 comes **only from the host-side** download of the
+  **server** archive, from a built-in source (F-3902 rules 2 and 4: resolution step `productTemplate` or
+  `builtInTable`), answering **404** or an equivalent "no such file" status, **when that failure is final**. That
+  happens under `remote.SSH.localServerDownload` `off` only:
+  - under `auto`, a host-side failure, this 404 included, falls back to the client download (F-2405 BR-2). The
+    client's own 404 is S071 (F-2401 7.E7; connect-38, #672);
+  - under `always`, the host makes no attempt.
 
-  Every other download failure, a 503 included, is unchanged: S043.
+  With S146 the log carries `no server build for <token> at <url>` (it names the token). A 404 from the user's own
+  template (step `override`) stays S043 (F-2403 AC-10), and so does every other download failure, a 503 included.
 - **R4** (F-3902 rule 5): a 404 for the **CLI** archive is **not** S146. The CLI path fails, and the connect falls back
   to the direct install, as it does for any CLI-path failure today (`connect.ts`: "the CLI path failed (…); installing
   the server directly"). The direct install's server download then follows R3.
@@ -76,17 +80,17 @@ s390x, riscv64 and loong64. Three places decide by a fixed list:
    - when the fetch fails and the text shows an HTTP 404, report `fact server.downloadStatus 404`. The patterns are
      GNU wget's `ERROR 404`, BusyBox wget's `server returned error: HTTP/1.1 404` and curl's `error: 404`;
    - the status word stays `ServerDownloadFailed`.
-5. **Client-side download** (`lib-server/src/transfer/`): the client download knows the HTTP status. `localDownload`
-   gains `status?: number`, set for an HTTP error answer.
-6. **lib-server failure types:** `TransferFailure`'s `serverDownload` gains `status?: number`, from
+5. **lib-server failure types:** `TransferFailure`'s `serverDownload` gains `status?: number`, from
    `server.downloadStatus`. The CLI path needs no status: R4 keeps its existing fall-back. Add only the row below.
-7. **remote-ssh** (`pipeline/failure.ts`, and `server-steps.ts` where the resolution's `step` is known):
+6. **remote-ssh** (`pipeline/failure.ts`, and `server-steps.ts` where the resolution's `step` is known):
    - `ofProbe`'s `unsupportedArch` gives `logged('unsupportedPlatform', 'reported: <name>', {id: 'S146'})`;
-   - a **server** download failure with status 404 and a step other than `override` gives
-     `logged('unsupportedPlatform', 'no server build for <token> at <url>', {id: 'S146'})`;
+   - a **host-side** server download failure (`serverDownload`) with status 404 and a step other than `override` gives
+     `logged('unsupportedPlatform', 'no server build for <token> at <url>', {id: 'S146'})`. The mapping sees only
+     the final failure: under `auto`, the planner has already fallen back to the client, whose failure is
+     `localDownload` (S071, connect-38). So the rule needs no mode test of its own;
    - with step `override`, it stays S043. The mapping needs the step: pass it with the failure from where
      `server-steps.ts` already holds `resolution.step`.
-8. **Strings:** S146 joins `surfaces/failure-strings.ts` and every `l10n/bundle.l10n*.json`, in English for now, as
+7. **Strings:** S146 joins `surfaces/failure-strings.ts` and every `l10n/bundle.l10n*.json`, in English for now, as
    S075 is. `pnpm check-string-tables` passes.
 
 ## 4. Rows
@@ -102,21 +106,23 @@ s390x, riscv64 and loong64. Three places decide by a fixed list:
 | F-3902 rule 5 | the CLI install body against the download host's `missing` path | the CLI step fails as today, and the connect logs "installing the server directly" (a connect-level unit row is enough if the real-shell CLI rows need the archive) |
 
 **Unit rows:**
-- **lib-server:** `ProbedHost` takes each of the seven tokens; `x86` is `unsupportedArch`. The client download's 404
-  gives `localDownload` with `status: 404`. A block with `downloadStatus 404` gives `serverDownload` with `status:
-  404`.
+- **lib-server:** `ProbedHost` takes each of the seven tokens; `x86` is `unsupportedArch`. A block with
+  `downloadStatus 404` gives `serverDownload` with `status: 404`. The client download's status is connect-38's (#672):
+  no row here.
 - **lib-product:** the computed base-URL platform for `linux-ppc64le`, `linux-x64`, `alpine-x64`, `alpine-arm64` and
   `darwin-arm64`: `server-linux-ppc64le`, `server-linux-x64`, `server-linux-alpine`, `server-alpine-arm64`,
   `server-darwin-arm64`. The existing five give the same URLs as before.
 - **remote-ssh:**
   - `unsupportedArch` gives S146 with `reported: i686`;
-  - (F-2401.AC-20) a server-archive 404 with step `productTemplate` gives S146, with `builtInTable` S146, and the log
-    detail names the token; with `override`, S043;
+  - (F-2401.AC-20) under `off`, a host-side server-archive 404 with step `productTemplate` gives S146, with
+    `builtInTable` S146, and the log detail names the token; with `override`, S043;
   - a 503, and any non-404 failure, with a built-in step gives S043;
   - (F-2401.AC-21) a connect over the pipeline fixture whose host reports `ppc64le` and whose server download succeeds:
     the connect proceeds to the start step, and no failure with S146 is produced (a unit row in `connect.test.ts`);
-  - (F-2401.AC-20) the same connect with the server download failing 404 from step `builtInTable`: the failure has
-    reason S146, the start step never runs, and the log detail names `ppc64le`;
+  - (F-2401.AC-20) the same connect under `off`, with the host-side server download failing 404 from step
+    `builtInTable`: the failure has reason S146, the start step never runs, and the log detail names `ppc64le`;
+  - (F-2405 BR-2) the same connect under `auto`: the host-side download fails 404 from `builtInTable`, the client
+    download succeeds, and the connect proceeds to the start step with no S146;
   - (F-3902 rule 5) a CLI-path failure caused by a CLI-archive 404 falls back to the direct install.
 
 **Acceptance row** (the VSCodium failure cases):
