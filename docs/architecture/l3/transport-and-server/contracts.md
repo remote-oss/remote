@@ -729,7 +729,11 @@ measured error had `code: -1`.
 and nothing visible depends on it, so the choice is ours). The CLI is started with `--parent-process-id` naming
 the connect's own session process on the host (the login shell that runs it), so `command-shell` ends when that
 session ends, after its open connections finish. The server it started outlives it and is found again by the next
-`serve` (F-2103 BR-10, AC-33). A reconnect starts its own CLI beside a lingering one (BR-8).
+`serve` (F-2103 BR-10, AC-33). A reconnect starts its own CLI beside a lingering one (BR-8). Over a shared session
+the session outlives the window, so the window's release and the extension's `deactivate` stop that connect's own CLI,
+best effort (#412, triton on #477): the CLI process only, behind the exact two-field guard, never its children, since
+the server it started is the one the other windows' CLIs serve. A CLI a crash leaves ends with the shared session.
+Nothing stops another connect's CLI, and the shared record holds no CLI token.
 
 **Logging.** Every `serverlog` line goes to the connect's log. Only the error line (level 4) may reach a failure's
 detail, as text the presenter shows through S031 (contracts R1: no other library text in a dialog).
