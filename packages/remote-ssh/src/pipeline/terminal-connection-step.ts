@@ -13,6 +13,8 @@ import {
   ConnectWait,
   connectWaitMilliseconds,
   type ConnectWaitSettings,
+  bootstrapLogLine,
+  type BootstrapEvent,
   type ConnectionNotice,
   LineSplitter,
   type LoginTerminals,
@@ -109,6 +111,7 @@ export function openTerminalConnectionStep(
       const lines: string[] = [];
       const waitSettings = dependencies.connectWait();
       let handedOver = false;
+      let authenticated = false;
       let finished = false;
       const asking: {
         questions?: {onQuestion(text: string): void; dispose(): void};
@@ -123,10 +126,15 @@ export function openTerminalConnectionStep(
         }
       }
 
+      function dropQuestions(): void {
+        asking.questions?.dispose();
+        delete asking.questions;
+      }
+
       function takeDown(): void {
         wait.stop();
         reader.stop();
-        asking.questions?.dispose();
+        dropQuestions();
         cancellation.removeEventListener('abort', onAbort);
       }
 
@@ -164,16 +172,42 @@ export function openTerminalConnectionStep(
         input,
       );
 
-      function handOver(): void {
-        handedOver = true;
-        finished = true;
-        takeDown();
-        const runner = new TerminalSessionRunner({
+      function startSession(): void {
+        authenticated = true;
+        reader.stop();
+        dropQuestions();
+        // The login shell's startup gets a wait of its own, which the bootstrap's bound ends first.
+        wait.start();
+        const runner: TerminalSessionRunner = new TerminalSessionRunner({
           terminal,
           scheduler: dependencies.scheduler,
           prelude: sessionStartFor(waitSettings).prelude,
           newMarker: () => dependencies.newMarker(),
+          onBootstrap: event => {
+            hearBootstrap(event, runner);
+          },
         });
+      }
+
+      function hearBootstrap(
+        event: BootstrapEvent,
+        runner: TerminalSessionRunner,
+      ): void {
+        if (finished) {
+          return;
+        }
+        if (event.kind === 'ready') {
+          handOver(runner);
+          return;
+        }
+        dependencies.logger.info(bootstrapLogLine(event));
+        fail(event.kind === 'timeout' ? {kind: 'timeout'} : {kind: 'unknown'});
+      }
+
+      function handOver(runner: TerminalSessionRunner): void {
+        handedOver = true;
+        finished = true;
+        takeDown();
         let channel: HostChannel;
         try {
           channel = dependencies.channelFor(runner, terms, input);
@@ -207,11 +241,11 @@ export function openTerminalConnectionStep(
       const splitter = new LineSplitter(line => {
         lines.push(line);
         if (
-          !handedOver &&
+          !authenticated &&
           !finished &&
           setupMarkerOf(line) === 'authenticated'
         ) {
-          handOver();
+          startSession();
         }
       });
       followLoginOutput(terminal, {
