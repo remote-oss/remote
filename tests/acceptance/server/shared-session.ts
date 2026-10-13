@@ -12,6 +12,7 @@ import {type HelperParameters, nodeEndpointPort} from 'lib-helper';
 import {MemoryFilePort} from 'lib-helper/testing/memory-file-port';
 import {
   acquireConnection,
+  type ConnectOutcome,
   nodeLauncherFiles,
   nodeLocalFiles,
   nodeProcessSpawner,
@@ -58,10 +59,23 @@ function setTimer(milliseconds: number, callback: () => void): () => void {
   };
 }
 
-/** Starts the helper of the host, takes a lease, waits for the login, and gives the channel over its session. */
-export async function openSharedSession(
+/** How an attempt at a shared session ended: the session, or why the login failed; and what the helper logged. */
+export type SharedSessionAttempt =
+  | {kind: 'connected'; session: SharedSession; logged: string[]}
+  | {
+      kind: 'failed';
+      failure: Extract<ConnectOutcome, {kind: 'failed'}>['failure'];
+      logged: string[];
+      stop(): Promise<void>;
+    };
+
+/**
+ * Starts the helper of the host, takes a lease and waits for the login: the channel over its session when the login
+ * succeeds, or the failure the window is told, with the lines the helper logged.
+ */
+export async function attemptSharedSession(
   host: RunningHost,
-): Promise<SharedSession> {
+): Promise<SharedSessionAttempt> {
   const runtimeFolder = mkdtempSync(path.join(tmpdir(), 'shared-session-'));
   const files = new MemoryFilePort();
   const endpoints = nodeEndpointPort();
@@ -71,6 +85,7 @@ export async function openSharedSession(
     return `acceptance${String(nonces)}${Date.now().toString(16)}`;
   }
   const helpers: Array<Promise<unknown>> = [];
+  const logged: string[] = [];
   const environment = {
     freePort,
     helper: {
@@ -92,7 +107,7 @@ export async function openSharedSession(
             spawner: nodeProcessSpawner,
             editorEnvironment: process.env,
             helloLimitMilliseconds: 2000,
-            logLine: () => undefined,
+            logLine: line => logged.push(line),
           }),
         );
         return Promise.resolve();
@@ -136,23 +151,40 @@ export async function openSharedSession(
   }
   const {connection} = acquired;
   const connected = await connection.connect(new AbortController().signal);
+  async function stop(): Promise<void> {
+    connection.release();
+    await Promise.all(helpers);
+    rmSync(runtimeFolder, {recursive: true, force: true});
+  }
   if (connected.kind !== 'connected') {
-    throw new Error(`no connection: ${JSON.stringify(connected.failure)}`);
+    return {kind: 'failed', failure: connected.failure, logged, stop};
   }
   return {
-    socksPort: connected.socksPort,
-    channel: new SharedSessionChannel({
-      session: connection,
-      direct: host.channel,
-      files: nodeLocalFiles,
-      runDeadlineMilliseconds: 60000,
-      runWaitMilliseconds: 120000,
-      maximumInputBytes: 16 * 1024 * 1024,
-    }),
-    stop: async () => {
-      connection.release();
-      await Promise.all(helpers);
-      rmSync(runtimeFolder, {recursive: true, force: true});
+    kind: 'connected',
+    logged,
+    session: {
+      socksPort: connected.socksPort,
+      channel: new SharedSessionChannel({
+        session: connection,
+        direct: host.channel,
+        files: nodeLocalFiles,
+        runDeadlineMilliseconds: 60000,
+        runWaitMilliseconds: 120000,
+        maximumInputBytes: 16 * 1024 * 1024,
+      }),
+      stop,
     },
   };
+}
+
+/** Starts the helper of the host, takes a lease, waits for the login, and gives the channel over its session. */
+export async function openSharedSession(
+  host: RunningHost,
+): Promise<SharedSession> {
+  const attempt = await attemptSharedSession(host);
+  if (attempt.kind === 'failed') {
+    await attempt.stop();
+    throw new Error(`no connection: ${JSON.stringify(attempt.failure)}`);
+  }
+  return attempt.session;
 }

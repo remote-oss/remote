@@ -20,7 +20,7 @@ import {
   runConnectionHelper,
   SharedConnection,
 } from '../../src/index.ts';
-import {AUTHENTICATED, SSH_REQUEST} from './connection-fixture.ts';
+import {authenticate, SSH_REQUEST} from './connection-fixture.ts';
 import {ScriptedSpawner, startError} from './fake-client-process.ts';
 
 const PARAMETERS = 'REMOTE_OSS_HELPER_PARAMETERS';
@@ -162,7 +162,7 @@ describe('the window side of the shared connection (S9)', () => {
 
   it('starts the helper, asks it to connect, and reports the SOCKS port once ssh has authenticated', async () => {
     const {outcome} = await connectFirst();
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await drive();
     deepStrictEqual(await outcome, {
       kind: 'connected',
@@ -173,7 +173,7 @@ describe('the window side of the shared connection (S9)', () => {
 
   it('starts ssh once, for the first window only', async () => {
     const {outcome} = await connectFirst();
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await outcome;
     const second = await acquired();
     await second.connect(new AbortController().signal);
@@ -182,7 +182,7 @@ describe('the window side of the shared connection (S9)', () => {
 
   it('gives a second window the connection that is set up, with the record the first left', async () => {
     const {connection, outcome} = await connectFirst();
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await outcome;
     await connection.storeSharedRecord(RECORD);
     const second = await acquired();
@@ -212,7 +212,7 @@ describe('the window side of the shared connection (S9)', () => {
     const second = await acquired();
     const waiting = second.connect(new AbortController().signal);
     await drive();
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await drive();
     deepStrictEqual(await waiting, {
       kind: 'connected',
@@ -279,7 +279,7 @@ describe('the window side of the shared connection (S9)', () => {
     await drive();
     sshRuns.started[0]?.exit(255);
     await drive();
-    sshRuns.started[1]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[1]);
     await drive();
     deepStrictEqual(
       [sshRuns.started.length, (await waiting).kind],
@@ -290,7 +290,7 @@ describe('the window side of the shared connection (S9)', () => {
   it('tells a window that holds the connection when ssh is lost', async () => {
     const {connection, outcome} = await connectFirst();
     const heard = notices(connection);
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await outcome;
     sshRuns.started[0]?.exit(255);
     await drive();
@@ -439,7 +439,7 @@ describe('the window side of the shared connection (S9)', () => {
     await askAtEndpoint('password: ');
     clock.advance(3 * LIMITS.loginMilliseconds);
     await connection.answer(1, 'secret');
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await drive();
     deepStrictEqual((await outcome).kind, 'connected');
   });
@@ -460,7 +460,7 @@ describe('the window side of the shared connection (S9)', () => {
 
   it('runs a script on the session of the helper, with its lines and its exit status', async () => {
     const {connection, outcome} = await connectFirst();
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await outcome;
     const lines: string[] = [];
     const running = connection.runOnSession(
@@ -485,7 +485,7 @@ describe('the window side of the shared connection (S9)', () => {
 
   it('gives each script its own lines when two run through one connection', async () => {
     const {connection, outcome} = await connectFirst();
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await outcome;
     const request = {
       script: 'echo',
@@ -513,7 +513,7 @@ describe('the window side of the shared connection (S9)', () => {
 
   it('fails a script that was not answered in the time it was given', async () => {
     const {connection, outcome} = await connectFirst();
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await outcome;
     const running = connection.runOnSession(
       {
@@ -536,7 +536,7 @@ describe('the window side of the shared connection (S9)', () => {
 
   it('fails a script as a closed channel when the helper is gone', async () => {
     const {connection, outcome} = await connectFirst();
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await outcome;
     await killConnection(environment, '/registry', 'harness');
     await drive();
@@ -603,7 +603,7 @@ describe('the window side of the shared connection (S9)', () => {
 
   it('ends ssh and the helper when the connection is killed', async () => {
     const {outcome} = await connectFirst();
-    sshRuns.started[0]?.error(AUTHENTICATED);
+    authenticate(sshRuns.started[0]);
     await outcome;
     await killConnection(environment, '/registry', 'harness');
     await drive();

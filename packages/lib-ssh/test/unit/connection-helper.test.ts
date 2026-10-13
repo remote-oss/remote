@@ -10,6 +10,7 @@ import {
   type SshRequest,
 } from '../../src/index.ts';
 import {ScriptedSpawner} from './fake-client-process.ts';
+import {authenticate} from './connection-fixture.ts';
 
 const ENDPOINT = '/run/rh-0123456789abcdef.sock';
 const NONCE = 'nonce-1';
@@ -148,9 +149,7 @@ describe('connection helper', () => {
     const connection = await join();
     connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
     await settled();
-    spawner.started[0]?.error(
-      'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n',
-    );
+    authenticate(spawner.started[0]);
     await settled();
     deepStrictEqual(
       [spawner.started[0]?.specification.programArguments, received.slice(-2)],

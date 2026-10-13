@@ -9,6 +9,15 @@ import type {SshRequest} from '../../src/index.ts';
 export const AUTHENTICATED =
   'Authenticated to 192.0.2.10 ([192.0.2.10]:22) using "publickey".\n';
 
+/** What a session reports once ssh has authenticated and the bootstrap has reached the commands. */
+export function authenticate(
+  session:
+    {error(chunk: string): void; output(chunk: string): void} | undefined,
+): void {
+  session?.error(AUTHENTICATED);
+  session?.output('LAYER1-READY\n');
+}
+
 /** The `ssh` run of a connection to the host `harness`. */
 export const SSH_REQUEST: SshRequest = {
   purpose: 'connection',
