@@ -132,6 +132,32 @@
         "cite": "#668"
       },
       "logIncludes": "cannot write /home/harness-ro/.vscodium-server-insiders/bin/"
+    },
+    {
+      "label": "platform-escape",
+      "alias": "harness",
+      "cite": "F-2601 AC-7, F-2304 AC-13",
+      "settings": {
+        "remote.SSH.useLocalServer": false
+      },
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "Select the platform",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Connecting was canceled."
     }
   ]
 }

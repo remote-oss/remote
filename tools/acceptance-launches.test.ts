@@ -118,6 +118,7 @@ describe('the launches of the VSCodium run', () => {
         .map(launch => launch.label),
       [
         'failure-refused-shown',
+        'failure-platform-escape',
         'terminal',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
@@ -152,6 +153,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-refused-shown',
         'failure-stranger-cancel',
         'failure-readonly',
+        'failure-platform-escape',
       ],
     );
   });
@@ -171,6 +173,7 @@ describe('the launches of the VSCodium run', () => {
         ['failure-refused-shown', 'refused-shown'],
         ['failure-stranger-cancel', 'stranger-cancel'],
         ['failure-readonly', 'readonly'],
+        ['failure-platform-escape', 'platform-escape'],
       ],
     );
   });
@@ -180,10 +183,16 @@ describe('the launches of the VSCodium run', () => {
       [
         launches.find(launch => launch.label === 'failure-refused-shown')
           ?.settings,
+        launches.find(launch => launch.label === 'failure-platform-escape')
+          ?.settings,
         launches.find(launch => launch.label === 'failure-stranger-cancel')
           ?.settings,
       ],
-      [{'remote.SSH.showLoginTerminal': true}, undefined],
+      [
+        {'remote.SSH.showLoginTerminal': true},
+        {'remote.SSH.useLocalServer': false},
+        undefined,
+      ],
     );
   });
 
