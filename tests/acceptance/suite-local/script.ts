@@ -37,6 +37,10 @@ export interface RecordLine {
   details?: boolean;
   /** The name of the window that wrote the line. */
   window: string;
+  /** The time of the line's append. */
+  time: number;
+  /** The labels the failure dialog was shown with, in order; only the lines of a `failureDialog` surface have it. */
+  buttons?: string[];
 }
 
 /** The lines of a record file; a record not written yet is empty. */

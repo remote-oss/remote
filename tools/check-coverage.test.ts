@@ -403,6 +403,16 @@ describe('check-coverage', () => {
       ]);
     });
 
+    it('daedalus on #546: a bound cite counts, so its acceptance line is cited', () => {
+      workspace.write('tests/acceptance/suite-failure/cases.json', {
+        cases: [
+          {bound: {from: 'progress', milliseconds: 2000, cite: 'F-2304 AC-22'}},
+        ],
+      });
+      tagged('F-2304.AC-22\tacceptance\t');
+      deepStrictEqual(problems(), []);
+    });
+
     it('athena on #465: an acceptance row of a feature outside the slice passes', () => {
       acceptanceTest('F-2407: x');
       tagged('F-2601.AC-1\ttodo\t');
@@ -464,6 +474,32 @@ describe('check-coverage', () => {
 
     it('#142 2: a name that only mentions a criterion later cites nothing', () => {
       deepStrictEqual(citedBy('see F-2601 AC-1: x'), []);
+    });
+
+    it('daedalus on #546: a two-feature cite cites each feature, the second with its own list', () => {
+      deepStrictEqual(citedBy('F-2601 AC-6, F-2304 AC-14, AC-27'), [
+        'F-2601.AC-6',
+        'F-2304.AC-14',
+        'F-2304.AC-27',
+      ]);
+    });
+
+    it('daedalus on #546: a cite with a lower-case label then a colon cites its feature', () => {
+      deepStrictEqual(
+        citedBy('F-2206 AC-16 (platform-out-of-enum-solaris): x'),
+        ['F-2206.AC-16'],
+      );
+    });
+
+    it('daedalus on #546: a label with no AC before it cites nothing', () => {
+      deepStrictEqual(citedBy('F-2206 (solaris): x'), []);
+    });
+
+    it('daedalus on #546: an upper-case or spaced label is not a label', () => {
+      deepStrictEqual(
+        [citedBy('F-2206 AC-1 (Foo):'), citedBy('F-2601 AC-1 (bad label): x')],
+        [[], []],
+      );
     });
   });
 });

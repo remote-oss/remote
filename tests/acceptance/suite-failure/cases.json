@@ -15,7 +15,12 @@
           "answer": "dismiss"
         }
       ],
-      "dialog": "Could not establish connection to \"refused\"."
+      "dialog": "Could not establish connection to \"refused\".",
+      "bound": {
+        "from": "progress",
+        "milliseconds": 2000,
+        "cite": "F-2304 AC-22"
+      }
     },
     {
       "alias": "nowhere",
@@ -36,12 +41,61 @@
     },
     {
       "alias": "stranger",
-      "cite": "F-2601 AC-6",
+      "cite": "F-2601 AC-6, F-2304 AC-14, AC-27",
       "script": [
         {
           "surface": "pick",
           "match": "has fingerprint",
           "answer": "dismiss"
+        },
+        {
+          "surface": "failureDialog",
+          "match": "\"stranger\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"stranger\".",
+      "bound": {
+        "from": "pick",
+        "milliseconds": 1500,
+        "cite": "F-2304 AC-14"
+      }
+    },
+    {
+      "label": "refused-shown",
+      "alias": "refused",
+      "cite": "F-2601 AC-30",
+      "settings": {
+        "remote.SSH.showLoginTerminal": true
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"refused\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"refused\"."
+    },
+    {
+      "label": "stranger-cancel",
+      "alias": "stranger",
+      "cite": "F-2601 AC-25",
+      "script": [
+        {
+          "surface": "pick",
+          "match": "has fingerprint",
+          "answer": "no"
         },
         {
           "surface": "failureDialog",

@@ -21,6 +21,16 @@ const RECORD_FILE = '/run/record.jsonl';
 const NEVER = new AbortController().signal;
 const WINDOW = 'main';
 
+/** The lines of a record without their append times. */
+function withoutTime(
+  lines: Array<Omit<RecordLine, 'time'> & {time?: number}>,
+): Array<Omit<RecordLine, 'time'>> {
+  return lines.map(line => {
+    delete line.time;
+    return line;
+  });
+}
+
 /** In-memory files: the script as written, and every text appended to the record. */
 class MemoryFiles {
   readonly appended: string[] = [];
@@ -44,13 +54,18 @@ class MemoryFiles {
     this.appended.push(text);
   };
 
-  /** The record as parsed lines. */
-  lines(): RecordLine[] {
-    return this.appended
-      .join('')
-      .split('\n')
-      .filter(line => line !== '')
-      .map(line => JSON.parse(line) as RecordLine);
+  /** The record as parsed lines, without their append times. */
+  lines(): Array<Omit<RecordLine, 'time'>> {
+    return withoutTime(
+      this.appended
+        .join('')
+        .split('\n')
+        .filter(line => line !== '')
+        .map(
+          line =>
+            JSON.parse(line) as Omit<RecordLine, 'time'> & {time?: number},
+        ),
+    );
   }
 }
 
@@ -969,7 +984,9 @@ describe('progressFor (card tooling-18)', () => {
       WINDOW,
     ).withProgress(REQUEST, twoUpdates);
     deepStrictEqual(
-      files.linesOf(RECORD_FILE).map(line => JSON.parse(line) as RecordLine),
+      withoutTime(
+        files.linesOf(RECORD_FILE).map(line => JSON.parse(line) as RecordLine),
+      ),
       [
         {
           surface: 'progress',
