@@ -22,7 +22,7 @@ Only another window's append in flight can be partial. A reload then continues w
 **A held entry.** Any `ScriptEntry` may carry `after: string`, a signal name of letters, digits and hyphens. When such an
 entry matches a question:
 1. the adapter appends the record line `{surface, question, answer: 'held', matched: true, held: true, window, time}`;
-2. it waits, polling every 100 ms, until the file `<HARNESS_RUN_FOLDER>/signals/<after>` exists, then answers as the
+2. it waits, polling every 100 ms, until the file `<REMOTE_OSS_ACCEPTANCE_SIGNALS>/<after>` exists, then answers as the
    entry says. It appends the answer's record line as today, plus `time`;
 3. if the question's `cancellation` ends first (the question was withdrawn: another window answered, the window closed,
    the connect ended), it gives nothing and appends `{…, answer: 'withdrawn', matched: true}`.
@@ -32,7 +32,12 @@ cursor counts lines with `matched: true` and no `held: true`. Surfaces without a
 `notice`, `licenceModal`, `mitigationPick`, `hostPick`, `filePick`) wait for their signal only. The wait is bounded by
 the run's own end.
 
-**`signal(name)`** in `tests/acceptance/windows/harness.ts` creates `<run>/signals/<name>`. It refuses `never`, a
+**The signal folder** is a harness variable of the product's own family, `REMOTE_OSS_ACCEPTANCE_SIGNALS`, beside
+`REMOTE_OSS_ACCEPTANCE_SCRIPT` and `_RECORD`: no file under `packages/` reads a `HARNESS_*` variable (triton on #575). The
+run sets it to `<run>/signals` for every launch, in `tools/acceptance.ts`'s and `acceptance-plain.ts`'s environments. A
+held entry with the variable unset fails closed, recorded as unmatched.
+
+**`signal(name)`** in `tests/acceptance/windows/harness.ts` creates `<REMOTE_OSS_ACCEPTANCE_SIGNALS>/<name>`. It refuses `never`, a
 reserved name for an answer that must never come. **`appendScript(entries)`** adds entries to the launch's script file
 **atomically**: it writes the whole new JSON to a temporary file in the same folder, then renames it over the script.
 The adapter reads the script at every question, so an in-place rewrite could be read half-written and fail closed at
