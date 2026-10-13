@@ -40,6 +40,8 @@ export interface RecordLine {
   answer: string;
   matched: boolean;
   window: string;
+  /** The labels a failure dialog or a notice was shown with, in order. */
+  buttons?: string[];
 }
 
 /** A harness variable of the run; throws when the tests run outside the harness. */
