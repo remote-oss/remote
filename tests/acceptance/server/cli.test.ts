@@ -7,6 +7,7 @@ import {
   type CliPlacement,
   type DownloadPort,
   installCli,
+  kill,
   nodeClientFiles,
   openCliControl,
   runStep,
@@ -544,5 +545,33 @@ describe('V7a the CLI on a real host', function () {
       ],
       [true, '600'],
     );
+  });
+
+  it('F-2411.BR-3, BR-4: after a CLI served the real server, kill ends the server, leaves the CLI and its supervisor, and keeps cli/servers and the agent-host token of the CLI', async () => {
+    await install();
+    const first = await servedBy(session);
+    const killed = await kill(session.channel, parameters, NEVER_CANCELLED);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    function kept(file: string): boolean {
+      return (
+        host
+          .onHost('sh', '-c', `[ -e '${file}' ] && echo yes || echo no`)
+          .trim() === 'yes'
+      );
+    }
+    deepStrictEqual(
+      [
+        killed.kind,
+        processes(isServer).length,
+        processes(line => line.includes('command-shell')).length > 0,
+        processes(isSupervisor).length,
+        kept(`${dataFolderOf(parameters)}/cli/agent-host-token`),
+        host
+          .onHost('sh', '-c', `ls '${dataFolderOf(parameters)}/cli/servers'`)
+          .trim() !== '',
+      ],
+      ['done', 0, true, 1, true, true],
+    );
+    running.push(first.processId);
   });
 });
