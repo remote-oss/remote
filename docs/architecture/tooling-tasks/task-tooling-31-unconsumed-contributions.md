@@ -24,10 +24,17 @@ exports reachable from entries that include tests.
   references its generated name. A production source is a `.ts` file under `packages/<x>/src/`, other than
   `identifiers.generated.ts`, `*.test.ts` and `src/testing/**`. By kind:
   - **`settings`:** a reference to the key (§3.2);
-  - **`commands`:** the package passes its `commands` table to lib-identifiers' `registerCommands`. That call's typed
-    handler map (`{readonly [Name in keyof Commands]: CommandHandler}`) makes a missing handler a type error, so every
-    key of a table passed there counts as registered. A table that's never passed to `registerCommands` leaves every
-    key unconsumed;
+  - **`commands`** (athena, register e2e9bba): a command is consumed when its **literal id** appears in the checker's
+    type of the **third argument** of a call to lib-identifiers' `registerCommands` in a production source.
+    - The generated table is `as const`, so each entry's `id` is a string literal type. The check takes the call's
+      third argument, asks the checker for its type, and collects every `id` property's literal type among that
+      type's property values.
+    - That covers each way a package builds the argument: the whole table, an object literal built from members
+      (`{addNewSshHost: commands.addNewSshHost, …}`, as `activation.ts` and `register-connect.ts` do), a variable
+      holding the map, and a spread.
+    - A property whose `id` type is widened to `string` (not a literal) is a **problem line**, never a pass:
+      `packages/<x>: registerCommands at src/<file>:<line> passes a command whose id isn't a literal`;
+    - a command id that no such call carries is reported as unconsumed;
   - **`runtimeCommands`, `internalCommands` with role `served`, `contextKeys` with setter `extension`:** a reference
     to the key (§3.2);
   - **`views`:** a reference to the key inside the argument list of a call to a function named `createTreeView`,
@@ -72,14 +79,14 @@ For a table `T` (an exported `const` of `identifiers.generated.ts`), a key `K` o
    remote-ssh's `valueOf(host, 'defaultExtensions')`, whose parameter is `entry: keyof typeof settings`. A string
    `'path'` in unrelated code has no such contextual type, so it doesn't count. This is the trap of a text search:
    `path` is a settings key.
-3. **Property names in an object contextually typed by a mapped type over `keyof typeof T`.** That covers the
-   `registerCommands` handler map. Only commands use it, and R2's `registerCommands` rule already decides commands, so
-   this counts only for the other kinds.
+3. **Property names in an object contextually typed by a mapped type over `keyof typeof T`**, for the kinds other than
+   `commands`. Commands are decided by R2's `registerCommands` rule alone.
 
 These **don't** count:
 - a whole-table use: `T` passed as a value, `Object.keys(T)`, `Object.values(T)`, `for … of`. Such a use is reported as
-  a note (`whole table: packages/<x>/src/<file>:<line> uses <T>`) and consumes no key, except `commands` passed to
-  `registerCommands` (R2). A settings dump that iterates the table, for example, proves nothing about any one key;
+  a note (`whole table: packages/<x>/src/<file>:<line> uses <T>`) and consumes no key. A `commands` table passed whole
+  to `registerCommands` is consumed by R2's type rule, not by this. A settings dump that iterates the table, for
+  example, proves nothing about any one key;
 - a reference in `identifiers.generated.ts`, in a test file or under `src/testing/`;
 - a reference in another package. Tables are package-local, and a library reads no extension's table.
 
@@ -152,6 +159,7 @@ Unknown fields are an error (exit 2).
 | remote-ssh | module | `src/environment/agent-link.ts` | `#676` | 0.2 slice 2 | — |
 | remote-ssh | module | `src/environment/display.ts` | `#676` | 0.2 slice 2 | — |
 | remote-ssh | settings | `localServerDownload`, `allowLocalServerDownload` (two entries) | `#672` | 0.2 | — (only if connect-38 hasn't merged when this lands; otherwise leave them out) |
+| remote-ssh | commands | `cleanCurrentRemoteServer` (`opensshremotes.cleanCurrentRemoteServer`, really unregistered on main) | `#681` (connect-43, which registers it) | 0.2 | — (only if #681 hasn't merged when this lands; otherwise leave it out) |
 
 The deferred ones name this card as their card, because no wiring card exists while the decision holds.
 
@@ -172,8 +180,11 @@ athena's, and the check's real output decides whether it's complete.
 | #674 R2 | `externalSSHAskpass` in the table (from `remote.SSH.externalSSH_ASKPASS`); `src/a.ts` reads `settings.externalSSHAskpass` | consumed, and the line names the id as written in the table |
 | #674 R2 | the only reference is in `test/unit/a.test.ts`; then in `src/testing/fake.ts` | reported, both times |
 | #674 R2 | `src/a.ts` does `Object.values(settings).forEach(…)` and nothing else | every key reported, plus one `whole table` note |
-| #674 R2 | a commands table passed to `registerCommands(host, outcome, commands, handlers)` in `src/` | no command reported |
-| #674 R2 | a commands table never passed to `registerCommands` | every command reported |
+| #674 R2 | a commands table `{alpha, beta, gamma}` (`as const`); `src/a.ts` calls `registerCommands(host, outcome, {alpha: commands.alpha, beta: commands.beta}, handlers)` | `gamma` reported; `alpha` and `beta` consumed (a subset literal) |
+| #674 R2 | the same table passed whole: `registerCommands(host, outcome, commands, handlers)` | none reported |
+| #674 R2 | `const served = {alpha: commands.alpha}; registerCommands(host, outcome, {...served, beta: commands.beta}, handlers)` | `gamma` reported only (a variable and a spread) |
+| #674 R2 | a third argument whose entry is typed `{id: string; …}` (widened) | the `id isn't a literal` problem line; exit 1 |
+| #674 R2 | a commands table no `registerCommands` call carries | every command reported |
 | #674 R2 | a views table `{remoteTargets}`; `src/a.ts` calls `editor.window.createTreeView(views.remoteTargets, …)` | consumed; the same key referenced only in a `const` that never reaches a registration is reported |
 | #674 R2 | a `contextKeys` entry with setter `core`; an `internalCommands` entry with role `called` | neither reported |
 | #674 R3 | an allowlist entry for a reported key | not reported; exit 0 |
@@ -204,5 +215,8 @@ athena gives the design check.
    example through a generic wrapper. Report the call. Don't fall back to text matching.
 2. **`knip --production` reports unused files outside the two modules,** or flags production entries the `!` marking
    missed. Report the list. Don't widen the allowlist by yourself.
-3. **A package's commands are registered some other way than `registerCommands`** (a `vscode.commands.registerCommand`
+3. **The card for `cleanCurrentRemoteServer`** is connect-43 (#681, "Kill Current VS Code Server is registered"), as
+   the coordinator confirmed; connect-42 (#680) is the port range and the bundle keys. If #681's scope changes, ask
+   daedalus for the right card.
+4. **A package's commands are registered some other way than `registerCommands`** (a `vscode.commands.registerCommand`
    in `src/`). Report the call site: it's either a defect or a gap in R2, athena's call.
