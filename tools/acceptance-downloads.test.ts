@@ -306,6 +306,21 @@ describe('serverArchiveOf', () => {
     deepStrictEqual([result, downloads], [file, []]);
   });
 
+  it('tooling-27: a cached file whose checksum does not match is downloaded again and replaced', async () => {
+    writeFileSync(path.join(folder, serverArchiveName('arm64')), 'tampered');
+    const body = Buffer.from('fresh');
+    const sha256 = createHash('sha256').update(body).digest('hex');
+    const downloads: string[] = [];
+    const result = await serverArchiveOfPinned(sha256, folder, address => {
+      downloads.push(address);
+      return Promise.resolve(body);
+    });
+    deepStrictEqual(
+      [downloads.length, readFileSync(result, 'utf8')],
+      [1, 'fresh'],
+    );
+  });
+
   it('tooling-27: a missing file is downloaded from the pinned release, checked and written', async () => {
     const body = Buffer.from('fresh');
     const sha256 = createHash('sha256').update(body).digest('hex');
