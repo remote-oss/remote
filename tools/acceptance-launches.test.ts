@@ -15,7 +15,7 @@ import {TemporaryWorkspace} from './temporary-workspace.ts';
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow and windows', () => {
+  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow, windows and no-proposals', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -28,6 +28,7 @@ describe('the launches of the VSCodium run', () => {
         'terminal',
         'slow',
         'windows',
+        'no-proposals',
       ],
     );
   });
@@ -173,8 +174,31 @@ describe('the launch with no runner', () => {
 
   it('D-85: the windows launch is plain and has a suite folder of Node tests', () => {
     deepStrictEqual(
-      launches.filter(launch => launch.kind === 'plain'),
+      launches.filter(launch => launch.label === 'windows'),
       [{label: 'windows', kind: 'plain', suite: 'windows'}],
+    );
+  });
+
+  it('F-3903 §5 rule 4: the no-proposals launch is plain and starts the editor without the proposed API', () => {
+    deepStrictEqual(
+      launches.filter(launch => launch.label === 'no-proposals'),
+      [
+        {
+          label: 'no-proposals',
+          kind: 'plain',
+          suite: 'no-proposals',
+          proposedApi: false,
+        },
+      ],
+    );
+  });
+
+  it('F-3903 §5 rule 4: only the no-proposals launch leaves the proposed API out', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.proposedApi === false)
+        .map(launch => launch.label),
+      ['no-proposals'],
     );
   });
 

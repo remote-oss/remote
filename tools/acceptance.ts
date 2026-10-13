@@ -560,7 +560,7 @@ export function vscodiumConfiguration(
         extension =>
           `--extensionDevelopmentPath=vscode-remote://ssh-remote+harness${hostExtensionFolder(extension)}`,
       ),
-      ...editorArguments(runFolder),
+      ...editorArguments(runFolder, launch.proposedApi !== false),
     ],
     env,
     mocha: {ui: 'bdd' as const, timeout: 120_000},

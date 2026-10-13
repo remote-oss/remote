@@ -73,6 +73,41 @@ describe('the plain editor of a launch', () => {
     );
   });
 
+  it('F-3903 §5 rule 4: the proposed API is enabled for the extension under test by default', () => {
+    deepStrictEqual(
+      plainEditorOf('/editor', '/run', LAUNCH, {}).programArguments.filter(
+        argument => argument.startsWith('--enable-proposed-api'),
+      ),
+      ['--enable-proposed-api=remote-oss.remote-ssh'],
+    );
+  });
+
+  it('F-3903 §5 rule 4: a launch with proposedApi false starts the editor without it', () => {
+    deepStrictEqual(
+      plainEditorOf(
+        '/editor',
+        '/run',
+        {...LAUNCH, proposedApi: false},
+        {},
+      ).programArguments.filter(argument =>
+        argument.startsWith('--enable-proposed-api'),
+      ),
+      [],
+    );
+  });
+
+  it("F-3903 §5 rule 4: a launch with proposedApi false keeps the run's folders", () => {
+    deepStrictEqual(
+      plainEditorOf(
+        '/editor',
+        '/run',
+        {...LAUNCH, proposedApi: false},
+        {},
+      ).programArguments.slice(0, 2),
+      ['--user-data-dir=/run/user-data', '--extensions-dir=/run/extensions'],
+    );
+  });
+
   it('D-85: it starts the program it was given', () => {
     strictEqual(plainEditorOf('/editor', '/run', LAUNCH, {}).file, '/editor');
   });

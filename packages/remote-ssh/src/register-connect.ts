@@ -1,7 +1,8 @@
 /**
  * @fileoverview The connect's registration once activation serves: the resolver behind activation's own readiness,
- * and, once it is registered, the window's label, the connect commands, Open Web UI and the progress's details command. Nothing is
- * registered when the editor does not grant the resolvers proposal. Nothing here imports the editor.
+ * and, once it is registered, the window's label. The connect commands, Open Web UI, the hint clearing and the progress's
+ * details command are registered whatever the editor grants: without the resolvers proposal only the resolver and what
+ * hangs on it are held back. Nothing here imports the editor.
  */
 
 import {
@@ -73,20 +74,17 @@ export async function registerConnect(
       resolversGranted: () => Promise.resolve(resolversGranted),
     },
   );
-  if (registration.kind !== 'registered') {
-    return {
-      registration: registration.kind,
-      currentAlias: () => '',
-      dispose: () => undefined,
-    };
-  }
-  const {resolver} = registration;
-  const label = registerWindowLabel(resolver, host.labels, host.translate);
+  const resolver =
+    registration.kind === 'registered' ? registration.resolver : undefined;
+  const label =
+    resolver === undefined
+      ? undefined
+      : registerWindowLabel(resolver, host.labels, host.translate);
   const connection = {
     killLocalServer: (hostString: string) =>
       assembly.killLocalServer(hostString),
     current: () => {
-      const current = resolver.currentConnection();
+      const current = resolver?.currentConnection();
       // This resolver serves only ssh-remote authorities, so its target is always an ssh target.
       return current === undefined
         ? undefined
@@ -110,7 +108,9 @@ export async function registerConnect(
     {
       ...connectCommandHandlers(host.connectEditor, connection),
       openWebUI: openWebUiHandler({
-        serverPort: () => assembly.connector.serverPort(),
+        // Without a resolver the window has no connection, so no server is known, as in a local window.
+        serverPort: () =>
+          resolver === undefined ? 'none' : assembly.connector.serverPort(),
         openExternal: address => host.openExternal(address),
       }),
       clearAllSessionHints: clearHintsHandler(host.globalState, host.logger),
@@ -119,20 +119,22 @@ export async function registerConnect(
   const details = host.commands.registerCommand(
     runtimeCommands.showDetails,
     () => {
-      assembly.connector.revealDetails();
+      if (resolver !== undefined) {
+        assembly.connector.revealDetails();
+      }
     },
   );
   return {
-    registration: 'registered',
+    registration: registration.kind,
     currentAlias: () => {
-      const target = resolver.currentConnection()?.decodedTarget.target;
+      const target = resolver?.currentConnection()?.decodedTarget.target;
       return target !== undefined && 'kind' in target ? hostAlias(target) : '';
     },
     dispose: () => {
       details.dispose();
       served.dispose();
-      label.dispose();
-      resolver.dispose();
+      label?.dispose();
+      resolver?.dispose();
     },
   };
 }

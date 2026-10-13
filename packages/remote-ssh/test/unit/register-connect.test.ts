@@ -139,12 +139,47 @@ describe("the connect's registration", () => {
     );
   });
 
-  it('F-3903: nothing is registered when the editor does not grant the resolvers proposal', async () => {
-    const {seen, registration} = await registered(false);
+  it('F-3903 §5 rule 4: without the resolvers grant the registration reports the missing proposal', async () => {
+    const {registration} = await registered(false);
+    deepStrictEqual(registration.registration, 'proposalMissing');
+  });
+
+  it('F-3903 §5 rule 4: without the resolvers grant every served command is registered', async () => {
+    const granted = await registered(true);
+    const missing = await registered(false);
     deepStrictEqual(
-      [registration.registration, seen.events, [...seen.commands.keys()]],
-      ['proposalMissing', [], []],
+      [...missing.seen.commands.keys()].sort(),
+      [...granted.seen.commands.keys()].sort(),
     );
+  });
+
+  it('F-3903 §5 rule 4: without the resolvers grant Connect to Host still opens the window', async () => {
+    const {seen} = await registered(false);
+    await seen.commands.get('opensshremotes.openEmptyWindow')?.({host: 'dev'});
+    deepStrictEqual(seen.remote, [['ssh-remote+dev', 'new']]);
+  });
+
+  it('F-3903 §5 rule 4: without the resolvers grant nothing of the resolver is registered', async () => {
+    const {seen} = await registered(false);
+    deepStrictEqual([seen.events, seen.labels], [[], 0]);
+  });
+
+  it('F-3903 §5 rule 4: without a resolver Open Web UI opens nothing', async () => {
+    const {seen} = await registered(false, 4321);
+    await seen.commands.get('opensshremotes.openWebUI')?.();
+    deepStrictEqual(seen.opened, []);
+  });
+
+  it('F-3903 §5 rule 4: without a resolver Show Details does nothing', async () => {
+    const {seen} = await registered(false);
+    seen.commands.get('opensshremotes.showDetails')?.();
+    deepStrictEqual(seen.revealed, 0);
+  });
+
+  it('F-3903 §5 rule 4: without a resolver the active-host command opens nothing', async () => {
+    const {seen} = await registered(false);
+    await seen.commands.get('opensshremotes.openEmptyWindowOnCurrentHost')?.();
+    deepStrictEqual(seen.remote, []);
   });
 
   it('F-2304, F-2405, F-2605: Open Web UI, Clear and the details command are registered with the resolver', async () => {
@@ -280,10 +315,13 @@ describe("the connect's registration", () => {
     );
   });
 
-  it('contracts §3.2: disposing a registration that registered nothing does nothing', async () => {
+  it('F-3903 §5 rule 4: disposing the commands registered without a resolver ends each of them', async () => {
     const {seen, registration} = await registered(false);
     registration.dispose();
-    deepStrictEqual(seen.disposed, []);
+    deepStrictEqual(
+      [...seen.disposed].sort(),
+      [...seen.commands.keys()].sort(),
+    );
   });
 
   it('F-2601: the window has no alias before its first resolve', async () => {
@@ -291,7 +329,7 @@ describe("the connect's registration", () => {
     deepStrictEqual(registration.currentAlias(), '');
   });
 
-  it('F-2601: a registration that registered nothing names no alias', async () => {
+  it('F-2601: a registration without a resolver names no alias', async () => {
     const {registration} = await registered(false);
     deepStrictEqual(registration.currentAlias(), '');
   });

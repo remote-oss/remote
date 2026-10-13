@@ -126,6 +126,9 @@
     },
     {
       "path": "tests/acceptance/windows"
+    },
+    {
+      "path": "tests/acceptance/no-proposals"
     }
   ]
 }
