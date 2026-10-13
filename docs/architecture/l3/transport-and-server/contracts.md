@@ -817,7 +817,10 @@ the host download by 30 min (F-2403 AC-24 requires at least 10). **The server's 
 #253 Q7 follow-up): F-2409 AC-25 and AC-26 bind that wait itself, not only a hang. A server that never reports a port
 fails with STR:S135 no earlier than about 13 s and no later than about 20 s, and a healthy server slower than 20 s
 fails once and is found running on Retry (BR-10: 14–16 s observed). Here the spec's acceptance tests require the end,
-so R-79's "never end a slow but working operation" doesn't apply. The CLI path's first `serve` keeps its own bound
+so R-79's "never end a slow but working operation" doesn't apply. A server that exits before reporting a port is
+reported at the end of the wait, not at once (AC-25: "even though the server process failed earlier"); exit 207
+(prerequisites, F-2401) still fails at once, and a port line written before the exit still counts (connect-26). The
+CLI path's first `serve` keeps its own bound
 (V7a: the host download plus this wait). The table with every value and its basis is on #253 (Q7).
 
 ### V9 server-cache
