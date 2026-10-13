@@ -46,11 +46,17 @@ editor adapters live with the existing ones (`surfaces/editor-adapters.ts`).
 
 ## 3. Kill Local Connection Server (F-2102 §6.4)
 
-The same picker (F-2102 6.4 step 2 names it). Then `killConnection` (lib-ssh `connection-server/client.ts`) for the
-picked host string, with the window's helper client, and the notice F-2102 gives for a server that ended or wasn't
-running. In terminal mode (`useLocalServer` off) the command isn't in the palette (manifest), and a call by keybinding
-shows nothing and changes nothing (F-2102 AC-21). Follow F-2102's 6.4 and ACs; ask on #142 for anything they leave
-open.
+- **The pick:** the same picker (F-2102 6.4 step 2 names it).
+- **The kill:** `killConnection` (lib-ssh `connection-server/client.ts`) for the picked host string **exactly as
+  written** in the picked row or the typed text (F-2102 AC-17: `<user>@<address>` of a window's alias target is another
+  host string, and that window's server stays).
+- **Silent:** no notice for a server that ended or wasn't running (F-2102 AC-6, AC-16, 6.3); `killConnection` is
+  silent by design.
+- **Terminal mode** (`useLocalServer` off): the command isn't in the palette (manifest). A call by keybinding opens the
+  picker, and the pick creates, changes and removes nothing (F-2102 AC-21, as written: "invoked by a keybinding and a
+  host is picked").
+
+Follow F-2102's 6.4 and ACs; ask on #142 for anything they leave open.
 
 ## 4. Rows
 
@@ -64,7 +70,11 @@ Unit rows (`test/unit/connect-commands.test.ts`), one assertion each, named by t
   - parse error → the handler throws `<file>: <reason>` and no pick opens;
   - Escape → nothing.
 - **The active-host command:** available → the active host in a new window; unavailable → nothing.
-- **Kill:** the picked host's `killConnection`; its notices; terminal mode → nothing.
+- **Kill:**
+  - the picked host string reaches `killConnection` as written (AC-17: `alex@10.0.0.5` and `dev` are different
+    strings);
+  - no notice is shown, whatever `killConnection` reports (AC-6, AC-16);
+  - in terminal mode, the picker opens and the pick calls nothing (AC-21).
 
 Acceptance rows, in the VSCodium run (`suite-remote`):
 - `F-2301 AC-1: Connect to Host... is a registered command`: `vscode.commands.getCommands(true)` holds all four ids;
