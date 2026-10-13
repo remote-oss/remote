@@ -64,6 +64,19 @@ const INSTALL_FAILED: FailureReason = {id: 'S075'};
 /** The reason of a server download that failed: the extension's own text. */
 const DOWNLOAD_FAILED: FailureReason = {id: 'S043'};
 
+/**
+ * What a failed client download's reason names: `Failed to fetch` for the network, `Server returned <status>` for an
+ * HTTP error status, and the file system's own text for the client's file.
+ */
+function localDownloadValue(
+  failure: Extract<TransferFailure, {kind: 'localDownload'}>,
+): string {
+  if (failure.cause === 'httpStatus') {
+    return `Server returned ${String(failure.status)}`;
+  }
+  return failure.cause === 'clientFile' ? failure.detail : 'Failed to fetch';
+}
+
 /** The failure of a host channel: a closed or timed out connection, a cancel, or a copy that did not work. */
 export function ofChannel(failure: ChannelFailure): FailureDetail {
   switch (failure.kind) {
@@ -204,7 +217,10 @@ export function ofTransfer(failure: TransferFailure): FailureDetail {
     case 'serverDownload':
       return logged('serverDownload', failure.cause, DOWNLOAD_FAILED);
     case 'localDownload':
-      return logged('serverDownload', failure.detail, DOWNLOAD_FAILED);
+      return logged('serverDownload', failure.detail, {
+        id: 'S071',
+        values: [localDownloadValue(failure)],
+      });
     case 'downloadTimeout':
       return logged('serverDownload', failure.reason, DOWNLOAD_FAILED);
     case 'verification':

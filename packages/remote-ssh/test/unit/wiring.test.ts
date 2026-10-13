@@ -3,7 +3,7 @@ import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
 import {RecordingChannel} from 'lib-host/testing/recording-channel';
-import {openCliControl} from 'lib-server';
+import {type LocalDownloadMode, openCliControl} from 'lib-server';
 import {
   fakeCli,
   type CliScript,
@@ -108,6 +108,7 @@ function portsOf(
     bridgePort?: number | 'none';
     cliTemplate?: string;
     useExecServer?: boolean;
+    localDownloadMode?: LocalDownloadMode;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
@@ -140,6 +141,7 @@ function portsOf(
         layer: 'defaultProfileUser',
       }),
       useExecServer: () => changes.useExecServer ?? false,
+      localDownloadMode: () => changes.localDownloadMode ?? 'auto',
     },
     terms: {
       settings: () => ({
@@ -411,6 +413,56 @@ describe("the composition's forwarding to this connect's server steps", () => {
     deepStrictEqual(
       (await steps.gate(inputFor('dev'), new AbortController().signal)).kind,
       'cleared',
+    );
+  });
+});
+
+describe("the download mode reaches this connect's plan (card connect-38)", () => {
+  /** Where the plan of a connect over `ports` downloads the server for a host with none installed, and its fallback. */
+  async function placementOf(
+    ports: WiringPorts,
+  ): Promise<{where: string; clientFallback: boolean}> {
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const planned = steps.plan(inputFor('dev'), HOST);
+    if (!('plan' in planned) || planned.plan.kind !== 'download') {
+      throw new Error('the plan should download');
+    }
+    return {
+      where: planned.plan.where,
+      clientFallback: planned.plan.clientFallback,
+    };
+  }
+
+  it('F-2405 BR-1: each mode reaches the placement of the plan', async () => {
+    deepStrictEqual(
+      await Promise.all(
+        (['auto', 'always', 'off'] as const).map(
+          async localDownloadMode =>
+            await placementOf(portsOf({localDownloadMode}).ports),
+        ),
+      ),
+      [
+        {where: 'host', clientFallback: true},
+        {where: 'client', clientFallback: false},
+        {where: 'host', clientFallback: false},
+      ],
+    );
+  });
+
+  it('F-2405 BR-1: a connect reads the mode as it is when it starts', async () => {
+    const changes: {localDownloadMode: LocalDownloadMode} = {
+      localDownloadMode: 'auto',
+    };
+    const {ports} = portsOf(changes);
+    const first = await placementOf(ports);
+    changes.localDownloadMode = 'off';
+    deepStrictEqual(
+      [first, await placementOf(ports)],
+      [
+        {where: 'host', clientFallback: true},
+        {where: 'host', clientFallback: false},
+      ],
     );
   });
 });

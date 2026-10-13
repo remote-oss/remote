@@ -15,7 +15,13 @@ export {
   type ServerPolicyRecord,
   type Verification,
 } from './policy/record.ts';
-export {CONTAINERS_POLICY, SSH_POLICY, wslPolicy} from './policy/rows.ts';
+export {
+  CONTAINERS_POLICY,
+  type LocalDownloadMode,
+  SSH_POLICY,
+  sshPolicyFor,
+  wslPolicy,
+} from './policy/rows.ts';
 export {validatePolicyRecord} from './policy/validate.ts';
 export {
   type ResultBlock,

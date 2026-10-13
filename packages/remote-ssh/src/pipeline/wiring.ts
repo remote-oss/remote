@@ -10,6 +10,7 @@ import type {Scheduler} from 'lib-helper';
 import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {OverrideValue} from 'lib-product';
+import {type LocalDownloadMode, sshPolicyFor} from 'lib-server';
 import {buildInvocation, connectWaitMilliseconds} from 'lib-ssh';
 import type {
   AcquireConnectionOutcome,
@@ -72,6 +73,8 @@ interface WiringSettings {
   override: () => OverrideValue | undefined;
   /** `remote.SSH.useExecServer`. */
   useExecServer: () => boolean;
+  /** Where the connect may download the server archive, from `remote.SSH.localServerDownload`. */
+  localDownloadMode: () => LocalDownloadMode;
 }
 
 /** What the channel of one connect is made from: the host as written, the runs' shared part, and the terms. */
@@ -124,7 +127,7 @@ export interface WiringPorts {
   /** The server steps' dependencies, apart from what depends on the connect's host. */
   server: Omit<
     ServerStepDependencies,
-    'settings' | 'remoteUser' | 'override' | 'useExecServer'
+    'settings' | 'remoteUser' | 'override' | 'useExecServer' | 'policy'
   >;
   /** The tunnel step's dependencies, apart from the window's environment, which the host's options give. */
   tunnel: Omit<
@@ -216,6 +219,7 @@ export function stepsOf(
       ),
       override: ports.settings.override(),
       useExecServer: ports.settings.useExecServer(),
+      policy: sshPolicyFor(ports.settings.localDownloadMode()),
       remoteUser: () => lookedUp(state).user,
     });
     return held.server;
