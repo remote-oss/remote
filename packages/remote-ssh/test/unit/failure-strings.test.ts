@@ -64,6 +64,7 @@ describe('the texts of the failure dialog and the progress', () => {
       'S137',
       'S140',
       'S142',
+      'S146',
       'S157',
       'S158',
       'S162',

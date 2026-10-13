@@ -180,17 +180,6 @@ const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
       problem: {kind: 'notHttpUrl', value: 'ftp://h/x'},
     }),
   ],
-  [
-    'unsupported template',
-    ofPlan({
-      kind: 'invalidOverride',
-      problem: {
-        kind: 'unsupportedPlatform',
-        operatingSystem: 'aix',
-        architecture: 'ppc',
-      },
-    }),
-  ],
   ['install path', ofPlan({kind: 'invalidInstallPath', reason: 'relative'})],
   ['download', ofTransfer({kind: 'serverDownload', cause: 'downloadFailed'})],
   [
@@ -300,11 +289,88 @@ describe('the reading of each library failure (no library text is shown)', () =>
     });
   });
 
-  it('contracts R1: an unsupported architecture logs what the host reported', () => {
-    deepStrictEqual(ofProbe({kind: 'unsupportedArch', reported: 'sparc'}), {
+  it('#670 R5: an unsupported architecture gives S146 and logs what the host reported', () => {
+    deepStrictEqual(ofProbe({kind: 'unsupportedArch', reported: 'i686'}), {
+      kind: 'unsupportedPlatform',
+      reason: {id: 'S146'},
+      logDetail: 'reported: i686',
+    });
+  });
+
+  it('contracts R1: an unsupported platform logs what the host reported and gives no reason', () => {
+    deepStrictEqual(ofProbe({kind: 'unsupportedPlatform', reported: 'sparc'}), {
       kind: 'unsupportedPlatform',
       logDetail: 'reported: sparc',
     });
+  });
+
+  for (const step of ['productTemplate', 'builtInTable'] as const) {
+    it(`#670 F-2401 AC-20: a host-side 404 from the ${step} gives S146 and names the token`, () => {
+      deepStrictEqual(
+        ofTransfer(
+          {kind: 'serverDownload', cause: 'downloadFailed', status: 404},
+          {step, architecture: 'ppc64le', address: 'https://x.example/a.tgz'},
+        ),
+        {
+          kind: 'unsupportedPlatform',
+          reason: {id: 'S146'},
+          logDetail: 'no server build for ppc64le at https://x.example/a.tgz',
+        },
+      );
+    });
+  }
+
+  for (const [name, failure, step] of [
+    [
+      'a 404 from the user template',
+      {kind: 'serverDownload', cause: 'downloadFailed', status: 404},
+      'override',
+    ],
+    [
+      'a 503 from a built-in source',
+      {kind: 'serverDownload', cause: 'downloadFailed', status: 503},
+      'builtInTable',
+    ],
+    [
+      'a failure with no status',
+      {kind: 'serverDownload', cause: 'downloadFailed'},
+      'builtInTable',
+    ],
+    [
+      'a 404 with no known step',
+      {kind: 'serverDownload', cause: 'downloadFailed', status: 404},
+      undefined,
+    ],
+  ] as const) {
+    it(`F-2403 AC-10: ${name} stays the download failure S043`, () => {
+      deepStrictEqual(
+        ofTransfer(failure, {
+          step,
+          architecture: 'ppc64le',
+          address: 'https://x.example/a.tgz',
+        }),
+        {
+          kind: 'serverDownload',
+          reason: {id: 'S043'},
+          logDetail: 'downloadFailed',
+        },
+      );
+    });
+  }
+
+  it('F-3902 rule 5: a 404 without a context (the CLI path) stays the download failure', () => {
+    deepStrictEqual(
+      ofTransfer({
+        kind: 'serverDownload',
+        cause: 'downloadFailed',
+        status: 404,
+      }),
+      {
+        kind: 'serverDownload',
+        reason: {id: 'S043'},
+        logDetail: 'downloadFailed',
+      },
+    );
   });
 
   it('contracts R1: missing tools give no reason and log the list', () => {
@@ -443,20 +509,6 @@ describe('the reading of each library failure (no library text is shown)', () =>
         problem: {kind: 'notHttpUrl', value: 'ftp://h/x'},
       }).logDetail?.includes('ftp://h/x'),
       true,
-    );
-  });
-
-  it('#299: a template problem of the base-URL form has no reason', () => {
-    deepStrictEqual(
-      ofPlan({
-        kind: 'invalidOverride',
-        problem: {
-          kind: 'unsupportedPlatform',
-          operatingSystem: 'aix',
-          architecture: 'ppc',
-        },
-      }).reason,
-      undefined,
     );
   });
 

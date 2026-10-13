@@ -93,5 +93,6 @@
   "Continue": "Continue",
   "Enter passphrase for ssh key {0}": "Enter passphrase for ssh key {0}",
   "Enter password": "Enter password",
-  "Enter password for {0}": "Enter password for {0}"
+  "Enter password for {0}": "Enter password for {0}",
+  "The remote host's architecture is not supported": "The remote host's architecture is not supported"
 }
