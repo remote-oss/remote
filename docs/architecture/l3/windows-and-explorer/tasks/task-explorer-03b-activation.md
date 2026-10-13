@@ -167,7 +167,7 @@ export function silentHandlers<Commands extends Readonly<Record<string, CommandE
 4. `silentHandlers` maps every name of `commands` to `{execute: () => undefined}`, one object per name, no
    `isAvailable`. That's F-5002 §19 items 1, 3 and 7: the command does nothing visible, and its promise resolves.
 
-In slice 1 every handler is silent. explorer-04 (the targets view) replaces `refresh`. explorer-06 (connect actions)
+In slice 1 every handler is silent. explorer-04 (the targets view) replaces `refresh`. explorer-05 (connect actions and the marker)
 replaces `connectToRemoteInCurrentWindow` and `connectToRemoteInNewWindow`, each with
 `{...silentHandlers(commands), <name>: <handler>}` in `extension.ts`.
 
