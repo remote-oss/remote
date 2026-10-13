@@ -32,6 +32,7 @@
         "suite-remote/*.test.ts",
         "suite-reconnect/*.test.ts",
         "suite-failure/*.test.ts",
+        "suite-ports/*.test.ts",
         "suite-terminal/*.test.ts",
         "suite-slow/*.test.ts",
         "slow-remote/src/extension.ts",

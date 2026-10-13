@@ -10,6 +10,11 @@ export type ScriptEntry = (
   | {surface: 'pick'; match: string; answer: 'yes' | 'no' | 'dismiss'}
   | {surface: 'maskedInput'; match: string; answer: {text: string} | 'dismiss'}
   | {
+      surface: 'notice';
+      match: string;
+      answer: {button: string} | 'dismiss';
+    }
+  | {
       surface: 'platformPick';
       match: string;
       answer: 'linux' | 'windows' | 'macOS' | 'dismiss';

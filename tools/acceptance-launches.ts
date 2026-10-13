@@ -21,6 +21,16 @@ interface LaunchCommon {
   environment?: Readonly<Record<string, string>>;
   /** Whether the editor is started with the proposed API enabled for the extensions under test; true when absent. */
   proposedApi?: boolean;
+  /** Commands the run runs on the host container, as root, before each attempt of the launch, in order. */
+  hostSetup?: readonly HostSetupEntry[];
+}
+
+/** One command of a launch's host setup, run on the host container through `docker exec`, in order. */
+export interface HostSetupEntry {
+  /** The command the host's `sh` runs with `-c`. */
+  command: string;
+  /** When true, the command is started with `docker exec -d` and the setup does not wait for it. */
+  detach?: boolean;
 }
 
 /** A launch whose tests run in a window of the editor, started by test-cli. */
@@ -135,6 +145,92 @@ export function failureLabel(alias: string): string {
   return `failure-${alias}`;
 }
 
+/** One ports case of the VSCodium run: one launch per case, with its host setup and its expectations. */
+export interface PortsCase {
+  /** The name of the case; the launch is `ports-<label>`. */
+  label: string;
+  /** The cite of the case's rows: the criterion of the case and its label, in parentheses. */
+  cite: string;
+  /** The authority the window opens, default `harness`. */
+  authority?: string;
+  /** Settings merged over the run's base settings for the case's launch. */
+  settings: Record<string, unknown>;
+  /** The ports a non-product listener holds on the host before the connect. */
+  holders?: number[];
+  /** Keeps the previous launch's server on the host, so the case reuses it. */
+  keepServer?: boolean;
+  /** How the case's connect ends. */
+  outcome: 'connected' | 'connectedOrDialog';
+  /** The port the server listens on, or "random" for a port outside the case's ranges. */
+  port?: number | 'random';
+  /** The address the server listens on, when the case checks it. */
+  address?: string;
+  /** The case checks that another machine of the run reaches the server's port. */
+  reaches?: boolean;
+  /** The port on which nothing new may listen. */
+  noListenerOn?: number;
+  /** The case checks that no notice appeared. */
+  noNotice?: boolean;
+}
+
+/** The ports cases, in the order the run makes their launches, from tests/acceptance/suite-ports/cases.json. */
+export function portsCases(root: string): PortsCase[] {
+  const {cases} = JSON.parse(
+    readFileSync(
+      path.join(root, 'tests', 'acceptance', 'suite-ports', 'cases.json'),
+      'utf8',
+    ),
+  ) as {cases: PortsCase[]};
+  const labels: string[] = [];
+  for (const entry of cases) {
+    // The label becomes part of file names, a test-cli label and an extension-host variable.
+    if (!LABEL_FORM.test(entry.label)) {
+      throw new Error(
+        `a ports case's label must match ${String(LABEL_FORM)}: "${entry.label}"`,
+      );
+    }
+    if (labels.includes(entry.label)) {
+      throw new Error(`two ports cases share the label "${entry.label}"`);
+    }
+    labels.push(entry.label);
+  }
+  return cases;
+}
+
+/**
+ * The host setup of a ports case, in the order the run runs it: free the held ports, free the server unless the case
+ * keeps it, then hold the case's ports, each waited on as it starts. The brackets keep `pkill` from matching the
+ * `sh -c` that runs it.
+ */
+export function portsHostSetup(portsCase: PortsCase): HostSetupEntry[] {
+  const entries: HostSetupEntry[] = [{command: "pkill -f 'n[c] -lk -p'; true"}];
+  if (portsCase.keepServer !== true) {
+    entries.push({
+      command:
+        "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; " +
+        'for i in $(seq 1 20); do ' +
+        "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
+        'sleep 0.5; done; exit 1',
+    });
+  }
+  const holders = portsCase.holders ?? [];
+  for (const holder of holders) {
+    entries.push({
+      command: `nc -lk -p ${String(holder)} -s 127.0.0.1 -e /bin/true`,
+      detach: true,
+    });
+  }
+  for (const holder of holders) {
+    entries.push({
+      command:
+        'for i in $(seq 1 20); do ' +
+        `netstat -ltn | grep -q ' 127.0.0.1:${String(holder)} ' && exit 0; ` +
+        'sleep 0.25; done; exit 1',
+    });
+  }
+  return entries;
+}
+
 /**
  * The launches of the VSCodium run: `local` runs suite-local in a plain window; `remote` runs suite-remote in a
  * window on `ssh-remote+harness`, where the runner is an extension of the workspace kind; `reconnect` runs
@@ -145,7 +241,8 @@ export function failureLabel(alias: string): string {
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
  * same without enabling the proposed API; `explorer`, `explorer-alone` and `explorer-no-proposals` do the same with
  * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
- * proposed API.
+ * proposed API; and each ports case of suite-ports/cases.json runs after every other launch, with its host setup and
+ * its own script.
  */
 export function launchesOf(root: string): Launch[] {
   const launches: Launch[] = [
@@ -209,6 +306,18 @@ export function launchesOf(root: string): Launch[] {
       suite: 'explorer-no-proposals',
       proposedApi: false,
     },
+    ...portsCases(root).map((portsCase): Launch => ({
+      label: `ports-${portsCase.label}`,
+      runner: 'runner-remote',
+      suite: 'suite-ports',
+      folderUri: `vscode-remote://ssh-remote+${
+        portsCase.authority ?? 'harness'
+      }/home/harness`,
+      settings: portsCase.settings,
+      environment: {HARNESS_PORTS_CASE: portsCase.label},
+      ownScript: true,
+      hostSetup: portsHostSetup(portsCase),
+    })),
   ];
   return launches;
 }

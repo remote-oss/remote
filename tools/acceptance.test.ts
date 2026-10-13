@@ -18,6 +18,8 @@ import {
   acceptanceConfiguration,
   type AttemptResult,
   bundleSuite,
+  FRESH_RESOLVE_WAIT_MILLISECONDS,
+  type Sleeper,
   downloadWithRetry,
   editorChoiceOf,
   type CommandResult,
@@ -50,7 +52,7 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
-import {acceptanceRunId} from './acceptance-run.ts';
+import {acceptanceRunId, type CommandRunner} from './acceptance-run.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -211,6 +213,22 @@ const FAILURE = {
   dialog: 'Could not establish connection to "refused".',
 };
 
+/** The labels a run launches with the fixture's cases, in order: the ports case last. */
+const LAUNCH_ORDER = [
+  'local',
+  'remote',
+  'reconnect',
+  'failure-refused',
+  'terminal',
+  'slow',
+  'windows',
+  'no-proposals',
+  'explorer',
+  'explorer-alone',
+  'explorer-no-proposals',
+  'ports-probe',
+];
+
 describe('acceptance', () => {
   let workspace: TemporaryWorkspace;
   let harness: FakeHarness;
@@ -221,6 +239,19 @@ describe('acceptance', () => {
     workspace.write(
       'tests/acceptance/suite-failure/cases.json',
       JSON.stringify({cases: [FAILURE]}),
+    );
+    workspace.write(
+      'tests/acceptance/suite-ports/cases.json',
+      JSON.stringify({
+        cases: [
+          {
+            label: 'probe',
+            cite: 'F-2409 AC-2 (probe)',
+            settings: {},
+            outcome: 'connected',
+          },
+        ],
+      }),
     );
   });
 
@@ -257,9 +288,27 @@ describe('acceptance', () => {
     );
   });
 
-  it('F-2601 AC-1: Host refused points at a closed port of the loopback', () => {
+  it('coverage-13: Host 127.0.0.1 reaches the harness host by the address as typed', () => {
     strictEqual(
       harnessSshConfig(49153, '/run').split('\n\n')[1],
+      [
+        'Host 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_ed25519',
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        '  StrictHostKeyChecking accept-new',
+        '  BatchMode yes',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts',
+      ].join('\n'),
+    );
+  });
+
+  it('F-2601 AC-1: Host refused points at a closed port of the loopback', () => {
+    strictEqual(
+      harnessSshConfig(49153, '/run').split('\n\n')[2],
       [
         'Host refused',
         '  HostName 127.0.0.1',
@@ -271,7 +320,7 @@ describe('acceptance', () => {
 
   it('F-2601 AC-3: Host nowhere names a host that never resolves', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run').split('\n\n')[2],
+      harnessSshConfig(49153, '/run').split('\n\n')[3],
       ['Host nowhere', '  HostName nowhere.invalid', '  BatchMode yes'].join(
         '\n',
       ),
@@ -280,7 +329,7 @@ describe('acceptance', () => {
 
   it('F-2601 AC-6: Host stranger is the harness host with its own empty known hosts, and asks', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run').split('\n\n')[3],
+      harnessSshConfig(49153, '/run').split('\n\n')[4],
       [
         'Host stranger',
         '  HostName 127.0.0.1',
@@ -624,15 +673,48 @@ describe('acceptance', () => {
       return JSON.parse(readFileSync(settingsPath(), 'utf8'));
     }
 
+    /** A command runner that records its calls and succeeds, for the host setup of a launch. */
+    function recordingCommand(): {calls: string[]; command: CommandRunner} {
+      const calls: string[] = [];
+      function command(
+        program: string,
+        programArguments: readonly string[],
+      ): CommandResult {
+        calls.push([program, ...programArguments].join(' '));
+        return {status: 0, stdout: '', stderr: ''};
+      }
+      return {calls, command};
+    }
+
+    /** A sleeper that records its waits. */
+    function recordingSleeper(): {waits: number[]; sleep: Sleeper} {
+      const waits: number[] = [];
+      function sleep(milliseconds: number): Promise<void> {
+        waits.push(milliseconds);
+        return Promise.resolve();
+      }
+      return {waits, sleep};
+    }
+
     /** The user settings each launch found when it started, by label. */
     async function settingsSeen(
       ...launches: Launch[]
     ): Promise<Map<string, unknown>> {
       const seen = new Map<string, unknown>();
-      await runLaunches(workspace.root, '/run/ssh_config', launches, launch => {
-        seen.set(launch?.label ?? '', settingsFile());
-        return Promise.resolve({exitCode: 0, output: ''});
-      });
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        launches,
+        command,
+        '',
+        sleep,
+        launch => {
+          seen.set(launch?.label ?? '', settingsFile());
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+      );
       return seen;
     }
 
@@ -663,32 +745,181 @@ describe('acceptance', () => {
     it('D-85: a retried launch finds the base settings again, not what the failed attempt left', async () => {
       const seen: unknown[] = [];
       let attempts = 0;
-      await runLaunches(workspace.root, '/run/ssh_config', [TERMINAL], () => {
-        attempts += 1;
-        seen.push(settingsFile());
-        writeFileSync(settingsPath(), '{"left": "behind"}');
-        return Promise.resolve({
-          exitCode: attempts === 1 ? 1 : 0,
-          output: attempts === 1 ? 'CodeWindow: detected unresponsive' : '',
-        });
-      });
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [TERMINAL],
+        command,
+        '',
+        sleep,
+        () => {
+          attempts += 1;
+          seen.push(settingsFile());
+          writeFileSync(settingsPath(), '{"left": "behind"}');
+          return Promise.resolve({
+            exitCode: attempts === 1 ? 1 : 0,
+            output: attempts === 1 ? 'CodeWindow: detected unresponsive' : '',
+          });
+        },
+      );
       deepStrictEqual(seen[1], seen[0]);
     });
 
     it('D-85: the VS Code run starts its one configuration without a label and writes no settings', async () => {
       const labels: Array<string | undefined> = [];
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
       await runLaunches(
         workspace.root,
         '/run/ssh_config',
         [undefined],
+        command,
+        '',
+        sleep,
         launch => {
           labels.push(launch?.label);
           return Promise.resolve({exitCode: 0, output: ''});
         },
       );
       deepStrictEqual(
-        [labels, existsSync(path.join(workspace.root, 'user-data', 'User'))],
-        [[undefined], false],
+        [
+          labels,
+          existsSync(path.join(workspace.root, 'user-data', 'User')),
+          readdirSync(workspace.root).filter(name =>
+            name.endsWith('-settings.json'),
+          ),
+        ],
+        [[undefined], false, []],
+      );
+    });
+
+    const PORTS: Launch = {
+      label: 'ports-probe',
+      runner: 'runner-remote',
+      suite: 'suite-ports',
+      settings: {
+        'remote.SSH.serverPickPortsFromRange': {harness: '45000-45010'},
+      },
+      hostSetup: [
+        {command: "pkill -f 'n[c] -lk -p'; true"},
+        {command: 'nc -lk -p 45000 -s 127.0.0.1 -e /bin/true', detach: true},
+      ],
+    };
+
+    it('coverage-13: a launch with host setup runs it in order, as root, before its window starts', async () => {
+      const order: string[] = [];
+      function command(
+        program: string,
+        programArguments: readonly string[],
+      ): CommandResult {
+        order.push([program, ...programArguments].join(' '));
+        return {status: 0, stdout: '', stderr: ''};
+      }
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [PORTS, REMOTE],
+        command,
+        'c0ffee',
+        sleep,
+        launch => {
+          order.push(`launch:${launch?.label ?? ''}`);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+      );
+      deepStrictEqual(
+        [
+          order.filter(call => call.startsWith('docker')),
+          order.indexOf('launch:ports-probe'),
+        ],
+        [
+          [
+            "docker exec --user root c0ffee sh -c pkill -f 'n[c] -lk -p'; true",
+            'docker exec -d --user root c0ffee sh -c nc -lk -p 45000 -s 127.0.0.1 -e /bin/true',
+          ],
+          2,
+        ],
+      );
+    });
+
+    it('coverage-13: a launch with host setup waits the helper grace after the previous launch, and a launch without does not', async () => {
+      const {command} = recordingCommand();
+      const {waits, sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [REMOTE, PORTS],
+        command,
+        '',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+      );
+      deepStrictEqual(waits, [FRESH_RESOLVE_WAIT_MILLISECONDS]);
+    });
+
+    it('coverage-13: a failing host setup fails the attempt with its command and its output', async () => {
+      function command(program: string): CommandResult {
+        return program === 'docker'
+          ? {status: 1, stdout: '', stderr: 'setup broke'}
+          : {status: 0, stdout: '', stderr: ''};
+      }
+      const {sleep} = recordingSleeper();
+      await rejects(
+        runLaunches(
+          workspace.root,
+          '/run/ssh_config',
+          [PORTS],
+          command,
+          'c0ffee',
+          sleep,
+          () => Promise.resolve({exitCode: 0, output: ''}),
+        ),
+        /host setup failed: pkill -f 'n\[c\] -lk -p'; true\nsetup broke/,
+      );
+    });
+
+    it('coverage-13: a launch with a label writes the same bytes to its own settings file', async () => {
+      const {command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [PORTS],
+        command,
+        '',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+      );
+      strictEqual(
+        readFileSync(
+          path.join(workspace.root, 'user-data', 'User', 'settings.json'),
+          'utf8',
+        ),
+        readFileSync(
+          path.join(workspace.root, 'ports-probe-settings.json'),
+          'utf8',
+        ),
+      );
+    });
+
+    it('coverage-13: the fresh-resolve wait is the extension helper grace', () => {
+      const bounds = readFileSync(
+        path.join(
+          REPOSITORY_ROOT,
+          'packages',
+          'remote-ssh',
+          'src',
+          'pipeline',
+          'bounds.ts',
+        ),
+        'utf8',
+      );
+      strictEqual(
+        FRESH_RESOLVE_WAIT_MILLISECONDS,
+        Number(/HELPER_GRACE_MILLISECONDS = (\d+)/.exec(bounds)?.[1]),
       );
     });
   });
@@ -937,21 +1168,28 @@ describe('acceptance', () => {
       );
     });
 
-    it('#253 Q14, rulings 1 and 2: test-cli ran the local label, the remote one, the reconnection and each failing connect', async () => {
+    it('#253 Q14, rulings 1 and 2: test-cli ran the local label, the remote one, the reconnection, each failing connect and the ports case, the ports case last', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.launched, [
-        'local',
-        'remote',
-        'reconnect',
-        'failure-refused',
-        'terminal',
-        'slow',
-        'windows',
-        'no-proposals',
-        'explorer',
-        'explorer-alone',
-        'explorer-no-proposals',
-      ]);
+      deepStrictEqual(harness.launched, LAUNCH_ORDER);
+    });
+
+    it('coverage-13: a ports case answers from its own script, written before the first launch', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        JSON.parse(
+          harness.firstLaunchFiles.get('ports-probe-script.json') ?? '',
+        ),
+        {
+          entries: [
+            {surface: 'failureDialog', match: '"', answer: 'dismiss'},
+            {
+              surface: 'mitigationPick',
+              match: 'Pick an action',
+              answer: 'dismiss',
+            },
+          ],
+        },
+      );
     });
 
     it("ruling 1: a failing connect's script is written before the first launch", async () => {
@@ -1051,19 +1289,7 @@ describe('acceptance', () => {
     it('#253 Q14: with the local run failing the remote ones still ran', async () => {
       harness.labelResults.set('local', {exitCode: 3, output: ''});
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.launched, [
-        'local',
-        'remote',
-        'reconnect',
-        'failure-refused',
-        'terminal',
-        'slow',
-        'windows',
-        'no-proposals',
-        'explorer',
-        'explorer-alone',
-        'explorer-no-proposals',
-      ]);
+      deepStrictEqual(harness.launched, LAUNCH_ORDER);
     });
 
     it('#253 Q14: with the remote run failing the exit code is non-zero', async () => {
@@ -1097,6 +1323,7 @@ describe('acceptance', () => {
           EXECUTABLE,
           EXECUTABLE,
           EXECUTABLE,
+          EXECUTABLE,
         ],
       );
     });
@@ -1108,7 +1335,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        [true, true, true, true, true, true],
+        [true, true, true, true, true, true, true],
       );
     });
 
@@ -1125,6 +1352,7 @@ describe('acceptance', () => {
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
           ['slow', 'dist-slow/**/*.test.cjs'],
+          ['ports-probe', 'dist-ports/**/*.test.cjs'],
         ],
       );
     });
@@ -1259,6 +1487,7 @@ describe('acceptance', () => {
           'failure-refused',
           'terminal',
           'slow',
+          'ports-probe',
         ].map(label => path.join('/run', `${label}-log.txt`)),
       );
     });
@@ -1270,7 +1499,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        [1, 2, 3, 4, 5].map(() =>
+        [1, 2, 3, 4, 5, 6].map(() =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -1495,6 +1724,7 @@ describe('acceptance', () => {
       workspace.write('tests/acceptance/suite-failure/window.test.ts', '');
       workspace.write('tests/acceptance/suite-terminal/window.test.ts', '');
       workspace.write('tests/acceptance/suite-slow/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-ports/window.test.ts', '');
       workspace.write(
         'tests/acceptance/slow-remote/src/extension.ts',
         'export function activate(): void {}\n',
@@ -1542,10 +1772,11 @@ describe('acceptance', () => {
           'dist-failure',
           'dist-terminal',
           'dist-slow',
+          'dist-ports',
         ].map(folder =>
           existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
         ),
-        [false, false, false, false, false, false, false],
+        [false, false, false, false, false, false, false, false],
       );
     });
 
@@ -1586,6 +1817,7 @@ describe('acceptance', () => {
           'dist-failure',
           'dist-terminal',
           'dist-slow',
+          'dist-ports',
         ].map(folder =>
           existsSync(
             path.join(
@@ -1596,7 +1828,7 @@ describe('acceptance', () => {
             ),
           ),
         ),
-        [true, true, true, true, true, true],
+        [true, true, true, true, true, true, true],
       );
     });
   });

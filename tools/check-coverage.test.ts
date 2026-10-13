@@ -240,6 +240,14 @@ describe('check-coverage', () => {
       deepStrictEqual(problems(), []);
     });
 
+    it('#142 2: a cites field of the ports suite satisfies an acceptance line', () => {
+      workspace.write('tests/acceptance/suite-ports/cases.json', {
+        cases: [{cite: 'F-2601 AC-6 (probe)'}, {label: 'no cite'}],
+      });
+      tagged('F-2601.AC-6\tacceptance\t');
+      deepStrictEqual(problems(), []);
+    });
+
     it('#142 2: a cases file with no list of cases cites nothing', () => {
       workspace.write('tests/acceptance/suite-failure/cases.json', {});
       tagged('F-2601.AC-6\tacceptance\t');
