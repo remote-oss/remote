@@ -150,6 +150,7 @@ function portsOf(
       }),
       pickPlatform: () => Promise.resolve(undefined),
       writePlatform: () => Promise.resolve(),
+      announcePlatform: () => undefined,
     },
     locate: {
       settingValue: () => '',

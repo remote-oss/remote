@@ -334,6 +334,7 @@ async function registerConnectOf(
         displayName: manifest.displayName,
       },
       acceptanceState: context.globalState,
+      noticeState: context.globalState,
     },
   );
   const machine = nodeMachineOf(

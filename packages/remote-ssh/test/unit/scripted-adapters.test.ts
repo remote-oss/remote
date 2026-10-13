@@ -760,6 +760,7 @@ describe('the scripted adapters answer from the script only', () => {
             question: 'Host added to the config',
             answer: 'OK',
             matched: true,
+            buttons: ['OK', 'Dismiss'],
             window: WINDOW,
           },
         ],
@@ -793,6 +794,7 @@ describe('the scripted adapters answer from the script only', () => {
             question: 'Broken',
             answer: 'dismiss',
             matched: false,
+            buttons: ['OK'],
             window: WINDOW,
           },
         ],
@@ -812,6 +814,7 @@ describe('the scripted adapters answer from the script only', () => {
             question: 'Something',
             answer: 'dismiss',
             matched: false,
+            buttons: ['OK'],
             window: WINDOW,
           },
         ],
@@ -1274,5 +1277,30 @@ describe('the windows of one script (card tooling-20)', () => {
 
   it('D-85: a window on the root folder is local', () => {
     strictEqual(windowNameOf('/'), 'local');
+  });
+});
+
+describe('a notice line of the record (card connect-25)', () => {
+  it('a notice record line carries its buttons, in order', async () => {
+    const {adapters, files} = scripted([
+      {surface: 'notice', match: 'You selected', answer: 'dismiss'},
+    ]);
+    await adapters.notice.showInformation('You selected "linux"', [
+      "Don't Show Again",
+      'Other',
+    ]);
+    deepStrictEqual(
+      files.lines().map(line => line.buttons),
+      [["Don't Show Again", 'Other']],
+    );
+  });
+
+  it('a notice nothing in the script matches still carries its buttons', async () => {
+    const {adapters, files} = scripted([]);
+    await adapters.notice.showInformation('Something else', ['OK']);
+    deepStrictEqual(
+      files.lines().map(line => line.buttons),
+      [['OK']],
+    );
   });
 });
