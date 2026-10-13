@@ -13,7 +13,12 @@ import {
   type FileChoice,
   type FileChoiceItem,
 } from './file-choice.ts';
-import {planCreation, starterTemplate, type Template} from './new-file.ts';
+import {
+  type NewFileInput,
+  planCreation,
+  starterTemplate,
+  type Template,
+} from './new-file.ts';
 
 /** What the command needs of the editor. */
 export interface ConfigFileEditor {
@@ -77,7 +82,7 @@ const STARTER_INDENT = {insertSpaces: true, tabSize: 4} as const;
  * of the setting, and a value that is neither absolute nor a `~` form is a command error, not a place under the
  * home folder.
  */
-function pathOf(
+export function pathOf(
   fileRow: Extract<FileChoiceItem, {kind: 'file'}>,
   homeFolder: string,
   platform: ClientPlatform,
@@ -96,6 +101,37 @@ function pathOf(
     );
   }
   return setting.path;
+}
+
+/** What making a file ready found and did. */
+export interface PreparedFile {
+  /** Whether the file was there before. */
+  exists: boolean;
+  /** Whether the file was made by this call, so it gets the starter template. */
+  insertTemplate: boolean;
+}
+
+/** Makes the file and the folders on its path when they are missing, with the modes of its role. */
+export async function createdFile(
+  files: ConfigFiles,
+  file: string,
+  role: NewFileInput['role'],
+): Promise<PreparedFile> {
+  const exists = await files.exists(file);
+  const plan = planCreation({
+    file,
+    role,
+    exists,
+    missingFolders: exists ? [] : await files.missingFolders(file),
+  });
+  for (const step of plan.steps) {
+    if (step.kind === 'folder') {
+      await files.makeFolder(step.path, step.mode);
+    } else {
+      await files.createFile(step.path, step.mode);
+    }
+  }
+  return {exists, insertTemplate: plan.insertTemplate};
 }
 
 /** The command: pick a file, make it when it is missing, open it, and give a new one its template. */
@@ -138,22 +174,9 @@ export function openConfigFileHandler(
         places.platform,
         translate,
       );
-      const exists = await files.exists(file);
-      const plan = planCreation({
-        file,
-        role: picked.role,
-        exists,
-        missingFolders: exists ? [] : await files.missingFolders(file),
-      });
-      for (const step of plan.steps) {
-        if (step.kind === 'folder') {
-          await files.makeFolder(step.path, step.mode);
-        } else {
-          await files.createFile(step.path, step.mode);
-        }
-      }
+      const created = await createdFile(files, file, picked.role);
       const opened = await editor.open(file);
-      if (plan.insertTemplate) {
+      if (created.insertTemplate) {
         await editor.insertTemplate(opened, starterTemplate(STARTER_INDENT));
       }
     },

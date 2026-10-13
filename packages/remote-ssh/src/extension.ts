@@ -25,8 +25,12 @@ import {activateRemoteSsh} from './activation.ts';
 import {
   configFileEditorOf,
   nodeConfigFiles,
+  nodeHostFiles,
 } from './config/config-file-editor.ts';
-import {openConfigFileHandler} from './config/open-config-file.ts';
+import {
+  type ConfigFilePlaces,
+  openConfigFileHandler,
+} from './config/open-config-file.ts';
 import {connectCommandEditorOf} from './connect/connect-editor.ts';
 import {nodeConfigReader} from './connect/node-config-reader.ts';
 import {connectAssemblyOf} from './connect-ports.ts';
@@ -169,6 +173,12 @@ export async function activate(
     name: manifest.name,
     version: manifest.version,
   };
+  const configPlaces: ConfigFilePlaces = {
+    homeFolder: homedir(),
+    platform: clientPlatformOf(process.platform),
+    userFile: path.join(homedir(), '.ssh', 'config'),
+    systemFile: SYSTEM_CONFIG_FILE,
+  };
   const help: HelpEditor = {
     openExternal: address => vscode.env.openExternal(vscode.Uri.parse(address)),
     openSettings: filter =>
@@ -202,12 +212,7 @@ export async function activate(
         openSettings: filter => help.openSettings(filter),
         openHelp: () => help.openExternal(CONFIG_HELP_ADDRESS),
       },
-      {
-        homeFolder: homedir(),
-        platform: clientPlatformOf(process.platform),
-        userFile: path.join(homedir(), '.ssh', 'config'),
-        systemFile: SYSTEM_CONFIG_FILE,
-      },
+      configPlaces,
       () => textOf(host, 'configFile'),
       extension,
       translate,
@@ -267,6 +272,7 @@ export async function activate(
       logger: result.logger,
       help: helpHandlers(help, helpLinksOf(manifest), extension),
       resolversGranted: result.proposals.granted.includes('resolvers'),
+      configPlaces,
     },
     adapters,
   );
@@ -308,6 +314,8 @@ interface ServedActivation {
   logger: Logger;
   help: HelpHandlers;
   resolversGranted: boolean;
+  /** The client's configuration files, which the command that adds a host writes to. */
+  configPlaces: ConfigFilePlaces;
 }
 
 /** The connect over the editor and this machine: its surfaces, its assembly and its registration. */
@@ -379,6 +387,13 @@ async function registerConnectOf(
       globalState: context.globalState,
       logger: served.logger,
       notice: adapters.notice,
+      addHost: {
+        editor: configFileEditorOf(vscode, translate),
+        input: adapters.textInput,
+        files: nodeHostFiles,
+        places: served.configPlaces,
+        configFile: () => textOf(host, 'configFile'),
+      },
     },
     connectAssemblyOf(surfaces, machine, served.logger),
     served.resolversGranted,

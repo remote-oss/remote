@@ -731,6 +731,21 @@ describe('the scripted adapters answer from the script only', () => {
     );
   });
 
+  it('card connect-22: a text input with a title is matched by its title, and the record keeps the title as the question', async () => {
+    const {adapters, files} = scripted([
+      {surface: 'textInput', match: 'Enter SSH', answer: {text: 'host1'}},
+    ]);
+    await adapters.textInput.showInputBox({
+      title: 'Enter SSH Connection Command',
+      prompt: 'ignored',
+      placeholder: 'ignored',
+    });
+    deepStrictEqual(
+      files.lines().map(line => (line as {question: string}).question),
+      ['Enter SSH Connection Command'],
+    );
+  });
+
   it('card tooling-24: a text input that asks no text is matched by an empty entry', async () => {
     deepStrictEqual(
       await scripted([

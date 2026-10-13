@@ -262,7 +262,7 @@ export function scriptedAdapters(
         Promise.resolve(
           answerFrom(
             'textInput',
-            request.prompt ?? request.placeholder ?? '',
+            request.title ?? request.prompt ?? request.placeholder ?? '',
             entry => ({
               value: entry.answer === 'dismiss' ? undefined : entry.answer.text,
               recorded:

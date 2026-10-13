@@ -38,6 +38,7 @@ function fakeEditor(answer: (shown: Shown) => string | undefined) {
   const picks: FakeQuickPick[] = [];
   const boxes: FakeInputBox[] = [];
   const inputs: Array<{
+    title: string | undefined;
     prompt: string | undefined;
     placeholder: string | undefined;
     typed: string | undefined;
@@ -93,6 +94,7 @@ function fakeEditor(answer: (shown: Shown) => string | undefined) {
           items: [],
         });
         inputs.push({
+          title: options.title,
           prompt: options.prompt,
           placeholder: options.placeHolder,
           typed,
@@ -658,6 +660,7 @@ describe('textInputOf and noticeOf (card tooling-24)', () => {
         'the-command',
         [
           {
+            title: undefined,
             prompt: 'Enter SSH Connection Command',
             placeholder: 'a host',
             typed: 'the-command',
@@ -667,13 +670,31 @@ describe('textInputOf and noticeOf (card tooling-24)', () => {
     );
   });
 
+  it('card connect-22: the text input passes the request title to the editor', async () => {
+    const fake = fakeEditor(() => undefined);
+    await textInputOf(fake.editor).showInputBox({
+      title: 'Enter SSH Connection Command',
+    });
+    deepStrictEqual(
+      fake.inputs.map(input => input.title),
+      ['Enter SSH Connection Command'],
+    );
+  });
+
   it('card tooling-24: a text input with no request and no typed text gives nothing', async () => {
     const fake = fakeEditor(() => undefined);
     deepStrictEqual(
       [await textInputOf(fake.editor).showInputBox({}), fake.inputs],
       [
         undefined,
-        [{prompt: undefined, placeholder: undefined, typed: undefined}],
+        [
+          {
+            title: undefined,
+            prompt: undefined,
+            placeholder: undefined,
+            typed: undefined,
+          },
+        ],
       ],
     );
   });

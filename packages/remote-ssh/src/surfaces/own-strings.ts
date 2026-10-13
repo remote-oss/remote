@@ -18,6 +18,10 @@ export const OWN_TEMPLATES = {
   platformStoredNotice:
     'You selected "{0}" as the remote platform - this will be stored in the setting "remote.SSH.remotePlatform" and can be changed there if needed.',
   S039: "Don't Show Again",
+  S025: 'Connect',
+  S063: 'Enter SSH Connection Command',
+  S078: 'Host added!',
+  S099: 'Open Config',
   configFileNotAbsolute:
     'remote.SSH.configFile must be an absolute path or start with ~/: "{0}"',
 } as const;

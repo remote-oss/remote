@@ -17,6 +17,10 @@ import {
   type Registration as CommandRegistration,
   registerCommands,
 } from 'lib-identifiers';
+import {
+  addNewSshHostHandler,
+  type AddHostSurroundings,
+} from './config/add-host-command.ts';
 import type {ConnectAssembly} from './connect-ports.ts';
 import {
   type ConnectCommandEditor,
@@ -57,6 +61,8 @@ export interface ConnectRegistrationHost {
   logger: Logger;
   /** The non-modal notices the maintenance commands show. */
   notice: NoticePort;
+  /** What the command that adds a host takes besides the notices and the window it opens. */
+  addHost: AddHostSurroundings;
 }
 
 /** What the registration gives back: whether the resolver is registered, and the end of everything it registered. */
@@ -117,11 +123,18 @@ export async function registerConnect(
       openEmptyWindowInCurrentWindow: commands.openEmptyWindowInCurrentWindow,
       openEmptyWindowOnCurrentHost: commands.openEmptyWindowOnCurrentHost,
       cleanLocalServer: commands.cleanLocalServer,
+      addNewSshHost: commands.addNewSshHost,
       cleanRemoteServer: commands.cleanRemoteServer,
       cleanDevBox: commands.cleanDevBox,
     },
     {
       ...connectCommandHandlers(host.connectEditor, connection),
+      addNewSshHost: addNewSshHostHandler({
+        ...host.addHost,
+        windows: host.connectEditor,
+        notice: host.notice,
+        translate: host.translate,
+      }),
       ...maintenanceHandlers({
         editor: host.connectEditor,
         perform: (action, target) => assembly.maintain(action, target),
