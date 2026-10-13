@@ -125,6 +125,20 @@ const START_TEXTS = [
   '{1} is not a valid host to bind',
 ];
 
+/** The prompts' and the host pick's own templates, which the code translates at run time. */
+const PROMPT_AND_PICK_TEXTS = [
+  'Select configured SSH host or enter user@host',
+  '{0} Add New SSH Host...',
+  'Configure SSH Hosts...',
+  '"{0}" has fingerprint "{1}".',
+  'Are you sure you want to continue connecting?',
+  'Are you sure you want to continue?',
+  'Continue',
+  'Enter passphrase for ssh key {0}',
+  'Enter password',
+  'Enter password for {0}',
+];
+
 function bundle(file: string): Record<string, string> {
   return JSON.parse(readFileSync(path.join(BUNDLES, file), 'utf8')) as Record<
     string,
@@ -153,6 +167,7 @@ describe('the runtime strings of the extension', () => {
           ...PLATFORM_NOTICE_TEXTS,
           ...ADD_HOST_TEXTS,
           ...START_TEXTS,
+          ...PROMPT_AND_PICK_TEXTS,
           'SSH: {0}',
         ].map(text => [text, text]),
       ),

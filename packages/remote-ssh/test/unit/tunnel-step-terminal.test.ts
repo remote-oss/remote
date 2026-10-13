@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import type {PortChoice} from '../../src/pipeline/port-choice.ts';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import type {TunnelSettings} from 'lib-forwarding';
 import {FakeLocalPort} from 'lib-forwarding/testing/fake-network';
@@ -56,6 +57,7 @@ function stepWith(
     settingsNow?: () => TunnelSettings;
     server?: StartedServer;
     port?: number | undefined;
+    busyRange?: {first: number; last: number};
     reveal?: boolean;
     connectScript?: Array<'work' | 'fail' | 'hang'>;
     connectWait?: ConnectWaitSettings;
@@ -73,6 +75,12 @@ function stepWith(
   let waits = 0;
   let portsChosen = 0;
   const port = 'port' in options ? options.port : LOCAL_PORT;
+  const choice: PortChoice =
+    options.busyRange !== undefined
+      ? {busyRange: options.busyRange}
+      : port === undefined
+        ? {noPort: true}
+        : {port};
   const step = openTunnelStep({
     settings: () => options.settingsNow?.() ?? options.settings ?? SECOND_SSH,
     local,
@@ -83,7 +91,7 @@ function stepWith(
     },
     chooseLocalPort: () => {
       portsChosen += 1;
-      return Promise.resolve(port);
+      return Promise.resolve(choice);
     },
     environment: () => ENVIRONMENT,
     terminals,
@@ -198,6 +206,33 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     deepStrictEqual(
       [await open(), terminals.opened.length],
       [{kind: 'failed', failure: {kind: 'unknown'}}, 0],
+    );
+  });
+
+  it('F-2104.AC-14: a busy preferred range opens no terminal and fails with the reason of its text, on the second-ssh path', async () => {
+    const {open, terminals} = stepWith({
+      busyRange: {first: 41060, last: 41061},
+    });
+    deepStrictEqual(
+      [await open(), terminals.opened.length],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'unknown',
+            reason: {
+              id: 'S067',
+              values: [
+                {
+                  id: 'S073',
+                  values: [{id: 'S095', values: ['41060', '41061']}],
+                },
+              ],
+            },
+          },
+        },
+        0,
+      ],
     );
   });
 

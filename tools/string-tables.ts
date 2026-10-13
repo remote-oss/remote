@@ -7,13 +7,15 @@
  * Every `%key%` of package.json has a text in package.nls.json. Each locale has package.nls.<locale>.json with
  * exactly the keys of package.nls.json. When l10n/ exists, each locale has l10n/bundle.l10n.<locale>.json with
  * exactly the keys of the default bundle l10n/bundle.l10n.json, or, in a package that ships no default bundle
- * the same keys as every other locale's bundle; the folder holds nothing else. Every text is a non-empty string. The locales are
+ * the same keys as every other locale's bundle; the folder holds nothing else. Every string the package's code
+ * translates (see translated-strings.ts) is a key of the default bundle. Every text is a non-empty string. The locales are
  * identifiers.json's `locales`, or the locales of the tables present when it names none.
  */
 
 import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {readPackageSources} from './identifier-sources.ts';
+import {translatedStrings} from './translated-strings.ts';
 import {
   isMainModule,
   messageOf,
@@ -161,6 +163,40 @@ function nlsProblems(
   );
 }
 
+/** The source files of a package that ship: the TypeScript files under src, without tests, fixtures and test doubles. */
+function shippedSources(directory: string, relative = 'src'): string[] {
+  const folder = path.join(directory, relative);
+  if (!existsSync(folder)) {
+    return [];
+  }
+  return readdirSync(folder, {withFileTypes: true}).flatMap(entry => {
+    const child = `${relative}/${entry.name}`;
+    if (entry.isDirectory()) {
+      return entry.name === 'testing' ? [] : shippedSources(directory, child);
+    }
+    return entry.name.endsWith('.ts') &&
+      !entry.name.endsWith('.test.ts') &&
+      !entry.name.endsWith('.fixture.ts')
+      ? [child]
+      : [];
+  });
+}
+
+/** A problem for each string the package's code translates that the default bundle has no key for. */
+function untranslatedProblems(
+  directory: string,
+  keys: ReadonlySet<string>,
+): FileProblem[] {
+  return shippedSources(directory).flatMap(file =>
+    translatedStrings(file, readFileSync(path.join(directory, file), 'utf8'))
+      .filter(found => !keys.has(found.text))
+      .map(found => ({
+        file: `${file}:${String(found.line)}`,
+        text: `"${found.text}" is translated but not a key of ${BUNDLE_SOURCE}`,
+      })),
+  );
+}
+
 function bundleProblems(
   directory: string,
   locales: readonly string[],
@@ -186,6 +222,7 @@ function bundleProblems(
     }
     problems.push(...emptyTextProblems(BUNDLE_SOURCE, source));
     sourceKeys = new Set(source.keys());
+    problems.push(...untranslatedProblems(directory, sourceKeys));
   }
   const bundles = readTables(directory, translatedFiles, problems);
   problems.push(

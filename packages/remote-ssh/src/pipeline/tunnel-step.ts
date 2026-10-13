@@ -30,6 +30,7 @@ import {
   type TerminalLogin,
 } from 'lib-ssh';
 import {isAborted, portOf} from './connect.ts';
+import {busyRangeReason, type PortChoice} from './port-choice.ts';
 import type {ConnectInput, ConnectSteps} from './steps.ts';
 
 /** What the window gets besides the tunnel: the variables of its extension host and its environment tunnels. */
@@ -47,8 +48,8 @@ export interface TunnelStepDependencies {
   limits: WaitLimits;
   /** The dialer through the connection's SOCKS relay on `socksPort`; the extension gives lib-forwarding's `socksDialer`. */
   dialerFor(socksPort: number): Dialer;
-  /** The window's port on this machine's loopback, or nothing when none is free. */
-  chooseLocalPort(): Promise<number | undefined>;
+  /** The window's port on this machine's loopback, or why none is free. */
+  chooseLocalPort(): Promise<PortChoice>;
   /** The window's environment for the connection that is being set up. */
   environment(): WindowEnvironment;
   /** The login terminals of the editor. */
@@ -84,6 +85,18 @@ const NOT_OPENED: Awaited<ReturnType<ConnectSteps['openTunnel']>> = {
   kind: 'failed',
   failure: {kind: 'unknown'},
 };
+
+/** The failure of a tunnel with no local port: the busy range's reason, or none when no range was searched. */
+function notOpenedFor(
+  chosen: Exclude<PortChoice, {port: number}>,
+): TunnelResult {
+  return 'busyRange' in chosen
+    ? {
+        kind: 'failed',
+        failure: {kind: 'unknown', reason: busyRangeReason(chosen.busyRange)},
+      }
+    : NOT_OPENED;
+}
 
 /** What the step gives when it opens a tunnel. */
 type TunnelResult = Awaited<ReturnType<ConnectSteps['openTunnel']>>;
@@ -151,10 +164,11 @@ async function openTerminalTunnel(
   if (isAborted(cancellation)) {
     return CANCELLED;
   }
-  const localPort = await dependencies.chooseLocalPort();
-  if (localPort === undefined) {
-    return NOT_OPENED;
+  const chosen = await dependencies.chooseLocalPort();
+  if (!('port' in chosen)) {
+    return notOpenedFor(chosen);
   }
+  const localPort = chosen.port;
   if (isAborted(cancellation)) {
     return CANCELLED;
   }
@@ -291,10 +305,11 @@ export function openTunnelStep(
     if (path !== 'socks') {
       return openTerminalTunnel(dependencies, path, given);
     }
-    const localPort = await dependencies.chooseLocalPort();
-    if (localPort === undefined) {
-      return NOT_OPENED;
+    const chosen = await dependencies.chooseLocalPort();
+    if (!('port' in chosen)) {
+      return notOpenedFor(chosen);
     }
+    const localPort = chosen.port;
     const dialer = dependencies.dialerFor(lease.socksPort);
     const outcome = await openRelayTunnel({
       dialer,

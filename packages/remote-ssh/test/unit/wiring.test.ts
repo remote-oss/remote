@@ -105,7 +105,7 @@ function portsOf(
     connection?: SharedConnection;
     mode?: ConnectionMode;
     cliLocal?: FakeLocalPort;
-    bridgePort?: number | 'none';
+    bridgePort?: number | 'none' | 'busy';
     cliTemplate?: string;
     useExecServer?: boolean;
     localDownloadMode?: LocalDownloadMode;
@@ -232,7 +232,7 @@ function portsOf(
         heldBytesMaximum: 8,
       },
       dialerFor: () => new FakeDialer(['work']),
-      chooseLocalPort: () => Promise.resolve(50000),
+      chooseLocalPort: () => Promise.resolve({port: 50000}),
       logger,
     },
     cliPath: {
@@ -241,8 +241,10 @@ function portsOf(
       chooseLocalPort: () =>
         Promise.resolve(
           changes.bridgePort === 'none'
-            ? undefined
-            : (changes.bridgePort ?? BRIDGE_PORT),
+            ? {noPort: true}
+            : changes.bridgePort === 'busy'
+              ? {busyRange: {first: 41060, last: 41061}}
+              : {port: changes.bridgePort ?? BRIDGE_PORT},
         ),
       newSecret: () => 'fresh-secret',
       presenter: {
@@ -1209,12 +1211,20 @@ describe("the composition's CLI path", () => {
 
   it('cli-04 §4: the bridge gives the window that port on 127.0.0.1', async () => {
     const {bridge} = await bridged();
-    deepStrictEqual(bridge?.address, {host: '127.0.0.1', port: BRIDGE_PORT});
+    deepStrictEqual(
+      bridge !== undefined && 'address' in bridge ? bridge.address : undefined,
+      {host: '127.0.0.1', port: BRIDGE_PORT},
+    );
   });
 
   it('cli-04 §4: with no free port there is no bridge', async () => {
     const {bridge} = await bridged({bridgePort: 'none'});
     deepStrictEqual(bridge, undefined);
+  });
+
+  it('F-2104.AC-14: with every port of the preferred range busy the bridge answers the range', async () => {
+    const {bridge} = await bridged({bridgePort: 'busy'});
+    deepStrictEqual(bridge, {busyRange: {first: 41060, last: 41061}});
   });
 
   it('cli-04 §4: a port that cannot be listened on gives no bridge', async () => {

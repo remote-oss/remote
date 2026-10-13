@@ -10,6 +10,7 @@
  * folder are removed at the end, whatever the outcome. Run `pnpm package` first; `pnpm test:acceptance` does both.
  */
 
+import {holdClientPorts, type PortHolder} from './acceptance-occupy.ts';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
@@ -570,6 +571,7 @@ export async function runLaunches(
   runLaunch: (launch?: Launch) => Promise<AttemptResult>,
   beforeAttempt: (launch: Launch) => Promise<void> = () => Promise.resolve(),
   bases: Readonly<Record<string, string | undefined>> = {},
+  holdPorts: PortHolder = holdClientPorts,
 ): Promise<number[]> {
   const exitCodes: number[] = [];
   for (const launch of launches) {
@@ -597,7 +599,12 @@ export async function runLaunches(
           );
           await beforeAttempt(launch);
         }
-        return runLaunch(launch);
+        const held = await holdPorts(launch?.clientListeners ?? []);
+        try {
+          return await runLaunch(launch);
+        } finally {
+          await held.release();
+        }
       }, console.log.bind(console)),
     );
   }

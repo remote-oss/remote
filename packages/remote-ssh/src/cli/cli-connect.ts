@@ -6,6 +6,7 @@
  * transport and shows the failure.
  */
 
+import {busyRangeReason} from '../pipeline/port-choice.ts';
 import type {Connected, Failed} from 'lib-authority';
 import type {Logger} from 'lib-log';
 import {openCliControl, type Plan, type ProbedHost} from 'lib-server';
@@ -181,6 +182,13 @@ export async function connectOverCli(
       controlEnded.push(listener);
     },
   });
+  if (bridge !== undefined && 'busyRange' in bridge) {
+    await abandon();
+    return {
+      kind: 'failed',
+      failure: {kind: 'unknown', reason: busyRangeReason(bridge.busyRange)},
+    };
+  }
   if (bridge === undefined) {
     await abandon();
     return {kind: 'fallback', cause: 'no local port for the bridge'};

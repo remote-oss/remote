@@ -676,11 +676,11 @@ describe("the assembled ports' window port", () => {
         machine,
         loggerOf(recorded),
       ).tunnel.chooseLocalPort(),
-      40001,
+      {port: 40001},
     );
   });
 
-  it('F-2104 BR-9: no free port in the range gives none', async () => {
+  it('F-2104 7.E1: no free port in the range gives the busy range', async () => {
     const {surfaces, machine, recorded} = assemblyInputs(
       {'remote.SSH.preferredLocalPortRange': '40000-40000'},
       {prober: new FakeProber({40000: 'open'})},
@@ -691,7 +691,22 @@ describe("the assembled ports' window port", () => {
         machine,
         loggerOf(recorded),
       ).tunnel.chooseLocalPort(),
-      undefined,
+      {busyRange: {first: 40000, last: 40000}},
+    );
+  });
+
+  it('F-2104 7.E1: with no range and no free random port there is no port', async () => {
+    const {surfaces, machine, recorded} = assemblyInputs(
+      {},
+      {prober: new FakeProber({})},
+    );
+    deepStrictEqual(
+      await wiringPortsOf(
+        surfaces,
+        machine,
+        loggerOf(recorded),
+      ).tunnel.chooseLocalPort(),
+      {noPort: true},
     );
   });
 

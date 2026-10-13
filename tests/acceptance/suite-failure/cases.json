@@ -158,6 +158,28 @@
         }
       ],
       "dialog": "Could not establish connection to \"harness\": Connecting was canceled."
+    },
+    {
+      "label": "port-range-busy",
+      "alias": "harness",
+      "cite": "F-2104 AC-14",
+      "settings": {
+        "remote.SSH.preferredLocalPortRange": "41060-41061"
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Error establishing tunnel (Failed to find a free local port: No free ports in specified range '41060-41061'.  Remove or update the 'Preferred Local Port Range' setting and try again.).",
+      "clientListeners": [41060, 41061]
     }
   ]
 }

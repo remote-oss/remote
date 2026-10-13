@@ -83,6 +83,7 @@ import {
 } from './pipeline/connect-settings.ts';
 import type {ConnectionRequestEnvironment} from './pipeline/connection-request.ts';
 import {connectorOf, type SshConnector} from './pipeline/connector.ts';
+import type {PortChoice} from './pipeline/port-choice.ts';
 import {hostAlias} from './pipeline/host-settings.ts';
 import {
   type MaintenanceRun,
@@ -181,23 +182,24 @@ function definedEnvironment(
   );
 }
 
-/** The window's local port: the first free one in the preferred range, else any free one; nothing when none is. */
+/** The window's local port: the first free one in the preferred range, else any free one; or why there is none. */
 async function chooseLocalPort(
   prober: PortProber,
   settingValue: unknown,
   logger: Logger,
-): Promise<number | undefined> {
+): Promise<PortChoice> {
   const parsed = parseRange(settingValue);
   if ('none' in parsed && parsed.reason !== 'empty') {
     logger.info(
       `remote.SSH.preferredLocalPortRange is ignored: ${parsed.reason}`,
     );
   }
-  const found = await findFreePort(
-    prober,
-    'range' in parsed ? parsed.range : undefined,
-  );
-  return 'port' in found ? found.port : undefined;
+  const range = 'range' in parsed ? parsed.range : undefined;
+  const found = await findFreePort(prober, range);
+  if ('port' in found) {
+    return {port: found.port};
+  }
+  return range === undefined ? {noPort: true} : {busyRange: range};
 }
 
 /** The download override's policy of Remote - SSH in `policies`; a table without one is a defect. */
@@ -225,7 +227,7 @@ export function wiringPortsOf(
     revealLoginTerminals: () => switchOf(settings, 'showLoginTerminal'),
   };
   /** A loopback port for the window, the tunnel's or the CLI bridge's, in the preferred range when one is free. */
-  function chooseWindowPort(): Promise<number | undefined> {
+  function chooseWindowPort(): Promise<PortChoice> {
     return chooseLocalPort(
       machine.prober,
       valueOf(settings, 'preferredLocalPortRange'),
