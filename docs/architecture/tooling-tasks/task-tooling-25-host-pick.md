@@ -16,8 +16,8 @@ and F-2204 can't be driven either. Builder: hestia or iris (hermes assigns). Siz
 'dismiss'}`, matched on the pick's placeholder (`Select configured SSH host or enter user@host`, the model's own
 `placeholder`, filled). An entry may name a `window`, as tooling-20 allows.
 
-- **`{label}`:** the row of the initial model whose shown label is `label`; a fixed row (`Add New SSH Host...`,
-  `Configure SSH Hosts...`) is matched by its translated text. No such row fails closed.
+- **`{label}`:** the row of the initial model whose shown label is `label`; a fixed row is matched by its shown text: `$(plus) Add New SSH Host...` (S167 filled with `$(plus)`) or
+  `Configure SSH Hosts...` (S024). No such row fails closed.
 - **`{typed}`:** the `typed` row (`➤ <text>`) of `modelOf(typed)`. F-2301 6.1 step 2 says the row focused after typing
   is the first one after core's filter and match sort. `modelOf` is unfiltered and lists the hosts first, so its first
   row can be a host such as `harness` for `harness@127.0.0.1`. The script doesn't model core's filter: a `{typed}`
@@ -66,7 +66,7 @@ Two capability rows in `tests/acceptance/windows/two-windows.test.ts`:
 | Name | Expected |
 |---|---|
 | `D-85: the configuration-file pick of Open SSH Configuration File... is answered from the script` | with the entry `{surface: 'filePick', match: 'Edit custom SSH configuration file', answer: 'dismiss', window: 'c'}`, `inWindow('c', 'opensshremotes.openConfigFile')` resolves; the record has one `filePick` line of window `c` whose `items` include the run's `<run>/ssh_config` path, `Settings` and `Help` |
-| `D-85: the host pick of Kill Local Connection Server is answered from the script` | with the entry `{surface: 'hostPick', match: 'Select configured SSH host', answer: 'dismiss', window: 'c'}`, `inWindow('c', 'opensshremotes.cleanLocalServer')` resolves; the record has one `hostPick` line of window `c` whose `items` include `harness`, `Add New SSH Host...` and `Configure SSH Hosts...` |
+| `D-85: the host pick of Kill Local Connection Server is answered from the script` | with the entry `{surface: 'hostPick', match: 'Select configured SSH host', answer: 'dismiss', window: 'c'}`, `inWindow('c', 'opensshremotes.cleanLocalServer')` resolves; the record has one `hostPick` line of window `c` whose `items` include `harness`, `$(plus) Add New SSH Host...` and `Configure SSH Hosts...` |
 
 remote-ssh stays at 100/100/100.
 
