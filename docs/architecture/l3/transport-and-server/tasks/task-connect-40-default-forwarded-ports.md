@@ -17,19 +17,25 @@ Nothing reads the setting, so on main no default port is forwarded.
 
 ## 2. The rules (F-2507 5.0, BR-2 to BR-7, W4)
 
-- **R1** (BR-5; athena, register e2e9bba): the decision is lib-forwarding's `shouldApplyDefaults(isReconnection)`
-  (`defaults/policy.ts`), called at each resolve that settles connected, where `isReconnection` is true when **an
-  earlier resolve in this extension host succeeded**.
-  - A connect and a reload apply the defaults: a reload starts a new extension host.
-  - A first connection's Retry applies them too: its first resolve failed, so no earlier resolve succeeded.
-  - A reconnection's resolve doesn't (6.5 step 3).
-  - The hook sits where connect-33 sets `forwardedPortsViewEnabled` when a resolve settles connected. The setting is read
-    there with the settings port's precedence (BR-6: user, remote, folder), through
-    `valueOf(host, 'defaultForwardedPorts')`.
-- **R2** (BR-2, 5.0 step 2): for each `parseDefaultForwards(...).requests` entry, in order, call `openTunnel` with:
-  - `remoteAddress: {host: 'localhost', port: remotePort}`;
-  - `localAddressPort: localPort` (the parser gives the remote port when none is set);
-  - `label: name`, when present.
+- **R1** (BR-5; athena, register e2e9bba; themis on #678): the decision is lib-forwarding's
+  `shouldApplyDefaults(isReconnection)` (`defaults/policy.ts`), made by **the connect itself once it has succeeded**,
+  with the connect's own `input.isReconnection`.
+  - That value is the resolver host's `memory.connectedBefore` (`lib-authority/src/resolver/host.ts`): false until a
+    resolve in this extension host succeeds, then true. It reaches `connect` as `input.isReconnection`.
+  - So a connect and a reload apply the defaults (a reload starts a new extension host), and so does a first
+    connection's Retry, since its first resolve failed and `connectedBefore` is still false. A reconnection's resolve
+    doesn't (6.5 step 3).
+  - Not connect-33's `onFirstResolveSettled`: that fires once per extension host, failed resolves included.
+  - The setting is read when the call is made, with the settings port's precedence (BR-6: user, remote, folder),
+    through `valueOf(host, 'defaultForwardedPorts')`.
+- **R2** (BR-2, 5.0 step 2): `parseDefaultForwards` already returns `TunnelRequest`s,
+  `{remoteHost: 'localhost', remotePort, localPort, label?}`, with the setting's `name` mapped to `label` and
+  `localPort` defaulting to the remote port. For each request, in order, call `openTunnel` with:
+  - `remoteAddress: {host: request.remoteHost, port: request.remotePort}`;
+  - `localAddressPort: request.localPort`;
+  - `label: request.label`, when present.
+
+  A request has no `name`.
 - **R3** (W4 failures): a skipped entry is logged at info, `defaultForwardedPorts entry <index> is skipped: <reason>`,
   and so is a `settingProblem`. An `openTunnel` that rejects is logged at warn, and the others still open.
   - Nothing is shown (AC-6).
@@ -45,9 +51,13 @@ Nothing reads the setting, so on main no default port is forwarded.
 2. **A module `forwarding/default-forwards.ts`** (remote-ssh): `applyDefaults(forwards, port, logger): Promise<void>`
    by R2–R3, over a port `{openTunnel(options): PromiseLike<unknown>}`, and its editor adapter over
    `vscode.workspace.openTunnel` (the `tunnels` proposal the manifest declares).
-3. **The hook:** in the activation code where connect-33 sets `forwardedPortsViewEnabled` when a resolve settles
-   connected, keep one flag per extension host, "a resolve has succeeded". When `shouldApplyDefaults(<that flag>)` is
-   true, call `applyDefaults(defaultForwardsOf(settings), …)`, not awaited by the resolve, then set the flag.
+3. **The call:**
+   - a new step, `ConnectSteps.applyDefaults(input): Promise<void>`, wired in `pipeline/wiring.ts` over
+     `defaultForwardsOf(settings)` and `applyDefaults`'s port;
+   - `connect.ts` calls it in both connect paths, the CLI one and the direct one, where `rememberPlatform` is called
+     after a success: `if (shouldApplyDefaults(input.isReconnection)) { void quietly('the default forwards', () =>
+     steps.applyDefaults(input)); }`. It's never awaited by the resolve (connect-37's reason);
+   - no flag of the extension host's own, since `connectedBefore` already is that flag.
 
 ## 4. Rows
 
@@ -60,8 +70,10 @@ Nothing reads the setting, so on main no default port is forwarded.
 | F-2507 7.E6 | two entries with remote port 8002 | one call, the first entry's |
 | F-2507 7.E4 | `[{remotePort: 'x'}, 5, {remotePort: 8003}]` | one call, for 8003; two info lines naming indexes 0 and 1 |
 | F-2507 W4 | the first `openTunnel` rejects | the second is still called; one warn line; `applyDefaults` resolves |
-| F-2507 BR-5 | the hook fired by a first resolve that succeeded, then a reconnection's resolve that succeeded | `applyDefaults` ran once |
-| F-2507 BR-5 | a first resolve that failed, then the Retry's resolve that succeeded (no earlier success) | `applyDefaults` ran once, at the Retry |
+| F-2507 BR-5 | a successful connect with `isReconnection` `false` (`connect.test.ts`, each path) | the `applyDefaults` step was called once |
+| F-2507 BR-5 | a successful connect with `isReconnection` `true` | not called |
+| F-2507 BR-5 | a failed connect with `isReconnection` `false` (a first resolve that fails) | not called; the following Retry, still `isReconnection` `false`, calls it once |
+| F-2507 W4 | the `applyDefaults` step never settles | the connect still resolves `connected` |
 | F-2507.AC-6 | any input | no notice port was called (the rows' fake surfaces) |
 
 **Acceptance row** (VSCodium, a plain launch `default-ports`, settings
@@ -85,7 +97,6 @@ reviews; athena gives the design check.
 
 ## 6. Open rows (stop and report on #677)
 
-1. connect-33's hook can't tell a resolve that settles connected from one that fails, so the flag can't be kept by
-   R1's rule. Report what the hook gets.
-2. `openTunnel` from the local extension host isn't allowed before core's Ports view is registered. Report the error
-   text.
+1. `openTunnel` called before the resolver has returned its result (the call isn't awaited, but it's started first)
+   rejects, or core's tunnel service waits on the unresolved window. Report the error text or the wait. Don't defer the
+   call by a timer.

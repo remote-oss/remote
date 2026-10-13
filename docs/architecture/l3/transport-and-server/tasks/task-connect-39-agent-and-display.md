@@ -2,7 +2,8 @@
 
 Issue: #676. Slice 2 (#41), in 0.2 under the standing plan, not gating (athena, register 3289d3d). Spec: F-2311
 (`remote-oss/remote-ssh#44`) and F-2312 (`#45`). Size: about 3 agent-days. Builder: assigned by hermes. Build order:
-after the gating cards.
+after the gating cards, and after tooling-29's build (its `agentAdd` and `fingerprintOf`, which the acceptance rows
+use, aren't on main yet; themis on #678).
 
 ## 1. What's missing
 
