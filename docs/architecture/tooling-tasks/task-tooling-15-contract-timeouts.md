@@ -46,8 +46,8 @@ triton reviews.
 
 #483 built this card. Two things in it were wrong:
 - **Only `shared-channel-contract.test.ts` runs real processes** (`localShell()`, a real `/bin/sh`).
-  `host-channel-contract.test.ts` uses the in-memory `ScriptedSpawner`, and its rows take milliseconds. Main sets the
-  timeout only in the shared suite, which is right.
+  `host-channel-contract.test.ts` uses the in-memory `ScriptedSpawner`, and its rows take milliseconds. #483 set the
+  timeout in both suites (`host-channel-contract.test.ts` line 186 too). It's harmless there and stays.
 - **Not every other process-spawning suite sets a timeout.** `lib-ssh`'s `shell-runs.test.ts` and
   `askpass-launcher.test.ts`, and `lib-server`'s `cli-script.test.ts`, spawn real processes under the 2 s default.
   Card tooling-21 (#494) gives them the same timeout.
