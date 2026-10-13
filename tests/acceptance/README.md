@@ -85,6 +85,15 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   harness copies the extension into `/home/harness/slow-remote` before the launches (`hostExtensions`) and the launch
   loads it with `--extensionDevelopmentPath=vscode-remote://ssh-remote+harness/home/harness/slow-remote`.
 
+- `client-<name>`: eighteen launches, one per entry of `suite-client/cases.json`, each in a window on
+  `vscode-remote://ssh-remote+harness/home/harness` with `suite-client/`. The run writes fake ssh clients into
+  `<run>/clients/` before the first launch (`tools/acceptance-clients.ts`); each logs its name and `check`, `options` or
+  `connect` to `calls.log`, answers `-V` with the banner of its case and otherwise runs the real `ssh`. A launch sets its
+  own `remote.SSH.path`, puts `clients/path` first on `PATH`, and the rows compare `calls.log` with the case. Every
+  launch is a fresh resolve: before a launch the run waits 5 s for the connection helper of the one before to end
+  (its grace is 3 s) and clears `calls.log`, because a live helper is reused without any check. The launches run in
+  every VSCodium run.
+
 - `windows`: a launch with no runner (`kind: 'plain'`). The editor is started plainly, as a user starts it, with no test run in it, one user-data folder and the run's extensions folder, which holds our VSIX files and the window agent's; a Node mocha run of `windows/*.test.ts` drives and observes it. See "Several windows".
 
 - `no-proposals`: the same without the proposed API.

@@ -1,6 +1,7 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {
   bundleFolderOf,
+  clientCases,
   CONFIG_FILE_LAUNCHES,
   extensionsOf,
   failureCases,
@@ -11,6 +12,7 @@ import {
   portsHostSetup,
   runnerLaunches,
   suitesOf,
+  withRunTokens,
 } from './acceptance-launches.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -18,7 +20,7 @@ import {TemporaryWorkspace} from './temporary-workspace.ts';
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow, windows, no-proposals, the three explorer launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, slow, the client searches, windows, no-proposals, the three explorer launches and the ports cases in the order of theirs', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -30,6 +32,7 @@ describe('the launches of the VSCodium run', () => {
         ),
         'terminal',
         'slow',
+        ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'windows',
         'no-proposals',
         'explorer',
@@ -107,7 +110,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are the terminal launch, the failing connects that name them, the explorer launches and every ports case', () => {
+  it('D-85: the settings of their own are the terminal launch, the failing connects that name them, the client searches, the explorer launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -115,6 +118,7 @@ describe('the launches of the VSCodium run', () => {
       [
         'failure-refused-shown',
         'terminal',
+        ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
@@ -334,6 +338,136 @@ describe('the ports cases', () => {
         ],
       });
       throws(() => portsCases(workspace.root), /share the label "x"/);
+    } finally {
+      workspace.remove();
+    }
+  });
+});
+
+describe('the client-search launches', () => {
+  const searches = launchesOf(REPOSITORY_ROOT).filter(launch =>
+    launch.label.startsWith('client-'),
+  );
+
+  it('coverage-11: there are 18, one for each case of the cases file', () => {
+    deepStrictEqual(
+      [searches.length, clientCases(REPOSITORY_ROOT).length],
+      [18, 18],
+    );
+  });
+
+  it('coverage-11: each runs suite-client in a remote window with a script and record of its own', () => {
+    deepStrictEqual(
+      searches.map(launch => [
+        launch.kind,
+        launch.suite,
+        launch.folderUri,
+        'ownScript' in launch ? launch.ownScript : undefined,
+      ]),
+      searches.map(() => [
+        undefined,
+        'suite-client',
+        'vscode-remote://ssh-remote+harness/home/harness',
+        true,
+      ]),
+    );
+  });
+
+  it("coverage-11: each puts the run's fake clients first on the PATH and names its case", () => {
+    deepStrictEqual(
+      searches.map(launch => launch.environment),
+      searches.map(launch => ({
+        PATH: '<run>/clients/path:<path>',
+        HARNESS_CLIENT_CASE: launch.label,
+        ...(launch.label === 'client-tilde' ? {HOME: '<run>/home'} : {}),
+      })),
+    );
+  });
+
+  it("coverage-11: an unset setting leaves remote.SSH.path out of the launch's settings", () => {
+    deepStrictEqual(
+      searches.find(launch => launch.label === 'client-unset')?.settings,
+      {},
+    );
+  });
+
+  it('coverage-11: an empty setting is written as an empty path', () => {
+    deepStrictEqual(
+      searches.find(launch => launch.label === 'client-empty')?.settings,
+      {'remote.SSH.path': ''},
+    );
+  });
+
+  it('coverage-11: the two Windows cases differ only in the warning setting', () => {
+    deepStrictEqual(
+      ['client-windows', 'client-windows-suppressed'].map(
+        label =>
+          searches.find(launch => launch.label === label)?.settings?.[
+            'remote.SSH.suppressWindowsSshWarning'
+          ],
+      ),
+      [false, true],
+    );
+  });
+
+  it('coverage-11: every case cites a criterion of F-2101', () => {
+    deepStrictEqual(
+      clientCases(REPOSITORY_ROOT).filter(
+        each => !/^F-2101 AC-\d+$/.test(each.cite),
+      ),
+      [],
+    );
+  });
+});
+
+describe('the run tokens (card coverage-11)', () => {
+  it('coverage-11: <run> and <path> are replaced at any depth', () => {
+    deepStrictEqual(
+      withRunTokens(
+        {
+          first: '<run>/x',
+          second: ['<path>', 3, {third: '<run>:<path>'}],
+          fourth: true,
+        },
+        '/run',
+        '/bin',
+      ),
+      {
+        first: '/run/x',
+        second: ['/bin', 3, {third: '/run:/bin'}],
+        fourth: true,
+      },
+    );
+  });
+
+  it('coverage-11: a value without a token is unchanged, and so is null', () => {
+    deepStrictEqual(
+      [
+        withRunTokens('plain', '/run', '/bin'),
+        withRunTokens(null, '/run', '/bin'),
+      ],
+      ['plain', null],
+    );
+  });
+
+  it('coverage-11: a label that is not in the form of an alias is refused', () => {
+    const workspace = new TemporaryWorkspace('client-cases');
+    try {
+      workspace.write(
+        'tests/acceptance/suite-client/cases.json',
+        JSON.stringify({
+          cases: [
+            {
+              label: 'Client',
+              cite: 'F-2101 AC-1',
+              setting: null,
+              checked: [],
+              used: 'x',
+            },
+          ],
+        }),
+      );
+      throws(() => clientCases(workspace.root), /label must match/);
     } finally {
       workspace.remove();
     }

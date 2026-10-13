@@ -72,6 +72,14 @@ class FakeHarness implements HarnessDependencies {
   /** The files of the run's folder as the first launch found them, by name. */
   readonly firstLaunchFiles = new Map<string, string>();
   readonly answers = new Map<string, CommandResult>();
+  /** What a client-search launch found in the run's folder when it started. */
+  readonly clientLaunches: Array<{
+    label: string;
+    fakes: boolean;
+    tildeCopy: boolean;
+    calls: string;
+    settings: string;
+  }> = [];
 
   readonly command = (
     program: string,
@@ -154,6 +162,23 @@ class FakeHarness implements HarnessDependencies {
     label?: string,
   ): Promise<AttemptResult> => {
     this.variables = variables;
+    const folder = variables.HARNESS_RUN_FOLDER;
+    if (label === 'remote') {
+      // A call a launch before the client searches made: the run must not hand it on.
+      writeFileSync(path.join(folder, 'clients', 'calls.log'), 'stale\n');
+    }
+    if (label?.startsWith('client-') === true) {
+      this.clientLaunches.push({
+        label,
+        fakes: existsSync(path.join(folder, 'clients', 'path', 'ssh')),
+        tildeCopy: existsSync(path.join(folder, 'home', 'clients-copy', 'ssh')),
+        calls: readFileSync(path.join(folder, 'clients', 'calls.log'), 'utf8'),
+        settings: readFileSync(
+          path.join(folder, 'user-data', 'User', 'settings.json'),
+          'utf8',
+        ),
+      });
+    }
     if (this.launched.length === 0) {
       for (const name of readdirSync(variables.HARNESS_RUN_FOLDER).filter(
         entry =>
@@ -221,6 +246,7 @@ const LAUNCH_ORDER = [
   'failure-refused',
   'terminal',
   'slow',
+  'client-unset',
   'windows',
   'no-proposals',
   'explorer',
@@ -228,6 +254,14 @@ const LAUNCH_ORDER = [
   'explorer-no-proposals',
   'ports-probe',
 ];
+
+const CLIENT_CASE = {
+  label: 'client-unset',
+  cite: 'F-2101 AC-1',
+  setting: null,
+  checked: ['path/ssh'],
+  used: 'path/ssh',
+};
 
 describe('acceptance', () => {
   let workspace: TemporaryWorkspace;
@@ -252,6 +286,10 @@ describe('acceptance', () => {
           },
         ],
       }),
+    );
+    workspace.write(
+      'tests/acceptance/suite-client/cases.json',
+      JSON.stringify({cases: [CLIENT_CASE]}),
     );
   });
 
@@ -1270,6 +1308,57 @@ describe('acceptance', () => {
       throws(() => failureCases(workspace.root), /alias must match/);
     });
 
+    it('coverage-11: the fake clients are written before the first client-search launch', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        harness.clientLaunches.map(launch => launch.fakes),
+        [true],
+      );
+    });
+
+    it('coverage-11: the tilde copy is written before the first client-search launch', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        harness.clientLaunches.map(launch => launch.tildeCopy),
+        [true],
+      );
+    });
+
+    it('coverage-11: a client-search launch finds the log of calls empty, whatever an earlier launch left', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        harness.clientLaunches.map(launch => launch.calls),
+        [''],
+      );
+    });
+
+    it('coverage-11: the run waits for the helper of the launch before to end, 5 s before a client-search launch and the grace before a ports launch', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(harness.sleeps, [5000, 3000]);
+    });
+
+    it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {
+      const cases = [{...CLIENT_CASE, setting: '<run>/clients/configured/ssh'}];
+      workspace.write(
+        'tests/acceptance/suite-client/cases.json',
+        JSON.stringify({cases}),
+      );
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        harness.clientLaunches.map(launch =>
+          (JSON.parse(launch.settings) as Record<string, string>)[
+            'remote.SSH.path'
+          ]?.endsWith('/clients/configured/ssh'),
+        ),
+        [true],
+      );
+    });
+
+    it('coverage-11: the VS Code run writes no fake clients', async () => {
+      await runAcceptance(workspace.root, harness);
+      deepStrictEqual(harness.clientLaunches, []);
+    });
+
     it('#253 Q14: the harness variables name the editor and its executable', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
       deepStrictEqual(
@@ -1316,15 +1405,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        [
-          EXECUTABLE,
-          EXECUTABLE,
-          EXECUTABLE,
-          EXECUTABLE,
-          EXECUTABLE,
-          EXECUTABLE,
-          EXECUTABLE,
-        ],
+        Array.from({length: 8}, () => EXECUTABLE),
       );
     });
 
@@ -1335,7 +1416,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        [true, true, true, true, true, true, true],
+        Array.from({length: 8}, () => true),
       );
     });
 
@@ -1352,6 +1433,7 @@ describe('acceptance', () => {
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
           ['slow', 'dist-slow/**/*.test.cjs'],
+          ['client-unset', 'dist-client/**/*.test.cjs'],
           ['ports-probe', 'dist-ports/**/*.test.cjs'],
         ],
       );
@@ -1487,6 +1569,7 @@ describe('acceptance', () => {
           'failure-refused',
           'terminal',
           'slow',
+          'client-unset',
           'ports-probe',
         ].map(label => path.join('/run', `${label}-log.txt`)),
       );
@@ -1499,7 +1582,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        [1, 2, 3, 4, 5, 6].map(() =>
+        [1, 2, 3, 4, 5, 6, 7].map(() =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
