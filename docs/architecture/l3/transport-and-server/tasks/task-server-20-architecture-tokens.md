@@ -76,9 +76,15 @@ s390x, riscv64 and loong64. Three places decide by a fixed list:
    them, with knip's agreement.
 4. **Host-side download status** (`posix-script.ts`, `fetch_archive`):
    - capture the downloader's stderr instead of discarding it, keeping `-q`, `-s` and the other flags. For curl, add
-     `-S`, so `-fsS` prints its error;
-   - when the fetch fails and the text shows an HTTP 404, report `fact server.downloadStatus 404`. The patterns are
-     GNU wget's `ERROR 404`, BusyBox wget's `server returned error: HTTP/1.1 404` and curl's `error: 404`;
+     `-S`, so `-fsS` prints its error. For GNU wget (both branches, the plain one and the `--no-config` one), add `-S`:
+     with `-q` alone it prints nothing on a 404 (hestia measured it on alpine:3.22). Don't use `-nv`, which changes a
+     successful download's output. `fetch_archive` keeps stderr only on failure;
+   - when the fetch fails, report `fact server.downloadStatus 404` from the text, never from the exit code (GNU wget's
+     8 is any server error):
+     - **GNU wget:** the **last** line matching `HTTP/1\.[01] [0-9]{3}` (a redirect chain prints several), when its
+       code is 404;
+     - **BusyBox wget:** `server returned error: HTTP/1\.[01] 404`;
+     - **curl:** `error: 404`;
    - the status word stays `ServerDownloadFailed`.
 5. **lib-server failure types:** `TransferFailure`'s `serverDownload` gains `status?: number`, from
    `server.downloadStatus`. The CLI path needs no status: R4 keeps its existing fall-back. Add only the row below.
@@ -103,6 +109,7 @@ s390x, riscv64 and loong64. Three places decide by a fixed list:
 | #670 R1 | (each) `i686`, `armv6l`, `aarch64_be`, `ppc64` | status `UnsupportedArch`, `host.arch` the name |
 | #670 R3 | `fetch_archive` against the download host's `missing` path (404), with each downloader variant of `fetch-tools.test.ts` | the install ends `ServerDownloadFailed` with `server.downloadStatus` `404` |
 | #670 R3 | the same against a 503 path, if the download host has one; else a refused port | no `server.downloadStatus` |
+| #670 R3 | GNU wget against a path that redirects (302) to the `missing` path, if the download host can redirect | `server.downloadStatus` `404` from the last status line; note in the PR if the host can't redirect |
 | F-3902 rule 5 | the CLI install body against the download host's `missing` path | the CLI step fails as today, and the connect logs "installing the server directly" (a connect-level unit row is enough if the real-shell CLI rows need the archive) |
 
 **Unit rows:**
