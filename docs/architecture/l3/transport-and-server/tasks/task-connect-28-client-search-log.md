@@ -34,7 +34,7 @@ The logger masks any run of 32 or more word characters. A folder or banner holdi
 builder's text in the log, so a row that compares them must avoid such names. The harness's own folders have none.
 
 The probe's line (F-2206 §9) is written once the probe has read the host, in both modes: `Host platform:
-<operatingSystem> <architecture>`, for example `Host platform: linux aarch64`. It isn't written when the platform was
+<operatingSystem> <architecture>`, for example `Host platform: linux arm64` (`ProbedHost`'s own terms, as the host script normalises them). It isn't written when the platform was
 decided without a probe.
 
 ## 2. Files
@@ -63,7 +63,7 @@ Not in this card:
 | `F-2101 §9: a check that outlasts its bound says it timed out` | `it timed out` |
 | `F-2101 §9: an unset setting is logged as ""` | `remote.SSH.path = ""` |
 | `F-2101 §9: the banner is read from standard error only` | a banner on standard output only: `ssh client: (no banner)`. The candidate is still judged on both streams, as `judge` does |
-| `F-2206 §9: the probed platform is logged` | `Host platform: linux x86_64` after the probe |
+| `F-2206 §9: the probed platform is logged` | `Host platform: linux x64` after the probe |
 | `F-2206 §9: no platform line when the probe didn't run` | a decided `windows` entry in default mode: no `Host platform:` line |
 
 remote-ssh stays at 100/100/100.
