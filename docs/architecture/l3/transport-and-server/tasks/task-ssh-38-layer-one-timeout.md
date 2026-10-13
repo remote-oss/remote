@@ -26,8 +26,10 @@ metis to mark that AC-11 case reference-only).
   exist and `"$LAYER1_DIR/out"` holds no line `LAYER1-START`, the prelude prints exactly one line, `LAYER1-EXITED
   <status>`, with layer 1's exit status (from `wait "$LAYER1_PID"`), removes `"$LAYER1_DIR"`, and runs `exit 1` instead
   of `exec sh`.
-- **The working path says it's ready.** When the start line was found, the prelude prints exactly one line,
-  `LAYER1-READY`, just before `exec sh` (hestia's option B on #538).
+- **Every path that reaches `exec sh` says it's ready.** The prelude prints exactly one line, `LAYER1-READY`, just
+  before **every** `exec sh` (hestia's option B on #538, athena on #539): after the start line was found, and on the
+  two paths that skip layer 1 (`$SHELL` unusable, no temporary folder), which connect today and must keep connecting
+  while the helper waits for the line.
 - **The other cases are unchanged:** a start line present (the environment is taken, then `exec sh`), `$SHELL`
   unusable, and no temporary folder all go on to `exec sh` as today.
 - The comment above `SESSION_BOOTSTRAP_LINES` says the session reaches `exec sh` **unless** the login shell outlasts
@@ -65,6 +67,8 @@ Neither marker names a secret or a path: each is a fixed word, a space and a num
 |---|---|---|
 | F-2704 AC-11 | the bootstrap run by `sh` with `SHELL` a script that sleeps past `LAYER1_SECONDS=1` | its output is exactly `LAYER1-TIMEOUT 1`, and it exits 124 |
 | #443 | the same with a shell that prints the start line at once | its first output line is `LAYER1-READY`, and the session reaches `exec sh` (a following `echo ok` prints `ok`) |
+| athena on #539 | the bootstrap with `SHELL` unset | its output is `LAYER1-READY`, and a following `echo ok` prints `ok` |
+| athena on #539 | the bootstrap where `mktemp -d` fails (a `PATH` whose `mktemp` exits 1) | its output is `LAYER1-READY`, and a following `echo ok` prints `ok` |
 | #538 | the helper's session that prints `LAYER1-READY` after authentication | `connected` is announced on that line, not before |
 | F-2704 AC-14 (real host) | a `.profile` that sleeps 25 s, `ConnectTimeout` 40 | the connect succeeds after the pause |
 | F-2704 AC-13 | the bootstrap with a shell that exits 1 at once, with no start line | its output is exactly `LAYER1-EXITED 1`, and it exits 1 |
