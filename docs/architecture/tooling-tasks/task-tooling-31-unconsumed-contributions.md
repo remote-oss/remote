@@ -24,17 +24,24 @@ exports reachable from entries that include tests.
   references its generated name. A production source is a `.ts` file under `packages/<x>/src/`, other than
   `identifiers.generated.ts`, `*.test.ts` and `src/testing/**`. By kind:
   - **`settings`:** a reference to the key (§3.2);
-  - **`commands`** (athena, register e2e9bba): a command is consumed when its **literal id** appears in the checker's
-    type of the **third argument** of a call to lib-identifiers' `registerCommands` in a production source.
-    - The generated table is `as const`, so each entry's `id` is a string literal type. The check takes the call's
-      third argument, asks the checker for its type, and collects every `id` property's literal type among that
-      type's property values.
-    - That covers each way a package builds the argument: the whole table, an object literal built from members
-      (`{addNewSshHost: commands.addNewSshHost, …}`, as `activation.ts` and `register-connect.ts` do), a variable
-      holding the map, and a spread.
-    - A property whose `id` type is widened to `string` (not a literal) is a **problem line**, never a pass:
-      `packages/<x>: registerCommands at src/<file>:<line> passes a command whose id isn't a literal`;
-    - a command id that no such call carries is reported as unconsumed;
+  - **`commands`** (athena, register e2e9bba; key-based, replacing the literal-id rule after triton's review at
+    f615ea9): a command is consumed when its generated table **key** (for example `showLog`) is a property name of the
+    checker's type of the **third argument** of a call to lib-identifiers' `registerCommands` in a production source.
+    - `registerCommands` pairs each handler with its entry by that key, and the keys survive when an entry's `id`
+      widens to `string`. The rule therefore reads property names, never `id` types, and a widened `id` is no problem.
+    - It covers a whole table, an object literal built from members (`{showLog: table.commands.showLog, …}`, whose
+      members are `CommandEntry` with `id: string`, as `packages/remote-ssh/src/activation.ts:181` builds `served`), a
+      variable holding the map, and a spread.
+    - **One-level type-parameter pass-through:** when the third argument's type is a type parameter of the enclosing
+      function, as `packages/remote-explorer/src/activation.ts:64` passes `table.commands` typed `Commands`:
+      - the check finds that function's call sites among the same package's production sources;
+      - at each, it takes the checker's resolved type argument for that parameter;
+      - it unions the property names of those types.
+
+      One level only, with no recursion. If the parameter can't be resolved (no call site, or still a type parameter
+      one level up), that's a problem line:
+      `packages/<x>: src/<file>:<line>: the commands of this registerCommands call can't be seen (type parameter <T>)`.
+    - A command key that no such call carries is reported as unconsumed.
   - **`runtimeCommands`, `internalCommands` with role `served`, `contextKeys` with setter `extension`:** a reference
     to the key (§3.2);
   - **`views`:** a reference to the key inside the argument list of a call to a function named `createTreeView`,
@@ -183,7 +190,10 @@ athena's, and the check's real output decides whether it's complete.
 | #674 R2 | a commands table `{alpha, beta, gamma}` (`as const`); `src/a.ts` calls `registerCommands(host, outcome, {alpha: commands.alpha, beta: commands.beta}, handlers)` | `gamma` reported; `alpha` and `beta` consumed (a subset literal) |
 | #674 R2 | the same table passed whole: `registerCommands(host, outcome, commands, handlers)` | none reported |
 | #674 R2 | `const served = {alpha: commands.alpha}; registerCommands(host, outcome, {...served, beta: commands.beta}, handlers)` | `gamma` reported only (a variable and a spread) |
-| #674 R2 | a third argument whose entry is typed `{id: string; …}` (widened) | the `id isn't a literal` problem line; exit 1 |
+| #674 R2 (triton, site 1) | `const served = {alpha: commands.alpha as CommandEntry}` (each member typed `CommandEntry`, `id: string`); `registerCommands(host, outcome, served, handlers)` | `alpha` consumed; `beta` and `gamma` reported; no problem line for the widened `id` |
+| #674 R2 (triton, site 2) | `function activateWith<Commands extends Record<string, CommandEntry>>(table: {commands: Commands}) { registerCommands(host, outcome, table.commands, handlers) }`, called once in `src/` with the concrete table `{commands}` | none reported: the pass-through resolves `Commands` to the table's type |
+| #674 R2 | the same generic function with no call site in `src/` (only a test calls it) | the `can't be seen (type parameter Commands)` problem line; exit 1 |
+| #674 R2 | the same function called only from another generic function that passes its own type parameter on | the same problem line (one level only) |
 | #674 R2 | a commands table no `registerCommands` call carries | every command reported |
 | #674 R2 | a views table `{remoteTargets}`; `src/a.ts` calls `editor.window.createTreeView(views.remoteTargets, …)` | consumed; the same key referenced only in a `const` that never reaches a registration is reported |
 | #674 R2 | a `contextKeys` entry with setter `core`; an `internalCommands` entry with role `called` | neither reported |
@@ -193,7 +203,7 @@ athena's, and the check's real output decides whether it's complete.
 | #674 R3 | `--release` with one entry without `decision` and one with | one `must be wired before a release` line for the first only; exit 1 |
 | #674 R4 | a stubbed knip runner returning a JSON report with an unused file `packages/x/src/m.ts`, with and without an allowlist entry for it | the module line, then none |
 | #674 R4 | a knip runner answering text that isn't the expected JSON | `knip output not understood`; exit 1 |
-| #674 | `checkConsumption(REPOSITORY_ROOT, <the committed allowlist>, {release: false})` with the real knip | no problem lines: the first allowlist covers main as it is |
+| #674 | `checkConsumption(REPOSITORY_ROOT, <the committed allowlist>, {release: false})` with the real knip | no problem lines: the first allowlist covers main as it is. Both of triton's call sites pass: `packages/remote-ssh/src/activation.ts:181`'s member-built `served` and `packages/remote-explorer/src/activation.ts:64`'s `table.commands`, through the pass-through. Among commands, only the allowlisted `cleanCurrentRemoteServer` (#681) is unconsumed |
 
 The knip runner is a port of `checkConsumption` (`runKnip: () => Promise<string>`), so the tools rows don't start knip.
 Only the repository row runs the real one.
