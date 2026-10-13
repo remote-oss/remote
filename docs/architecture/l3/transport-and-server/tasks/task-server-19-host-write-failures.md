@@ -52,7 +52,11 @@ The start script's own writes have the same blind spot:
   `The host lock file can't be used here. On a distributed file system such as NFS or AFS, setting
   remote.SSH.lockfilesInTmp to true keeps the lock in /tmp.`
   - The wording is ours (ADR-0008), in the spirit of F-2408 §9's `remote.SSH.useFlock` hint.
-  - The dialog stays S075. The script reports `server.lockInTemporary yes|no` so the mapping can tell.
+  - The dialog stays S075.
+  - **How the mapping knows** (athena on #669): only `take_lock_or_finish`'s `*)` branch reports
+    `server.lockInTemporary` (`yes` or `no`, from `LOCK_IN_TEMPORARY`), together with `server.lockPath`.
+    `server.lockPath` is also reported by the busy branch (R4). No other write failure reports either fact.
+  - The mapping never decides "this is the lock" from a file name.
 
 ## 3. Changes
 
@@ -100,7 +104,11 @@ take_lock_or_finish() {
   case $? in
     0) ;;
     1) fact server.lockPath "$LOCK_CANDIDATE"; finish LockBusy ;;
-    *) write_failed "$LOCK_CANDIDATE" "$LOCK_ERROR" ;;
+    *)
+      fact server.lockPath "$LOCK_CANDIDATE"
+      fact server.lockInTemporary "$LOCK_IN_TEMPORARY"
+      write_failed "$LOCK_CANDIDATE" "$LOCK_ERROR"
+      ;;
   esac
 }
 ```
@@ -123,8 +131,11 @@ take_lock_or_finish() {
 ### 3.2 lib-server types
 
 - `StartFailure`'s `scriptFailed`, and `TransferFailure`'s `scriptFailed`, gain
-  `writeFailure?: {path: string; error: string}`, set from the block's `serverFacts.writeFailedPath` and
-  `writeFailedError` when the status is `CreateInstallDirFailed` and the path is present.
+  `writeFailure?: {path: string; error: string; lockInTemporary?: boolean}`, set from the block's
+  `serverFacts.writeFailedPath` and `writeFailedError` when the status is `CreateInstallDirFailed` and the path is
+  present.
+- `lockInTemporary` is set **only when the block's `serverFacts.lockPath` equals `writeFailedPath`**: `true` for
+  `lockInTemporary` `yes`, `false` for `no`. Otherwise it's absent.
 - `retriesExhausted` (in both) gains `lockPath?: string` and `attempts: number`, from the last `LockBusy` block's
   `serverFacts.lockPath` and the loop's attempt count.
 - `hostLockLoopOf` (`transfer/lock-loop.ts`) keeps the last `LockBusy` step run, and returns
@@ -135,6 +146,9 @@ take_lock_or_finish() {
 
 - `ofStatus` takes the optional `writeFailure`. For `CreateInstallDirFailed` with a `writeFailure`, it gives
   `logged('serverInstall', 'cannot write <path>: <error>', INSTALL_FAILED)`. Without one, it's unchanged.
+- **R7's line** is added to the log after that detail **if and only if `writeFailure.lockInTemporary === false`**. Name
+  the place where the extension writes it (the failure's `logDetail` as a second line, or a second `logger.warn` in
+  `connect.ts` beside the "the <kind> failure:" line), and keep it to one place.
 - `ofStart` and `ofTransfer`:
   - `scriptFailed` passes `writeFailure` on;
   - `retriesExhausted` gives `logged('retriesExhausted', <R5's text>)` when `lockPath` is present, else
@@ -170,7 +184,8 @@ the test machine, as the existing script rows do):
 | #668 R3 | `/tmp` mode, the lock path a symlink; a directory | returns 2 with `not a regular file` (each) |
 | #668 R1 | the install body with `INSTALL_DIR`'s parent read-only (the folder missing) | status `CreateInstallDirFailed`; `server.writeFailedPath` is `INSTALL_DIR`; `writeFailedError` is non-empty |
 | #668 R1 | the install body with `INSTALL_DIR` existing and read-only | `CreateInstallDirFailed`; `writeFailedPath` is the lock file's path |
-| #668 R3 (the AFS case) | the install body with `INSTALL_DIR` writable and the lock path pre-created as a **directory** (an open that fails whoever runs it, root included) | `CreateInstallDirFailed`; `writeFailedPath` is the lock path; `writeFailedError` non-empty; `server.lockInTemporary` `no` |
+| #668 R3 (the AFS case) | the install body with `INSTALL_DIR` writable and the lock path pre-created as a **directory** (an open that fails whoever runs it, root included) | `CreateInstallDirFailed`; `writeFailedPath` and `server.lockPath` both the lock path; `writeFailedError` non-empty; `server.lockInTemporary` `no` |
+| #668 R7 | the install body with the install folder's `mkdir -p` failing (not the lock) | `writeFailedPath` the folder; no `server.lockPath`, no `server.lockInTemporary` |
 | #668 R3 | the same with `LOCK_IN_TEMPORARY=yes` and the `/tmp` lock path free | `Ok`: the lock moved to `/tmp` works, as `lockfilesInTmp` did for the user |
 | #668 R4 | the install body with the lock held by another process | `LockBusy`, and `server.lockPath` is the lock file's path |
 | #668 R1 | the start body with the token file's folder read-only | `CreateInstallDirFailed`, `writeFailedPath` the token file |
@@ -184,8 +199,10 @@ the test machine, as the existing script rows do):
 **remote-ssh unit rows (`failure.test.ts`):**
 - `writeFailure` gives `logDetail` `cannot write /p: Permission denied` with reason S075;
 - `retriesExhausted` with `lockPath` gives R5's text, and without it the short text;
-- a `writeFailure` on the lock file with `lockInTemporary` `no` adds R7's line; with `yes`, or on another path, it
-  doesn't.
+- R7, three cases: a `writeFailure` with `lockInTemporary: false` adds R7's line; with `true`, no line; with
+  `lockInTemporary` absent (another path), no line;
+- lib-server: `lockInTemporary` is set from a block whose `lockPath` equals `writeFailedPath` (`yes` gives `true`,
+  `no` gives `false`), and is absent when `lockPath` is missing or differs.
 
 **Real-host rows** (`tests/acceptance/server/`, against the harness host, opt-in like the other real-shell rows):
 - the install step as `harness-ro` gives `CreateInstallDirFailed` with `writeFailedPath` under
