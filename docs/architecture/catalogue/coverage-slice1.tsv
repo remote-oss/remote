@@ -507,7 +507,7 @@ F-2501.AC-35	todo
 F-2502.AC-1	unit	
 F-2502.AC-2	core	core: the window title and the Explorer header
 F-2502.AC-3	core	core: the remote indicator's text and icon
-F-2502.AC-4	todo	
+F-2502.AC-4	unit	
 F-2502.AC-5	core	core: the window title variables
 F-2502.AC-6	core	core: the window title variable and the Open Recent entry
 F-2502.AC-7	core	core: the window title variable
@@ -516,10 +516,10 @@ F-2502.AC-9	core	core: the window title, the Explorer header and the root folder
 F-2502.AC-10	core	core: the remote indicator and the window title of an empty window
 F-2502.AC-11	core	core: the descriptions in Open Editors
 F-2502.AC-12	core	core: the Open Recent labels and core's label cache
-F-2502.AC-13	todo	
-F-2502.AC-14	todo	
-F-2502.AC-15	todo	
-F-2502.AC-16	todo	
+F-2502.AC-13	unit	
+F-2502.AC-14	unit	
+F-2502.AC-15	unit	
+F-2502.AC-16	core	core: one cache entry per authority string
 F-2502.AC-17	core	core: the title, the indicator and the label cache after a failed first resolve
 F-2502.AC-18	core	core: the indicator's reconnecting text and the window title
 F-2502.AC-19	core	core: the indicator's truncated text and the window title
@@ -538,7 +538,7 @@ F-2502.AC-31	core	core: the Open Recent descriptions
 F-2502.AC-32	core	core: the Open Recent entries of two spellings
 F-2502.AC-33	core	core: the Welcome page's Recent list
 F-2502.AC-34	core	core: the Open Recent entry after a failed resolve
-F-2502.AC-35	todo	
+F-2502.AC-35	unit	
 F-2601.AC-1	acceptance	
 F-2601.AC-2	acceptance	
 F-2601.AC-3	acceptance	

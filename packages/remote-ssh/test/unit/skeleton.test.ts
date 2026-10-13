@@ -380,7 +380,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
     );
   });
 
-  it('menus: 8 entries, the indicator groups, every when gated, the key nowhere else', () => {
+  it('F-2502 AC-13: menus: 8 entries, the indicator groups, every when gated, the key nowhere else', () => {
     const contributes = manifest().contributes;
     const menus = contributes?.menus ?? {};
     const stripped = JSON.stringify({
