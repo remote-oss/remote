@@ -50,6 +50,52 @@ describe('the connect pipeline, when it works', () => {
     ]);
   });
 
+  it('F-2206 §9: the probed platform is logged after the probe', async () => {
+    const {recording, options, logSink} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(
+      logSink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('Host platform:')),
+      ['Host platform: linux x64'],
+    );
+  });
+
+  it('F-2206 §9: no platform line is written when the connect ends before the probe', async () => {
+    const {recording, options, logSink} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        decideTerms: () =>
+          Promise.resolve({kind: 'failed', failure: {kind: 'cancelled'}}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      logSink.lines.filter(line => line.message.startsWith('Host platform:')),
+      [],
+    );
+  });
+
+  it('F-2206 §9: no platform line is written when the probe fails', async () => {
+    const {recording, options, logSink} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        probe: () =>
+          Promise.resolve({
+            kind: 'failed',
+            failure: {kind: 'noResultBlock'},
+          }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      logSink.lines.filter(line => line.message.startsWith('Host platform:')),
+      [],
+    );
+  });
+
   it('skips the transfer when the plan reuses an installed server', async () => {
     const {recording, options} = setup();
     await connect(
@@ -976,7 +1022,9 @@ describe('the connect pipeline, the transport of a connection that worked', () =
     const {endTunnel, logSink} = await connected();
     endTunnel('listener failed');
     deepStrictEqual(
-      logSink.lines.map(line => line.message),
+      logSink.lines
+        .filter(line => line.level === 'warn')
+        .map(line => line.message),
       ['the window tunnel ended: listener failed'],
     );
   });
