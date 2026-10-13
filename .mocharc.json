@@ -1,4 +1,5 @@
 {
   "spec": ["tools/**/*.test.ts", "packages/*/test/unit/**/*.test.ts"],
-  "extension": ["ts"]
+  "extension": ["ts"],
+  "timeout": 10000
 }

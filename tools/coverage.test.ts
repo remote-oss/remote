@@ -1,4 +1,4 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, notStrictEqual, strictEqual} from 'node:assert';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
@@ -214,6 +214,15 @@ describe('coverage', () => {
         "import {strictEqual} from 'node:assert';\n\nit('fails', () => {\n  strictEqual(1, 2);\n});\n",
       );
       strictEqual(measureUnit(workspace.root, packageUnit(), []), undefined);
+    });
+
+    it('tooling-21: a unit test of 2.5 s passes under the 10 s default', function () {
+      this.timeout(30_000);
+      workspace.write(
+        'packages/remote-a/test/unit/slow.test.ts',
+        "it('waits', async () => {\n  await new Promise(resolve => setTimeout(resolve, 2500));\n});\n",
+      );
+      notStrictEqual(measureUnit(workspace.root, packageUnit(), []), undefined);
     });
   });
 

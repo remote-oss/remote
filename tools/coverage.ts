@@ -191,6 +191,7 @@ export function measureUnit(
         resolveBinary('mocha/bin/mocha.js'),
         '--no-config',
         '--extension=ts',
+        '--timeout=10000',
         ...unit.tests,
       ],
       {cwd: root, stdio: ['ignore', 'inherit', 'inherit']},
