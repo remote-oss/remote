@@ -23,7 +23,7 @@ running CLI (it needs the control token in the shared record). Builder: daedalus
 | `packages/remote-ssh/src/cli/cli-connect.ts` | `release()`: close the bridge, close the tunnel, then `stopCli` with the connect's CLI pid and an abort signal that fires after the request bound (10 s, contracts S9). The lease is given back when the stop settles or the bound passes, whichever comes first, whatever the outcome, so a hung stop never holds the shared session's lease (athena on #519). A second `release()` does nothing |
 | `packages/remote-ssh/src/pipeline/steps.ts`, `server-steps.ts` | `stopCli` takes that cancellation, and passes it to lib-server's `stopCli` in place of today's own never-firing signal |
 | `packages/remote-ssh/src/pipeline/connector.ts` | check that the extension's deactivation reaches the held connection's `release()`. If it doesn't, the connector's `dispose` releases what it holds |
-| `packages/remote-ssh/test/unit/cli-connect.test.ts`, `connector.test.ts` | rows (section 2) |
+| `packages/remote-ssh/test/unit/cli-connect.test.ts`, `wiring.test.ts` (the 10 s bound's rows), `connector.test.ts` | rows (section 2) |
 | `tests/acceptance/server/cli.test.ts` | the real-host rows (section 2), opt-in on `REMOTE_OSS_CLI_ARCHIVE` as today |
 
 The serve rows must name the CLI's own commit, which `<cli file> --version` prints (`… (commit <hash>)`). It's the
@@ -42,16 +42,16 @@ VSCodium build's commit, not upstream vscode's, and the patched CLI expands its 
 | athena on #412 (real host) | a CLI that served the real server, then `stopCli` with its pid | within 5 s the CLI's pid is gone, and the server's process still runs |
 | athena on #518 (real host) | two connects over one session, each `serve`d | exactly one `<cli> --cli-data-dir …` process (the agent-host supervisor) runs, a child of the first `command-shell` |
 | athena on #518 (real host) | the same, then both `command-shell`s stopped, then the session ended | the supervisor still runs (re-parented), one, with the server |
-| F-2103 BR-8 (real host) | the same, then a new CLI and `serve` | the reply is `serving`, a `serverlog` line reads `Found running server`, and a server socket opened with the connection token the second connect hands its editor connects (triton on #519; which token that is waits on athena's ruling, section 4) |
+| F-2103 BR-8 (real host) | the same, then a new CLI and `serve` | the reply is `serving`, a `serverlog` line reads `Found running server`, and a server socket opened with the connection token the second connect hands its editor connects (triton on #519; the host's one token, section 3) |
 
-## 4. Open: the found server's connection token (triton on #519)
+## 3. The found server's connection token (triton on #519)
 
 Measured 2026-10-13: the CLI starts the server with `--connection-token=<the first serve's token>` on its command line,
-and a later `serve` that finds it keeps that token. Two consequences are with athena: a second window is handed a token
-the server refuses, and the token is visible in `ps` (S10). This card builds no token change. Its last row waits for
-the ruling.
+and a later `serve` that finds it keeps that token. Settled by athena's ruling on #412: one connection token per host
+on the CLI path, built by cli-07 (#523, PR #542). The argv exposure is a recorded S10/V7a deviation there. This card
+builds no token change. Its last row's token is the host's one token of cli-07.
 
-## 3. Gates and review
+## 4. Gates and review
 
 The repository's gates, with the changed files at 100/100/100. The real-host rows' run with the archive goes in the PR
 body. PR title `remote-ssh, lib-server: a connect's CLI ends with its window, its server stays (card cli-06, #412)`.

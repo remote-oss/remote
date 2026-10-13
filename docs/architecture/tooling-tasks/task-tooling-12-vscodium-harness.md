@@ -47,7 +47,7 @@ The two values are the release's own `.sha256` assets (the arm64 one checked aga
 
 `runAcceptance(root, dependencies, editor: EditorChoice = 'vscode')`. With `vscodium`:
 - `HarnessDependencies` gains `vscodiumExecutable: () => Promise<string>`. The real one downloads
-  `VSCodium-<os>-<arch>-<tag>.tar.gz` from the release URL into `.vscode-test/vscodium-<tag>/`, unless it is already
+  `VSCodium-<os>-<arch>-<tag>.tar.gz` from the release URL into `.vscode-test/vscodium-<tag>-<os>-<arch>/` (per platform since #657), unless it is already
   there. It checks the sha256 (a mismatch throws `the VSCodium download does not match its checksum`), unpacks it, and
   returns `<folder>/bin/codium-insiders`. The CLI that installs the VSIX files is the same executable.
 - The VSIX files are installed with that CLI into the run's extensions folder, as for VS Code.
