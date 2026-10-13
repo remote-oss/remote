@@ -42,7 +42,11 @@ import {
   withOneRetry,
   writeUserSettings,
 } from './acceptance.ts';
-import {failureCases, type Launch} from './acceptance-launches.ts';
+import {
+  failureCases,
+  type Launch,
+  type RunnerLaunch,
+} from './acceptance-launches.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -104,6 +108,23 @@ class FakeHarness implements HarnessDependencies {
   };
 
   readonly editorCli = (): Promise<string> => Promise.resolve('code');
+
+  readonly windowAgentVsix = (): Promise<string> => {
+    this.calls.push('window agent vsix');
+    return Promise.resolve('window-agent.vsix');
+  };
+
+  readonly runPlain = (
+    root: string,
+    variables: HarnessVariables,
+    launch: Launch,
+  ): Promise<AttemptResult> => {
+    this.variables = variables;
+    this.launched.push(launch.label);
+    return Promise.resolve(
+      this.labelResults.get(launch.label) ?? this.testResult,
+    );
+  };
 
   readonly vscodiumExecutable = (): Promise<string> => {
     this.calls.push('vscodium executable');
@@ -401,6 +422,16 @@ describe('acceptance', () => {
       );
     });
 
+    it("names the run's folder after the run's id, so that a clean-up finds a killed run's editor", async () => {
+      await runAcceptance(workspace.root, harness);
+      strictEqual(
+        path
+          .basename(harness.runFolder)
+          .startsWith(`acceptance-local-${String(process.pid)}-`),
+        true,
+      );
+    });
+
     it('passes the harness variables to the tests', async () => {
       await runAcceptance(workspace.root, harness);
       deepStrictEqual(harness.variables, {
@@ -521,8 +552,8 @@ describe('acceptance', () => {
       ...launches: Launch[]
     ): Promise<Map<string, unknown>> {
       const seen = new Map<string, unknown>();
-      await runLaunches(workspace.root, '/run/ssh_config', launches, label => {
-        seen.set(label ?? '', settingsFile());
+      await runLaunches(workspace.root, '/run/ssh_config', launches, launch => {
+        seen.set(launch?.label ?? '', settingsFile());
         return Promise.resolve({exitCode: 0, output: ''});
       });
       return seen;
@@ -573,8 +604,8 @@ describe('acceptance', () => {
         workspace.root,
         '/run/ssh_config',
         [undefined],
-        label => {
-          labels.push(label);
+        launch => {
+          labels.push(launch?.label);
           return Promise.resolve({exitCode: 0, output: ''});
         },
       );
@@ -712,7 +743,7 @@ describe('acceptance', () => {
 
   describe('the VSCodium run', () => {
     const EXECUTABLE = '/vscodium/codium-insiders';
-    const LAUNCH: Launch = {
+    const LAUNCH: RunnerLaunch = {
       label: 'extra',
       runner: 'runner',
       suite: 'suite-extra',
@@ -740,6 +771,37 @@ describe('acceptance', () => {
       );
     });
 
+    it('D-85: the window agent is packaged for the VSCodium run', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      strictEqual(harness.calls.includes('window agent vsix'), true);
+    });
+
+    it('D-85: the window agent is not packaged for the VS Code run', async () => {
+      await runAcceptance(workspace.root, harness);
+      strictEqual(harness.calls.includes('window agent vsix'), false);
+    });
+
+    it('D-85: the window agent is installed with the extensions under test', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      strictEqual(
+        harness.calls.some(
+          call =>
+            call.includes('--install-extension') &&
+            call.includes('window-agent.vsix'),
+        ),
+        true,
+      );
+    });
+
+    it('D-85: the plain launch is not a test-cli configuration', () => {
+      deepStrictEqual(
+        configurations().filter(
+          configuration => configuration.label === 'windows',
+        ),
+        [],
+      );
+    });
+
     it('#253 Q14: the VSIX files are installed with the command-line wrapper in the bin folder beside the executable', async () => {
       workspace.write('dist/remote-ssh-0.0.0.vsix', '');
       await runAcceptance(workspace.root, harness, 'vscodium');
@@ -760,6 +822,7 @@ describe('acceptance', () => {
         'failure-refused',
         'terminal',
         'slow',
+        'windows',
       ]);
     });
 
@@ -850,6 +913,7 @@ describe('acceptance', () => {
         'failure-refused',
         'terminal',
         'slow',
+        'windows',
       ]);
     });
 
