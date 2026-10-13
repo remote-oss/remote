@@ -36,7 +36,9 @@ import {
 } from './acceptance-run.ts';
 import {
   bundleFolderOf,
+  extensionsOf,
   failureCases,
+  hostExtensionFolder,
   failureLabel,
   type Launch,
   launchesOf,
@@ -104,6 +106,8 @@ export interface HarnessVariables {
   REMOTE_OSS_ACCEPTANCE_RECORD: string;
   /** The editor of the run. */
   HARNESS_EDITOR: EditorChoice;
+  /** The file the log channel's lines are appended to, in the run's folder. */
+  REMOTE_OSS_ACCEPTANCE_LOG: string;
   /** The VSCodium executable, in the VSCodium run only. */
   HARNESS_VSCODIUM_EXECUTABLE?: string;
 }
@@ -344,19 +348,50 @@ async function prepare(
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
     HARNESS_EDITOR: editor,
+    REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
   };
 }
 
-/** The script and record files of a launch: the run's own, or a failing connect's. */
+/** The script, record and log files of a launch: the run's own, or a failing connect's. */
 function launchFiles(
   runFolder: string,
   label: string,
-): {script: string; record: string} {
+): {script: string; record: string; logFile: string} {
   return {
     script: path.join(runFolder, `${label}-script.json`),
     record: path.join(runFolder, `${label}-record.jsonl`),
+    logFile: path.join(runFolder, `${label}-log.txt`),
   };
+}
+
+/** Copies the host extensions of the launches into the host's home folder, owned by the user harness. */
+function copyHostExtensions(
+  command: CommandRunner,
+  root: string,
+  container: string,
+  launches: readonly Launch[],
+): void {
+  for (const extension of new Set(
+    launches.flatMap(launch => launch.hostExtensions ?? []),
+  )) {
+    const folder = hostExtensionFolder(extension);
+    checked(command, 'docker', [
+      'cp',
+      path.join(root, 'tests', 'acceptance', extension),
+      `${container}:${folder}`,
+    ]);
+    checked(command, 'docker', [
+      'exec',
+      '--user',
+      'root',
+      container,
+      'chown',
+      '-R',
+      'harness:harness',
+      folder,
+    ]);
+  }
 }
 
 /**
@@ -410,11 +445,18 @@ export async function runAcceptance(
         JSON.stringify({entries: failure.script}),
       );
     }
+    const launches = editor === 'vscodium' ? launchesOf(root) : [];
+    copyHostExtensions(
+      dependencies.command,
+      root,
+      variables.HARNESS_CONTAINER,
+      launches,
+    );
     exitCodes.push(
       ...(await runLaunches(
         runFolder,
         variables.HARNESS_SSH_CONFIG,
-        editor === 'vscodium' ? launchesOf(root) : [undefined],
+        editor === 'vscodium' ? launches : [undefined],
         label => dependencies.runTests(root, variables, label),
       )),
     );
@@ -482,6 +524,7 @@ export function vscodiumConfiguration(
   const runner = path.join(acceptance, launch.runner);
   const env: Record<string, string | undefined> = {
     ...environment,
+    REMOTE_OSS_ACCEPTANCE_LOG: files.logFile,
     ...(launch.ownScript === true
       ? {
           REMOTE_OSS_ACCEPTANCE_SCRIPT: files.script,
@@ -507,6 +550,10 @@ export function vscodiumConfiguration(
       ...(launch.folderUri === undefined
         ? []
         : ['--folder-uri', launch.folderUri]),
+      ...(launch.hostExtensions ?? []).map(
+        extension =>
+          `--extensionDevelopmentPath=vscode-remote://ssh-remote+harness${hostExtensionFolder(extension)}`,
+      ),
       ...editorArguments(runFolder),
     ],
     env,
@@ -530,7 +577,12 @@ function suitesOfRun(root: string): string[] {
   return suitesOf(launchesOf(root));
 }
 
-/** Removes every suite's bundle folder, so that no run leaves bundles in a checkout. */
+/** The bundle of a further development extension: the `extension.cjs` beside its package.json. */
+function extensionBundleOf(root: string, extension: string): string {
+  return path.join(root, 'tests', 'acceptance', extension, 'extension.cjs');
+}
+
+/** Removes every suite's bundle folder and extension bundle, so that no run leaves bundles in a checkout. */
 export function removeBundles(root: string): void {
   for (const suite of suitesOfRun(root)) {
     rmSync(path.join(root, 'tests', 'acceptance', bundleFolderOf(suite)), {
@@ -538,12 +590,38 @@ export function removeBundles(root: string): void {
       force: true,
     });
   }
+  for (const extension of extensionsOf(launchesOf(root))) {
+    rmSync(extensionBundleOf(root, extension), {force: true});
+  }
 }
 
-/** Bundles every `*.test.ts` of each suite folder of tests/acceptance into its output folder, one `.cjs` file each. */
+/**
+ * Bundles every `*.test.ts` of each suite folder of tests/acceptance into its output folder, one `.cjs` file each,
+ * and the `src/extension.ts` of each further development extension into its `extension.cjs`.
+ */
 export async function bundleSuite(root: string): Promise<void> {
   for (const suite of suitesOfRun(root)) {
     await bundleFolder(root, suite, bundleFolderOf(suite));
+  }
+  for (const extension of extensionsOf(launchesOf(root))) {
+    await build({
+      entryPoints: [
+        path.join(
+          root,
+          'tests',
+          'acceptance',
+          extension,
+          'src',
+          'extension.ts',
+        ),
+      ],
+      outfile: extensionBundleOf(root, extension),
+      bundle: true,
+      platform: 'node',
+      format: 'cjs',
+      external: ['vscode'],
+      logLevel: 'warning',
+    });
   }
 }
 

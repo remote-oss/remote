@@ -24,10 +24,24 @@ export type ScriptEntry =
 
 /** One line of the record: the question as asked, and what the adapter answered. */
 export interface RecordLine {
-  surface: ScriptEntry['surface'];
+  /** A question's surface, or `progress` or `downloadProgress` for a display-only line. */
+  surface: ScriptEntry['surface'] | 'progress' | 'downloadProgress';
   question: string;
   answer: string;
   matched: boolean;
+  /** Whether the progress message carried the details link; only the phase lines of a `progress` surface have it. */
+  details?: boolean;
+}
+
+/** The lines of a record file; a record not written yet is empty. */
+export function readRecord(recordFile: string): RecordLine[] {
+  if (!existsSync(recordFile)) {
+    return [];
+  }
+  return readFileSync(recordFile, 'utf8')
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => JSON.parse(line) as RecordLine);
 }
 
 /** The file the harness names in `variable`; throws when the tests run outside the harness. */
@@ -49,13 +63,7 @@ export interface ScriptRun {
 /** The run of `entries`, recorded in `recordFile`; a record not written yet is empty. */
 function runOf(entries: readonly ScriptEntry[], recordFile: string): ScriptRun {
   function record(): RecordLine[] {
-    if (!existsSync(recordFile)) {
-      return [];
-    }
-    return readFileSync(recordFile, 'utf8')
-      .split('\n')
-      .filter(line => line !== '')
-      .map(line => JSON.parse(line) as RecordLine);
+    return readRecord(recordFile);
   }
   return {
     record,

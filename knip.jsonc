@@ -33,6 +33,8 @@
         "suite-reconnect/*.test.ts",
         "suite-failure/*.test.ts",
         "suite-terminal/*.test.ts",
+        "suite-slow/*.test.ts",
+        "slow-remote/src/extension.ts",
         "server/*.test.ts",
       ],
       "project": ["**/*.ts", "vscode-test.mjs"],
