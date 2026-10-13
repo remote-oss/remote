@@ -1,4 +1,4 @@
-# Task card ssh-38: a login shell that never finishes its startup fails the connect as a timeout (#443)
+# Task card ssh-38: a login shell that never finishes or ends its startup fails the connect (#443)
 
 Issue: #538. Why: athena's ruling on #443 after `remote-oss/remote-ssh#91` (2026-10-13). F-2704 AC-11 (a startup file
 that reads its input or pauses past the connect timeout) and F-2206 AC-28 (a login shell that doesn't answer) both
@@ -7,11 +7,13 @@ bootstrap (`packages/lib-ssh/src/connection-server/session-bootstrap.ts`) has it
 `LAYER1_SECONDS` (the connect timeout), then goes on to `exec sh` **without** the profile environment, and the connect
 succeeds. Builder: daedalus after cli-07, or hestia (hermes assigns). Size: M.
 
-Not in this card:
-- a startup file that **replaces bash with fish** still connects through layer 1 (athena has asked metis to mark that
-  AC-11 case reference-only);
-- a login shell that **exits by itself** without printing `LAYER1-START` (F-2704 AC-13, `.profile` ending `exit 1`):
-  athena rules separately, and its behaviour stays as today.
+A login shell that **ends its startup by itself** without printing `LAYER1-START` (F-2704 AC-13, AC-25, 7.E2: a
+`.profile` ending `exit 1`) fails the connect at once (athena's ruling on #539). The reason is the same: never connect
+silently without the user's environment. A login shell that can't start at all (`nologin`) already fails earlier,
+because sshd runs it for our remote command too.
+
+Not in this card: a startup file that **replaces bash with fish** still connects through layer 1 (athena has asked
+metis to mark that AC-11 case reference-only).
 
 ## 1. The bootstrap (`session-bootstrap.ts`)
 
@@ -20,8 +22,12 @@ Not in this card:
 - **After the waits, a fired watchdog with no start line ends the session.** When `"$LAYER1_DIR/timeout"` exists and
   `"$LAYER1_DIR/out"` holds no line `LAYER1-START`, the prelude prints exactly one line, `LAYER1-TIMEOUT
   <LAYER1_SECONDS>`, removes `"$LAYER1_DIR"`, and runs `exit 124` instead of `exec sh`.
-- **Every other case is unchanged:** a start line present (the environment is taken, then `exec sh`); layer 1 ending
-  by itself without the start line; `$SHELL` unusable; no temporary folder. All of these go on to `exec sh` as today.
+- **A layer 1 that ended by itself, with no start line, also ends the session.** When `"$LAYER1_DIR/timeout"` doesn't
+  exist and `"$LAYER1_DIR/out"` holds no line `LAYER1-START`, the prelude prints exactly one line, `LAYER1-EXITED
+  <status>`, with layer 1's exit status (from `wait "$LAYER1_PID"`), removes `"$LAYER1_DIR"`, and runs `exit 1` instead
+  of `exec sh`.
+- **The other cases are unchanged:** a start line present (the environment is taken, then `exec sh`), `$SHELL`
+  unusable, and no temporary folder all go on to `exec sh` as today.
 - The comment above `SESSION_BOOTSTRAP_LINES` says the session reaches `exec sh` **unless** the login shell outlasts
   its bound.
 
@@ -37,7 +43,12 @@ a run's output and is never passed to `ShellRuns`.
 **Terminal mode (`terminal/terminal-runs.ts`):** the same line in the terminal's output after the prelude ends the
 connect the same way, with the same log line.
 
-The marker names no secret and no path. It's a fixed word, a space and a number.
+**`LAYER1-EXITED <n>`, in both readers:** the connect fails **at once** with F-2601's dialog **without** a reason
+(`Could not establish connection to "<alias>".`, S030, 7.E2's form, not the timeout). The log has one line, AC-25's
+statement: `the SSH session ended before the host reported its platform: the login shell's startup exited with status
+<n>`.
+
+Neither marker names a secret or a path: each is a fixed word, a space and a number.
 
 ## 3. Rows
 
@@ -45,11 +56,14 @@ The marker names no secret and no path. It's a fixed word, a space and a number.
 |---|---|---|
 | F-2704 AC-11 | the bootstrap run by `sh` with `SHELL` a script that sleeps past `LAYER1_SECONDS=1` | its output is exactly `LAYER1-TIMEOUT 1`, and it exits 124 |
 | #443 | the same with a shell that prints the start line at once | no `LAYER1-TIMEOUT`, and the session reaches `exec sh` (a following `echo ok` prints `ok`) |
-| F-2704 AC-13 (unchanged) | a shell that exits 1 at once, with no start line | no `LAYER1-TIMEOUT`; it goes on to `exec sh` as today |
+| F-2704 AC-13 | the bootstrap with a shell that exits 1 at once, with no start line | its output is exactly `LAYER1-EXITED 1`, and it exits 1 |
+| F-2704 AC-25 | the helper's session whose first line is `LAYER1-EXITED 1` | the acquire fails at once with the reasonless failure (no S-id reason, so F-2601 shows S030), and the log has `the SSH session ended before the host reported its platform: the login shell's startup exited with status 1` |
+| F-2704 AC-25 | terminal mode, the same line | the connect fails the same way |
 | #443 | the bootstrap's temporary folder | it's gone after the timeout |
 | F-2704 AC-11 | the helper's session whose first line is `LAYER1-TIMEOUT 5` | the acquire fails with the login-timeout failure, and the log has `the login shell did not finish its startup within 5 s` |
 | F-2704 AC-11 | terminal mode, the same line | the connect fails the same way |
 | F-2206 AC-28 (real host) | tooling-17's `mute` alias, default mode | the connect fails with the timeout failure after the connect wait, never succeeds |
+| F-2704 AC-13 (real host) | a `.profile` ending in `exit 1` | the connect fails within a second, and the log has AC-25's statement |
 | F-2704 AC-11 (real host) | ssh-34's sleeping `.bash_profile` row | it becomes a timeout row: the connect fails, where today it succeeds without the profile's variables |
 
 Update ssh-34's real-host row in `tests/acceptance/server/login-shells.test.ts` and `tests/acceptance/server/*` for
@@ -57,5 +71,5 @@ the sleeping profile (it expected success without the profile environment). It n
 
 ## 4. Gates and review
 
-The repository's gates, the changed files at 100/100/100. PR title `lib-ssh: a login shell that never finishes its
-startup fails the connect as a timeout (card ssh-38, #443)`. athena, themis or triton.
+The repository's gates, the changed files at 100/100/100. PR title `lib-ssh: a login shell that never finishes or ends its
+startup fails the connect (card ssh-38, #443)`. athena, themis or triton.
