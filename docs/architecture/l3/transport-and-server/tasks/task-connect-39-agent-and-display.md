@@ -43,16 +43,21 @@ unless the running server happened to inherit them from the session that started
   `{...agentLink.terminalEnvironment(plan), ...display.terminalEnvironment(plan)}`, so `SSH_AUTH_SOCK` and/or
   `DISPLAY` and nothing else. `windowEnvironment` returns it as `extensionHostEnv` instead of `{}`, through the
   probed host this connect holds: wiring keeps the probe step's `host` for the connect, as it keeps the server steps.
-- **R4** (F-2311 5.0 steps 5–6): with an agent plan of kind `link`, the extension creates the link on the host:
-  `ln -sfn -- <target> <linkPath>`, in `/tmp` whatever the user's `TMPDIR` is (F-2311 BR-4), over the connection's
-  host channel (lib-host's run, the same channel the server steps use), after the server has started.
-  - First it lists the existing `/tmp/vscode-ssh-auth-sock-*` names for `takenNames`.
-  - A failure of the command is logged at warn, and nothing is shown (F-2311 7.E7).
-  - **Trust:** the link is made at once when `vscode.workspace.isTrusted` is true, or when the core setting
-    `terminal.integrated.allowInUntrustedWorkspace` is `true` (F-2311 5.0 step 5, AC-25). Otherwise it's made on the
-    first `workspace.onDidGrantWorkspaceTrust`, over the connection's channel, if the connection is still up.
-  - The extension doesn't raise core's trust modal itself (see §5).
-  - The step never delays the resolve's result: it runs after the result is handed back, while the connection is
+- **R4** (F-2311 5.0 steps 5–6; athena, register e2e9bba): with an agent plan of kind `link`, the extension creates
+  the link on the host from a **hidden extension terminal**:
+  - `vscode.window.createTerminal({name: 'Remote - SSH agent link', pty, hideFromUser: true})`. Its pseudoterminal's
+    `open()` lists the existing `/tmp/vscode-ssh-auth-sock-*` names (for `takenNames`), then runs
+    `ln -sfn -- <target> <linkPath>` in `/tmp` (whatever the user's `TMPDIR` is, F-2311 BR-4) over the connection's
+    host channel (lib-host's run, the same channel the server steps use), then closes the terminal.
+  - Core opens a terminal through its own trust check ([oss] `src/vs/workbench/contrib/terminal/browser/terminalInstance.ts`,
+    `_createProcess` and `_trust`). That gives the spec's behaviour without code of ours:
+    - no link while the trust modal is open (AC-8);
+    - the link right after "Trust Folder & Continue";
+    - the link with Restricted Mode after "Cancel" (AC-9);
+    - the link at once with `terminal.integrated.allowInUntrustedWorkspace` `true` (AC-25);
+    - step 5's own modal, raised by this step.
+  - A failure of the command is logged at warn, and nothing is shown (F-2311 7.E7). The terminal closes either way.
+  - The step never delays the resolve's result: it's started after the result is handed back, while the connection is
     held.
 - **R5** (F-2311 3.3, F-2312 3.3, AC-6, AC-5): the window's terminal environment collection
   (`context.environmentVariableCollection`) holds exactly R3's variables, replaced for each connect of the window:
@@ -72,14 +77,16 @@ unless the running server happened to inherit them from the session that started
    - `windowEnvironment` takes the two plans;
    - the plans come from R1 and R2, the record's plans are stored with `storeSharedRecord` (`connect.ts` already
      calls it after the tunnel; add the two fields where that record is built);
-   - the link step is a new `ConnectSteps.linkAgent(input, lease, plan)` called by `connect.ts` after the result is
-     built, never awaited by the resolve.
+   - the link command is a new `ConnectSteps.linkAgent(input, lease, plan)`, run by R4's pseudoterminal and started by
+     `connect.ts` after the result is built, never awaited by the resolve.
 3. **`lib-ssh` (`connection-server/messages.ts`):** the two optional `SharedRecord` fields and their reader.
 4. **The window side** (where the resolver's result reaches the extension, beside connect-33's Ports-view key in
    `extension.ts` or `register-connect.ts`): R5's collection, from the plans the connect returns with its result. Add
    the plans to the connect's `Connection` value for this.
-5. **Trust** (R4): a small port `trust: {isTrusted(): boolean; allowsUntrustedTerminals(): boolean;
-   onGranted(listener): Disposable}` over `vscode.workspace`, faked in the unit rows.
+5. **The link terminal** (R4): a port `linkTerminals: {open(name: string, run: () => Promise<void>): void}`. Its editor
+   adapter creates the hidden pty terminal whose `open()` awaits `run()` and then fires the pty's close. It's faked in
+   the unit rows: the fake records the open, and calls `open` and `close` when the test says so, standing for core's
+   trust check. No trust port.
 
 ## 4. Rows
 
@@ -94,8 +101,9 @@ unless the running server happened to inherit them from the session that started
 | F-2312.AC-11 | the same with `enableX11Forwarding` `false` | no `DISPLAY` |
 | F-2311.AC-2, F-2312.AC-7 | both | exactly the two variables, nothing else |
 | F-2311 6.4 | a connect that finds a stored record with an agent plan and a display plan | the stored plans are used: the same link path and display, and the probe's facts are ignored |
-| F-2311 5.0 step 5 | the trust port untrusted, then granted | no link step until the grant, then one |
-| F-2311.AC-25 | untrusted, with `allowsUntrustedTerminals()` true | the link step at once |
+| F-2311 5.0 step 5 | a link plan: the fake terminal port records one hidden terminal named `Remote - SSH agent link`; the link command hasn't run before the fake calls `open` | no command before `open` |
+| F-2311 5.0 step 6 | the fake then calls `open` | the listing and `ln -sfn -- …` ran once, in that order, and the pty fired close |
+| F-2311 5.0 step 5 | a `none` agent plan | no terminal opened |
 | F-2311 7.E7 | the link command fails | a warn line; the connect's result is unchanged |
 | F-2311.AC-6, F-2312.AC-5 | the window side with both plans | the collection holds exactly `SSH_AUTH_SOCK` and `DISPLAY`; with `none` plans, it's cleared |
 | lib-ssh | `SharedRecord` with valid and malformed `agentLink` and `display` | valid ones read back; malformed ones are absent |
@@ -124,16 +132,18 @@ Use the helpers of tooling-29 (`agentAdd` and `fingerprintOf` in `windows/harnes
 `onHost`. The rows run in the launch's own suite folder, `suite-forwarding/`. Add it as the README's "To add a launch"
 says.
 
-## 5. For athena's design check
+## 5. The catalogue
 
-1. **How the link is created.** F-2311 5.0 step 5 says the reference makes it through a terminal-style process, so
-   core's terminal trust modal gates it, and a reimplementation's link step "itself raises the modal". This card makes
-   it over the host channel instead, gated on `workspace.isTrusted` and `onDidGrantWorkspaceTrust` (R4).
-   - **The same:** no link before trust (AC-8), at once when trust is granted or isn't required (AC-25), and with
-     Cancel (AC-9) only when another feature's terminal step raises the modal.
-   - **Different:** in a window with no other terminal-style step, the reimplementation shows no modal of its own.
-   - Accept that, or rule that the step must start a terminal-kind process.
-2. **R1's reading of the settings:** a value other than `false` counts as enabled (the manifest default is `true`).
+**Rows waiting on #406:**
+- F-2311 AC-8 (no link while the trust modal is open) and AC-9 (Cancel still links, in Restricted Mode) need an
+  untrusted window, and the harness starts every editor with `--disable-workspace-trust`.
+- Their acceptance waits on #406's untrusted-launch gap. Tag them `todo` in `coverage-slice1.tsv` (or slice 2's file
+  when it exists), with nothing in the reason column, as `todo` takes none.
+- AC-25 likewise.
+
+**Settled by athena (register e2e9bba):**
+- R4's hidden extension terminal, which replaces the first draft's host-channel step behind its own trust gate.
+- R1: only an explicit `false` disables a setting.
 
 ## 6. Gates and review
 
@@ -143,10 +153,12 @@ reviews (security: the link command quotes its paths and uses `--`), and athena 
 
 ## 7. Open rows (stop and report on #676)
 
-1. ssh refuses X11 forwarding because the helper's `ssh` process gets no `DISPLAY`: the shared connection's process
+1. Core treats the hidden pty terminal as a local terminal (after "Cancel": "Cannot launch a terminal process in an
+   untrusted workspace", and no `open`). Stop and report. Don't force the terminal's kind.
+2. ssh refuses X11 forwarding because the helper's `ssh` process gets no `DISPLAY`: the shared connection's process
    environment may not carry the editor's. Report what the helper's environment holds. Don't add `DISPLAY` to it by
    guess.
-2. The probe's session is not the forwarding session, so `host.sshAuthSock` is empty though the alias forwards. Report
+3. The probe's session is not the forwarding session, so `host.sshAuthSock` is empty though the alias forwards. Report
    which session runs the probe.
-3. `SharedRecord` is read by a reference-shaped reader that rejects unknown fields: report it, and don't loosen the
+4. `SharedRecord` is read by a reference-shaped reader that rejects unknown fields: report it, and don't loosen the
    reader beyond the two fields.

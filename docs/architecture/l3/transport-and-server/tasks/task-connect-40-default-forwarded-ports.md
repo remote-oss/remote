@@ -17,11 +17,15 @@ Nothing reads the setting, so on main no default port is forwarded.
 
 ## 2. The rules (F-2507 5.0, BR-2 to BR-7, W4)
 
-- **R1** (BR-5): the setting is read **once per extension-host session**, after that session's first resolve settles
-  connected. That covers a connect and a reload, but not a reconnection's resolve: the extension host survives a
-  reconnection, so the reconnection doesn't apply it again (6.5 step 3). The hook is the one connect-33 uses for the
-  Ports-view key ("once the first resolve settles connected"). The value is read with the settings port's precedence
-  (BR-6: user, remote, folder), through `valueOf(host, 'defaultForwardedPorts')`.
+- **R1** (BR-5; athena, register e2e9bba): the decision is lib-forwarding's `shouldApplyDefaults(isReconnection)`
+  (`defaults/policy.ts`), called at each resolve that settles connected, where `isReconnection` is true when **an
+  earlier resolve in this extension host succeeded**.
+  - A connect and a reload apply the defaults: a reload starts a new extension host.
+  - A first connection's Retry applies them too: its first resolve failed, so no earlier resolve succeeded.
+  - A reconnection's resolve doesn't (6.5 step 3).
+  - The hook sits where connect-33 sets `forwardedPortsViewEnabled` when a resolve settles connected. The setting is read
+    there with the settings port's precedence (BR-6: user, remote, folder), through
+    `valueOf(host, 'defaultForwardedPorts')`.
 - **R2** (BR-2, 5.0 step 2): for each `parseDefaultForwards(...).requests` entry, in order, call `openTunnel` with:
   - `remoteAddress: {host: 'localhost', port: remotePort}`;
   - `localAddressPort: localPort` (the parser gives the remote port when none is set);
@@ -41,9 +45,9 @@ Nothing reads the setting, so on main no default port is forwarded.
 2. **A module `forwarding/default-forwards.ts`** (remote-ssh): `applyDefaults(forwards, port, logger): Promise<void>`
    by R2–R3, over a port `{openTunnel(options): PromiseLike<unknown>}`, and its editor adapter over
    `vscode.workspace.openTunnel` (the `tunnels` proposal the manifest declares).
-3. **The hook:** in the activation code where connect-33 sets `forwardedPortsViewEnabled` after the first resolve settles
-   connected, call `applyDefaults(defaultForwardsOf(settings), …)` once, not awaited by the resolve. Reuse the same
-   once-per-session guard, and don't add a second one.
+3. **The hook:** in the activation code where connect-33 sets `forwardedPortsViewEnabled` when a resolve settles
+   connected, keep one flag per extension host, "a resolve has succeeded". When `shouldApplyDefaults(<that flag>)` is
+   true, call `applyDefaults(defaultForwardsOf(settings), …)`, not awaited by the resolve, then set the flag.
 
 ## 4. Rows
 
@@ -56,7 +60,8 @@ Nothing reads the setting, so on main no default port is forwarded.
 | F-2507 7.E6 | two entries with remote port 8002 | one call, the first entry's |
 | F-2507 7.E4 | `[{remotePort: 'x'}, 5, {remotePort: 8003}]` | one call, for 8003; two info lines naming indexes 0 and 1 |
 | F-2507 W4 | the first `openTunnel` rejects | the second is still called; one warn line; `applyDefaults` resolves |
-| F-2507 BR-5 | the hook fired by a first resolve, then a reconnection's resolve | `applyDefaults` ran once |
+| F-2507 BR-5 | the hook fired by a first resolve that succeeded, then a reconnection's resolve that succeeded | `applyDefaults` ran once |
+| F-2507 BR-5 | a first resolve that failed, then the Retry's resolve that succeeded (no earlier success) | `applyDefaults` ran once, at the Retry |
 | F-2507.AC-6 | any input | no notice port was called (the rows' fake surfaces) |
 
 **Acceptance row** (VSCodium, a plain launch `default-ports`, settings
@@ -80,7 +85,7 @@ reviews; athena gives the design check.
 
 ## 6. Open rows (stop and report on #677)
 
-1. connect-33's hook isn't once per extension-host session, so it fires again on a reconnection's resolve. Report it,
-   and don't add a second guard.
+1. connect-33's hook can't tell a resolve that settles connected from one that fails, so the flag can't be kept by
+   R1's rule. Report what the hook gets.
 2. `openTunnel` from the local extension host isn't allowed before core's Ports view is registered. Report the error
    text.
