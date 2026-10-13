@@ -138,27 +138,39 @@ export function createTargets(options: TargetsOptions): Targets;
 
 **Builds:**
 
+`Targets` keeps two sequence numbers, both starting at 0:
+- the **build sequence**, taken by every build;
+- the **full-build sequence**, taken by full builds only.
+
+A build takes its numbers synchronously when it starts, before its first call. "Latest" always means the most
+recently started build, by these numbers, never the one that answered last. A build's answers that arrive after a later
+build has started are dropped for what that later build supersedes (rule 9). Within one build, F-5902's call order
+holds (rule 6).
+
 6. **A full build**, `rebuild()`:
    - with the companion absent, it makes no call, stores nothing and fires nothing (F-5101 7.E1; F-5902 §5, "calls none
      of the SSH ids then"), and resolves;
-   - otherwise it takes the next number of the build counter and of the full-build counter, then calls
+   - otherwise it takes the next build number and the next full-build number, then calls
      `calls.activeRemote()` and, in the same synchronous turn, `calls.hostnames()`. It doesn't await the first before
      making the second (F-5902 §5, "Order of a build's calls").
-7. **A host build**, `rebuildHosts()`: absent → as rule 6. Otherwise it takes the next build number and calls
-   `calls.hostnames()` alone.
+7. **A host build**, `rebuildHosts()`: absent → as rule 6. Otherwise it takes the next build number, but no full-build
+   number, and calls `calls.hostnames()` alone. So a host build supersedes the host list of every build started
+   before it, but never the stored active-host answer: it neither stores nor drops a pull.
 8. A build settles when all its calls have settled; `call` never rejects (companion-04 rule 3), so there's no error
    path.
 9. **When a build settles:**
    - **the aliases:** an `answered` host list is stored, with `value.hostnames`, when its build number is still the
-     latest. A failed one (`unavailable`, any cause) stores `[]`, under the same condition (F-5902 §5: the "SSH" group
+     latest build number taken; otherwise it's dropped. A failed one (`unavailable`, any cause) stores `[]`, under the same condition (F-5902 §5: the "SSH" group
      is shown with no host rows, F-5101 7.E2);
-   - **the pull** (full builds only), when its full-build number is still the latest: `answered` stores
+   - **the pull** (full builds only), when its full-build number is still the latest full-build number taken
+     (otherwise it's dropped): `answered` stores
      `{connected: value.connected, hostKey: value.hostKey}`, and `unavailable` stores `undefined`, so no row is marked
      (F-5902 §5);
    - **the listeners:** when either was stored, every `onDidChange` listener is called once, after the store.
 
-   Overlapping builds end with the latest one's list, each host once (F-5101 BR-6). A host build never changes the
-   stored pull, so the marker survives it.
+   Overlapping builds end with the most recently started build's list, each host once (F-5101 BR-6), and the most
+   recently started full build's pull. A host build never changes the stored pull, so the marker survives it. An
+   older build that answers last changes nothing.
 10. `children(group)` first awaits the build with the highest build number, when that build hasn't settled yet. It
    then returns the current host nodes. So the first render after a build shows its whole
    result (F-5103 BR-6, the marker on the first render). `children(<host node>)` is `[]` (no folder rows in slice 1).
@@ -282,6 +294,7 @@ The tree-adapter and window-activation rows use a fake editor:
 | F-5103.AC-28 | (each) the pull answers `{connected: true, hostKey: 'nomatch'}`; `{connected: true, hostKey: 'alpha'}` (case differs); `{connected: false}` | no host is connected |
 | F-5902.AC-5 | (each) the pull `U` with the hosts answered; the hosts `U` with the pull answered connected to `a` | hosts listed, none connected; the group present with `children(group)` `[]`; no exception |
 | F-5101.BR-6 | `rebuild()` twice; the first build's calls settle after the second's (the first: hosts `['old']`; the second: `['new']`) | `children(group)` is the one host `new`, also after the first settles |
+| F-5101.BR-6 | an older build answers last, end to end: `createTargets` over `companionCallsOf(createProtocol({bus: fake, timers}))`, where companion-05's recording fake has, for each of the two queries, a registered callback that returns a promise the test holds. `rebuild()`, then `rebuild()` again. The test releases the second build's answers first (pull connected to `second`, hosts `['second', 'shared']`), awaits that build, then releases the first build's (pull connected to `first`, hosts `['first', 'shared']`) and awaits it | the fake recorded the four calls in the order pull, hosts, pull, hosts. After both builds: `children(group)` is `second`, `shared`, and `second` alone is connected; one change event in all, from the second build |
 | F-5101.6.5 | after a full build marking `Alpha` (hosts `['Alpha']`): `fakeConfig` fires, and `hostnames` answers `['Alpha', 'beta']` | `order` gained only `hostnames`; `Alpha` is still connected, and `beta` is listed |
 | F-5101.BR-6 | `rebuild()` (pending), then a host build that settles first with `['x']`, then the full build settles with pull connected to `x` and hosts `['y']` | the hosts are `['x']` (the host build is later), and `x` is connected (the full build is the latest full build) |
 | F-5101.7.E1 | detector absent: `rebuild()` and `rebuildHosts()` | no call, no change event, both resolve |
@@ -304,7 +317,7 @@ The tree-adapter and window-activation rows use a fake editor:
 | F-5101.7.E5 | serving without the focus command | no `createTreeView`, no bus call; the refresh callback resolves `undefined` and makes no call |
 | F-5001.AC-16 | `l10n/` | the 15 bundles hold the same 9 keys, `connected` among them (03b's row, updated) |
 
-31 rows (an (each) row counts once). Every `it` name starts with its cite.
+32 rows (an (each) row counts once). Every `it` name starts with its cite.
 
 ## 4. Rule for the builder
 
