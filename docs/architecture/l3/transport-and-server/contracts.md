@@ -1096,7 +1096,7 @@ The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
 | `release` | lease | none; closing the lease's connection has the same effect, so a crashed extension host releases by itself | none |
 | `request` | lease, message (plain data) | reply (plain data) | `helperGone`, `timeout` (the caller's limit) |
 | `events` | lease | helper messages, `leaseListChanged`, `helperGone` | none |
-| `stop` | registry folder, namespace, recordKey | done, also when nothing runs | none |
+| `stop` | registry folder, namespace, recordKey | done, also when nothing runs. Once the helper has ended, `stop` removes its record, so nothing it stored for the key outlives the call (ruled 2026-10-13, #532: F-2412 BR-7 and POST-3, F-2411 6.1 step 2). It removes only the record of the helper it stopped: a record a new helper wrote in the meantime (another start token) stays | none |
 
 ### X2 helper-runtime (bundled into each helper script)
 
