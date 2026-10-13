@@ -43,13 +43,14 @@ Unit rows:
 | `F-3903 §5 rule 4: the setup probes the proposals the manifest ships` | the setup is given the generated `enabledApiProposals`. A fake editor whose `packageJSON.enabledApiProposals` is `[]` still gets the four probed |
 | `F-3903 §5 rule 4: a family member's proposals are read from its manifest file` | `installed()` with a fake file port: a member with a file declaring `resolvers` counts; a member with none, or with an unreadable file, doesn't; a non-family extension isn't read |
 | `the generated identifiers carry each package's enabledApiProposals` | tools row over `remote-ssh`'s `package.json` |
+| `F-3903 §5: closing the setup notice stores the dismissal flag, as Not Now does` | `setup-ports` with a notice that answers nothing: the dismissal flag is set (add this row if `setup-ports.test.ts` has none) |
 | `the setup's notice goes through the notice port` | `gateEditorOf` with a recording `NoticePort`: the setup notice's text and buttons |
 
 **Acceptance rows** (connect-30's `no-proposals` plain launch: no `--enable-proposed-api`, not development mode):
 
 | Name | Expected |
 |---|---|
-| `F-3903 §5 rule 4: without the proposals the setup notice is shown once` | after `inWindow('local', 'opensshremotes.showLog')`, the record has exactly one `notice` line of window `local`, whose question is F-2001 §3.4's setup text (`SETUP_TEXT_TEMPLATES.setup`, filled), with the buttons that text gives. The script answers it `dismiss`, which is not "Not Now", so no dismissal is stored |
+| `F-3903 §5 rule 4: without the proposals the setup notice is shown once` | after `inWindow('local', 'opensshremotes.showLog')`, the record has exactly one `notice` line of window `local`, whose question is F-2001 §3.4's setup text (`SETUP_TEXT_TEMPLATES.setup`, filled), with the buttons that text gives. The script answers it `dismiss`. Closing the notice stores the dismissal flag, as "Not Now" does (F-3903's repeat rule; `setup-ports.ts` maps a close to `notNow`). The launch activates the extension once, so no later row depends on the flag |
 | `F-3903 §5 rule 4: without the proposals the log names them` | the launch's log holds exactly one line `Missing proposed APIs: resolvers, tunnels, terminalDataWriteEvent`, plus any further missing ones in the manifest's order |
 | `F-3903 §5 rule 4: a second command in the same window shows nothing more` | after `inWindow('local', 'opensshremotes.getHelp')` (any served command), still exactly one setup `notice` line |
 
