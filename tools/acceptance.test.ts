@@ -1593,6 +1593,8 @@ describe('acceptance', () => {
           'failure-refused',
           'terminal',
           'slow',
+          'client-unset',
+          'ports-probe',
         ].map(label => path.join('/run', label, 'agent', 'pids')),
       );
     });
