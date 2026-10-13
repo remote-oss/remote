@@ -49,8 +49,9 @@ as passed (`scripted-adapters.ts`, with its unit row; `RecordLine` in `suite-loc
 **F-3902 AC-6** is shown by the run's first launch, not by a case. In `suite-remote/remote-window.test.ts`, the row
 `F-3902 AC-6: the host has bin/<commit> and no CLI, and the log says once that the CLI was not used` asserts:
 - the host has `bin/<commit>/` and no `cli/` folder;
-- `connectionLog()` has exactly one line with the reason `the editor names no CLI source` (`server-steps.ts`'s
-  `CLI_NOT_USED_REASONS`, read through its export, not copied).
+- `connectionLog()` has exactly one line `the CLI path was not used: the editor names no CLI source`. Today
+  `server-steps.ts` logs it from the module-private `CLI_NOT_USED_REASONS`. Export a builder for the line,
+  `cliNotUsedLine(reason)`, so that the row builds the expected text from it and doesn't copy it.
 
 That launch connects with exec server on by default and with no CLI source, since cli-05's archive is opt-in.
 
