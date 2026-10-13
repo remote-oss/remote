@@ -9,8 +9,7 @@
   },
   "scripts": {
     "typecheck": "node tools/identifiers.ts && tsc --build",
-    "lint": "node tools/identifiers.ts && pnpm --silent lint:part packages/remote-ssh && pnpm --silent lint:part packages/lib-ssh packages/lib-server packages/lib-authority && pnpm --silent lint:part 'packages/lib-*/**' --ignore-pattern 'packages/lib-ssh/**' --ignore-pattern 'packages/lib-server/**' --ignore-pattern 'packages/lib-authority/**' && pnpm --silent lint:part . --ignore-pattern 'packages/remote-ssh/**' --ignore-pattern 'packages/lib-*/**'",
-    "lint:part": "node --max-old-space-size=4096 node_modules/eslint/bin/eslint.js --no-error-on-unmatched-pattern",
+    "lint": "node tools/identifiers.ts && node --max-old-space-size=4096 node_modules/eslint/bin/eslint.js .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "build": "node tools/identifiers.ts && node tools/build.ts",
