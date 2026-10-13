@@ -147,6 +147,8 @@ export interface HarnessVariables {
   REMOTE_OSS_ACCEPTANCE_SCRIPT: string;
   /** The file the scripted adapters append their record to, in the run's folder. */
   REMOTE_OSS_ACCEPTANCE_RECORD: string;
+  /** The folder the signal files of held entries live in, one per run: the harness's `signal` creates a file in it. */
+  REMOTE_OSS_ACCEPTANCE_SIGNALS: string;
   /** The editor of the run. */
   HARNESS_EDITOR: EditorChoice;
   /** The file the log channel's lines are appended to, in the run's folder. */
@@ -203,8 +205,10 @@ const READY_INTERVAL = 500;
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
  * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); and the aliases of the
- * host's other accounts: `password` (login by password only), `noforward` (TCP forwarding refused), `mute` (a
- * login shell that does not answer), `readonly` (a server data folder that exists and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster).
+ * host's other accounts: `password` (login by password only), `password-ask` (the same account whose host key is
+ * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
+ * forwarding refused), `mute` (a login shell that does not answer), `readonly` (a server data folder that exists
+ * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster).
  */
 export function harnessSshConfig(port: number, runFolder: string): string {
   return [
@@ -251,6 +255,16 @@ export function harnessSshConfig(port: number, runFolder: string): string {
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_stranger')}`,
     '',
     ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
+    'Host password-ask',
+    '  HostName 127.0.0.1',
+    `  Port ${String(port)}`,
+    '  User harness-pw',
+    '  IdentityAgent none',
+    '  StrictHostKeyChecking ask',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_password_ask')}`,
+    ...PASSWORD_LINES.map(line => `  ${line}`),
+    '',
     ...accountAlias(
       'noforward',
       'harness-nofwd',
@@ -490,6 +504,7 @@ async function prepare(
     HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
+    REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(runFolder, 'signals'),
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),

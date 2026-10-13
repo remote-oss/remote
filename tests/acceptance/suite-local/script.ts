@@ -35,6 +35,8 @@ export type ScriptEntry = (
 ) & {
   /** The window that answers; an entry without one is answered once by each window. */
   window?: string;
+  /** The signal a held entry waits for before it answers: the run's signal file of that name must exist. */
+  after?: string;
 };
 
 /** One line of the record: the question as asked, and what the adapter answered. */
@@ -42,8 +44,11 @@ export interface RecordLine {
   /** A question's surface, or `progress` or `downloadProgress` for a display-only line. */
   surface: ScriptEntry['surface'] | 'progress' | 'downloadProgress';
   question: string;
+  /** The answer given, `'held'` on a held entry's waiting line and `'withdrawn'` when its question ended while it waited. */
   answer: string;
   matched: boolean;
+  /** The waiting line of a held entry: the answer or withdrawal line that follows it counts, not this one. */
+  held?: boolean;
   /** Whether the progress message carried the details link; only the phase lines of a `progress` surface have it. */
   details?: boolean;
   /** The name of the window that wrote the line. */
@@ -93,7 +98,10 @@ function runOf(entries: readonly ScriptEntry[], recordFile: string): ScriptRun {
   return {
     record,
     assertAllUsed: () => {
-      const used = record().filter(line => line.matched).length;
+      // The held line of a waiting entry does not count: its answer or withdrawal line does.
+      const used = record().filter(
+        line => line.matched && line.held !== true,
+      ).length;
       if (used < entries.length) {
         throw new Error(
           `${String(entries.length - used)} of ${String(entries.length)} script entries were not used`,

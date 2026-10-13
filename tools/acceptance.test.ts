@@ -448,6 +448,23 @@ describe('acceptance', () => {
     );
   });
 
+  it('D-85: Host password-ask is the password account whose host key is asked, against its own known hosts', () => {
+    strictEqual(
+      accountBlock('password-ask'),
+      [
+        'Host password-ask',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness-pw',
+        '  IdentityAgent none',
+        '  StrictHostKeyChecking ask',
+        '  ConnectTimeout 10',
+        '  UserKnownHostsFile /run/known_hosts_password_ask',
+        ...PASSWORD_ALIAS_LINES,
+      ].join('\n'),
+    );
+  });
+
   it('D-85: Host noforward logs in to harness-nofwd with the run key', () => {
     strictEqual(
       accountBlock('noforward'),
@@ -677,6 +694,7 @@ describe('acceptance', () => {
           harness.runFolder,
           'record.jsonl',
         ),
+        REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(harness.runFolder, 'signals'),
         HARNESS_VSIX_FILES: '',
         HARNESS_EDITOR: 'vscode',
         REMOTE_OSS_ACCEPTANCE_LOG: path.join(harness.runFolder, 'log.txt'),
@@ -2166,6 +2184,7 @@ describe('acceptance', () => {
           HARNESS_PASSWORD_FILE: '',
           REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
           REMOTE_OSS_ACCEPTANCE_RECORD: '',
+          REMOTE_OSS_ACCEPTANCE_SIGNALS: '',
           HARNESS_VSIX_FILES: '',
           HARNESS_EDITOR: 'vscode',
           REMOTE_OSS_ACCEPTANCE_LOG: '',

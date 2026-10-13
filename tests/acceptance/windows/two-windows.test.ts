@@ -3,8 +3,12 @@ import {promisify} from 'node:util';
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import path from 'node:path';
 import {
+  acceptedPasswords,
+  appendScript,
   closeWindow,
   emptyWindows,
+  heldLines,
+  hostPassword,
   inWindow,
   nextEmptyName,
   nextEmptyWindow,
@@ -13,12 +17,18 @@ import {
   recordLines,
   reloadWindow,
   scriptEntries,
+  signal,
   windowEvents,
   windowNameOrder,
   windowState,
 } from './harness.ts';
 
 const execFileAsync = promisify(execFile);
+
+/** Waits the given number of milliseconds. */
+function pause(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
 
 /** How many connection-helper processes of this run's extensions folder run on this machine. */
 async function connectionHelpers(): Promise<number> {
@@ -147,6 +157,60 @@ describe('windows of one editor on the same host (the first window is local)', f
     );
   });
 
+  let passwordLoginsBefore = 0;
+
+  it('D-85: a held password answer keeps the window waiting until its signal', async () => {
+    passwordLoginsBefore = await acceptedPasswords();
+    appendScript([
+      {
+        surface: 'maskedInput',
+        match: 'password',
+        answer: {text: hostPassword()},
+        window: 'h1',
+        after: 'h1-go',
+      },
+    ]);
+    await openWindow('password', 'h1');
+    const deadline = Date.now() + 60_000;
+    while (heldLines('h1').length === 0) {
+      if (Date.now() > deadline) {
+        throw new Error('window h1 never reached the held password question');
+      }
+      await pause(200);
+    }
+    // The connect stays at the password: three seconds on, its question is still the held one, with no answer line after it.
+    await pause(3000);
+    const heldWhileWaiting = [
+      heldLines('h1').length,
+      recordLines('maskedInput', 'h1').map(line => line.answer),
+    ];
+    signal('h1-go');
+    // h1 is connected when its connect runs on past the held question to its tunnel.
+    const connectedDeadline = Date.now() + 60_000;
+    while (
+      recordLines('progress', 'h1')
+        .map(line => line.question)
+        .at(-1) !== 'Setting up SSH tunnel'
+    ) {
+      if (Date.now() > connectedDeadline) {
+        throw new Error(
+          `window h1 never reached its tunnel: ${JSON.stringify(recordLines(undefined, 'h1'))}`,
+        );
+      }
+      await pause(500);
+    }
+    deepStrictEqual(
+      [
+        heldWhileWaiting,
+        recordLines('maskedInput', 'h1').map(line => line.answer),
+      ],
+      [
+        [1, ['held']],
+        ['held', '<supplied>'],
+      ],
+    );
+  });
+
   it('D-85: the host pick of Kill Local Connection Server is answered from the script', async () => {
     await inWindow('c', 'opensshremotes.cleanLocalServer');
     deepStrictEqual(
@@ -169,5 +233,19 @@ describe('windows of one editor on the same host (the first window is local)', f
         ],
       ],
     );
+  });
+  it('D-85: one accepted password is counted on the host', async () => {
+    const deadline = Date.now() + 30_000;
+    let count = await acceptedPasswords();
+    while (count !== passwordLoginsBefore + 1) {
+      if (Date.now() > deadline) {
+        throw new Error(
+          `the host counted ${String(count)} accepted passwords, expected ${String(passwordLoginsBefore + 1)}`,
+        );
+      }
+      await pause(500);
+      count = await acceptedPasswords();
+    }
+    await closeWindow('h1');
   });
 });
