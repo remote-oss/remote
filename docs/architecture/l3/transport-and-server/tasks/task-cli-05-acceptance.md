@@ -88,7 +88,7 @@ One assertion per `it`; names start with the cite.
 | brief §3 | the server is under `~/.vscodium-server/cli/servers/Insiders-<commit>/server/` and its `node` runs |
 | F-2103 5.0 step 6 | the record has one `downloadProgress` line, `Downloading VS Code Server...` |
 | F-2103 5.0 step 5 | `ps -eo args` on the host shows `<CLI file> command-shell` |
-| contracts S10 | the control token, read from the CLI process's `/proc/<pid>/environ` (`VSCODE_CLI_REQUIRE_TOKEN`), and the connection token, read from the running server's token file, appear in no `ps -eo args` line on the host and no line of the log. The row compares booleans only, so no output ever holds a token |
+| contracts S10 | the control token, read from the CLI process's `/proc/<pid>/environ` (`VSCODE_CLI_REQUIRE_TOKEN`), appears in no `ps -eo args` line on the host and no line of the log. The row compares booleans only, so no output ever holds a token |
 | #140 | a file written through the window is on the host |
 
 **suite-cli-reconnect (second launch)**
@@ -140,6 +140,12 @@ the PR body, with the host's architecture. PR title `tests: the CLI path in VSCo
 cli-05, #412)`.
 
 ## 8. Open rows
+
+- **S10 for the connection token** (themis on #485): the row "the connection token appears in no `ps -eo args` line
+  and no log line" waits for card cli-07. Today the CLI starts the server with `--connection-token=<token>` in its
+  argv (measured 2026-10-13, remote-oss/remote-ssh#92), and no token file exists. athena's ruling on #412 keeps the
+  CLI path dormant in 0.2, recorded as a release blocker on #299. cli-07 adds the row once it changes how the token
+  reaches the server.
 
 - Brief §11 (the user's): where CI gets a CLI. Until then, nothing in CI.
 - `remote-oss/remote-ssh#79` point 1: if the server source is passed at run time, a row checks that the CLI downloaded
