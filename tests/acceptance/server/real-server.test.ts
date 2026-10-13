@@ -284,7 +284,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       host.stop();
     });
 
-    it('F-2403 AC-5: the host downloads the archive itself and unpacks it where the plan says', () => {
+    it('contracts V4: the host downloads the archive itself and unpacks it where the plan says', () => {
       deepStrictEqual(
         [
           installation.transferred.kind === 'failed'
