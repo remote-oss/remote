@@ -1,6 +1,6 @@
 # Task card connect-44: with no CLI source, the log says once that the CLI path was not used
 
-Issue: #689. Release 0.2, not gating. Size: S. Builder: assigned by hermes. Spec: F-3902 AC-6 (remote-oss/remote-ssh#79,
+Issue: #689. Release 0.2, **gating** (athena: F-3902 AC-6 is a slice-1 criterion). Size: S. Builder: assigned by hermes. Spec: F-3902 AC-6 (remote-oss/remote-ssh#79,
 rule 5 (iii)). Found while building coverage-17 (#581, PR #688), which left AC-6 `todo` for it.
 
 ## 1. The defect
