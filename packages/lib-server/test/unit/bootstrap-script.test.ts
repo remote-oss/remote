@@ -1665,10 +1665,9 @@ describe('the POSIX bootstrap script', () => {
       return marker;
     }
 
-    /** Starts the launcher: `sh <script under cli/servers/>`, whose script records the TERM it gets. */
-    function startedLauncher(name: string): string {
-      const marker = markerOf(name);
-      const script = path.join(
+    /** The launcher's script, under cli/servers/, as the server's own is. */
+    function launcherScript(): string {
+      return path.join(
         dataFolder(),
         'cli',
         'servers',
@@ -1677,6 +1676,18 @@ describe('the POSIX bootstrap script', () => {
         'bin',
         'launcher',
       );
+    }
+
+    /**
+     * Starts `script` with a shell, named `program` in the command line, so that the script is its argv[1]; the script
+     * records the TERM it gets. Returns the marker.
+     */
+    function startedScript(
+      name: string,
+      program: string,
+      script: string,
+    ): string {
+      const marker = markerOf(name);
       mkdirSync(path.dirname(script), {recursive: true});
       writeFileSync(script, trapScript(marker));
       children.push(
@@ -1684,6 +1695,7 @@ describe('the POSIX bootstrap script', () => {
           env: host.environment,
           stdio: 'ignore',
           detached: true,
+          argv0: program,
         }),
       );
       return marker;
@@ -1711,7 +1723,9 @@ describe('the POSIX bootstrap script', () => {
 
     it("F-2411.BR-3: kill stops the server's launcher, a shell running a script under cli/servers/", () => {
       runScript(host, single('install'), parametersFor());
-      const markers = {launcher: startedLauncher('launcher')};
+      const markers = {
+        launcher: startedScript('launcher', 'sh', launcherScript()),
+      };
       spawnSync('/bin/sleep', ['0.5']);
       deepStrictEqual(afterKill(markers), ['launcher']);
     });
@@ -1728,6 +1742,46 @@ describe('the POSIX bootstrap script', () => {
     it('F-2412 AC-27: kill leaves an editor that only names a path under cli/servers/', () => {
       runScript(host, single('install'), parametersFor());
       const markers = {editor: started('editor', 'vim', [serverFile()])};
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2412 AC-27: kill leaves a program that is not a shell and has a script under cli/servers/ as its first argument', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        editor: startedScript('editor', 'vim', launcherScript()),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2412 AC-27: kill leaves a shell that is not one of the four, running a script under cli/servers/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        fish: startedScript('fish', '/usr/bin/fish', launcherScript()),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2412 AC-27: kill leaves a program whose file only contains the path under cli/servers/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        copy: started('copy', `/copy${serverFile()}`),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterKill(markers), []);
+    });
+
+    it('F-2412 AC-27: kill leaves a shell whose script only contains the path under cli/servers/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        copy: startedScript(
+          'copy',
+          'sh',
+          path.join(dataFolder(), 'copy', launcherScript()),
+        ),
+      };
       spawnSync('/bin/sleep', ['0.5']);
       deepStrictEqual(afterKill(markers), []);
     });
