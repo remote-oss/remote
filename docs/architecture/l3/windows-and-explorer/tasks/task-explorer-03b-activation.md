@@ -208,7 +208,7 @@ flags appear only when a proposal is missing, and then the view doesn't exist (F
 
 | Constant in `extension.ts` | English text |
 |---|---|
-| `STAND_DOWN_WARNING` | Another Remote Explorer extension is enabled in this window. This extension stays inactive while it is enabled because both use the same commands, settings and views. Disable one of the two extensions and reload the window. |
+| `STAND_DOWN_WARNING` | Remote Explorer stays inactive in this window because another Remote Explorer extension is enabled. Both use the same commands, settings and views. Disable one of the two and reload the window. |
 | `STAND_DOWN_BUTTON` | Show Remote Explorer Extension |
 | `SETUP_TEXT_TEMPLATES.setup` | {0} needs proposed VS Code APIs that {1} has not enabled for it. Add {2} to 'enable-proposed-api' in argv.json, then restart {1}. |
 | `SETUP_TEXT_TEMPLATES.failedAttempt` | The previous setup attempt did not enable the proposed APIs {0} needs. Check that 'enable-proposed-api' in argv.json lists 'remote-oss.remote-explorer', then restart {1}. |
@@ -217,12 +217,10 @@ flags appear only when a proposal is missing, and then the view doesn't exist (F
 | `SETUP_TEXT_TEMPLATES.notNowButton` | Not Now |
 | `SETUP_TEXT_TEMPLATES.quitButton` | Quit {1} |
 
-**The coexistence warning** is F-5001 3.4's text with one change. The spec's message opens with
-"Remote Explorer (ms-vscode.remote-explorer) is enabled in this window." The family's public-surface rule (ADR-0008,
-`tools/public-surface-terms.ts`) forbids `ms-vscode` in a shipped string, and remote-ssh's warning names no Microsoft
-id for the same reason. So the opening becomes "Another Remote Explorer extension is enabled in this window." The rest
-of the message and the button are verbatim. The button still opens the Extensions view on `ms-vscode.remote-explorer`
-(lib-standdown's `revealExtension`).
+**The coexistence warning** and its button are F-5001 3.4's text exactly, as republished on remote-oss/remote-explorer#17
+(athena, 2026-10-13). The message names no extension id, so ADR-0008's public-surface rule holds without a deviation.
+The button opens the Extensions view on `ms-vscode.remote-explorer` (lib-standdown's `revealExtension`, F-5001
+AC-20).
 
 **The setup templates** are remote-ssh's with the explorer's id in the failed-attempt text, as remote-ssh-08 publishes
 its own.
@@ -278,10 +276,8 @@ its test name.
 
 ## 6. Open rows (stop and report on #630)
 
-1. **Spec text.** The coexistence warning differs from F-5001 3.4's exact message (2.6). If athena rules for the spec's
-   text, the public-surface rule needs an exemption first. Don't add one in this card.
-2. **`extensionsAny`** is declared but has no probe (`probe.ts` gives `unprobeable`). Its silent same-host fallback is
+1. **`extensionsAny`** is declared but has no probe (`probe.ts` gives `unprobeable`). Its silent same-host fallback is
    companion-05's detector, not the setup. No notice ever names it.
-3. **`remote-internal.setActiveFolders`** is declared as the activation event but not registered until increment 2. A
+2. **`remote-internal.setActiveFolders`** is declared as the activation event but not registered until increment 2. A
    keybinding on it before then gets core's "not found" warning; F-5001 AC-11 is `deferred`
    (`explorer slice 1: increment 2`).
