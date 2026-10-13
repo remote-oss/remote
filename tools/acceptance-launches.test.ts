@@ -40,10 +40,13 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the terminal launch turns the local server off', () => {
+  it('D-85: the terminal launch turns the local server off and names the platform of the host, so that no pick is asked', () => {
     deepStrictEqual(
       launches.find(launch => launch.label === 'terminal')?.settings,
-      {'remote.SSH.useLocalServer': false},
+      {
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
     );
   });
 

@@ -23,7 +23,7 @@ function reasonOf(
 
 /** Login terminals in the editor: one terminal per open, its output read through the terminal data event. */
 export function loginTerminalsOf(
-  editor: Pick<typeof vscode, 'window' | 'TerminalExitReason'>,
+  editor: Pick<typeof vscode, 'window' | 'TerminalExitReason' | 'Uri'>,
   homeFolder: string,
 ): LoginTerminals {
   return {
@@ -53,7 +53,8 @@ export function loginTerminalsOf(
         name,
         shellPath: invocation.program,
         shellArgs: invocation.arguments,
-        cwd: homeFolder,
+        // A folder URI of the file scheme makes the terminal a local one, also in a window that is still connecting.
+        cwd: editor.Uri.file(homeFolder),
         env: invocation.environment,
         hideFromUser: !reveal,
       });

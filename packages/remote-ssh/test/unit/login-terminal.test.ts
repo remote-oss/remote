@@ -49,6 +49,7 @@ function fakeEditor() {
   const terminal = fakeTerminal();
   const editor = {
     TerminalExitReason: REASONS,
+    ['Uri']: {file: (path: string) => ({scheme: 'file', fsPath: path})},
     window: {
       onDidWriteTerminalData: (
         listener: (event: {terminal: unknown; data: string}) => void,
@@ -73,7 +74,7 @@ function fakeEditor() {
         return terminal;
       },
     },
-  } as unknown as Pick<typeof vscode, 'window' | 'TerminalExitReason'>;
+  } as unknown as Pick<typeof vscode, 'window' | 'TerminalExitReason' | 'Uri'>;
   return {
     editor,
     terminal,
@@ -112,11 +113,19 @@ describe('loginTerminalsOf (card ssh-18 table)', () => {
         name: 'install',
         shellPath: 'ssh',
         shellArgs: ['-T', 'host'],
-        cwd: '/home/a',
+        cwd: {scheme: 'file', fsPath: '/home/a'},
         env: {TERM: 'dumb'},
         hideFromUser: true,
       },
     ]);
+  });
+
+  it('#639: the terminal is a local one, whose folder is a file URI and not a text', () => {
+    const [terminal] = opened().created;
+    deepStrictEqual(
+      [typeof terminal?.cwd, (terminal?.cwd as {scheme: string}).scheme],
+      ['object', 'file'],
+    );
   });
 
   it('F-2308 BR-2: a revealed terminal is not hidden', () => {
