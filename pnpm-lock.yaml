@@ -301,6 +301,9 @@ importers:
       lib-authority:
         specifier: workspace:*
         version: link:../lib-authority
+      lib-companion:
+        specifier: workspace:*
+        version: link:../lib-companion
       lib-forwarding:
         specifier: workspace:*
         version: link:../lib-forwarding

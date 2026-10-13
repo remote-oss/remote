@@ -7,6 +7,7 @@
 
 import {
   type LabelFormatterHost,
+  type LastResolve,
   type SshTarget,
   type Registration,
   registerResolver,
@@ -70,6 +71,11 @@ export interface ConnectRegistration {
   registration: Registration['kind'];
   /** The host alias of the window's connection, as the user wrote it; empty before the first resolve. */
   currentAlias(): string;
+  /**
+   * The window's connection: the authority's host part as written, and how its last settled resolve ended; nothing
+   * before the first resolve starts or without a resolver.
+   */
+  activeConnection(): {hostKey: string; lastResolve: LastResolve} | undefined;
   dispose(): void;
 }
 
@@ -168,6 +174,15 @@ export async function registerConnect(
     currentAlias: () => {
       const target = resolver?.currentConnection()?.decodedTarget.target;
       return target !== undefined && 'kind' in target ? hostAlias(target) : '';
+    },
+    activeConnection: () => {
+      const current = resolver?.currentConnection();
+      return resolver === undefined || current === undefined
+        ? undefined
+        : {
+            hostKey: current.decodedTarget.rawHostString,
+            lastResolve: resolver.lastResolve(),
+          };
     },
     dispose: () => {
       details.dispose();

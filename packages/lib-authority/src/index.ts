@@ -56,6 +56,7 @@ export {
   type ConnectionState,
   ConnectionTracker,
   type CurrentConnection,
+  type LastResolve,
 } from './resolver/connection-state.ts';
 export {
   type InteractionOutcome,

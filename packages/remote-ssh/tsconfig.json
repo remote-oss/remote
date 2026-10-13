@@ -6,6 +6,9 @@
       "path": "../lib-authority"
     },
     {
+      "path": "../lib-companion"
+    },
+    {
       "path": "../lib-forwarding"
     },
     {
