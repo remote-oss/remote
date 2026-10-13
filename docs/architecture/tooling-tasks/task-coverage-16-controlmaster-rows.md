@@ -41,10 +41,11 @@ to `true`.
 | 5 | `m1`: (pw). `masterExit('master')` | within 30 s `m1` is connected again; exactly one new `maskedInput` line of `m1`; `masterCheck('master')` (a new socket) | AC-30 |
 | 6 | clean (as above). `m2`: (pw), then `{surface: 'maskedInput', match: 'Allow shared connection', answer: {text: 'yes'}}`. Open `m2` on `master-ask` | `m2` connected; `m2`'s second `maskedInput` line's question contains `Allow shared connection to`. If the prompt comes as a `pick` instead, the row fails: report it on the issue, since the AC says an input | AC-39 |
 | 7 | clean. `m3`: (pw), then `hostPick` → `{label: 'master-yes'}`, then (pw). Open `m3` on `master-yes`; in `m3`, Kill; reload `m3` | after the reload `m3` asked for the password again: one more `maskedInput` line; `m3` connected | AC-40 (`yes`) |
-| 8 | clean. `m3`: (pw), `{surface: 'maskedInput', match: 'Allow shared connection', answer: {text: 'yes'}}`, then `hostPick` → `{label: 'master-autoask'}`. Open `m3` on `master-autoask`; in `m3`, Kill; reload `m3` | after the reload `m3` is connected with no new `maskedInput` line | AC-40 (`autoask`) |
+| 8 | clean. `m3`: (pw), `{surface: 'maskedInput', match: 'Allow shared connection', answer: {text: 'yes'}}`, then `hostPick` → `{label: 'master-autoask'}`. Open `m3` on `master-autoask`; in `m3`, Kill; reload `m3` | the first connect asks `Allow shared connection to` (as row 6); after the reload `m3` is connected with no new `maskedInput` line | AC-39 (`autoask`), AC-40 (`autoask`) |
 
-In row 8 the first connect may or may not ask "Allow shared connection" (OpenSSH asks only when a master is in use). If
-it doesn't, the entry stays unused, which is allowed. Assert only the line counts after the Kill.
+Entries are matched in order, and a question that doesn't match the next entry is dismissed. So every entry a row
+writes must be asked, in its order. Row 7 counts exactly one new matched `maskedInput` line between the Kill and the end
+of the reload.
 
 ## 3. The catalogue
 
