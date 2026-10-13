@@ -230,6 +230,12 @@ describe("the connect's registration", () => {
     );
   });
 
+  it('F-2411 POST-3: the kill ends the local connection server of the host through the registration', async () => {
+    const {seen} = await registered(true);
+    await seen.commands.get('opensshremotes.cleanRemoteServer')?.();
+    deepStrictEqual(seen.killed, ['dev']);
+  });
+
   it('F-2411.AC-8: Open Logs on the notice reveals the log', async () => {
     const {seen} = await registered(true);
     seen.noticeAnswer = 'Open Logs';

@@ -9,6 +9,7 @@ import type {Logger} from 'lib-log';
 import type {SshTarget} from 'lib-ssh';
 import {
   type ConnectCommandEditor,
+  payloadOf,
   pickedTarget,
 } from '../connect/connect-commands.ts';
 import {ownText} from '../surfaces/own-strings.ts';
@@ -31,6 +32,8 @@ export interface MaintenancePorts {
     action: 'kill' | 'uninstall',
     target: SshTarget,
   ): Promise<MaintenanceRun>;
+  /** Ends the local connection server of the host string and forgets its stored details; silent when none runs. */
+  killLocalServer(hostString: string): PromiseLike<void>;
   notice: NoticePort;
   translate: Translate;
   /** Reveals the connection's log: what "Open Logs" does. */
@@ -72,6 +75,8 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
         const outcome = await ports.perform('kill', target);
         if (outcome.result === 'connectionFailed') {
           ports.logger.warn(`the kill failed: ${outcome.cause}`);
+        } else {
+          await ports.killLocalServer(payloadOf(target));
         }
         await notify(
           outcome.result === 'stepRan'
@@ -91,6 +96,7 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
           ports.logger.warn(`the uninstall failed: ${outcome.cause}`);
           throw new Error(UNINSTALL_FAILED);
         }
+        await ports.killLocalServer(payloadOf(target));
       },
     },
   };

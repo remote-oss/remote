@@ -118,6 +118,7 @@ export async function registerConnect(
       ...maintenanceHandlers({
         editor: host.connectEditor,
         perform: (action, target) => assembly.maintain(action, target),
+        killLocalServer: hostString => connection.killLocalServer(hostString),
         notice: host.notice,
         translate: host.translate,
         revealLog: () => {

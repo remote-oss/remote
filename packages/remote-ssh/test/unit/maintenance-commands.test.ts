@@ -23,6 +23,8 @@ interface Setup {
   notices: Array<[string, readonly string[]]>;
   commands: string[];
   revealed: number;
+  /** The host strings whose local connection server was ended. */
+  ended: string[];
   sink: MemorySink;
   kill(): Promise<void>;
   uninstall(): Promise<void>;
@@ -41,6 +43,7 @@ function setup(
     notices: [],
     commands: [],
     revealed: 0,
+    ended: [],
     sink: new MemorySink(),
     kill: () => Promise.resolve(),
     uninstall: () => Promise.resolve(),
@@ -59,6 +62,10 @@ function setup(
     perform: (action, target: SshTarget) => {
       seen.runs.push(`${action} ${target.host}`);
       return Promise.resolve(options.outcome ?? RAN_OK);
+    },
+    killLocalServer: hostString => {
+      seen.ended.push(hostString);
+      return Promise.resolve();
     },
     notice: {
       showInformation: (message, buttons) => {
@@ -207,5 +214,44 @@ describe('Uninstall VS Code Server from Host... (F-2412)', () => {
       [scenario.notices, scenario.sink.lines.map(line => line.message)],
       [[], ['the uninstall failed: the connection failed: x']],
     );
+  });
+});
+
+describe('the local connection server after a maintenance run (F-2411 POST-3, F-2412 POST-3)', () => {
+  it('F-2411 POST-3: after a kill that ran, the local connection server of the host is ended', async () => {
+    const scenario = setup();
+    await scenario.kill();
+    deepStrictEqual(scenario.ended, ['dev']);
+  });
+
+  it('F-2412 POST-3: after an uninstall that ran, the local connection server of the host is ended', async () => {
+    const scenario = setup();
+    await scenario.uninstall();
+    deepStrictEqual(scenario.ended, ['dev']);
+  });
+
+  it('F-2411 POST-3: a kill that could not connect ends nothing', async () => {
+    const scenario = setup({outcome: FAILED});
+    await scenario.kill();
+    deepStrictEqual(scenario.ended, []);
+  });
+
+  it('F-2412 POST-3: an uninstall that could not connect ends nothing', async () => {
+    const scenario = setup({outcome: FAILED});
+    await scenario.uninstall().catch(() => undefined);
+    deepStrictEqual(scenario.ended, []);
+  });
+
+  it('F-2411.AC-11: a typed target ends the server of its own host string', async () => {
+    const scenario = setup({
+      picked: {
+        kind: 'typed',
+        label: '➤ me@box:2222',
+        text: 'me@box:2222',
+        keepVisible: true,
+      },
+    });
+    await scenario.kill();
+    deepStrictEqual(scenario.ended.length, 1);
   });
 });
