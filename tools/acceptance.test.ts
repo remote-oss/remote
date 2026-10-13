@@ -418,21 +418,23 @@ describe('acceptance', () => {
       suite: 'suite-remote',
     };
 
+    /** The editor's user settings file of the run. */
+    function settingsPath(): string {
+      return path.join(workspace.root, 'user-data', 'User', 'settings.json');
+    }
+
+    /** The user settings as the editor would read them now. */
+    function settingsFile(): unknown {
+      return JSON.parse(readFileSync(settingsPath(), 'utf8'));
+    }
+
     /** The user settings each launch found when it started, by label. */
     async function settingsSeen(
       ...launches: Launch[]
     ): Promise<Map<string, unknown>> {
       const seen = new Map<string, unknown>();
       await runLaunches(workspace.root, '/run/ssh_config', launches, label => {
-        seen.set(
-          label ?? '',
-          JSON.parse(
-            readFileSync(
-              path.join(workspace.root, 'user-data', 'User', 'settings.json'),
-              'utf8',
-            ),
-          ),
-        );
+        seen.set(label ?? '', settingsFile());
         return Promise.resolve({exitCode: 0, output: ''});
       });
       return seen;
@@ -450,6 +452,29 @@ describe('acceptance', () => {
         (await settingsSeen(TERMINAL, REMOTE)).get('remote'),
         BASE,
       );
+    });
+
+    it("D-85: a launch's settings cannot replace the run's ssh_config", async () => {
+      const seen = await settingsSeen({
+        ...REMOTE,
+        settings: {'remote.SSH.configFile': '/elsewhere'},
+      });
+      deepStrictEqual(seen.get('remote'), BASE);
+    });
+
+    it('D-85: a retried launch finds the base settings again, not what the failed attempt left', async () => {
+      const seen: unknown[] = [];
+      let attempts = 0;
+      await runLaunches(workspace.root, '/run/ssh_config', [TERMINAL], () => {
+        attempts += 1;
+        seen.push(settingsFile());
+        writeFileSync(settingsPath(), '{"left": "behind"}');
+        return Promise.resolve({
+          exitCode: attempts === 1 ? 1 : 0,
+          output: attempts === 1 ? 'CodeWindow: detected unresponsive' : '',
+        });
+      });
+      deepStrictEqual(seen[1], seen[0]);
     });
 
     it('D-85: the VS Code run starts its one configuration without a label and writes no settings', async () => {
