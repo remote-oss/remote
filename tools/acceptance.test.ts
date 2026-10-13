@@ -333,6 +333,12 @@ describe('acceptance', () => {
         HARNESS_VSIX_FILES: '',
         HARNESS_EDITOR: 'vscode',
         REMOTE_OSS_ACCEPTANCE_LOG: path.join(harness.runFolder, 'log.txt'),
+        HARNESS_WINDOW_AGENT: path.join(
+          workspace.root,
+          'tests',
+          'acceptance',
+          'window-agent',
+        ),
       });
     });
 
@@ -1285,6 +1291,7 @@ describe('acceptance', () => {
           HARNESS_VSIX_FILES: '',
           HARNESS_EDITOR: 'vscode',
           REMOTE_OSS_ACCEPTANCE_LOG: '',
+          HARNESS_WINDOW_AGENT: '',
         })
       ).exitCode,
       0,

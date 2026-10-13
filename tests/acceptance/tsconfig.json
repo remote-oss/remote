@@ -14,6 +14,9 @@
     "${configDir}/suite-terminal",
     "${configDir}/suite-slow",
     "${configDir}/slow-remote/src",
+    "${configDir}/suite-windows",
+    "${configDir}/suite-windows-local",
+    "${configDir}/window-agent/src",
     "${configDir}/suite-failure/cases.json"
   ],
   "references": [

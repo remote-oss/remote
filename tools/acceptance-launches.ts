@@ -9,6 +9,9 @@ import path from 'node:path';
 /** The window the remote launches open: the harness host's home folder over `ssh-remote`. */
 const REMOTE_FOLDER_URI = 'vscode-remote://ssh-remote+harness/home/harness';
 
+/** The development extension every launch loads: it runs commands for the window and reports its activation. */
+const WINDOW_AGENT = 'window-agent';
+
 /** One launch of the VSCodium run, in the order the run makes them. */
 export interface Launch {
   /** The test-cli label: lower-case letters, digits and hyphens. */
@@ -33,6 +36,8 @@ export interface Launch {
    * runs on the host.
    */
   hostExtensions?: readonly string[];
+  /** Folders of the host user's home that exist before the launch, such as the folder of the window it opens. */
+  hostFolders?: readonly string[];
 }
 
 /** One failing connect of the VSCodium run: its own launch on `alias`, the script its window answers from. */
@@ -81,11 +86,13 @@ export function failureLabel(alias: string): string {
  * window on `ssh-remote+harness`, where the runner is an extension of the workspace kind; `reconnect` runs
  * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); each
  * failing connect runs suite-failure in a window on its alias, answered from its own script; and `terminal` runs
- * suite-terminal with `remote.SSH.useLocalServer` off; and `slow` runs suite-slow with an extension that takes 15 s to
- * activate in the remote extension host, which the harness copies to the host first.
+ * suite-terminal with `remote.SSH.useLocalServer` off; `slow` runs suite-slow with an extension that takes 15 s to
+ * activate in the remote extension host, which the harness copies to the host first; `windows` runs suite-windows in a
+ * window on the folder `a`, which opens and drives further windows; `windows-local` does the same from a local window.
+ * Every launch loads the window agent.
  */
 export function launchesOf(root: string): Launch[] {
-  return [
+  const launches: Launch[] = [
     {label: 'local', runner: 'runner', suite: 'suite-local'},
     {
       label: 'remote',
@@ -120,7 +127,19 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
       hostExtensions: ['slow-remote'],
     },
+    {
+      label: 'windows',
+      runner: 'runner-remote',
+      suite: 'suite-windows',
+      folderUri: 'vscode-remote://ssh-remote+harness/home/harness/a',
+      hostFolders: ['a'],
+    },
+    {label: 'windows-local', runner: 'runner', suite: 'suite-windows-local'},
   ];
+  return launches.map(launch => ({
+    ...launch,
+    extraExtensions: [...(launch.extraExtensions ?? []), WINDOW_AGENT],
+  }));
 }
 
 /** The folder a suite is bundled into: `dist` for the shared suite, `dist-<name>` for `suite-<name>`. */

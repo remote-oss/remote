@@ -106,6 +106,8 @@ export interface HarnessVariables {
   HARNESS_EDITOR: EditorChoice;
   /** The file the log channel's lines are appended to, in the run's folder. */
   REMOTE_OSS_ACCEPTANCE_LOG: string;
+  /** The window agent's folder, which a window a test opens loads as a development extension. */
+  HARNESS_WINDOW_AGENT: string;
   /** The VSCodium executable, in the VSCodium run only. */
   HARNESS_VSCODIUM_EXECUTABLE?: string;
 }
@@ -279,6 +281,12 @@ async function prepare(
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
+    HARNESS_WINDOW_AGENT: path.join(
+      root,
+      'tests',
+      'acceptance',
+      'window-agent',
+    ),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
   };
 }
@@ -295,13 +303,26 @@ function launchFiles(
   };
 }
 
-/** Copies the host extensions of the launches into the host's home folder, owned by the user harness. */
-function copyHostExtensions(
+/** Makes the host folders of the launches, and copies their host extensions, into the host's home folder of the user harness. */
+function prepareHost(
   command: CommandRunner,
   root: string,
   container: string,
   launches: readonly Launch[],
 ): void {
+  for (const folder of new Set(
+    launches.flatMap(launch => launch.hostFolders ?? []),
+  )) {
+    checked(command, 'docker', [
+      'exec',
+      '--user',
+      'harness',
+      container,
+      'mkdir',
+      '-p',
+      `/home/harness/${folder}`,
+    ]);
+  }
   for (const extension of new Set(
     launches.flatMap(launch => launch.hostExtensions ?? []),
   )) {
@@ -376,7 +397,7 @@ export async function runAcceptance(
       );
     }
     const launches = editor === 'vscodium' ? launchesOf(root) : [];
-    copyHostExtensions(
+    prepareHost(
       dependencies.command,
       root,
       variables.HARNESS_CONTAINER,

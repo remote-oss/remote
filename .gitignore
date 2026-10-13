@@ -9,6 +9,7 @@ packages/*/src/identifiers.generated.ts
 tests/acceptance/dist/
 tests/acceptance/dist-*/
 tests/acceptance/slow-remote/extension.cjs
+tests/acceptance/window-agent/extension.cjs
 
 # Python bytecode (the conformance runner)
 __pycache__/

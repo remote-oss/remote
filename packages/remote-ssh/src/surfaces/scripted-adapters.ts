@@ -16,8 +16,11 @@ const SCRIPT = 'REMOTE_OSS_ACCEPTANCE_SCRIPT';
 const RECORD = 'REMOTE_OSS_ACCEPTANCE_RECORD';
 const LOG_FILE_VARIABLE = 'REMOTE_OSS_ACCEPTANCE_LOG';
 
-/** One expected question and its answer, in the order the test expects them. */
-export type ScriptEntry =
+/**
+ * One expected question and its answer, in the order the test expects them. An entry with a `window` is answered only
+ * by the window of that name; one without is answered once by each window.
+ */
+export type ScriptEntry = (
   | {surface: 'pick'; match: string; answer: 'yes' | 'no' | 'dismiss'}
   | {surface: 'maskedInput'; match: string; answer: {text: string} | 'dismiss'}
   | {
@@ -35,7 +38,8 @@ export type ScriptEntry =
       match: string;
       answer: MitigationAction | 'dismiss';
     }
-  | {surface: 'licenceModal'; match: string; answer: 'decline' | 'dismiss'};
+  | {surface: 'licenceModal'; match: string; answer: 'decline' | 'dismiss'}
+) & {window?: string};
 
 /** One line of the record: the question as asked, and what the adapter answered. */
 export interface RecordLine {
@@ -49,6 +53,14 @@ export interface RecordLine {
   matched: boolean;
   /** Whether the progress message carried the details link; only the phase lines of a `progress` surface have it. */
   details?: boolean;
+  /** The name of the window that wrote the line. */
+  window: string;
+}
+
+/** The name of a window: the last segment of its first workspace folder's path, or `local` for a window without one. */
+export function windowNameOf(firstFolderPath: string | undefined): string {
+  const segment = firstFolderPath?.split('/').filter(part => part !== '').at(-1);
+  return segment ?? 'local';
 }
 
 /** The files the adapters use: the script is read, the record is appended to. */
@@ -63,13 +75,21 @@ interface Given<Value> {
   recorded: string;
 }
 
-/** The entries of the script file; a missing or unreadable file, or one with no list, holds none. */
-function entriesOf(scriptFile: string, files: AdapterFiles): ScriptEntry[] {
+/** The entries of the script file for the window; a missing or unreadable file, or one with no list, holds none. */
+function entriesOf(
+  scriptFile: string,
+  files: AdapterFiles,
+  windowName: string,
+): ScriptEntry[] {
   try {
     const parsed = JSON.parse(files.read(scriptFile)) as {
       entries?: ScriptEntry[];
     };
-    return Array.isArray(parsed.entries) ? parsed.entries : [];
+    return Array.isArray(parsed.entries)
+      ? parsed.entries.filter(
+          entry => entry.window === undefined || entry.window === windowName,
+        )
+      : [];
   } catch {
     return [];
   }
@@ -84,12 +104,16 @@ export function scriptedAdapters(
   recordFile: string,
   real: Pick<EditorAdapters, 'terminals'>,
   files: AdapterFiles,
+  windowName: string,
 ): EditorAdapters & {unusedEntries(): number} {
-  const entries = entriesOf(scriptFile, files);
+  const entries = entriesOf(scriptFile, files, windowName);
   let cursor = 0;
 
-  function record(line: RecordLine): void {
-    files.append(recordFile, `${JSON.stringify(line)}\n`);
+  function record(line: Omit<RecordLine, 'window'>): void {
+    files.append(
+      recordFile,
+      `${JSON.stringify({...line, window: windowName})}\n`,
+    );
   }
 
   /**
@@ -192,6 +216,7 @@ export function adaptersFor(
   environment: Readonly<Record<string, string | undefined>>,
   real: EditorAdapters,
   files: AdapterFiles,
+  windowName: string,
 ): EditorAdapters {
   const script = environment[SCRIPT];
   const record = environment[RECORD];
@@ -200,7 +225,7 @@ export function adaptersFor(
     script !== '' &&
     record !== undefined &&
     record !== ''
-    ? scriptedAdapters(script, record, real, files)
+    ? scriptedAdapters(script, record, real, files, windowName)
     : real;
 }
 
@@ -229,6 +254,7 @@ export function progressFor(
   environment: Readonly<Record<string, string | undefined>>,
   real: ProgressPort,
   files: AdapterFiles,
+  windowName: string,
 ): ProgressPort {
   const recordFile = namedBy(environment, RECORD);
   if (!switchedOn(environment) || recordFile === undefined) {
@@ -240,6 +266,7 @@ export function progressFor(
       question,
       answer: 'shown',
       matched: true,
+      window: windowName,
       ...(details === undefined ? {} : {details}),
     };
     files.append(recordFile ?? '', `${JSON.stringify(line)}\n`);

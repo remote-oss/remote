@@ -13,11 +13,13 @@ import {
   type RecordLine,
   type ScriptEntry,
   scriptedAdapters,
+  windowNameOf,
 } from '../../src/surfaces/scripted-adapters.ts';
 
 const SCRIPT_FILE = '/run/script.json';
 const RECORD_FILE = '/run/record.jsonl';
 const NEVER = new AbortController().signal;
+const WINDOW = 'main';
 
 /** In-memory files: the script as written, and every text appended to the record. */
 class MemoryFiles {
@@ -71,9 +73,15 @@ const REAL: EditorAdapters = {
 };
 
 /** The scripted adapters over `entries`, with the files they wrote to. */
-function scripted(entries: ScriptEntry[]) {
+function scripted(entries: ScriptEntry[], windowName = WINDOW) {
   const files = filesWith(entries);
-  const adapters = scriptedAdapters(SCRIPT_FILE, RECORD_FILE, REAL, files);
+  const adapters = scriptedAdapters(
+    SCRIPT_FILE,
+    RECORD_FILE,
+    REAL,
+    files,
+    windowName,
+  );
   return {adapters, files};
 }
 
@@ -117,12 +125,17 @@ describe('which adapters the extension uses', () => {
   const files = new MemoryFiles();
 
   it('constraint 7: with no switch it uses the real adapters', () => {
-    strictEqual(adaptersFor({}, REAL, files), REAL);
+    strictEqual(adaptersFor({}, REAL, files, WINDOW), REAL);
   });
 
   it('constraint 7: with the switch at 0 it uses the real adapters', () => {
     strictEqual(
-      adaptersFor({...ENABLED, REMOTE_OSS_ACCEPTANCE: '0'}, REAL, files),
+      adaptersFor(
+        {...ENABLED, REMOTE_OSS_ACCEPTANCE: '0'},
+        REAL,
+        files,
+        WINDOW,
+      ),
       REAL,
     );
   });
@@ -133,6 +146,7 @@ describe('which adapters the extension uses', () => {
         {...ENABLED, REMOTE_OSS_ACCEPTANCE_SCRIPT: undefined},
         REAL,
         files,
+        WINDOW,
       ),
       REAL,
     );
@@ -144,6 +158,7 @@ describe('which adapters the extension uses', () => {
         {...ENABLED, REMOTE_OSS_ACCEPTANCE_RECORD: undefined},
         REAL,
         files,
+        WINDOW,
       ),
       REAL,
     );
@@ -151,20 +166,33 @@ describe('which adapters the extension uses', () => {
 
   it('constraint 2: with the switch on and an empty script name it uses the real adapters', () => {
     strictEqual(
-      adaptersFor({...ENABLED, REMOTE_OSS_ACCEPTANCE_SCRIPT: ''}, REAL, files),
+      adaptersFor(
+        {...ENABLED, REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
+        REAL,
+        files,
+        WINDOW,
+      ),
       REAL,
     );
   });
 
   it('constraint 2: with the switch on and an empty record name it uses the real adapters', () => {
     strictEqual(
-      adaptersFor({...ENABLED, REMOTE_OSS_ACCEPTANCE_RECORD: ''}, REAL, files),
+      adaptersFor(
+        {...ENABLED, REMOTE_OSS_ACCEPTANCE_RECORD: ''},
+        REAL,
+        files,
+        WINDOW,
+      ),
       REAL,
     );
   });
 
   it('constraint 1: with the switch on and both files it uses adapters that are not the real ones', () => {
-    strictEqual(adaptersFor(ENABLED, REAL, filesWith([])) === REAL, false);
+    strictEqual(
+      adaptersFor(ENABLED, REAL, filesWith([]), WINDOW) === REAL,
+      false,
+    );
   });
 
   it('constraint 1, ruling 4: no source file but the adapters names the variables', () => {
@@ -210,6 +238,7 @@ describe('the scripted adapters answer from the script only', () => {
         question: FINGERPRINT.title,
         answer: 'dismiss',
         matched: false,
+        window: WINDOW,
       },
     ]);
   });
@@ -262,6 +291,7 @@ describe('the scripted adapters answer from the script only', () => {
         RECORD_FILE,
         REAL,
         new MemoryFiles(),
+        WINDOW,
       ).prompts.pick(FINGERPRINT, NEVER),
       undefined,
     );
@@ -275,6 +305,7 @@ describe('the scripted adapters answer from the script only', () => {
         RECORD_FILE,
         REAL,
         files,
+        WINDOW,
       ).prompts.pick(FINGERPRINT, NEVER),
       undefined,
     );
@@ -288,6 +319,7 @@ describe('the scripted adapters answer from the script only', () => {
         RECORD_FILE,
         REAL,
         files,
+        WINDOW,
       ).prompts.pick(FINGERPRINT, NEVER),
       undefined,
     );
@@ -313,6 +345,7 @@ describe('the scripted adapters answer from the script only', () => {
         question: FINGERPRINT.title,
         answer: 'no',
         matched: true,
+        window: WINDOW,
       },
     ]);
   });
@@ -453,6 +486,7 @@ describe('the scripted adapters answer from the script only', () => {
         question: 'The licence terms',
         answer: 'decline',
         matched: true,
+        window: WINDOW,
       },
     ]);
   });
@@ -721,6 +755,7 @@ describe('progressFor (card tooling-18)', () => {
         {REMOTE_OSS_ACCEPTANCE_RECORD: RECORD_FILE},
         real,
         new AppendedFiles(),
+        WINDOW,
       ),
       real,
     );
@@ -729,7 +764,12 @@ describe('progressFor (card tooling-18)', () => {
   it('D-85: with the switch on and no record file it is the real port itself', () => {
     const real = new NotingProgress();
     strictEqual(
-      progressFor({REMOTE_OSS_ACCEPTANCE: '1'}, real, new AppendedFiles()),
+      progressFor(
+        {REMOTE_OSS_ACCEPTANCE: '1'},
+        real,
+        new AppendedFiles(),
+        WINDOW,
+      ),
       real,
     );
   });
@@ -741,6 +781,7 @@ describe('progressFor (card tooling-18)', () => {
         {REMOTE_OSS_ACCEPTANCE: '1', REMOTE_OSS_ACCEPTANCE_RECORD: ''},
         real,
         new AppendedFiles(),
+        WINDOW,
       ),
       real,
     );
@@ -752,6 +793,7 @@ describe('progressFor (card tooling-18)', () => {
       SWITCHED_RECORD,
       new NotingProgress(),
       files,
+      WINDOW,
     ).withProgress(REQUEST, twoUpdates);
     deepStrictEqual(
       files.linesOf(RECORD_FILE).map(line => JSON.parse(line) as RecordLine),
@@ -761,12 +803,14 @@ describe('progressFor (card tooling-18)', () => {
           question: 'Setting up SSH Host harness',
           answer: 'shown',
           matched: true,
+          window: WINDOW,
         },
         {
           surface: 'progress',
           question: 'A',
           answer: 'shown',
           matched: true,
+          window: WINDOW,
           details: true,
         },
         {
@@ -774,6 +818,7 @@ describe('progressFor (card tooling-18)', () => {
           question: 'B',
           answer: 'shown',
           matched: true,
+          window: WINDOW,
           details: false,
         },
       ],
@@ -782,10 +827,12 @@ describe('progressFor (card tooling-18)', () => {
 
   it('D-85: the real port gets both updates, in order, with their details', async () => {
     const real = new NotingProgress();
-    await progressFor(SWITCHED_RECORD, real, new AppendedFiles()).withProgress(
-      REQUEST,
-      twoUpdates,
-    );
+    await progressFor(
+      SWITCHED_RECORD,
+      real,
+      new AppendedFiles(),
+      WINDOW,
+    ).withProgress(REQUEST, twoUpdates);
     deepStrictEqual(real.updates, [
       ['A', true],
       ['B', false],
@@ -794,10 +841,12 @@ describe('progressFor (card tooling-18)', () => {
 
   it('D-85: the real port gets the request unchanged', async () => {
     const real = new NotingProgress();
-    await progressFor(SWITCHED_RECORD, real, new AppendedFiles()).withProgress(
-      REQUEST,
-      twoUpdates,
-    );
+    await progressFor(
+      SWITCHED_RECORD,
+      real,
+      new AppendedFiles(),
+      WINDOW,
+    ).withProgress(REQUEST, twoUpdates);
     deepStrictEqual(real.requests, [REQUEST]);
   });
 
@@ -807,6 +856,7 @@ describe('progressFor (card tooling-18)', () => {
         SWITCHED_RECORD,
         new NotingProgress(),
         new AppendedFiles(),
+        WINDOW,
       ).withProgress(REQUEST, twoUpdates),
       7,
     );
@@ -818,6 +868,7 @@ describe('progressFor (card tooling-18)', () => {
       SWITCHED_RECORD,
       new NotingProgress(),
       files,
+      WINDOW,
     ).withProgress(REQUEST, () => Promise.resolve(0));
     strictEqual(files.linesOf(RECORD_FILE).length, 1);
   });
@@ -828,6 +879,7 @@ describe('progressFor (card tooling-18)', () => {
         SWITCHED_RECORD,
         new NotingProgress(),
         new AppendedFiles(),
+        WINDOW,
       ).withProgress(REQUEST, () =>
         Promise.reject(new Error('connect failed')),
       ),
@@ -944,5 +996,76 @@ describe('channelPortFor (card tooling-18)', () => {
     channel.show(false);
     channel.dispose();
     deepStrictEqual([real.channel.shown, real.channel.disposed], [[false], 1]);
+  });
+});
+
+describe('the windows of one script (card tooling-20)', () => {
+  const FOR_B: ScriptEntry = {
+    surface: 'pick',
+    match: 'authenticity',
+    answer: 'yes',
+    window: 'b',
+  };
+
+  it('D-85: an entry for window b is answered by b', async () => {
+    deepStrictEqual(
+      await scripted([FOR_B], 'b').adapters.prompts.pick(FINGERPRINT, NEVER),
+      'yes',
+    );
+  });
+
+  it('D-85: an entry for window b is not answered by a', async () => {
+    deepStrictEqual(
+      await scripted([FOR_B], 'a').adapters.prompts.pick(FINGERPRINT, NEVER),
+      undefined,
+    );
+  });
+
+  it('D-85: an entry for window b does not use up the cursor of a', async () => {
+    deepStrictEqual(
+      await scripted(
+        [FOR_B, {surface: 'pick', match: 'authenticity', answer: 'no'}],
+        'a',
+      ).adapters.prompts.pick(FINGERPRINT, NEVER),
+      'no',
+    );
+  });
+
+  it('D-85: an entry with no window is answered by every window', async () => {
+    const entries: ScriptEntry[] = [
+      {surface: 'pick', match: 'authenticity', answer: 'yes'},
+    ];
+    deepStrictEqual(
+      [
+        await scripted(entries, 'a').adapters.prompts.pick(FINGERPRINT, NEVER),
+        await scripted(entries, 'b').adapters.prompts.pick(FINGERPRINT, NEVER),
+      ],
+      ['yes', 'yes'],
+    );
+  });
+
+  it('D-85: a line of the record names the window that wrote it', async () => {
+    const {adapters, files} = scripted([FOR_B], 'b');
+    await adapters.prompts.pick(FINGERPRINT, NEVER);
+    deepStrictEqual(
+      files.lines().map(line => line.window),
+      ['b'],
+    );
+  });
+
+  it('D-85: a window with a folder is named by the last segment of its path', () => {
+    strictEqual(windowNameOf('/home/harness/a'), 'a');
+  });
+
+  it('D-85: a trailing slash does not make a window nameless', () => {
+    strictEqual(windowNameOf('/home/harness/b/'), 'b');
+  });
+
+  it('D-85: a window with no folder is local', () => {
+    strictEqual(windowNameOf(undefined), 'local');
+  });
+
+  it('D-85: a window on the root folder is local', () => {
+    strictEqual(windowNameOf('/'), 'local');
   });
 });

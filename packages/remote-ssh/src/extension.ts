@@ -56,6 +56,7 @@ import {
   adaptersFor,
   channelPortFor,
   progressFor,
+  windowNameOf,
 } from './surfaces/scripted-adapters.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
 
@@ -130,11 +131,21 @@ const ACCEPTANCE_FILES = {
   },
 };
 
+/** The name of this window for the harness's script and record: its first workspace folder's last segment, or `local`. */
+function acceptanceWindowName(): string {
+  return windowNameOf(vscode.workspace.workspaceFolders?.[0]?.uri.path);
+}
+
 /** The resolver's editor with its progress recorded when the harness's switch is on; the same editor otherwise. */
 function acceptanceProgressOf(editor: ResolverEditor): ResolverEditor {
   return {
     ...editor,
-    progress: progressFor(process.env, editor.progress, ACCEPTANCE_FILES),
+    progress: progressFor(
+      process.env,
+      editor.progress,
+      ACCEPTANCE_FILES,
+      acceptanceWindowName(),
+    ),
   };
 }
 
@@ -274,6 +285,7 @@ async function registerConnectOf(
         mitigationPick: mitigationPickPortOf(vscode),
       },
       ACCEPTANCE_FILES,
+      acceptanceWindowName(),
     ),
     editorOperationsOf(vscode, () => {
       served.revealLog();
