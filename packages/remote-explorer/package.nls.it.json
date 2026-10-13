@@ -1,0 +1,7 @@
+{
+  "description": "Every remote target in one view: SSH hosts, containers and WSL distros, one click away.",
+  "views.remote.title": "Remotes (Tunnels/SSH)",
+  "commands.refresh.title": "Refresh",
+  "commands.connectToRemoteInNewWindow.title": "Connect in New Window...",
+  "commands.connectToRemoteInCurrentWindow.title": "Connect in Current Window..."
+}

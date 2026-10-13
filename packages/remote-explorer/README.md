@@ -9,7 +9,7 @@ This extension is under development; its features arrive in coming releases.
 | | |
 |---|---|
 | Maintainers | remote-oss |
-| Features | none yet (they arrive in a later release) |
-| Components | none yet |
+| Features | the package manifest: identity, activation event, the view, and the Refresh and connect commands |
+| Components | `explorer.package` (manifest, string tables, identifiers); `src/model/` (the SSH group's rows and the connected marker) |
 | Allowed imports | none yet |
 | Coverage exclusions | none |
