@@ -193,12 +193,15 @@ function parameterBlock(parameters: ScriptParameters): string[] {
   ];
 }
 
-/** The `set --` line that holds the server's start options, each as one quoted word. */
+/**
+ * The `set --` line that holds the server's start options: each option and value as one single-quoted word, and the
+ * two file variables as words the script expands.
+ */
 function startOptions(start: StartParameters): string {
+  const quoted = (words: readonly string[]) => words.map(shellQuote);
   const endpoint = start.socketMode
-    ? ['--socket-path', '"$SOCKET_FILE"']
-    : ['--host', start.bindHost, '--port', start.port];
-  const words = ['--start-server', ...endpoint, '--connection-token-file'];
+    ? [...quoted(['--socket-path']), '"$SOCKET_FILE"']
+    : quoted(['--host', start.bindHost, '--port', start.port]);
   const tail = ['--telemetry-level', 'off', '--enable-remote-auto-shutdown'];
   const optional = [
     ...(start.licenceAccepted ? ['--accept-server-license-terms'] : []),
@@ -214,10 +217,14 @@ function startOptions(start: StartParameters): string {
       : []),
     ...(start.useHostProxy ? ['--use-host-proxy'] : []),
   ];
-  const quoted = [...words, '"$TOKEN_FILE"', ...tail, ...optional].map(word =>
-    word.startsWith('"') ? word : shellQuote(word),
-  );
-  return `set -- ${quoted.join(' ')}`;
+  const words = [
+    ...quoted(['--start-server']),
+    ...endpoint,
+    ...quoted(['--connection-token-file']),
+    '"$TOKEN_FILE"',
+    ...quoted([...tail, ...optional]),
+  ];
+  return `set -- ${words.join(' ')}`;
 }
 
 const GUARD: readonly string[] = [

@@ -90,6 +90,33 @@ describe('the move of the install-if-installed-locally setting (card containers-
     );
   });
 
+  it('contracts: a read that throws is logged and nothing is written', async () => {
+    const writes: string[] = [];
+    const sink = new MemorySink();
+    await moveInstallIfLocal({
+      userValue: () => {
+        throw new Error('no configuration');
+      },
+      writeUserValue: key => {
+        writes.push(key);
+        return Promise.resolve();
+      },
+      logger: createLogger(sink, {minimumLevel: () => 'debug'}),
+    });
+    deepStrictEqual(
+      [writes, sink.lines.map(line => [line.level, line.message])],
+      [
+        [],
+        [
+          [
+            'warn',
+            'the old install-if-installed-locally setting could not be moved: no configuration',
+          ],
+        ],
+      ],
+    );
+  });
+
   it('contracts: values that are not lists count as empty, and non-text entries are skipped', () => {
     deepStrictEqual(
       [

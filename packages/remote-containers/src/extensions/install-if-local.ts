@@ -46,16 +46,16 @@ export function mergeInstallIfLocal(
 
 /**
  * Moves the old key's ids into the editor's key. The old key is removed only after the new one is written; a failed
- * write is logged and leaves the old key where it was.
+ * read or write is logged and leaves the old key where it was.
  */
 export async function moveInstallIfLocal(
   ports: InstallIfLocalPorts,
 ): Promise<void> {
-  const retired = ports.userValue(OLD_INSTALL_IF_LOCAL_KEY);
-  if (retired === undefined) {
-    return;
-  }
   try {
+    const retired = ports.userValue(OLD_INSTALL_IF_LOCAL_KEY);
+    if (retired === undefined) {
+      return;
+    }
     await ports.writeUserValue(
       INSTALL_IF_LOCAL_KEY,
       mergeInstallIfLocal(ports.userValue(INSTALL_IF_LOCAL_KEY), retired),
