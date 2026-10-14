@@ -2,12 +2,18 @@ import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import {sshRemoteCodec} from 'lib-authority';
 import {
+  aliases,
   appendScript,
   closeWindow,
+  connected,
+  connectedWithin,
   connectionHelpers,
+  hostAnswer,
   inWindow,
+  isOpen,
   kill,
-  onHost,
+  messagesSince,
+  noHelperWithin,
   openWindow,
   recordLines,
   reloadWindow,
@@ -18,7 +24,6 @@ import {
   userSettings,
   variable,
   waitFor,
-  windowEvents,
   windowState,
 } from './harness.ts';
 
@@ -37,67 +42,6 @@ const PER_WINDOW = {
   'remote.SSH.useLocalServer': false,
   'remote.SSH.remotePlatform': {harness: 'linux'},
 };
-
-/** The surfaces of the record that are messages to the user. */
-const MESSAGE_SURFACES = ['notice', 'failureDialog', 'pick', 'maskedInput'];
-
-/** The `Host` names of the run's ssh_config with no `*`, `?` or `!`, in file order. */
-function aliases(): string[] {
-  return readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8')
-    .split('\n')
-    .filter(line => /^\s*Host\s/i.test(line))
-    .flatMap(line => line.trim().split(/\s+/).slice(1))
-    .filter(word => !/[*?!]/.test(word));
-}
-
-/** Whether window `name` is open: its agent activated more often than it deactivated. */
-function isOpen(name: string): boolean {
-  const events = windowEvents(name).map(each => each.event);
-  return (
-    events.filter(event => event === 'activated').length >
-    events.filter(event => event === 'deactivated').length
-  );
-}
-
-/** The messages the record gained since `mark` lines: the lines of the surfaces that speak to the user. */
-function messagesSince(mark: number): string[] {
-  return recordLines()
-    .slice(mark)
-    .filter(line => MESSAGE_SURFACES.includes(line.surface))
-    .map(line => `${line.window}: ${line.surface}: ${line.question}`);
-}
-
-/** Whether window `name` is connected: it is on the remote and a file it writes reaches the host. */
-async function connected(name: string): Promise<boolean> {
-  try {
-    const state = await windowState(name);
-    await inWindow(name, 'acceptance.agent.writeFile', 'probe.txt', name);
-    return (
-      state.remoteName === 'ssh-remote' &&
-      (await onHost('cat', `/home/harness/${name}/probe.txt`)) === name
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Waits until window `name` is connected, for up to `milliseconds`. */
-function connectedWithin(name: string, milliseconds: number): Promise<void> {
-  return waitFor(
-    `${name} to be connected`,
-    () => connected(name),
-    milliseconds,
-  );
-}
-
-/** Waits until no connection helper of the run runs, for up to `milliseconds`. */
-function noHelperWithin(milliseconds: number): Promise<void> {
-  return waitFor(
-    'no connection helper to run',
-    async () => (await connectionHelpers()).length === 0,
-    milliseconds,
-  );
-}
 
 /** Whether the process `processId` runs. */
 function runs(processId: number): boolean {
@@ -132,19 +76,6 @@ function newHelperWithin(
       (await connectionHelpers()).some(processId => !known.includes(processId)),
     milliseconds,
   );
-}
-
-/** One scripted answer of the host pick of window `window`. */
-function hostAnswer(
-  window: string,
-  answer: 'dismiss' | {label: string} | {typed: string},
-) {
-  return {
-    surface: 'hostPick',
-    match: 'Select configured SSH host',
-    answer,
-    window,
-  } as const;
 }
 
 describe('the local connection server on a key host (card coverage-14)', function () {

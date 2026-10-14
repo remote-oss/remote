@@ -53,6 +53,8 @@ export interface AgentEvent {
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
+  /** The output channel a `state` event saw shown in the window, or null. */
+  visibleOutputChannel?: string | null;
 }
 
 /** One line of the record the extensions append to. */
@@ -112,6 +114,14 @@ function agentFile(name: string, kind: 'events' | 'commands'): string {
   return path.join(agentFolder(), `${name}.${kind}.jsonl`);
 }
 
+/** The names of the windows whose agent has reported anything, in no particular order. */
+export function windowNames(): string[] {
+  const folder = agentFolder();
+  return (existsSync(folder) ? readdirSync(folder) : [])
+    .filter(file => file.endsWith('.events.jsonl'))
+    .map(file => file.slice(0, -'.events.jsonl'.length));
+}
+
 /** The events the agent of window `name` has reported, in order. */
 export function windowEvents(name: string): AgentEvent[] {
   return linesOf<AgentEvent>(agentFile(name, 'events'));
@@ -151,16 +161,24 @@ export function heldLines(window?: string): RecordLine[] {
   return recordLines(undefined, window).filter(line => line.held === true);
 }
 
-/** The output of a command run in the host container as the user harness. */
-export async function onHost(...command: string[]): Promise<string> {
+/** The output of a command run in the host container as `user`. */
+export async function onHostAs(
+  user: string,
+  ...command: string[]
+): Promise<string> {
   const {stdout} = await execFileAsync('docker', [
     'exec',
     '--user',
-    'harness',
+    user,
     variable('HARNESS_CONTAINER'),
     ...command,
   ]);
   return stdout;
+}
+
+/** The output of a command run in the host container as the user harness. */
+export function onHost(...command: string[]): Promise<string> {
+  return onHostAs('harness', ...command);
 }
 
 /** The bare password of the host's user `harness-pw`, from the run's file. */
@@ -185,19 +203,22 @@ export function appendScript(entries: readonly AppendedEntry[]): void {
 }
 
 /**
- * The number of logins the host's sshd counted for the password account: the `Accepted password` lines of the
- * container's log, which sshd gets with `-e` — read from both of the container's streams, since its log is its
- * stderr.
+ * The number of the container's log lines that contain `line`: sshd runs with `-e`, so its log is the container's
+ * stderr, and both streams are read.
  */
-export async function acceptedPasswords(): Promise<number> {
+async function acceptedLogins(line: string): Promise<number> {
   const {stdout, stderr} = await execFileAsync(
     'docker',
     ['logs', variable('HARNESS_CONTAINER')],
     {encoding: 'utf8'},
   );
-  return `${stdout}\n${stderr}`
-    .split('\n')
-    .filter(line => line.includes('Accepted password for harness-pw')).length;
+  return `${stdout}\n${stderr}`.split('\n').filter(each => each.includes(line))
+    .length;
+}
+
+/** The number of logins the host's sshd counted for the password account. */
+export function acceptedPasswords(): Promise<number> {
+  return acceptedLogins('Accepted password for harness-pw');
 }
 
 /** Polls until `ready` holds, for up to a minute; it fails naming what it waited for. */
@@ -603,4 +624,81 @@ export async function settingIn(
   return windowEvents(name)
     .filter(each => each.event === 'setting' && each.settingId === settingId)
     .at(-1)?.value;
+}
+
+/** The surfaces of the record that are messages to the user. */
+const MESSAGE_SURFACES = ['notice', 'failureDialog', 'pick', 'maskedInput'];
+
+/** The `Host` names of the run's ssh_config with no `*`, `?` or `!`, in file order. */
+export function aliases(): string[] {
+  return readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8')
+    .split('\n')
+    .filter(line => /^\s*Host\s/i.test(line))
+    .flatMap(line => line.trim().split(/\s+/).slice(1))
+    .filter(word => !/[*?!]/.test(word));
+}
+
+/** Whether window `name` is open: its agent activated more often than it deactivated. */
+export function isOpen(name: string): boolean {
+  const events = windowEvents(name).map(each => each.event);
+  return (
+    events.filter(event => event === 'activated').length >
+    events.filter(event => event === 'deactivated').length
+  );
+}
+
+/** The messages the record gained since `mark` lines: the lines of the surfaces that speak to the user. */
+export function messagesSince(mark: number): string[] {
+  return recordLines()
+    .slice(mark)
+    .filter(line => MESSAGE_SURFACES.includes(line.surface))
+    .map(line => `${line.window}: ${line.surface}: ${line.question}`);
+}
+
+/** Whether window `name` is connected: it is on the remote and a file it writes reaches the host. */
+export async function connected(name: string): Promise<boolean> {
+  try {
+    const state = await windowState(name);
+    await inWindow(name, 'acceptance.agent.writeFile', 'probe.txt', name);
+    return (
+      state.remoteName === 'ssh-remote' &&
+      (await onHost('cat', `/home/harness/${name}/probe.txt`)) === name
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Waits until window `name` is connected, for up to `milliseconds`. */
+export function connectedWithin(
+  name: string,
+  milliseconds: number,
+): Promise<void> {
+  return waitFor(
+    `${name} to be connected`,
+    () => connected(name),
+    milliseconds,
+  );
+}
+
+/** Waits until no connection helper of the run runs, for up to `milliseconds`. */
+export function noHelperWithin(milliseconds: number): Promise<void> {
+  return waitFor(
+    'no connection helper to run',
+    async () => (await connectionHelpers()).length === 0,
+    milliseconds,
+  );
+}
+
+/** One scripted answer of the host pick of window `window`. */
+export function hostAnswer(
+  window: string,
+  answer: 'dismiss' | {label: string} | {typed: string},
+) {
+  return {
+    surface: 'hostPick',
+    match: 'Select configured SSH host',
+    answer,
+    window,
+  } as const;
 }
