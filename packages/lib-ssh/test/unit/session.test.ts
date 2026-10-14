@@ -322,6 +322,89 @@ describe('Node.js process spawner', () => {
     );
   });
 
+  /** A child whose grandchild keeps its standard streams, as a ControlMaster keeps its mux client's; it prints the pid. */
+  function heldStreamsScript(ending: string): string {
+    return [
+      'const {spawn} = require("node:child_process");',
+      'const holder = spawn(process.execPath, ["-e", "setTimeout(() => undefined, 30000)"], {stdio: "inherit", detached: true});',
+      'holder.unref();',
+      'process.stdout.write(holder.pid + "\\n");',
+      ending,
+    ].join(' ');
+  }
+
+  /** Starts a held-streams child and gives its session, once it has printed the holder's pid, and the pid. */
+  async function heldStreams(ending: string) {
+    const session = sessionOf(
+      await spawnSession(
+        nodeProcessSpawner,
+        {
+          program: process.execPath,
+          arguments: ['-e', heldStreamsScript(ending)],
+          environment: {},
+        },
+        {},
+        {},
+      ),
+    );
+    const holder = await new Promise<number>(resolve => {
+      session.onOutput(chunk => {
+        resolve(Number(chunk.trim()));
+      });
+    });
+    holders.push(holder);
+    return {session, printedAt: Date.now()};
+  }
+
+  const holders: number[] = [];
+
+  afterEach(() => {
+    for (const holder of holders.splice(0)) {
+      try {
+        process.kill(holder);
+      } catch {
+        // The holder has already ended.
+      }
+    }
+  });
+
+  it('connect-51: kill() ends a session whose stdio another process holds', async () => {
+    const {session} = await heldStreams('setTimeout(() => undefined, 30000);');
+    const killedAt = Date.now();
+    session.kill();
+    const status = await session.exit();
+    deepStrictEqual([status, Date.now() - killedAt < 2000], [undefined, true]);
+  });
+
+  it('connect-51: a process that exits while another holds its stdio is seen to exit', async () => {
+    const {session, printedAt} = await heldStreams('process.exit(4);');
+    const status = await session.exit();
+    const elapsed = Date.now() - printedAt;
+    deepStrictEqual([status, elapsed >= 500, elapsed < 2000], [4, true, true]);
+  });
+
+  it("connect-51: a process's last output still arrives before its exit is reported", async () => {
+    const session = sessionOf(
+      await spawnSession(
+        nodeProcessSpawner,
+        {
+          program: process.execPath,
+          arguments: ['-e', 'process.stdout.write("last"); process.exit(0);'],
+          environment: {},
+        },
+        {},
+        {},
+      ),
+    );
+    const events: string[] = [];
+    session.onOutput(chunk => {
+      events.push(`output ${chunk}`);
+    });
+    await session.exit();
+    events.push('exit');
+    deepStrictEqual(events, ['output last', 'exit']);
+  });
+
   it('ignores a write after the process ended', async () => {
     const session = sessionOf(
       await spawnSession(
