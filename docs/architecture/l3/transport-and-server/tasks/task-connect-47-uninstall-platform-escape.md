@@ -28,6 +28,16 @@ platform picker. After Escape, "the command ends without dialog, notification or
      `killFailed` notice, and no `killLocalServer`. athena ruled that S076 after Escape agrees with F-2411 7.E5. So
      change its test to `outcome.result !== 'stepRan'`, and leave its behaviour unchanged.
 3. `StepResult` (`own-host.ts`) and `killResult` don't change.
+4. **If connect-43 (#748) has merged first:** it moves the two bodies into `killOnHost(target)` and
+   `uninstallOnHost(target)`, which `cleanRemoteServer`, `cleanDevBox` and `cleanCurrentRemoteServer` (through
+   `killOwnHost` and `uninstallOwnHost`) all call. Apply the same rule there:
+   - `killOnHost` tests `outcome.result !== 'stepRan'` where it tests `=== 'connectionFailed'`;
+   - `uninstallOnHost` returns on `cancelled` before its `connectionFailed` test.
+
+   The type checker doesn't catch a missed spot, because `=== 'connectionFailed'` still compiles with the wider union.
+   So grep `maintenance-commands.ts` for `'connectionFailed'` after the change: every remaining test must be one where
+   `cancelled` is meant to fall through. If connect-43 merges after this card, its builder applies this point, and
+   this card's rows then catch a miss.
 
 ## 3. Rows
 
@@ -37,6 +47,8 @@ platform picker. After Escape, "the command ends without dialog, notification or
 | `maintenance-run.test.ts` | the existing `F-2411.7.E2: terms that were not decided are a failed connection` | unchanged (its failure is `invalidSetting`) | still `connectionFailed` |
 | `maintenance-commands.test.ts` | `F-2206 AC-33: Escape at the platform pick ends the uninstall with no error, notice or local end` | `setup({outcome: {result: 'cancelled', cause: 'the platform pick was dismissed'}})`; `await scenario.uninstall()` | it resolves (no rejection); `scenario.notices` is `[]`; `scenario.ended` is `[]`; no warn line |
 | `maintenance-commands.test.ts` | `F-2206 AC-26: Escape at the platform pick ends the kill with the kill-failed notice and no local end` | the same outcome; `await scenario.kill()` | the notices are the ones the existing `connectionFailed` kill row gives; `scenario.ended` is `[]` |
+
+| `maintenance-commands.test.ts` | `F-2206 AC-26: Kill Current with Escape at the platform pick ends no local server` (only once connect-43 is on main; otherwise connect-43's builder adds it) | Kill Current in a window whose plan acts on the host (`heldHost` set, terminal mode), with the outcome `cancelled` | `scenario.ended` is `[]`, the kill-failed notice is shown, and no switch to a local window happens |
 
 **Defect rule:** the two `F-2206 AC-33` rows must fail on main and pass with the fix. Paste both runs.
 
