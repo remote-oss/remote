@@ -24,18 +24,31 @@ pick: `MAINTENANCE_PICKER_OPTIONS` and `maintenanceStep`.
    - If none does, add a row in `maintenance-commands.test.ts` that runs the command through `setup(...)` with the
      picked item, and asserts the target the run gets (`scenario.runs`), or that nothing runs.
 
+3. If tooling-31 (#741) has merged with an allowlist entry for this module (card `#744`), remove that entry in the
+   same PR. A stale entry fails `check-consumed`.
+
 ## 3. The rows
+
+**The recording:** `maintenance-commands.test.ts`'s `setup` records each run as `` `${action} ${target.host}` `` in
+`scenario.runs`, and each handed-over command id in `scenario.commands`. To assert a whole target, add
+`targets: SshTarget[]` to `Setup`: `perform` pushes the target it gets. Existing rows don't change.
+
+**Cites that must move:** two catalogue tags rest on rows of the deleted file. `check-coverage` fails if their cite
+disappears:
+- `F-2412 AC-22` (tagged `unit` by #722) is cited only in the deleted `F-2412 AC-22: 6.4, a typed alias runs on its
+  parsed target`;
+- `F-2411 AC-11` is cited there as well, and by live rows.
+
+Carry both to the live-path rows below (dike on #746).
 
 | Deleted row (cite) | Outcome to keep | Where on the live path |
 |---|---|---|
 | `F-2411.5.0`: the fixed options of the quick pick | no title, one pick, no Back, the first row focused | the connect editor's `pickHost` adapter rows (`connect-editor.test.ts`), which set the same options for every host pick. Re-cite the row that asserts them |
 | `F-2412.5.0`: a listed host runs on its alias as the text; the host label is the text, case kept | the run's target is the alias, with its case | `maintenance-commands.test.ts`: picking a host row named `Dev-Box` runs on `Dev-Box` |
-| `F-2411.6.3` / `F-2412.6.4`: typed `user@host:port` and a typed alias run on their parsed target | the parsed target | `maintenance-commands.test.ts`: the typed item `lab@x.invalid:2222` runs on `{host: 'x.invalid', user: 'lab', port: 2222}` |
+| `F-2411 AC-11: 6.3`: a typed `user@host:port` runs on its parsed target | the parsed target | `maintenance-commands.test.ts`: `F-2411 AC-11, F-2411 6.3: …`. The typed item (`{kind: 'typed', label: '➤ lab@x.invalid:2222', text: 'lab@x.invalid:2222', keepVisible: true}`, the form the existing `F-2411.AC-11` row uses) gives `scenario.targets` `[{host: 'x.invalid', user: 'lab', port: 2222}]` for a kill |
+| `F-2412 AC-22: 6.4`: a typed alias runs on its parsed target | the uninstall runs on the typed user and alias | `maintenance-commands.test.ts`: `F-2412 AC-22: a typed user@alias is uninstalled with the typed user`. The typed item `me@dev` gives `scenario.targets` `[{host: 'dev', user: 'me'}]` for `uninstall()` |
 | `F-2411.6.3`: spaces kept, `-oProxyCommand=x`, `a b.invalid` and three spaces not refused | the run gets the text unchanged | `connect-picker-model.test.ts`'s `outcomeOfPick` rows, if they cover these four; otherwise add them there |
-| `F-2411.6.4` / `F-2412.6.5`: the add-host and configure rows end the command | the row runs its command (F-2204's flow or F-2203's picker), and the kill or uninstall doesn't continue. F-2411 6.4 says so (`remote-oss/remote-ssh#56`). That's `pickedTarget`'s hand-over | `maintenance-commands.test.ts`: re-cite the existing hand-over rows, or add one per command. It asserts `commandsRun` holds the row's command id, and `scenario.runs` is empty |
-
-3. If tooling-31 (#741) has merged with an allowlist entry for this module (card `#744`), remove that entry in the
-   same PR. A stale entry fails `check-consumed`.
+| `F-2411.6.4` / `F-2412.6.5`: the add-host and configure rows end the command | the row runs its command (F-2204's flow or F-2203's picker), and the kill or uninstall doesn't continue. F-2411 6.4 says so (`remote-oss/remote-ssh#56`). That's `pickedTarget`'s hand-over | `maintenance-commands.test.ts`: re-cite the existing hand-over rows, or add one per command. It asserts `scenario.commands` holds the row's command id, and `scenario.runs` is empty |
 
 ## 4. Gates and review
 
