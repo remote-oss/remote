@@ -267,6 +267,8 @@ const LAUNCH_ORDER = [
   'explorer',
   'explorer-alone',
   'explorer-no-proposals',
+  'trust',
+  'trust-terminal',
   'ports-probe',
   'install-probe',
 ];
@@ -719,7 +721,7 @@ describe('acceptance', () => {
       });
     });
 
-    it("installs the packaged VSIX into the run's own extensions folder before the tests", async () => {
+    it("installs the packaged VSIX into the run's own extensions folder before the tests, with the run's user and shared data", async () => {
       workspace.write('dist/remote-ssh-edit-0.0.0.vsix', '');
       await runAcceptance(workspace.root, harness);
       deepStrictEqual(
@@ -729,6 +731,7 @@ describe('acceptance', () => {
             'code',
             `--extensions-dir=${path.join(harness.runFolder, 'extensions')}`,
             `--user-data-dir=${path.join(harness.runFolder, 'user-data')}`,
+            `--shared-data-dir=${path.join(harness.runFolder, 'shared-data')}`,
             '--install-extension',
             path.join(workspace.root, 'dist', 'remote-ssh-edit-0.0.0.vsix'),
           ].join(' '),
@@ -1302,6 +1305,7 @@ describe('acceptance', () => {
           '1.139.1',
           [
             '--user-data-dir=/run/user-data',
+            '--shared-data-dir=/run/shared-data',
             '--extensions-dir=/run/extensions',
             '--enable-proposed-api=remote-oss.remote-ssh',
             '--enable-proposed-api=remote-oss.acceptance-window-agent',

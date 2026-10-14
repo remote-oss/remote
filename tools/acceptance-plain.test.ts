@@ -20,15 +20,29 @@ import {TemporaryWorkspace} from './temporary-workspace.ts';
 const LAUNCH: PlainLaunch = {label: 'windows', kind: 'plain', suite: 'windows'};
 
 describe('the editor arguments of a run', () => {
-  it('D-85: they name the run’s own user-data and extensions folders', () => {
-    deepStrictEqual(editorArguments('/run').slice(0, 2), [
+  it('D-85, tooling-33: they name the run’s own user-data, shared-data and extensions folders', () => {
+    deepStrictEqual(editorArguments('/run').slice(0, 3), [
       '--user-data-dir=/run/user-data',
+      '--shared-data-dir=/run/shared-data',
       '--extensions-dir=/run/extensions',
     ]);
   });
 
+  it('tooling-33: every launch, runner or plain, keeps core’s shared data in the run’s folder', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    deepStrictEqual(
+      [undefined, ...launches].filter(
+        launch =>
+          !editorArguments('/run', true, launch).includes(
+            '--shared-data-dir=/run/shared-data',
+          ),
+      ),
+      [],
+    );
+  });
+
   it('D-85: they enable the proposed API of remote-ssh and of the window agent, and skip the trust prompt', () => {
-    deepStrictEqual(editorArguments('/run').slice(2), [
+    deepStrictEqual(editorArguments('/run').slice(3), [
       '--enable-proposed-api=remote-oss.remote-ssh',
       '--enable-proposed-api=remote-oss.acceptance-window-agent',
       '--disable-workspace-trust',
@@ -36,7 +50,7 @@ describe('the editor arguments of a run', () => {
   });
 });
 
-describe('the explorer launches (card tooling-30)', () => {
+describe('the explorer and trust launches (cards tooling-30, tooling-33)', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
   function launchNamed(label: string): PlainLaunch {
@@ -142,6 +156,40 @@ describe('the explorer launches (card tooling-30)', () => {
     );
   });
 
+  it('tooling-33: a trust launch starts the editor with workspace trust on and a debugging port', () => {
+    deepStrictEqual(
+      [
+        editorArguments('/run', true, launchNamed('trust')).includes(
+          '--disable-workspace-trust',
+        ),
+        ...['trust', 'trust-terminal'].map(label => {
+          const programArguments = plainEditorOf(
+            '/editor',
+            '/run',
+            launchNamed(label),
+            {},
+          ).programArguments;
+          return [
+            programArguments.includes('--disable-workspace-trust'),
+            programArguments.includes('--remote-debugging-port=0'),
+          ];
+        }),
+      ],
+      [false, [false, true], [false, true]],
+    );
+  });
+
+  it('tooling-33: every other launch keeps workspace trust off', () => {
+    deepStrictEqual(
+      [
+        editorArguments('/run'),
+        editorArguments('/run', true, launchNamed('windows')),
+        editorArguments('/run', true, launchNamed('explorer')),
+      ].map(list => list.at(-1)),
+      Array.from({length: 3}, () => '--disable-workspace-trust'),
+    );
+  });
+
   it('tooling-30: the port file is the user-data folder’s DevToolsActivePort', () => {
     strictEqual(
       debuggingPortFile('/run'),
@@ -222,8 +270,12 @@ describe('the plain editor of a launch', () => {
         '/run',
         {...LAUNCH, proposedApi: false},
         {},
-      ).programArguments.slice(0, 2),
-      ['--user-data-dir=/run/user-data', '--extensions-dir=/run/extensions'],
+      ).programArguments.slice(0, 3),
+      [
+        '--user-data-dir=/run/user-data',
+        '--shared-data-dir=/run/shared-data',
+        '--extensions-dir=/run/extensions',
+      ],
     );
   });
 
