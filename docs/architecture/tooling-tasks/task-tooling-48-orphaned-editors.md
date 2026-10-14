@@ -1,6 +1,6 @@
 # Task card tooling-48: an acceptance harness that dies leaves no editor running
 
-Issue: #875. Not gating (rooms only; CI's runner reaps a job's processes). R-99: tools only, nothing under
+Issue: #875. Not gating (rooms, and `/tmp` folders on self-hosted runners; CI's runner reaps a job's processes). R-99: tools only, nothing under
 `packages/*/src`. Size: S–M. Builder: `task:claude`.
 
 ## 1. Why
@@ -93,6 +93,39 @@ line names the harness that started it. No pid file is needed.
 4. Rename `STALE_EDITOR_SECONDS` to `STALE_RUN_SECONDS` only if tooling-47 (#873) hasn't done it yet. Otherwise use
    the name it left.
 
+### 2.3 The short socket folders (athena, #876)
+
+When the run folder is too deep for a Unix socket path, the windows harness makes short folders outside it, and
+nothing removes them. On a self-hosted runner, `/tmp` outlives the job. The two are:
+- `agentSocketPath`'s `/tmp/agent-…` (`acceptance-keys.ts:182`, called at `acceptance.ts:579`);
+- `controlFolderOf`'s `/tmp/control-…`, from #877. **Build on #877 merged**, and if it hasn't merged, wait for it.
+
+1. **`runAcceptance` records what it made.** It holds `const shortFolders: string[] = []`, declared before the signal
+   handler of §2.1. It passes both functions a maker that records:
+
+   ```ts
+   function shortFolderMaker(prefix: string): () => string {
+     return () => {
+       const folder = mkdtempSync(prefix);
+       shortFolders.push(folder);
+       return folder;
+     };
+   }
+   ```
+
+   That is `agentSocketPath(runFolder, shortFolderMaker('/tmp/agent-'))` and `controlFolderOf(runFolder,
+   shortFolderMaker('/tmp/control-'))`. The defaults of the two functions stay for their other callers.
+2. **`acceptance.ts` exports `MASTER_ALIASES`:** `['master', 'master-ask', 'master-yes', 'master-autoask'] as const`.
+   `harnessSshConfig` builds its master blocks from it, so the list exists once.
+3. **`endShortFolders(command, configFile, folders)`**, exported from `acceptance.ts`:
+   - for each alias of `MASTER_ALIASES`, `command('ssh', ['-F', configFile, '-o', 'ControlMaster=no', '-O', 'exit',
+     alias])`, ignoring the status, since no master may run;
+   - then `rmSync(folder, {recursive: true, force: true})` for each folder.
+   It is synchronous, so the signal handler can call it.
+4. **It's called** in `runAcceptance`'s `finally`, before `rmSync(runFolder)`, and in §2.1's `onSignal`, before the run
+   folder's removal. The `configFile` is `path.join(runFolder, 'ssh_config')`. When the run ended before that file
+   was written, the `ssh -O exit` calls are skipped (`existsSync`), and the folders are still removed.
+
 ## 3. Rows
 
 | File | Name | Expected |
@@ -106,6 +139,10 @@ line names the harness that started it. No pid file is needed.
 | same | `tooling-48: no editor running is no error` | `pgrep` status 1: nothing else runs |
 | same | `tooling-48: cleanRun sweeps by pid before the 2 h rule` | the order of the recorded commands |
 | `tools/acceptance.test.ts` | `tooling-48: a SIGTERM during a run stops the editors, removes the containers and the run folder, and exits 143` | `runAcceptance` with fake dependencies whose `bundleSuite` emits `process.emit('SIGTERM')`, with `process.exit` stubbed: the stubbed `stopAllStarted` was called, `docker rm --force <c>` was recorded, the run folder is gone, and the exit code is 143 |
+| same | `tooling-48: a run with a deep run folder removes its agent and control folders when it ends` | `runAcceptance` with `tmpdir()` stubbed to a path over the limit: after the run, both recorded folders are gone; `ssh -O exit` was recorded once per master alias, with `-o ControlMaster=no`, before the removals |
+| same | `tooling-48: the signal path removes them too` | as the SIGTERM row, with the deep folder: both folders are gone before the exit |
+| same | `tooling-48: a run that fails before its ssh_config removes its folders without ssh -O exit` | `prepare` throws after the agent folder was made: the folder is gone, and there's no `ssh` call |
+| same | `tooling-48: the master blocks of the ssh_config come from MASTER_ALIASES` | each alias of `MASTER_ALIASES` has a `Host` block with a `ControlPath` |
 | same | `tooling-48: the handlers are removed when the run ends` | `process.listenerCount('SIGTERM')` is the same before and after a run |
 
 **Room proof, in the PR:** start `pnpm test:acceptance:vscodium` and `kill -TERM` the harness while an editor runs.
