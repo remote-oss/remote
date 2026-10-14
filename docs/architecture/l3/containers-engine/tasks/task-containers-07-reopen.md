@@ -85,8 +85,15 @@ export function devContainerTargetOf(payload: string): DevContainerTarget | Payl
 2. The JSON is written with `JSON.stringify` and no spacing. That's F-0501's observed form, for example
    `{"hostPath":"/home/u/p","localDocker":false,"configFile":{"$mid":1,"fsPath":"/home/u/p/.devcontainer/devcontainer.json","external":"file:///home/u/p/.devcontainer/devcontainer.json","path":"/home/u/p/.devcontainer/devcontainer.json","scheme":"file"}}`.
 3. The payload is the **lowercase** hex of its UTF-8 bytes (`Buffer.from(text, 'utf8').toString('hex')`).
-4. The caller supplies `configFile` from the editor (`Uri.file(path).toJSON()`, through the port of §4.1). The codec
-   never builds `external` itself, so its escaping is the editor's own.
+4. The caller supplies `configFile` from the editor's URI, through the port of §4.1 and `serializedUriOf` (below). The
+   codec never builds `external` itself, so its escaping is the editor's own.
+
+   **Not `toJSON()`** (themis on #768, measured with vscode-uri 3.2): the editor's URI serializes only its cached state,
+   so a fresh `Uri.file(path).toJSON()` is `{"$mid":1,"path":…,"scheme":"file"}`, with no `fsPath` or `external`. Those
+   appear only after `.fsPath` and `.toString()` have been read. So `serializedUriOf(uri)` (pure, in `payload.ts`)
+   builds the five members itself, in F-0501's order: `{$mid: 1, fsPath: uri.fsPath, external: uri.toString(), path:
+   uri.path, scheme: uri.scheme}`. It takes `{fsPath: string; path: string; scheme: string; toString(): string}`, so
+   it never calls `toJSON`.
 5. The **authority** is lib-authority's
    `encodeAuthority({family: 'dev-container', target: {payload}, rawHostString: payload})`, which gives
    `dev-container+<payload>`. The codec doesn't add the prefix.
@@ -122,7 +129,7 @@ export interface ReopenPorts {
     remoteName(): string | undefined;
     folders(): readonly {scheme: string; fsPath: string}[];
     isTrusted(): boolean;
-    /** `Uri.file(path).toJSON()` */
+    /** `serializedUriOf(vscode.Uri.file(path))` */
     serializedFile(path: string): SerializedUri;
   };
   files: {isFile(path: string): Promise<boolean>; subfolders(path: string): Promise<readonly string[]>};
@@ -232,6 +239,7 @@ resolve.
 | F-0501 BR-2a | the same with `context: 'desktop-linux'` | `settings` sits between `localDocker` and `configFile`: `…"localDocker":false,"settings":{"context":"desktop-linux"},"configFile":…` |
 | F-0501 BR-2a | a `hostPath` with a space, `#`, a non-ASCII letter, and a `"` | the round trip keeps it exactly |
 | F-0501 BR-2a | (each) round trip of: no context; a context; the SSH-variant `configFile` (no `fsPath` or `external`, scheme `vscode-fileHost`) | deep-equal |
+| F-0501 BR-2a | `serializedUriOf` over a fake URI whose `toJSON()` returns only `{$mid: 1, path, scheme}` and whose `fsPath`, `path`, `scheme` and `toString()` give `/home/u/p/.devcontainer/devcontainer.json`, the same, `file` and `file:///home/u/p/.devcontainer/devcontainer.json` | the five members in order `$mid`, `fsPath`, `external`, `path`, `scheme`, with those values; the fake's `toJSON` was never called |
 | F-0501 BR-2c | the hex of `/home/u/legacy` | `{kind: 'legacy', hostPath: '/home/u/legacy'}` |
 | contracts §3 | (each) `''`, `'abc'` (odd), `'zz'`, `'7B'` (uppercase) | `{malformed: 'hex'}` |
 | contracts §3 | the hex of `{"hostPath":` | `{malformed: 'json'}` |
