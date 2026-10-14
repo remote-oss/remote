@@ -336,10 +336,6 @@ export function harnessSshConfig(
     ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, runFolder, [
       'id_second',
     ]),
-    'Host blackhole',
-    '  HostName 192.0.2.1',
-    '  BatchMode yes',
-    '',
     // Two aliases, so the window with the setting off finds no connection, and no stored plan, of the other.
     ...['agentfwd', 'agentfwd-off'].flatMap(alias =>
       accountAlias(
@@ -356,6 +352,9 @@ export function harnessSshConfig(
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
     ]),
+    'Host blackhole',
+    '  HostName 192.0.2.1',
+    '  BatchMode yes',
   ].join('\n');
 }
 

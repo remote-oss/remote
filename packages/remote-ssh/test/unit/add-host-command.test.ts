@@ -345,6 +345,42 @@ describe('the command that adds a host (card connect-22)', () => {
     );
   });
 
+  it("F-2201 AC-20: a picked file that cannot be parsed fails with the reader's message and is left unchanged", async () => {
+    const world = worldWith({
+      disk: new Map([
+        [`${HOME}/`, ''],
+        [`${HOME}/.ssh/`, ''],
+        [PLACES.userFile, 'Host "broken\n'],
+      ]),
+    });
+    const failure = await execute(world).catch((error: unknown) =>
+      error instanceof Error ? error.message : String(error),
+    );
+    deepStrictEqual(
+      [
+        failure,
+        world.disk.get(PLACES.userFile),
+        world.steps,
+        world.notices,
+        world.opened,
+      ],
+      [
+        `${PLACES.userFile}: unterminated quote after Host`,
+        'Host "broken\n',
+        ['input', 'pick', 'read'],
+        [],
+        [],
+      ],
+    );
+  });
+
+  it('F-2201 AC-20: a picked file that parses is read once and written', async () => {
+    const world = worldWith();
+    world.disk.set(PLACES.userFile, 'Host old\n  HostName a\n');
+    await execute(world);
+    deepStrictEqual(world.steps, ['input', 'pick', 'read', 'write']);
+  });
+
   it('F-2204 AC-26: a file that cannot be written rejects with the system error', async () => {
     const failure = new Error("EACCES: permission denied, open '/x'");
     const world = worldWith({writeFailure: failure});
