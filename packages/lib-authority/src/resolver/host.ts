@@ -26,6 +26,7 @@ export type PhaseName =
   | 'installing'
   | 'settingUpTunnel'
   | 'waitingForForwarding'
+  | 'startingServer'
   | 'serverDownloadPercent';
 
 /** The latest the progress opens after a resolve starts. */

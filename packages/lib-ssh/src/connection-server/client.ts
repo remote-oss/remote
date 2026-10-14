@@ -56,7 +56,7 @@ export type PreparedConnection<Rejection> =
 export interface ConnectionAcquireRequest<Rejection = never> {
   /** The registry folder of the profile. */
   folder: string;
-  /** The host string exactly as written: one helper per host string. */
+  /** The helper's key: the target's connection identity (one helper per identity, transport contracts §9), or a maintenance run's own key. */
   hostString: string;
   /** The bundled helper script. */
   script: string;

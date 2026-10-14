@@ -187,7 +187,10 @@ const EVERY_CASE: ReadonlyArray<readonly [string, FailureDetail]> = [
   ['copy failed', ofChannel({kind: 'copyFailed', detail: 'denied'})],
   ['channel spawn failed', ofChannel({kind: 'spawnFailed', detail: 'EAGAIN'})],
   ['platform', ofProbe({kind: 'unsupportedPlatform', reported: 'FreeBSD'})],
-  ['architecture', ofProbe({kind: 'unsupportedArch', reported: 'sparc'})],
+  [
+    'architecture',
+    ofProbe({kind: 'unsupportedArch', reported: 'sparc', libc: 'glibc'}),
+  ],
   ['tools', ofProbe({kind: 'prerequisiteMissing', missing: ['tar', 'gzip']})],
   ['probe status', ofProbe({kind: 'probeFailed', status: 'NoBash'})],
   ['probe new status', ofProbe({kind: 'probeFailed', status: 'SomethingNew'})],
@@ -322,11 +325,14 @@ describe('the reading of each library failure (no library text is shown)', () =>
   });
 
   it('#670 R5: an unsupported architecture gives S146 and logs what the host reported', () => {
-    deepStrictEqual(ofProbe({kind: 'unsupportedArch', reported: 'i686'}), {
-      kind: 'unsupportedPlatform',
-      reason: {id: 'S146'},
-      logDetail: 'reported: i686',
-    });
+    deepStrictEqual(
+      ofProbe({kind: 'unsupportedArch', reported: 'i686', libc: 'glibc'}),
+      {
+        kind: 'unsupportedPlatform',
+        reason: {id: 'S146'},
+        logDetail: 'reported: i686',
+      },
+    );
   });
 
   it('contracts R1: an unsupported platform logs what the host reported and gives no reason', () => {

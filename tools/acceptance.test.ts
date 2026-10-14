@@ -6,15 +6,19 @@ import {
   throws,
 } from 'node:assert';
 import type {PortHolder} from './acceptance-occupy.ts';
+import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
+  rmSync,
   readFileSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   acceptanceConfiguration,
@@ -57,7 +61,8 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
-import {acceptanceRunId, type CommandRunner} from './acceptance-run.ts';
+import {acceptanceRunId} from './acceptance-run.ts';
+import type {CommandRunner} from './command-runner.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -317,6 +322,7 @@ const LAUNCH_ORDER = [
   'client-unset',
   'terminal-pick',
   'windows',
+  'config-files',
   'default-ports',
   'no-proposals',
   'explorer',
@@ -2659,5 +2665,30 @@ describe('acceptance', () => {
       ).exitCode,
       0,
     );
+  });
+});
+
+describe('the harness of the windows suites, bundled for the editor', () => {
+  it("coverage-19: the harness bundle loads with an argv[1] set and no import.meta.url, as in the editor's extension host", async () => {
+    const {build} = await import('esbuild');
+    const folder = mkdtempSync(path.join(tmpdir(), 'harness-bundle-'));
+    try {
+      const bundle = path.join(folder, 'harness.cjs');
+      await build({
+        entryPoints: [
+          path.join(REPOSITORY_ROOT, 'tests/acceptance/windows/harness.ts'),
+        ],
+        outfile: bundle,
+        bundle: true,
+        platform: 'node',
+        format: 'cjs',
+        external: ['vscode'],
+        logLevel: 'silent',
+      });
+      const loaded = spawnSync(process.execPath, [bundle], {encoding: 'utf8'});
+      deepStrictEqual([loaded.status, loaded.stderr], [0, '']);
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
   });
 });

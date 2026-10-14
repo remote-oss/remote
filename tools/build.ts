@@ -29,6 +29,13 @@ const ENTRY_PATH = 'src/extension.ts';
 /** Where a package's bundle goes. */
 const BUNDLE_PATH = 'dist/extension.js';
 
+/**
+ * The fields of a dependency's package.json that name its entry, in order. The ES module build comes before `main`
+ * because `jsonc-parser`'s `main` is a UMD file that requires its parts with a `require` it is handed, which esbuild
+ * cannot follow: a bundle of it would fail to load.
+ */
+const MAIN_FIELDS = ['module', 'main'];
+
 /** Where a package keeps the entry point for the web extension host, and where its bundle goes. */
 const WEB_ENTRY_PATH = 'src/web-extension.ts';
 
@@ -127,6 +134,7 @@ export async function buildPackages(
       platform: 'node',
       format: 'cjs',
       target: NODE_TARGET,
+      mainFields: MAIN_FIELDS,
       external: ['vscode'],
       sourcemap: true,
       logLevel: 'warning',

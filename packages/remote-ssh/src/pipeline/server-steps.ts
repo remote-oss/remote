@@ -40,6 +40,7 @@ import {
   startCli,
   startOrReuse,
   stopCli,
+  templatePlatformOf,
   transfer,
   uninstall,
 } from 'lib-server';
@@ -148,17 +149,6 @@ export function cliNotUsedLine(
   reason: keyof typeof CLI_NOT_USED_REASONS,
 ): string {
   return `the CLI path was not used: ${CLI_NOT_USED_REASONS[reason]}`;
-}
-
-/** The host's platform as the templates name it: a musl Linux is `alpine`. */
-function templatePlatformOf(host: ProbedHost): {
-  operatingSystem: ProbedHost['operatingSystem'] | 'alpine';
-  architecture: ProbedHost['architecture'];
-} {
-  return {
-    operatingSystem: host.libc === 'musl' ? 'alpine' : host.operatingSystem,
-    architecture: host.architecture,
-  };
 }
 
 /**

@@ -10,10 +10,12 @@ import {
   kill,
   type MaintenanceOutcome,
   probe,
+  type ProbedHost,
   type ProbeOutcome,
   RESULT_BEGIN,
   RESULT_END,
   runStep,
+  templatePlatformOf,
   uninstall,
 } from '../../src/index.ts';
 import {
@@ -340,7 +342,7 @@ describe('probe (V2)', () => {
     );
     deepStrictEqual(
       outcome.kind === 'failed' ? outcome.failure : outcome.kind,
-      {kind: 'unsupportedArch', reported: ''},
+      {kind: 'unsupportedArch', reported: '', libc: 'unknown'},
     );
   });
 
@@ -364,7 +366,50 @@ describe('probe (V2)', () => {
     );
     deepStrictEqual(
       outcome.kind === 'failed' ? outcome.failure : outcome.kind,
-      {kind: 'unsupportedArch', reported: 'i686'},
+      {kind: 'unsupportedArch', reported: 'i686', libc: 'unknown'},
+    );
+  });
+
+  it('F-2401.AC-10: UnsupportedArch names the C library it found', async () => {
+    const outcome = await probe(
+      recording(block('UnsupportedArch', 'host.arch=armv7l', 'host.libc=musl')),
+      parametersFor(),
+      NEVER_CANCELLED,
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'unsupportedArch', reported: 'armv7l', libc: 'musl'},
+    );
+  });
+
+  it('F-2401: a host is named for the templates by its system and architecture, and a musl Linux is alpine', () => {
+    function host(libc: 'glibc' | 'musl' | 'unknown'): ProbedHost {
+      return {
+        operatingSystem: 'linux',
+        architecture: 'arm64',
+        libc,
+        release: '',
+        home: '/home/u',
+        temporaryFolder: '/tmp',
+        loginShell: 'sh',
+        tools: [],
+        busyboxWget: false,
+        sshAuthSock: '',
+        display: '',
+        installed: false,
+        installFolder: '',
+        treeComplete: false,
+      };
+    }
+    deepStrictEqual(
+      (['glibc', 'musl', 'unknown'] as const).map(libc =>
+        templatePlatformOf(host(libc)),
+      ),
+      [
+        {operatingSystem: 'linux', architecture: 'arm64'},
+        {operatingSystem: 'alpine', architecture: 'arm64'},
+        {operatingSystem: 'linux', architecture: 'arm64'},
+      ],
     );
   });
 

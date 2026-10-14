@@ -3,19 +3,13 @@
  * decides from, and the mounts of one container.
  */
 
+import {recordOf} from '../json-record.ts';
 import type {ContainerFacts} from './labels.ts';
 
 /** The facts of the inspected containers, or the field that could not be read. */
 export type InspectedFacts =
   | {kind: 'facts'; containers: ContainerFacts[]}
   | {kind: 'discoveryFailed'; detail: string};
-
-/** Whether a value is a plain object. */
-function recordOf(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
 
 /** The labels of a container: an object of strings, or none. */
 function labelsOf(value: unknown): Record<string, string> | undefined {

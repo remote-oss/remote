@@ -43,6 +43,7 @@
         "suite-slow/*.test.ts",
         "slow-remote/src/extension.ts",
         "windows/*.test.ts",
+        "config-files/*.test.ts",
         "no-proposals/*.test.ts",
         "default-ports/*.test.ts",
         "terminal-pick/*.test.ts",

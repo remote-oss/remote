@@ -9,6 +9,8 @@ import {
   type RunFacts,
   SharedConnection,
 } from 'lib-ssh';
+import {payloadOf} from '../../src/connect/connect-commands.ts';
+import {parseTypedHost} from '../../src/connect/typed-input.ts';
 import {
   type LoginLease,
   openConnectionStep,
@@ -27,6 +29,19 @@ const INPUT: ConnectInput = {
   isReconnection: false,
   windowId: 'window-1',
   windowWorkspace: undefined,
+};
+
+/** The codec's hex of the target with a user and port 2222, and of the same target without the port. */
+const HEX_USER_PORT =
+  '7b22686f73744e616d65223a223132372e302e302e31222c2275736572223a226861726e657373222c22706f7274223a323232327d';
+const HEX_USER =
+  '7b22686f73744e616d65223a223132372e302e302e31222c2275736572223a226861726e657373227d';
+
+/** The plain typed `user@host:port` text with port 2222 and the authority's text for it; the rows that key it share this input. */
+const TYPED_2222: ConnectInput = {
+  ...INPUT,
+  target: {kind: 'plain', text: 'harness@127.0.0.1:2222'},
+  rawHostString: 'harness@127.0.0.1:2222',
 };
 
 const TERMS: ConnectionTerms = {
@@ -241,7 +256,7 @@ async function loggedIn(
 }
 
 describe('the connection step', () => {
-  it('asks for the helper of the host string as written, with the connect cancellation', async () => {
+  it("F-2501 BR-3: asks for the helper of the target's identity, with the connect cancellation", async () => {
     const {requests, connecting} = fixture();
     const controller = new AbortController();
     void connecting(controller.signal);
@@ -252,6 +267,75 @@ describe('the connection step', () => {
         requests[0]?.cancellation === controller.signal,
       ],
       ['harness', true],
+    );
+  });
+
+  it('F-2501 BR-3: a structured alias is keyed as the plain alias', async () => {
+    const {requests, connecting} = fixture();
+    void connecting(undefined, {
+      ...INPUT,
+      target: {kind: 'host', hostName: 'harness'},
+      rawHostString: '7b22686f73744e616d65223a226861726e657373227d',
+    });
+    await settled();
+    deepStrictEqual(requests[0]?.hostString, 'harness');
+  });
+
+  it('F-2501 BR-3: a plain user, host and port is keyed as its structured form', async () => {
+    const {requests, connecting} = fixture();
+    void connecting(undefined, TYPED_2222);
+    await settled();
+    deepStrictEqual(requests[0]?.hostString, HEX_USER_PORT);
+  });
+
+  it('F-2501 BR-3: a structured user, host and port gives the same key', async () => {
+    const {requests, connecting} = fixture();
+    void connecting(undefined, {
+      ...INPUT,
+      target: {
+        kind: 'host',
+        hostName: '127.0.0.1',
+        user: 'harness',
+        port: 2222,
+      },
+      rawHostString: HEX_USER_PORT,
+    });
+    await settled();
+    deepStrictEqual(requests[0]?.hostString, HEX_USER_PORT);
+  });
+
+  it('F-2501 BR-3: a missing port is another identity', async () => {
+    const {requests, connecting} = fixture();
+    void connecting(undefined, {
+      ...INPUT,
+      target: {kind: 'plain', text: 'harness@127.0.0.1'},
+      rawHostString: 'harness@127.0.0.1',
+    });
+    await settled();
+    deepStrictEqual(requests[0]?.hostString, HEX_USER);
+  });
+
+  it('F-2501 BR-3: other letter case is another identity', async () => {
+    const {requests, connecting} = fixture();
+    void connecting(undefined, {
+      ...INPUT,
+      target: {kind: 'plain', text: 'Harness'},
+      rawHostString: 'Harness',
+    });
+    await settled();
+    deepStrictEqual(
+      requests[0]?.hostString,
+      '7b22686f73744e616d65223a224861726e657373227d',
+    );
+  });
+
+  it('F-2102 6.3 step 2: the key is the one Kill ends for the same typed text', async () => {
+    const {requests, connecting} = fixture();
+    void connecting(undefined, TYPED_2222);
+    await settled();
+    deepStrictEqual(
+      requests[0]?.hostString,
+      payloadOf(parseTypedHost('harness@127.0.0.1:2222')),
     );
   });
 

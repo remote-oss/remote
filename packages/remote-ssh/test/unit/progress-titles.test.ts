@@ -27,6 +27,10 @@ describe('the titles of the connection progress', () => {
     });
   }
 
+  it('F-2304: the stage of starting the server has no message, which the ssh connector never reports', () => {
+    deepStrictEqual(phaseTitleOf({name: 'startingServer'}), undefined);
+  });
+
   it('F-2304: the share downloaded has no message, so the last one stays', () => {
     deepStrictEqual(
       phaseTitleOf({name: 'serverDownloadPercent', percent: 40}),

@@ -31,7 +31,7 @@ import {
 } from './harness.ts';
 
 /** The windows the rows open, in the order their folders are named. */
-const WINDOWS = ['a1', 'a2', 'a3'];
+const WINDOWS = ['a1', 'a2', 'a3', 'a4'];
 
 /** The start title of a resolve for the host `harness`: every attempt leaves one progress line with this question. */
 const START_TITLE = 'Setting up SSH Host';
@@ -124,6 +124,54 @@ describe('the ssh-remote authorities of F-2501 (card coverage-19)', function () 
   it('F-2501 AC-5: the hex of a target with a host name and a user connects', async () => {
     await openWindow(hexOf({hostName: '127.0.0.1', user: 'harness'}), 'a1');
     deepStrictEqual(await connected('a1'), true);
+  });
+
+  it('F-2501 AC-6: a port as a number and as a string is one connection', async () => {
+    const since = now();
+    const port = hostPort();
+    await openWindow(
+      hexOf({hostName: '127.0.0.1', user: 'harness', port}),
+      'a1',
+    );
+    await openWindow(
+      hexOf({hostName: '127.0.0.1', user: 'harness', port: String(port)}),
+      'a2',
+    );
+    deepStrictEqual(await sharing(since, ['a1', 'a2']), {
+      helpers: 1,
+      logins: 1,
+    });
+  });
+
+  it('F-2501 AC-7: the alias, the hex of its host name and the hex with a field of its own are one connection', async () => {
+    const since = now();
+    await openWindow('harness', 'a1');
+    await openWindow(hexOf({hostName: 'harness'}), 'a2');
+    await openWindow(hexOf({hostName: 'harness', unknownField: 'bar'}), 'a3');
+    deepStrictEqual(await sharing(since, ['a1', 'a2', 'a3']), {
+      helpers: 1,
+      logins: 1,
+    });
+  });
+
+  it('F-2501 AC-8: the hex and the plain spelling of one target share a connection, and a target without a port is another', async () => {
+    const since = now();
+    const port = hostPort();
+    const mark = Date.now();
+    await openWindow(
+      hexOf({hostName: '127.0.0.1', user: 'harness', port}),
+      'a1',
+    );
+    await openWindow(`harness@127.0.0.1:${String(port)}`, 'a2');
+    await openWindow(hexOf({hostName: '127.0.0.1', user: 'harness'}), 'a3');
+    await openWindow('harness@127.0.0.1', 'a4');
+    deepStrictEqual(
+      [
+        await sharing(since, ['a1', 'a2', 'a3', 'a4']),
+        recordLines('notice').filter(line => line.time >= mark),
+      ],
+      [{helpers: 2, logins: 2}, []],
+    );
   });
 
   it('F-2501 AC-9: a host typed with a port connects as the configured user, and a name with no configured user is refused', async () => {
@@ -230,6 +278,17 @@ describe('the ssh-remote authorities of F-2501 (card coverage-19)', function () 
         ?.question,
       first?.question,
     );
+  });
+
+  it('F-2501 AC-25: the alias and the hex of its host name share a connection, and the same host with a user and a port is another', async () => {
+    const since = now();
+    await openWindow('harness', 'a1');
+    await openWindow(hexOf({hostName: 'harness'}), 'a2');
+    await openWindow(`harness@127.0.0.1:${String(hostPort())}`, 'a3');
+    deepStrictEqual(await sharing(since, ['a1', 'a2', 'a3']), {
+      helpers: 2,
+      logins: 2,
+    });
   });
 
   it('F-2501 AC-14: a key the host does not accept fails with Permission denied and the three buttons', async () => {
