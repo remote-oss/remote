@@ -37,6 +37,10 @@ export interface MaintenancePorts {
   heldHost(): {target: SshTarget; terminalMode: boolean} | undefined;
   /** Ends the local connection server of the host string and forgets its stored details; silent when none runs. */
   killLocalServer(hostString: string): PromiseLike<void>;
+  /** Tells the window's resolver that the window is about to leave its remote, so its resolves end silently. */
+  leaveWindow(): void;
+  /** Takes back `leaveWindow()`, for a window that stays. */
+  stayInWindow(): void;
   notice: NoticePort;
   translate: Translate;
   /** Reveals the connection's log: what "Open Logs" does. */
@@ -106,9 +110,17 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
       await uninstallOnHost(held.target);
       return;
     }
-    await ports.killLocalServer(payloadOf(held.target));
     if (plan.switchesToLocalWindow) {
-      await ports.editor.switchToLocalWindow();
+      ports.leaveWindow();
+    }
+    try {
+      await ports.killLocalServer(payloadOf(held.target));
+      if (plan.switchesToLocalWindow) {
+        await ports.editor.switchToLocalWindow();
+      }
+    } catch (caught) {
+      ports.stayInWindow();
+      throw caught;
     }
   }
 

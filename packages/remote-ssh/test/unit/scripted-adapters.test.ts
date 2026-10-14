@@ -161,7 +161,11 @@ const ENABLED = {
 
 const PLATFORM_PICK = {
   placeholder: {id: 'platformPickPlaceholder', values: ['dev']},
-  items: [{label: 'Linux', platform: 'linux' as const}],
+  active: 'linux' as const,
+  items: [
+    {label: 'Linux', platform: 'linux' as const},
+    {label: 'Windows', platform: 'windows' as const},
+  ],
 };
 
 const MITIGATION_PICK = {
@@ -724,6 +728,21 @@ describe('the scripted adapters answer from the script only', () => {
     ]);
     await adapters.platformPick.pick(PLATFORM_PICK, NEVER);
     strictEqual(files.lines()[0]?.question.includes('dev'), true);
+  });
+
+  it('F-2206 AC-2: a platform pick records its items in order and the label of the focused one', async () => {
+    const {adapters, files} = scripted([
+      {surface: 'platformPick', match: 'dev', answer: 'linux'},
+    ]);
+    await adapters.platformPick.pick(
+      {...PLATFORM_PICK, active: 'windows'},
+      NEVER,
+    );
+    const [line] = files.lines();
+    deepStrictEqual(
+      [line?.items, line?.active],
+      [['Linux', 'Windows'], 'Windows'],
+    );
   });
 
   it('#253: a platform pick entry that dismisses gives nothing', async () => {

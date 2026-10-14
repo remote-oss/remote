@@ -29,6 +29,10 @@ describe('the platform picker (F-2206)', () => {
     });
   });
 
+  it('F-2206 AC-2: Linux is the focused one', () => {
+    deepStrictEqual(platformPickOf('box').active, 'linux');
+  });
+
   it('F-2206 AC-2: the items are Linux, Windows and macOS in that order', () => {
     deepStrictEqual(platformPickOf('box').items, [
       {label: 'Linux', platform: 'linux'},

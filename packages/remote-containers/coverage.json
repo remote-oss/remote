@@ -2,6 +2,8 @@
   "exclude": {
     "src/extension.ts": "loads the editor",
     "src/engine/engine-host.ts": "types only; no executable code",
+    "src/cli/cli-host.ts": "types only; no executable code",
+    "src/programs/cli-preload.ts": "runs as a preload in the CLI's own process; the preload row covers it",
     "src/engine/node-engine-host.ts": "spawns real processes; the server acceptance rows cover it"
   },
   "ratchet": {

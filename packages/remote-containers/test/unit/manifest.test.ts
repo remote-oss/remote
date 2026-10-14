@@ -104,6 +104,8 @@ describe('the manifest', () => {
         },
       },
       dependencies: {
+        '@devcontainers/cli': '0.89.0',
+        'jsonc-parser': '3.3.1',
         'lib-authority': 'workspace:*',
         'lib-forwarding': 'workspace:*',
         'lib-host': 'workspace:*',

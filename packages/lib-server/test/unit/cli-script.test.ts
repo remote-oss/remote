@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {NOISE_LINES} from 'lib-host/testing/noise';
 import {
   parseResult,
   type ResultBlock,
@@ -300,6 +301,24 @@ describe('the CLI steps of the bootstrap script (card cli-03b, contracts V7a)', 
       deepStrictEqual(
         block === 'none' ? block : block.status,
         'ServerFailedToStart',
+      );
+    });
+
+    it("ADR-0010: the CLI's port line: noise around and inside its stream changes nothing", () => {
+      const parameters = placed(host);
+      const block = blockOf(host, single('startCli'), parameters, {
+        environment: {
+          VSCODE_CLI_REQUIRE_TOKEN: 'tok-xyz',
+          CLI_NOISE: [
+            ...NOISE_LINES,
+            'xListening on 127.0.0.1:1',
+            'Listening on 127.0.0.1:2 extra',
+          ].join('\n'),
+        },
+      });
+      deepStrictEqual(
+        block === 'none' ? block : [block.status, block.cliFacts.port],
+        ['Ok', '41234'],
       );
     });
 

@@ -33,6 +33,7 @@
     "test:acceptance": "pnpm package && node tools/acceptance.ts",
     "test:acceptance:vscodium": "pnpm package && node tools/acceptance.ts --editor vscodium",
     "test:acceptance:server": "pnpm build && mocha --no-config --extension ts --spec 'tests/acceptance/server/*.test.ts'",
+    "test:acceptance:containers-cli": "pnpm build && node tools/package-extensions.ts remote-containers && mocha --no-config --extension ts --spec 'tests/acceptance/containers-cli/*.test.ts'",
     "test:acceptance:variants": "node tools/acceptance-variants.ts",
     "test:acceptance:real-server": "REMOTE_OSS_REAL_SERVER=1 mocha --no-config --extension ts --spec 'tests/acceptance/server/real-server.test.ts'"
   },

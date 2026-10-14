@@ -3,3 +3,5 @@
 !package.nls*.json
 !l10n/**
 !dist/extension.js
+!dist/cli-preload.js
+!dist/devcontainers-cli/**
