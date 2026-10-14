@@ -6,7 +6,7 @@ Issue: #590. Why: #142's acceptance rows, batch 3b. F-2501 (`remote-oss/remote-s
 - or plain text, with a user, a port, or two `@`.
 
 Spellings of one target share one connection, and each failure has its own dialog. These rows open windows on those
-spellings in the windows suite. Builder: iris or hestia (hermes assigns). Size: about 2 agent-days. **Depends on:**
+spellings in the windows suite. Builder: iris or hestia (hermes assigns). Size: about 2.5 agent-days. **Depends on:**
 - tooling-26 (#573): `appendScript`, `acceptedPasswords`-style sshd log reading;
 - coverage-13 (#556): the `Host 127.0.0.1` block;
 - coverage-14 (#568): the windows helpers.
@@ -24,9 +24,19 @@ spellings in the windows suite. Builder: iris or hestia (hermes assigns). Size: 
 **Helpers** (`windows/harness.ts`):
 - `hexOf(target)`: `Buffer.from(JSON.stringify(target)).toString('hex')`, the lower-case hex F-2501 BR-1 defines;
 - `sshdLog(since)`: the lines of `docker logs --since <since> <container>`;
-- `acceptedKeyLogins(since)`: the count of `Accepted publickey for harness` lines among them.
+- `acceptedKeyLogins(since)`: the count of `Accepted publickey for harness` lines among them;
+- `cutHostNetwork()` and `restoreHostNetwork()`: `cutNetwork` and `restoreNetwork` of `tools/acceptance-network.ts`,
+  with `runCommand` and `variable('HARNESS_CONTAINER')` (D-85's cut, which the run's host container allows: it runs
+  with `NET_ADMIN`). A row that cuts restores in a `finally`. coverage-12 §2a adds the same pair; whichever card lands
+  second reuses them.
+
+**The resolver's log line** (`packages/remote-ssh/src/diagnostics/log-content.ts`): export
+`resolvingLine(authority: string, attempt: number, reconnection: boolean)`, the line `resolveLogLines` writes today
+(`Resolving ssh-remote+<authority>, attempt <n>`, then `, reconnection` for a reconnection). `resolveLogLines` uses it.
+Its unit rows give both forms. The AC-12 row builds its expected lines with it.
 
 **The agent's state** gains `remoteSshActive`: `vscode.extensions.getExtension('remote-oss.remote-ssh')?.isActive ?? false`.
+coverage-32 (#715) uses the same field. Whichever card lands second reuses it.
 
 ## 2. The rows (`tests/acceptance/windows/authority.test.ts`)
 
@@ -55,6 +65,8 @@ folder name before it opens. "One connection" means two things:
 | F-2501 AC-32 | `a1` ← `a@b@127.0.0.1` | `sshdLog` holds `Invalid user a@b`; the dialog names `127.0.0.1` |
 | F-2501 AC-33 | `a1` ← `Harness` | dialog `Could not establish connection to "Harness": Could not resolve hostname.` |
 | F-2501 AC-2 | in `local`, `acceptance.agent.openWindow` on `file://<run>/local-folder` (made first) | that window's state has `remoteName` null and `remoteSshActive` false. Close it |
+| F-2501 AC-31 | in `local`, open `file://<run>/a-internal` (made first); its window is `a-internal`. Read its state; then `inWindow('a-internal', 'remote-internal.getActiveSshRemote')`; read its state again | before: `remoteSshActive` false. After: the command resolved, `remoteSshActive` true, `remoteName` still null. No `progress` line of `a-internal`, and no log line since the command starts with `Resolving ssh-remote+` (`resolvingLine`'s fixed start): the resolver wasn't called. Close it |
+| F-2501 AC-12 | `a1` ← `harness`, connected. Note `a1`'s `activated` events and the log's length. `cutHostNetwork()`; wait up to 180 s until the new log lines hold `resolvingLine('harness', 2, true)` and `resolvingLine('harness', 3, true)`; `restoreHostNetwork()` | no `failureDialog` line of `a1` since the cut; within 120 s of the restore `a1` is connected; `a1` has no new `activated` event (no reload). Compare log lines through `redact(line, [])`, as `client.test.ts`'s `logged` does |
 
 ## 3. The catalogue
 
@@ -67,11 +79,19 @@ activation order is core's. Core halves, listed in #142:
 - AC-18's "Opening Remote...";
 - AC-25's stored folder entries.
 
+AC-12 and AC-31 go to `acceptance` too. Core halves: AC-12's reconnection loop and its attempt numbers, which are
+core's input to our resolver; AC-31's "for example by opening the Remotes view", since the Remotes view is
+remote-explorer's in 0.2.
+
 These stay `todo`, each listed with what it waits for:
-- AC-12: D-85's network cut in the windows suite ("harness capability missing");
 - AC-22: a trust-enabled launch (#456).
-- AC-27 and AC-29 are coverage-12's cases (`platform-pick-linux`, `platform-escape`). Add their F-2501 cites there
-  when that card is built.
+- AC-26: its Given (a resolve that returns while the server download still runs) arises only on the CLI path, where the
+  CLI downloads the server after it starts. In 0.2 the CLI path is dormant: VSCodium names no CLI source (connect-44,
+  #689). The tag waits for athena's pending ruling on the CLI-path ACs: `deferred` with them, or a row on cli-05's
+  opt-in archive. Don't decide it in the build.
+
+AC-27 and AC-29 are coverage-12's (#551) cases, `platform-pick-linux` and `platform-escape`. That card's §1 now carries
+their F-2501 cites, and its build tags them.
 
 ## 4. Done when
 

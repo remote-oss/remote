@@ -179,9 +179,27 @@ Rows, in each of these launches (`cite` as in coverage-13):
 
 A server that failed to listen may stay alive without a port (7.E3). The next case's setup kills it.
 
+**The stored hint of a failed start (AC-18, added by the 0.2 acceptance-row cards).** Every launch shares
+`<run>/user-data`, so a case's launch can read what the case before it stored. `ports.test.ts` gains `storedHints()`:
+- it reads `<run>/user-data/User/globalStorage/state.vscdb` with `python3 -I -c <script> <file>`, Python's `sqlite3`
+  opened read-only (`file:<path>?mode=ro`);
+- it takes the `value` of the `ItemTable` row whose key is `remote-oss.remote-ssh`, parses it as JSON, and returns its
+  `HINT_STORE_KEY` entry (`diagnostics/hint-store.ts`).
+
+The row runs in the launch of `start-range-full-default`, the case right after `start-range-full` in the file. That's a
+dialog case, so its tests run on the client, where the file is:
+
+| Name | Assertion |
+|---|---|
+| `F-2409 AC-18 (start-range-full-default): the stored hint of the session before carries STR:S135 as its error details` | among the store's records, the newest one whose `started` is before this launch's first record line has an `error` hint whose `details` is `The VS Code Server failed to start` (S135's template in `FAILURE_TEMPLATES`) |
+
+**Measure first:** the key the editor stores the extension's global state under, and that the row is in the file while
+the editor runs. If it isn't, stop and report on #557.
+
 ## 4. The catalogue
 
-F-2409 AC-7, 9, 10, 12, 13, 14, 15, 19, 25, 28 and 29 go to `acceptance`. AC-30 stays `todo`: its outcome is the
+F-2409 AC-7, 9, 10, 12, 13, 14, 15, 18, 19, 25, 28 and 29 go to `acceptance`. AC-11, 16 and 22 need no row: the
+D-65 recorded cases cover them. AC-30 stays `todo`: its outcome is the
 window's dialog, and no window case can make the real server end for CVE-2020-1416 (its check runs on Windows only). The
 unit row proves the dialog's text and the real-shell row proves the cause, but by athena's reading on #481 and #522 a
 server-level row doesn't carry `acceptance` for a window outcome. List AC-30 under "harness capability missing" in #142:
@@ -197,8 +215,8 @@ AC-26 waits for a slow stand-in in the VSCodium run and tooling-20's Retry.
 
 ## 5. Done when
 
-The repository's gates pass, and `pnpm test:acceptance:vscodium` passes with coverage-13's cases plus these 19. Paste
-the `suite-ports` summaries.
+The repository's gates pass, and `pnpm test:acceptance:vscodium` passes with coverage-13's cases plus these 19 and the
+AC-18 row. Paste the `suite-ports` summaries.
 
 ## 6. Review
 
