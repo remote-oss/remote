@@ -52,6 +52,28 @@
   ],
   "l10n": "./l10n",
   "contributes": {
+    "commands": [
+      {
+        "command": "remote-containers.reopenInContainer",
+        "title": "%commands.Reopenincontainer.title%",
+        "category": "Dev Containers"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "remote-containers.reopenInContainer",
+          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown"
+        }
+      ],
+      "statusBar/remoteIndicator": [
+        {
+          "command": "remote-containers.reopenInContainer",
+          "group": "remote_30_dev-container_2_actions@8",
+          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown"
+        }
+      ]
+    },
     "configuration": {
       "title": "%configuration.title%",
       "properties": {
