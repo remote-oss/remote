@@ -3,6 +3,8 @@
  * the Docker context and the configuration file, and its reading back. A plain host path in hex is the legacy form.
  */
 
+import {recordOf} from '../json-record.ts';
+
 /** A `file` or `vscode-fileHost` URI as the editor writes it, in that member order. */
 export interface SerializedUri {
   $mid: 1;
@@ -65,13 +67,6 @@ export function devContainerPayloadOf(target: DevContainerFolder): string {
     configFile: target.configFile,
   });
   return Buffer.from(text, 'utf8').toString('hex');
-}
-
-/** Whether a value is a plain object. */
-function recordOf(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }
 
 /** Whether a member is absent or a string. */
