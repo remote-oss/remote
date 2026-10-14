@@ -1,6 +1,5 @@
 /**
- * @fileoverview The host channel over `docker exec -i`: a script is piped to `sh -s` in the container with its input
- * after it, and a file is streamed into `tar -x` as a one-file archive. Environment values reach the container through
+ * @fileoverview The host channel over `docker exec -i`: a script is given to a shell in the container ahead of its input, and a file is streamed into `tar -x` as a one-file archive. Environment values reach the container through
  * the `docker` process's own environment, never through its arguments.
  */
 
@@ -8,6 +7,7 @@ import {once} from 'node:events';
 import {access, stat} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import path from 'node:path';
+import {StringDecoder} from 'node:string_decoder';
 import {
   type CopyOutcome,
   type CopyRequest,
@@ -87,10 +87,11 @@ function lineSplitter(onLine: (line: string) => void): {
   push(chunk: Buffer): void;
   flush(): void;
 } {
+  const decoder = new StringDecoder('utf8');
   let pending = '';
   return {
     push: chunk => {
-      const text = pending + chunk.toString('utf8');
+      const text = pending + decoder.write(chunk);
       const lineEnd = text.lastIndexOf('\n');
       pending = text.slice(lineEnd + 1);
       const complete = lineEnd < 0 ? [] : text.slice(0, lineEnd).split('\n');
@@ -99,9 +100,10 @@ function lineSplitter(onLine: (line: string) => void): {
       }
     },
     flush: () => {
-      if (pending !== '') {
-        onLine(pending.endsWith('\r') ? pending.slice(0, -1) : pending);
-        pending = '';
+      const rest = pending + decoder.end();
+      pending = '';
+      if (rest !== '') {
+        onLine(rest.endsWith('\r') ? rest.slice(0, -1) : rest);
       }
     },
   };
@@ -218,9 +220,9 @@ export function execChannelOf(
         await writeFile(process, request.input.localFile);
       }
       process.stdin.end();
-    })();
+    })().catch(() => undefined);
     const status = await process.exited;
-    await feeding.catch(() => undefined);
+    await feeding;
     splitter.flush();
     if (isAborted(request.cancellation)) {
       return failedWith('cancelled', 'cancelled while the script ran');
@@ -266,9 +268,9 @@ export function execChannelOf(
       await writeFile(process, request.localFile);
       await write(process, ustarTrailer(size));
       process.stdin.end();
-    })();
+    })().catch(() => undefined);
     const status = await process.exited;
-    await feeding.catch(() => undefined);
+    await feeding;
     if (isAborted(request.cancellation)) {
       return failedWith('cancelled', 'cancelled while the file was copied');
     }

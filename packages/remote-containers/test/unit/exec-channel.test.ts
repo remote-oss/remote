@@ -266,16 +266,85 @@ describe('the exec channel (card containers-02)', () => {
     );
   });
 
+  /** The outcome of a script given 200 000 bytes of input. */
+  function withLongInput(engine: ReturnType<typeof fakeEngine>) {
+    return execChannelOf(engine, 'c1', 'node').runScript(
+      request({input: {kind: 'text', text: 'x'.repeat(200_000)}}),
+      () => undefined,
+    );
+  }
+
   it('contracts §1: a process that ends before reading its input does not hang the run', async () => {
     const engine = fakeEngine(process => {
       process.exit(3);
     });
+    deepStrictEqual(await withLongInput(engine), {kind: 'exited', status: 3});
+  });
+
+  it('contracts §1: a character split across two chunks of stdout and of stderr arrives whole', async () => {
+    const bytes = Buffer.from('café\n');
+    const engine = fakeEngine(async process => {
+      process.print(bytes.subarray(0, 4));
+      process.printError(bytes.subarray(0, 4));
+      await new Promise(resolve => setImmediate(resolve));
+      process.print(bytes.subarray(4));
+      process.printError(bytes.subarray(4));
+      process.exit(3);
+    });
+    const lines: string[] = [];
+    const outcome = await execChannelOf(engine, 'c1', 'node').runScript(
+      request(),
+      line => lines.push(line),
+    );
+    deepStrictEqual([lines, outcome], [['café'], {kind: 'exited', status: 3}]);
+  });
+
+  it('contracts §1: a process that ends while its input waits to drain does not hang the run', async () => {
+    const engine = fakeEngine(process => {
+      process.stall();
+      setImmediate(() => {
+        process.exit(3);
+      });
+    });
+    deepStrictEqual(await withLongInput(engine), {kind: 'exited', status: 3});
+  });
+
+  it('contracts §1: a stdin that breaks while the input waits to drain leaves the outcome to the exit', async () => {
+    const engine = fakeEngine(process => {
+      process.stall();
+      setImmediate(() => {
+        process.breakStdin();
+        process.exit(3);
+      });
+    });
+    deepStrictEqual(await withLongInput(engine), {kind: 'exited', status: 3});
+  });
+
+  it('contracts §1: a script cancelled in the middle of its output delivers no more lines and ends as cancelled', async () => {
+    const engine = fakeEngine(process => {
+      process.print('first\nsecond\nthird');
+    });
+    const controller = new AbortController();
+    const lines: string[] = [];
+    const outcome = await execChannelOf(engine, 'c1', 'node').runScript(
+      request({cancellation: controller.signal}),
+      line => {
+        lines.push(line);
+        controller.abort();
+      },
+    );
     deepStrictEqual(
-      await execChannelOf(engine, 'c1', 'node').runScript(
-        request({input: {kind: 'text', text: 'x'.repeat(200_000)}}),
-        () => undefined,
-      ),
-      {kind: 'exited', status: 3},
+      [lines, outcome],
+      [
+        ['first'],
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'cancelled',
+            detail: 'cancelled while the script ran',
+          },
+        },
+      ],
     );
   });
 

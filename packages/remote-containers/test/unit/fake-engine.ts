@@ -23,8 +23,12 @@ export interface FakeProcess {
   /** The number of writes that said false, and the number of drains told. */
   pressure: {fulls: number; drains: number};
   killed: boolean;
-  print(text: string): void;
-  printError(text: string): void;
+  print(text: string | Uint8Array): void;
+  printError(text: string | Uint8Array): void;
+  /** Makes every later write wait for ever, so stdin never drains. */
+  stall(): void;
+  /** Breaks stdin with an error, as a pipe to a dead process does. */
+  breakStdin(): void;
   /** Ends the streams, then the process, with the status (undefined for a signal). */
   exit(status: number | undefined): void;
 }
@@ -57,11 +61,14 @@ function fakeProcess(
   const stdinEnded = new Promise<void>(resolve => {
     endings.push(resolve);
   });
+  let stalled = false;
   const stdin = new Writable({
     highWaterMark: 1,
     write: (chunk: Buffer, encoding, done) => {
       chunks.push(chunk);
-      setImmediate(done);
+      if (!stalled) {
+        setImmediate(done);
+      }
     },
     final: done => {
       endings[0]?.();
@@ -102,6 +109,12 @@ function fakeProcess(
     },
     printError: text => {
       stderr.write(text);
+    },
+    stall: () => {
+      stalled = true;
+    },
+    breakStdin: () => {
+      stdin.destroy(new Error('broken pipe'));
     },
     exit,
   };
