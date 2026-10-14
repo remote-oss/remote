@@ -5,7 +5,12 @@
  * parses alike.
  */
 
-import type {ScriptInput, ScriptRequest} from 'lib-host';
+import {
+  posixQuote,
+  preludeCommand,
+  type ScriptInput,
+  type ScriptRequest,
+} from 'lib-host';
 
 const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -24,17 +29,12 @@ export type ScriptPlan =
     }
   | {kind: 'refused'; reason: string};
 
-/** A value as one word for a POSIX shell, whatever it holds. */
-export function posixQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
 /**
  * The remote command that evaluates the first `byteCount` bytes of its standard input and leaves the rest of the
  * input to what they start. Only a number is on the command line; every login shell passes it to `sh` unchanged.
  */
 export function preludeProgram(byteCount: number): string {
-  return `sh -c 'eval "$(dd bs=1 count=${String(byteCount)} 2>/dev/null)"'`;
+  return `sh -c ${posixQuote(preludeCommand(byteCount))}`;
 }
 
 /** The first name in the environment that cannot be a variable's, if any. */

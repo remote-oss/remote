@@ -3,6 +3,7 @@
  * places files there, whatever the transport.
  */
 
+export {posixQuote, preludeCommand} from './shell-words.ts';
 export {
   type ChannelFailure,
   type ChannelFailureKind,

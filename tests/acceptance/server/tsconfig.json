@@ -16,6 +16,9 @@
       "path": "../../../packages/lib-forwarding"
     },
     {
+      "path": "../../../packages/lib-host"
+    },
+    {
       "path": "../../../packages/lib-helper"
     },
     {
@@ -31,7 +34,13 @@
       "path": "../../../packages/lib-ssh"
     },
     {
+      "path": "../../../packages/remote-containers"
+    },
+    {
       "path": "../../../packages/lib-forwarding/tsconfig.test.json"
+    },
+    {
+      "path": "../../../packages/lib-host/tsconfig.test.json"
     },
     {
       "path": "../../../packages/lib-helper/tsconfig.test.json"

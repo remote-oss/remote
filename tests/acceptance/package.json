@@ -6,6 +6,7 @@
     "lib-authority": "workspace:*",
     "lib-forwarding": "workspace:*",
     "lib-helper": "workspace:*",
+    "lib-host": "workspace:*",
     "lib-log": "workspace:*",
     "lib-product": "workspace:*",
     "lib-server": "workspace:*",

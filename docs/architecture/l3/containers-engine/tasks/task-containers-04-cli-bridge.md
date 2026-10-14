@@ -467,6 +467,11 @@ Over the appendix's recorded lines, stored as `test/fixtures/devcontainers-cli-0
 - A `progress` line with `stepDetail` → `progress` with `detail`.
 - The recorded Node deprecation line → a `log` at level 3, whole.
 - Text with ANSI codes is kept unchanged.
+- **Noisy neighbour (ADR-0010 rule 2; connect-59 §4):** stderr lines that only look like a result or an event aren't
+  read as either. Each of these is a plain `log` line, and the bridge's result stays the stdout result line's:
+  `npm WARN {"outcome":"success","containerId":"x"}`, `  {"outcome":"error"}` (leading spaces), and the five noise
+  lines N1–N5 of connect-59 (#832). The same text on stdout, in any line but the CLI's result line, isn't taken as the
+  result either.
 
 ### 6.4 Adapters and the bridge
 

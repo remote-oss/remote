@@ -46,6 +46,48 @@
       "key": "src/maintenance/host-picker.ts",
       "card": "#744",
       "slice": "0.2"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/exec/exec-arguments.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/exec/exec-channel.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/exec/exec-dialer.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/exec/exec-failures.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/exec/relay-script.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/exec/tar-stream.ts",
+      "card": "#776",
+      "slice": "containers release 1"
     }
   ]
 }
