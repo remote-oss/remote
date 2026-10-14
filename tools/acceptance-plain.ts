@@ -257,28 +257,115 @@ export function plainTestsOf(
 
 /** A started program that can be stopped, with everything it started. */
 export interface Started {
-  stop(): void;
+  /** Ends the program and its group; resolves once none of the group is left, so the next program never meets it. */
+  stop(): Promise<void>;
+}
+
+/** How long a stopped program has to end, in milliseconds: after SIGTERM, then after SIGKILL, and how often it's looked at. */
+export interface StopTiming {
+  graceMilliseconds: number;
+  afterKillMilliseconds: number;
+  pollMilliseconds: number;
+  /** Whether any process of a group is left; a zombie its parent never reaped counts. */
+  groupAlive(groupId: number): boolean;
+}
+
+/**
+ * The editor's own shutdown takes seconds on a loaded machine; one still shutting down holds the user-data folder's
+ * main socket, and the next editor on that folder would wait on it forever.
+ */
+const STOP_TIMING: StopTiming = {
+  graceMilliseconds: 10_000,
+  afterKillMilliseconds: 5000,
+  pollMilliseconds: 100,
+  groupAlive: groupId => {
+    try {
+      process.kill(-groupId, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+};
+
+/** Sends `signal` to the process, or with `group` to its whole group, if it is still there. */
+function signal(processId: number, name: NodeJS.Signals, group: boolean): void {
+  try {
+    process.kill(group ? -processId : processId, name);
+  } catch {
+    // It is already gone.
+  }
+}
+
+/** Waits until `done` holds or `milliseconds` have passed; whether `done` held. */
+async function waitUntil(
+  done: () => boolean,
+  milliseconds: number,
+  pollMilliseconds: number,
+): Promise<boolean> {
+  const deadline = Date.now() + milliseconds;
+  while (!done()) {
+    if (Date.now() >= deadline) {
+      return false;
+    }
+    await new Promise(resolve => setTimeout(resolve, pollMilliseconds));
+  }
+  return true;
 }
 
 /** Starts a program detached, in a group of its own, so that stopping it stops the processes it started too. */
-export function startDetached(program: Program): Started {
+export function startDetached(
+  program: Program,
+  timing: StopTiming = STOP_TIMING,
+): Started {
   const child = spawn(program.file, program.programArguments, {
     env: program.environment,
     detached: true,
     stdio: 'ignore',
   });
+  let exited = false;
+  child.on('exit', () => {
+    exited = true;
+  });
   // A program that cannot start has no process group to stop; the error must not end the harness unhandled.
-  child.on('error', () => undefined);
+  child.on('error', () => {
+    exited = true;
+  });
   child.unref();
   return {
-    stop: () => {
-      if (child.pid === undefined) {
+    stop: async () => {
+      const groupId = child.pid;
+      if (groupId === undefined) {
         return;
       }
-      try {
-        process.kill(-child.pid, 'SIGTERM');
-      } catch {
-        // The group is already gone.
+      // The program first, alone: an editor whose GPU and zygote processes go down with it aborts instead of quitting,
+      // and leaves its main socket behind. Its group follows it when it quits.
+      signal(groupId, 'SIGTERM', false);
+      const group: number = groupId;
+      function ended(): boolean {
+        return exited && !timing.groupAlive(group);
+      }
+      if (
+        await waitUntil(
+          ended,
+          timing.graceMilliseconds,
+          timing.pollMilliseconds,
+        )
+      ) {
+        return;
+      }
+      signal(groupId, 'SIGKILL', true);
+      if (
+        !(await waitUntil(
+          ended,
+          timing.afterKillMilliseconds,
+          timing.pollMilliseconds,
+        ))
+      ) {
+        // Zombies nobody reaps keep a group alive for ever; a later editor is safe from them, so the run goes on.
+        console.error(
+          `acceptance: the process group ${String(groupId)} of ${program.file} was still there after SIGKILL`,
+        );
       }
     },
   };
@@ -334,6 +421,6 @@ export async function runPlainLaunch(
   try {
     return await steps.runTests(plainTestsOf(root, launch, environment));
   } finally {
-    editor.stop();
+    await editor.stop();
   }
 }

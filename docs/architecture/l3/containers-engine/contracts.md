@@ -109,8 +109,11 @@ its content:
    **The volume's shared folders (amended 2026-10-14, daedalus; the user's `scriptFailed` on a non-root image):** a fresh
    named volume is `root:root 0755`, so the remote user can't create the tree. When the volume is mounted, after the first
    probe and before the second, C10 runs one fixed script of ours over a C11 channel opened with `--user root`. For each of
-   `/vscode/vscode-server`, `…/bin`, `…/bin/<platform>` and `…/extensionsCache` that **doesn't exist**, it runs `mkdir` and
-   then `chmod 0777` on that folder. It never changes an existing folder's owner or mode, so F-0419 7.E4 and 7.E5 hold as
+   `cacheFolders`' server root, its `bin` and its `bin/<platform>` (for VSCodium `/vscode/codium-server/…`: our
+   product-specific names keep our tree apart from the reference's on the shared volume, transport contracts #279) that
+   **doesn't exist**, it runs `mkdir` and then `chmod 0777` on that folder. The extensions cache folder
+   (`cacheFolders`' `extensionsCache`, not F-0419's observed `vscode-server/extensionsCache`) joins this step with the
+   increment-2 card that uses it (corrected 2026-10-14 on #925). It never changes an existing folder's owner or mode, so F-0419 7.E4 and 7.E5 hold as
    observed: a root-only `0700` tree stays unusable, and the install then fails as observed. This is F-0419 5.0 step 6's
    layout.
    - `<platform>` is the first probe's `templatePlatformOf`, checked against `^[a-z0-9-]+$` and passed as a script
