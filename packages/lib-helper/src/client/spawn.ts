@@ -12,6 +12,8 @@ export const PARAMETERS_VARIABLE = 'REMOTE_OSS_HELPER_PARAMETERS';
 export interface HelperParameters {
   endpoint: string;
   nonce: string;
+  /** The helper's registry record, which it removes when it ends. */
+  recordFile: string;
   policy: EndPolicy;
   payload: Record<string, string | number | boolean>;
   /** The consumer's own start values. */
