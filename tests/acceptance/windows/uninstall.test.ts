@@ -475,6 +475,35 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     );
   });
 
+  it('F-2412 AC-20: with serverInstallPath set, the home data folder goes, the servers stop and the custom folder stays', async () => {
+    const custom = '/home/harness/custom';
+    await setting('remote.SSH.serverInstallPath', {harness: custom});
+    try {
+      await onHostAs('harness', 'mkdir', '-p', custom);
+      await onHostAs('harness', 'touch', `${custom}/keep.txt`);
+      await makeDataFolder();
+      await openConnected('u1', INSTALL_MILLISECONDS);
+      await closeAllButLocal();
+      const mark = await uninstallWith('local', [pickHost('harness')]);
+      await removedWithin(DATA_FOLDER);
+      await waitFor(
+        'no server process of the run',
+        async () => (await serverProcesses()).length === 0,
+        10_000,
+      );
+      deepStrictEqual(
+        [
+          await existsOnHost(`${custom}/keep.txt`),
+          surfacesSince(mark, 'local'),
+        ],
+        [true, ['hostPick']],
+      );
+    } finally {
+      await setting('remote.SSH.serverInstallPath', undefined);
+      await onHostAs('harness', 'rm', '-rf', custom);
+    }
+  });
+
   describe('with remote.SSH.useLocalServer false', () => {
     before(async () => {
       await closeAllButLocal();
