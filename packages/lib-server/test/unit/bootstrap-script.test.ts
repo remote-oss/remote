@@ -1477,6 +1477,17 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
+    it('ADR-0010: port 0 and a port with a leading zero are not a port', () => {
+      deepStrictEqual(
+        ['0', '041000'].map(port =>
+          statusOf(host, single('start'), quickStart(), {
+            environment: {SERVER_READY_TEXT: port},
+          }),
+        ),
+        ['ServerFailedToStart', 'ServerFailedToStart'],
+      );
+    });
+
     it('ADR-0010: a failure phrase mid-line is not the failure', () => {
       deepStrictEqual(
         statusAndFacts(
@@ -2196,6 +2207,66 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, single('install'), parametersFor());
       const markers = {
         other: started('other', '/usr/bin/node', ['/home/user/app.js']),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('kill', markers), []);
+    });
+
+    /** The install's own `node`, under bin/<commit>/, which every process of a direct install's server runs. */
+    function installNode(): string {
+      return `${dataFolder()}/bin/abc123/node`;
+    }
+
+    it('F-2411.BR-3: kill stops an extension host under bin/ that no pid file names', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        extensionHost: started('extensionHost', installNode(), [
+          `${dataFolder()}/bin/abc123/out/bootstrap-fork`,
+          '--type=extensionHost',
+        ]),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('kill', markers), ['extensionHost']);
+    });
+
+    it('F-2411.BR-3: kill stops a file watcher whose parent has gone', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        fileWatcher: started('fileWatcher', installNode(), [
+          `${dataFolder()}/bin/abc123/out/bootstrap-fork`,
+          '--type=fileWatcher',
+        ]),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('kill', markers), ['fileWatcher']);
+    });
+
+    it('F-2411.BR-3: kill stops a launcher shell running a script under bin/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        launcher: startedScript(
+          'launcher',
+          'sh',
+          path.join(dataFolder(), 'bin', 'abc123', 'bin', 'code-server'),
+        ),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('kill', markers), ['launcher']);
+    });
+
+    it('F-2412 AC-27: kill leaves a sleep that only names a path under bin/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        sleeper: started('sleeper', 'sleep', ['30', installNode()]),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('kill', markers), []);
+    });
+
+    it('F-2411.BR-3: kill leaves the exec-server launcher', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        launcher: started('launcher', `${dataFolder()}/code-abc123`),
       };
       spawnSync('/bin/sleep', ['0.5']);
       deepStrictEqual(afterStep('kill', markers), []);

@@ -344,24 +344,25 @@ export const PROCESS_FUNCTIONS: readonly string[] = [
 ];
 
 /**
- * Whether a process is a server of the CLI path: the file it runs is under `cli/servers/`, or it is a POSIX shell
- * running a script there, as the server's launcher does. The arguments of the command line are read as fields, so that a
- * program that only names a path under `cli/servers/`, such as `tail -f` or an editor, is not taken for a server.
+ * Whether a process belongs to a server tree under the folder its second argument names: the file it runs is under that
+ * folder, or it is a POSIX shell running a script there, as a server's launcher does. The arguments of the command line
+ * are read as fields, so that a program that only names a path under the folder, such as `tail -f` or an editor, is not
+ * taken for a server.
  */
-export const CLI_PROCESS_FUNCTIONS: readonly string[] = [
-  'is_cli_server_process() {',
+export const SERVER_TREE_FUNCTIONS: readonly string[] = [
+  'is_server_tree_process() {',
   "  case $1 in ''|*[!0-9]*|0|1) return 1 ;; esac",
   '  [ -r "/proc/$1/cmdline" ] || return 1',
-  "  CLI_FIELDS=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | head -n 2)",
-  '  CLI_PROGRAM=$(printf \'%s\\n\' "$CLI_FIELDS" | sed -n 1p)',
-  '  CLI_FIRST=$(printf \'%s\\n\' "$CLI_FIELDS" | sed -n 2p)',
-  '  case $CLI_PROGRAM in',
-  '    "$DATA_DIR/cli/servers/"*) return 0 ;;',
+  "  TREE_FIELDS=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | head -n 2)",
+  '  TREE_PROGRAM=$(printf \'%s\\n\' "$TREE_FIELDS" | sed -n 1p)',
+  '  TREE_FIRST=$(printf \'%s\\n\' "$TREE_FIELDS" | sed -n 2p)',
+  '  case $TREE_PROGRAM in',
+  '    "$2"*) return 0 ;;',
   '  esac',
-  '  case ${CLI_PROGRAM##*/} in',
+  '  case ${TREE_PROGRAM##*/} in',
   '    sh|bash|dash|ash)',
-  '      case $CLI_FIRST in',
-  '        "$DATA_DIR/cli/servers/"*) return 0 ;;',
+  '      case $TREE_FIRST in',
+  '        "$2"*) return 0 ;;',
   '      esac',
   '      ;;',
   '  esac',
@@ -371,9 +372,9 @@ export const CLI_PROCESS_FUNCTIONS: readonly string[] = [
 
 /**
  * Stop the servers of the data folder: those of a direct install, whose process ids are recorded in it and whose command
- * lines hold `bin/`, and those of the CLI path, which record nothing and are found by their command lines holding
- * `cli/servers/`. A process that is not a server, such as the CLI's `command-shell` and its supervisor, which run the
- * CLI file, is left alone.
+ * lines hold `bin/`, and every process of a server tree, found by the file it runs being under `bin/` or `cli/servers/`.
+ * The sweep reaches a server's extension host and file watcher, which outlive a main process that ended. A process that
+ * is not a server, such as the CLI's `command-shell` and its supervisor, which run the CLI file, is left alone.
  */
 export const STOP_FUNCTIONS: readonly string[] = [
   'stop_servers() {',
@@ -389,7 +390,9 @@ export const STOP_FUNCTIONS: readonly string[] = [
   '  for PROC_DIR in /proc/[0-9]*; do',
   '    SERVER_PID=${PROC_DIR#/proc/}',
   '    [ "$SERVER_PID" != "$$" ] || continue',
-  '    is_cli_server_process "$SERVER_PID" || continue',
+  '    is_server_tree_process "$SERVER_PID" "$DATA_DIR/bin/" ||',
+  '      is_server_tree_process "$SERVER_PID" "$DATA_DIR/cli/servers/" ||',
+  '      continue',
   '    if have pkill; then',
   '      pkill -P "$SERVER_PID" 2>/dev/null',
   '    fi',
