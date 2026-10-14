@@ -331,6 +331,9 @@ export function harnessSshConfig(port: number, runFolder: string): string {
     ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, runFolder, [
       'id_second',
     ]),
+    'Host blackhole',
+    '  HostName 192.0.2.1',
+    '  BatchMode yes',
   ].join('\n');
 }
 

@@ -492,6 +492,19 @@ export async function fingerprintOf(file: string): Promise<string> {
   return stdout.split(' ')[1] ?? '';
 }
 
+/** Makes a new ed25519 key pair without a passphrase at `file` and `file.pub`. */
+export async function newKeyPair(file: string): Promise<void> {
+  await execFileAsync('ssh-keygen', [
+    '-q',
+    '-t',
+    'ed25519',
+    '-N',
+    '',
+    '-f',
+    file,
+  ]);
+}
+
 /** The fingerprints of the keys the run's agent holds; none when it holds none. */
 export async function agentKeys(): Promise<string[]> {
   const listed = await withAgent('ssh-add', ['-l']);

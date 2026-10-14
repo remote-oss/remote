@@ -388,6 +388,14 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-39: Host blackhole names an address of TEST-NET-1, which is never routed, so a connect waits', () => {
+    const blocks = harnessSshConfig(49153, '/run').split('\n\n');
+    strictEqual(
+      blocks.find(block => block.startsWith('Host blackhole')),
+      ['Host blackhole', '  HostName 192.0.2.1', '  BatchMode yes'].join('\n'),
+    );
+  });
+
   it('F-2601 AC-3: Host nowhere names a host that never resolves', () => {
     strictEqual(
       harnessSshConfig(49153, '/run').split('\n\n')[3],

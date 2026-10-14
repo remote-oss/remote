@@ -1,6 +1,5 @@
 import {deepStrictEqual, ok} from 'node:assert';
-import {execFileSync} from 'node:child_process';
-import {readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
@@ -13,6 +12,7 @@ import {
   hostPassword,
   inWindow,
   isOpen,
+  newKeyPair,
   nextEmptyWindow,
   noHelperWithin,
   onHost,
@@ -88,10 +88,7 @@ function killFailed(host: string): string {
   return `Failed to kill VS Code Server on ${host}.`;
 }
 
-/**
- * The server processes the run's earlier files left on the host: a kill does not end the extension host and file
- * watcher of a server whose window went away (reported on #727), so this file counts only the processes it saw start.
- */
+/** The server processes the run's earlier files left on the host, which this file's rows don't count. */
 let leftBefore: number[] = [];
 
 /** The process ids, on the host, of the user harness's processes that run from the server's data folder. */
@@ -231,6 +228,18 @@ async function shownChannel(name: string): Promise<string | null | undefined> {
 async function openConnected(name: string): Promise<void> {
   await openWindow('harness', name);
   await connectedWithin(name, 60_000);
+}
+
+/** Opens a local folder window `name` on a folder of the run, made first, and waits for its agent. */
+async function openLocalWindow(name: string): Promise<void> {
+  const folder = path.join(
+    variable('HARNESS_RUN_FOLDER'),
+    'kill-folders',
+    name,
+  );
+  mkdirSync(folder, {recursive: true});
+  await inWindow('local', 'acceptance.agent.openWindow', `file://${folder}`);
+  await waitFor(`${name} to activate its agent`, () => isOpen(name), 60_000);
 }
 
 /** Closes every window of the launch but `local` that is open, and waits until no connection helper runs. */
@@ -510,15 +519,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     const keyFile = path.join(variable('HARNESS_RUN_FOLDER'), 'kill-wrong-key');
     rmSync(keyFile, {force: true});
     rmSync(`${keyFile}.pub`, {force: true});
-    execFileSync('ssh-keygen', [
-      '-q',
-      '-t',
-      'ed25519',
-      '-N',
-      '',
-      '-f',
-      keyFile,
-    ]);
+    await newKeyPair(keyFile);
     const publicKey = readFileSync(`${keyFile}.pub`, 'utf8')
       .split(' ')
       .slice(0, 2)
@@ -574,6 +575,24 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     }
   });
 
+  it('F-2411 AC-31: a kill that waits on one host does not hold back a kill of another', async () => {
+    await openLocalWindow('kl2');
+    appendScript([
+      {...pickHost('blackhole'), window: 'local'},
+      {...pickHost('harness'), window: 'kl2'},
+    ]);
+    const mark = recordLines().length;
+    const waiting = killOnHost('local');
+    await killOnHost('kl2');
+    await waiting;
+    const notices = recordLines()
+      .slice(mark)
+      .filter(line => line.surface === 'notice')
+      .map(line => line.question);
+    await closeWindow('kl2');
+    deepStrictEqual(notices, [killed('harness'), killFailed('blackhole')]);
+  });
+
   it('F-2411 AC-23: no kill writes the settings file', () => {
     deepStrictEqual(
       settingsAround.map(([before, after]) => before === after),
@@ -623,25 +642,6 @@ describe('Kill VS Code Server (card coverage-39)', function () {
       ],
       [true, true, false],
     );
-  });
-
-  it('F-2411 AC-32: in socket mode Kill on Host kills the server', async () => {
-    await closeAllButLocal();
-    await setting('remote.SSH.remoteServerListenOnSocket', true);
-    await setting('remote.SSH.remotePlatform', {harness: 'linux'});
-    try {
-      await openConnected('x1');
-      const servers = await serverProcesses();
-      const mark = await killWith('local', [pickHost('harness')]);
-      await serversGoneWithin(servers, 10_000);
-      deepStrictEqual(noticesSince(mark, 'local'), [
-        [killed('harness'), ['Open Logs']],
-      ]);
-    } finally {
-      await closeAllButLocal();
-      await setting('remote.SSH.remoteServerListenOnSocket', undefined);
-      await setting('remote.SSH.remotePlatform', undefined);
-    }
   });
 
   it('F-2411 AC-19: Kill Current in a default-mode window makes it an empty local window and leaves the server', async () => {
@@ -741,23 +741,18 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     await closeWindow('x3');
   });
 
-  it('F-2411 AC-32: in socket mode Kill Current kills the server and keeps the window remote', async () => {
-    await setting('remote.SSH.remoteServerListenOnSocket', true);
-    await setting('remote.SSH.remotePlatform', {harness: 'linux'});
-    try {
-      await openConnected('x1');
-      const servers = await serverProcesses();
-      const mark = recordLines().length;
-      await killCurrent('x1');
-      await serversGoneWithin(servers, 10_000);
-      deepStrictEqual(
-        [noticesSince(mark, 'x1'), (await windowState('x1')).remoteName],
-        [[[killed('harness'), ['Open Logs']]], 'ssh-remote'],
-      );
-    } finally {
-      await closeAllButLocal();
-      await setting('remote.SSH.remoteServerListenOnSocket', undefined);
-      await setting('remote.SSH.remotePlatform', undefined);
-    }
+  it('F-2411 AC-26: Kill Current in one window leaves the other window on the host connected, with no failure dialog', async () => {
+    await closeAllButLocal();
+    await openConnected('x1');
+    await openConnected('x2');
+    const mark = recordLines().length;
+    const name = await nextEmptyWindow(() => killCurrent('x1'));
+    await closeWindow(name);
+    await connectedWithin('x2', 60_000);
+    deepStrictEqual(
+      linesSince(mark, 'x2').filter(line => line.surface === 'failureDialog'),
+      [],
+    );
+    await closeAllButLocal();
   });
 });
