@@ -322,6 +322,7 @@ const LAUNCH_ORDER = [
   'client-unset',
   'terminal-pick',
   'windows',
+  'config-files',
   'default-ports',
   'no-proposals',
   'explorer',

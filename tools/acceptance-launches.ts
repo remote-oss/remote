@@ -549,6 +549,20 @@ export function launchesOf(root: string): Launch[] {
     },
     {label: 'windows', kind: 'plain', suite: 'windows'},
     {
+      label: 'config-files',
+      kind: 'plain',
+      suite: 'config-files',
+      environment: {
+        HOME: '<run>/home',
+        PATH: '<run>/ssh-bin:<path>',
+        SSH_AUTH_SOCK: '',
+        XDG_CACHE_HOME: '<run>/xdg/cache',
+        XDG_CONFIG_HOME: '<run>/xdg/config',
+        XDG_DATA_HOME: '<run>/xdg/data',
+        XDG_STATE_HOME: '<run>/xdg/state',
+      },
+    },
+    {
       label: 'default-ports',
       kind: 'plain',
       suite: 'default-ports',

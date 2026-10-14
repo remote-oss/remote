@@ -51,6 +51,7 @@ import {
 import {
   clearCalls,
   writeClients,
+  writeSshRecorder,
   writeTildeCopy,
 } from './acceptance-clients.ts';
 import {
@@ -921,6 +922,7 @@ export async function runAcceptance(
     if (editor === 'vscodium') {
       writeClients(runFolder);
       writeTildeCopy(runFolder);
+      writeSshRecorder(runFolder);
     }
     prepareHost(
       dependencies.command,
