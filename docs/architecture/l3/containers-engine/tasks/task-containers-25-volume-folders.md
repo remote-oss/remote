@@ -28,7 +28,7 @@ Container ends in S034, and the log says only this:
 
 ## 2. The design
 
-### 2.1 The folders (`server-steps.ts`)
+### 2.1 The folders (`volume-folders.ts`)
 
 ```ts
 /** The volume's shared folders for `platform`, parents first (contracts §5.2); nothing for a platform that isn't a folder name. */
@@ -53,10 +53,14 @@ export function sharedFoldersOf(profile: ProductProfile, platform: string): read
 /** The fixed script that makes each missing shared folder 0777 as root; its folders come in SHARED_FOLDER_1 to 3. */
 export const VOLUME_FOLDERS_SCRIPT: string;
 
-/** Runs the script over `rootChannel`; it logs what happened and never fails the connect (contracts §5.2). */
+/**
+ * Runs the script over `rootChannel` for the folders of `platform`; it logs what happened and never fails the connect
+ * (contracts §5.2).
+ */
 export async function prepareVolumeFolders(
   rootChannel: HostChannel,
-  folders: readonly string[],
+  profile: ProductProfile,
+  platform: string,
   logger: Logger,
   cancellation: AbortSignal,
 ): Promise<void>;
@@ -103,7 +107,8 @@ printf '%s\n' '<RESULT_END>'
   (`SHARED_FOLDER_1` to `SHARED_FOLDER_3`). C11 passes environment values in the `docker` process's own environment,
   so `docker exec`'s argv holds the variable names and nothing else of the step.
 
-**`prepareVolumeFolders`.** It runs the script with `interpreter: 'posixShell'`, `input: {kind: 'text', text: ''}`
+**`prepareVolumeFolders`.** For a platform that `sharedFoldersOf` refuses, it logs `the volume's shared folders were not
+prepared: the platform "<platform>" is not a folder name` and returns. Otherwise it runs the script with `interpreter: 'posixShell'`, `input: {kind: 'text', text: ''}`
 and `environment` set from `folders`, then reads the lines with lib-server's `parseResult`. It logs exactly one
 line, at `info`:
 
@@ -124,12 +129,9 @@ In every case it returns. The connect goes on, and the remote user's install suc
    volume's shared folders (contracts §5.2)".
 2. **`connector.ts`** builds it next to `channel`: `execChannelOf(engine, prepared.containerId, 'root')`.
 3. **`runServerSteps`.** When `installTree !== ''` (the volume is mounted), between the first probe and the second:
-   - `const folders = sharedFoldersOf(profile, platformName)`;
-   - `undefined` logs `the volume's shared folders were not prepared: the platform "<platformName>" is not a folder
-     name` and goes on;
-   - otherwise, `await prepareVolumeFolders(request.rootChannel, folders, logger, cancellation)`.
-
-   Without the volume, the root channel is never used.
+   `await prepareVolumeFolders(request.rootChannel, profile, platformName, logger, cancellation)`. Without the volume,
+   the root channel is never used. The platform check lives in `prepareVolumeFolders`, because `templatePlatformOf`'s
+   closed types never give a bad platform through a probe, so only a direct call can reach that branch.
 4. **Nothing else changes.** The install, the start and the commit folder stay the remote user's. The install
    script's own `mkdir` makes the commit folder with the user's umask (0755).
 
@@ -160,8 +162,8 @@ The user's case would now log `the server was not installed: scriptFailed (Creat
 
 | File | What |
 |---|---|
-| `packages/remote-containers/src/connect/volume-folders.ts` | new: §2.2 |
-| `packages/remote-containers/src/connect/server-steps.ts` | `sharedFoldersOf`, `ServerRequest.rootChannel`, the step, `transferredDetail` |
+| `packages/remote-containers/src/connect/volume-folders.ts` | new: §2.1 and §2.2 |
+| `packages/remote-containers/src/connect/server-steps.ts` | `ServerRequest.rootChannel`, the step, `transferredDetail` (exported for its table row) |
 | `packages/remote-containers/src/connect/connector.ts` | the root channel |
 | `packages/remote-containers/test/unit/volume-folders.test.ts` | new: §4.1 and §4.2 |
 | `packages/remote-containers/test/unit/server-steps.test.ts`, `connector.test.ts` | §4.3, §4.4 |
@@ -183,7 +185,7 @@ script has run, so the umask can't hide a missing `chmod`.
 | `F-0419 7.E4: an existing folder keeps its mode` | `T/s` exists, mode 0700 | `T/s` is still 0700; `bin` and `bin/p` are made 0777 inside it |
 | `F-0419 7.E5: an existing tree is left as found` | all three exist, 0755, with a stray file in `T/s/bin/p` | the modes and the listing don't change; the block is `Ok` with `server.created` empty |
 | `contracts §5.2: an existing file in a folder's place is left alone` | `T/s/bin/p` is a file | it's still that file, unchanged; the block is `Ok` and lists the other two |
-| `contracts §5.2: a folder that can't be made is reported, and the first failure is the one kept` | `T/s` is a folder the script can't write into (mode 0500) | `CreateInstallDirFailed` with `writeFailedPath` `T/s/bin` and the `mkdir` error on one line; `T/s/bin/p` isn't made |
+| `contracts §5.2: a folder that can't be made is reported, and the first failure is the one kept` | `T/s` is a file, which fails the `mkdir` beneath it even as root | `CreateInstallDirFailed` with `writeFailedPath` `T/s/bin` and the `mkdir` error on one line |
 
 ### 4.2 `prepareVolumeFolders` over a recording channel (`volume-folders.test.ts`)
 
@@ -205,13 +207,18 @@ script has run, so the umask can't hide a missing `chmod`.
 | `contracts §5.2: with the volume, the root step runs after the first probe and before the second` | the root channel's one script is `VOLUME_FOLDERS_SCRIPT`, with the fixture's folders (`/vscode/fixture-server`, `…/bin`, `…/bin/linux-x64`); the user channel's scripts are probe, probe, …, as now; the call order across both channels is probe, root step, probe |
 | `contracts §5.2: without the volume, the root channel is never used` | no script on the root channel |
 | `contracts §5.2: a root step that fails doesn't fail the connect` | the root channel answers with a failure, and the connect still starts the server |
-| `contracts §5.2: a platform that isn't a folder name skips the root step` | `sharedFoldersOf(profile, 'linux-x64;rm')`, `'Linux-x64'` and `''` are `undefined`; with a probe that reports such a platform, the root channel isn't used and the log has the "not a folder name" line |
-| `contracts §5.2: the platform folder is the server tree's parent` | for `linux-x64` and `alpine-arm64`: `sharedFoldersOf(…)[2]` is `cacheFolders(…).serverTree` without its last segment |
+| `contracts §5.2: a platform that isn't a folder name skips the root step` (volume-folders.test.ts) | `sharedFoldersOf(profile, 'linux-x64;rm')`, `'Linux-x64'` and `''` are `undefined`; `prepareVolumeFolders` with `'linux-x64;rm'` doesn't use the channel and logs the "not a folder name" line |
+| `contracts §5.2: the platform folder is the server tree's parent` (volume-folders.test.ts) | for `linux-x64` and `alpine-arm64`: `sharedFoldersOf(…)[2]` is `cacheFolders(…).serverTree` without its last segment |
 | `F-0419 5.0 step 6: the install's failure logs its status and what it couldn't write` | an install that ends `CreateInstallDirFailed` with `server.writeFailedPath=/vscode/fixture-server` and an error logs `the server was not installed: scriptFailed (CreateInstallDirFailed): cannot write /vscode/fixture-server: <error>` |
 | `contracts §5.2: each other transfer failure logs what it carries` | one table-driven row over §2.4's other kinds, each with its exact text |
 | `contracts §5.2: the connector passes a root channel of the same container` (connector.test.ts) | the `runServer` request's `rootChannel` runs as `root` in `prepared.containerId` (through the fake engine's recorded argv) |
 
-### 4.5 Acceptance (`tests/acceptance/containers-volume/volume.test.ts`, new launch)
+### 4.5 Acceptance (`tests/acceptance/containers-volume/volume.test.ts`, new launch): part 2, after #918
+
+These rows use containers-09 part 2's helpers (`devContainerFolder`, `devContainersOf`, `waitForDialog`), which are on
+#918. Part 1 (§2, §4.1 to §4.4) ships the fix first. Part 2 adds this launch, the Dockerfile's `node` user and the
+catalogue rows once #918 is on main. V1 checks the commit folder's owner (`node`); its mode is whatever the install
+script's umask leaves, and V1 records that without asserting 755.
 
 **A precondition before the rows.** No running container of another run (`remote-oss.acceptance.run` label ≠
 `HARNESS_RUN_ID`) mounts the `vscode` volume. If one does, the launch fails, naming those containers, and doesn't skip.
@@ -220,7 +227,7 @@ product's server folder. The folder names come from the same lib-product and lib
 
 | # | Steps | Assertions |
 |---|---|---|
-| V1 | `devContainerFolder('volume-user', {name: 'Volume User', remoteUser: 'node'})`, then Reopen and wait until connected | connected, with `remoteName` `dev-container`; a root listing (`docker exec --user root <id> stat -c '%U %a' <folder>`) shows the three folders `root 777`, and the commit folder `node 755`; the log has `the volume's shared folders were created: <the three>` (F-0419 5.0 step 6, the user's trial) |
+| V1 | `devContainerFolder('volume-user', {name: 'Volume User', remoteUser: 'node'})`, then Reopen and wait until connected | connected, with `remoteName` `dev-container`; a root listing (`docker exec --user root <id> stat -c '%U %a' <folder>`) shows the three folders `root 777`, and the commit folder owned by `node`; the log has `the volume's shared folders were created: <the three>` (F-0419 5.0 step 6, the user's trial) |
 | V2 | Close V1's window. Clear the server folder again, then make `/vscode/<serverFolder>` `root 0700` with the helper container. Reopen `devContainerFolder('volume-closed', {name: 'Volume Closed', remoteUser: 'node'})` | the S034 dialog (F-0419 7.E4); afterwards `/vscode/<serverFolder>` is still `root 700`, `bin` and `bin/<platform>` are `root 777`, and there's no commit folder; the log has `scriptFailed (CreateInstallDirFailed): cannot write` and the path under `/vscode/<serverFolder>`. Then close the dialog and clear the server folder, so later launches install afresh |
 
 **On main without this card,** V1 fails with the user's S034. That's how the defect is reproduced.
