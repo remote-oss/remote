@@ -649,9 +649,9 @@ F-2501.AC-2	acceptance
 F-2501.AC-3	core	core: the remote indicator's text and the window title
 F-2501.AC-4	acceptance	
 F-2501.AC-5	acceptance	
-F-2501.AC-6	todo	
-F-2501.AC-7	todo	
-F-2501.AC-8	todo	
+F-2501.AC-6	acceptance	
+F-2501.AC-7	acceptance	
+F-2501.AC-8	acceptance	
 F-2501.AC-9	acceptance	
 F-2501.AC-10	todo	
 F-2501.AC-11	acceptance	
@@ -668,7 +668,7 @@ F-2501.AC-21	unit
 F-2501.AC-22	acceptance	
 F-2501.AC-23	core	core: the Cannot reconnect dialog and the indicator
 F-2501.AC-24	todo	
-F-2501.AC-25	todo	
+F-2501.AC-25	acceptance	
 F-2501.AC-26	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-2501.AC-27	acceptance	
 F-2501.AC-28	unit	
