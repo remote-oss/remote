@@ -56,15 +56,56 @@ describe('helper client', () => {
     runAction: () => Promise.resolve(),
   };
 
-  function request(overrides: Partial<AcquireRequest> = {}): AcquireRequest {
+  /** A preparation that runs `action` and then answers with empty start values. */
+  function preparing(action: () => void): () => Promise<{
+    kind: 'ready';
+    options: Record<string, never>;
+    payload: Record<string, never>;
+  }> {
+    return () => {
+      action();
+      return Promise.resolve({kind: 'ready', options: {}, payload: {}});
+    };
+  }
+
+  /** Starts a live helper of the old record's nonce at `endpoint`. */
+  function serveAt(endpoint: string): void {
+    void serve({
+      endpoint,
+      nonce: 'old',
+      recordFile: RECORD_PATH,
+      files,
+      payload: {},
+      policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
+      handler,
+      port: endpoints,
+      clock: () => clock.now(),
+      scheduler: clock.scheduler(),
+      helloLimitMilliseconds: 500,
+      logLine: () => undefined,
+    });
+  }
+
+  /** How many times a request of this file has been prepared. */
+  let prepares = 0;
+
+  function request(
+    overrides: Partial<AcquireRequest<string>> = {},
+  ): AcquireRequest<string> {
     return {
       folder: '/registry',
       namespace: 'ssh.connection',
       helperKey: 'user@host:22',
       script: '/ext/dist/helpers/connection-server.js',
-      options: {hostString: 'user@host:22'},
       policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
-      payload: {port: 49152},
+      prepare: () => {
+        prepares += 1;
+        return Promise.resolve({
+          kind: 'ready',
+          options: {hostString: 'user@host:22'},
+          payload: {port: 49152},
+        });
+      },
       cancellation: new AbortController().signal,
       ...overrides,
     };
@@ -100,7 +141,7 @@ describe('helper client', () => {
   }
 
   /** Starts an acquire, lets it reach its wait, cancels it, and returns how it ended. */
-  async function cancelledWhilePending(): Promise<AcquireOutcome> {
+  async function cancelledWhilePending(): Promise<AcquireOutcome<string>> {
     const controller = new AbortController();
     const pending = acquire(
       environment,
@@ -111,14 +152,15 @@ describe('helper client', () => {
     return drive(pending);
   }
 
-  function leaseOf(outcome: AcquireOutcome): HelperLease {
+  function leaseOf(outcome: AcquireOutcome<string>): HelperLease {
     if (outcome.kind !== 'acquired') {
-      throw new Error(`no lease: ${outcome.failure}`);
+      throw new Error(`no lease: ${JSON.stringify(outcome)}`);
     }
     return outcome.lease;
   }
 
   beforeEach(() => {
+    prepares = 0;
     clock = new FakeClock();
     files = new MemoryFilePort();
     endpoints = new FakeEndpointPort();
@@ -269,7 +311,7 @@ describe('helper client', () => {
       strictEqual(lease.startedByMe, true);
     });
 
-    it('joins the helper another acquirer started during the replacement', async () => {
+    it('F-2101 6.4: joins the helper another acquirer started during the replacement, after preparing for the stale record', async () => {
       const path = RECORD_PATH;
       files.files.set(path, '{broken');
       const winner = leaseOf(await drive(acquire(environment, request())));
@@ -282,8 +324,8 @@ describe('helper client', () => {
       files.files.set(path, '{broken');
       const joiner = leaseOf(await drive(acquire(environment, request())));
       deepStrictEqual(
-        [winner.startedByMe, joiner.startedByMe, spawned.length],
-        [true, false, 1],
+        [winner.startedByMe, joiner.startedByMe, spawned.length, prepares],
+        [true, false, 1, 2],
       );
     });
 
@@ -306,6 +348,186 @@ describe('helper client', () => {
         kind: 'failed',
         failure: 'endpointUnreachable',
       });
+    });
+
+    it('F-2101 BR-9: a free key prepares once, before the spawn, and the helper is started with the prepared values', async () => {
+      const outcome = await drive(acquire(environment, request()));
+      const parameters = helperParameters(spawned[0]?.environment ?? {});
+      deepStrictEqual(
+        [outcome.kind, prepares, parameters.options, parameters.payload],
+        ['acquired', 1, {hostString: 'user@host:22'}, {port: 49152}],
+      );
+    });
+
+    it('F-2101 BR-9: the record the claim writes holds no payload, and the starter and a joiner both get the prepared one', async () => {
+      const starter = leaseOf(await drive(acquire(environment, request())));
+      const joiner = leaseOf(await drive(acquire(environment, request())));
+      const text = files.files.get(RECORD_PATH);
+      deepStrictEqual(
+        [
+          text === undefined ? undefined : parseRecord(text)?.payload,
+          starter.payload,
+          joiner.payload,
+        ],
+        [{}, {port: 49152}, {port: 49152}],
+      );
+    });
+
+    it('F-2101 6.4: a window that joins a running helper prepares nothing', async () => {
+      leaseOf(await drive(acquire(environment, request())));
+      leaseOf(await drive(acquire(environment, request())));
+      deepStrictEqual([prepares, spawned.length], [1, 1]);
+    });
+
+    it('F-2101 BR-9: a refusal is the outcome, starts no helper and touches no record', async () => {
+      deepStrictEqual(
+        [
+          await drive(
+            acquire(
+              environment,
+              request({
+                prepare: () => Promise.resolve({kind: 'refused', refusal: 'r'}),
+              }),
+            ),
+          ),
+          spawned.length,
+          files.files.size,
+        ],
+        [{kind: 'refused', refusal: 'r'}, 0, 0],
+      );
+    });
+
+    it('F-2101 BR-9: prepare runs before the record exists, and the record is stamped after it', async () => {
+      let recordsSeen = -1;
+      const outcome = await drive(
+        acquire(
+          environment,
+          request({
+            prepare: () => {
+              recordsSeen = files.files.size;
+              clock.advance(5000);
+              return Promise.resolve({kind: 'ready', options: {}, payload: {}});
+            },
+          }),
+        ),
+      );
+      deepStrictEqual(
+        [
+          outcome.kind,
+          recordsSeen,
+          parseRecord(files.files.get(RECORD_PATH) ?? '')?.startedAt,
+        ],
+        ['acquired', 0, 5000],
+      );
+    });
+
+    for (const [name, before] of [
+      ['a record that a rival writes during prepare', undefined],
+      ['a live record that replaces the stale one during prepare', 'stale'],
+    ] as const) {
+      it(`F-2101 BR-9: ${name} is joined, no helper is spawned and nothing is removed`, async () => {
+        if (before === 'stale') {
+          files.files.set(RECORD_PATH, recordAt('/run/gone.sock'));
+        }
+        serveAt('/run/rival.sock');
+        const outcome = await drive(
+          acquire(
+            environment,
+            request({
+              prepare: preparing(() => {
+                files.files.set(
+                  RECORD_PATH,
+                  recordAt('/run/rival.sock', clock.now()),
+                );
+              }),
+            }),
+          ),
+        );
+        deepStrictEqual(
+          [
+            leaseOf(outcome).startedByMe,
+            spawned.length,
+            files.calls.filter(call => call.operation === 'remove'),
+          ],
+          [false, 0, []],
+        );
+      });
+    }
+
+    it('F-2101 BR-9: a stale record is prepared for before it is replaced', async () => {
+      files.files.set(RECORD_PATH, recordAt('/run/gone.sock'));
+      const order: string[] = [];
+      const remove = files.remove.bind(files);
+      files.remove = async file => {
+        order.push('remove');
+        await remove(file);
+      };
+      await drive(
+        acquire(
+          environment,
+          request({
+            prepare: () => {
+              order.push('prepare');
+              return Promise.resolve({kind: 'ready', options: {}, payload: {}});
+            },
+          }),
+        ),
+      );
+      deepStrictEqual(order.slice(0, 2), ['prepare', 'remove']);
+    });
+
+    it('F-2101 BR-9: a slow prepare, past the start limit, does not make a second helper when another acquire runs meanwhile', async () => {
+      function slow() {
+        prepares += 1;
+        return new Promise<{
+          kind: 'ready';
+          options: Record<string, never>;
+          payload: Record<string, never>;
+        }>(resolve => {
+          environment.timer(3000, () => {
+            resolve({kind: 'ready', options: {}, payload: {}});
+          });
+        });
+      }
+      const outcomes = await drive(
+        Promise.all([
+          acquire(environment, request({prepare: slow})),
+          acquire(environment, request({prepare: slow})),
+        ]),
+      );
+      deepStrictEqual(
+        [outcomes.map(outcome => outcome.kind), spawned.length, prepares],
+        [['acquired', 'acquired'], 1, 2],
+      );
+    });
+
+    it('contracts: a cancellation during prepare is cancelled, starts no helper and removes nothing', async () => {
+      const controller = new AbortController();
+      const outcome = await drive(
+        acquire(
+          environment,
+          request({
+            cancellation: controller.signal,
+            prepare: () => {
+              controller.abort();
+              return Promise.resolve({
+                kind: 'ready',
+                options: {},
+                payload: {},
+              });
+            },
+          }),
+        ),
+      );
+      deepStrictEqual(
+        [
+          outcome,
+          spawned.length,
+          files.files.size,
+          files.calls.filter(call => call.operation === 'remove'),
+        ],
+        [{kind: 'failed', failure: 'cancelled'}, 0, 0, []],
+      );
     });
 
     it('fails as spawnFailed and frees the key when the helper cannot start', async () => {
@@ -347,20 +569,7 @@ describe('helper client', () => {
       const starterRecord = recordAt('/run/starting.sock', clock.now());
       files.files.set(RECORD_PATH, starterRecord);
       clock.scheduler().setTimer(300, () => {
-        void serve({
-          endpoint: '/run/starting.sock',
-          nonce: 'old',
-          recordFile: RECORD_PATH,
-          files,
-          payload: {},
-          policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
-          handler,
-          port: endpoints,
-          clock: () => clock.now(),
-          scheduler: clock.scheduler(),
-          helloLimitMilliseconds: 500,
-          logLine: () => undefined,
-        });
+        serveAt('/run/starting.sock');
       });
       const lease = leaseOf(await drive(acquire(environment, request())));
       deepStrictEqual(

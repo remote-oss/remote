@@ -17,8 +17,18 @@ import {
   type ConnectionLimits,
   killConnection,
   type RunBase,
+  type RunFacts,
   type SshRequest,
 } from 'lib-ssh';
+
+/** What the client lookup would find for a host: the programs and the options the run base holds. */
+export function runFactsOf(base: RunBase): RunFacts {
+  return {
+    sshProgram: base.programs.sshProgram,
+    scpProgram: base.programs.scpProgram,
+    effective: base.effective,
+  };
+}
 
 const BUNDLES = path.join(
   import.meta.dirname,
@@ -101,16 +111,21 @@ export class WindowSide {
       folder: path.join(this.folder, 'registry'),
       hostString: base.target.host,
       script: HELPER_BUNDLE,
-      options: {
-        request: JSON.stringify(request),
-        unboundedWaitSeconds: 60,
-        runtimeFolder: this.folder,
-        runtime: process.execPath,
-        askpassProgram: ASKPASS_BUNDLE,
-        displayHost: base.target.host,
-        externalAskpass: false,
-        askpassFirstMessageMilliseconds: 5000,
-      },
+      prepare: () =>
+        Promise.resolve({
+          kind: 'ready' as const,
+          runFacts: runFactsOf(base),
+          options: {
+            request: JSON.stringify(request),
+            unboundedWaitSeconds: 60,
+            runtimeFolder: this.folder,
+            runtime: process.execPath,
+            askpassProgram: ASKPASS_BUNDLE,
+            displayHost: base.target.host,
+            externalAskpass: false,
+            askpassFirstMessageMilliseconds: 5000,
+          },
+        }),
       policy: {kind: 'graceAfterLastLease', milliseconds: GRACE_MILLISECONDS},
       cancellation: new AbortController().signal,
       ...changes,
@@ -125,7 +140,7 @@ export class WindowSide {
     return acquireConnection(
       this.environment,
       this.request(base, changes),
-      LIMITS,
+      () => LIMITS,
     );
   }
 
