@@ -75,7 +75,7 @@ describe('F-2409 the start of the server', function () {
       host.channel,
       parameters,
       {...OPTIONS, ...changes},
-      [],
+      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
       {lockLoop: lockLoop(), logger: SILENT},
       new AbortController().signal,
     );
@@ -259,7 +259,7 @@ describe('F-2409 the start of the server', function () {
   it('contracts V7: reports a server that lacks libraries on the host as missing prerequisites', async () => {
     deepStrictEqual(await start(await installed('missingLibraries')), {
       kind: 'failed',
-      failure: {kind: 'prerequisitesMissing'},
+      failure: {kind: 'prerequisitesMissing', detail: ''},
     });
   });
 

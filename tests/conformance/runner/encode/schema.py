@@ -18,14 +18,15 @@ WRITER_KEYS = ("id", "feature", "title", "ac", "atoms", "kind", "covers", "profi
 VERBS = ("cmd", "palette", "pick", "check", "type", "key", "button", "link", "remote", "view", "rowmenu", "rowaction",
          "viewaction", "menu", "focus", "hover", "window", "wait", "observe", "engine", "settings", "restart", "target",
          "goto", "open")   # goto/open: the editor helpers of the lab driver (remote-ssh-edit, 2026-10-02)
+TARGET_ACTIONS = ("cut", "heal", "rekey", "free")
 ENGINE_CONTAINER_ACTIONS = ("pause", "unpause", "stop", "start", "kill", "remove")
 ENGINE_ACTIONS = ENGINE_CONTAINER_ACTIONS + ("create_volume", "remove_volume", "run")
 INFRA_NAME = re.compile(r"^(labdind-|encode-registry|lab-k8s-)")
 STRING_VERBS = ("cmd", "palette", "pick", "check", "type", "key", "button", "link", "view", "menu", "focus", "window")
 FORBIDDEN_VERBS = ("sleep", "shell", "sh", "bash", "run", "exec", "docker", "kubectl", "typeraw", "script", "pause")
 SIMPLE_WHATS = ("title", "dialogs", "notifications", "statusbar", "contextmenu", "banner", "editors", "welcome",
-                "sidebar", "quickpick", "notification_center", "windows", "files")
-WAIT_KINDS = ("quickpick", "dialog", "no_dialog", "no_notification", "notification", "statusbar", "title", "windows", "view", "container",
+                "sidebar", "quickpick", "notification_center", "windows", "files", "opened_urls")
+WAIT_KINDS = ("quickpick", "dialog", "no_dialog", "no_notification", "notification", "notification_seen", "statusbar", "title", "windows", "view", "container",
               "volume", "quiet")
 STATUSES = ("recorded", "flaky", "failed", "unconfirmed")
 # identity rule (D-14, R-29, F-1401): nothing the writer writes may name the reference's identity
@@ -68,7 +69,7 @@ def _wait_errors(where, arg):
             errs.append(f"{where}: condition {c!r} is not one of {', '.join(WAIT_KINDS)}")
             continue
         (k, v), = c.items()
-        if k in ("dialog", "notification", "statusbar", "title") and not (isinstance(v, str) and v):
+        if k in ("dialog", "notification", "notification_seen", "statusbar", "title") and not (isinstance(v, str) and v):
             errs.append(f"{where}: {k} wants a text")
         elif k == "quickpick" and not (v in ("visible", "hidden", True, False) or (isinstance(v, dict) and set(v) == {"contains"})):
             errs.append(f"{where}: quickpick wants visible | hidden | {{contains: text}}")
@@ -91,6 +92,33 @@ def _wait_errors(where, arg):
                 errs.append(f"{where}: container state must be running|exited|paused|created|absent")
         elif k == "quiet" and not (isinstance(v, (int, float)) and 1 <= v <= 60):
             errs.append(f"{where}: quiet wants 1..60 seconds")
+    return errs
+
+
+TARGET_FILES_PATH = re.compile(r"(?:~|/tmp)(?:/[A-Za-z0-9._+@-]+)*/?")   # the target's lab HOME (~) or /tmp
+# the steps that end the window's connection to its target: closing a window, cutting the target's network, or core's
+# Close Remote Connection; a target_files observation comes after one of them (athena on #218, item 3)
+CLOSE_REMOTE = "Close Remote Connection"
+
+
+def target_files_errors(case, profile):
+    """A target_files observation needs the case's own SSH target and an earlier step that ended the connection."""
+    errs, ended = [], False
+    variant = caselib.ssh_variant(profile) if profile is not None else "?"
+    for i, st in enumerate(case.get("steps") or []):
+        if not isinstance(st, dict) or len(st) != 1:
+            continue
+        (verb, arg), = st.items()
+        if (verb == "window" and isinstance(arg, dict) and "close" in arg) or (verb == "target" and arg == "cut") \
+                or (verb in ("cmd", "palette") and isinstance(arg, str) and CLOSE_REMOTE in arg):
+            ended = True
+        if verb == "observe" and isinstance(arg, dict) and any(isinstance(w, dict) and "target_files" in w
+                                                               for w in arg.get("what") or []):
+            if not variant:
+                errs.append(f"steps[{i}]: target_files needs a profile with the case's own SSH target")
+            elif not ended:
+                errs.append(f"steps[{i}]: target_files only after a step that ends the connection (window: {{close}}, "
+                            f"target: cut, or {CLOSE_REMOTE})")
     return errs
 
 
@@ -139,8 +167,26 @@ def _observe_errors(where, arg, seen):
                                 errs.append(f"{where}: docker ids: true (adds container ids, for bind)")
                         else:
                             errs += _filter_errors(f"{where} docker {kind}", flt)
+            elif k == "user_settings":   # athena on kit #227 (item 3): the named keys only
+                keys = v.get("keys") if isinstance(v, dict) and set(v) == {"keys"} else None
+                if not (isinstance(keys, list) and keys and all(isinstance(x, str) and x.strip() for x in keys)):
+                    errs.append(f"{where}: user_settings wants {{keys: [<setting key>, ...]}}")
+            elif k == "notification_order":   # athena on #241 (option (2)): [A, B], two texts, one per observe
+                if not (isinstance(v, list) and len(v) == 2 and all(isinstance(x, str) and x.strip() for x in v)
+                        and v[0] != v[1]):
+                    errs.append(f"{where}: notification_order wants [<first text>, <second text>], two different texts")
+                elif sum(1 for x in what if isinstance(x, dict) and "notification_order" in x) > 1:
+                    errs.append(f"{where}: one notification_order per observe")
             elif k == "panel" and v != {}:
                 errs.append(f"{where}: panel takes no arguments (panel: {{}})")
+            elif k == "target_files":   # athena on #218 (item 3): names, size changes, executable names; never contents
+                if not (isinstance(v, dict) and "path" in v and not set(v) - {"path", "interval"}
+                        and isinstance(v["path"], str) and TARGET_FILES_PATH.fullmatch(v["path"])
+                        and not any(p in (".", "..") for p in v["path"].split("/"))
+                        and (v.get("interval") is None or (isinstance(v["interval"], (int, float))
+                                                           and not isinstance(v["interval"], bool) and 1 <= v["interval"] <= 30))):
+                    errs.append(f"{where}: target_files wants {{path: <~, ~/... or /tmp/... (letters, digits, ._+@-)>, "
+                                f"interval?: 1-30 s}}")
             elif k == "statusbar":
                 core = v.get("core") if isinstance(v, dict) and set(v) == {"core"} else None
                 if not (isinstance(core, list) and core and all(isinstance(x, str) and STATUS_ID.match(x) for x in core)):
@@ -154,7 +200,7 @@ def _observe_errors(where, arg, seen):
                                 f"plain form `contextmenu`")
             elif k in EDITOR_WHATS:
                 errs += _editor_arg_errors(where, k, v)
-            elif k not in ("view", "hover", "docker", "panel", "statusbar", "contextmenu"):
+            elif k not in ("view", "hover", "docker", "panel", "statusbar", "contextmenu", "notification_order"):
                 errs.append(f"{where}: unknown observation {k!r}")
         else:
             errs.append(f"{where}: bad observation {w!r}")
@@ -206,13 +252,25 @@ def _step_errors(i, step, seen):
         return [f"{where}: verb {verb!r} is forbidden (no sleeps, no shell steps; only fixture/state scripts touch Docker)"]
     if verb not in VERBS:
         return [f"{where}: unknown verb {verb!r} (lab verbs only: {', '.join(VERBS)})"]
-    if verb == "window" and isinstance(arg, dict):   # the waiting form
-        bad = set(arg) - {"title", "timeout", "count"}
-        t, n = arg.get("timeout"), arg.get("count")
-        if bad or not (isinstance(arg.get("title"), str) and (re.fullmatch(r"#\d+", arg["title"]) or len(arg["title"]) >= 2)) \
-                or not (isinstance(t, int) and 1 <= t <= 600) or not (n is None or (isinstance(n, int) and n >= 1)):
-            return [f"{where}: window wants #<n> or a title text, or {{title, timeout: 1..600, count?: <n>}}"]
+    if verb == "window" and isinstance(arg, dict) and "close" in arg:   # athena: close one of the run's own windows
+        t = arg.get("timeout")
+        if set(arg) - {"close", "timeout"} or not (isinstance(arg["close"], str) and (re.fullmatch(r"#\d+", arg["close"]) or len(arg["close"]) >= 2)) \
+                or not (isinstance(t, int) and 1 <= t <= 600):
+            return [f"{where}: window wants {{close: #<n> (the lab's window index, from 0) or a title text, timeout: 1..600}}"]
         return []
+    if verb == "window" and isinstance(arg, dict):   # the waiting form; nth picks by open order (athena on #227 items 6, 8)
+        bad = set(arg) - {"title", "timeout", "count", "nth"}
+        t, n, nth = arg.get("timeout"), arg.get("count"), arg.get("nth")
+        title_ok = isinstance(arg.get("title"), str) and (re.fullmatch(r"#\d+", arg["title"]) or len(arg["title"]) >= 2)
+        nth_ok = nth is None or nth in ("first", "last") or (isinstance(nth, int) and not isinstance(nth, bool) and nth >= 1)
+        if bad or not (title_ok or ("title" not in arg and nth is not None)) or not nth_ok \
+                or (nth is not None and str(arg.get("title", "")).startswith("#")) \
+                or not (isinstance(t, int) and 1 <= t <= 600) or not (n is None or (isinstance(n, int) and n >= 1)):
+            return [f"{where}: window wants #<n> or a title text, or {{title?, nth?: first|last|<k>, timeout: 1..600, "
+                    f"count?: <n>}} (nth: by the order windows opened; title may be left out only with nth)"]
+        return []
+    if verb == "button" and isinstance(arg, dict):   # athena on #227 item 1: the modal dialog's own close X
+        return [] if arg == {"dialog_close": True} else [f"{where}: button wants a button text, or {{dialog_close: true}}"]
     if verb in STRING_VERBS:
         if not (isinstance(arg, str) and arg.strip()):
             return [f"{where}: {verb} wants a non-empty text"]
@@ -244,8 +302,11 @@ def _step_errors(i, step, seen):
         return []
     if verb == "restart":
         return [] if arg is True else [f"{where}: restart: true (restarts the window on the same profile, folder and daemon)"]
-    if verb == "target":   # athena on #198: new host keys on the per-case target, ${SSH_TARGET_FINGERPRINT_NEW} bound to them
-        return [] if arg == "rekey" else [f"{where}: target: rekey (new host keys on the case's own SSH target)"]
+    # athena on #198: rekey = new host keys on the per-case target, ${SSH_TARGET_FINGERPRINT_NEW} bound to them; on #218:
+    # cut / heal = drop / restore its network, two separate steps (cut never heals on a timer)
+    if verb == "target":
+        return [] if arg in TARGET_ACTIONS else [f"{where}: target: {'|'.join(TARGET_ACTIONS)} (new host keys on, or "
+                                                 "drop / restore the network of, the case's own SSH target)"]
     return []
 
 
@@ -283,6 +344,18 @@ def _engine_errors(where, arg):
     return errs
 
 
+END_STATE_KINDS = ("dialog", "title", "notification", "statusbar")
+
+
+def _waits_for_end_state(step):
+    """A wait step with at least one condition on what the window shows: a dialog, a title or a text."""
+    arg = step.get("wait") if isinstance(step, dict) else None
+    if not isinstance(arg, dict):
+        return False
+    conds = arg.get("until") if isinstance(arg.get("until"), list) else [arg.get("until")]
+    return any(isinstance(c, dict) and len(c) == 1 and next(iter(c)) in END_STATE_KINDS for c in conds)
+
+
 def _fixture_errors(fx, case, profile):
     errs = []
     if fx is None:
@@ -290,8 +363,17 @@ def _fixture_errors(fx, case, profile):
     if not isinstance(fx, dict):
         return ["fixture must be a mapping"]
     errs += caselib.window_env_errors(fx.get("env"))   # fixture.env: names the room allows, ${WORKSPACE}/${HOME} only
-    bad = set(fx) - {"workspace", "files", "settings", "containers", "volumes", "extensions", "workspace_fixture",
-                     "workspace_paths", "links", "modes", "env", "window_start"}
+    if "default_title" in fx and fx["default_title"] is not True:
+        errs.append("fixture.default_title: true (the window keeps the editor's default title; select it with window: {nth})")
+    if fx.get("default_title") is True and "window.title" in (fx.get("settings") or {}):
+        errs.append("fixture.default_title and fixture.settings window.title contradict each other")
+    if fx.get("default_title") is True and not _waits_for_end_state((case.get("steps") or [None])[0]):
+        # athena on kit #232 (B): ready() then accepts the folder's name without [SSH: <alias>], so the case says what
+        # the window must reach before anything else
+        errs.append("fixture.default_title: the first step must be a wait for the end state (until: dialog, title, "
+                    "notification or statusbar)")
+    bad = set(fx) - {"workspace", "files", "settings", "keybindings", "challenges", "default_title", "containers", "volumes", "extensions",
+                     "workspace_fixture", "workspace_paths", "links", "modes", "env", "window_start"}
     if bad:
         errs.append(f"fixture: unknown keys {sorted(bad)}")
     if fx.get("workspace", "folder") not in ("folder", "empty-window"):
@@ -340,6 +422,7 @@ def _fixture_errors(fx, case, profile):
                         f"0444 as a number)")
     if not isinstance(fx.get("settings") or {}, dict):
         errs.append("fixture.settings must be a mapping of user settings")
+    errs += keybinding_errors(fx.get("keybindings"))
     if "images" in fx:
         errs.append("fixture.images: images come from the profile's engine fixture (pulled by digest from the mirror)")
     seeded = engine_images(case, profile)
@@ -365,6 +448,115 @@ def _fixture_errors(fx, case, profile):
             errs.append(f"fixture.extensions: {ext} is not a fixture AGENTS.md permits")
         elif caselib.FIXTURE_EXTENSIONS[ext][1] and caselib.FIXTURE_EXTENSIONS[ext][1] != case.get("feature"):
             errs.append(f"fixture.extensions: {ext} is only for {caselib.FIXTURE_EXTENSIONS[ext][1]}")
+    return errs
+
+
+SECRET_PLACEHOLDERS = {"SSH_PASSWORD": {"password", "otp", "pwchange"}, "SSH_PASSPHRASE": {"passphrase"}, "SSH_OTP": {"otp"},
+                       "SSH_PASSWORD_NEW": {"pwchange"},   # athena on #218: pwchange's new password; challenges' answers
+                       **{f"SSH_ANSWER_{n}": {"challenges"} for n in range(1, 17)}}
+
+
+def challenge_errors(fx, profile):
+    """fixture.challenges (athena on kit #218): [{text, echo}], 1 to 16, for a profile whose target variant is
+    `challenges` (and only there); each text 1-512 bytes, no NUL, kept byte for byte."""
+    chal = (fx or {}).get("challenges")
+    variant = set((caselib.ssh_variant(profile) or "").split("+")) if profile is not None else None
+    if chal is None:
+        return ["fixture.challenges: a challenges target asks the case's texts; name them"] \
+            if variant is not None and "challenges" in variant else []
+    if variant is not None and "challenges" not in variant:
+        return [f"fixture.challenges: profile's target is not a challenges variant ({'+'.join(sorted(variant)) or 'none'})"]
+    if not isinstance(chal, list) or not 1 <= len(chal) <= 16:
+        return ["fixture.challenges must be a list of 1 to 16 {text, echo}"]
+    return [f"fixture.challenges[{i}]: {{text: <1-512 bytes, no NUL>, echo: true|false}}" for i, c in enumerate(chal)
+            if not (isinstance(c, dict) and set(c) == {"text", "echo"} and isinstance(c["text"], str) and c["text"]
+                    and "\0" not in c["text"] and len(c["text"].encode()) <= 512 and isinstance(c["echo"], bool))]
+
+
+KEYBINDING_KEYS = {"key", "command", "when"}
+
+
+def command_owners():
+    """(the extension under test's command ids, {command id: companion id}), from the room's inventory (CMD atoms of
+    the reference package), the under-test entry's `runtime_commands` in project.toml (ids the spec names that the
+    extension registers at runtime, so no manifest declares them), and the companions' declarative extractions (R-52);
+    empty where the room has none of them."""
+    ours = {c for e in caselib.kitlib.cfg("reference.extensions", []) or [] if e.get("role") == "under-test"
+            for c in e.get("runtime_commands") or [] if isinstance(c, str)}
+    try:
+        with open(os.path.join(caselib.ROOT, "inventory", "atoms.jsonl")) as fh:
+            for line in fh:
+                a = json.loads(line)
+                if a.get("kind") == "CMD":
+                    ours.add(a["key"])
+    except (OSError, ValueError):
+        pass
+    theirs = {}
+    for c in caselib.kitlib.companion_sources():
+        try:
+            with open(os.path.join(c["link"], "package.json")) as fh:
+                pkg = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        for cmd in (pkg.get("contributes") or {}).get("commands") or []:
+            theirs.setdefault(cmd.get("command"), c["id"])
+    return ours, theirs
+
+
+def keybinding_errors(kbs, owners=None):
+    """fixture.keybindings (athena on kit #218, item 2): [{key, command, when?}], written at provision to the slot
+    profile's keybindings.json; declarative strings only. A command is a core one or one of the extension under test's,
+    by the id the spec names, never another extension's: a companion's command, or an id in the extension's own
+    namespace that it does not contribute, is refused. The key press itself is a `key` step."""
+    if kbs is None:
+        return []
+    if not isinstance(kbs, list) or not kbs:
+        return ["fixture.keybindings must be a non-empty list of {key, command, when?}"]
+    ours, theirs = owners if owners is not None else command_owners()
+    spaces = {c.split(".", 1)[0] for c in ours if "." in c}
+    errs = []
+    for i, kb in enumerate(kbs):
+        w = f"fixture.keybindings[{i}]"
+        if not isinstance(kb, dict) or set(kb) - KEYBINDING_KEYS or not {"key", "command"} <= set(kb):
+            errs.append(f"{w}: {{key, command, when?}} only")
+            continue
+        if not all(isinstance(kb[k], str) and kb[k].strip() and "\n" not in kb[k] for k in kb):
+            errs.append(f"{w}: key, command and when are one-line strings")
+            continue
+        cmd = kb["command"]
+        if cmd in theirs:
+            errs.append(f"{w}: {cmd} is {theirs[cmd]}'s command; a binding names a core command or one of the "
+                        "extension under test's")
+        elif cmd not in ours and cmd.split(".", 1)[0] in spaces:
+            errs.append(f"{w}: the extension under test contributes no command {cmd} (use the id the spec names; one "
+                        f"it registers at runtime goes in project.toml's runtime_commands)")
+    return errs
+
+
+def secret_placeholder_errors(case, profile):
+    """athena on kit #209: ${SSH_PASSWORD}, ${SSH_PASSPHRASE} and ${SSH_OTP} only as a `type` step's whole value (never
+    in a check, wait, observe, setting, file or expectation, so a case can never assert a secret), and only on a per-case
+    target whose variant makes that secret."""
+    import json as _json
+    errs = []
+    variant = set((caselib.ssh_variant(profile) or "").split("+")) if profile is not None else None
+    for i, st in enumerate(case.get("steps") or []):
+        if not isinstance(st, dict) or len(st) != 1:
+            continue
+        (verb, arg), = st.items()
+        text = _json.dumps(arg)
+        for name, makes in SECRET_PLACEHOLDERS.items():
+            if "${" + name + "}" not in text:
+                continue
+            if verb != "type" or arg != "${" + name + "}":
+                errs.append(f"steps[{i}]: ${{{name}}} only as a type step's whole value (type: \"${{{name}}}\")")
+            elif variant is not None and not (variant & makes):
+                errs.append(f"steps[{i}]: ${{{name}}}: profile {case.get('profile')}'s target makes no such secret "
+                            f"(variant {'+'.join(sorted(variant)) or 'none'})")
+    rest = _json.dumps({k: v for k, v in case.items() if k != "steps"})
+    for name in SECRET_PLACEHOLDERS:
+        if "${" + name + "}" in rest:
+            errs.append(f"${{{name}}} only in a type step, never in {', '.join(k for k in case if k != 'steps' and '${' + name + '}' in _json.dumps(case[k]))}")
     return errs
 
 
@@ -702,7 +894,13 @@ def validate_case(path, case=None, for_recording=False):
         errs += _fixture_binding_errors(case, profile)
     errs += _fixture_errors(case.get("fixture"), case, profile)
     errs += _engine_use_errors(case, profile)
-    if profile is not None and not caselib.ssh_variant(profile):   # target: rekey acts on the case's own SSH target
+    errs += secret_placeholder_errors(case, profile)
+    errs += target_files_errors(case, profile)
+    errs += challenge_errors(case.get("fixture") if isinstance(case.get("fixture"), dict) else None, profile)
+    n_chal = len(((case.get("fixture") or {}) if isinstance(case.get("fixture"), dict) else {}).get("challenges") or [])
+    errs += [f"${{SSH_ANSWER_{n}}}: the case names {n_chal} challenge(s)"
+             for n in sorted({int(m) for m in re.findall(r"\$\{SSH_ANSWER_(\d+)\}", json.dumps(case))}) if n > n_chal]
+    if profile is not None and not caselib.ssh_variant(profile):   # target: steps act on the case's own SSH target
         errs += [f"steps[{i}]: target: {case.get('profile')} has no per-case SSH target" for i, st in enumerate(case.get("steps") or [])
                  if isinstance(st, dict) and "target" in st]
     steps = case.get("steps")

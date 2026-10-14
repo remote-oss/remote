@@ -65,14 +65,33 @@ class Listeners<Event> {
  * The stage the window is shown for a pipeline phase. The details link goes with `initializing` and, in terminal
  * mode, with `settingUpTunnel`, whatever the order of the stages; no other stage carries it.
  */
-function phaseOf(event: PhaseEvent, terminalMode: boolean): ConnectPhase {
+function phaseOf(
+  event: Exclude<PhaseEvent, {kind: 'promptShown'}>,
+  terminalMode: boolean,
+): ConnectPhase {
   if (event.kind === 'serverDownloadPercent') {
     return {name: event.kind, percent: event.percent};
   }
   const details =
     event.kind === 'initializing' ||
     (event.kind === 'settingUpTunnel' && terminalMode);
-  return details ? {name: event.kind, details: true} : {name: event.kind};
+  const quiet =
+    (event.kind === 'initializing' && event.quiet === true) ||
+    event.kind === 'settingUpTunnel';
+  return {
+    name: event.kind,
+    ...(details ? {details: true as const} : {}),
+    ...(quiet ? {quiet: true as const} : {}),
+  };
+}
+
+/** The stage again, as a prompt is about to be shown: the same text, and not quiet. */
+function promptedStage(stage: ConnectPhase): ConnectPhase {
+  return {
+    name: stage.name,
+    ...(stage.percent === undefined ? {} : {percent: stage.percent}),
+    ...(stage.details === true ? {details: true as const} : {}),
+  };
 }
 
 /**
@@ -150,8 +169,14 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
       running = controller;
       try {
         const terminalMode = dependencies.terminalMode();
+        let told: ConnectPhase = {name: 'initializing', details: true};
         function onPhase(event: PhaseEvent): void {
-          phases.tell(phaseOf(event, terminalMode));
+          if (event.kind === 'promptShown') {
+            phases.tell(promptedStage(told));
+            return;
+          }
+          told = phaseOf(event, terminalMode);
+          phases.tell(told);
         }
         const result = await connect(input, dependencies.stepsFor(onPhase), {
           ...dependencies.options,

@@ -52,7 +52,7 @@ describe('the maintenance of the host server', function () {
         readySeconds: 10,
         socketMode: false,
       },
-      [],
+      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
       {
         lockLoop: lockLoop(),
         logger: createLogger(undefined, {minimumLevel: () => 'info'}),

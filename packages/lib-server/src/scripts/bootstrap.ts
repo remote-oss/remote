@@ -74,6 +74,8 @@ export interface StartParameters {
   fileWatcherPollingMilliseconds: number;
   /** Whether the server starts in host-proxy mode, when the policy allows it. */
   useHostProxy: boolean;
+  /** Whether the server's own requirements helper runs before a launch (policy `bundledHelper`). */
+  requirementsHelper: boolean;
   /** How many seconds the start waits for the ready line before it fails. */
   readySeconds: number;
   /** Whether the server listens on a socket in the host's temporary folder instead of a TCP port. */
@@ -182,6 +184,7 @@ function parameterBlock(parameters: ScriptParameters): string[] {
     assignment('KEEP_COUNT', keepCount(parameters.cleanup)),
     assignment('BIND_HOST', start.bindHost),
     assignment('SERVER_PORT', start.port),
+    assignment('REQUIREMENTS_HELPER', yesNo(start.requirementsHelper)),
     assignment('READY_SECONDS', start.readySeconds),
     assignment('SOCKET_MODE', yesNo(start.socketMode)),
     assignment('CLI_NAME', parameters.cli?.name ?? ''),
@@ -499,6 +502,39 @@ const STEPWISE_BODIES: Readonly<Record<StepwiseAction, readonly string[]>> = {
   ],
 };
 
+/**
+ * What a launch does first under the `bundledHelper` policy: it runs the server's own requirements helper through `sh`.
+ * Exit 99 is `LinuxPrereqs`, with the helper's output as facts inside the result block (ADR-0010 rule 1): up to 20 lines
+ * of 500 characters, read from a here-document so that the loop runs in the script's own shell. Any other exit
+ * launches the server. A server with no helper is not checked, and the fact says so. The lines of the here-document
+ * start in the first column, because its end marker must.
+ */
+const REQUIREMENTS_HELPER_LINES: readonly string[] = [
+  'if [ "$REQUIREMENTS_HELPER" = yes ]; then',
+  '  REQUIREMENTS_SCRIPT=$INSTALL_DIR/bin/helpers/check-requirements.sh',
+  '  if [ -f "$REQUIREMENTS_SCRIPT" ]; then',
+  '    REQUIREMENTS_STATUS=0',
+  '    REQUIREMENTS_OUTPUT=$(sh "$REQUIREMENTS_SCRIPT" 2>&1) || REQUIREMENTS_STATUS=$?',
+  '    if [ "$REQUIREMENTS_STATUS" = 99 ]; then',
+  '      REQUIREMENTS_LINE=0',
+  '      if [ -n "$REQUIREMENTS_OUTPUT" ]; then',
+  '        while IFS= read -r REQUIREMENTS_TEXT; do',
+  '          [ "$REQUIREMENTS_LINE" -lt 20 ] || break',
+  '          REQUIREMENTS_LINE=$((REQUIREMENTS_LINE + 1))',
+  "          REQUIREMENTS_TEXT=$(printf '%s' \"$REQUIREMENTS_TEXT\" | tr -d '\\r' | cut -c1-500)",
+  '          fact "server.prerequisites.$REQUIREMENTS_LINE" "$REQUIREMENTS_TEXT"',
+  '        done <<REQUIREMENTS_END',
+  '$REQUIREMENTS_OUTPUT',
+  'REQUIREMENTS_END',
+  '      fi',
+  '      leave LinuxPrereqs',
+  '    fi',
+  '  else',
+  '    fact server.prerequisitesHelper missing',
+  '  fi',
+  'fi',
+];
+
 function startBody(start: StartParameters, installTree: string): string[] {
   return [
     'if [ "$SOCKET_MODE" = yes ]; then KIND_PREFIX=$BOOT_PREFIX.socket; else KIND_PREFIX=$BOOT_PREFIX; fi',
@@ -553,6 +589,7 @@ function startBody(start: StartParameters, installTree: string): string[] {
     '  LAUNCHED=no',
     'else',
     '  prepare_environment',
+    ...REQUIREMENTS_HELPER_LINES,
     '  if [ ! -s "$TOKEN_FILE" ]; then',
     '    WRITE_ERROR=$( (umask 077; tr -dc \'A-Za-z0-9\' </dev/urandom | head -c 32 >"$TOKEN_FILE") 2>&1 )',
     '  fi',

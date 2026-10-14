@@ -48,7 +48,7 @@ export const CONTAINERS_POLICY: ServerPolicyRecord = frozen({
   cache: 'kept',
   verification: ['none'],
   environmentSetup: undefined,
-  requirementsCheck: 'serverBundled',
+  requirementsCheck: 'bundledHelper',
   allowedExtraStartOptions: ['useHostProxy'],
   cleanup: {kind: 'onlyCurrentKeepLeftovers'},
   installMode: 'singleScript',

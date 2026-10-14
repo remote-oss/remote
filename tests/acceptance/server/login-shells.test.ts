@@ -583,7 +583,7 @@ describe('ADR-0010, connect-59: a .profile and a ~/.ssh/rc that print noise', fu
         session.channel,
         parameters,
         START_OPTIONS,
-        [],
+        {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
         {lockLoop: lockLoop(), logger: SILENT},
         CANCELLATION,
       );

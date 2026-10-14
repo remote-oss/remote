@@ -68,6 +68,9 @@ import {TemporaryWorkspace} from './temporary-workspace.ts';
 
 const CONTAINER = 'c0ffee';
 
+/** The host's address on the run network, which the `routed` alias names. */
+const ROUTED_ADDRESS = '172.18.0.2';
+
 /** A harness whose commands succeed, recording each call; `answers` overrides the result of a program. */
 class FakeHarness implements HarnessDependencies {
   readonly calls: string[] = [];
@@ -88,6 +91,7 @@ class FakeHarness implements HarnessDependencies {
   readonly clientLaunches: Array<{
     label: string;
     fakes: boolean;
+    vanishing: boolean;
     tildeCopy: boolean;
     calls: string;
     settings: string;
@@ -141,7 +145,10 @@ class FakeHarness implements HarnessDependencies {
         ? `${CONTAINER}\n`
         : programArguments[0] === 'port'
           ? '127.0.0.1:49153\n'
-          : '';
+          : programArguments[0] === 'inspect' &&
+              programArguments.some(argument => argument.includes('IPAddress'))
+            ? `${ROUTED_ADDRESS}\n`
+            : '';
     return {status: 0, stdout, stderr: ''};
   };
 
@@ -165,6 +172,7 @@ class FakeHarness implements HarnessDependencies {
     return {
       stop: () => {
         this.calls.push('agent stopped');
+        return Promise.resolve();
       },
     };
   };
@@ -237,9 +245,11 @@ class FakeHarness implements HarnessDependencies {
       writeFileSync(path.join(folder, 'clients', 'calls.log'), 'stale\n');
     }
     if (label?.startsWith('client-') === true) {
+      const vanishing = path.join(folder, 'clients', 'vanishing', 'ssh');
       this.clientLaunches.push({
         label,
         fakes: existsSync(path.join(folder, 'clients', 'path', 'ssh')),
+        vanishing: existsSync(vanishing),
         tildeCopy: existsSync(path.join(folder, 'home', 'clients-copy', 'ssh')),
         calls: readFileSync(path.join(folder, 'clients', 'calls.log'), 'utf8'),
         settings: readFileSync(
@@ -247,6 +257,15 @@ class FakeHarness implements HarnessDependencies {
           'utf8',
         ),
       });
+      // The first attempt of the vanishing launch finds the client, and its check deletes it: simulate the
+      // launch doing so, so a retried attempt must find it rewritten.
+      if (
+        label === 'client-vanishing' &&
+        this.launched.filter(each => each === label).length === 0 &&
+        existsSync(vanishing)
+      ) {
+        rmSync(vanishing);
+      }
     }
     if (this.launched.length === 0) {
       for (const name of readdirSync(variables.HARNESS_RUN_FOLDER).filter(
@@ -425,7 +444,9 @@ describe('acceptance', () => {
 
   it('writes Host harness with the run key, its own known hosts and no agent', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run', '/run/agent.sock').split('\n\n')[0],
+      harnessSshConfig(49153, '/run', '/run/agent.sock', ROUTED_ADDRESS).split(
+        '\n\n',
+      )[0],
       [
         'Host harness',
         '  HostName 127.0.0.1',
@@ -444,7 +465,9 @@ describe('acceptance', () => {
 
   it('coverage-13: Host 127.0.0.1 reaches the harness host by the address as typed', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run', '/run/agent.sock').split('\n\n')[1],
+      harnessSshConfig(49153, '/run', '/run/agent.sock', ROUTED_ADDRESS).split(
+        '\n\n',
+      )[1],
       [
         'Host 127.0.0.1',
         '  Port 49153',
@@ -462,7 +485,9 @@ describe('acceptance', () => {
 
   it('F-2601 AC-1: Host refused points at a closed port of the loopback', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run', '/run/agent.sock').split('\n\n')[2],
+      harnessSshConfig(49153, '/run', '/run/agent.sock', ROUTED_ADDRESS).split(
+        '\n\n',
+      )[2],
       [
         'Host refused',
         '  HostName 127.0.0.1',
@@ -473,9 +498,12 @@ describe('acceptance', () => {
   });
 
   it('coverage-39: Host blackhole names an address of TEST-NET-1, which is never routed, so a connect waits', () => {
-    const blocks = harnessSshConfig(49153, '/run', '/run/agent.sock').split(
-      '\n\n',
-    );
+    const blocks = harnessSshConfig(
+      49153,
+      '/run',
+      '/run/agent.sock',
+      ROUTED_ADDRESS,
+    ).split('\n\n');
     strictEqual(
       blocks.find(block => block.startsWith('Host blackhole'))?.trimEnd(),
       ['Host blackhole', '  HostName 192.0.2.1', '  BatchMode yes'].join('\n'),
@@ -484,7 +512,9 @@ describe('acceptance', () => {
 
   it('F-2601 AC-3: Host nowhere names a host that never resolves', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run', '/run/agent.sock').split('\n\n')[3],
+      harnessSshConfig(49153, '/run', '/run/agent.sock', ROUTED_ADDRESS).split(
+        '\n\n',
+      )[3],
       ['Host nowhere', '  HostName nowhere.invalid', '  BatchMode yes'].join(
         '\n',
       ),
@@ -493,7 +523,9 @@ describe('acceptance', () => {
 
   it('F-2601 AC-6: Host stranger is the harness host with its own empty known hosts, and asks', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run', '/run/agent.sock').split('\n\n')[4],
+      harnessSshConfig(49153, '/run', '/run/agent.sock', ROUTED_ADDRESS).split(
+        '\n\n',
+      )[4],
       [
         'Host stranger',
         '  HostName 127.0.0.1',
@@ -511,12 +543,30 @@ describe('acceptance', () => {
   /** The alias blocks of the host's other accounts, after the four failure aliases. */
   function accountBlock(name: string): string {
     return (
-      harnessSshConfig(49153, '/run', '/run/agent.sock')
+      harnessSshConfig(49153, '/run', '/run/agent.sock', ROUTED_ADDRESS)
         .split('\n\n')
         .find(block => block.startsWith(`Host ${name}\n`))
         ?.trimEnd() ?? ''
     );
   }
+
+  it("tooling-47: the run's ssh_config has the routed alias at the run-network address, with no connect timeout", () => {
+    strictEqual(
+      accountBlock('routed'),
+      [
+        'Host routed',
+        `  HostName ${ROUTED_ADDRESS}`,
+        '  Port 22',
+        '  User harness',
+        '  IdentityFile /run/id_ed25519',
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        '  StrictHostKeyChecking accept-new',
+        '  BatchMode yes',
+        '  UserKnownHostsFile /run/known_hosts_routed',
+      ].join('\n'),
+    );
+  });
 
   /** The lines every alias of the other accounts shares, with its user and its own known-hosts file. */
   function sharedLines(name: string, user: string): string[] {
@@ -664,7 +714,13 @@ describe('acceptance', () => {
   it('coverage-16: the control sockets of the master aliases are in the control folder when it is not the run folder', () => {
     deepStrictEqual(
       ['master', 'master-ask', 'master-yes', 'master-autoask'].map(alias =>
-        harnessSshConfig(49153, '/run', '/run/agent.sock', '/tmp/control-x')
+        harnessSshConfig(
+          49153,
+          '/run',
+          '/run/agent.sock',
+          ROUTED_ADDRESS,
+          '/tmp/control-x',
+        )
           .split('\n\n')
           .find(block => block.startsWith(`Host ${alias}\n`))
           ?.split('\n')
@@ -898,10 +954,35 @@ describe('acceptance', () => {
           'ssh-keygen -q',
           'docker run',
           'docker port',
+          'docker network',
+          'docker network',
+          'docker network',
+          'docker inspect',
           'ssh -F',
           'bundle suite',
           `docker rm`,
         ],
+      );
+    });
+
+    it("tooling-47: the host joins the run's own network once it runs, and its address there is read from it", async () => {
+      await runAcceptance(workspace.root, harness);
+      const network = `remote-oss-acceptance-${acceptanceRunId(process.env, process.pid)}`;
+      const started = harness.calls.findIndex(call =>
+        call.startsWith('docker run'),
+      );
+      const joined = harness.calls.findIndex(
+        call => call === `docker network connect ${network} ${CONTAINER}`,
+      );
+      const addressed = harness.calls.findIndex(
+        call =>
+          call.startsWith('docker inspect --format') &&
+          call.includes(`Networks "${network}"`) &&
+          call.endsWith(CONTAINER),
+      );
+      deepStrictEqual(
+        [started >= 0, joined > started, addressed > joined],
+        [true, true, true],
       );
     });
 
@@ -923,6 +1004,7 @@ describe('acceptance', () => {
         REMOTE_OSS_ACCEPTANCE: '1',
         HARNESS_SSH_CONFIG: path.join(harness.runFolder, 'ssh_config'),
         HARNESS_CONTAINER: CONTAINER,
+        HARNESS_ROUTED_ADDRESS: ROUTED_ADDRESS,
         HARNESS_RUN_FOLDER: harness.runFolder,
         HARNESS_RUN_ID: acceptanceRunId(process.env, process.pid),
         HARNESS_PASSWORD_FILE: path.join(harness.runFolder, 'password'),
@@ -1571,6 +1653,37 @@ describe('acceptance', () => {
           harness.calls.some(call => call.startsWith('code ')),
         ],
         [false, true],
+      );
+    });
+
+    it('coverage-31: an attempt after one that deleted the vanishing client finds it rewritten', async () => {
+      workspace.write(
+        'tests/acceptance/suite-client/cases.json',
+        JSON.stringify({
+          cases: [
+            {
+              label: 'client-vanishing',
+              cite: 'F-2101 AC-19',
+              setting: '<run>/clients/vanishing/ssh',
+              checked: ['vanishing/ssh'],
+              used: null,
+            },
+          ],
+        }),
+      );
+      harness.labelResults.set('client-vanishing', {
+        exitCode: 1,
+        output: 'CodeWindow: detected unresponsive',
+      });
+      const status = await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        [
+          status,
+          harness.clientLaunches
+            .filter(each => each.label === 'client-vanishing')
+            .map(each => each.vanishing),
+        ],
+        [1, [true, true]],
       );
     });
 
@@ -2652,6 +2765,7 @@ describe('acceptance', () => {
           REMOTE_OSS_ACCEPTANCE: '1',
           HARNESS_SSH_CONFIG: '',
           HARNESS_CONTAINER: '',
+          HARNESS_ROUTED_ADDRESS: '',
           HARNESS_RUN_FOLDER: '',
           HARNESS_RUN_ID: '',
           HARNESS_PASSWORD_FILE: '',

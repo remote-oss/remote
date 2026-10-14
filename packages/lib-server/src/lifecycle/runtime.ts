@@ -6,7 +6,7 @@
 
 import type {ChannelFailure, HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
-import type {ExtraStartOption} from '../policy/record.ts';
+import type {ServerPolicyRecord} from '../policy/record.ts';
 import type {ScriptParameters} from '../scripts/bootstrap.ts';
 import type {ResultBlock, ScriptStatus} from '../scripts/result-block.ts';
 import {keptExtensions} from './extensions.ts';
@@ -50,11 +50,14 @@ export interface StartedServer {
 }
 
 /** What the start tells the caller without failing. */
-export interface StartNotice {
-  kind: 'bindHostRejected';
-  /** The bind host as the setting wrote it. */
-  configured: string;
-}
+export type StartNotice =
+  | {
+      kind: 'bindHostRejected';
+      /** The bind host as the setting wrote it. */
+      configured: string;
+    }
+  /** The policy runs the server's requirements helper and the installed server has none, so nothing was checked. */
+  | {kind: 'requirementsHelperMissing'};
 
 /** Why a launched server did not report a port, when the server says: its range had no free port, or it ended for CVE-2020-1416. */
 type ServerStartCause = 'noFreePort' | 'cveTerminated';
@@ -67,6 +70,32 @@ function causeOf(
   return failure === 'noFreePort' || failure === 'cveTerminated'
     ? failure
     : undefined;
+}
+
+/** The most lines of the requirements helper's output the facts of a block carry. */
+const MAXIMUM_PREREQUISITE_LINES = 20;
+
+/**
+ * The output of the server's requirements helper, from the facts `prerequisites.1`, `prerequisites.2`, … in numeric
+ * order until the first one missing, joined by newlines; empty when the block carries none. It is the host's own text,
+ * and the caller shows it unread (ADR-0010 rules 1 and 4).
+ */
+export function prerequisiteDetail(
+  serverFacts: Readonly<Record<string, string>>,
+): string {
+  const lines: string[] = [];
+  for (
+    let position = 1;
+    position <= MAXIMUM_PREREQUISITE_LINES;
+    position += 1
+  ) {
+    const line = serverFacts[`prerequisites.${String(position)}`];
+    if (line === undefined) {
+      break;
+    }
+    lines.push(line);
+  }
+  return lines.join('\n');
 }
 
 /** The path a script could not write, and the error text the failing command printed. */
@@ -133,7 +162,7 @@ export function exhaustedFailure(
 export type StartFailure =
   | {kind: 'invalidPortRange'}
   | {kind: 'serverStart'; detail?: string; cause?: ServerStartCause}
-  | {kind: 'prerequisitesMissing'}
+  | {kind: 'prerequisitesMissing'; detail: string}
   | {kind: 'retriesExhausted'; attempts: number; lockPath?: string}
   | {
       kind: 'scriptFailed';
@@ -266,7 +295,10 @@ function outcomeOf(
             connectionToken,
             reused: block.serverFacts.reused === 'yes',
           },
-          notices,
+          notices:
+            block.serverFacts.prerequisitesHelper === 'missing'
+              ? [...notices, {kind: 'requirementsHelperMissing'}]
+              : notices,
         }
       : failed({kind: 'unreadableServerFacts'});
   }
@@ -279,7 +311,10 @@ function outcomeOf(
     );
   }
   if (block.status === 'LinuxPrereqs') {
-    return failed({kind: 'prerequisitesMissing'});
+    return failed({
+      kind: 'prerequisitesMissing',
+      detail: prerequisiteDetail(block.serverFacts),
+    });
   }
   return failed(scriptFailure(block));
 }
@@ -287,13 +322,17 @@ function outcomeOf(
 /**
  * Starts the server of an install, or reuses the one that runs, and reads its port. A range with a problem fails before the
  * host is asked anything; a rejected bind host is replaced by the loopback address, with a notice. The extra start
- * option of the policy goes only when the policy allows it.
+ * options of the policy go only when the policy allows them, and the server's own requirements helper runs before a
+ * launch only under the `bundledHelper` policy.
  */
 export async function startOrReuse(
   channel: HostChannel,
   base: ScriptParameters,
   options: RuntimeOptions,
-  allowedExtraOptions: readonly ExtraStartOption[],
+  startPolicy: Pick<
+    ServerPolicyRecord,
+    'allowedExtraStartOptions' | 'requirementsCheck'
+  >,
   dependencies: RuntimeDependencies,
   cancellation: AbortSignal,
 ): Promise<StartOutcome> {
@@ -320,12 +359,13 @@ export async function startOrReuse(
       licenceAccepted: options.licenceAccepted,
       graceSeconds: windows ? 0 : options.graceSeconds,
       extensions,
-      fileWatcherPollingMilliseconds: allowedExtraOptions.includes(
-        'fileWatcherPolling',
-      )
-        ? options.fileWatcherPollingMilliseconds
-        : 0,
-      useHostProxy: allowedExtraOptions.includes('useHostProxy'),
+      fileWatcherPollingMilliseconds:
+        startPolicy.allowedExtraStartOptions.includes('fileWatcherPolling')
+          ? options.fileWatcherPollingMilliseconds
+          : 0,
+      useHostProxy:
+        startPolicy.allowedExtraStartOptions.includes('useHostProxy'),
+      requirementsHelper: startPolicy.requirementsCheck === 'bundledHelper',
       readySeconds: options.readySeconds,
       socketMode: options.socketMode,
     },

@@ -21,6 +21,7 @@ import {
 } from 'lib-ssh';
 import {
   acceptanceRunId,
+  connectRunNetwork,
   startHostContainer,
 } from '../../../tools/acceptance-run.ts';
 import {checked, runCommand} from '../../../tools/command-runner.ts';
@@ -55,6 +56,8 @@ export interface RunningHost {
   container: string;
   /** The port on this machine that reaches the host's `sshd`. */
   port: number;
+  /** The host's address on the run network, which the `routed` alias names. */
+  routedAddress: string;
   /** The run's folder: its keys and known hosts. */
   runFolder: string;
   /** How many logins the host's `sshd` has accepted since it started. */
@@ -171,11 +174,17 @@ export async function startHost(
     );
     container = host.container;
     const port = host.port;
+    const routedAddress = connectRunNetwork(runCommand, runId, container);
     const configFile = path.join(runFolder, 'ssh_config');
     // The server rows start no agent, and no row uses the alias that forwards one.
     writeFileSync(
       configFile,
-      harnessSshConfig(port, runFolder, path.join(runFolder, 'agent.sock')),
+      harnessSshConfig(
+        port,
+        runFolder,
+        path.join(runFolder, 'agent.sock'),
+        routedAddress,
+      ),
     );
     await waitForHost(configFile);
     const base = baseFor(configFile, 'harness');
@@ -194,6 +203,7 @@ export async function startHost(
       },
       container,
       port,
+      routedAddress,
       runFolder,
       generateKey: (keyFile, passphrase) => {
         checked(runCommand, 'ssh-keygen', [

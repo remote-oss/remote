@@ -5,8 +5,8 @@
  *     node tools/acceptance-run.ts --clean
  *
  * Every Docker object of a run carries the run's label, so the clean-up removes only what one run made: its
- * containers, forced, and its image tag. What is already gone is not an error, and the shared machine is never
- * pruned.
+ * containers, forced, its network and its image tag. What is already gone is not an error, and the shared machine is
+ * never pruned.
  */
 
 import {randomInt} from 'node:crypto';
@@ -18,8 +18,11 @@ import {isMainModule, messageOf} from './repository.ts';
 /** The label every Docker object of an acceptance run carries; its value is the run's id. */
 export const RUN_LABEL = 'remote-oss.acceptance.run';
 
-/** How old an editor of a CI run is before the opening clean takes it for one a killed job left behind: two hours. */
-const STALE_EDITOR_SECONDS = 7200;
+/**
+ * How old an editor or a network of a CI run is before the opening clean takes it for one a killed job left behind:
+ * two hours.
+ */
+const STALE_RUN_SECONDS = 7200;
 
 /** The image name of the SSH host; the run's tag keeps each run's build and container its own. */
 export const HOST_IMAGE = 'remote-oss-acceptance-host';
@@ -134,7 +137,7 @@ export function sweepStaleDevContainers(
   function isStale(object: LabelledObject): boolean {
     return (
       object.runId !== runId &&
-      nowSeconds - object.createdSeconds > STALE_EDITOR_SECONDS
+      nowSeconds - object.createdSeconds > STALE_RUN_SECONDS
     );
   }
   const filter = `label=${DEVCONTAINER_LABEL}=1`;
@@ -179,6 +182,90 @@ export function sweepStaleDevContainers(
       command('docker', ['image', 'rm', '--force', stale.objectId]);
     }
   }
+}
+
+/** The name of the run's own Docker network: `remote-oss-acceptance-<run id>`. */
+export function runNetworkOf(runId: string): string {
+  return `remote-oss-acceptance-${runId}`;
+}
+
+/** The format of a network's `inspect` line: its creation time in seconds, and how many containers it holds. */
+const NETWORK_AGE_FORMAT = '{{.Created.Unix}} {{len .Containers}}';
+
+/**
+ * Removes the networks that a killed or cancelled run left: each with the run label of any run, older than two hours
+ * before `nowMilliseconds` and with no container (Docker's default address pool runs out after about 30 networks). A
+ * younger network, or one with a container, is another job's. One that cannot be read is skipped, and one that
+ * another job removed first is no error.
+ */
+function sweepStaleNetworks(
+  command: CommandRunner,
+  nowMilliseconds: number,
+): void {
+  const nowSeconds = nowMilliseconds / 1000;
+  for (const networkId of idsOf(
+    checked(command, 'docker', [
+      'network',
+      'ls',
+      '--quiet',
+      '--filter',
+      `label=${RUN_LABEL}`,
+    ]),
+  )) {
+    const inspected = command('docker', [
+      'network',
+      'inspect',
+      '--format',
+      NETWORK_AGE_FORMAT,
+      networkId,
+    ]);
+    const fields = /^(\d+) (\d+)$/.exec(inspected.stdout.trim());
+    if (inspected.status !== 0 || fields === null) {
+      continue;
+    }
+    const [, created = '', containers = ''] = fields;
+    if (
+      nowSeconds - Number(created) > STALE_RUN_SECONDS &&
+      Number(containers) === 0
+    ) {
+      command('docker', ['network', 'rm', networkId]);
+    }
+  }
+}
+
+/**
+ * Connects the host container to the run's own network as well as Docker's default one, and returns its address
+ * there: the address the `routed` alias reaches without Docker's published port. The networks that a killed run left
+ * are swept first. A run with two host containers shares one network.
+ */
+export function connectRunNetwork(
+  command: CommandRunner,
+  runId: string,
+  container: string,
+  now: () => number = Date.now,
+): string {
+  sweepStaleNetworks(command, now());
+  const name = runNetworkOf(runId);
+  if (command('docker', ['network', 'inspect', name]).status !== 0) {
+    checked(command, 'docker', [
+      'network',
+      'create',
+      '--label',
+      `${RUN_LABEL}=${runId}`,
+      name,
+    ]);
+  }
+  checked(command, 'docker', ['network', 'connect', name, container]);
+  const address = checked(command, 'docker', [
+    'inspect',
+    '--format',
+    `{{(index .NetworkSettings.Networks "${name}").IPAddress}}`,
+    container,
+  ]).trim();
+  if (address === '') {
+    throw new Error(`the host ${container} has no address on ${name}`);
+  }
+  return address;
 }
 
 /** The characters of the run's password for the user `harness-pw`, and its length. */
@@ -277,10 +364,10 @@ export function startHostContainer(
 }
 
 /**
- * Removes the run's containers (by the run's label, forced), ends an editor still on the run's user-data folder, and
- * removes its image tags and its dev containers' images; what is already gone is not an
- * error. A container that still carries the run's label afterwards makes it throw, naming the ids, so a failed
- * removal fails the run instead of keeping the run's state on the shared machine.
+ * Removes the run's containers (by the run's label, forced) and its networks, ends an editor still on the run's
+ * user-data folder, and removes its image tags and its dev containers' images; what is already gone is not an
+ * error. A container or a network that still carries the run's label afterwards makes it throw, naming the ids, so a
+ * failed removal fails the run instead of keeping the run's state on the shared machine.
  */
 export function cleanRun(command: CommandRunner, runId: string): void {
   const filter = `label=${RUN_LABEL}=${runId}`;
@@ -302,13 +389,24 @@ export function cleanRun(command: CommandRunner, runId: string): void {
   )) {
     checked(command, 'docker', ['rm', '--force', containerId]);
   }
+  for (const networkId of idsOf(
+    checked(command, 'docker', [
+      'network',
+      'ls',
+      '--quiet',
+      '--filter',
+      filter,
+    ]),
+  )) {
+    checked(command, 'docker', ['network', 'rm', networkId]);
+  }
   // An editor that a killed job left holds the run's user-data folder, named by the run's id; none running is no error.
   command('pkill', ['-f', '--', `acceptance-${runId}-[A-Za-z0-9]+/user-data`]);
   // So does one that a runner left from an earlier CI run, whose id this run does not know: CI ids are numeric, local
   // ones are not, and only an editor older than any job's time limit is taken to be left over, not another job's.
   command('pkill', [
     '-O',
-    String(STALE_EDITOR_SECONDS),
+    String(STALE_RUN_SECONDS),
     '-f',
     '--',
     'acceptance-[0-9]+-[0-9]+-[A-Za-z0-9_-]+-[A-Za-z0-9]+/user-data',
@@ -324,10 +422,25 @@ export function cleanRun(command: CommandRunner, runId: string): void {
   const remaining = idsOf(
     checked(command, 'docker', ['ps', '--all', '--quiet', '--filter', filter]),
   );
-  if (remaining.length > 0) {
-    throw new Error(
-      `the run ${runId} still owns containers after the clean-up: ${remaining.join(', ')}`,
-    );
+  const remainingNetworks = idsOf(
+    checked(command, 'docker', [
+      'network',
+      'ls',
+      '--quiet',
+      '--filter',
+      filter,
+    ]),
+  );
+  const left = [
+    ...(remaining.length > 0
+      ? [`containers after the clean-up: ${remaining.join(', ')}`]
+      : []),
+    ...(remainingNetworks.length > 0
+      ? [`networks after the clean-up: ${remainingNetworks.join(', ')}`]
+      : []),
+  ];
+  if (left.length > 0) {
+    throw new Error(`the run ${runId} still owns ${left.join(' and ')}`);
   }
 }
 

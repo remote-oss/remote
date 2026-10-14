@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {overrideText} from '../../src/cli/override-pre-pass.ts';
+import {dropsImage, overrideText} from '../../src/cli/override-pre-pass.ts';
 
 describe('the override pre-pass (card containers-04)', () => {
   it('F-0304 AC-66: a localEnv reference to an empty variable gets its default', () => {
@@ -75,5 +75,109 @@ describe('the override pre-pass (card containers-04)', () => {
 
   it('C3: a text with nothing in it gives nothing', () => {
     deepStrictEqual(overrideText('', {V: ''}), undefined);
+  });
+
+  /** The override parsed back to an object. */
+  function parsedOverride(
+    text: string,
+    environment: Record<string, string> = {},
+  ): unknown {
+    const override = overrideText(text, environment);
+    return override === undefined ? undefined : JSON.parse(override);
+  }
+
+  it('F-0412 7.E8, Q-1: image beside a build object is dropped', () => {
+    deepStrictEqual(
+      parsedOverride(
+        '{"image":"alpine:3.22","build":{"dockerfile":"Dockerfile"}}',
+      ),
+      {build: {dockerfile: 'Dockerfile'}},
+    );
+  });
+
+  it('F-0412 7.E8: image beside the legacy dockerFile is dropped', () => {
+    deepStrictEqual(parsedOverride('{"image":"a","dockerFile":"Dockerfile"}'), {
+      dockerFile: 'Dockerfile',
+    });
+  });
+
+  it('F-0412 BR-16: image alone is untouched', () => {
+    deepStrictEqual(overrideText('{"image":"a"}', {}), undefined);
+  });
+
+  it('F-0412: a build without image is untouched', () => {
+    deepStrictEqual(
+      overrideText('{"build":{"dockerfile":"D"}}', {}),
+      undefined,
+    );
+  });
+
+  it("F-0412: an image inside build isn't the top-level one", () => {
+    deepStrictEqual(
+      overrideText('{"build":{"dockerfile":"D","image":"x"}}', {}),
+      undefined,
+    );
+  });
+
+  it("F-0412: a build that isn't an object doesn't count", () => {
+    deepStrictEqual(
+      [
+        overrideText('{"image":"a","build":"D"}', {}),
+        overrideText('{"image":"a","build":["D"]}', {}),
+        overrideText('{"image":"a","dockerFile":3}', {}),
+      ],
+      [undefined, undefined, undefined],
+    );
+  });
+
+  it('F-0412: a configuration that is not an object has nothing to drop', () => {
+    deepStrictEqual(
+      [overrideText('["image"]', {}), overrideText('"image"', {})],
+      [undefined, undefined],
+    );
+  });
+
+  it('ADR-0009: comments and other members stay when the image goes', () => {
+    deepStrictEqual(
+      overrideText(
+        '{\n  // the image\n  "image": "a",\n  "name": "n",\n  "dockerFile": "D"\n}',
+        {},
+      )?.includes('"name": "n"'),
+      true,
+    );
+  });
+
+  it('ADR-0009: a comment above another member stays when the image goes', () => {
+    deepStrictEqual(
+      overrideText(
+        '{\n  // keep\n  "name": "n",\n  "image": "a",\n  "dockerFile": "D"\n}',
+        {},
+      ),
+      '{\n  // keep\n  "name": "n",\n  "dockerFile": "D"\n}',
+    );
+  });
+
+  it('ADR-0009: this rule and an env rule apply together', () => {
+    deepStrictEqual(
+      parsedOverride(
+        '{"image":"${localEnv:EMPTY_VARIABLE:fallback}","name":"${localEnv:EMPTY_VARIABLE:fallback}","build":{"dockerfile":"D"}}',
+        {EMPTY_VARIABLE: ''},
+      ),
+      {name: 'fallback', build: {dockerfile: 'D'}},
+    );
+  });
+
+  it('F-0412 Q-1: dropsImage says whether the rule applies', () => {
+    deepStrictEqual(
+      [
+        dropsImage('{"image":"a","dockerFile":"D"}'),
+        dropsImage('{"image":"a","build":{"dockerfile":"D"}}'),
+        dropsImage('{"image":"a"}'),
+        dropsImage('{"build":{"dockerfile":"D"}}'),
+        dropsImage('{"dockerFile":"D"}'),
+        dropsImage('{"image":'),
+      ],
+      [true, true, false, false, false, false],
+    );
   });
 });

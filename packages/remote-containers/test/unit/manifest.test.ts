@@ -36,6 +36,10 @@ function readJson(file: string): Record<string, unknown> {
 const MANIFEST = readJson('package.json');
 
 /** The `when` clause of the command's palette entry and menu entry. */
+/** The `when` clause of the in-container rebuild commands. */
+const REBUILD_WHEN =
+  '!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown';
+
 const REOPEN_WHEN =
   '!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown';
 
@@ -46,6 +50,9 @@ const ENGLISH = {
     'Opening a folder in a container requires workspace trust.',
   'configuration.title': 'Dev Containers',
   'commands.Reopenincontainer.title': 'Reopen in Container',
+  'commands.Rebuildcontainer.title': 'Rebuild Container',
+  'commands.Rebuildcontainerwithoutcache.title':
+    'Rebuild Container Without Cache',
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
   'setting.ServerDownloadBaseUrl.description':
@@ -108,6 +115,16 @@ describe('the manifest', () => {
             title: '%commands.Reopenincontainer.title%',
             category: 'Dev Containers',
           },
+          {
+            command: 'remote-containers.rebuildContainer',
+            title: '%commands.Rebuildcontainer.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.rebuildContainerNoCache',
+            title: '%commands.Rebuildcontainerwithoutcache.title%',
+            category: 'Dev Containers',
+          },
         ],
         menus: {
           commandPalette: [
@@ -115,12 +132,25 @@ describe('the manifest', () => {
               command: 'remote-containers.reopenInContainer',
               when: REOPEN_WHEN,
             },
+            {
+              command: 'remote-containers.rebuildContainer',
+              when: REBUILD_WHEN,
+            },
+            {
+              command: 'remote-containers.rebuildContainerNoCache',
+              when: REBUILD_WHEN,
+            },
           ],
           'statusBar/remoteIndicator': [
             {
               command: 'remote-containers.reopenInContainer',
               group: 'remote_30_dev-container_2_actions@8',
               when: REOPEN_WHEN,
+            },
+            {
+              command: 'remote-containers.rebuildContainer',
+              group: 'remote_30_dev-container_2_actions@5',
+              when: REBUILD_WHEN,
             },
           ],
         },
@@ -198,38 +228,81 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0401 3.1, F-1406: the command has its id, category and title, and no keybinding', () => {
+  it('F-0401 3.1, F-1406: the reopen command has its id, category and title, and no command has a keybinding', () => {
     const contributes = MANIFEST.contributes as {
-      commands: unknown[];
+      commands: Array<{command: string}>;
       keybindings?: unknown;
     };
     deepStrictEqual(
       [
-        contributes.commands,
+        contributes.commands.find(
+          entry => entry.command === 'remote-containers.reopenInContainer',
+        ),
         readJson('package.nls.json')['commands.Reopenincontainer.title'],
         contributes.keybindings,
       ],
       [
-        [
-          {
-            command: 'remote-containers.reopenInContainer',
-            title: '%commands.Reopenincontainer.title%',
-            category: 'Dev Containers',
-          },
-        ],
+        {
+          command: 'remote-containers.reopenInContainer',
+          title: '%commands.Reopenincontainer.title%',
+          category: 'Dev Containers',
+        },
         'Reopen in Container',
         undefined,
       ],
     );
   });
 
-  it('F-0401 AC-5: the palette and the remote indicator list the command with the local clause of the reference', () => {
+  it('F-0405 3.1: the in-container rebuild commands have the titles of the reference, in the category Dev Containers', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<{command: string; title: string; category: string}>;
+    };
+    deepStrictEqual(
+      [
+        contributes.commands.filter(entry =>
+          entry.command.startsWith('remote-containers.rebuild'),
+        ),
+        readJson('package.nls.json')['commands.Rebuildcontainer.title'],
+        readJson('package.nls.json')[
+          'commands.Rebuildcontainerwithoutcache.title'
+        ],
+      ],
+      [
+        [
+          {
+            command: 'remote-containers.rebuildContainer',
+            title: '%commands.Rebuildcontainer.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.rebuildContainerNoCache',
+            title: '%commands.Rebuildcontainerwithoutcache.title%',
+            category: 'Dev Containers',
+          },
+        ],
+        'Rebuild Container',
+        'Rebuild Container Without Cache',
+      ],
+    );
+  });
+
+  /** The menu entries of the manifest that name one of `commands`. */
+  function menusOf(commands: readonly string[]): Record<string, unknown[]> {
     const menus = (
       MANIFEST.contributes as {
-        menus: Record<string, Array<{when: string; group?: string}>>;
+        menus: Record<string, Array<{command: string}>>;
       }
     ).menus;
-    deepStrictEqual(menus, {
+    return Object.fromEntries(
+      Object.entries(menus).map(([name, entries]) => [
+        name,
+        entries.filter(entry => commands.includes(entry.command)),
+      ]),
+    );
+  }
+
+  it('F-0401 AC-5: the palette and the remote indicator list the command with the local clause of the reference', () => {
+    deepStrictEqual(menusOf(['remote-containers.reopenInContainer']), {
       commandPalette: [
         {command: 'remote-containers.reopenInContainer', when: REOPEN_WHEN},
       ],
@@ -241,6 +314,31 @@ describe('the manifest', () => {
         },
       ],
     });
+  });
+
+  it('F-0405 3.1: both in-container rebuild commands are in the palette, and only the cached one is in the remote indicator', () => {
+    deepStrictEqual(
+      menusOf([
+        'remote-containers.rebuildContainer',
+        'remote-containers.rebuildContainerNoCache',
+      ]),
+      {
+        commandPalette: [
+          {command: 'remote-containers.rebuildContainer', when: REBUILD_WHEN},
+          {
+            command: 'remote-containers.rebuildContainerNoCache',
+            when: REBUILD_WHEN,
+          },
+        ],
+        'statusBar/remoteIndicator': [
+          {
+            command: 'remote-containers.rebuildContainer',
+            group: 'remote_30_dev-container_2_actions@5',
+            when: REBUILD_WHEN,
+          },
+        ],
+      },
+    );
   });
 
   it('F-1406.5: package.nls.json holds its keys, and every key package.json uses is one of them', () => {
@@ -276,6 +374,7 @@ describe('the manifest', () => {
       contextKeys: [
         {id: 'remote-containers:standingDown', setter: 'extension'},
         {id: 'hideConnectCommands', setter: 'extension'},
+        {id: 'hideRebuildCommands', setter: 'extension'},
       ],
       infoLineCommands: [],
       runtimeCommands: [

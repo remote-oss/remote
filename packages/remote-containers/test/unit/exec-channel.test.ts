@@ -4,6 +4,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {hostPathOf, type ScriptRequest} from 'lib-host';
 import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
+import {VOLUME_FOLDERS_SCRIPT} from '../../src/connect/volume-folders.ts';
 import {execChannelOf} from '../../src/exec/exec-channel.ts';
 import {ustarHeader, ustarTrailer} from '../../src/exec/tar-stream.ts';
 import {fakeEngine, type ProcessScript} from './fake-engine.ts';
@@ -57,6 +58,43 @@ describe('the exec channel (card containers-02)', () => {
         spawned?.environment,
       ],
       [true, false, {TOKEN: 's3cret value'}],
+    );
+  });
+
+  it("contracts §5.2: the root step's argv is the channel prelude only", async () => {
+    const engine = fakeEngine(endsWith(0));
+    await execChannelOf(engine, 'c1', 'root').runScript(
+      request({
+        script: VOLUME_FOLDERS_SCRIPT,
+        environment: {
+          SHARED_FOLDER_1: '/vscode/codium-server',
+          SHARED_FOLDER_2: '/vscode/codium-server/bin',
+          SHARED_FOLDER_3: '/vscode/codium-server/bin/linux-x64',
+        },
+      }),
+      () => undefined,
+    );
+    const [spawned] = engine.processes;
+    deepStrictEqual(
+      [
+        spawned?.argv.slice(0, 10),
+        spawned?.argv.some(argument => argument.includes('/vscode')),
+      ],
+      [
+        [
+          'exec',
+          '-i',
+          '--user',
+          'root',
+          '-e',
+          'SHARED_FOLDER_1',
+          '-e',
+          'SHARED_FOLDER_2',
+          '-e',
+          'SHARED_FOLDER_3',
+        ],
+        false,
+      ],
     );
   });
 
