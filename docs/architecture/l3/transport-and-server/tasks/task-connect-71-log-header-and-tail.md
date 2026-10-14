@@ -48,6 +48,18 @@ order:
 - the resolved line;
 - the tail.
 
+**Terminal mode (F-2003 6.7 point 1, BR-16, AC-29; republished on #13):** the settings listing is written in terminal
+mode too, with `useLocalServer` among its lines (its effective value, `false`).
+
+| File | Name | Given | Expected |
+|---|---|---|---|
+| `connect.test.ts` | `F-2003 BR-16, AC-29: the settings listing is written in terminal mode, useLocalServer among it` | a terminal-mode connect (`remote.SSH.useLocalServer` false) | the listing's lines, including the `useLocalServer` line with `false`, in item 2's place |
+
+**Acceptance:** the same listing check in a terminal-mode window (`connectionLog()`).
+
+AC-29 is split: its settings half is this card's and waits (no milestone, per athena's 2bb86d6). Its install-output half
+is connect-67's and is gating. AC-29 is tagged once both halves have rows.
+
 ## 3. Gates and review
 
 Run all gates and the VSCodium run. PR title `remote-ssh: the settings listing, ssh started and the no-hints tail in

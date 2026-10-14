@@ -16,7 +16,10 @@ on #13 notes the missing remote lines and the missing download and unpack progre
    `channelFor` returns is wrapped by a decorator, `loggedChannel(channel, remoteLog)`
    (`remote-ssh/src/pipeline/remote-log.ts`, new). `runScript`'s `onLine` gives each line first to
    `remoteLog(line)`, then to the caller's `onLine`, unchanged. The other methods pass through.
-   - It covers shared mode (`SharedSessionChannel`) and terminal mode alike, because both are this channel.
+   - It covers shared mode (`SharedSessionChannel`) and terminal mode alike, because both are this channel:
+     `wiring.ts`'s `channelOf` is the `channelFor` of both the shared step (`openConnectionStep`) and the terminal step
+     (`openTerminalConnectionStep`), and both call `ports.channelFor`, which is `connect-ports.ts:311`. The decorator
+     wraps the channel there, once, so terminal mode needs no second place (F-2003 6.7 point 1, BR-16).
    - The F-2704 startup output (connect-69) and the server's own output (connect-72) use the same `remoteLog`, when
      they come.
 2. **`remoteLog(line)`** logs `[remote] <scrubbed line>` at `info`, unless the line is empty.
@@ -46,6 +49,14 @@ on #13 notes the missing remote lines and the missing download and unpack progre
 | `remote-log.test.ts` | `ADR-0010 rule 1: a remote line that looks like ours changes nothing` | a line `remote-oss-server-result-begin` emitted outside a run's block | logged; lib-server's result is what its own block says |
 | `connect.test.ts` | `F-2003 BR-6 item 8: the steps and percents the notification shows are logged` | phase events `installing`, `serverDownloadPercent` 0, 50 and 100 | `Progress: installing`, then the three percent lines, in that order |
 
+**AC-29 (F-2003 6.7, BR-16, republished on #13):** in terminal mode, a fresh connect's install and start output is
+in the channel as server output, as in shared mode. That half of AC-29 is **gating** with this card (item 8, athena's
+2bb86d6). AC-29's settings-listing half is connect-71's, which waits. AC-29 stays `todo` until both halves have rows.
+
+| File | Name | Given | Expected |
+|---|---|---|---|
+| `connect-ports.test.ts` (or the file holding `channelFor`'s rows) | `F-2003 BR-16, AC-29: the terminal mode's channel is the logged channel too` | `channelFor` built for a terminal-mode connect (the terminal step's session), with a fake runner whose script emits `a` | the log has `[remote] a`, exactly as for a shared-mode connect |
+
 **Acceptance** (`tests/acceptance/windows`, `connectionLog()`): `F-2003 BR-6 item 8: a fresh install logs the remote
 output and its progress`. Remove the server's install folder on the host first (`onHost('rm', '-rf', …)`), then connect
 `harness` and check:
@@ -54,6 +65,11 @@ output and its progress`. Remove the server's install folder on the host first (
 - these come after `Resolving ssh-remote+harness` and before `Resolved ssh-remote+harness` (connect-65).
 
 connect-65's AC-21 row guards these lines.
+
+**The same row in terminal mode** (`F-2003 BR-16, AC-29: a fresh terminal-mode install logs the remote output`): with
+`remote.SSH.useLocalServer` false (the agent's `updateSetting`), and `remote.SSH.remotePlatform` `{harness: 'linux'}`,
+remove the server folder, connect `harness`, and check the same `[remote]` and progress lines. Also check that no
+line names a local connection server (the 6.7 point 2 half, which connect-68's terminal row asserts too).
 
 ## 4. Gates and review
 

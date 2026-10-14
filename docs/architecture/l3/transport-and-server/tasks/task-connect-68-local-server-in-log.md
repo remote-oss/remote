@@ -25,6 +25,16 @@ Builder: `task:claude`.
 **Acceptance:** two windows on `harness`. The second window's log has `Local connection server reused: pid <n>`, and
 `<n>` is the helper's pid (`connectionHelpers()`).
 
+**Terminal mode (F-2003 6.7 point 2, BR-16, AC-29):** no line about a local connection server, started or reused,
+appears in terminal mode, because F-2102's local server isn't used there.
+
+| File | Name | Given | Expected |
+|---|---|---|---|
+| `connect.test.ts` | `F-2003 BR-16, AC-29: no local-server line in terminal mode` | a terminal-mode connect, then a reload | no pid line and no "started" or "reused" line of this card's |
+
+**Acceptance:** in a terminal-mode window, `connectionLog()` holds no local-server line. connect-67's terminal row asserts
+it too.
+
 ## 3. Gates and review
 
 Run all gates and the VSCodium run. PR title `lib-ssh, remote-ssh: the local connection server's start, reuse and pids

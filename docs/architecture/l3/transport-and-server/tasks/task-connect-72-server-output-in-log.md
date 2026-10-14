@@ -35,6 +35,14 @@ folder removed first). Then:
   assert on it;
 - the same connect at `debug` writes fewer lines than at `trace`.
 
+**Terminal mode (F-2003 6.7 points 1 and 4, BR-16):** the server's own output reaches the channel in terminal mode too,
+marked as server output, when this connection starts the server (item 13). After a reload the reconnect record carries
+only the little the reused server prints; no line claims that it was reused.
+
+| File | Name | Given | Expected |
+|---|---|---|---|
+| `connect.test.ts` | `F-2003 BR-16: the server's own output is logged in terminal mode` | a terminal-mode connect that starts the server, with a fake server writing `ready` | its output line logged marked as server output, as in shared mode |
+
 ## 3. Gates and review
 
 Run all gates and the VSCodium run. PR title `lib-server, remote-ssh: the server's own output in the log, and the

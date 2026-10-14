@@ -39,6 +39,13 @@ unchanged. This card reads the startup output file **before** the bootstrap remo
 **Acceptance:** a host account whose `.profile` prints one line. In local-server mode, the log has `> <line>`. In
 terminal mode, it doesn't.
 
+**Terminal mode (F-2704 6.4 step 3, F-2003 6.7 point 4, AC-29):** the login profile's printed text doesn't reach the
+channel in terminal mode. This card's profile-output logging is for local-server (shared) mode only.
+
+| File | Name | Given | Expected |
+|---|---|---|---|
+| `connect.test.ts` (or the terminal step's file) | `F-2704 6.4 step 3, F-2003 AC-29: login-profile text isn't logged in terminal mode` | a terminal-mode connect whose login profile prints `PROFILE-SENTINEL` | no log line contains `PROFILE-SENTINEL` |
+
 ## 3. Gates and review
 
 Run all gates, shellcheck and the VSCodium run. PR title `lib-ssh, remote-ssh: the login profile's output in the log in
