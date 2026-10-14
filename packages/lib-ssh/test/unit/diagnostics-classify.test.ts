@@ -16,7 +16,7 @@ import type {
 
 /** The warning line that names a changed host key. */
 const CHANGED_KEY_LINE =
-  '@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@';
+  '@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @';
 
 /** The line that names a client-disabled port forwarding. */
 const MITM_FORWARDING_LINE =
@@ -25,6 +25,22 @@ const MITM_FORWARDING_LINE =
 /** The line that names a server-prohibited forwarding. */
 const PROHIBITED_LINE =
   'channel 2: open failed: administratively prohibited: open failed';
+
+/** The classification of a host name with invalid characters. */
+const INVALID_HOST_NAME: Classification = {
+  kind: 'unreachable',
+  reason: {id: 'S079'},
+  hints: [
+    {
+      status: 'InvalidHostName',
+      message: 'Error: InvalidHostName',
+      details: {id: 'S079'},
+      mitigations: [],
+      resources: [],
+    },
+  ],
+  logLines: [],
+};
 
 /** The hint an offline text carries, the row's OFF(id) notation. */
 function offlineHint(reasonId: DiagnosticStringId): FailureHint {
@@ -132,6 +148,17 @@ function mitmResult(): Classification {
   };
 }
 
+/** The full line `ssh` prints for one of the seven network texts, as measured against the real client. */
+function lineOf(text: string): string {
+  if (text === 'Could not resolve hostname') {
+    return 'ssh: Could not resolve hostname h: Name or service not known';
+  }
+  if (text === 'The process tried to write to a nonexistent pipe') {
+    return text;
+  }
+  return `ssh: connect to host h port 22: ${text}`;
+}
+
 const SEVEN_TEXTS = [
   'Network is unreachable',
   'Could not resolve hostname',
@@ -231,15 +258,19 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     );
   });
 
-  it('F-2603.BR-1: the text is recognised at any position in the line', () => {
+  it("ADR-0010: a rule's text in the middle of a line is not ssh's message (it was recognised at any position before the forms were anchored)", () => {
     deepStrictEqual(
       classifyRun(
-        ['prefix Network is unreachable suffix'],
+        [
+          'prefix Network is unreachable suffix',
+          'motd: Permission denied (publickey) is a test',
+          'see ssh: connect to host x port 22: Connection refused',
+        ],
         255,
         'connection',
         'shared',
       ),
-      offline('unreachable', 'S094'),
+      {kind: 'unknown', hints: [], logLines: []},
     );
   });
 
@@ -297,8 +328,18 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
     it(`F-2603.7.E2: ${label}, in either line order`, () => {
       deepStrictEqual(
         [
-          classifyRun([first, second], 255, 'connection', 'shared').reason,
-          classifyRun([second, first], 255, 'connection', 'shared').reason,
+          classifyRun(
+            [lineOf(first), lineOf(second)],
+            255,
+            'connection',
+            'shared',
+          ).reason,
+          classifyRun(
+            [lineOf(second), lineOf(first)],
+            255,
+            'connection',
+            'shared',
+          ).reason,
         ],
         [{id: reason}, {id: reason}],
       );
@@ -307,15 +348,19 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
 
   it('F-2603.7.E2: all seven texts in table order give the first reason', () => {
     deepStrictEqual(
-      classifyRun([...SEVEN_TEXTS], 255, 'connection', 'shared').reason,
+      classifyRun(SEVEN_TEXTS.map(lineOf), 255, 'connection', 'shared').reason,
       {id: 'S094'},
     );
   });
 
   it('F-2603.7.E2: all seven texts in reverse order give the first reason', () => {
     deepStrictEqual(
-      classifyRun([...SEVEN_TEXTS].reverse(), 255, 'connection', 'shared')
-        .reason,
+      classifyRun(
+        SEVEN_TEXTS.map(lineOf).reverse(),
+        255,
+        'connection',
+        'shared',
+      ).reason,
       {id: 'S094'},
     );
   });
@@ -357,20 +402,7 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
         'connection',
         'shared',
       ),
-      {
-        kind: 'unreachable',
-        reason: {id: 'S079'},
-        hints: [
-          {
-            status: 'InvalidHostName',
-            message: 'Error: InvalidHostName',
-            details: {id: 'S079'},
-            mitigations: [],
-            resources: [],
-          },
-        ],
-        logLines: [],
-      },
+      INVALID_HOST_NAME,
     );
   });
 
@@ -686,7 +718,7 @@ describe('classify (the kind, reason and hints of one failed run)', () => {
       [
         "Enter passphrase for key '/home/dev/.ssh/id_x': ",
         'Password: hunter2',
-        'Network is unreachable',
+        'ssh: connect to host h port 22: Network is unreachable',
       ],
       255,
       'connection',
@@ -949,4 +981,158 @@ describe('endWithFullStop (the closing full stop of a reason text)', () => {
       strictEqual(endWithFullStop(ending), ending);
     });
   }
+
+  const AUTHENTICATED_LINE =
+    'Authenticated to 127.0.0.1 ([127.0.0.1]:22) using "publickey".';
+
+  const AFTER_AUTHENTICATION = [
+    'curl: (28) Connection timed out after 5001 milliseconds',
+    'ERROR: Your fridge is not running: Permission denied (fridge)',
+    'backup.sh: Could not resolve hostname nas',
+  ];
+  for (const line of AFTER_AUTHENTICATION) {
+    it(`ADR-0010: the line "${line}" after Authenticated to never changes the classification`, () => {
+      deepStrictEqual(
+        classifyRun(
+          ['debug1: SSH2_MSG_NEWKEYS received', AUTHENTICATED_LINE, line],
+          255,
+          'connection',
+          'shared',
+        ),
+        {kind: 'unknown', hints: [], logLines: []},
+      );
+    });
+  }
+
+  const MEASURED: Array<[string, string, Classification]> = [
+    [
+      'a name that does not resolve',
+      'ssh: Could not resolve hostname nowhere.invalid: Name or service not known\r',
+      offline('unreachable', 'S032'),
+    ],
+    [
+      'a host that does not answer',
+      'ssh: connect to host 192.0.2.1 port 22: Connection timed out\r',
+      offline('timeout', 'S137'),
+    ],
+    [
+      'a host key that is not accepted',
+      'Host key verification failed.\r',
+      {kind: 'hostKeyRejected', hints: [], logLines: []},
+    ],
+    [
+      'a host name with invalid characters',
+      'hostname contains invalid characters\r',
+      INVALID_HOST_NAME,
+    ],
+    [
+      'a key that is refused',
+      'harness@127.0.0.1: Permission denied (publickey).\r',
+      denied('Permission denied (publickey).'),
+    ],
+    [
+      'a user configuration file that cannot be read',
+      "Can't open user config file /tmp/x/unreadable: Permission denied\r",
+      {
+        kind: 'unknown',
+        reason: {text: 'Permission denied'},
+        hints: [],
+        logLines: [],
+      },
+    ],
+  ];
+  for (const [name, line, expected] of MEASURED) {
+    it(`F-2603: ${name}, in the form the real client prints it (with its carriage return)`, () => {
+      deepStrictEqual(
+        classifyRun([line], 255, 'connection', 'shared'),
+        expected,
+      );
+    });
+  }
+
+  it("ADR-0010 rule 3: a forwarding prohibition after authentication counts only with ssh's own status 255", () => {
+    const lines = [AUTHENTICATED_LINE, PROHIBITED_LINE];
+    deepStrictEqual(
+      [
+        classifyRun(lines, 255, 'connection', 'shared').kind,
+        classifyRun(lines, 1, 'connection', 'shared').kind,
+      ],
+      ['forwardingDisabled', 'unknown'],
+    );
+  });
+
+  it("ADR-0010 rule 3: a broken pipe and a closed connection after authentication count only with ssh's own status 255", () => {
+    deepStrictEqual(
+      [
+        classifyRun(
+          [AUTHENTICATED_LINE, 'client_loop: send disconnect: Broken pipe'],
+          255,
+          'connection',
+          'shared',
+        ).kind,
+        classifyRun(
+          [AUTHENTICATED_LINE, 'client_loop: send disconnect: Broken pipe'],
+          1,
+          'connection',
+          'shared',
+        ).kind,
+        classifyRun(
+          [AUTHENTICATED_LINE, 'Connection closed.'],
+          255,
+          'connection',
+          'shared',
+        ).kind,
+        classifyRun(
+          [AUTHENTICATED_LINE, 'Connection closed.'],
+          0,
+          'connection',
+          'shared',
+        ).kind,
+      ],
+      ['brokenPipe', 'unknown', 'channelClosed', 'unknown'],
+    );
+  });
+
+  for (const [form, line] of [
+    ['host key rejected', 'motd: Host key verification failed.'],
+    [
+      'configuration file unreadable',
+      "motd: Can't open user config file x: Permission denied",
+    ],
+    ['network', 'motd: ssh: connect to host h port 22: Connection timed out'],
+    ['host name', 'motd: hostname contains invalid characters'],
+  ] as const) {
+    it(`ADR-0010: the ${form} form counts only at the start of a line`, () => {
+      deepStrictEqual(
+        classifyRun([line], 255, 'connection', 'shared'),
+        classifyRun([], 255, 'connection', 'shared'),
+      );
+    });
+  }
+
+  for (const [form, line] of [
+    ['forwarding prohibited', `motd: ${PROHIBITED_LINE}`],
+    ['broken pipe', 'motd: client_loop: send disconnect: Broken pipe: x'],
+    ['connection closed', 'motd: Connection closed.'],
+  ] as const) {
+    it(`ADR-0010: the ${form} form after authentication counts only at the start of a line`, () => {
+      deepStrictEqual(
+        classifyRun([AUTHENTICATED_LINE, line], 255, 'connection', 'shared')
+          .kind,
+        'unknown',
+      );
+    });
+  }
+
+  it('ADR-0010: an scp line about the network is read like the ssh line', () => {
+    deepStrictEqual(
+      classifyRun(
+        ['scp: ssh: connect to host h port 22: Connection timed out'],
+        255,
+        'connection',
+        'shared',
+      ).kind,
+      'timeout',
+    );
+  });
 });

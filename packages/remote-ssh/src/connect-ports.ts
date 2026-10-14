@@ -4,6 +4,7 @@
  * Node; the extension passes the real surfaces and the machine, and a test passes fakes.
  */
 
+import type {TunnelOpener} from './forwarding/default-forwards.ts';
 import type {
   DecodedTarget,
   FailurePresenter,
@@ -71,6 +72,7 @@ import {
 } from './pipeline/bounds.ts';
 import {
   agentForwardingOf,
+  defaultForwardsOf,
   connectionSettingsOf,
   localDownloadModeOf,
   overrideOf,
@@ -94,7 +96,7 @@ import {
   maintenanceInputOf,
   runMaintenance,
 } from './maintenance/maintenance-run.ts';
-import type {ConnectInput} from './pipeline/steps.ts';
+import type {ConnectInput, StepFailure} from './pipeline/steps.ts';
 import {stepsOf, type WiringPorts} from './pipeline/wiring.ts';
 import {phaseTitleOf, startTitleOf} from './surfaces/progress-titles.ts';
 import {type FailureStringId, textOfId} from './surfaces/failure-strings.ts';
@@ -137,6 +139,8 @@ export interface ConnectSurfaces {
   applyTerminalEnvironment: (
     variables: Readonly<Record<string, string>>,
   ) => void;
+  /** The editor's tunnel service, which the default forwarded ports are opened through. */
+  tunnels: TunnelOpener;
 }
 
 /** Where the extension runs and what it may use there. */
@@ -267,7 +271,9 @@ export function wiringPortsOf(
       localDownloadMode: () => localDownloadModeOf(settings),
       agentForwarding: () => agentForwardingOf(settings),
       x11Forwarding: () => x11ForwardingOf(settings),
+      defaultForwards: () => defaultForwardsOf(settings),
     },
+    tunnels: surfaces.tunnels,
     terms: {
       settings: () => termsSettingsOf(settings),
       pickPlatform: surfaces.pickPlatform,
@@ -296,7 +302,7 @@ export function wiringPortsOf(
       logger,
     },
     acquire: (request, limits) =>
-      acquireConnection(
+      acquireConnection<StepFailure>(
         {helper: machine.helpers, freePort: machine.freeSocksPort},
         request,
         limits,

@@ -266,6 +266,7 @@ const LAUNCH_ORDER = [
   'client-unset',
   'terminal-pick',
   'windows',
+  'default-ports',
   'no-proposals',
   'explorer',
   'explorer-alone',
@@ -398,7 +399,7 @@ describe('acceptance', () => {
       '\n\n',
     );
     strictEqual(
-      blocks.find(block => block.startsWith('Host blackhole')),
+      blocks.find(block => block.startsWith('Host blackhole'))?.trimEnd(),
       ['Host blackhole', '  HostName 192.0.2.1', '  BatchMode yes'].join('\n'),
     );
   });

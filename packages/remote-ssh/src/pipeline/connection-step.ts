@@ -10,26 +10,44 @@ import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
   ConnectionNotice,
+  RunFacts,
   SharedConnection,
 } from 'lib-ssh';
 import type {PhaseEvent} from './connect.ts';
 import {ofAcquire, ofConnection} from './failure.ts';
-import type {ConnectInput, ConnectionTerms, ConnectSteps} from './steps.ts';
+import type {
+  ConnectInput,
+  ConnectionTerms,
+  ConnectSteps,
+  ConnectWaits,
+  StepFailure,
+} from './steps.ts';
 
 /** What the connection step is made from. */
 export interface ConnectionStepDependencies {
   /** Takes a lease on the helper of a host; the real one is `acquireConnection` over the window's environment. */
   acquire: (
-    request: ConnectionAcquireRequest,
-  ) => Promise<AcquireConnectionOutcome>;
+    request: ConnectionAcquireRequest<StepFailure>,
+  ) => Promise<AcquireConnectionOutcome<StepFailure>>;
   /**
-   * What the acquire is asked for, apart from the host string and the cancellation: the helper to start, its start
-   * values with the `ssh` request built for these terms, and its end policy.
+   * What the acquire is asked for, apart from the host string and the cancellation: the helper to start, its end
+   * policy, and the preparation of its start values, which looks the client up and runs only when this window starts
+   * the helper.
    */
   requestFor: (
     input: ConnectInput,
     terms: ConnectionTerms,
-  ) => Omit<ConnectionAcquireRequest, 'hostString' | 'cancellation'>;
+  ) => Omit<
+    ConnectionAcquireRequest<StepFailure>,
+    'hostString' | 'cancellation'
+  >;
+  /**
+   * Keeps what the window that started the helper found, for a window that joined it and looked nothing up; nothing
+   * is changed in a window that did.
+   */
+  adoptRunFacts: (runFacts: RunFacts) => void;
+  /** The waits the host asks for, once the connection is set up and the lookup's results are in. */
+  waits: () => ConnectWaits;
   /** The channel for the server steps over the connection that is set up, for the platform the terms say. */
   channelFor: (
     connection: SharedConnection,
@@ -69,6 +87,9 @@ export function openConnectionStep(
       hostString: input.connectionKey ?? input.rawHostString,
       cancellation,
     });
+    if (acquired.kind === 'refused') {
+      return {kind: 'failed', failure: acquired.refusal};
+    }
     if (acquired.kind === 'failed') {
       if (acquired.failure !== 'cancelled') {
         dependencies.logger.warn(
@@ -100,6 +121,7 @@ export function openConnectionStep(
       end();
       return {kind: 'failed', failure: ofConnection(outcome.failure)};
     }
+    dependencies.adoptRunFacts(outcome.runFacts);
     let channel: HostChannel;
     try {
       channel = dependencies.channelFor(connection, terms, input);
@@ -114,6 +136,7 @@ export function openConnectionStep(
       kind: 'done',
       value: {
         channel,
+        waits: dependencies.waits(),
         socksPort: outcome.socksPort,
         storedRecord: outcome.sharedRecord ?? undefined,
         storeSharedRecord: record => connection.storeSharedRecord(record),

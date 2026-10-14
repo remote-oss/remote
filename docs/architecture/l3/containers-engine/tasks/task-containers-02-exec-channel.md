@@ -148,7 +148,7 @@ this order:
 
 | Situation | Outcome |
 |---|---|
-| a stderr line starting `Error response from daemon:` or `Error: No such container:`, or containing `is not running` | `failed`, `channelClosed`; detail: those lines |
+| a stderr line starting `Error response from daemon:` or `Error: No such container:` (contracts §1, main 42c188a; ADR-0010 rule 2: no free-text match such as `is not running`) | `failed`, `channelClosed`; detail: those lines |
 | status `125` | `failed`, `channelClosed`; detail: stderr's last line, or `docker exit 125` |
 | status `undefined` (a signal) | `failed`, `channelClosed`; detail: `docker ended by a signal` |
 | `copy`, status `127` or `126` | `failed`, `copyToolMissing`; detail: stderr's last line (the container has no runnable `tar`) |

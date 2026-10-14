@@ -2,13 +2,13 @@ import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import {sshRemoteCodec} from 'lib-authority';
 import {
-  aliases,
   appendScript,
   closeWindow,
   connected,
   connectedWithin,
   connectionHelpers,
   goneWithin,
+  hostAliases,
   hostAnswer,
   inWindow,
   isOpen,
@@ -103,7 +103,11 @@ describe('the local connection server on a key host (card coverage-14)', functio
       ],
       [
         HOST_QUESTION,
-        [...aliases(), '$(plus) Add New SSH Host...', 'Configure SSH Hosts...'],
+        [
+          ...hostAliases(),
+          '$(plus) Add New SSH Host...',
+          'Configure SSH Hosts...',
+        ],
         helper,
         [],
       ],

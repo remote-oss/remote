@@ -9,6 +9,8 @@
     no VS Code entry in the server table);
   - R-28 and F-3905 (no telemetry, no payload lines in logs);
   - R-47, R-58, R-68 with R-80 (the source-based licence test alone);
+  - ADR-0010 (2026-10-14): remote and program output is read only between our own whole-line markers, or in
+    a program's documented, anchored form, and every parser has a noisy-neighbour row;
   - R-79 (one hang rule), R-83 (servers start with telemetry off), R-86 (F-3908: no deliberate failure), D-60
     (clauses that need a lab run are marked "provisional (lab)" and keep their defaults).
 - Component ids are those of `components.md`.
@@ -365,7 +367,12 @@ wait for the run of F-2102 Q1 (D-60).
 | `events` | lease | `waitingForOtherWindow`, `ownerChanged`, `loginFailed`, `transportLost` | none |
 
 Rules:
-- One helper per host string, exactly as written (F-2102 BR-6).
+- One helper per **connection identity** (amended 2026-10-14, connect-77): the decoded target's (host, user, port),
+  written as `payloadOf(target)`, the same function the own-host rule (connect-53) and the maintenance key (connect-52)
+  use. The plain and hex spellings of one target, and a port given as a number or a string, share one helper and one
+  record (F-2501 BR-3). A different or missing user or port, other letter case, or an alias against a typed
+  `user@address` are different identities, since no alias is resolved (F-2102 BR-6). The helper key, the record and
+  Kill all use it.
 - The environment the helper hands to `ssh` is the editor's environment it was started with minus the helper's own parameter variable (`REMOTE_OSS_HELPER_PARAMETERS`: the nonce and the request); the askpass variables S3 sets are added on top (ruled 2026-10-09, #187 review).
 - The record is written only after the connection completes.
 - `acquire` is not used when `remote.SSH.useLocalServer` is off or socket mode is on (F-2102 BR-10, F-2410).

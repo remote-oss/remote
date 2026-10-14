@@ -1,6 +1,7 @@
 /**
- * @fileoverview The texts `ssh` writes on its error output that the classifier recognises, and what each one
- * means. Recognition is a case-sensitive substring test against each line.
+ * @fileoverview The forms `ssh` writes on its error output that the classifier recognises, and what each one means.
+ * A form is a regular expression anchored at the start of a line: a text in the middle of a line, such as remote text a
+ * startup file prints, is not ssh's message.
  */
 
 /** A failure kind, closed: every failure maps to exactly one. */
@@ -32,41 +33,85 @@ export type DiagnosticStringId =
   | 'S142'
   | 'S150';
 
-/** A network text and the reason it gives, in priority order: when several match, the first listed wins. */
+/** A network form and the reason it gives, in priority order: when several match, the first listed wins. */
 export interface NetworkRule {
-  text: string;
+  pattern: RegExp;
   kind: 'unreachable' | 'timeout';
   reason: DiagnosticStringId;
 }
 
-/** The network texts, highest priority first, whatever the order of the lines. */
+/** The start of a line `ssh` writes about its own run: `scp` puts its name before the lines of the `ssh` it starts. */
+const OWN_PREFIX = '(?:scp: )?ssh: ';
+
+/** The line `ssh` prints when it cannot connect to the host, ending in `text`. */
+function connectError(text: string): RegExp {
+  return new RegExp(`^${OWN_PREFIX}connect to host \\S+ port \\d+: ${text}$`);
+}
+
+/** The network forms, highest priority first, whatever the order of the lines. */
 export const NETWORK_RULES: readonly NetworkRule[] = [
-  {text: 'Network is unreachable', kind: 'unreachable', reason: 'S094'},
-  {text: 'Could not resolve hostname', kind: 'unreachable', reason: 'S032'},
   {
-    text: 'The process tried to write to a nonexistent pipe',
+    pattern: connectError('Network is unreachable'),
+    kind: 'unreachable',
+    reason: 'S094',
+  },
+  {
+    pattern: new RegExp(`^${OWN_PREFIX}Could not resolve hostname \\S+: `),
+    kind: 'unreachable',
+    reason: 'S032',
+  },
+  {
+    pattern:
+      /^(?:scp: )?(?:ssh: connect to host \S+ port \d+: )?The process tried to write to a nonexistent pipe/,
     kind: 'unreachable',
     reason: 'S142',
   },
-  {text: 'Connection timed out', kind: 'timeout', reason: 'S137'},
-  {text: 'Operation timed out', kind: 'timeout', reason: 'S140'},
-  {text: 'No route to host', kind: 'unreachable', reason: 'S097'},
-  {text: "Can't assign requested address", kind: 'unreachable', reason: 'S014'},
+  {
+    pattern: connectError('Connection timed out'),
+    kind: 'timeout',
+    reason: 'S137',
+  },
+  {
+    pattern: connectError('Operation timed out'),
+    kind: 'timeout',
+    reason: 'S140',
+  },
+  {
+    pattern: connectError('No route to host'),
+    kind: 'unreachable',
+    reason: 'S097',
+  },
+  {
+    pattern: connectError("Can't assign requested address"),
+    kind: 'unreachable',
+    reason: 'S014',
+  },
 ];
 
-/** The other texts the classifier looks for. */
-export const FAILURE_TEXTS = {
-  hostKeyChanged: 'REMOTE HOST IDENTIFICATION HAS CHANGED',
-  hostKeyRejected: 'Host key verification failed.',
-  permissionDenied: 'Permission denied (',
-  invalidHostName: 'hostname contains invalid characters',
-  forwardingProhibited: 'administratively prohibited',
+/**
+ * The other forms the classifier looks for, each anchored at the start of a line. A line is read after one trailing
+ * carriage return is removed.
+ */
+export const FAILURE_PATTERNS = {
+  hostKeyChanged: /^@\s+WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\s+@$/,
+  hostKeyRejected: /^Host key verification failed\.$/,
+  permissionDenied: /^(?:\S+@\S+: )?Permission denied \([^)]*\)\.?\s*$/,
+  invalidHostName: /^(?:scp: )?(?:ssh: )?hostname contains invalid characters$/,
+  forwardingProhibited:
+    /^channel \d+: open failed: administratively prohibited: /,
   forwardingDisabledByClient:
-    'Port forwarding is disabled to avoid man-in-the-middle attacks',
-  brokenPipe: 'send disconnect: Broken pipe',
-  connectionClosed: 'Connection closed.',
-  configFileUnreadable: "Can't open user config file ",
+    /^(?:Warning: )?Port forwarding is disabled to avoid man-in-the-middle attacks\.$/,
+  brokenPipe:
+    /^(?:\S+: )?(?:Connection to \S+ port \d+: )?send disconnect: Broken pipe$/,
+  connectionClosed: /^Connection closed\.$/,
+  configFileUnreadable: /^Can't open user config file .*: Permission denied$/,
 } as const;
+
+/** The text a permission-denied reason keeps from. */
+export const PERMISSION_DENIED_START = 'Permission denied (';
+
+/** The reason text of a closed connection. */
+export const CONNECTION_CLOSED_TEXT = 'Connection closed.';
 
 /** The prefix of ssh's first-level debug lines. */
 export const DEBUG1_PREFIX = 'debug1: ';

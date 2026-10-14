@@ -671,7 +671,7 @@ export async function settingIn(
 const MESSAGE_SURFACES = ['notice', 'failureDialog', 'pick', 'maskedInput'];
 
 /** The `Host` names of the run's ssh_config with no `*`, `?` or `!`, in file order. */
-export function aliases(): string[] {
+export function hostAliases(): string[] {
   return readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8')
     .split('\n')
     .filter(line => /^\s*Host\s/i.test(line))

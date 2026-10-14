@@ -173,6 +173,7 @@ export function channelAnswering(output: readonly string[]): RecordingChannel {
 export function leaseOn(channel: RecordingChannel): ConnectionLease {
   return {
     channel,
+    waits: undefined,
     socksPort: 1080,
     storedRecord: undefined,
     storeSharedRecord: () => Promise.resolve(true),
@@ -228,5 +229,6 @@ export function surfacesOf(
     rejectBindHost: () => undefined,
     linkTerminals: {runProgram: () => Promise.resolve()},
     applyTerminalEnvironment: () => undefined,
+    tunnels: {openTunnel: () => Promise.resolve({})},
   };
 }

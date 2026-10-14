@@ -49,6 +49,11 @@ const AUTHENTICATED_ONLY =
 /** The login line and, after it, the bootstrap's report that the session is ready for the commands. */
 const AUTHENTICATED = `${AUTHENTICATED_ONLY}LAYER1-READY\n`;
 
+/** A mux client's run: no login, its session line, then the same ready report. */
+const MUX_SESSION =
+  "debug1: auto-mux: Trying existing master at '/c'\n" +
+  'debug1: mux_client_request_session: master session id: 3\nLAYER1-READY\n';
+
 /** The failure of the extension's own connect wait (card connect-50). */
 const TIMED_OUT = {kind: 'timeout', reason: {id: 'sshTimedOut'}} as const;
 
@@ -235,6 +240,13 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     const made = fixture();
     const {result, terminal} = await started(made);
     terminal.write(`debug1: x\n${AUTHENTICATED}`);
+    deepStrictEqual((await result).kind, 'done');
+  });
+
+  it("F-2102 AC-26: a mux client's session line starts the session, as a login's would", async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(MUX_SESSION);
     deepStrictEqual((await result).kind, 'done');
   });
 
@@ -601,6 +613,18 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
         ? [await outcome.value.answer(1, 'x'), await outcome.value.refuse(1)]
         : outcome,
       [false, false],
+    );
+  });
+
+  it("ADR-0010: a terminal that ends after authentication is not classified from the shell's output", async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(`${AUTHENTICATED_ONLY}x@h: Permission denied (fridge).\n`);
+    terminal.end(255, 'process');
+    const outcome = await result;
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure.kind : outcome,
+      'unknown',
     );
   });
 });

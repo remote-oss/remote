@@ -83,7 +83,7 @@ jobs:
       - run: pnpm check-identifiers
       - run: pnpm check-consumed
         if: github.ref_type != 'tag'
-      - run: node tools/identifiers.ts --consumed --release
+      - run: node tools/identifiers.ts --consumed --release "${GITHUB_REF_NAME%-v*}"
         if: github.ref_type == 'tag'
       - run: pnpm check-public-surface
       - run: pnpm check-coverage # every acceptance criterion tagged, and every tagged one cited by a test (#142)

@@ -8,6 +8,7 @@
  */
 
 import type {Connected, Failed} from 'lib-authority';
+import {shouldApplyDefaults} from 'lib-forwarding';
 import type {Logger} from 'lib-log';
 import type {StartedServer, TransferPhase} from 'lib-server';
 import {
@@ -26,6 +27,7 @@ import type {
   ConnectInput,
   ConnectionLease,
   ConnectSteps,
+  ConnectWaits,
   StepFailure,
   StepResult,
 } from './steps.ts';
@@ -241,6 +243,13 @@ async function runSteps(
     }
   }
 
+  /** Starts the default forwards of a connect that has worked, unless it is a reconnection; never awaited. */
+  function startDefaultForwards(): void {
+    if (shouldApplyDefaults(input.isReconnection)) {
+      void quietly('the default forwards', () => steps.applyDefaults(input));
+    }
+  }
+
   function cancelled(): Failed | undefined {
     return cancellation.aborted ? failure({kind: 'cancelled'}) : undefined;
   }
@@ -271,15 +280,18 @@ async function runSteps(
   if (undecided !== undefined) {
     return undecided;
   }
-  const located = await steps.locateClient(input);
-  if (located.kind === 'failed') {
-    return failure(located.failure);
+  let waits: ConnectWaits | undefined;
+  if (steps.lookupBeforeConnection()) {
+    const located = await steps.locateClient(input);
+    if (located.kind === 'failed') {
+      return failure(located.failure);
+    }
+    const unlocated = cancelled();
+    if (unlocated !== undefined) {
+      return unlocated;
+    }
+    waits = located.value;
   }
-  const unlocated = cancelled();
-  if (unlocated !== undefined) {
-    return unlocated;
-  }
-  const waits = located.value;
   const connection = await steps.openConnection(
     input,
     terms.value,
@@ -290,6 +302,10 @@ async function runSteps(
   }
   const lease = connection.value;
   held.lease = lease;
+  waits ??= lease.waits;
+  if (waits === undefined) {
+    throw new Error('the connection was opened with no waits and no lookup');
+  }
   const dropped = cancelled();
   if (dropped !== undefined) {
     return dropped;
@@ -350,6 +366,7 @@ async function runSteps(
       void quietly('the platform setting', () =>
         steps.rememberPlatform(input, host.operatingSystem),
       );
+      startDefaultForwards();
       steps.linkAgent(lease, forwarding.agentLink);
       return {
         connected: overCli.connected,
@@ -460,6 +477,7 @@ async function runSteps(
   void quietly('the platform setting', () =>
     steps.rememberPlatform(input, host.operatingSystem),
   );
+  startDefaultForwards();
   const {opened} = tunnel.value;
   steps.linkAgent(lease, forwarding.agentLink);
   return {

@@ -117,6 +117,7 @@ function surfacesWith(
     noticeState: {get: () => undefined, update: () => Promise.resolve()},
     logger: createLogger(calls.logged, {minimumLevel: () => 'info'}),
     applyTerminalEnvironment: () => undefined,
+    tunnels: {openTunnel: () => Promise.resolve({})},
   };
   return {surfaces: editorSurfacesOf(adapters, operations, context), calls};
 }

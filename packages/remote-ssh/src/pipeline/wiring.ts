@@ -4,6 +4,11 @@
  * imports the editor; the extension passes the real ports and a test passes fakes.
  */
 
+import type {DefaultForwards} from 'lib-forwarding';
+import {
+  applyDefaults as applyDefaultForwards,
+  type TunnelOpener,
+} from '../forwarding/default-forwards.ts';
 import type {FailurePresenter} from 'lib-authority';
 import {environmentTunnels, type LocalPort} from 'lib-forwarding';
 import type {Scheduler} from 'lib-helper';
@@ -28,6 +33,7 @@ import {
 import type {ServerDownloadProgress} from '../cli/server-download-progress.ts';
 import {
   connectionLimitsFor,
+  connectWaitsFor,
   effectiveConnectTimeoutSeconds,
   FIRST_SERVE_MILLISECONDS,
   HELPER_REQUEST_MILLISECONDS,
@@ -62,7 +68,12 @@ import {
   createServerSteps,
   type ServerStepDependencies,
 } from './server-steps.ts';
-import type {ConnectInput, ConnectionTerms, ConnectSteps} from './steps.ts';
+import type {
+  ConnectInput,
+  ConnectionTerms,
+  ConnectSteps,
+  StepFailure,
+} from './steps.ts';
 import {createTermsSteps, type TermsStepDependencies} from './terms-steps.ts';
 import {
   openTerminalConnectionStep,
@@ -89,6 +100,8 @@ interface WiringSettings {
   agentForwarding: () => boolean;
   /** `remote.SSH.enableX11Forwarding`, on unless it is false. */
   x11Forwarding: () => boolean;
+  /** `remote.SSH.defaultForwardedPorts`, as it is when the call is made. */
+  defaultForwards: () => DefaultForwards;
 }
 
 /** What the channel of one connect is made from: the host as written, the runs' shared part, and the terms. */
@@ -117,17 +130,19 @@ interface CliWiring {
 /** What the steps of every connect are made from. */
 export interface WiringPorts {
   settings: WiringSettings;
+  /** The editor's tunnel service, which the default forwarded ports are opened through. */
+  tunnels: TunnelOpener;
   terms: TermsStepDependencies;
   /** The client step's dependencies, apart from this connect's state and what the settings give. */
   locate: Omit<
     LocateStepDependencies,
     'state' | 'configFile' | 'connectTimeout'
   >;
-  /** Takes a lease on the host's helper with the client's waits for this connect. */
+  /** Takes a lease on the host's helper, with the limits of the login wait when it starts. */
   acquire: (
-    request: ConnectionAcquireRequest,
-    limits: ConnectionLimits,
-  ) => Promise<AcquireConnectionOutcome>;
+    request: ConnectionAcquireRequest<StepFailure>,
+    limits: () => ConnectionLimits,
+  ) => Promise<AcquireConnectionOutcome<StepFailure>>;
   requestEnvironment: ConnectionRequestEnvironment;
   /** The channel of the server steps over a connection's session, in either mode. */
   channelFor: (session: SessionRunner, channelRun: ChannelRun) => HostChannel;
@@ -289,12 +304,17 @@ export function stepsOf(
   }
 
   const terms = createTermsSteps(ports.terms);
+  const locateClient = locateClientStep({
+    ...ports.locate,
+    configFile: () => connectionSettings().configFile,
+    connectTimeout: () => connectionSettings().connectTimeout,
+    state,
+  });
   const sharedConnection = openConnectionStep({
     acquire: request =>
-      ports.acquire(
-        request,
+      ports.acquire(request, () =>
         connectionLimitsFor(
-          lookedUp(state).connectTimeout,
+          state.effective?.connectTimeout,
           connectionSettings().connectTimeout,
         ),
       ),
@@ -305,6 +325,21 @@ export function stepsOf(
         state,
         connectionSettings(),
         ports.requestEnvironment,
+        () => locateClient(input),
+      ),
+    adoptRunFacts: runFacts => {
+      state.programs ??= {
+        sshProgram: runFacts.sshProgram,
+        scpProgram: runFacts.scpProgram,
+      };
+      state.effective ??= runFacts.effective;
+    },
+    waits: () =>
+      connectWaitsFor(
+        effectiveConnectTimeoutSeconds(
+          lookedUp(state).connectTimeout,
+          connectionSettings().connectTimeout,
+        ),
       ),
     channelFor: channelOf,
     attachLogin: (login, input) =>
@@ -374,12 +409,8 @@ export function stepsOf(
       logger: ports.logger,
     }),
     decideTerms: terms.decideTerms,
-    locateClient: locateClientStep({
-      ...ports.locate,
-      configFile: () => connectionSettings().configFile,
-      connectTimeout: () => connectionSettings().connectTimeout,
-      state,
-    }),
+    lookupBeforeConnection: () => ports.locate.mode() === 'terminal',
+    locateClient,
     openConnection: (input, connectTerms, cancellation) => {
       held.opening = {input, terms: connectTerms};
       return (
@@ -487,5 +518,11 @@ export function stepsOf(
       serverSteps(input).installExtensions(input, ...rest),
     ...tunnelStep,
     rememberPlatform: terms.rememberPlatform,
+    applyDefaults: () =>
+      applyDefaultForwards(
+        ports.settings.defaultForwards(),
+        ports.tunnels,
+        ports.logger,
+      ),
   };
 }

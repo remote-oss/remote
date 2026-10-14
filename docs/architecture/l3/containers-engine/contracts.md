@@ -16,7 +16,7 @@ sections. A builder doesn't change a contract; a question goes to the architect.
 | `clientPathOnHost` | not implemented (a container never reads a client path directly). |
 
 **Failures:** a `docker` that can't start is `spawnFailed`; a container that stopped or vanished during an operation
-(exit 125, or the daemon's "is not running" / "No such container", or exit 137 or 143 with an empty stderr while one `docker inspect` through the same `EngineHost` says the container no longer runs; measured on Docker 29.9, amended 2026-10-14 on #808) is `channelClosed`; an abort is `cancelled`. The
+(exit 125, or a stderr line that **starts with** the Docker client's own `Error response from daemon:` or `Error: No such container:`, never a line that merely contains such words, since a script's own stderr is merged into the same stream (amended 2026-10-14, iris and triton on #808), or exit 137 or 143 with an empty stderr while one `docker inspect` through the same `EngineHost` says the container no longer runs; measured on Docker 29.9, amended 2026-10-14 on #808) is `channelClosed`; an abort is `cancelled`. The
 channel never retries.
 
 **The exec dialer:** `execDialer(engine, containerId, user, relayScriptPath): Dialer` (lib-forwarding's `Dialer`).
@@ -32,8 +32,10 @@ side ends. `{kind: 'socket'}` is refused in release 1.
 
 **`connect(input)`, in order** (F-0408 §5.0; each step reports its phase through `onPhase`):
 1. Decode the payload (§3). A malformed payload fails as `Failed{kind: 'malformedAuthority', silent: false}`.
-2. C2's pre-flight checks. Their dialogs belong to F-0201. A failed check returns `Failed` with
-   `userAlreadyNotified: true`.
+2. C2's second pre-flight check (F-0201 5.0 step 5; the first check ran before the reload, in C6's flow, and showed
+   its own F-0201 dialog). It shows nothing: a failure returns its detail id (S339, S104 or S144), and the connector
+   returns `Failed{userAlreadyNotified: false}` with that reason, for C8 to present as F-0202's three-button dialog
+   (amended 2026-10-14, containers-03 §6.1, #842).
 3. C7: find, reuse, start or create the container (F-0409, F-0412, F-0415), with the rebuild intent if the payload
    carries one (F-0405 BR-17).
 4. lib-server: probe, plan, transfer and start over C11 with the remote-containers policy row (§5), the licence gate
@@ -117,6 +119,9 @@ its content:
     reference text. lib-log's standard redaction then applies, as to every line. It's a pure function with rows: a token
     in a `Run:` line and in `Command failed:` is replaced, a short value isn't, and an unreferenced variable isn't
     touched.
+- **ADR-0010:** a value from a container's shell is read only between our own whole-line markers. The engine's and the
+  CLI's output is read only in their documented, anchored forms (prefixes, the JSON result line, `docker inspect -f`).
+  Each parser has a noisy-neighbour row.
 - **No shell:** every engine and CLI spawn has `shell: false`, and a row proves a value with spaces and quotes reaches
   the program unchanged (F-0201).
 - **Pure parts first:** the payload codec, the label matching (F-0409's tiers), the CLI argument builder and the

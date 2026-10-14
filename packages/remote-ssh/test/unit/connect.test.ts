@@ -58,6 +58,7 @@ describe('the connect pipeline, when it works', () => {
       'start',
       'openTunnel',
       'rememberPlatform',
+      'applyDefaults',
     ]);
   });
 
@@ -1320,5 +1321,153 @@ describe('the connect pipeline, the transport of a connection that worked', () =
     stop();
     endTunnel('listener failed');
     deepStrictEqual(heard, []);
+  });
+});
+
+describe('the default forwarded ports of a connect (card connect-40)', () => {
+  const FRESH = {...INPUT, isReconnection: false};
+  const RECONNECTION = {...INPUT, attempt: 2, isReconnection: true};
+
+  /** How often `applyDefaults` ran in a connect of `input`, with `changes` to the steps. */
+  async function applied(
+    input: typeof INPUT,
+    changes: Partial<ConnectSteps> = {},
+  ) {
+    const {recording, options, logSink} = setup();
+    let count = 0;
+    const result = await connect(
+      input,
+      steps(recording, {
+        applyDefaults: () => {
+          count += 1;
+          return Promise.resolve();
+        },
+        ...changes,
+      }),
+      options,
+    );
+    return {count, result, logSink};
+  }
+
+  it('F-2507 BR-5: a connect that works and is not a reconnection applies the defaults once', async () => {
+    deepStrictEqual((await applied(FRESH)).count, 1);
+  });
+
+  it('F-2507 BR-5: a reconnection does not apply them', async () => {
+    deepStrictEqual((await applied(RECONNECTION)).count, 0);
+  });
+
+  it('F-2507 BR-5: a first resolve that fails applies nothing, and its Retry, still not a reconnection, applies them once', async () => {
+    const {recording, options} = setup();
+    let count = 0;
+    const counting = {
+      applyDefaults: () => {
+        count += 1;
+        return Promise.resolve();
+      },
+    };
+    await connect(
+      FRESH,
+      steps(recording, {...counting, openTunnel: tunnelFails}),
+      options,
+    );
+    const failedCount = count;
+    await connect(FRESH, steps(recording, counting), options);
+    deepStrictEqual([failedCount, count], [0, 1]);
+  });
+
+  it('F-2507 W4: the connect still resolves when the defaults never settle', async () => {
+    const {result} = await applied(FRESH, {
+      applyDefaults: () => new Promise<void>(() => undefined),
+    });
+    deepStrictEqual('connected' in result, true);
+  });
+
+  it('F-2507 W4: a rejection of the defaults is logged at warn and does not fail the connect', async () => {
+    const {result, logSink} = await applied(FRESH, {
+      applyDefaults: () => Promise.reject(new Error('no tunnel service')),
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .filter(line => line.message.includes('the default forwards'))
+          .map(line => [line.level, line.message]),
+      ],
+      [
+        true,
+        [
+          [
+            'warn',
+            'the default forwards did not work: Error: no tunnel service',
+          ],
+        ],
+      ],
+    );
+  });
+});
+
+describe('the client lookup of a connect (card connect-57)', () => {
+  it('F-2101 AC-14: in shared mode the pipeline runs no lookup, and the probe is bound by the waits the connection brings', async () => {
+    const {recording, options} = setup();
+    const started = Date.now();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        lookupBeforeConnection: () => false,
+        openConnection: () =>
+          Promise.resolve({
+            kind: 'done',
+            value: {
+              ...leaseOf(recording),
+              waits: {probeMilliseconds: 20, tunnelMilliseconds: 20},
+            },
+          }),
+        probe: () => never(),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        recording.calls.includes('locateClient'),
+        Date.now() - started < 500,
+      ],
+      ['timeout', false, true],
+    );
+  });
+
+  it('F-2101 6.5 step 3: in terminal mode the lookup comes first and its waits bind the probe', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        lookupBeforeConnection: () => true,
+        locateClient: waitsOf({...WAITS, probeMilliseconds: 20}),
+        probe: () => never(),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      recording.calls.slice(
+        recording.calls.indexOf('decideTerms'),
+        recording.calls.indexOf('openConnection') + 1,
+      ),
+      ['decideTerms', 'openConnection'],
+    );
+  });
+
+  it('contracts: a connection opened with no waits and no lookup is a defect, and the connect fails as unknown', async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {lookupBeforeConnection: () => false}),
+      options,
+    );
+    deepStrictEqual(
+      ['kind' in result ? result.kind : result, recording.releases],
+      ['unknown', 1],
+    );
   });
 });

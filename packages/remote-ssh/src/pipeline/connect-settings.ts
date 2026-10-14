@@ -4,7 +4,12 @@
  * connection's switches. The values are as the editor reports them; the steps judge them.
  */
 
-import {effectiveUseLocalServer, type TunnelSettings} from 'lib-forwarding';
+import {
+  type DefaultForwards,
+  effectiveUseLocalServer,
+  parseDefaultForwards,
+  type TunnelSettings,
+} from 'lib-forwarding';
 import {readSetting, type SettingHost} from 'lib-identifiers';
 import type {LocalDownloadMode} from 'lib-server';
 import type {OverrideValue} from 'lib-product';
@@ -53,6 +58,11 @@ export function localDownloadModeOf(host: SettingHost): LocalDownloadMode {
 /** `remote.SSH.enableAgentForwarding`: on unless it is the boolean false, as its default of true reads. */
 export function agentForwardingOf(host: SettingHost): boolean {
   return valueOf(host, 'enableAgentForwarding') !== false;
+}
+
+/** The ports of `remote.SSH.defaultForwardedPorts`: the requests, and the entries that were skipped and why. */
+export function defaultForwardsOf(host: SettingHost): DefaultForwards {
+  return parseDefaultForwards(valueOf(host, 'defaultForwardedPorts'));
 }
 
 /** `remote.SSH.enableX11Forwarding`: on unless it is the boolean false, as its default of true reads. */

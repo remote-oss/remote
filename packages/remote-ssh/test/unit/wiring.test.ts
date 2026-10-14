@@ -1,5 +1,7 @@
+import type {TunnelOptions} from '../../src/forwarding/default-forwards.ts';
 import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
+import {parseDefaultForwards} from 'lib-forwarding';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
 import {RecordingChannel} from 'lib-host/testing/recording-channel';
@@ -19,16 +21,20 @@ import {RecordingTerminals} from 'lib-ssh/testing/recording-terminal';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {
-  AcquireConnectionOutcome,
   ConnectionAcquireRequest,
   ConnectionLimits,
   ConnectionMode,
+  PreparedConnection,
   SharedConnection,
 } from 'lib-ssh';
+import {
+  connectionLimitsFor,
+  connectWaitsFor,
+} from '../../src/pipeline/bounds.ts';
 import {serverDownloadProgress} from '../../src/cli/server-download-progress.ts';
 import type {LoginLease} from '../../src/pipeline/connection-step.ts';
 import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
-import type {ConnectInput} from '../../src/pipeline/steps.ts';
+import type {ConnectInput, StepFailure} from '../../src/pipeline/steps.ts';
 import {
   type ChannelRun,
   stepsOf as stepsWith,
@@ -82,8 +88,11 @@ function serverSettings(
 interface WiringSeen {
   spawned: Seen;
   acquires: Array<{
-    request: ConnectionAcquireRequest;
+    request: ConnectionAcquireRequest<StepFailure>;
+    /** The limits as they stand when the acquire ends, which is after a starting window's preparation. */
     limits: ConnectionLimits;
+    /** What the preparation answered; none when this acquire joined a running helper. */
+    prepared: PreparedConnection<StepFailure> | undefined;
   }>;
   logins: string[];
   channels: ChannelRun[];
@@ -99,6 +108,8 @@ interface WiringSeen {
   progress: string[];
   /** The link terminals run, by name, with the program and its arguments. */
   linkTerminals: Array<{name: string; command: string[]}>;
+  /** The tunnels the editor was asked for. */
+  tunnels: TunnelOptions[];
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -109,6 +120,8 @@ function portsOf(
     preconnect?: unknown;
     connectTimeout?: unknown;
     connection?: SharedConnection;
+    /** Whether the acquire joins a running helper, which never prepares. */
+    joins?: boolean;
     mode?: ConnectionMode;
     cliLocal?: FakeLocalPort;
     bridgePort?: number | 'none' | 'busy';
@@ -117,6 +130,7 @@ function portsOf(
     localDownloadMode?: LocalDownloadMode;
     agentForwarding?: boolean;
     x11Forwarding?: boolean;
+    defaultForwards?: unknown;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
@@ -130,12 +144,19 @@ function portsOf(
     cliLocal: changes.cliLocal ?? new FakeLocalPort(),
     presented: [],
     progress: [],
+    tunnels: [],
     linkTerminals: [],
   };
   const logger = createLogger(seen.sink, {
     minimumLevel: (): Level => 'info',
   });
   const ports: WiringPorts = {
+    tunnels: {
+      openTunnel: options => {
+        seen.tunnels.push(options);
+        return Promise.resolve({});
+      },
+    },
     settings: {
       preconnect: () => changes.preconnect,
       server: () => serverSettings(changes.server),
@@ -153,6 +174,7 @@ function portsOf(
       localDownloadMode: () => changes.localDownloadMode ?? 'auto',
       agentForwarding: () => changes.agentForwarding ?? true,
       x11Forwarding: () => changes.x11Forwarding ?? true,
+      defaultForwards: () => parseDefaultForwards(changes.defaultForwards),
     },
     terms: {
       settings: () => ({
@@ -180,13 +202,16 @@ function portsOf(
       checkMilliseconds: 50,
       logger,
     },
-    acquire: (request, limits) => {
-      seen.acquires.push({request, limits});
-      return Promise.resolve<AcquireConnectionOutcome>(
-        changes.connection === undefined
-          ? {kind: 'failed', failure: 'spawnFailed'}
-          : {kind: 'acquired', connection: changes.connection},
-      );
+    acquire: async (request, limits) => {
+      const prepared =
+        changes.joins === true ? undefined : await request.prepare();
+      if (prepared?.kind === 'refused') {
+        return {kind: 'refused', refusal: prepared.refusal};
+      }
+      seen.acquires.push({request, limits: limits(), prepared});
+      return changes.connection === undefined
+        ? {kind: 'failed', failure: 'spawnFailed'}
+        : {kind: 'acquired', connection: changes.connection};
     },
     requestEnvironment: {
       registryFolder: '/storage/registry',
@@ -391,7 +416,9 @@ describe("the composition of a connect's steps", () => {
       new AbortController().signal,
     );
     const request = JSON.parse(
-      seen.acquires[0]?.request.options.request ?? '{}',
+      seen.acquires[0]?.prepared?.kind === 'ready'
+        ? seen.acquires[0].prepared.options.request
+        : '{}',
     ) as {effective?: {user?: string}};
     deepStrictEqual(request.effective?.user, 'alex');
   });
@@ -417,30 +444,29 @@ describe("the composition of a connect's steps", () => {
     });
   });
 
-  it('connect-14: a connection asked for before the client step is a defect, and throws', async () => {
-    const {ports} = portsOf();
-    await rejects(
-      stepsOf(ports).openConnection(
-        inputFor('dev'),
-        TERMS,
-        new AbortController().signal,
-      ),
-      /before the client was found/,
+  it('F-2101 BR-9: the shared step looks the client up itself when it starts the helper', async () => {
+    const {ports, seen} = portsOf();
+    await stepsOf(ports).openConnection(
+      inputFor('dev'),
+      TERMS,
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      [seen.spawned.started.length > 0, seen.acquires[0]?.prepared?.kind],
+      [true, 'ready'],
     );
   });
 
-  it('connect-14: each set of steps has its own state', async () => {
-    const {ports} = portsOf();
-    const first = stepsOf(ports);
-    await first.locateClient(inputFor('dev'));
-    await rejects(
-      stepsOf(ports).openConnection(
-        inputFor('dev'),
-        TERMS,
-        new AbortController().signal,
-      ),
-      /before the client was found/,
+  it('connect-14: each set of steps has its own state, so a second set looks up on its own', async () => {
+    const {ports, seen} = portsOf();
+    await stepsOf(ports).locateClient(inputFor('dev'));
+    const lookups = seen.spawned.started.length;
+    await stepsOf(ports).openConnection(
+      inputFor('dev'),
+      TERMS,
+      new AbortController().signal,
     );
+    deepStrictEqual(seen.spawned.started.length > lookups, true);
   });
 });
 
@@ -737,7 +763,7 @@ describe('the connection step by mode (card connect-17)', () => {
     void steps
       .openConnection(inputFor('dev'), TERMS, new AbortController().signal)
       .catch(() => undefined);
-    await Promise.resolve();
+    await new Promise(resolve => setTimeout(resolve, 20));
     return seen;
   }
 
@@ -895,12 +921,30 @@ describe("the composition's server steps", () => {
   });
 });
 
+/** What the starter's lookup found, as a connection welcomes a window with. */
+const RUN_FACTS = {
+  sshProgram: SSH_PROGRAM,
+  scpProgram: 'scp',
+  effective: {
+    hostName: 'dev.example',
+    user: 'alex',
+    port: '22',
+    localForwards: [],
+    clearAllForwardings: false,
+  },
+};
+
 /** A connection that logs in at once on the SOCKS port 1080. */
 const CONNECTED = {
   onNotice: () => () => undefined,
   answer: () => Promise.resolve(false),
   refuse: () => Promise.resolve(false),
-  connect: () => Promise.resolve({kind: 'connected', socksPort: 1080}),
+  connect: () =>
+    Promise.resolve({
+      kind: 'connected',
+      socksPort: 1080,
+      runFacts: RUN_FACTS,
+    }),
   release: () => undefined,
 } as unknown as SharedConnection;
 
@@ -1117,6 +1161,38 @@ describe("the composition's channel and window environment", () => {
         progress: [],
       },
     );
+  });
+
+  it('F-2507 W4: the applyDefaults step opens the tunnels the setting gives, as the setting is when the step runs', async () => {
+    const changes: {defaultForwards: unknown} = {
+      defaultForwards: [{remotePort: 8000}],
+    };
+    const wired = portsOf();
+    const ports: WiringPorts = {
+      ...wired.ports,
+      settings: {
+        ...wired.ports.settings,
+        defaultForwards: () => parseDefaultForwards(changes.defaultForwards),
+      },
+    };
+    const steps = stepsOf(ports);
+    changes.defaultForwards = [
+      {name: 'web', remotePort: 8001, localPort: 18001},
+    ];
+    await steps.applyDefaults(inputFor('dev'));
+    deepStrictEqual(wired.seen.tunnels, [
+      {
+        remoteAddress: {host: 'localhost', port: 8001},
+        localAddressPort: 18001,
+        label: 'web',
+      },
+    ]);
+  });
+
+  it('F-2507.AC-6: the applyDefaults step shows no notice and presents no failure', async () => {
+    const wired = portsOf({defaultForwards: [{remotePort: 8000}]});
+    await stepsOf(wired.ports).applyDefaults(inputFor('dev'));
+    deepStrictEqual([wired.seen.presented, wired.seen.progress], [[], []]);
   });
 
   it('F-2507: an entry left out is logged with its position and why', async () => {
@@ -1567,5 +1643,98 @@ describe("the composition's CLI path", () => {
   it("cli-04 §3: the connect's secrets are the port's", () => {
     const {ports} = portsOf();
     deepStrictEqual(stepsOf(ports).newSecret(), 'fresh-secret');
+  });
+});
+
+describe("the lookup inside the shared connection's acquire (card connect-57)", () => {
+  it('F-2101 AC-14: a window that joins a running helper looks nothing up and waits under the setting alone', async () => {
+    const {ports, seen} = portsOf({
+      connection: CONNECTED,
+      joins: true,
+      connectTimeout: 15,
+    });
+    await stepsOf(ports).openConnection(
+      inputFor('dev'),
+      TERMS,
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      [
+        seen.spawned.started.length,
+        seen.acquires[0]?.prepared,
+        seen.acquires[0]?.limits,
+      ],
+      [0, undefined, connectionLimitsFor(undefined, 15)],
+    );
+  });
+
+  it('F-2101 AC-14: a joining window adopts the run facts of the window that started the helper', async () => {
+    const {ports} = portsOf({connection: CONNECTED, joins: true});
+    const steps = stepsOf(ports);
+    const opened = await steps.openConnection(
+      inputFor('dev'),
+      TERMS,
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      opened.kind === 'done' ? opened.value.waits : opened,
+      connectWaitsFor(15),
+    );
+  });
+
+  it('F-2101 BR-9: a starting window looks up before the helper starts, and waits as the lookup says', async () => {
+    const {ports, seen} = portsOf({
+      connection: CONNECTED,
+      lookup: {
+        kind: 'exit',
+        output: `${OPTIONS_TEXT}connecttimeout 9\n`,
+        status: 0,
+      },
+    });
+    await stepsOf(ports).openConnection(
+      inputFor('dev'),
+      TERMS,
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      [
+        seen.spawned.started.length > 0,
+        seen.acquires[0]?.prepared?.kind,
+        seen.acquires[0]?.limits,
+      ],
+      [true, 'ready', connectionLimitsFor('9', undefined)],
+    );
+  });
+
+  it('F-2101 7.E4: a lookup that finds no client refuses the start with S009 and starts no helper', async () => {
+    const {ports, seen} = portsOf({connection: CONNECTED});
+    const opened = await stepsOf({
+      ...ports,
+      locate: {
+        ...ports.locate,
+        spawner: spawnerOf(
+          {},
+          {kind: 'exit', output: '', status: 0},
+          seen.spawned,
+        ),
+      },
+    }).openConnection(inputFor('dev'), TERMS, new AbortController().signal);
+    deepStrictEqual(
+      [
+        opened.kind === 'failed' ? opened.failure : opened,
+        seen.acquires.length,
+      ],
+      [{kind: 'prerequisiteMissing', reason: {id: 'S009'}}, 0],
+    );
+  });
+
+  it('F-2102 BR-10: in terminal mode the lookup comes before the connection', () => {
+    const {ports} = portsOf({mode: 'terminal'});
+    deepStrictEqual(stepsOf(ports).lookupBeforeConnection(), true);
+  });
+
+  it('F-2102 BR-9: in shared mode it does not', () => {
+    const {ports} = portsOf({mode: 'shared'});
+    deepStrictEqual(stepsOf(ports).lookupBeforeConnection(), false);
   });
 });
