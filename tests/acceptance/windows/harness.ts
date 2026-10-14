@@ -17,6 +17,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {processIdsOf} from '../../../tools/process-ids.ts';
 import {
   appendScriptTo,
   signalFile,
@@ -498,4 +499,72 @@ export async function agentAdd(
 /** Removes every key from the run's agent. */
 export async function agentClear(): Promise<void> {
   await withAgent('ssh-add', ['-D']);
+}
+
+/** The process ids of the connection helpers of this run's extensions folder. */
+export async function connectionHelpers(): Promise<number[]> {
+  try {
+    const {stdout} = await execFileAsync('pgrep', [
+      '-f',
+      `${variable('HARNESS_RUN_FOLDER')}/extensions/.*connection-helper`,
+    ]);
+    return processIdsOf(stdout);
+  } catch {
+    return [];
+  }
+}
+
+/** The ids of the `ssh` processes whose parent is `helperId`. */
+export async function sshChildren(helperId: number): Promise<number[]> {
+  try {
+    const {stdout} = await execFileAsync('pgrep', [
+      '-P',
+      String(helperId),
+      '-x',
+      'ssh',
+    ]);
+    return processIdsOf(stdout);
+  } catch {
+    return [];
+  }
+}
+
+/** Polls `check` every 100 ms until it holds; it fails naming `description` after `milliseconds`. */
+export async function waitFor(
+  description: string,
+  check: () => boolean | Promise<boolean>,
+  milliseconds: number,
+): Promise<void> {
+  const deadline = Date.now() + milliseconds;
+  while (!(await check())) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${description}`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
+
+/** Has window `name` run Kill Local Connection Server For Host..., whose host pick is already in the script. */
+export function kill(name: string): Promise<void> {
+  return inWindow(name, 'opensshremotes.cleanLocalServer');
+}
+
+/** The run's user settings file. */
+function userSettingsFile(): string {
+  return path.join(
+    variable('HARNESS_RUN_FOLDER'),
+    'user-data/User/settings.json',
+  );
+}
+
+/** Rewrites the run's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
+export async function userSettings(
+  change: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  const file = userSettingsFile();
+  const current = existsSync(file)
+    ? (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>)
+    : {};
+  writeFileSync(file, JSON.stringify({...current, ...change}, null, 2));
+  await new Promise(resolve => setTimeout(resolve, 1000));
 }
