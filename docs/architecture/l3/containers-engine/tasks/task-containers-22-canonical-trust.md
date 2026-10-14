@@ -46,7 +46,8 @@ asking the resolver for the canonical URI of each workspace folder and file. lib
    };
    ```
 
-2. **`EditorResolver`** gains `canonicalPath?(authority: string, path: string): Promise<string | undefined>`. In
+2. **`EditorResolver`** gains `canonicalPath?: (authority: string, path: string) => Promise<string | undefined>` (a
+   property, so lint's `unbound-method` lets the editor adapter take it out of the object). In
    `registerResolver`, when `options.canonical` is set, the resolver handed to `editor.registerRemoteAuthorityResolver`
    gets:
 
@@ -101,7 +102,8 @@ asking the resolver for the canonical URI of each workspace folder and file. lib
    - **The bridge and the target** come from one function shared by `connectFresh` and the memo (the same `cliFor`
      environment with `DOCKER_CONTEXT`, the same `dockerPath`), so both reads would be identical.
    - **A failed read** (any `CliFailure`) gives `undefined` and one warn: `the configuration of <hostPath> could not be
-     read for the canonical URI: <kind>`. **The cap:** the canonical request waits at most 30 s
+     read: <kind>`. It's the read's one warn, shared by the canonical request and the connect, and it replaces the
+     connect's old `the configuration's name could not be read` line. **The cap:** the canonical request waits at most 30 s
      (`CANONICAL_READ_MILLISECONDS = 30_000`, through `dependencies.setTimer`) and then answers `undefined`. The read
      itself goes on for the connect.
    - A failed read is dropped from the memo once settled, so a reconnect reads again. A successful one is kept for
@@ -124,10 +126,12 @@ asking the resolver for the canonical URI of each workspace folder and file. lib
    - `path.startsWith(<root> + '/')` gives `<hostPath> + path.slice(<root>.length)`.
      The rest keeps its `/` separators. Release 1 is Linux and macOS, so a host path is POSIX.
    - Anything else gives `undefined`, including a sibling such as `<folder>-other`.
-   - **Each mapped answer logs one line at debug:** `the canonical path of <authority><path> is <local> (from the
-     configuration read)`, or `(from the connection)` when held. T1 reads it.
+   - **Each mapped answer logs one line at debug:** `the canonical path of <path> is <local> (from the configuration
+     read)`, or `(from the connection)` when held. The authority isn't in the line, because lib-log redacts payloads.
+     T1 reads it.
 4. **`register-connector.ts`:** `registerResolver`'s options gain `canonical: {pathOf: uri =>
-   connector.canonicalPathOf(uri.authority, uri.path), warn: message => logger.warn(message)}`.
+   connector.canonicalPathOf(uri.authority, uri.path), warn: message => served.logger.warn(message)}`. `ConnectorServed`
+   gains `logger: Logger`, which `extension.ts` passes.
 5. **Nothing else changes.** `Connected.trusted` stays `false` (F-0106 6.11: "NOT forced"), and core reads the local
    folder's entry through the mapping.
 
@@ -188,7 +192,7 @@ asking the resolver for the canonical URI of each workspace folder and file. lib
 
 | # | Steps | Assertions |
 |---|---|---|
-| T1 | As containers-12's row 11 accepts trust: open untrusted window `gate-trust-held`, run Reopen, answer `Trust Folder & Continue`, and wait until connected | the window's log has the debug line `the canonical path of <uri> is <local> (from the configuration read)` before C10's `container … was` line (T0: the answer came with no connection held); `isTrusted('gate-trust-held')` is `true` in the connected window, and the status bar has no `status.workspaceTrust` item (F-0106 6.11: "once trusted, the connected window shows no `status.workspaceTrust` item") |
+| T1 | As containers-12's row 11 accepts trust: open untrusted window `gate-trust-held`, run Reopen, answer `Trust Folder & Continue`, and wait until connected | the window's log has the debug line `the canonical path of <path> is <local> (from the configuration read)` before C10's `container … was` line (T0: the answer came with no connection held); `isTrusted('gate-trust-held')` is `true` in the connected window, and the status bar has no `status.workspaceTrust` item (F-0106 6.11: "once trusted, the connected window shows no `status.workspaceTrust` item") |
 | T2 | In T1's connected window, run `workbench.trust.manage`. The editor's text (the renderer's `document.body.innerText`) holds `You trust this folder` and a `Don't Trust` button (F-0106 AC-39: trust not forced). Click `Don't Trust` through the renderer (`answerDialog` won't do, since it's an editor: add `clickButton(name, label)` to `renderer.ts`, finding a `.monaco-button` by its exact text in the active editor). Then `reloadWindow` and wait until connected | after the reload, `isTrusted` is `false` (athena's ruling: untrusting the local folder makes the container window restricted on its next reload). F-0106 AC-41 and AC-42 (the reconnect asking for trust, and S360/S377 on Cancel) are the resolver-side request of containers-17, so they aren't this row's |
 
 **On main without this card,** T1 fails: the connected window reports `isTrusted` `false`.
