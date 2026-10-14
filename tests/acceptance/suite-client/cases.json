@@ -140,6 +140,49 @@
       },
       "checked": ["windows/ssh"],
       "used": "windows/ssh"
+    },
+    {
+      "label": "client-silent",
+      "cite": "F-2101 AC-20",
+      "setting": "<run>/clients/silent/ssh",
+      "checked": ["silent/ssh", "path/ssh"],
+      "used": "path/ssh"
+    },
+    {
+      "label": "client-vanishing",
+      "cite": "F-2101 AC-19",
+      "setting": "<run>/clients/vanishing/ssh",
+      "checked": ["vanishing/ssh"],
+      "used": null,
+      "dialog": "Could not establish connection to \"harness\".",
+      "script": [
+        {"surface": "failureDialog", "match": "\"", "answer": "dismiss"},
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action",
+          "answer": "dismiss"
+        }
+      ]
+    },
+    {
+      "label": "client-platform-escape",
+      "cite": "F-2101 AC-28",
+      "setting": "<run>/clients/configured/ssh",
+      "settings": {
+        "remote.SSH.useLocalServer": false
+      },
+      "checked": [],
+      "used": null,
+      "dialog": "Could not establish connection to \"harness\": Connecting was canceled.",
+      "script": [
+        {"surface": "platformPick", "match": "harness", "answer": "dismiss"},
+        {"surface": "failureDialog", "match": "\"", "answer": "dismiss"},
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action",
+          "answer": "dismiss"
+        }
+      ]
     }
   ]
 }

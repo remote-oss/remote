@@ -50,6 +50,7 @@ import {
 } from './acceptance-keys.ts';
 import {
   clearCalls,
+  rewriteClient,
   writeClients,
   writeSshRecorder,
   writeTildeCopy,
@@ -57,6 +58,7 @@ import {
 import {
   bundleFolderOf,
   extensionsOf,
+  clientCases,
   failureCases,
   hostExtensionFolder,
   failureLabel,
@@ -918,6 +920,13 @@ export async function runAcceptance(
         );
       }
     }
+    for (const client of editor === 'vscodium' ? clientCases(root) : []) {
+      // A connected case leaves the script unused, which is no failure; a failed one is answered from it.
+      writeFileSync(
+        launchFiles(runFolder, client.label).script,
+        JSON.stringify({entries: client.script ?? []}),
+      );
+    }
     const launches = editor === 'vscodium' ? launchesOf(root) : [];
     if (editor === 'vscodium') {
       writeClients(runFolder);
@@ -946,6 +955,10 @@ export async function runAcceptance(
           if (launch.label.startsWith('client-')) {
             await dependencies.sleep(HELPER_GONE_MILLISECONDS);
             clearCalls(runFolder);
+          }
+          // The vanishing client's check deletes itself, so an attempt after a hung one must find it again.
+          if (launch.label === 'client-vanishing') {
+            rewriteClient(runFolder, 'vanishing');
           }
           markDownloadRequests(runFolder, launch.label, variables);
         },
