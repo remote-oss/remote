@@ -17,6 +17,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {promisify} from 'node:util';
 import {cutNetwork, restoreNetwork} from '../../../tools/acceptance-network.ts';
 import {runCommand} from '../../../tools/command-runner.ts';
@@ -496,6 +497,23 @@ export async function reopenInContainer(name: string): Promise<void> {
     `window ${name} to activate in its container`,
     () => countOf(name, 'activated') > before,
   );
+}
+
+/** Opens a local window on `folder` and waits for its agent; the window is named after the folder. */
+export async function openFolderWindow(folder: string): Promise<string> {
+  const name = path.basename(folder);
+  const before = countOf(name, 'activated');
+  await inWindow(
+    'local',
+    'acceptance.agent.openWindow',
+    pathToFileURL(folder).href,
+  );
+  await waitFor(
+    `window ${name} to activate its agent`,
+    () => countOf(name, 'activated') > before,
+    60_000,
+  );
+  return name;
 }
 
 /**

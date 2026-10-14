@@ -37,7 +37,7 @@ function hostLaunchLabels(): string[] {
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the three containers launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the four containers launches and the ports cases in the order of theirs', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -67,6 +67,7 @@ describe('the launches of the VSCodium run', () => {
         'containers',
         'containers-standdown',
         'containers-no-proposals',
+        'containers-volume',
         ...hostLaunchLabels(),
       ],
     );
@@ -171,11 +172,17 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        [
+          'containers-volume',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
       ],
     );
   });
 
-  it('containers-09: the containers launches draw dialogs in the window and download the server from the run’s host; containers and containers-standdown have the other extension’s stand-in, and only containers-no-proposals turns the proposed API off', () => {
+  it('containers-09: the containers launches draw dialogs in the window and download the server from the run’s host; containers and containers-standdown have the other extension’s stand-in, and only containers-no-proposals turns the proposed API off; containers-volume has neither', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -186,28 +193,36 @@ describe('the launches of the VSCodium run', () => {
           launch.kind === 'plain' ? launch.standIns : undefined,
           launch.proposedApi,
         ]),
-      ['containers', 'containers-standdown', 'containers-no-proposals'].map(
-        label => [
-          label,
-          label,
-          {
-            'window.title': '[${rootName}]',
-            'window.dialogStyle': 'custom',
-            'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
-          },
-          label === 'containers-no-proposals'
-            ? undefined
-            : ['ms-vscode-remote.remote-containers'],
-          label === 'containers-no-proposals' ? false : undefined,
-        ],
-      ),
+      [
+        'containers',
+        'containers-standdown',
+        'containers-no-proposals',
+        'containers-volume',
+      ].map(label => [
+        label,
+        label,
+        {
+          'window.title': '[${rootName}]',
+          'window.dialogStyle': 'custom',
+          'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+        },
+        label === 'containers' || label === 'containers-standdown'
+          ? ['ms-vscode-remote.remote-containers']
+          : undefined,
+        label === 'containers-no-proposals' ? false : undefined,
+      ]),
     );
   });
 
   it('containers-09: only the containers launches need the run’s dev container image', () => {
     deepStrictEqual(
       launches.filter(needsDevContainerImage).map(launch => launch.label),
-      ['containers', 'containers-standdown', 'containers-no-proposals'],
+      [
+        'containers',
+        'containers-standdown',
+        'containers-no-proposals',
+        'containers-volume',
+      ],
     );
   });
 
@@ -304,6 +319,7 @@ describe('the launches of the VSCodium run', () => {
         'containers',
         'containers-standdown',
         'containers-no-proposals',
+        'containers-volume',
         ...hostLaunchLabels(),
       ],
     );
