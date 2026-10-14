@@ -630,3 +630,32 @@ export async function settingIn(
     .filter(each => each.event === 'setting' && each.settingId === settingId)
     .at(-1)?.value;
 }
+
+/** The surfaces of the record that are messages to the user. */
+const MESSAGE_SURFACES = ['notice', 'failureDialog', 'pick', 'maskedInput'];
+
+/** The `Host` names of the run's ssh_config with no `*`, `?` or `!`, in file order. */
+export function hostAliases(): string[] {
+  return readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8')
+    .split('\n')
+    .filter(line => /^\s*Host\s/i.test(line))
+    .flatMap(line => line.trim().split(/\s+/).slice(1))
+    .filter(word => !/[*?!]/.test(word));
+}
+
+/** Whether window `name` is open: its agent activated more often than it deactivated. */
+export function isOpen(name: string): boolean {
+  const events = windowEvents(name).map(each => each.event);
+  return (
+    events.filter(event => event === 'activated').length >
+    events.filter(event => event === 'deactivated').length
+  );
+}
+
+/** The messages the record gained since `mark` lines: the lines of the surfaces that speak to the user. */
+export function messagesSince(mark: number): string[] {
+  return recordLines()
+    .slice(mark)
+    .filter(line => MESSAGE_SURFACES.includes(line.surface))
+    .map(line => `${line.window}: ${line.surface}: ${line.question}`);
+}

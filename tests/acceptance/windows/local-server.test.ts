@@ -5,8 +5,11 @@ import {
   appendScript,
   closeWindow,
   connectionHelpers,
+  hostAliases,
   inWindow,
+  isOpen,
   kill,
+  messagesSince,
   onHost,
   openWindow,
   recordLines,
@@ -18,7 +21,6 @@ import {
   userSettings,
   variable,
   waitFor,
-  windowEvents,
   windowState,
 } from './harness.ts';
 
@@ -37,35 +39,6 @@ const PER_WINDOW = {
   'remote.SSH.useLocalServer': false,
   'remote.SSH.remotePlatform': {harness: 'linux'},
 };
-
-/** The surfaces of the record that are messages to the user. */
-const MESSAGE_SURFACES = ['notice', 'failureDialog', 'pick', 'maskedInput'];
-
-/** The `Host` names of the run's ssh_config with no `*`, `?` or `!`, in file order. */
-function aliases(): string[] {
-  return readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8')
-    .split('\n')
-    .filter(line => /^\s*Host\s/i.test(line))
-    .flatMap(line => line.trim().split(/\s+/).slice(1))
-    .filter(word => !/[*?!]/.test(word));
-}
-
-/** Whether window `name` is open: its agent activated more often than it deactivated. */
-function isOpen(name: string): boolean {
-  const events = windowEvents(name).map(each => each.event);
-  return (
-    events.filter(event => event === 'activated').length >
-    events.filter(event => event === 'deactivated').length
-  );
-}
-
-/** The messages the record gained since `mark` lines: the lines of the surfaces that speak to the user. */
-function messagesSince(mark: number): string[] {
-  return recordLines()
-    .slice(mark)
-    .filter(line => MESSAGE_SURFACES.includes(line.surface))
-    .map(line => `${line.window}: ${line.surface}: ${line.question}`);
-}
 
 /** Whether window `name` is connected: it is on the remote and a file it writes reaches the host. */
 async function connected(name: string): Promise<boolean> {
@@ -204,7 +177,11 @@ describe('the local connection server on a key host (card coverage-14)', functio
       ],
       [
         HOST_QUESTION,
-        [...aliases(), '$(plus) Add New SSH Host...', 'Configure SSH Hosts...'],
+        [
+          ...hostAliases(),
+          '$(plus) Add New SSH Host...',
+          'Configure SSH Hosts...',
+        ],
         helper,
         [],
       ],
