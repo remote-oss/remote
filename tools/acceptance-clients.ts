@@ -177,6 +177,37 @@ export function writeTildeCopy(runFolder: string): void {
   chmodSync(file, 0o755);
 }
 
+/** The log the recorder appends to: one line per argument, a blank line after every invocation. */
+export function invocationNotesOf(runFolder: string): string {
+  return path.join(runFolder, 'ssh-bin', 'invocations.txt');
+}
+
+/**
+ * Writes the ssh invocation recorder into the run's folder: a pass-through that notes each call's argv in the
+ * invocation notes, then runs the real `ssh` with it, unchanged. The config-files launch puts it on the PATH,
+ * because a failing connect's `ssh` lives too briefly for a /proc reading and the rows must still see its argv.
+ */
+export function writeSshRecorder(runFolder: string): void {
+  const folder = path.join(runFolder, 'ssh-bin');
+  mkdirSync(folder, {recursive: true});
+  const script = path.join(folder, 'ssh');
+  writeFileSync(
+    script,
+    [
+      '#!/bin/sh',
+      `{
+        for argument in "$0" "$@"; do
+          printf '%s\\n' "$argument"
+        done
+        printf '\\n'
+      } >> ${quoted(invocationNotesOf(runFolder))}`,
+      `exec ${REAL_SSH} "$@"`,
+      '',
+    ].join('\n'),
+  );
+  chmodSync(script, 0o755);
+}
+
 /** Empties the log before a launch, so the launch finds only its own calls. */
 export function clearCalls(runFolder: string): void {
   writeFileSync(callsLogOf(runFolder), '');

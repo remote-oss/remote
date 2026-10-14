@@ -52,6 +52,7 @@ export {
   type ProbeFailure,
   type ProbeOutcome,
   probe,
+  templatePlatformOf,
 } from './lifecycle/probe.ts';
 export {type StepOptions, type StepRun, runStep} from './lifecycle/run-step.ts';
 export {

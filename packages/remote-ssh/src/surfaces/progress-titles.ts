@@ -17,6 +17,7 @@ const PHASE_IDS: Readonly<Record<PhaseName, FailureStringId | undefined>> = {
   installing: 'S084',
   settingUpTunnel: 'S130',
   waitingForForwarding: 'S158',
+  startingServer: undefined,
   serverDownloadPercent: undefined,
 };
 
