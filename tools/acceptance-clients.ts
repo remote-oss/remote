@@ -14,7 +14,7 @@ const REAL_SSH = '/usr/bin/ssh';
 /** The stream a fake prints its banner to. */
 type Stream = 'stderr' | 'stdout';
 
-/** One fake client: its place under `clients/`, what a check prints and where, how a check ends, and its file mode. */
+/** One fake client: its place under `clients/`, what a check prints and where, how a check ends, its file mode, and whether it deletes itself. */
 export interface FakeClient {
   /** The folder under `clients/`; the program is `<folder>/ssh`. */
   folder: string;
@@ -24,6 +24,8 @@ export interface FakeClient {
   mode: number;
   /** What the log calls it when it differs from the folder. */
   loggedName?: string;
+  /** A check deletes the program, so a call after it finds no program. */
+  vanishes?: boolean;
 }
 
 const OPENSSH_BANNER = 'OpenSSH_9.6p1, OpenSSL 3.0.13';
@@ -100,6 +102,21 @@ export const FAKE_CLIENTS: readonly FakeClient[] = [
     status: 0,
     mode: 0o644,
   },
+  {
+    folder: 'silent',
+    banner: '',
+    stream: 'stderr',
+    status: 0,
+    mode: 0o755,
+  },
+  {
+    folder: 'vanishing',
+    banner: OPENSSH_BANNER,
+    stream: 'stderr',
+    status: 0,
+    mode: 0o755,
+    vanishes: true,
+  },
 ];
 
 /** The folder the fakes live in. */
@@ -117,11 +134,11 @@ function quoted(text: string): string {
   return `'${text.replaceAll("'", "'\\''")}'`;
 }
 
-/** The script of a fake client. */
+/** The script of a fake client: a check prints its banner when it has one, deletes the program when it vanishes, and ends with its status. */
 export function clientScript(client: FakeClient, callsLog: string): string {
   const name = client.loggedName ?? `${client.folder}/ssh`;
   const stream = client.stream === 'stderr' ? ' >&2' : '';
-  return [
+  const lines = [
     '#!/bin/sh',
     'kind=connect',
     'for argument in "$@"; do',
@@ -130,12 +147,20 @@ export function clientScript(client: FakeClient, callsLog: string): string {
     '[ "${1:-}" = -V ] && kind=check',
     `printf '%s\\t%s\\n' ${quoted(name)} "$kind" >> ${quoted(callsLog)}`,
     'if [ "$kind" = check ]; then',
-    `  printf '%s\\n' ${quoted(client.banner)}${stream}`,
+  ];
+  if (client.banner !== '') {
+    lines.push(`  printf '%s\\n' ${quoted(client.banner)}${stream}`);
+  }
+  if (client.vanishes === true) {
+    lines.push('  rm -f "$0"');
+  }
+  lines.push(
     `  exit ${String(client.status)}`,
     'fi',
     `exec ${REAL_SSH} "$@"`,
     '',
-  ].join('\n');
+  );
+  return lines.join('\n');
 }
 
 /** Writes the fakes into the run's folder, a directory named `adir` beside them, and an empty log. */
@@ -211,4 +236,15 @@ export function writeSshRecorder(runFolder: string): void {
 /** Empties the log before a launch, so the launch finds only its own calls. */
 export function clearCalls(runFolder: string): void {
   writeFileSync(callsLogOf(runFolder), '');
+}
+
+/** Rewrites one fake of the table, so an attempt after one that deleted the file finds it again. */
+export function rewriteClient(runFolder: string, folder: string): void {
+  const client = FAKE_CLIENTS.find(each => each.folder === folder);
+  if (client === undefined) {
+    throw new Error(`the fake client ${folder} is not in the table`);
+  }
+  const file = path.join(clientsFolder(runFolder), client.folder, 'ssh');
+  writeFileSync(file, clientScript(client, callsLogOf(runFolder)));
+  chmodSync(file, client.mode);
 }

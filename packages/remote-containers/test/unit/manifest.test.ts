@@ -36,6 +36,10 @@ function readJson(file: string): Record<string, unknown> {
 const MANIFEST = readJson('package.json');
 
 /** The `when` clause of the command's palette entry and menu entry. */
+/** The `when` clause of the in-container rebuild commands. */
+const REBUILD_WHEN =
+  '!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown';
+
 const REOPEN_WHEN =
   '!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown';
 
@@ -46,12 +50,23 @@ const ENGLISH = {
     'Opening a folder in a container requires workspace trust.',
   'configuration.title': 'Dev Containers',
   'commands.Reopenincontainer.title': 'Reopen in Container',
+  'commands.Rebuildcontainer.title': 'Rebuild Container',
+  'commands.Rebuildcontainerwithoutcache.title':
+    'Rebuild Container Without Cache',
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
   'setting.ServerDownloadBaseUrl.description':
     'Base URL for downloading the VS Code server. The path `/commit:{commit}/server-{platform}/{quality}` will be appended to this URL. Platforms include `linux-x64`, `linux-armhf`, `linux-arm64`, `linux-alpine`, and `alpine-arm64`. Quality is `stable` or `insider`.',
   'setting.ServerDownloadBaseUrl.patternError':
     'Must be a URL (e.g., https://example.com or https://example.com:8080/path).',
+  'setting.Defaultextensions.description':
+    'Configures the list of extensions to always install while creating a container.',
+  'setting.Defaultextensions.itemError':
+    "Expected format '${publisher}.${name}'. Example: 'vscode.csharp'.",
+  'setting.Remotecontainersdefaultextensions.deprecation':
+    "Use 'dev.containers.defaultExtensions' instead.",
+  'setting.Remotecontainersdefaultextensions.markdownDeprecation':
+    'Use `#dev.containers.defaultExtensions#` instead.',
   'setting.ServerDownloadFolder.description':
     "Local folder for downloading and caching VS Code server archives. The archives will be stored as `{downloadFolder}/{commit}/vscode-server-{platform}[-{quality}].tar.gz`. Platforms include `linux-x64`, `linux-armhf`, `linux-arm64`, `linux-alpine`, and `alpine-arm64`. Quality is `stable` or `insider`. The `-{quality}` suffix is omitted for `stable`. The default is in the system's temp folder.",
 };
@@ -90,7 +105,10 @@ describe('the manifest', () => {
           description: '%capabilities.untrustedWorkspaces.description%',
         },
       },
-      activationEvents: ['onResolveRemoteAuthority:dev-container'],
+      activationEvents: [
+        'onResolveRemoteAuthority:dev-container',
+        'onStartupFinished',
+      ],
       enabledApiProposals: [
         'resolvers',
         'tunnels',
@@ -108,6 +126,16 @@ describe('the manifest', () => {
             title: '%commands.Reopenincontainer.title%',
             category: 'Dev Containers',
           },
+          {
+            command: 'remote-containers.rebuildContainer',
+            title: '%commands.Rebuildcontainer.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.rebuildContainerNoCache',
+            title: '%commands.Rebuildcontainerwithoutcache.title%',
+            category: 'Dev Containers',
+          },
         ],
         menus: {
           commandPalette: [
@@ -115,12 +143,25 @@ describe('the manifest', () => {
               command: 'remote-containers.reopenInContainer',
               when: REOPEN_WHEN,
             },
+            {
+              command: 'remote-containers.rebuildContainer',
+              when: REBUILD_WHEN,
+            },
+            {
+              command: 'remote-containers.rebuildContainerNoCache',
+              when: REBUILD_WHEN,
+            },
           ],
           'statusBar/remoteIndicator': [
             {
               command: 'remote-containers.reopenInContainer',
               group: 'remote_30_dev-container_2_actions@8',
               when: REOPEN_WHEN,
+            },
+            {
+              command: 'remote-containers.rebuildContainer',
+              group: 'remote_30_dev-container_2_actions@5',
+              when: REBUILD_WHEN,
             },
           ],
         },
@@ -145,6 +186,25 @@ describe('the manifest', () => {
               type: 'string',
               scope: 'application',
               description: '%setting.ServerDownloadFolder.description%',
+            },
+            'dev.containers.defaultExtensions': {
+              type: 'array',
+              default: [],
+              scope: 'application',
+              items: {
+                type: 'string',
+                pattern:
+                  '([a-z0-9A-Z][a-z0-9-A-Z]*)\\.([a-z0-9A-Z][a-z0-9-A-Z]*)',
+                errorMessage: '%setting.Defaultextensions.itemError%',
+              },
+              description: '%setting.Defaultextensions.description%',
+            },
+            'remote.containers.defaultExtensions': {
+              scope: 'application',
+              deprecationMessage:
+                '%setting.Remotecontainersdefaultextensions.deprecation%',
+              markdownDeprecationMessage:
+                '%setting.Remotecontainersdefaultextensions.markdownDeprecation%',
             },
           },
         },
@@ -181,9 +241,10 @@ describe('the manifest', () => {
     ]);
   });
 
-  it('containers-01: the only activation event is the resolve of the dev-container authority', () => {
+  it('containers-11 (athena on #892): the activation events are the resolve of the dev-container authority and the end of the startup', () => {
     deepStrictEqual(MANIFEST.activationEvents, [
       'onResolveRemoteAuthority:dev-container',
+      'onStartupFinished',
     ]);
   });
 
@@ -198,38 +259,81 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0401 3.1, F-1406: the command has its id, category and title, and no keybinding', () => {
+  it('F-0401 3.1, F-1406: the reopen command has its id, category and title, and no command has a keybinding', () => {
     const contributes = MANIFEST.contributes as {
-      commands: unknown[];
+      commands: Array<{command: string}>;
       keybindings?: unknown;
     };
     deepStrictEqual(
       [
-        contributes.commands,
+        contributes.commands.find(
+          entry => entry.command === 'remote-containers.reopenInContainer',
+        ),
         readJson('package.nls.json')['commands.Reopenincontainer.title'],
         contributes.keybindings,
       ],
       [
-        [
-          {
-            command: 'remote-containers.reopenInContainer',
-            title: '%commands.Reopenincontainer.title%',
-            category: 'Dev Containers',
-          },
-        ],
+        {
+          command: 'remote-containers.reopenInContainer',
+          title: '%commands.Reopenincontainer.title%',
+          category: 'Dev Containers',
+        },
         'Reopen in Container',
         undefined,
       ],
     );
   });
 
-  it('F-0401 AC-5: the palette and the remote indicator list the command with the local clause of the reference', () => {
+  it('F-0405 3.1: the in-container rebuild commands have the titles of the reference, in the category Dev Containers', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<{command: string; title: string; category: string}>;
+    };
+    deepStrictEqual(
+      [
+        contributes.commands.filter(entry =>
+          entry.command.startsWith('remote-containers.rebuild'),
+        ),
+        readJson('package.nls.json')['commands.Rebuildcontainer.title'],
+        readJson('package.nls.json')[
+          'commands.Rebuildcontainerwithoutcache.title'
+        ],
+      ],
+      [
+        [
+          {
+            command: 'remote-containers.rebuildContainer',
+            title: '%commands.Rebuildcontainer.title%',
+            category: 'Dev Containers',
+          },
+          {
+            command: 'remote-containers.rebuildContainerNoCache',
+            title: '%commands.Rebuildcontainerwithoutcache.title%',
+            category: 'Dev Containers',
+          },
+        ],
+        'Rebuild Container',
+        'Rebuild Container Without Cache',
+      ],
+    );
+  });
+
+  /** The menu entries of the manifest that name one of `commands`. */
+  function menusOf(commands: readonly string[]): Record<string, unknown[]> {
     const menus = (
       MANIFEST.contributes as {
-        menus: Record<string, Array<{when: string; group?: string}>>;
+        menus: Record<string, Array<{command: string}>>;
       }
     ).menus;
-    deepStrictEqual(menus, {
+    return Object.fromEntries(
+      Object.entries(menus).map(([name, entries]) => [
+        name,
+        entries.filter(entry => commands.includes(entry.command)),
+      ]),
+    );
+  }
+
+  it('F-0401 AC-5: the palette and the remote indicator list the command with the local clause of the reference', () => {
+    deepStrictEqual(menusOf(['remote-containers.reopenInContainer']), {
       commandPalette: [
         {command: 'remote-containers.reopenInContainer', when: REOPEN_WHEN},
       ],
@@ -241,6 +345,31 @@ describe('the manifest', () => {
         },
       ],
     });
+  });
+
+  it('F-0405 3.1: both in-container rebuild commands are in the palette, and only the cached one is in the remote indicator', () => {
+    deepStrictEqual(
+      menusOf([
+        'remote-containers.rebuildContainer',
+        'remote-containers.rebuildContainerNoCache',
+      ]),
+      {
+        commandPalette: [
+          {command: 'remote-containers.rebuildContainer', when: REBUILD_WHEN},
+          {
+            command: 'remote-containers.rebuildContainerNoCache',
+            when: REBUILD_WHEN,
+          },
+        ],
+        'statusBar/remoteIndicator': [
+          {
+            command: 'remote-containers.rebuildContainer',
+            group: 'remote_30_dev-container_2_actions@5',
+            when: REBUILD_WHEN,
+          },
+        ],
+      },
+    );
   });
 
   it('F-1406.5: package.nls.json holds its keys, and every key package.json uses is one of them', () => {
@@ -269,13 +398,18 @@ describe('the manifest', () => {
       standingDownKey: 'remote-containers:standingDown',
       namespaces: {
         commands: ['remote-containers.'],
-        settings: ['dev.containers.', 'remote.serverDownload'],
+        settings: [
+          'dev.containers.',
+          'remote.containers.',
+          'remote.serverDownload',
+        ],
         contextKeys: ['remote-containers:'],
         internalCommands: ['remote-oss.'],
       },
       contextKeys: [
         {id: 'remote-containers:standingDown', setter: 'extension'},
         {id: 'hideConnectCommands', setter: 'extension'},
+        {id: 'hideRebuildCommands', setter: 'extension'},
       ],
       infoLineCommands: [],
       runtimeCommands: [
@@ -294,7 +428,13 @@ describe('the manifest', () => {
           date: '2026-10-14',
         },
       ],
-      settingPairs: [],
+      settingPairs: [
+        {
+          current: 'dev.containers.defaultExtensions',
+          legacy: 'remote.containers.defaultExtensions',
+          winner: 'current',
+        },
+      ],
       ungated: [],
       locales: LOCALES,
     });

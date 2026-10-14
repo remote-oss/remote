@@ -6,6 +6,7 @@
 
 import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
+import type {ExtensionEntries} from '../policy/record.ts';
 import type {ScriptParameters} from '../scripts/bootstrap.ts';
 import {runStep, type StepRun} from './run-step.ts';
 
@@ -15,16 +16,18 @@ export function isExtensionIdentifier(entry: string): boolean {
 }
 
 /**
- * The entries that are extension identifiers, in the order and with the casing written. Each entry is logged, as
- * kept or as dropped.
+ * The entries that are kept, in the order and with the casing written: the extension identifiers, or every entry
+ * under `asWritten`, which leaves the server to skip what it cannot install. Each entry is logged, as kept or as
+ * dropped.
  */
 export function keptExtensions(
   entries: readonly string[],
   logger: Logger,
+  mode: ExtensionEntries,
 ): string[] {
   const kept: string[] = [];
   for (const entry of entries) {
-    if (isExtensionIdentifier(entry)) {
+    if (mode === 'asWritten' || isExtensionIdentifier(entry)) {
       kept.push(entry);
       logger.info(`default extension: ${entry}`);
     } else {
@@ -100,7 +103,7 @@ export async function installExtensions(
   cancellation: AbortSignal,
   deadlineMilliseconds: number = EXTENSIONS_DEADLINE_MILLISECONDS,
 ): Promise<ExtensionsOutcome> {
-  const extensions = keptExtensions(entries, logger);
+  const extensions = keptExtensions(entries, logger, 'identifiersOnly');
   if (extensions.length === 0) {
     return {kind: 'done', results: []};
   }

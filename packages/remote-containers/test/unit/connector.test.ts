@@ -14,6 +14,10 @@ import {
   STARTED_SERVER,
   type Scene,
 } from './connector.fixture.ts';
+import {
+  REBUILD_INTENTS_KEY,
+  storeRebuildIntent,
+} from '../../src/open/rebuild-intent.ts';
 
 function tick(): Promise<unknown> {
   return new Promise(resolve => setImmediate(resolve));
@@ -27,12 +31,37 @@ function messages(scene: Scene): string[] {
   return scene.sink.lines.map(line => line.message);
 }
 
+/** Holds the preparation of the next connect until the returned function releases it. */
+function heldPreparation(scene: Scene): () => void {
+  let release: (() => void) | undefined;
+  scene.outcome = () =>
+    new Promise(resolve => {
+      release = () => {
+        resolve(READY);
+      };
+    });
+  return () => {
+    release?.();
+  };
+}
+
 async function connected(scene: Scene) {
   const result = await scene.connector.connect(inputOf(PAYLOAD));
   if (!('connectionToken' in result)) {
     throw new Error(`the connect failed: ${JSON.stringify(result)}`);
   }
   return result;
+}
+
+/** The CLI's answer for a configuration whose layers list these extensions. */
+function withMerged(extensions: string[]): Scene['configuration'] {
+  return {
+    kind: 'configuration',
+    configuration: {name: 'Proj'},
+    workspaceFolder: '/workspaces/proj',
+    workspaceMount: undefined,
+    mergedConfiguration: {customizations: {vscode: [{extensions}]}},
+  };
 }
 
 describe('the container connector: the connect (card containers-08)', () => {
@@ -101,6 +130,27 @@ describe('the container connector: the connect (card containers-08)', () => {
     ]);
   });
 
+  it("F-0410 AC-11, AC-12: a setup failure carries the daemon's refusal as its reason (card containers-11)", async () => {
+    const reasons: unknown[] = [];
+    for (const refusal of [
+      'invalidMount',
+      'portAllocated',
+      undefined,
+    ] as const) {
+      const scene = sceneOf();
+      scene.outcome = {
+        kind: 'setupFailed',
+        message: 'x',
+        description: 'y',
+        containerId: undefined,
+        ...(refusal === undefined ? {} : {refusal}),
+      };
+      const result = await scene.connector.connect(inputOf(PAYLOAD));
+      reasons.push('reason' in result ? result.reason : result);
+    }
+    deepStrictEqual(reasons, [{id: 'S018'}, {id: 'S019'}, {id: 'S034'}]);
+  });
+
   it('contracts §2 steps 4–6: everything succeeding gives the host port and the token, untrusted, with no environment and no tunnels, and the phases in order', async () => {
     const scene = sceneOf();
     const phases: ConnectPhase[] = [];
@@ -119,6 +169,93 @@ describe('the container connector: the connect (card containers-08)', () => {
         ['initializing', 'installing', 'startingServer'],
       ],
     );
+  });
+
+  /** Leaves a no-cache rebuild intent for the payload, as the reload of a rebuild command does. */
+  async function withIntent(scene: Scene): Promise<void> {
+    await storeRebuildIntent(
+      {
+        get: () => scene.intentStore,
+        update: (key, value) => {
+          scene.intentStore = value;
+          return Promise.resolve();
+        },
+      },
+      PAYLOAD,
+      {buildNoCache: true},
+      0,
+    );
+  }
+
+  it('contracts §3: the first attempt takes the intent and hands it to C7', async () => {
+    const scene = sceneOf();
+    await withIntent(scene);
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.prepared[0]?.rebuild,
+        scene.intentStore,
+        messages(scene).includes(
+          'the window asked for a rebuild (no cache: true)',
+        ),
+      ],
+      [{buildNoCache: true}, {}, true],
+    );
+  });
+
+  it('F-0502: a reconnection never takes the intent', async () => {
+    const scene = sceneOf();
+    await withIntent(scene);
+    await scene.connector.connect(inputOf(PAYLOAD, {isReconnection: true}));
+    deepStrictEqual(
+      [
+        scene.prepared[0]?.rebuild,
+        REBUILD_INTENTS_KEY in {[REBUILD_INTENTS_KEY]: 1},
+        Object.keys(scene.intentStore as object).length,
+      ],
+      [undefined, true, 1],
+    );
+  });
+
+  it('contracts §3: a later attempt never takes the intent', async () => {
+    const scene = sceneOf();
+    await withIntent(scene);
+    await scene.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
+    deepStrictEqual(scene.prepared[0]?.rebuild, undefined);
+  });
+
+  it('contracts §3: an unreadable store is an ordinary open, with one warning', async () => {
+    const scene = sceneOf();
+    scene.intentError = new Error('store gone');
+    const result = await connected(scene);
+    deepStrictEqual(
+      [
+        scene.prepared[0]?.rebuild,
+        messages(scene).filter(line =>
+          line.startsWith('the rebuild intent could not be read'),
+        ),
+        'connectionToken' in result,
+      ],
+      [undefined, ['the rebuild intent could not be read: store gone'], true],
+    );
+  });
+
+  it('contracts §3: a store that throws something that is not an error is read by its text', async () => {
+    const scene = sceneOf();
+    scene.intentError = 'quota' as unknown as Error;
+    await connected(scene);
+    deepStrictEqual(
+      messages(scene).filter(line =>
+        line.startsWith('the rebuild intent could not be read'),
+      ),
+      ['the rebuild intent could not be read: quota'],
+    );
+  });
+
+  it('F-0409: an ordinary open hands C7 no rebuild', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    deepStrictEqual(scene.prepared[0]?.rebuild, undefined);
   });
 
   it('F-0503 AC-1: a reused server has no installing phase', async () => {
@@ -211,6 +348,12 @@ describe('the container connector: the connect (card containers-08)', () => {
         {name: 'Proj', context: undefined},
         [
           [
+            undefined,
+            '/work/proj',
+            '/work/proj/.devcontainer/devcontainer.json',
+            'docker',
+          ],
+          [
             'c1c1c1c1c1c1c1c1',
             '/work/proj',
             '/work/proj/.devcontainer/devcontainer.json',
@@ -218,6 +361,83 @@ describe('the container connector: the connect (card containers-08)', () => {
           ],
         ],
       ],
+    );
+  });
+
+  it("F-0505 5.0 step 5: a new container's start carries the effective list, and the log names it", async () => {
+    const scene = sceneOf();
+    scene.defaultExtensions = ['c.d'];
+    scene.configuration = withMerged(['a.b']);
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.serverRequests.map(request => request.defaultExtensions),
+        messages(scene).filter(line => line.includes('extensions to install')),
+      ],
+      [
+        [['a.b', 'c.d']],
+        ['extensions to install in the new container: a.b, c.d'],
+      ],
+    );
+  });
+
+  it('F-0505 AC-14: a reused container installs nothing, and says nothing of it', async () => {
+    const scene = sceneOf();
+    scene.outcome = {...READY, created: false};
+    scene.defaultExtensions = ['c.d'];
+    scene.configuration = withMerged(['a.b']);
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.serverRequests.map(request => request.defaultExtensions),
+        messages(scene).some(line => line.includes('extensions to install')),
+      ],
+      [[[]], false],
+    );
+  });
+
+  it('F-0505 BR-10: an empty list says so', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.serverRequests.map(request => request.defaultExtensions),
+        messages(scene).includes('no extensions to install'),
+      ],
+      [[[]], true],
+    );
+  });
+
+  it("F-0504 BR-2 with F-0505: a failed identity read keeps the setting's ids", async () => {
+    const scene = sceneOf();
+    scene.defaultExtensions = ['c.d'];
+    scene.configuration = {kind: 'malformedResult', field: 'configuration'};
+    await connected(scene);
+    deepStrictEqual(
+      scene.serverRequests.map(request => request.defaultExtensions),
+      [['c.d']],
+    );
+  });
+
+  it('F-0505 AC-27: the deprecated setting is used when the new one is unset', async () => {
+    const scene = sceneOf();
+    scene.deprecatedDefaultExtensions = ['x.y'];
+    await connected(scene);
+    deepStrictEqual(
+      scene.serverRequests.map(request => request.defaultExtensions),
+      [['x.y']],
+    );
+  });
+
+  it('F-0505 6.4 step 8: the settings are read at each connect', async () => {
+    const scene = sceneOf();
+    scene.defaultExtensions = ['one.a'];
+    await connected(scene);
+    scene.defaultExtensions = ['two.b'];
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      scene.serverRequests.map(request => request.defaultExtensions),
+      [['one.a'], ['two.b']],
     );
   });
 
@@ -280,7 +500,10 @@ describe('the container connector: the connect (card containers-08)', () => {
       [
         41000,
         undefined,
-        ["the configuration's name could not be read: configurationFailed"],
+        [
+          'the configuration of /work/proj could not be read: configurationFailed',
+          "the configuration's name could not be read: configurationFailed",
+        ],
       ],
     );
   });
@@ -296,7 +519,8 @@ describe('the container connector: the connect (card containers-08)', () => {
       'Starting container',
       'containerReady',
       'container c1c1c1c1c1c1 was newly started',
-      'Resolving Remote: 25 ms',
+      'no extensions to install',
+      'Resolving Remote: 50 ms',
     ]);
   });
 
@@ -313,8 +537,24 @@ describe('the container connector: the connect (card containers-08)', () => {
   it('F-0408 BR-6: the CLI’s error events are logged as errors and the rest as debug lines', async () => {
     const scene = sceneOf();
     scene.cliEvents = [
-      {kind: 'log', level: 5, text: 'it broke', channel: undefined},
-      {kind: 'log', level: 3, text: 'it ran', channel: undefined},
+      {
+        kind: 'log',
+        level: 5,
+        text: 'it broke',
+        channel: undefined,
+        type: 'text',
+        timestamp: undefined,
+        startTimestamp: undefined,
+      },
+      {
+        kind: 'log',
+        level: 3,
+        text: 'it ran',
+        channel: undefined,
+        type: 'text',
+        timestamp: undefined,
+        startTimestamp: undefined,
+      },
       {
         kind: 'progress',
         name: 'Running',
@@ -494,17 +734,11 @@ describe('the container connector: the connect (card containers-08)', () => {
 describe('the container connector: cancelling (card containers-08)', () => {
   it('contracts §2 cancel: a cancel during the preparation ends the connect as cancelled, stops the background and opens no relay', async () => {
     const scene = sceneOf();
-    let release: (() => void) | undefined;
-    scene.outcome = () =>
-      new Promise(resolve => {
-        release = () => {
-          resolve(READY);
-        };
-      });
+    const release = heldPreparation(scene);
     const connecting = scene.connector.connect(inputOf(PAYLOAD));
     await tick();
     scene.connector.cancel();
-    release?.();
+    release();
     const result = await connecting;
     deepStrictEqual(
       [
@@ -514,7 +748,7 @@ describe('the container connector: cancelling (card containers-08)', () => {
         scene.configurationReads.length,
         scene.relayRequests.length,
       ],
-      ['cancelled', 1, 0, 0, 0],
+      ['cancelled', 1, 0, 1, 0],
     );
   });
 
@@ -827,5 +1061,169 @@ describe('the container connector: a reconnection (card containers-08)', () => {
       [127],
     );
     deepStrictEqual(failedKind(outcome.again), 'transportLost');
+  });
+});
+
+describe('the container connector: the canonical path (card containers-22)', () => {
+  const AUTHORITY = `dev-container+${PAYLOAD}`;
+
+  /** The canonical paths of `paths` in the window of `authority`, in order. */
+  async function pathsOf(
+    scene: Scene,
+    paths: readonly string[],
+    authority = AUTHORITY,
+  ): Promise<Array<string | undefined>> {
+    const answers: Array<string | undefined> = [];
+    for (const path of paths) {
+      answers.push(await scene.connector.canonicalPathOf(authority, path));
+    }
+    return answers;
+  }
+
+  it('F-0106 6.11: the workspace folder and a file under it map to the local folder; a sibling and a path outside don’t', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    deepStrictEqual(
+      await pathsOf(scene, [
+        '/workspaces/proj',
+        '/workspaces/proj/src/a.ts',
+        '/workspaces/proj-other',
+        '/etc/hosts',
+      ]),
+      ['/work/proj', '/work/proj/src/a.ts', undefined, undefined],
+    );
+  });
+
+  it("contracts §3.2: another family's authority and a payload that isn't a folder map nothing", async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    deepStrictEqual(
+      [
+        await scene.connector.canonicalPathOf('ssh-remote+h', '/x'),
+        await scene.connector.canonicalPathOf('dev-container+zz', '/x'),
+        scene.configurationReads.length,
+      ],
+      [undefined, undefined, 2],
+    );
+  });
+
+  it('contracts §3.2 (T0): with no connection held, the answer comes from the read alone', async () => {
+    const scene = sceneOf();
+    deepStrictEqual(
+      [
+        await pathsOf(scene, ['/workspaces/proj/a']),
+        scene.configurationReads.length,
+        scene.prepared.length,
+        messages(scene).filter(message => message.startsWith('the canonical')),
+      ],
+      [
+        ['/work/proj/a'],
+        1,
+        0,
+        [
+          'the canonical path of /workspaces/proj/a is /work/proj/a (from the configuration read)',
+        ],
+      ],
+    );
+  });
+
+  it('contracts §3.2: the canonical request and the connect’s start share one read without a container, and the name keeps its own read with the container (ADR-0009 deviation 4)', async () => {
+    const scene = sceneOf();
+    await pathsOf(scene, ['/workspaces/proj']);
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.configurationReads.map(read => read.containerId),
+        scene.connector.heldIdentity()?.name,
+      ],
+      [[undefined, 'c1c1c1c1c1c1c1c1'], 'Proj'],
+    );
+  });
+
+  it('contracts §3.2: the connect first, then the canonical request, answered before prepare settles', async () => {
+    const scene = sceneOf();
+    const release = heldPreparation(scene);
+    const connecting = scene.connector.connect(inputOf(PAYLOAD));
+    await tick();
+    const answer = await scene.connector.canonicalPathOf(
+      AUTHORITY,
+      '/workspaces/proj',
+    );
+    const preparedBefore = scene.prepared.length;
+    release();
+    await connecting;
+    deepStrictEqual(
+      [answer, preparedBefore, scene.configurationReads.length],
+      ['/work/proj', 1, 2],
+    );
+  });
+
+  it('contracts §3.2: a failed read answers nothing and warns, and the next request reads again', async () => {
+    const scene = sceneOf();
+    const answers = [
+      {kind: 'configurationFailed' as const, message: 'x'},
+      {
+        kind: 'configuration' as const,
+        configuration: {},
+        workspaceFolder: '/workspaces/proj',
+        workspaceMount: undefined,
+        mergedConfiguration: undefined,
+      },
+    ];
+    scene.configuration = () =>
+      Promise.resolve(answers.shift() ?? {kind: 'cancelled'});
+    deepStrictEqual(
+      [
+        await pathsOf(scene, ['/workspaces/proj', '/workspaces/proj']),
+        scene.configurationReads.length,
+        scene.sink.lines
+          .filter(line => line.level === 'warn')
+          .map(line => line.message),
+      ],
+      [
+        [undefined, '/work/proj'],
+        2,
+        [
+          'the configuration of /work/proj could not be read: configurationFailed',
+        ],
+      ],
+    );
+  });
+
+  it('contracts §3.2: the canonical request gives up after 30 s', async () => {
+    const scene = sceneOf();
+    scene.configuration = () => new Promise(() => undefined);
+    const asking = scene.connector.canonicalPathOf(
+      AUTHORITY,
+      '/workspaces/proj',
+    );
+    for (const fire of scene.timers) {
+      fire();
+    }
+    deepStrictEqual([await asking, scene.timerDelays], [undefined, [30_000]]);
+  });
+
+  it('contracts §3.2: a read that settles first stops the timer', async () => {
+    const scene = sceneOf();
+    await pathsOf(scene, ['/workspaces/proj']);
+    deepStrictEqual([scene.timerDelays, scene.timers], [[30_000], []]);
+  });
+
+  it('contracts §3.2: a held connection wins over the read', async () => {
+    const scene = sceneOf();
+    scene.outcome = {...READY, remoteWorkspaceFolder: '/srv/app'};
+    await connected(scene);
+    deepStrictEqual(
+      [
+        await pathsOf(scene, ['/srv/app/x', '/workspaces/proj/x']),
+        messages(scene).filter(message => message.startsWith('the canonical')),
+      ],
+      [
+        ['/work/proj/x', undefined],
+        [
+          'the canonical path of /srv/app/x is /work/proj/x (from the connection)',
+        ],
+      ],
+    );
   });
 });

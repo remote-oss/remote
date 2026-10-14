@@ -7,9 +7,15 @@ export type DownloadPlacement =
 /** How a downloaded archive is checked, in the order applied. */
 export type Verification = 'headerHash' | 'lengthOnly' | 'none';
 
-/** Whether the host's requirements are checked, and by whom. */
+/**
+ * Whether the host's requirements are checked, and by whom. `bundledHelper`: lib-server runs the server's
+ * `bin/helpers/check-requirements.sh` before each launch; exit 99 aborts the start with the helper's output.
+ */
 export type RequirementsCheck =
-  'none' | 'serverBundled' | 'serverBundledPlusAlpineProbe';
+  'none' | 'serverBundled' | 'serverBundledPlusAlpineProbe' | 'bundledHelper';
+
+/** Whether a default extension entry reaches the server as written, or only when it is a `publisher.name` identifier. */
+export type ExtensionEntries = 'identifiersOnly' | 'asWritten';
 
 /** An extra start option the record allows the extension to add. */
 export type ExtraStartOption = 'fileWatcherPolling' | 'useHostProxy';
@@ -42,6 +48,7 @@ export interface ServerPolicyRecord {
   environmentSetup: string | undefined;
   requirementsCheck: RequirementsCheck;
   allowedExtraStartOptions: readonly ExtraStartOption[];
+  extensionEntries: ExtensionEntries;
   cleanup: Cleanup;
   installMode: InstallMode;
   prefetch: Prefetch;

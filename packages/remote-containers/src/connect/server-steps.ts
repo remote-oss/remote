@@ -90,6 +90,8 @@ export interface ServerRequest {
   remoteUser: string;
   /** Whether the container mounts the `vscode` volume, so that the server installs into its shared tree. */
   volumeMounted: boolean;
+  /** The extensions the server installs when it starts: the new container's list, empty for a container that is reused. */
+  defaultExtensions: readonly string[];
   onPhase(phase: 'installing' | 'startingServer'): void;
   cancellation: AbortSignal;
 }
@@ -204,6 +206,7 @@ function parametersOf(
       extensions: [],
       fileWatcherPollingMilliseconds: 0,
       useHostProxy: false,
+      requirementsHelper: false,
       readySeconds: READY_SECONDS,
       socketMode: false,
     },
@@ -442,12 +445,12 @@ export async function runServerSteps(
       portRange: '',
       licenceAccepted: licence.acceptanceFlag,
       graceSeconds: 0,
-      defaultExtensions: [],
+      defaultExtensions: request.defaultExtensions,
       fileWatcherPollingMilliseconds: 0,
       readySeconds: READY_SECONDS,
       socketMode: false,
     },
-    CONTAINERS_POLICY.allowedExtraStartOptions,
+    CONTAINERS_POLICY,
     {
       lockLoop: hostLockLoopOf(
         dependencies.clock,
@@ -462,8 +465,15 @@ export async function runServerSteps(
     logger.info(`the server was not started: ${started.failure.kind}`);
     return failedWith(
       started.failure.kind === 'prerequisitesMissing'
-        ? requirementsNotMet('')
+        ? requirementsNotMet(started.failure.detail)
         : serverFailed(),
+    );
+  }
+  if (
+    started.notices.some(notice => notice.kind === 'requirementsHelperMissing')
+  ) {
+    logger.warn(
+      "the server has no requirements helper; the container's requirements weren't checked",
     );
   }
   const {server} = started;

@@ -1,0 +1,244 @@
+# Replays a recorded conformance suite against our build on the self-hosted runners (linux/x86_64). A workflow of its
+# own, so it never shares ci.yml's concurrency groups or slows pull requests. Dispatch only. The suite is a private
+# repository; CONFORMANCE_SUITES_TOKEN reads remote-oss/remote-containers only (contents, read-only).
+name: conformance
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: The package under test
+        type: choice
+        options: [remote-containers]
+        default: remote-containers
+      suite_ref:
+        description: The commit of remote-oss/<package> whose tests/conformance is replayed (a full sha, never a branch)
+        type: string
+        required: true
+      features:
+        description: Space-separated feature ids
+        type: string
+        required: true
+      shards:
+        description: How many runners share the cases
+        type: number
+        default: 4
+
+permissions:
+  contents: read
+
+# a second dispatch of the same package waits for the first
+concurrency:
+  group: conformance-${{ inputs.package }}
+  cancel-in-progress: false
+
+env:
+  # the VS Code the suite was recorded on (recorded.vscode_version); the list job refuses a suite recorded on another
+  # version. The runners' image carries it; a runner without it installs the rpm from vars.VSCODE_RPM_BASE_URL (the
+  # editor's own yum repository), checked against this sha256 first
+  VSCODE_VERSION: '1.139.1'
+  VSCODE_RPM: 'code-1.139.1-1790309585.el8.x86_64.rpm'
+  VSCODE_RPM_SHA256: 'b0676fa039df53589acdd5aa55673267cff910d260e875e7c6118144592d05f0'
+
+jobs:
+  build:
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm package "$PACKAGE"
+        env:
+          PACKAGE: ${{ inputs.package }}
+      - id: vsix
+        run: |
+          set -- dist/"$PACKAGE"-*.vsix
+          [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "expected one dist/$PACKAGE-*.vsix, found: $*" >&2; exit 1; }
+          echo "path=$1" >> "$GITHUB_OUTPUT"
+        env:
+          PACKAGE: ${{ inputs.package }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: ${{ steps.vsix.outputs.path }}
+          if-no-files-found: error
+
+  list:
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    outputs:
+      shards: ${{ steps.list.outputs.shards }}
+      count: ${{ steps.list.outputs.count }}
+    steps:
+      - name: The suite ref is a full commit sha
+        run: |
+          printf '%s' "$SUITE_REF" | grep -qxE '[0-9a-f]{40}' || { echo "suite_ref must be a full sha: $SUITE_REF" >&2; exit 1; }
+        env:
+          SUITE_REF: ${{ inputs.suite_ref }}
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: remote-oss/${{ inputs.package }}
+          ref: ${{ inputs.suite_ref }}
+          token: ${{ secrets.CONFORMANCE_SUITES_TOKEN }}
+          sparse-checkout: tests/conformance
+          path: suite
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: list
+        run: |
+          # shellcheck disable=SC2086 # the features are a space-separated list
+          out=$(node tools/conformance-shards.ts list suite/tests/conformance "$SHARDS" "$VSCODE_VERSION" $FEATURES)
+          echo "$out"
+          node -e 'const o = JSON.parse(process.argv[1]); console.log(`shards=${JSON.stringify(o.shards)}\ncount=${o.count}`)' "$out" >> "$GITHUB_OUTPUT"
+        env:
+          SHARDS: ${{ inputs.shards }}
+          FEATURES: ${{ inputs.features }}
+
+  replay:
+    needs: [build, list]
+    if: needs.list.outputs.count != '0'
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.list.outputs.shards) }}
+    env:
+      ENCODE_SLOTS: '31-31' # one slot: each runner has 2 CPUs
+      LAB_SLOT: '31' # the fixture builds run in this slot
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: remote-oss/${{ inputs.package }}
+          ref: ${{ inputs.suite_ref }}
+          token: ${{ secrets.CONFORMANCE_SUITES_TOKEN }}
+          sparse-checkout: tests/conformance
+          path: suite
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+          path: vsix
+      - name: The work folder lives outside the checkout and outside /tmp, and is kept between jobs
+        run: |
+          work=$(realpath -m "$HOME/conformance-work")
+          mkdir -p "$work"
+          echo "CONFORMANCE_WORK=$work" >> "$GITHUB_ENV"
+      - name: VS Code ${{ env.VSCODE_VERSION }}
+        run: |
+          installed=$(rpm -q code 2>/dev/null || true)
+          if [ "$installed.rpm" = "$VSCODE_RPM" ]; then
+            echo "$installed is installed"; exit 0
+          fi
+          [ -n "$RPM_BASE_URL" ] || { echo "this runner has '$installed', not $VSCODE_RPM, and vars.VSCODE_RPM_BASE_URL is unset" >&2; exit 1; }
+          package="$RUNNER_TEMP/$VSCODE_RPM"
+          curl -fsSL -o "$package" "$RPM_BASE_URL/$VSCODE_RPM"
+          echo "$VSCODE_RPM_SHA256  $package" | sha256sum -c -
+          sudo dnf install -y "$package"
+          [ "$(rpm -q code).rpm" = "$VSCODE_RPM" ]
+        env:
+          RPM_BASE_URL: ${{ vars.VSCODE_RPM_BASE_URL }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: The runner's driver dependencies
+        run: |
+          for folder in tests/conformance/runner/*/; do
+            [ ! -f "$folder/package.json" ] || (cd "$folder" && npm install --no-audit --no-fund)
+          done
+      - name: Fixtures (built once per runner; a fixture the local catalogue verifies is kept)
+        run: |
+          display() { if command -v xvfb-run >/dev/null; then xvfb-run --auto-servernum "$@"; else DISPLAY=${DISPLAY:-:99} "$@"; fi; }
+          # the environment bin/conformance gives fixture.py, for its verify (bin/conformance runs only build and run)
+          verified() {
+            ( cd tests/conformance/runner/encode && ENCODE_ROOT="$CONFORMANCE_WORK" ENCODE_TESTS="$CONFORMANCE_SUITE/suite" ENCODE_FIXTURES="$CONFORMANCE_WORK/fixtures" \
+              ENCODE_REFERENCE_CATALOG="$CONFORMANCE_SUITE/fixtures/CATALOG.json" ENCODE_SLOTS_DIR="$CONFORMANCE_WORK/slots" \
+              ENCODE_WORKSPACES="$CONFORMANCE_WORK/workspaces/encode" ENCODE_DIND_MOUNT="$CONFORMANCE_WORK/workspaces" \
+              ENCODE_HOMES="$CONFORMANCE_WORK/homes" ENCODE_ISO="$CONFORMANCE_WORK/iso" ENCODE_NO_SYSTEMD=1 \
+              python3 fixture.py verify "$1" 2>/dev/null ) | grep -qE " $1@[0-9a-f]+ .*: ok$"
+          }
+          conformance=tests/conformance/runner/bin/conformance
+          verified encode-registry || $conformance build mirror --pull
+          verified base || $conformance build engine/base
+          verified pilot-states || $conformance build engine/pilot-states
+          verified fresh-public || display $conformance build editor/fresh-public
+          for git in "$CONFORMANCE_SUITE"/fixtures/git/*/; do
+            [ -d "$git" ] || continue
+            name=$(basename "$git")
+            verified "$name" || $conformance build "git/$name"
+          done
+        env:
+          CONFORMANCE_SUITE: ${{ github.workspace }}/suite/tests/conformance
+      - name: Replay this shard's cases
+        run: |
+          vsix=$(realpath vsix/*.vsix)
+          args=""
+          for feature in $FEATURES; do args="$args --feature $feature"; done
+          for id in $IDS; do args="$args --case $id"; done
+          display() { if command -v xvfb-run >/dev/null; then xvfb-run --auto-servernum "$@"; else DISPLAY=${DISPLAY:-:99} "$@"; fi; }
+          # shellcheck disable=SC2086 # args is a list of options
+          ENCODE_EXTENSION="$vsix" display tests/conformance/runner/bin/conformance run $args --slots "$ENCODE_SLOTS" || rc=$?
+          echo "rc=${rc:-0}" >> "$GITHUB_ENV"
+        env:
+          CONFORMANCE_SUITE: ${{ github.workspace }}/suite/tests/conformance
+          ENCODE_IDENTITY: ${{ github.workspace }}/tests/conformance/packages/${{ inputs.package }}/identity.yaml
+          ENCODE_RULES: ${{ github.workspace }}/tests/conformance/packages/${{ inputs.package }}/rules.json
+          FEATURES: ${{ inputs.features }}
+          IDS: ${{ join(matrix.shard, ' ') }}
+      - id: results
+        if: always()
+        run: |
+          dir=$(ls -1dt "$CONFORMANCE_WORK"/results/*-suite 2>/dev/null | head -1)
+          [ -n "$dir" ] || { echo "no results folder" >&2; exit 1; }
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "name=results-$(printf '%s' "$IDS" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+        env:
+          IDS: ${{ join(matrix.shard, ' ') }}
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.results.outputs.dir != ''
+        with:
+          name: ${{ steps.results.outputs.name }}
+          path: |
+            ${{ steps.results.outputs.dir }}/*.json
+          if-no-files-found: error
+      - name: Leftovers (the run's daemons, slots, workspaces and results; fixtures stay)
+        if: always()
+        run: |
+          left=$(docker ps -aq --filter label=encode.run)
+          [ -z "$left" ] || { echo "the run left containers behind:"; docker ps -a --filter label=encode.run; docker rm -f $left; }
+          rm -rf "$CONFORMANCE_WORK"/slots/* "$CONFORMANCE_WORK"/workspaces/* "$CONFORMANCE_WORK"/results/*
+          [ -z "$left" ]
+      - name: The shard's verdict (the runner's exit status)
+        run: exit "${rc:-1}"
+
+  summary:
+    needs: [list, replay]
+    if: always() && needs.list.result == 'success'
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: results
+      - name: Merge the shards
+        run: |
+          mkdir -p results
+          node tools/conformance-shards.ts merge results | tee -a "$GITHUB_STEP_SUMMARY"

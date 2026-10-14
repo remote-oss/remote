@@ -154,6 +154,7 @@ export function attachPromptSurface(
       case 'waitingForOtherWindow':
       case 'ownerChanged':
       case 'loginOwned':
+      case 'loginStarted':
         break;
       default:
         takeDownAll();

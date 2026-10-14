@@ -279,6 +279,7 @@ async function runSteps(
   channel: RecordingChannel,
   options: Parameters<typeof dependenciesOf>[1] & {
     volume?: boolean;
+    defaultExtensions?: readonly string[];
     cancellation?: AbortSignal;
     root?: RecordingChannel;
   } = {},
@@ -295,6 +296,7 @@ async function runSteps(
     rootChannel: options.root ?? rootChannelOf(),
     remoteUser: 'node',
     volumeMounted: options.volume ?? false,
+    defaultExtensions: options.defaultExtensions ?? [],
     onPhase: phase => {
       seen.phases.push(phase);
     },
@@ -341,6 +343,29 @@ describe('the server steps of a connect (card containers-08)', () => {
         },
         ['installing', 'startingServer'],
       ],
+    );
+  });
+
+  it("F-0505 5.0 step 5: the new container's extensions reach the start as installs, in order", async () => {
+    const channel = channelOf();
+    await runSteps(channel, {defaultExtensions: ['a.b', 'c.d']});
+    const start = scriptsOf(channel).find(isStart) ?? '';
+    deepStrictEqual(
+      [
+        start.indexOf("'--install-extension' 'a.b'") <
+          start.indexOf("'--install-extension' 'c.d'"),
+        start.includes("'--install-extension' 'a.b'"),
+      ],
+      [true, true],
+    );
+  });
+
+  it('F-0505 BR-11: a request with no extensions starts the server with no install', async () => {
+    const channel = channelOf();
+    await runSteps(channel);
+    deepStrictEqual(
+      (scriptsOf(channel).find(isStart) ?? '').includes('--install-extension'),
+      false,
     );
   });
 
@@ -589,6 +614,44 @@ describe('the server steps of a connect (card containers-08)', () => {
       channelOf({start: blockOf('LinuxPrereqs'), startStatus: 0}),
     );
     deepStrictEqual(failureKind(result), 'requirementsNotMet');
+  });
+
+  it("F-0503 7.E1: the requirements failure carries the check's output as its text, unread", async () => {
+    const {result} = await runSteps(
+      channelOf({
+        start: blockOf(
+          'LinuxPrereqs',
+          'server.prerequisites.1=Warning: Missing GLIBC >= 2.28!',
+          'server.prerequisites.2=Error: Missing required dependencies.',
+        ),
+        startStatus: 0,
+      }),
+    );
+    deepStrictEqual(result.kind === 'failed' && result.failure.reason, {
+      text: 'Warning: Missing GLIBC >= 2.28!\nError: Missing required dependencies.',
+    });
+  });
+
+  it('F-0503 5.0 step 6: a server with no requirements helper is logged at warn', async () => {
+    const {seen} = await runSteps(
+      channelOf({
+        start: blockOf(
+          'Ok',
+          'server.port=4321',
+          'server.pid=77',
+          'server.token=abcdefghijklmnopqrstuvwxyz012345',
+          'server.prerequisitesHelper=missing',
+        ),
+      }),
+    );
+    deepStrictEqual(
+      seen.sink.lines
+        .filter(line => line.level === 'warn')
+        .map(line => line.message),
+      [
+        "the server has no requirements helper; the container's requirements weren't checked",
+      ],
+    );
   });
 
   it('F-0503 7.E4: a start that fails otherwise is serverFailed', async () => {

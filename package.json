@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "node tools/identifiers.ts && tsc --build",
-    "lint": "node tools/identifiers.ts && node --max-old-space-size=4096 node_modules/eslint/bin/eslint.js .",
+    "lint": "node tools/identifiers.ts && node --max-old-space-size=6144 node_modules/eslint/bin/eslint.js .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "build": "node tools/identifiers.ts && node tools/build.ts",

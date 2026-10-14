@@ -1,6 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {throws} from 'node:assert';
-import {cutNetwork, restoreNetwork} from './acceptance-network.ts';
+import {
+  cutNetwork,
+  cutRoute,
+  restoreNetwork,
+  restoreRoute,
+} from './acceptance-network.ts';
 import {type CommandResult} from './command-runner.ts';
 
 /** A container whose `iptables` holds the chains in `held` and records each change of the rules. */
@@ -92,6 +97,116 @@ describe('restoreNetwork, when iptables refuses', () => {
     const container = containerHolding(['INPUT', 'OUTPUT'], ['-D']);
     throws(() => {
       restoreNetwork(container.command, 'c0ffee');
+    }, /-D INPUT .* Permission denied/);
+  });
+});
+
+/** The rules of the two route cuts for the address 10.1.2.3, as `iptables` prints them after the chain. */
+const REJECT_RULE =
+  'INPUT -d 10.1.2.3 -p tcp --dport 22 -j REJECT --reject-with icmp-host-unreachable';
+const SYN_DROP_RULE = 'INPUT -d 10.1.2.3 -p tcp --dport 22 --syn -j DROP';
+
+/** A container whose `iptables` holds the rules in `held` (chain and match, joined) and records each change. */
+function containerHoldingRules(held: string[] = [], refused: string[] = []) {
+  const rules = new Set(held);
+  const changes: string[] = [];
+
+  function command(tool: string, argv: readonly string[]): CommandResult {
+    const [, , , flag, ...rule] = argv;
+    const text = rule.join(' ');
+    if (refused.includes(flag ?? '')) {
+      return {
+        status: 4,
+        stdout: '',
+        stderr: 'Permission denied (you must be root)',
+      };
+    }
+    if (flag === '-C') {
+      return {status: rules.has(text) ? 0 : 1, stdout: '', stderr: ''};
+    }
+    changes.push(`${flag ?? ''} ${text}`);
+    if (flag === '-I') {
+      rules.add(text);
+    } else {
+      rules.delete(text);
+    }
+    return {status: 0, stdout: '', stderr: ''};
+  }
+
+  return {command, changes, rules};
+}
+
+describe('cutRoute (card tooling-47)', () => {
+  it('tooling-47: an unreachable cut inserts the REJECT rule for the address', () => {
+    const container = containerHoldingRules();
+    cutRoute(container.command, 'c0ffee', '10.1.2.3', 'unreachable');
+    deepStrictEqual(container.changes, [`-I ${REJECT_RULE}`]);
+  });
+
+  it('tooling-47: a silent cut inserts the SYN DROP rule for the address', () => {
+    const container = containerHoldingRules();
+    cutRoute(container.command, 'c0ffee', '10.1.2.3', 'silent');
+    deepStrictEqual(container.changes, [`-I ${SYN_DROP_RULE}`]);
+  });
+
+  it('tooling-47: a cut held already inserts nothing', () => {
+    const container = containerHoldingRules([REJECT_RULE]);
+    cutRoute(container.command, 'c0ffee', '10.1.2.3', 'unreachable');
+    deepStrictEqual(container.changes, []);
+  });
+
+  it('tooling-47: switching from unreachable to silent deletes the REJECT rule first', () => {
+    const container = containerHoldingRules([REJECT_RULE]);
+    cutRoute(container.command, 'c0ffee', '10.1.2.3', 'silent');
+    deepStrictEqual(container.changes, [
+      `-D ${REJECT_RULE}`,
+      `-I ${SYN_DROP_RULE}`,
+    ]);
+  });
+
+  it('tooling-47: a cut leaves exactly one rule after a switch back and forth', () => {
+    const container = containerHoldingRules();
+    cutRoute(container.command, 'c0ffee', '10.1.2.3', 'silent');
+    cutRoute(container.command, 'c0ffee', '10.1.2.3', 'unreachable');
+    deepStrictEqual([...container.rules], [REJECT_RULE]);
+  });
+
+  it("tooling-47: a refused rule throws with iptables' error", () => {
+    const container = containerHoldingRules([], ['-I']);
+    throws(() => {
+      cutRoute(container.command, 'c0ffee', '10.1.2.3', 'silent');
+    }, /-I INPUT .* Permission denied/);
+  });
+});
+
+describe('restoreRoute (card tooling-47)', () => {
+  it('tooling-47: restoreRoute deletes the held rules and nothing else', () => {
+    const container = containerHoldingRules([
+      SYN_DROP_RULE,
+      'OUTPUT -j ACCEPT',
+    ]);
+    restoreRoute(container.command, 'c0ffee', '10.1.2.3');
+    deepStrictEqual(
+      [container.changes, [...container.rules]],
+      [[`-D ${SYN_DROP_RULE}`], ['OUTPUT -j ACCEPT']],
+    );
+  });
+
+  it('tooling-47: restoreRoute deletes both rules when both are held, and nothing when neither is', () => {
+    const both = containerHoldingRules([REJECT_RULE, SYN_DROP_RULE]);
+    restoreRoute(both.command, 'c0ffee', '10.1.2.3');
+    const none = containerHoldingRules();
+    restoreRoute(none.command, 'c0ffee', '10.1.2.3');
+    deepStrictEqual(
+      [both.changes, none.changes],
+      [[`-D ${REJECT_RULE}`, `-D ${SYN_DROP_RULE}`], []],
+    );
+  });
+
+  it("tooling-47: a refused delete throws with iptables' error", () => {
+    const container = containerHoldingRules([REJECT_RULE], ['-D']);
+    throws(() => {
+      restoreRoute(container.command, 'c0ffee', '10.1.2.3');
     }, /-D INPUT .* Permission denied/);
   });
 });

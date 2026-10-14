@@ -59,6 +59,11 @@ One more is in, at its minimum:
   before anything runs (F-0106 BR-2's prompt). The rest of F-0106 (attach, pod and volume windows, the revocation
   reload, the per-profile flags) comes with those features.
 
+And one more, moved in from increment 2 by the user (2026-10-14, after their first try of Reopen):
+- **F-0402, the reopen notification.** A local window with one folder that has a configuration, and that the user hasn't
+  dismissed, shows S186/S426 with "Reopen in Container" and "Don't Show Again...", on containers-11's
+  `onStartupFinished` activation. It's the first thing a user meets, and without it a configured folder looks broken.
+
 ### Increment 2
 
 The order is the PM's:
@@ -68,7 +73,7 @@ The order is the PM's:
   forwards ports over the connection, as for ssh-remote (contracts §3.2, connect-34).
 - **Shutdown:** F-0417 and F-0502 BR-10. Until then, a container keeps running after its last window closes.
   That's a release note, and the spec's three conflicting texts on Reopen Folder Locally are a question to the room.
-- **The rest:** the reopen notification (F-0402); the extension-cache half of F-0419; Features (F-0414); Podman;
+- **The rest:** the extension-cache half of F-0419; Features (F-0414); Podman;
   `DOCKER_HOST` and contexts from settings (F-0205).
 
 ### Later

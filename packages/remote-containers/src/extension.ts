@@ -3,7 +3,7 @@
  * proposed-API setup and the strings of the notices.
  */
 
-import {readdir, readFile, stat} from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
@@ -17,6 +17,7 @@ import {downloadPortOf, nodeClientFiles} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
 import {activateContainers} from './activation.ts';
 import {serializedUriOf} from './authority/payload.ts';
+import {configFilesOf, configSurfacesOf} from './config/config-ports.ts';
 import {type CliBridge, cliBridgeOf} from './cli/cli-bridge.ts';
 import {cliPathsOf} from './cli/cli-paths.ts';
 import {nodeCliHost} from './cli/node-cli-host.ts';
@@ -35,9 +36,18 @@ import {
   settings,
   standDown,
 } from './identifiers.generated.ts';
+import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
-import {licenceModalOf} from './surfaces/licence-modal.ts';
+import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
+import {rebuildContainer} from './open/rebuild.ts';
 import {reopenInContainer} from './open/reopen.ts';
+import {licenceModalOf} from './surfaces/licence-modal.ts';
+import {
+  lifecyclePresenterOf,
+  type StatusProgressPort,
+  type TerminalPort,
+} from './surfaces/lifecycle-terminal.ts';
+import {recoveryPortsOf} from './surfaces/recovery-editor.ts';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
 const STAND_DOWN_WARNING =
@@ -63,8 +73,75 @@ interface Manifest {
   contributes?: {commands?: Array<{command: string; title: string}>};
 }
 
+/** The folders the window has open, by scheme and path on this machine. */
+function windowFolders(): Array<{scheme: string; fsPath: string}> {
+  return (vscode.workspace.workspaceFolders ?? []).map(folder => ({
+    scheme: folder.uri.scheme,
+    fsPath: folder.uri.fsPath,
+  }));
+}
+
 function translate(template: string): string {
   return vscode.l10n.t(template);
+}
+
+/** The editor's terminals as the lifecycle presenter uses them: a pseudoterminal that is transient and takes focus. */
+function terminalPortOf(): TerminalPort {
+  return {
+    open: (name, onInput, onClosed) => {
+      const written = new vscode.EventEmitter<string>();
+      const early: string[] = [];
+      let ready = false;
+      const terminal = vscode.window.createTerminal({
+        name,
+        isTransient: true,
+        // eslint-disable-next-line id-length -- the editor's name for the option
+        pty: {
+          onDidWrite: written.event,
+          open: () => {
+            ready = true;
+            for (const text of early.splice(0)) {
+              written.fire(text);
+            }
+          },
+          close: onClosed,
+          handleInput: onInput,
+        },
+      });
+      terminal.show(false);
+      return {
+        write: text => {
+          if (ready) {
+            written.fire(text);
+          } else {
+            early.push(text);
+          }
+        },
+        close: () => {
+          terminal.dispose();
+        },
+      };
+    },
+  };
+}
+
+/** The editor's window progress (its status bar entry) as the lifecycle presenter uses it. */
+function statusProgressPortOf(): StatusProgressPort {
+  return {
+    show: title => {
+      const ender: {finish?: () => void} = {};
+      const finished = new Promise<void>(resolve => {
+        ender.finish = resolve;
+      });
+      void vscode.window.withProgress(
+        {location: vscode.ProgressLocation.Window, title},
+        () => finished,
+      );
+      return () => {
+        ender.finish?.();
+      };
+    },
+  };
 }
 
 /** Called by the editor when the extension activates. */
@@ -158,33 +235,77 @@ export async function activate(
       function firstFolder(): string | undefined {
         return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       }
+      function rebuildHandler(buildNoCache: boolean): () => Promise<void> {
+        return rebuildContainer(
+          {
+            window: {
+              remoteName: () => vscode.env.remoteName,
+              remoteAuthority: () => vscode.env.remoteAuthority,
+              reload: () =>
+                vscode.commands.executeCommand('workbench.action.reloadWindow'),
+            },
+            intents: context.globalState,
+            now: Date.now,
+            logger: served.logger,
+          },
+          {buildNoCache},
+        );
+      }
       return {
         reopenInContainer: {
           execute: reopenInContainer({
             window: {
               remoteName: () => vscode.env.remoteName,
-              folders: () =>
-                (vscode.workspace.workspaceFolders ?? []).map(folder => ({
-                  scheme: folder.uri.scheme,
-                  fsPath: folder.uri.fsPath,
-                })),
+              folders: windowFolders,
               isTrusted: () => vscode.workspace.isTrusted,
               serializedFile: file => serializedUriOf(vscode.Uri.file(file)),
             },
-            files: {
-              isFile: file =>
-                stat(file).then(
-                  found => found.isFile(),
-                  () => false,
-                ),
-              subfolders: folder =>
-                readdir(folder, {withFileTypes: true}).then(
-                  entries =>
-                    entries
-                      .filter(entry => entry.isDirectory())
-                      .map(entry => entry.name),
-                  () => [],
-                ),
+            config: {
+              files: configFilesOf(
+                {
+                  readDirectory: folder =>
+                    vscode.workspace.fs.readDirectory(vscode.Uri.file(folder)),
+                  readFile: file =>
+                    vscode.workspace.fs.readFile(vscode.Uri.file(file)),
+                },
+                vscode.FileType,
+              ),
+              surfaces: configSurfacesOf(
+                {
+                  createQuickPick: () => vscode.window.createQuickPick(),
+                  showWarningMessage: (message, options, ...items) =>
+                    vscode.window.showWarningMessage(
+                      message,
+                      options,
+                      ...items,
+                    ),
+                  showInformationMessage: message =>
+                    vscode.window.showInformationMessage(message),
+                  showTextDocument: (file, options) =>
+                    vscode.window.showTextDocument(
+                      vscode.Uri.file(file),
+                      options,
+                    ),
+                  iconOf: name => new vscode.ThemeIcon(name),
+                },
+                {
+                  showError: (message, detail, items) =>
+                    Promise.resolve(
+                      vscode.window.showErrorMessage(
+                        message,
+                        {modal: true, detail},
+                        ...items,
+                      ),
+                    ),
+                  revealLog: () => {
+                    logChannel?.show(true);
+                  },
+                },
+                served.logger,
+              ),
+              compare: new Intl.Collator(undefined, {sensitivity: 'accent'})
+                .compare,
+              translate,
             },
             settings: {
               dockerPath: () =>
@@ -213,13 +334,33 @@ export async function activate(
             logger: served.logger,
           }),
         },
+        rebuildContainer: {execute: rebuildHandler(false)},
+        rebuildContainerNoCache: {execute: rebuildHandler(true)},
       };
     },
   });
   if (result.kind === 'serving') {
     const {served} = result;
     const logger = served.logger;
+    void openPendingEdit({
+      memento: context.globalState,
+      remoteName: () => vscode.env.remoteName,
+      folders: windowFolders,
+      now: Date.now,
+      open: file =>
+        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file)),
+      logger,
+    });
     const host = identifierHost(vscode, manifest);
+    void moveInstallIfLocal({
+      userValue: key =>
+        vscode.workspace.getConfiguration().inspect(key)?.globalValue,
+      writeUserValue: (key, value) =>
+        vscode.workspace
+          .getConfiguration()
+          .update(key, value, vscode.ConfigurationTarget.Global),
+      logger,
+    });
     const scheduler = {setTimer: nodeTimer};
     const clock = {
       now: Date.now,
@@ -254,9 +395,20 @@ export async function activate(
     const connector = containerConnectorOf({
       engineFor: file => served.preflight.engineFor(file),
       cliFor: environment => bridgeFor(environment, logger),
-      lifecycleFor: (engine, bridge) =>
-        // eslint-disable-next-line id-length -- the lifecycle's dependency is named cli
-        containerLifecycleOf({engine, cli: bridge, logger}),
+      lifecycleFor: (engine, bridge, presenter) =>
+        containerLifecycleOf({
+          engine,
+          // eslint-disable-next-line id-length -- the lifecycle's dependency is named cli
+          cli: bridge,
+          logger,
+          presenter,
+          clock: Date.now,
+        }),
+      lifecyclePresenter: lifecyclePresenterOf(
+        terminalPortOf(),
+        statusProgressPortOf(),
+        translate,
+      ),
       settings: () => {
         const configuration = vscode.workspace.getConfiguration();
         const written = configuration.inspect(
@@ -271,10 +423,17 @@ export async function activate(
           serverDownloadFolder: configuration.get(
             settings.serverDownloadFolder.id,
           ),
+          defaultExtensions: configuration.inspect(
+            settings.defaultExtensions.id,
+          )?.globalValue,
+          deprecatedDefaultExtensions: configuration.inspect(
+            settings.defaultExtensions.legacyId,
+          )?.globalValue,
         };
       },
       preflight: served.preflight,
       editorEnvironment: process.env,
+      intents: context.globalState,
       runServer: (request, serverSettings) =>
         runServerSteps(
           {
@@ -316,21 +475,16 @@ export async function activate(
         }),
         labels: vscode.workspace,
         commands: host,
-        presenter: {
-          showError: (message, detail, items) =>
-            Promise.resolve(
-              vscode.window.showErrorMessage(
-                message,
-                {modal: true, detail},
-                ...items,
-              ),
+        presenter: recoveryPortsOf(vscode, {
+          keepEdit: (folder, configFile) =>
+            storePendingEdit(
+              context.globalState,
+              folder,
+              configFile,
+              Date.now(),
             ),
-          openSetting: setting =>
-            vscode.commands.executeCommand(
-              'workbench.action.openSettings',
-              setting,
-            ),
-        },
+          logger,
+        }),
         translate,
       },
       connector,
@@ -339,6 +493,7 @@ export async function activate(
         revealLog: () => {
           logChannel?.show(true);
         },
+        logger,
       },
     );
     context.subscriptions.push(

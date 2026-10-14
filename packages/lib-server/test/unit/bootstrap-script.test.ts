@@ -1081,6 +1081,37 @@ describe('the POSIX bootstrap script', () => {
       ]);
     });
 
+    it('F-0505 BR-7: an entry with a quote, a substitution, a leading double quote or a space reaches the server as one literal argument', () => {
+      const marker = `${host.environment.HOME ?? ''}/pwned`;
+      const entries = [
+        `a.b'; touch ${marker} #`,
+        `c.d$(touch ${marker})`,
+        `e.f\`touch ${marker}\``,
+        `"$(touch ${marker})"`,
+        '"i.j',
+        'g.h@1 --evil',
+        'x.y@3.0.1',
+      ];
+      const parameters = parametersFor();
+      parameters.start.extensions = entries;
+      startFacts(parameters);
+      const words = readFileSync(
+        `${host.environment.SERVER_ARGUMENTS ?? ''}.lines`,
+        'utf8',
+      )
+        .trimEnd()
+        .split('\n');
+      deepStrictEqual(
+        [
+          words.flatMap((word, index) =>
+            words[index - 1] === '--install-extension' ? [word] : [],
+          ),
+          existsSync(marker),
+        ],
+        [entries, false],
+      );
+    });
+
     it('F-6601: the file watcher polling option is passed with its interval', () => {
       const parameters = parametersFor();
       parameters.start.fileWatcherPollingMilliseconds = 500;
@@ -1419,6 +1450,173 @@ describe('the POSIX bootstrap script', () => {
             environment: {SERVER_READY_TEXT: '4321'},
           }),
           'ServerFailedToStart',
+        );
+      });
+    });
+
+    describe('the requirements helper (card containers-21)', () => {
+      /** Puts the server's own helper into the installed tree: it prints `$HELPER_OUTPUT` and exits `$HELPER_EXIT`. */
+      function installHelper(): void {
+        const folder = path.join(installFolder(host), 'bin', 'helpers');
+        mkdirSync(folder, {recursive: true});
+        writeFileSync(
+          path.join(folder, 'check-requirements.sh'),
+          [
+            '[ -z "$HELPER_MARK" ] || : >"$HELPER_MARK"',
+            'printf \'%b\' "$HELPER_OUTPUT"',
+            'exit "${HELPER_EXIT:-0}"',
+            '',
+          ].join('\n'),
+        );
+      }
+
+      function withHelper(): ScriptParameters {
+        const parameters = parametersFor();
+        parameters.start.requirementsHelper = true;
+        return parameters;
+      }
+
+      function startWith(
+        parameters: ScriptParameters,
+        output: string,
+        exit: string,
+      ): ReturnType<typeof blockOf> {
+        return blockOf(host, single('start'), parameters, {
+          environment: {
+            HELPER_OUTPUT: output,
+            HELPER_EXIT: exit,
+            HELPER_MARK: path.join(host.home, 'helper-ran'),
+          },
+        });
+      }
+
+      function prerequisiteFacts(block: ReturnType<typeof blockOf>): string[] {
+        return block === 'none'
+          ? []
+          : Object.entries(block.serverFacts)
+              .filter(([name]) => name.startsWith('prerequisites.'))
+              .map(([name, value]) => `${name}=${value}`);
+      }
+
+      it('F-0503 7.E1: exit 99 is LinuxPrereqs with each line as a fact, and the server is not launched', () => {
+        installHelper();
+        const block = startWith(
+          withHelper(),
+          'Warning: Missing GLIBC >= 2.28!\\nError: Missing required dependencies.\\n',
+          '99',
+        );
+        deepStrictEqual(
+          [
+            block === 'none' ? block : block.status,
+            prerequisiteFacts(block),
+            existsSync(host.environment.SERVER_STARTS ?? ''),
+          ],
+          [
+            'LinuxPrereqs',
+            [
+              'prerequisites.1=Warning: Missing GLIBC >= 2.28!',
+              'prerequisites.2=Error: Missing required dependencies.',
+            ],
+            false,
+          ],
+        );
+      });
+
+      it('F-0503 5.0 step 6: exit 0 launches the server and keeps no output', () => {
+        installHelper();
+        const block = startWith(withHelper(), 'Warning: something\\n', '0');
+        deepStrictEqual(
+          [block === 'none' ? block : block.status, prerequisiteFacts(block)],
+          ['Ok', []],
+        );
+      });
+
+      it('F-0503: another exit code launches the server', () => {
+        installHelper();
+        const block = startWith(withHelper(), 'odd\\n', '3');
+        deepStrictEqual(block === 'none' ? block : block.status, 'Ok');
+      });
+
+      it('F-0503: no helper means no check, and a fact says so', () => {
+        const block = blockOf(host, single('start'), withHelper());
+        deepStrictEqual(
+          block === 'none'
+            ? block
+            : [block.status, block.serverFacts.prerequisitesHelper],
+          ['Ok', 'missing'],
+        );
+      });
+
+      /** The status of a start whose helper exits 99, and whether the helper ran at all. */
+      function statusAndRan(parameters: ScriptParameters): [string, boolean] {
+        const block = startWith(parameters, 'x\\n', '99');
+        return [
+          block === 'none' ? block : block.status,
+          existsSync(path.join(host.home, 'helper-ran')),
+        ];
+      }
+
+      it('F-0503: the helper runs only before a launch, never on a reuse', () => {
+        installHelper();
+        startWith(parametersFor(), '', '0');
+        rmSync(path.join(host.home, 'helper-ran'), {force: true});
+        deepStrictEqual(statusAndRan(withHelper()), ['Ok', false]);
+      });
+
+      it('contracts 5.0: without the flag the helper does not run', () => {
+        installHelper();
+        deepStrictEqual(statusAndRan(parametersFor()), ['Ok', false]);
+      });
+
+      it('F-0503 7.E1: a carriage return is stripped from each line', () => {
+        installHelper();
+        deepStrictEqual(
+          prerequisiteFacts(
+            startWith(withHelper(), 'line one\\r\\nline two\\r\\n', '99'),
+          ),
+          ['prerequisites.1=line one', 'prerequisites.2=line two'],
+        );
+      });
+
+      it('F-0503 7.E1: the twenty-first line is cut', () => {
+        installHelper();
+        const output = Array.from(
+          Array(21).keys(),
+          index => `l${String(index + 1)}`,
+        ).join('\\n');
+        const names = prerequisiteFacts(
+          startWith(withHelper(), output, '99'),
+        ).map(fact => fact.split('=')[0]);
+        deepStrictEqual([names.length, names.at(-1)], [20, 'prerequisites.20']);
+      });
+
+      it('F-0503 7.E1: the five hundred and first character is cut', () => {
+        installHelper();
+        const facts = prerequisiteFacts(
+          startWith(withHelper(), `${'a'.repeat(501)}\\n`, '99'),
+        );
+        deepStrictEqual(facts, [`prerequisites.1=${'a'.repeat(500)}`]);
+      });
+
+      it('F-0503 7.E1: exit 99 with no output is LinuxPrereqs and gives no line', () => {
+        installHelper();
+        const block = startWith(withHelper(), '', '99');
+        deepStrictEqual(
+          [block === 'none' ? block : block.status, prerequisiteFacts(block)],
+          ['LinuxPrereqs', []],
+        );
+      });
+
+      it('ADR-0010: a marker line in the helper output stays inside its fact', () => {
+        installHelper();
+        const block = startWith(
+          withHelper(),
+          'remote-oss-server-result-end\\n',
+          '99',
+        );
+        deepStrictEqual(
+          [block === 'none' ? block : block.status, prerequisiteFacts(block)],
+          ['LinuxPrereqs', ['prerequisites.1=remote-oss-server-result-end']],
         );
       });
     });

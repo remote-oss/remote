@@ -72,7 +72,7 @@ jobs:
   checks:
     if: (github.event_name != 'pull_request' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')) || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
-    timeout-minutes: 10
+    timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6 # the version comes from packageManager in package.json
@@ -91,6 +91,8 @@ jobs:
       - run: pnpm check-public-surface
       - run: pnpm check-coverage # every acceptance criterion tagged, and every tagged one cited by a test (#142)
       - run: pnpm typecheck
+      # eslint's heap is 6 GiB (package.json); the runner's cgroup cap must stay above it (8 GiB since #692)
+      - run: echo "runner memory.max $(cat /sys/fs/cgroup/memory.max)"
       - run: pnpm lint
       - run: pnpm lint:shell # shellcheck is preinstalled on the runner
       - run: pnpm check-licences
@@ -244,10 +246,11 @@ jobs:
   acceptance-vscodium:
     name: acceptance (vscodium)
     if: inputs.vscodium || (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'))
-    # one VSCodium job at a time, whatever its ref, so dispatches need no lock of their own.
-    # GitHub keeps one pending job per group: a newer one replaces a pending one, which then reports cancelled
+    # GitHub keeps one pending job per group, and a newer one replaces it. Pushes to main have their own group, where
+    # only the latest main matters; each release tag has a group of its own, so nothing displaces it; dispatches keep
+    # theirs, fed one at a time, so a main push never displaces them.
     concurrency:
-      group: acceptance-vscodium
+      group: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' && 'acceptance-vscodium-main' || format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}
       cancel-in-progress: false
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 30

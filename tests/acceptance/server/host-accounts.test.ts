@@ -315,7 +315,7 @@ describe("tooling-29: the run's further keys and the certificate-only account", 
     } finally {
       process.env.HARNESS_AGENT_SOCKET = saved.socket;
       process.env.HARNESS_RUN_FOLDER = saved.folder;
-      agent.stop();
+      await agent.stop();
     }
   }
 

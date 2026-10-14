@@ -4,8 +4,8 @@
  *
  *     node tools/check-coverage.ts
  *
- * The files are those of `COVERAGE_SCOPES` under docs/architecture/catalogue (the first slice of Remote - SSH, and
- * Remote - Containers release 1), each with its own features: `ac`, `tag`, `reason` per line. An id's number may end in
+ * The files are those of `COVERAGE_SCOPES` under docs/architecture/catalogue (the first slice of Remote - SSH, Remote
+ * - Containers release 1, and the first slice of Remote Explorer), each with its own features: `ac`, `tag`, `reason` per line. An id's number may end in
  * a lower-case letter (`AC-17b`). A test row proves the
  * criteria its name starts with (feature ids, each with its `AC-` numbers, after a space or a dot, in a `, `-separated list, then a colon). The check fails when a line is malformed, when a tag asks for a
  * kind of row that does not cite the criterion, when a row cites a criterion the file does not have, or when an
@@ -44,6 +44,9 @@ type Tag = (typeof TAGS)[number];
 
 /** The tags whose line must say why. */
 const REASON_TAGS: readonly string[] = ['core', 'deferred'];
+
+/** The set whose missing file makes the check unreadable; the others' missing files are skipped. */
+const READABLE_SET = 'slice1';
 
 const AC_PATTERN = /^(F-\d{4})\.AC-(\d+)([a-z]?)$/;
 
@@ -267,19 +270,27 @@ function linesOf(file: string, text: string, problems: string[]): Line[] {
   return lines;
 }
 
-/** Checks the tags of `file`'s lines against their reasons. */
+/** Checks the tags of a set's lines against their reasons, the set's deferred reasons included. */
 function reasonProblems(
-  file: string,
+  scope: CoverageScope,
   lines: readonly Line[],
   problems: string[],
 ): void {
+  const deferredReasons = scope.deferredReasons;
   for (const line of lines) {
     const needs = REASON_TAGS.includes(line.tagName);
+    const withinSet = deferredReasons?.includes(line.reason) ?? true;
     if (needs && line.reason === '') {
-      problems.push(`${place(file, line.number)}: ${line.id} needs a reason`);
+      problems.push(
+        `${place(scope.file, line.number)}: ${line.id} needs a reason`,
+      );
+    } else if (line.tagName === 'deferred' && !withinSet) {
+      problems.push(
+        `${place(scope.file, line.number)}: ${line.id} gives the reason "${line.reason}", which isn't one of the set's`,
+      );
     } else if (!needs && line.reason !== '') {
       problems.push(
-        `${place(file, line.number)}: ${line.id} has a reason, which is only for core or deferred`,
+        `${place(scope.file, line.number)}: ${line.id} has a reason, which is only for core or deferred`,
       );
     }
   }
@@ -352,26 +363,33 @@ function countsOf(lines: readonly Line[]): Record<Tag, number> {
   return counts;
 }
 
-/** Runs the check over the repository at `root`, for every coverage file of `scopes`. */
+/**
+ * Runs the check over the repository at `root`, for every coverage file of `scopes` that is present: a missing file of
+ * the slice-1 set makes the check unreadable, a missing file of any other set is skipped.
+ */
 export function checkCoverage(
   root: string,
   scopes: readonly CoverageScope[] = COVERAGE_SCOPES,
 ): CoverageReport {
-  const missing = scopes.find(
-    scope => !existsSync(path.join(root, scope.file)),
+  const sliceMissing = scopes.find(
+    scope =>
+      scope.name === READABLE_SET && !existsSync(path.join(root, scope.file)),
   );
-  if (missing !== undefined) {
-    return {kind: 'unreadable', file: missing.file};
+  if (sliceMissing !== undefined) {
+    return {kind: 'unreadable', file: sliceMissing.file};
   }
+  const present = scopes.filter(scope =>
+    existsSync(path.join(root, scope.file)),
+  );
   const problems: string[] = [];
   const rows = rowsOf(root);
-  const counts = scopes.map(scope => {
+  const counts = present.map(scope => {
     const lines = linesOf(
       scope.file,
       readFileSync(path.join(root, scope.file), 'utf8'),
       problems,
     );
-    reasonProblems(scope.file, lines, problems);
+    reasonProblems(scope, lines, problems);
     rowProblems(scope, lines, rows, problems);
     return {file: scope.file, counts: countsOf(lines)};
   });

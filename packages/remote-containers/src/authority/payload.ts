@@ -3,6 +3,7 @@
  * the Docker context and the configuration file, and its reading back. A plain host path in hex is the legacy form.
  */
 
+import type {DecodedTarget} from 'lib-authority';
 import {recordOf} from '../json-record.ts';
 
 /** A `file` or `vscode-fileHost` URI as the editor writes it, in that member order. */
@@ -149,4 +150,17 @@ export function devContainerTargetOf(
     return {malformed: 'json'};
   }
   return folderOf(parsed);
+}
+
+/** The folder a window's decoded target names, or none when it has no target yet or the target names no folder. */
+export function decodedFolderOf(
+  decoded: DecodedTarget | undefined,
+): DevContainerFolder | undefined {
+  const target =
+    decoded === undefined || !('payload' in decoded.target)
+      ? undefined
+      : devContainerTargetOf(decoded.target.payload);
+  return target !== undefined && 'kind' in target && target.kind === 'folder'
+    ? target
+    : undefined;
 }

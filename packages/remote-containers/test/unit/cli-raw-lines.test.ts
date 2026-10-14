@@ -1,8 +1,16 @@
 import {deepStrictEqual} from 'node:assert';
 import {rawHoldOf, type RawEvent} from '../../src/cli/cli-raw-lines.ts';
 
-function chunk(text: string, channel?: string): RawEvent {
-  return {kind: 'log', level: 3, text, channel};
+function chunk(text: string, channel?: string, timestamp?: number): RawEvent {
+  return {
+    kind: 'log',
+    level: 3,
+    text,
+    channel,
+    type: 'raw',
+    timestamp,
+    startTimestamp: undefined,
+  };
 }
 
 describe('the output of lifecycle commands held by line (card containers-04)', () => {
@@ -19,6 +27,24 @@ describe('the output of lifecycle commands held by line (card containers-04)', (
     deepStrictEqual(
       [hold.push(chunk('echo s3cr3t-')), hold.push(chunk('token\n'))],
       [[], [chunk('echo s3cr3t-token\n')]],
+    );
+  });
+
+  it("F-0415 5.1: a joined event keeps the first chunk's timestamp", () => {
+    const hold = rawHoldOf();
+    deepStrictEqual(
+      [
+        hold.push(chunk('ab', 'postCreate', 100)),
+        hold.push(chunk('cd', 'postCreate', 200)),
+        hold.push(chunk('ef\ngh', 'postCreate', 300)),
+        hold.push(chunk('ij\n', 'postCreate', 400)),
+      ],
+      [
+        [],
+        [],
+        [chunk('abcdef\n', 'postCreate', 100)],
+        [chunk('ghij\n', 'postCreate', 300)],
+      ],
     );
   });
 

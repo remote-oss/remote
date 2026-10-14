@@ -138,7 +138,10 @@ class FakeEditor implements ResolverEditor {
   refuses = false;
   disposed = 0;
   progressRuns: Array<ProgressRequest & {updates: string[]}> = [];
+  progressEnded = 0;
   actions: string[] = [];
+  timers: Array<{milliseconds: number; callback: () => void; live: boolean}> =
+    [];
   readonly progress = {
     withProgress: async <Result>(
       request: ProgressRequest,
@@ -148,11 +151,33 @@ class FakeEditor implements ResolverEditor {
     ): Promise<Result> => {
       const entry = {...request, updates: [] as string[]};
       this.progressRuns.push(entry);
-      return task((title, details) => {
-        entry.updates.push(details ? `${title} (details)` : title);
-      });
+      try {
+        return await task((title, details) => {
+          entry.updates.push(details ? `${title} (details)` : title);
+        });
+      } finally {
+        this.progressEnded += 1;
+      }
     },
   };
+
+  startTimer(milliseconds: number, callback: () => void): () => void {
+    const timer = {milliseconds, callback, live: true};
+    this.timers.push(timer);
+    return () => {
+      timer.live = false;
+    };
+  }
+
+  /** Runs the timers that are still live, as if their time had passed. */
+  fireTimers(): void {
+    for (const timer of this.timers) {
+      if (timer.live) {
+        timer.live = false;
+        timer.callback();
+      }
+    }
+  }
 
   registerRemoteAuthorityResolver(
     prefix: string,
@@ -445,6 +470,7 @@ describe('the resolver host: a connection (F-2501)', () => {
 describe('the resolver host: progress (F-2304)', () => {
   it("F-2304: the progress starts with the extension's title", async () => {
     const context = await setup();
+    context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     deepStrictEqual(
       context.editor.progressRuns.map(entry => entry.title),
@@ -486,6 +512,7 @@ describe('the resolver host: progress (F-2304)', () => {
 
   it('F-2304: the progress offers Cancel only to a family that allows it', async () => {
     const context = await setup({cancellable: true});
+    context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     deepStrictEqual(
       context.editor.progressRuns.map(entry => entry.cancellable),
@@ -495,6 +522,7 @@ describe('the resolver host: progress (F-2304)', () => {
 
   it('F-2304.AC-2: BR-2, the progress of the ssh family has no Cancel', async () => {
     const context = await setup();
+    context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     deepStrictEqual(
       context.editor.progressRuns.map(entry => entry.cancellable),
@@ -504,6 +532,7 @@ describe('the resolver host: progress (F-2304)', () => {
 
   it("F-2304: the user's Cancel cancels the connector", async () => {
     const context = await setup({cancellable: true});
+    context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     context.editor.progressRuns[0]?.onCancel();
     deepStrictEqual(context.connector.cancels, 1);
@@ -511,6 +540,7 @@ describe('the resolver host: progress (F-2304)', () => {
 
   it('F-2304: the details link reveals the detail of the connect', async () => {
     const context = await setup();
+    context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     context.editor.progressRuns[0]?.onDetails();
     deepStrictEqual(context.connector.reveals, 1);
@@ -526,6 +556,83 @@ describe('the resolver host: progress (F-2304)', () => {
     const context = await setup();
     await resolve(context);
     deepStrictEqual(context.connector.listenerCount(), 2);
+  });
+});
+
+describe('the resolver host: the progress opens lazily (card connect-78)', () => {
+  it('F-2304 6.1: a connect whose phases are all quiet and that settles before the fallback opens no progress', async () => {
+    const context = await setup();
+    context.connector.phases = [
+      {name: 'initializing', quiet: true},
+      {name: 'settingUpTunnel', quiet: true},
+    ];
+    await resolve(context);
+    context.editor.fireTimers();
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.length,
+        context.editor.timers.map(timer => timer.milliseconds),
+      ],
+      [0, [1500]],
+    );
+  });
+
+  it('F-2304 BR-11: the first phase that is not quiet opens the progress with its title', async () => {
+    const context = await setup();
+    context.connector.phases = [
+      {name: 'initializing', quiet: true},
+      {name: 'downloading'},
+    ];
+    await resolve(context);
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.map(entry => entry.title),
+        context.editor.progressRuns[0]?.updates,
+      ],
+      [['starting'], ['phase downloading']],
+    );
+  });
+
+  it('F-2304 BR-11: a connect with no phase that opens it shows the progress at the fallback', async () => {
+    const context = await setup();
+    context.connector.phases = [
+      {name: 'initializing', details: true, quiet: true},
+    ];
+    context.connector.during = () => {
+      context.editor.fireTimers();
+    };
+    await resolve(context);
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.map(entry => entry.title),
+        context.editor.progressRuns[0]?.updates,
+      ],
+      [['starting'], ['phase initializing (details)']],
+    );
+  });
+
+  it('contracts §3.2: once open, a quiet phase updates the progress', async () => {
+    const context = await setup();
+    context.connector.phases = [
+      {name: 'downloading'},
+      {name: 'settingUpTunnel', quiet: true},
+    ];
+    await resolve(context);
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.length,
+        context.editor.progressRuns[0]?.updates,
+      ],
+      [1, ['phase downloading', 'phase settingUpTunnel']],
+    );
+  });
+
+  it('contracts §3.2: the progress ends when the connect settles', async () => {
+    const context = await setup();
+    context.connector.phases = [{name: 'downloading'}];
+    await resolve(context);
+    await Promise.resolve();
+    deepStrictEqual(context.editor.progressEnded, 1);
   });
 });
 
@@ -802,6 +909,7 @@ describe('the resolver host: leaving the remote (F-2412 AC-17)', () => {
 
   it('F-2412 AC-17: stay() puts the resolver back', async () => {
     const context = await setup();
+    context.connector.phases = [{name: 'installing'}];
     handleOf(context.registration).leave();
     handleOf(context.registration).stay();
     await resolve(context);
@@ -928,5 +1036,126 @@ describe('the resolver host: a registration the editor refuses', () => {
       () => 'refused',
     );
     deepStrictEqual([outcome, connector.listenerCount()], ['refused', 0]);
+  });
+});
+
+describe('the resolver host: the canonical mapping (card containers-22)', () => {
+  /** A dev-container setup whose mapping records what it was given and answers `answer`. */
+  async function mapping(
+    answer: () => Promise<string | undefined>,
+  ): Promise<{context: Setup; given: unknown[]; warned: string[]}> {
+    const given: unknown[] = [];
+    const warned: string[] = [];
+    const context = await setup({
+      family: 'dev-container',
+      canonical: {
+        pathOf: (uri, decoded) => {
+          given.push([uri, decoded]);
+          return answer();
+        },
+        warn: message => {
+          warned.push(message);
+        },
+      },
+    });
+    return {context, given, warned};
+  }
+
+  it('contracts §3.2: a family with a mapping registers canonicalPath', async () => {
+    const {context} = await mapping(() => Promise.resolve(undefined));
+    deepStrictEqual(
+      typeof resolverOf(context.editor).canonicalPath,
+      'function',
+    );
+  });
+
+  it('contracts §3.2: a family without one registers none', async () => {
+    const context = await setup();
+    deepStrictEqual('canonicalPath' in resolverOf(context.editor), false);
+  });
+
+  it('contracts §3.2: the mapping gets the decoded target of this family', async () => {
+    const {context, given} = await mapping(() => Promise.resolve('/home/u/x'));
+    const answer = await resolverOf(context.editor).canonicalPath?.(
+      'dev-container+7b7d',
+      '/workspaces/x',
+    );
+    deepStrictEqual(
+      [answer, given],
+      [
+        '/home/u/x',
+        [
+          [
+            {authority: 'dev-container+7b7d', path: '/workspaces/x'},
+            {
+              family: 'dev-container',
+              target: {payload: '7b7d'},
+              rawHostString: '7b7d',
+            },
+          ],
+        ],
+      ],
+    );
+  });
+
+  it("contracts §3.2: another family's authority maps to nothing", async () => {
+    const {context, given} = await mapping(() => Promise.resolve('/x'));
+    deepStrictEqual(
+      [
+        await resolverOf(context.editor).canonicalPath?.('ssh-remote+h', '/x'),
+        given,
+      ],
+      [undefined, []],
+    );
+  });
+
+  it('contracts §3.2: a malformed authority maps to nothing', async () => {
+    const {context, given} = await mapping(() => Promise.resolve('/x'));
+    deepStrictEqual(
+      [
+        await resolverOf(context.editor).canonicalPath?.('dev-container', '/x'),
+        given,
+      ],
+      [undefined, []],
+    );
+  });
+
+  it('contracts §3.2: a mapping that rejects answers nothing and warns', async () => {
+    const {context, warned} = await mapping(() =>
+      Promise.reject(new Error('boom')),
+    );
+    deepStrictEqual(
+      [
+        await resolverOf(context.editor).canonicalPath?.(
+          'dev-container+7b7d',
+          '/workspaces/x',
+        ),
+        warned,
+      ],
+      [
+        undefined,
+        [
+          'the canonical URI of dev-container+7b7d/workspaces/x could not be mapped: Error: boom',
+        ],
+      ],
+    );
+  });
+
+  it('contracts §3.2: the mapping may answer later', async () => {
+    const {context} = await mapping(
+      () =>
+        new Promise(resolve => {
+          setImmediate(() => {
+            resolve('/late');
+          });
+        }),
+    );
+    deepStrictEqual(
+      await resolverOf(context.editor).canonicalPath?.(
+        'dev-container+7b7d',
+        '/workspaces/x',
+      ),
+      '/late',
+    );
   });
 });

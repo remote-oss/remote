@@ -100,6 +100,9 @@ export interface Scene {
   /** What the version query answers: its status and stderr. */
   version: {status: number; stderr: string};
   prepared: ContainerRequest[];
+  /** What the extension's store holds under the rebuild key, and the error its reading throws, if any. */
+  intentStore: unknown;
+  intentError: Error | undefined;
   configurationReads: Array<{
     target: CliTarget;
     containerId: string | undefined;
@@ -118,11 +121,21 @@ export interface Scene {
   outcome: ContainerOutcome | (() => Promise<ContainerOutcome>);
   steps: ContainerStep[];
   cliEvents: CliEvent[];
-  configuration: Awaited<ReturnType<CliBridge['readConfiguration']>>;
+  /** What the configuration read answers; a function to hold it or to change it from one read to the next. */
+  configuration:
+    | Awaited<ReturnType<CliBridge['readConfiguration']>>
+    | (() => ReturnType<CliBridge['readConfiguration']>);
+  /** The delay of each timer set, in order. */
+  timerDelays: number[];
+  /** The callbacks of the timers still pending. */
+  timers: Array<() => void>;
   server: ServerResult | (() => Promise<ServerResult>);
   phasesOfServer: Array<'installing' | 'startingServer'>;
   relayOutcome: 'open' | Failed;
   dockerPath: unknown;
+  /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
+  defaultExtensions: unknown;
+  deprecatedDefaultExtensions: unknown;
   /** The exit statuses of the next `kill -0` runs. */
   killStatuses: number[];
   /** What the runs over the channel were given on their input, as text. */
@@ -174,6 +187,8 @@ export function sceneOf(
     inspect: {answer: {status: 'running', startedAt: '2026-10-14T10:00:00Z'}},
     version: {status: 0, stderr: ''},
     prepared: [],
+    intentStore: undefined,
+    intentError: undefined,
     configurationReads: [],
     serverRequests: [],
     relayRequests: [],
@@ -195,9 +210,13 @@ export function sceneOf(
     phasesOfServer: ['installing', 'startingServer'],
     relayOutcome: 'open',
     dockerPath: 'docker',
+    defaultExtensions: undefined,
+    deprecatedDefaultExtensions: undefined,
     killStatuses: [],
     killScripts: [],
     relayGate: undefined,
+    timerDelays: [],
+    timers: [],
     ...overrides,
   };
   const kills = fakeEngine(
@@ -278,7 +297,9 @@ export function sceneOf(
       for (const event of scene.cliEvents) {
         onEvent(event);
       }
-      return Promise.resolve(scene.configuration);
+      return typeof scene.configuration === 'function'
+        ? scene.configuration()
+        : Promise.resolve(scene.configuration);
     },
   };
   const lifecycle: ContainerLifecycle = {
@@ -308,20 +329,45 @@ export function sceneOf(
       return bridge;
     },
     lifecycleFor: () => lifecycle,
+    lifecyclePresenter: {
+      output: () => undefined,
+      backgroundStarted: () => undefined,
+      ended: () => undefined,
+    },
     settings: () => ({
       dockerPath: scene.dockerPath,
       serverDownloadBaseUrl: undefined,
       serverDownloadFolder: undefined,
+      defaultExtensions: scene.defaultExtensions,
+      deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,
     }),
     preflight: {
       logger: createLogger(sink, {minimumLevel: () => 'debug'}),
       searchPath: () => '/usr/bin',
       clock: () => 0,
-      setTimer: () => () => undefined,
+      setTimer: (milliseconds, callback) => {
+        scene.timerDelays.push(milliseconds);
+        scene.timers.push(callback);
+        return () => {
+          scene.timers = scene.timers.filter(each => each !== callback);
+        };
+      },
       translate: template => template,
       dialogs: silentDialogs(),
     },
     editorEnvironment: {HOME: '/home/u', GITHUB_TOKEN: 's3cr3t-token'},
+    intents: {
+      get: () => {
+        if (scene.intentError !== undefined) {
+          throw scene.intentError;
+        }
+        return scene.intentStore;
+      },
+      update: (key, value) => {
+        scene.intentStore = value;
+        return Promise.resolve();
+      },
+    },
     runServer: async request => {
       scene.serverRequests.push(request);
       for (const phase of scene.phasesOfServer) {

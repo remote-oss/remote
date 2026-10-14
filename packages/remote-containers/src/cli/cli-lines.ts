@@ -3,6 +3,22 @@
  * differently for each subcommand), and the events of stderr, one JSON object a line. Nothing here throws.
  */
 
+/** Why the Docker daemon refused to create or start the container, by its own words. */
+export type DaemonRefusal = 'invalidMount' | 'portAllocated';
+
+const INVALID_MOUNT =
+  /^(?:docker: )?Error response from daemon: invalid mount config for type "/u;
+const PORT_ALLOCATED =
+  /^(?:docker: )?Error response from daemon: .*: Bind for \S+ failed: port is already allocated$/u;
+
+/** The refusal one line of the Docker client says, or undefined; the line has no colour codes and no CR. */
+export function daemonRefusalOf(line: string): DaemonRefusal | undefined {
+  if (INVALID_MOUNT.test(line)) {
+    return 'invalidMount';
+  }
+  return PORT_ALLOCATED.test(line) ? 'portAllocated' : undefined;
+}
+
 /** Why a subcommand did not give its result. */
 export type CliFailure =
   | {
@@ -20,6 +36,8 @@ export type CliFailure =
       message: string;
       description: string;
       containerId: string | undefined;
+      /** Why the daemon refused, when the CLI relayed its words; absent otherwise. */
+      refusal?: DaemonRefusal;
     }
   | {kind: 'noResult'; status: number | null}
   | {kind: 'malformedResult'; field: string}
@@ -62,6 +80,12 @@ export type CliEvent =
       level: number;
       text: string;
       channel: string | undefined;
+      /** The CLI's event type: `raw` output, a `start` or `stop` of a step, or a `text` line; `text` for anything else. */
+      type: 'raw' | 'start' | 'stop' | 'text';
+      /** The CLI's own time of the event, in epoch milliseconds; none for a line that isn't JSON. */
+      timestamp: number | undefined;
+      /** For a `stop`: when its step started, in epoch milliseconds. */
+      startTimestamp: number | undefined;
     };
 
 /** The level of a line that is not an event: Node's own warnings and stack lines. */
@@ -81,6 +105,19 @@ function isFields(value: unknown): value is Fields {
 
 function textOf(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function numberOf(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+/** The event type of a log line: the three the terminal renders, else `text`. */
+function eventTypeOf(value: unknown): 'raw' | 'start' | 'stop' | 'text' {
+  return value === 'raw' || value === 'start' || value === 'stop'
+    ? value
+    : 'text';
 }
 
 /** A line of stderr as its event, with what the bridge needs to buffer output: whether it is raw, and its channel. */
@@ -121,6 +158,9 @@ export function readStderrLine(line: string): StderrLine {
       level: typeof parsed.level === 'number' ? parsed.level : PLAIN_LINE_LEVEL,
       text: textOf(parsed.text) ?? line,
       channel,
+      type: eventTypeOf(parsed.type),
+      timestamp: numberOf(parsed.timestamp),
+      startTimestamp: numberOf(parsed.startTimestamp),
     },
     isRaw: parsed.type === 'raw',
     channel,
@@ -133,7 +173,15 @@ export function parseLogLine(line: string): CliEvent {
 }
 
 function plain(line: string): CliEvent {
-  return {kind: 'log', level: PLAIN_LINE_LEVEL, text: line, channel: undefined};
+  return {
+    kind: 'log',
+    level: PLAIN_LINE_LEVEL,
+    text: line,
+    channel: undefined,
+    type: 'text',
+    timestamp: undefined,
+    startTimestamp: undefined,
+  };
 }
 
 /** The failure an `error` result is, by the CLI's own words. */

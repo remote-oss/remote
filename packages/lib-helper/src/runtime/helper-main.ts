@@ -26,14 +26,15 @@ export function helperParameters(
 
 /**
  * The environment this helper passes on to the programs it starts: the one it was started with, without the
- * variable that carries its own parameters, which hold the nonce and the whole request.
+ * helper's parameters and the variable that made the editor's executable run the helper as Node.js.
  */
 export function inheritedEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ): Record<string, string | undefined> {
   return Object.fromEntries(
     Object.entries(environment).filter(
-      ([name]) => name !== PARAMETERS_VARIABLE,
+      ([name]) =>
+        name !== PARAMETERS_VARIABLE && name !== 'ELECTRON_RUN_AS_NODE',
     ),
   );
 }

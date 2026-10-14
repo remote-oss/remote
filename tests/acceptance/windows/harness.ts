@@ -657,6 +657,11 @@ export async function windowState(name: string): Promise<{
   }
 }
 
+/** Whether window `name`'s Remote - SSH extension is active, as its `state` reports it now. */
+export async function remoteSshActive(name: string): Promise<boolean> {
+  return (await reportedState(name))?.remoteSshActive ?? false;
+}
+
 /**
  * A window's state without `remoteSshActive`, which changes when the extension activates; for rows that compare what
  * a window shows of itself before and after something that may activate it.

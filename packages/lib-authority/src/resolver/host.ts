@@ -29,12 +29,17 @@ export type PhaseName =
   | 'startingServer'
   | 'serverDownloadPercent';
 
+/** The latest the progress opens after a resolve starts. */
+const PROGRESS_FALLBACK_MILLISECONDS = 1500;
+
 /** A stage the connector reports, with the share downloaded for `serverDownloadPercent`. */
 export interface ConnectPhase {
   name: PhaseName;
   percent?: number;
   /** Whether the progress shows the "(details)" link in front of this stage's text. */
   details?: boolean;
+  /** Sets the text the progress shows without opening it; a stage that is not quiet opens it. */
+  quiet?: true;
 }
 
 /** What the connector is asked to connect to. */
@@ -86,6 +91,11 @@ export interface EditorResolver {
     authority: string,
     context: {resolveAttempt: number},
   ): Promise<ResolvedConnection>;
+  /** The local path a URI of this window stands for, for a family that maps one (windows contracts §3.2). */
+  canonicalPath?: (
+    authority: string,
+    path: string,
+  ) => Promise<string | undefined>;
 }
 
 /** What the progress shows and how the user can act on it. */
@@ -113,6 +123,8 @@ export interface ResolverEditor {
     resolver: EditorResolver,
   ): {dispose(): void};
   progress: ProgressPort;
+  /** Calls `callback` once after `milliseconds`; the returned function cancels it. */
+  startTimer(milliseconds: number, callback: () => void): () => void;
   /** The editor's error for an authority that cannot be resolved; `handled` tells it nothing more is to be shown. */
   notAvailable(message: string | undefined, handled: boolean): Error;
   /** The editor's error for one that may be tried again. */
@@ -136,6 +148,17 @@ export interface ResolverOptions {
   titleOf(phase: ConnectPhase, target: DecodedTarget): string;
   /** The title the progress starts with. */
   startTitle(target: DecodedTarget): string;
+  /**
+   * The family's canonical mapping, registered as the resolver's `getCanonicalURI` (windows contracts §3.2): the local
+   * path a `vscode-remote` URI of this window stands for, or nothing. `warn` logs a mapping that failed.
+   */
+  canonical?: {
+    pathOf(
+      uri: {authority: string; path: string},
+      decodedTarget: DecodedTarget,
+    ): Promise<string | undefined>;
+    warn(message: string): void;
+  };
 }
 
 /** Whether the extension registers: the other extension stands in, or the proposal is missing. */
@@ -291,28 +314,60 @@ export async function registerResolver(
     decoded: DecodedTarget,
     input: ConnectInput,
   ): Promise<Connected | Failed> {
-    return editor.progress.withProgress(
-      {
-        title: options.startTitle(decoded),
-        cancellable: options.cancellable,
-        onCancel: () => {
-          connector.cancel();
+    let shown: {title: string; details: boolean} | undefined;
+    let report: ((title: string, details: boolean) => void) | undefined;
+    let opened = false;
+    const releases: Array<() => void> = [];
+    const settled = new Promise<void>(resolve => {
+      releases.push(resolve);
+    });
+    function open(): void {
+      if (opened) {
+        return;
+      }
+      opened = true;
+      stopTimer();
+      void editor.progress.withProgress(
+        {
+          title: options.startTitle(decoded),
+          cancellable: options.cancellable,
+          onCancel: () => {
+            connector.cancel();
+          },
+          onDetails: () => {
+            connector.revealDetails();
+          },
         },
-        onDetails: () => {
-          connector.revealDetails();
+        async update => {
+          report = update;
+          if (shown !== undefined) {
+            update(shown.title, shown.details);
+          }
+          await settled;
         },
-      },
-      async update => {
-        const stop = connector.onPhase(phase => {
-          update(options.titleOf(phase, decoded), phase.details === true);
-        });
-        try {
-          return await connector.connect(input);
-        } finally {
-          stop();
-        }
-      },
-    );
+      );
+    }
+    const stopTimer = editor.startTimer(PROGRESS_FALLBACK_MILLISECONDS, open);
+    const stop = connector.onPhase(phase => {
+      shown = {
+        title: options.titleOf(phase, decoded),
+        details: phase.details === true,
+      };
+      if (report !== undefined) {
+        report(shown.title, shown.details);
+      } else if (phase.quiet !== true) {
+        open();
+      }
+    });
+    try {
+      return await connector.connect(input);
+    } finally {
+      stop();
+      stopTimer();
+      for (const release of releases) {
+        release();
+      }
+    }
   }
 
   async function resolveOne(
@@ -364,6 +419,23 @@ export async function registerResolver(
       return turn;
     },
   };
+  const {canonical} = options;
+  if (canonical !== undefined) {
+    resolver.canonicalPath = async (authority, path) => {
+      const decoded = decodeAuthority(authority);
+      if (!('target' in decoded) || decoded.family !== options.family) {
+        return undefined;
+      }
+      try {
+        return await canonical.pathOf({authority, path}, decoded);
+      } catch (caught) {
+        canonical.warn(
+          `the canonical URI of ${authority}${path} could not be mapped: ${String(caught)}`,
+        );
+        return undefined;
+      }
+    };
+  }
   const registration = editor.registerRemoteAuthorityResolver(
     options.family,
     resolver,

@@ -43,6 +43,18 @@ describe('policy rows (card server-01 table)', () => {
     });
   });
 
+  it('transport contracts 5.0: the SSH and WSL policies take identifiers only, and the SSH policy of a mode too', () => {
+    deepStrictEqual(
+      [
+        SSH_POLICY.extensionEntries,
+        sshPolicyFor('off').extensionEntries,
+        wslPolicy({scriptLessStartup: false, environmentSetupPath: undefined})
+          .extensionEntries,
+      ],
+      ['identifiersOnly', 'identifiersOnly', 'identifiersOnly'],
+    );
+  });
+
   it('SSH_POLICY.cleanup -> {kind: keepNewest, count: 5}', () => {
     deepStrictEqual(SSH_POLICY.cleanup, {kind: 'keepNewest', count: 5});
   });
@@ -88,8 +100,9 @@ describe('the SSH policy of a download mode (card connect-38)', () => {
     ['cache', 'kept'],
     ['verification', ['none']],
     ['environmentSetup', undefined],
-    ['requirementsCheck', 'serverBundled'],
+    ['requirementsCheck', 'bundledHelper'],
     ['allowedExtraStartOptions', ['useHostProxy']],
+    ['extensionEntries', 'asWritten'],
     ['cleanup', {kind: 'onlyCurrentKeepLeftovers'}],
     ['installMode', 'singleScript'],
     ['prefetch', {kind: 'none'}],

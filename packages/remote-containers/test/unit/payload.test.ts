@@ -1,7 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
-import {encodeAuthority} from 'lib-authority';
+import {type DecodedTarget, encodeAuthority} from 'lib-authority';
 import {
   type DevContainerFolder,
+  decodedFolderOf,
   devContainerPayloadOf,
   devContainerTargetOf,
   type SerializedUri,
@@ -188,6 +189,38 @@ describe('the dev-container payload', () => {
         rawHostString: payload,
       }),
       `dev-container+${payload}`,
+    );
+  });
+});
+
+describe('the folder of a window’s decoded target (card containers-11)', () => {
+  /** A dev-container target with `payload`. */
+  function containerTarget(payload: string): DecodedTarget {
+    return {family: 'dev-container', target: {payload}, rawHostString: payload};
+  }
+
+  it('F-0410: a folder payload names its folder', () => {
+    deepStrictEqual(
+      decodedFolderOf(containerTarget(devContainerPayloadOf(FOLDER))),
+      FOLDER,
+    );
+  });
+
+  it('F-0410: no target yet, a target with no payload, a legacy payload and a malformed one name no folder', () => {
+    deepStrictEqual(
+      [
+        decodedFolderOf(undefined),
+        decodedFolderOf({
+          family: 'ssh-remote',
+          target: {kind: 'plain', text: 'host'},
+          rawHostString: 'host',
+        }),
+        decodedFolderOf(
+          containerTarget(Buffer.from('/home/u/p').toString('hex')),
+        ),
+        decodedFolderOf(containerTarget('zz')),
+      ],
+      [undefined, undefined, undefined, undefined],
     );
   });
 });
