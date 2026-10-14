@@ -126,6 +126,8 @@ interface TableInfo {
   readonly keys: ReadonlySet<string>;
   readonly type: typescript.Type;
   readonly entries: ReadonlyMap<string, TableEntry>;
+  /** For the `standDown` table only: the id of its `contextKey`, which lib-standdown sets. */
+  readonly contextKey?: string;
 }
 
 /** The result of the §3.2 analysis over one package's production sources. */
@@ -318,6 +320,7 @@ function tablesOf(
       const type = checker.getTypeAtLocation(declaration.name);
       const keys = new Set<string>();
       const entries = new Map<string, TableEntry>();
+      let standDownContextKey: string | undefined;
       for (const property of initializer.properties) {
         if (!typescript.isPropertyAssignment(property)) {
           continue;
@@ -330,8 +333,17 @@ function tablesOf(
         if (isCheckedEntry(declaration.name.text, entry)) {
           entries.set(entry.key, {key: entry.key, id: entry.id});
         }
+        if (declaration.name.text === 'standDown' && entry.key === 'contextKey') {
+          standDownContextKey = entry.id;
+        }
       }
-      tables.push({name: declaration.name.text, keys, type, entries});
+      tables.push({
+        name: declaration.name.text,
+        keys,
+        type,
+        entries,
+        contextKey: standDownContextKey,
+      });
     }
   }
   return tables;
@@ -905,6 +917,46 @@ function registerCommandsCall(
 }
 
 /**
+ * A `serve({commandId: …})` call: the served internal command its commandId's string literal type names is
+ * consumed, whatever table that id comes from. The id is matched as a literal type, so a widened `string` matches
+ * nothing.
+ */
+function serveCall(state: WalkState, node: typescript.CallExpression): void {
+  const first = node.arguments[0];
+  if (first === undefined || !typescript.isObjectLiteralExpression(first)) {
+    return;
+  }
+  for (const property of first.properties) {
+    if (
+      !typescript.isPropertyAssignment(property) ||
+      property.name.getText() !== 'commandId'
+    ) {
+      continue;
+    }
+    const argumentType = state.checker.getTypeAtLocation(property.initializer);
+    const constituents = argumentType.isUnion()
+      ? argumentType.types
+      : [argumentType];
+    for (const constituent of constituents) {
+      if (!constituent.isStringLiteral()) {
+        continue;
+      }
+      const commandId = constituent.value;
+      for (const table of state.tables) {
+        if (table.name !== 'internalCommands') {
+          continue;
+        }
+        for (const entry of table.entries.values()) {
+          if (entry.id === commandId) {
+            state.consumed.add(`internalCommands ${entry.key}`);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
  * The call-site arguments a resolvable pass-through counts the keys of, by file: a whole-table use inside one is
  * consumed by the registerCommands call it feeds, and gets no whole-table note. An unresolvable pass-through names
  * its problem line, and no argument of it is covered.
@@ -1080,6 +1132,9 @@ function walkNode(
     if (name === REGISTER_COMMANDS) {
       registerCommandsCall(state, file, node);
     }
+    if (name === 'serve') {
+      serveCall(state, node);
+    }
   }
   if (
     typescript.isPropertyAccessExpression(node) ||
@@ -1130,6 +1185,21 @@ function consumptionOf(root: string, folder: string): PackageConsumption {
     };
     walkNode(state, file, file);
   }
+  // The stand-down key is set by lib-standdown from the standDown table's contextKey, so the matching contextKeys
+  // entry is consumed even though no production source references it by name.
+  const standDown = tables.find(table => table.name === 'standDown');
+  if (standDown?.contextKey !== undefined) {
+    for (const table of tables) {
+      if (table.name !== 'contextKeys') {
+        continue;
+      }
+      for (const entry of table.entries.values()) {
+        if (entry.id === standDown.contextKey) {
+          consumed.add(`contextKeys ${entry.key}`);
+        }
+      }
+    }
+  }
   const entries = new Map<string, TableEntry>();
   for (const table of tables) {
     for (const entry of table.entries.values()) {
@@ -1171,8 +1241,9 @@ function runProductionKnip(root: string): Promise<string> {
 }
 
 /**
- * The unused files under `packages/<x>/src/` of a knip production run, or undefined when the output is not the
- * expected JSON. The export-level categories (exports, types, …) are not this check's: `pnpm dead` owns them.
+ * The unused files under `packages/<x>/src/`, other than `src/testing/**`, of a knip production run, or undefined
+ * when the output is not the expected JSON. The export-level categories (exports, types, …) are not this check's:
+ * `pnpm dead` owns them.
  */
 function unusedModulesOf(output: string): readonly string[] | undefined {
   let parsed: unknown;
@@ -1207,6 +1278,10 @@ function unusedModulesOf(output: string): readonly string[] | undefined {
       const name = (file as {name?: unknown}).name;
       if (typeof name !== 'string') {
         return undefined;
+      }
+      // src/testing/** is test support by convention; R2 excludes it from consumption, and so does the module half.
+      if (/^packages\/[^/]+\/src\/testing\//.test(name)) {
+        continue;
       }
       if (/^packages\/[^/]+\/src\/[^/]/.test(name)) {
         modules.push(name);
