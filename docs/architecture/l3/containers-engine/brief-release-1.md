@@ -8,7 +8,7 @@ alongside the 0.2 gate, not instead of it. Sources:
 - ADR-0002 to ADR-0008;
 - the register (`remote-oss/remote-development`, `decisions.md`).
 
-The release number is the PM's. Open decisions and the spec questions are on the design issue named at the end.
+The release number is the PM's. Open decisions and the spec questions are on the design issue, remote-oss/remote#737.
 
 ## 1. The job
 
@@ -66,8 +66,8 @@ The order is the PM's:
   forwards ports over the connection, as for ssh-remote (contracts §3.2, connect-34).
 - **Shutdown:** F-0417 and F-0502 BR-10. Until then, a container keeps running after its last window closes.
   That's a release note, and the spec's three conflicting texts on Reopen Folder Locally are a question to the room.
-- **The rest:** the reopen notification (F-0402); the extension-cache half of F-0419; Features (F-0414); Podman; `DOCKER_HOST`
-  and contexts from settings (F-0205).
+- **The rest:** the reopen notification (F-0402); the extension-cache half of F-0419; Features (F-0414); Podman;
+  `DOCKER_HOST` and contexts from settings (F-0205).
 
 ### Later
 
