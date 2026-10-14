@@ -20,15 +20,12 @@ function fakeEditor(): {
   close: (terminal: unknown, code?: number) => void;
 } {
   const created: FakeTerminal[] = [];
-  const closeListeners: Array<(terminal: unknown) => void> = [];
+  const closeListeners = new Set<(terminal: unknown) => void>();
   const editor = {
     window: {
       onDidCloseTerminal: (listener: (closed: unknown) => void) => {
-        closeListeners.push(listener);
-        return {
-          dispose: () =>
-            closeListeners.splice(closeListeners.indexOf(listener), 1),
-        };
+        closeListeners.add(listener);
+        return {dispose: () => closeListeners.delete(listener)};
       },
       createTerminal: (options: vscode.TerminalOptions) => {
         const terminal: FakeTerminal = {
