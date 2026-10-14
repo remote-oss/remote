@@ -872,6 +872,32 @@ describe("the server steps with the volume's root step (card containers-25)", ()
     );
   });
 
+  it('contracts §5.2: the second probe waits until the root step has ended', async () => {
+    const channel = channelOf({volume: true});
+    let release: (() => void) | undefined;
+    const late = new RecordingChannel({
+      identity: 'c1',
+      platformHint: 'linux',
+      scripts: [],
+    });
+    const root: RecordingChannel = Object.assign(late, {
+      runScript: async () => {
+        await new Promise<void>(resolve => {
+          release = resolve;
+        });
+        return {kind: 'exited' as const, status: 0};
+      },
+    });
+    const running = runSteps(channel, {volume: true, root});
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+    const callsWhileHeld = channel.calls.length;
+    release?.();
+    const {result} = await running;
+    deepStrictEqual([callsWhileHeld, result.kind], [1, 'started']);
+  });
+
   it('contracts §5.2: without the volume, the root channel is never used', async () => {
     const root = rootChannelOf();
     await runSteps(channelOf(), {root});
