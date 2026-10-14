@@ -33,11 +33,20 @@ The connect commands already refuse such a file before any pick: `connect/connec
    reading the host pick uses: `extension.ts`'s `configuredHosts(host)`, over lib-ssh's `listHosts` and
    `nodeConfigReader`. Pass that function through `connect-ports.ts`, and don't write a second reader.
    - `{hosts}` → `{kind: 'done', value: undefined}`;
-   - `{parseError: {file, reason}}` → `{kind: 'failed', failure: {kind: 'invalidSetting', reason: {text:
+   - `{parseError: {file, reason}}` → `{kind: 'failed', failure: {kind: 'configFileUnparsable', reason: {text:
      `${file}: ${reason}`}, logDetail: `the SSH configuration file cannot be parsed: ${file}: ${reason}`}}`.
-3. **What the user sees:** the failure presenter shows `Could not establish connection to "<alias>": <file>: <reason>.`
-   That names the parse problem, as AC-22 asks, in the same words as AC-19's command error. The record's `failureDialog`
-   line holds it.
+   - `configFileUnparsable` is a new failure kind of its own in remote-ssh's failure mapping (`pipeline/failure.ts`'s
+     kinds). The one place that maps a failure to lib-authority's `Failed` maps this kind, and only this kind, to
+     **`silent: true`**, `retryable: false`, keeping the reason. `invalidSetting` and every other kind keep their
+     current mapping.
+3. **What the user sees (F-2201 Q1 = (a), athena on #811): core's own error notification**, as 7.E2 observes:
+   `Failed to connect to the remote extension host server (Error: <file>: <reason>)`, with "Open Developer Tools".
+   - **How it gets there:** lib-authority's resolver host turns a `silent` failure into `notAvailable(message, handled:
+     false)`, with `message` the reason's text (`resolver/host.ts`, `messageOf`, `errorFor`). Core shows the
+     notification for an error that isn't handled ([oss] `remoteAgentService.ts`).
+   - **No new code** is needed in lib-authority or core. Our failure presenter isn't called: no dialog, no Retry, no More
+     Actions…
+   - **Unused strings:** S010, S099 (as an action) and S114 stay unused, as on every observed route.
 4. **Unchanged:** a file reached only through `Include` keeps 7.E4's behaviour: our reader drops it, and ssh rejects it
    at connect. `listHosts` already reports only files in effect.
 
@@ -45,19 +54,23 @@ The connect commands already refuse such a file before any pick: `connect/connec
 
 | File | Name | Given | Expected |
 |---|---|---|---|
-| `connect.test.ts` (the pipeline fixture) | `F-2201 AC-22: an unparsable file in effect fails the connect before the client check, naming the problem` | `checkConfigFile` failing with the parse failure above | the result is `Failed` `invalidSetting` with the reason text `<file>: <reason>`; `locateClient`, `decideTerms` and `preconnect` were never called |
+| `connect.test.ts` (the pipeline fixture) | `F-2201 AC-22: an unparsable file in effect fails the connect before the client check, naming the problem` | `checkConfigFile` failing with the parse failure above | the result is `Failed` `configFileUnparsable` with the reason text `<file>: <reason>`; `locateClient`, `decideTerms` and `preconnect` were never called |
 | `connect.test.ts` | `F-2201 BR-8: the configuration check runs first` | every check failing | the failure is `checkConfigFile`'s |
 | `wiring.test.ts` | `F-2201 AC-22: the check reads the files in effect through the host list` | `configuredHosts` answering `{parseError: {file: '/h/.ssh/config', reason: 'unterminated quote after Host'}}`, then `{hosts: []}` | failed with reason text `/h/.ssh/config: unterminated quote after Host`; done |
-| `failure-presenter.test.ts` | `F-2201 AC-22: the dialog names the parse problem` | `textFor({kind: 'invalidSetting', reason: {text: '/h/.ssh/config: unterminated quote after Host'}})` | `Could not establish connection to "box": /h/.ssh/config: unterminated quote after Host.` |
+| `connector.test.ts` (or the file holding the failure-to-`Failed` mapping's rows) | `F-2201 AC-22: an unparsable file is a silent, non-retryable failure that our presenter never shows` | the connect failing with `configFileUnparsable` and the reason text `/h/.ssh/config: unterminated quote after Host` | the `Failed` has `silent: true`, `retryable: false` and that reason text; the presenter fake was never called |
+| `failure.test.ts` | `F-2201 AC-22: only the parse failure is silent` | `invalidSetting` with a reason | not silent, as today |
 
-**Defect rule:** the first and third rows must fail on main and pass with the fix. Paste both runs.
+**Defect rule:** the first and third rows (`connect.test.ts`'s parse row and `wiring.test.ts`'s) must fail on main and
+pass with the fix. Paste both runs.
 
 **Acceptance:** coverage-18's AC-22 row (#588; iris holds it out) goes back in after this card merges, with these
 assertions:
-- `q1`'s `failureDialog` text contains `invalid` or the reader's reason. Measure the reader's text for `Host "broken`
-  and assert it exactly;
+- `q1` has **no** `failureDialog` line;
 - `connectionLog()` has no `Checking ssh client:` line after the step began;
-- `q1` is disconnected.
+- `q1` is disconnected;
+- core's notification text `Failed to connect to the remote extension host server (Error: <file>: <reason>)`, if the
+  window agent can read core's notifications. If it can't, say so in the PR. The text is then a unit fact, from the
+  connector row plus lib-authority's existing `errorFor` rows.
 
 Tell iris on #588 when this merges.
 
@@ -74,5 +87,5 @@ Request athena only; hermes assigns the peer.
 
 ## 6. Open rows (stop and report on #810)
 
-1. A reconnection to a window whose file has since become unparsable must, by this card, fail without a retry
-   (`invalidSetting` isn't retryable). If F-2501's reconnection rules say otherwise, report it.
+None. Open row 1 (a reconnection with an unparsable file) is answered by `retryable: false` and athena's Q1 ruling: the
+failure is final, and core shows its notification.
