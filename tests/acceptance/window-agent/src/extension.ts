@@ -189,6 +189,7 @@ export function activate(context: vscode.ExtensionContext): void {
         remoteSshActive:
           vscode.extensions.getExtension('remote-oss.remote-ssh')?.isActive ??
           false,
+        terminals: vscode.window.terminals.map(terminal => terminal.name),
       });
     }),
     vscode.commands.registerCommand(
