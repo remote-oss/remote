@@ -437,7 +437,7 @@ export function launchesOf(root: string): Launch[] {
       folderUri: REMOTE_FOLDER_URI,
     },
     forwardingLaunch('agent', 'agentfwd'),
-    forwardingLaunch('agent-off', 'agentfwd', {
+    forwardingLaunch('agent-off', 'agentfwd-off', {
       'remote.SSH.enableAgentForwarding': false,
     }),
     forwardingLaunch('x11', 'x11fwd'),

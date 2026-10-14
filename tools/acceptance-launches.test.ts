@@ -83,7 +83,7 @@ describe('the launches of the VSCodium run', () => {
         ],
         [
           'agent-off',
-          'vscode-remote://ssh-remote+agentfwd/home/harness',
+          'vscode-remote://ssh-remote+agentfwd-off/home/harness',
           {HARNESS_FORWARDING_CASE: 'agent-off'},
           {'remote.SSH.enableAgentForwarding': false},
         ],

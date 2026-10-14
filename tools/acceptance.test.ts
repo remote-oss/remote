@@ -488,14 +488,20 @@ describe('acceptance', () => {
     );
   });
 
-  it("connect-39: Host agentfwd logs in to harness with the run key and forwards the run's agent by its path", () => {
-    strictEqual(
-      accountBlock('agentfwd'),
-      [
-        ...sharedLines('agentfwd', 'harness'),
-        ...KEY_ALIAS_LINES,
-        '  ForwardAgent /run/agent.sock',
-      ].join('\n'),
+  it("connect-39: Hosts agentfwd and agentfwd-off log in to harness with the run key and forward the run's agent by its path", () => {
+    deepStrictEqual(
+      ['agentfwd', 'agentfwd-off'].map(alias => accountBlock(alias)),
+      ['agentfwd', 'agentfwd-off'].map(alias =>
+        [
+          ...sharedLines(alias, 'harness').map(line =>
+            line === '  IdentityAgent none'
+              ? '  IdentityAgent /run/agent.sock'
+              : line,
+          ),
+          ...KEY_ALIAS_LINES,
+          '  ForwardAgent /run/agent.sock',
+        ].join('\n'),
+      ),
     );
   });
 
