@@ -55,6 +55,8 @@ export interface AgentEvent {
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
+  /** The output channel a `state` event saw shown in the window, or null. */
+  visibleOutputChannel?: string | null;
 }
 
 /** One line of the record the extensions append to. */
@@ -114,6 +116,14 @@ function agentFile(name: string, kind: 'events' | 'commands'): string {
   return path.join(agentFolder(), `${name}.${kind}.jsonl`);
 }
 
+/** The names of the windows whose agent has reported anything, in no particular order. */
+export function windowNames(): string[] {
+  const folder = agentFolder();
+  return (existsSync(folder) ? readdirSync(folder) : [])
+    .filter(file => file.endsWith('.events.jsonl'))
+    .map(file => file.slice(0, -'.events.jsonl'.length));
+}
+
 /** The events the agent of window `name` has reported, in order. */
 export function windowEvents(name: string): AgentEvent[] {
   return linesOf<AgentEvent>(agentFile(name, 'events'));
@@ -153,16 +163,24 @@ export function heldLines(window?: string): RecordLine[] {
   return recordLines(undefined, window).filter(line => line.held === true);
 }
 
-/** The output of a command run in the host container as the user harness. */
-export async function onHost(...command: string[]): Promise<string> {
+/** The output of a command run in the host container as `user`. */
+export async function onHostAs(
+  user: string,
+  ...command: string[]
+): Promise<string> {
   const {stdout} = await execFileAsync('docker', [
     'exec',
     '--user',
-    'harness',
+    user,
     variable('HARNESS_CONTAINER'),
     ...command,
   ]);
   return stdout;
+}
+
+/** The output of a command run in the host container as the user harness. */
+export function onHost(...command: string[]): Promise<string> {
+  return onHostAs('harness', ...command);
 }
 
 /** The bare password of the host's user `harness-pw`, from the run's file. */
@@ -187,19 +205,22 @@ export function appendScript(entries: readonly AppendedEntry[]): void {
 }
 
 /**
- * The number of logins the host's sshd counted for the password account: the `Accepted password` lines of the
- * container's log, which sshd gets with `-e` — read from both of the container's streams, since its log is its
- * stderr.
+ * The number of the container's log lines that contain `line`: sshd runs with `-e`, so its log is the container's
+ * stderr, and both streams are read.
  */
-export async function acceptedPasswords(): Promise<number> {
+async function acceptedLogins(line: string): Promise<number> {
   const {stdout, stderr} = await execFileAsync(
     'docker',
     ['logs', variable('HARNESS_CONTAINER')],
     {encoding: 'utf8'},
   );
-  return `${stdout}\n${stderr}`
-    .split('\n')
-    .filter(line => line.includes('Accepted password for harness-pw')).length;
+  return `${stdout}\n${stderr}`.split('\n').filter(each => each.includes(line))
+    .length;
+}
+
+/** The number of logins the host's sshd counted for the password account. */
+export function acceptedPasswords(): Promise<number> {
+  return acceptedLogins('Accepted password for harness-pw');
 }
 
 /** Polls until `ready` holds, for up to a minute; it fails naming what it waited for. */
@@ -495,6 +516,19 @@ async function withAgent(
 export async function fingerprintOf(file: string): Promise<string> {
   const {stdout} = await execFileAsync('ssh-keygen', ['-l', '-f', file]);
   return stdout.split(' ')[1] ?? '';
+}
+
+/** Makes a new ed25519 key pair without a passphrase at `file` and `file.pub`. */
+export async function newKeyPair(file: string): Promise<void> {
+  await execFileAsync('ssh-keygen', [
+    '-q',
+    '-t',
+    'ed25519',
+    '-N',
+    '',
+    '-f',
+    file,
+  ]);
 }
 
 /** The fingerprints of the keys the run's agent holds; none when it holds none. */

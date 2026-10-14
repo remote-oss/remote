@@ -27,6 +27,7 @@ import type {
   ConnectInput,
   ConnectionLease,
   ConnectSteps,
+  ConnectWaits,
   StepFailure,
   StepResult,
 } from './steps.ts';
@@ -279,15 +280,18 @@ async function runSteps(
   if (undecided !== undefined) {
     return undecided;
   }
-  const located = await steps.locateClient(input);
-  if (located.kind === 'failed') {
-    return failure(located.failure);
+  let waits: ConnectWaits | undefined;
+  if (steps.lookupBeforeConnection()) {
+    const located = await steps.locateClient(input);
+    if (located.kind === 'failed') {
+      return failure(located.failure);
+    }
+    const unlocated = cancelled();
+    if (unlocated !== undefined) {
+      return unlocated;
+    }
+    waits = located.value;
   }
-  const unlocated = cancelled();
-  if (unlocated !== undefined) {
-    return unlocated;
-  }
-  const waits = located.value;
   const connection = await steps.openConnection(
     input,
     terms.value,
@@ -298,6 +302,10 @@ async function runSteps(
   }
   const lease = connection.value;
   held.lease = lease;
+  waits ??= lease.waits;
+  if (waits === undefined) {
+    throw new Error('the connection was opened with no waits and no lookup');
+  }
   const dropped = cancelled();
   if (dropped !== undefined) {
     return dropped;

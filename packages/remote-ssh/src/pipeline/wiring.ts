@@ -33,6 +33,7 @@ import {
 import type {ServerDownloadProgress} from '../cli/server-download-progress.ts';
 import {
   connectionLimitsFor,
+  connectWaitsFor,
   effectiveConnectTimeoutSeconds,
   FIRST_SERVE_MILLISECONDS,
   HELPER_REQUEST_MILLISECONDS,
@@ -67,7 +68,12 @@ import {
   createServerSteps,
   type ServerStepDependencies,
 } from './server-steps.ts';
-import type {ConnectInput, ConnectionTerms, ConnectSteps} from './steps.ts';
+import type {
+  ConnectInput,
+  ConnectionTerms,
+  ConnectSteps,
+  StepFailure,
+} from './steps.ts';
 import {createTermsSteps, type TermsStepDependencies} from './terms-steps.ts';
 import {
   openTerminalConnectionStep,
@@ -132,11 +138,11 @@ export interface WiringPorts {
     LocateStepDependencies,
     'state' | 'configFile' | 'connectTimeout'
   >;
-  /** Takes a lease on the host's helper with the client's waits for this connect. */
+  /** Takes a lease on the host's helper, with the limits of the login wait when it starts. */
   acquire: (
-    request: ConnectionAcquireRequest,
-    limits: ConnectionLimits,
-  ) => Promise<AcquireConnectionOutcome>;
+    request: ConnectionAcquireRequest<StepFailure>,
+    limits: () => ConnectionLimits,
+  ) => Promise<AcquireConnectionOutcome<StepFailure>>;
   requestEnvironment: ConnectionRequestEnvironment;
   /** The channel of the server steps over a connection's session, in either mode. */
   channelFor: (session: SessionRunner, channelRun: ChannelRun) => HostChannel;
@@ -298,12 +304,17 @@ export function stepsOf(
   }
 
   const terms = createTermsSteps(ports.terms);
+  const locateClient = locateClientStep({
+    ...ports.locate,
+    configFile: () => connectionSettings().configFile,
+    connectTimeout: () => connectionSettings().connectTimeout,
+    state,
+  });
   const sharedConnection = openConnectionStep({
     acquire: request =>
-      ports.acquire(
-        request,
+      ports.acquire(request, () =>
         connectionLimitsFor(
-          lookedUp(state).connectTimeout,
+          state.effective?.connectTimeout,
           connectionSettings().connectTimeout,
         ),
       ),
@@ -314,6 +325,21 @@ export function stepsOf(
         state,
         connectionSettings(),
         ports.requestEnvironment,
+        () => locateClient(input),
+      ),
+    adoptRunFacts: runFacts => {
+      state.programs ??= {
+        sshProgram: runFacts.sshProgram,
+        scpProgram: runFacts.scpProgram,
+      };
+      state.effective ??= runFacts.effective;
+    },
+    waits: () =>
+      connectWaitsFor(
+        effectiveConnectTimeoutSeconds(
+          lookedUp(state).connectTimeout,
+          connectionSettings().connectTimeout,
+        ),
       ),
     channelFor: channelOf,
     attachLogin: (login, input) =>
@@ -383,12 +409,8 @@ export function stepsOf(
       logger: ports.logger,
     }),
     decideTerms: terms.decideTerms,
-    locateClient: locateClientStep({
-      ...ports.locate,
-      configFile: () => connectionSettings().configFile,
-      connectTimeout: () => connectionSettings().connectTimeout,
-      state,
-    }),
+    lookupBeforeConnection: () => ports.locate.mode() === 'terminal',
+    locateClient,
     openConnection: (input, connectTerms, cancellation) => {
       held.opening = {input, terms: connectTerms};
       return (
