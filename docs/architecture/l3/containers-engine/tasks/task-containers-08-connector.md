@@ -240,8 +240,16 @@ CLI path and no host-side download:
    - The client download goes to `clientArchiveFolder(cacheRoot, product, archiveKeyOf(resolution.step, profile))`,
      where `cacheRoot` is `remote.serverDownloadFolder` when it's a non-empty string, else the system temporary
      folder's `vscode-remote-containers` folder (F-0503 §3.2: "a folder in the system's temp folder").
-   - Then `copyToHost` over `channel`, and the install into the tree. A failed download is tried once more (7.E2),
-     which is lib-server's existing client-download retry.
+   - Then `copyToHost` over `channel`, and the install into the tree.
+   - **One more try (F-0503 7.E2; themis on #780).** lib-server has no client-download retry: `transfer/http-download.ts`
+     follows redirects and times out stalls, nothing more. So `server-steps.ts` wraps `transfer` itself:
+     - when `transfer` fails with `localDownload` (or `verification`, should a later policy name one), log one line
+       naming the URL tried, the local cache path, the reason (the failure's detail) and `retrying once`, and call
+       `transfer` a second time with the same plan;
+     - a second failure is final, and its failure is what the connect returns (row 5 of §3.7);
+     - for a `verification` failure, the attempt's log line also carries S157's text (`Downloading the VS Code Server
+       failed. Please try again later.`); S157 is never shown in a dialog;
+     - `cancelled`, `copyFailed`, `copyToolMissing`, `channelClosed` and the install's own failures aren't retried.
 6. **`onPhase({name: 'startingServer'})`, then `startOrReuse`** over `channel`, with:
    - `bindHost: '127.0.0.1'` and `portRange: ''`. The container port is dynamic: `devPort` (6.5) is increment 1b;
    - `licenceAccepted` from step 4;
@@ -507,6 +515,10 @@ has rows of its own (§5.3).
 | contracts §5.2 | `volumeMounted` true | `installTree` is `cacheFolders(product, commit, platform, true).serverTree`; false: `''` |
 | F-0503 7.E3 | the probe reports an unsupported machine `armv7l` on Alpine; on glibc | row 7 with S031; with S359 |
 | F-0503 7.E1 | the start reports prerequisites missing, with output text | row 8 with that text |
+| F-0503 7.E2 | `transfer` fails `localDownload` once, then succeeds | two `transfer` calls; the connect proceeds; the log has one line with the URL, the cache path, the reason and `retrying once` |
+| F-0503 7.E2 | `transfer` fails `localDownload` twice | two calls; the connect fails with the second failure (§3.7 row 5); one retry line |
+| F-0503 7.E2 | `transfer` fails `verification`, then succeeds | the retry line also carries S157's text |
+| F-0503 7.E2 | `transfer` fails `cancelled`; then `copyFailed`; then `channelClosed` | one `transfer` call each; no retry line |
 
 ### 5.4 `register-connector.test.ts`
 
