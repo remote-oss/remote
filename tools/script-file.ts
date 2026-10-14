@@ -24,6 +24,8 @@ export interface AppendedEntry {
     | 'platformPick'
     | 'failureDialog'
     | 'notice'
+    | 'hostPick'
+    | 'filePick'
     | 'mitigationPick'
     | 'licenceModal';
   match: string;
@@ -36,7 +38,9 @@ export interface AppendedEntry {
     | 'macOS'
     | 'decline'
     | {text: string}
-    | {button: string};
+    | {button: string}
+    | {label: string}
+    | {typed: string};
   window?: string;
   after?: string;
 }
