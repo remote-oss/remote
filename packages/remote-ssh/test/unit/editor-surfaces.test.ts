@@ -48,7 +48,7 @@ function surfacesWith(
   const adapters: EditorAdapters = {
     prompts: SILENT_PROMPTS,
     terminals: new RecordingTerminals(),
-    linkTerminals: {runProgram: () => Promise.resolve(0)},
+    linkTerminals: {runProgram: () => Promise.resolve()},
     failureDialog: {showError: () => Promise.resolve(changes.dialogAnswer)},
     licenceDialog: {showModal: () => Promise.resolve(undefined)},
     platformPick: {pick: () => Promise.resolve(changes.platform)},

@@ -5,10 +5,9 @@ import {
   terminalEnvironmentOf,
 } from '../../src/surfaces/window-forwarding.ts';
 
-/** A terminal the fake editor made: the options it was given, its exit status and its disposals. */
+/** A terminal the fake editor made: the options it was given and its disposals. */
 interface FakeTerminal {
   options: vscode.TerminalOptions;
-  exitStatus: {code: number | undefined} | undefined;
   disposals: number;
   dispose(): void;
 }
@@ -17,7 +16,7 @@ interface FakeTerminal {
 function fakeEditor(): {
   editor: Pick<typeof vscode, 'window'>;
   created: FakeTerminal[];
-  close: (terminal: unknown, code?: number) => void;
+  close: (terminal: unknown) => void;
 } {
   const created: FakeTerminal[] = [];
   const closeListeners = new Set<(terminal: unknown) => void>();
@@ -30,7 +29,6 @@ function fakeEditor(): {
       createTerminal: (options: vscode.TerminalOptions) => {
         const terminal: FakeTerminal = {
           options,
-          exitStatus: undefined,
           disposals: 0,
           dispose: () => {
             terminal.disposals += 1;
@@ -44,10 +42,7 @@ function fakeEditor(): {
   return {
     editor,
     created,
-    close: (terminal, code) => {
-      if (code !== undefined) {
-        (terminal as FakeTerminal).exitStatus = {code};
-      }
+    close: terminal => {
       for (const listener of [...closeListeners]) {
         listener(terminal);
       }
@@ -56,15 +51,13 @@ function fakeEditor(): {
 }
 
 /** Runs the link command in a link terminal of `fake`, the way the forwarding does. */
-function runIn(
-  fake: ReturnType<typeof fakeEditor>,
-): Promise<number | undefined> {
+function runIn(fake: ReturnType<typeof fakeEditor>): Promise<void> {
   return linkTerminalsOf(fake.editor).runProgram(
     'Remote - SSH agent link',
     '/bin/sh',
     [
       '-c',
-      'ln -sfn -- "$1" "$2"',
+      'ln -sfn -- "$1" "$2" 2>/dev/null; exit 0',
       'sh',
       '/tmp/ssh-x/agent.1',
       '/tmp/vscode-ssh-auth-sock-42',
@@ -84,7 +77,7 @@ describe('the link terminals in the editor', () => {
           shellPath: '/bin/sh',
           shellArgs: [
             '-c',
-            'ln -sfn -- "$1" "$2"',
+            'ln -sfn -- "$1" "$2" 2>/dev/null; exit 0',
             'sh',
             '/tmp/ssh-x/agent.1',
             '/tmp/vscode-ssh-auth-sock-42',
@@ -96,28 +89,38 @@ describe('the link terminals in the editor', () => {
     );
   });
 
-  it('F-2311 7.E7: the run gives the exit status once the terminal closed, and disposes it', async () => {
+  it('F-2311 5.0 step 6: the run settles once its terminal closed, and disposes it', async () => {
     const fake = fakeEditor();
-    const running = runIn(fake);
-    fake.close(fake.created[0], 1);
-    deepStrictEqual([await running, fake.created[0]?.disposals], [1, 1]);
-  });
-
-  it('F-2311 7.E7: a terminal that closes with no exit status gives none', async () => {
-    const fake = fakeEditor();
-    const running = runIn(fake);
+    const order: string[] = [];
+    const running = runIn(fake).then(() => {
+      order.push('settled');
+    });
+    await settledTurns();
+    order.push('close');
     fake.close(fake.created[0]);
-    deepStrictEqual(await running, undefined);
+    await running;
+    deepStrictEqual(
+      [order, fake.created[0]?.disposals],
+      [['close', 'settled'], 1],
+    );
   });
 
-  it("F-2311 R6: another terminal's close is not the link terminal's", async () => {
+  it("F-2311 R6: another terminal's close leaves the link terminal's run open", async () => {
     const fake = fakeEditor();
-    const running = runIn(fake);
-    fake.close({other: true}, 2);
-    fake.close(fake.created[0], 0);
-    deepStrictEqual(await running, 0);
+    let settled = false;
+    void runIn(fake).then(() => {
+      settled = true;
+    });
+    fake.close({other: true});
+    await settledTurns();
+    deepStrictEqual(settled, false);
   });
 });
+
+/** Lets the promises already resolved run their callbacks. */
+async function settledTurns(): Promise<void> {
+  await new Promise(resolve => setImmediate(resolve));
+}
 
 /** A collection as the editor's, recording each call. */
 function fakeCollection(): Pick<

@@ -8,8 +8,8 @@ import type {LinkTerminals} from '../pipeline/forwarding-step.ts';
 
 /**
  * Link terminals in the editor: each run creates one hidden, transient terminal that runs the program, with no folder,
- * so that a remote window starts it on the host, and gives its exit status once the editor has closed it; the
- * terminal is then disposed.
+ * so that a remote window starts it on the host, and settles once the editor has closed it; the terminal is then
+ * disposed.
  */
 export function linkTerminalsOf(
   editor: Pick<typeof vscode, 'window'>,
@@ -26,7 +26,7 @@ export function linkTerminalsOf(
           }
           closeSubscription.dispose();
           closed.dispose();
-          resolve(closed.exitStatus?.code);
+          resolve();
         });
         target.terminal = editor.window.createTerminal({
           name,

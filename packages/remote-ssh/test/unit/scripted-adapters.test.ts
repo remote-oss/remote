@@ -107,7 +107,7 @@ const REAL: EditorAdapters = {
     translate: template => template,
   },
   terminals: new RecordingTerminals(),
-  linkTerminals: {runProgram: () => Promise.resolve(0)},
+  linkTerminals: {runProgram: () => Promise.resolve()},
   failureDialog: {showError: () => Promise.resolve('real')},
   licenceDialog: {showModal: () => Promise.resolve('real')},
   platformPick: {pick: () => Promise.resolve('linux')},

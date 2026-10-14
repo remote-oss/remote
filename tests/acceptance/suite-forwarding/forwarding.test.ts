@@ -62,6 +62,24 @@ async function hostLinks(): Promise<string[]> {
   return listed.split('\n').filter(line => line !== '');
 }
 
+/**
+ * The log lines of the read-back of the link at `linkPath`, once one is there, within the terminal's time: the
+ * extension reads the link after its terminal ended, and logs what it found.
+ */
+async function linkChecked(linkPath: string): Promise<string[]> {
+  const ending = Date.now() + TERMINAL_MILLISECONDS;
+  let lines: string[] = [];
+  while (lines.length === 0 && Date.now() < ending) {
+    lines = connectionLog().filter(line =>
+      line.startsWith(`the agent link ${linkPath} `),
+    );
+    if (lines.length === 0) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+  }
+  return lines;
+}
+
 /** Whether `file` exists on the client, as a link or anything else: a link made on the host never does. */
 function existsOnClient(file: string): boolean {
   try {
@@ -88,12 +106,14 @@ const ROWS: Readonly<Record<string, () => void>> = {
       const keys = await terminalWrites('ssh-add -l', 'agent-keys.txt');
       const links = await hostLinks();
       const target = await onHost('readlink', socket).catch(() => '');
+      const checked = await linkChecked(socket);
       deepStrictEqual(
         {
           links,
           isLink: /^\/tmp\/vscode-ssh-auth-sock-\d+$/.test(socket),
           targetsSession: /^\/tmp\/ssh-[^/]+\/agent\.\d+$/.test(target.trim()),
           onClient: existsOnClient(socket),
+          checked,
           listsKey: keys.includes(await fingerprintOf(keyFile)),
         },
         {
@@ -101,6 +121,7 @@ const ROWS: Readonly<Record<string, () => void>> = {
           isLink: true,
           targetsSession: true,
           onClient: false,
+          checked: [`the agent link ${socket} points at ${target.trim()}`],
           listsKey: true,
         },
         `${socket}\n${keys}\n${forwardingLines()}`,

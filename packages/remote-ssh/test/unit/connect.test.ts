@@ -930,7 +930,7 @@ describe('the connect pipeline, what it keeps and gives back', () => {
       INPUT,
       steps(recording, {
         planForwarding: () => Promise.resolve(LINKED),
-        linkAgent: plan => {
+        linkAgent: (lease, plan) => {
           recording.calls.push('linkAgent');
           recording.links.push(plan);
         },

@@ -288,7 +288,7 @@ function portsOf(
             name,
             command: [program, ...programArguments],
           });
-          return Promise.resolve(0);
+          return Promise.resolve();
         },
       },
     },
@@ -1051,7 +1051,7 @@ describe("the composition's channel and window environment", () => {
 
   it('F-2311 5.0 steps 5-6: the link step runs ln in the agent link terminal of the window', () => {
     const {ports, seen} = portsOf();
-    stepsOf(ports).linkAgent({
+    stepsOf(ports).linkAgent(leaseOn(channelAnswering([])), {
       kind: 'link',
       linkPath: '/tmp/vscode-ssh-auth-sock-7',
       target: '/tmp/ssh-x/agent.1',
@@ -1062,13 +1062,42 @@ describe("the composition's channel and window environment", () => {
         command: [
           '/bin/sh',
           '-c',
-          'ln -sfn -- "$1" "$2"',
+          'ln -sfn -- "$1" "$2" 2>/dev/null; exit 0',
           'sh',
           '/tmp/ssh-x/agent.1',
           '/tmp/vscode-ssh-auth-sock-7',
         ],
       },
     ]);
+  });
+
+  it('F-2311 7.E7: a link that reads back as another target is a warn line in the log, and the window is shown nothing', async () => {
+    const {ports, seen} = portsOf();
+    stepsOf(ports).linkAgent(
+      leaseOn(channelAnswering(['/tmp/ssh-y/agent.2'])),
+      {
+        kind: 'link',
+        linkPath: '/tmp/vscode-ssh-auth-sock-7',
+        target: '/tmp/ssh-x/agent.1',
+      },
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(
+      {
+        warned: seen.sink.lines
+          .filter(line => line.level === 'warn')
+          .map(line => line.message),
+        presented: seen.presented,
+        progress: seen.progress,
+      },
+      {
+        warned: [
+          'the agent link /tmp/vscode-ssh-auth-sock-7 was not made: it points at /tmp/ssh-y/agent.2',
+        ],
+        presented: [],
+        progress: [],
+      },
+    );
   });
 
   it('F-2507: an entry left out is logged with its position and why', async () => {

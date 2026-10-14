@@ -7,6 +7,7 @@
 import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {ProbedHost} from 'lib-server';
+import {posixQuote} from 'lib-ssh';
 import {type AgentLinkPlan, planAgentLink} from '../environment/agent-link.ts';
 import {type DisplayPlan, planDisplay} from '../environment/display.ts';
 import type {ForwardingPlans} from '../environment/forwarding.ts';
@@ -29,13 +30,13 @@ const LISTING_SCRIPT = [
 export interface LinkTerminals {
   /**
    * Runs `program` with `programArguments` in a hidden terminal named `name`, on the host in a remote window, and
-   * gives its exit status once the terminal has closed; none when the editor reports none.
+   * settles once the terminal has closed.
    */
   runProgram(
     name: string,
     program: string,
     programArguments: readonly string[],
-  ): Promise<number | undefined>;
+  ): Promise<void>;
 }
 
 /** What the forwarding of a connect reads and where it makes the link. */
@@ -135,41 +136,72 @@ export async function planForwarding(
   return {agentLink, display};
 }
 
-/** The command of the link terminal: `ln` with the target and the link path as its own arguments, never in its text. */
-const LINK_COMMAND = 'ln -sfn -- "$1" "$2"';
+/**
+ * The command of the link terminal: `ln` with the target and the link path as its own arguments, never in its text.
+ * It always exits 0, so the editor never reports a failure of it; the link is read back once the terminal ended.
+ */
+const LINK_COMMAND = 'ln -sfn -- "$1" "$2" 2>/dev/null; exit 0';
+
+/** Reads the link back over the channel, without writing anything; a link that is not the plan's is a warn line. */
+async function checkLink(
+  channel: HostChannel,
+  plan: Extract<AgentLinkPlan, {kind: 'link'}>,
+  logger: Logger,
+  warn: (detail: string) => void,
+): Promise<void> {
+  const output: string[] = [];
+  const outcome = await channel.runScript(
+    {
+      script: `readlink -- ${posixQuote(plan.linkPath)}`,
+      interpreter: 'posixShell',
+      environment: {},
+      input: {kind: 'text', text: ''},
+      cancellation: new AbortController().signal,
+    },
+    line => {
+      output.push(line);
+    },
+  );
+  if (outcome.kind === 'failed') {
+    warn(`it could not be read back: ${outcome.failure.detail}`);
+    return;
+  }
+  const found = output.join('\n');
+  if (found === plan.target) {
+    logger.info(`the agent link ${plan.linkPath} points at ${found}`);
+  } else {
+    warn(found === '' ? 'there is no link' : `it points at ${found}`);
+  }
+}
 
 /**
  * Makes a `link` plan's link from a hidden terminal of the window, which the editor starts on the host after its own
- * trust check; a `none` plan makes none. It returns at once; an exit status other than 0 is a warn line.
+ * trust check, then reads it back over the channel once the terminal ended; a `none` plan makes none. It returns at
+ * once; a link that is missing or other than the plan's is a warn line, and nothing is shown.
  */
 export function linkAgent(
   dependencies: Pick<ForwardingDependencies, 'linkTerminals' | 'logger'>,
+  channel: HostChannel,
   plan: AgentLinkPlan,
 ): void {
   if (plan.kind !== 'link') {
     return;
   }
   const {logger} = dependencies;
-  const {linkPath} = plan;
+  const link = plan;
   function warn(detail: string): void {
-    logger.warn(`the agent link ${linkPath} was not made: ${detail}`);
+    logger.warn(`the agent link ${link.linkPath} was not made: ${detail}`);
   }
   dependencies.linkTerminals
     .runProgram(LINK_TERMINAL_NAME, '/bin/sh', [
       '-c',
       LINK_COMMAND,
       'sh',
-      plan.target,
-      linkPath,
+      link.target,
+      link.linkPath,
     ])
-    .then(
-      status => {
-        if (status !== 0) {
-          warn(`ln exited with ${String(status)}`);
-        }
-      },
-      (caught: unknown) => {
-        warn(String(caught));
-      },
-    );
+    .then(() => checkLink(channel, link, logger, warn))
+    .catch((caught: unknown) => {
+      warn(String(caught));
+    });
 }

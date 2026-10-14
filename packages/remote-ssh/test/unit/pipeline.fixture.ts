@@ -254,7 +254,7 @@ export function steps(
       Promise.resolve(note('openConnection', {kind: 'done', value: lease})),
     probe: () => Promise.resolve(note('probe', {kind: 'probed', host: HOST})),
     planForwarding: () => Promise.resolve(NO_FORWARDING),
-    linkAgent: plan => {
+    linkAgent: (lease, plan) => {
       recording.links.push(plan);
     },
     plan: () => note('plan', {plan: DOWNLOAD}),

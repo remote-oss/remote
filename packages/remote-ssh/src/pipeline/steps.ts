@@ -152,8 +152,11 @@ export interface ConnectSteps {
     host: ProbedHost,
     cancellation: AbortSignal,
   ): Promise<ForwardingPlans>;
-  /** Makes a `link` plan's link on the host from a hidden terminal; returns at once, and only logs a failure. */
-  linkAgent(plan: AgentLinkPlan): void;
+  /**
+   * Makes a `link` plan's link on the host from a hidden terminal, and reads it back over the lease's channel once the
+   * terminal ended; returns at once, and only logs a failure.
+   */
+  linkAgent(lease: ConnectionLease, plan: AgentLinkPlan): void;
   /** The install plan; `direct` plans without the CLI path, as its fallback does. */
   plan(
     input: ConnectInput,

@@ -341,7 +341,7 @@ async function runSteps(
       void quietly('the platform setting', () =>
         steps.rememberPlatform(input, host.operatingSystem),
       );
-      steps.linkAgent(forwarding.agentLink);
+      steps.linkAgent(lease, forwarding.agentLink);
       return {
         connected: overCli.connected,
         serverPort: 0,
@@ -452,7 +452,7 @@ async function runSteps(
     steps.rememberPlatform(input, host.operatingSystem),
   );
   const {opened} = tunnel.value;
-  steps.linkAgent(forwarding.agentLink);
+  steps.linkAgent(lease, forwarding.agentLink);
   return {
     connected: {
       ...opened,

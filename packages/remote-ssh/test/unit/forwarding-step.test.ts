@@ -68,8 +68,8 @@ function forwardingOf(
     x11Forwarding?: boolean;
     draws?: number[];
     windowLink?: string;
-    /** How the link terminal ends: its exit status, or a rejection. */
-    linkEnd?: Promise<number | undefined>;
+    /** How the link terminal ends: closed, or a rejection. */
+    linkEnd?: Promise<void>;
   } = {},
 ): {
   dependencies: ForwardingDependencies;
@@ -88,7 +88,7 @@ function forwardingOf(
       linkTerminals: {
         runProgram: (name, program, programArguments) => {
           terminals.push({name, command: [program, ...programArguments]});
-          return changes.linkEnd ?? Promise.resolve(0);
+          return changes.linkEnd ?? Promise.resolve();
         },
       },
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
@@ -343,28 +343,56 @@ const LINK = {
   target: AGENT_SOCKET,
 } as const;
 
-/** The warn lines of the link of `plan` whose terminal ends with `linkEnd`, once it has ended. */
-async function linkWarnings(
-  linkEnd: Promise<number | undefined>,
-): Promise<string[]> {
+/** A channel whose `readlink` prints `lines` and ends as `ending` says, recording what it ran. */
+function readBackChannel(
+  lines: readonly string[],
+  ending: ScriptAnswer['ending'] = {kind: 'exit', status: 0},
+): RecordingChannel {
+  return new RecordingChannel({
+    identity: 'harness',
+    platformHint: 'linux',
+    scripts: [
+      {
+        interpreter: 'posixShell',
+        matches: script => script.startsWith('readlink'),
+        lines,
+        ending,
+      },
+    ],
+  });
+}
+
+/** The log lines and the channel's scripts of a link whose terminal ends with `linkEnd`, once all of it settled. */
+async function linked(
+  channel: RecordingChannel,
+  linkEnd: Promise<void> = Promise.resolve(),
+): Promise<{warned: string[]; logged: string[]; scripts: string[]}> {
   const {dependencies, sink} = forwardingOf({linkEnd});
-  linkAgent(dependencies, LINK);
+  linkAgent(dependencies, channel, LINK);
   await linkEnd.catch(() => undefined);
   await new Promise(resolve => setImmediate(resolve));
-  return warnings(sink);
+  return {
+    warned: warnings(sink),
+    logged: sink.lines.map(line => line.message),
+    scripts: channel.calls.map(call =>
+      call.operation === 'runScript' ? call.request.script : '',
+    ),
+  };
 }
 
 describe('the agent link of a connect', () => {
-  it('F-2311 5.0 steps 5-6: a link plan runs ln in one hidden terminal, its paths as arguments of their own', () => {
-    const {dependencies, terminals} = forwardingOf();
-    linkAgent(dependencies, LINK);
+  it('F-2311 5.0 steps 5-6: a link plan runs ln in one hidden terminal, its paths as arguments of their own, always exiting 0', () => {
+    const {dependencies, terminals} = forwardingOf({
+      linkEnd: new Promise(() => undefined),
+    });
+    linkAgent(dependencies, readBackChannel([]), LINK);
     deepStrictEqual(terminals, [
       {
         name: LINK_TERMINAL_NAME,
         command: [
           '/bin/sh',
           '-c',
-          'ln -sfn -- "$1" "$2"',
+          'ln -sfn -- "$1" "$2" 2>/dev/null; exit 0',
           'sh',
           AGENT_SOCKET,
           '/tmp/vscode-ssh-auth-sock-42',
@@ -373,34 +401,83 @@ describe('the agent link of a connect', () => {
     ]);
   });
 
+  it('F-2311 5.0 step 5: nothing is read before the terminal ended', () => {
+    const {dependencies} = forwardingOf({
+      linkEnd: new Promise(() => undefined),
+    });
+    const channel = readBackChannel([AGENT_SOCKET]);
+    linkAgent(dependencies, channel, LINK);
+    deepStrictEqual(channel.calls, []);
+  });
+
   it('F-2311 5.0 step 5: a none plan runs no terminal', () => {
     const {dependencies, terminals} = forwardingOf();
-    linkAgent(dependencies, {kind: 'none', reason: 'noForwardedSocket'});
+    linkAgent(dependencies, readBackChannel([]), {
+      kind: 'none',
+      reason: 'noForwardedSocket',
+    });
     deepStrictEqual(terminals, []);
   });
 
-  it('F-2311 7.E7: an ln that exits 0 logs nothing', async () => {
-    deepStrictEqual(await linkWarnings(Promise.resolve(0)), []);
-  });
-
-  it('F-2311 7.E7: an ln that fails is a warn line with its exit status', async () => {
-    deepStrictEqual(await linkWarnings(Promise.resolve(1)), [
-      'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: ln exited with 1',
-    ]);
-  });
-
-  it('F-2311 7.E7: a terminal that closes with no exit status is a warn line', async () => {
-    deepStrictEqual(await linkWarnings(Promise.resolve(undefined)), [
-      'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: ln exited with undefined',
-    ]);
-  });
-
-  it('F-2311 7.E7: a terminal the editor could not run is a warn line', async () => {
-    deepStrictEqual(
-      await linkWarnings(Promise.reject(new Error('no terminal'))),
-      [
-        'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: Error: no terminal',
+  it('F-2311 7.E7: a link made reads back as the target, read only, with an info line and no warn', async () => {
+    deepStrictEqual(await linked(readBackChannel([AGENT_SOCKET])), {
+      warned: [],
+      logged: [
+        `the agent link /tmp/vscode-ssh-auth-sock-42 points at ${AGENT_SOCKET}`,
       ],
+      scripts: ["readlink -- '/tmp/vscode-ssh-auth-sock-42'"],
+    });
+  });
+
+  it('F-2311 7.E7: a link that points elsewhere is a warn line', async () => {
+    deepStrictEqual(
+      (await linked(readBackChannel(['/tmp/ssh-other/agent.2']))).warned,
+      [
+        'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: it points at /tmp/ssh-other/agent.2',
+      ],
+    );
+  });
+
+  it('F-2311 7.E7: no link (the ln failed, or the trust was refused) is a warn line', async () => {
+    deepStrictEqual(
+      (await linked(readBackChannel([], {kind: 'exit', status: 1}))).warned,
+      [
+        'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: there is no link',
+      ],
+    );
+  });
+
+  it('F-2311 7.E7: a read back that fails is a warn line', async () => {
+    deepStrictEqual(
+      (
+        await linked(
+          readBackChannel([], {
+            kind: 'fail',
+            failure: {kind: 'channelClosed', detail: 'session ended'},
+          }),
+        )
+      ).warned,
+      [
+        'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: it could not be read back: session ended',
+      ],
+    );
+  });
+
+  it('F-2311 7.E7: a terminal the editor could not run is a warn line, and nothing is read', async () => {
+    deepStrictEqual(
+      await linked(
+        readBackChannel([AGENT_SOCKET]),
+        Promise.reject(new Error('no terminal')),
+      ),
+      {
+        warned: [
+          'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: Error: no terminal',
+        ],
+        logged: [
+          'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: Error: no terminal',
+        ],
+        scripts: [],
+      },
     );
   });
 });
