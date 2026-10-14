@@ -190,6 +190,8 @@ export function activate(context: vscode.ExtensionContext): void {
           vscode.extensions.getExtension('remote-oss.remote-ssh')?.isActive ??
           false,
         terminals: vscode.window.terminals.map(terminal => terminal.name),
+        activeEditor:
+          vscode.window.activeTextEditor?.document.uri.fsPath ?? null,
       });
     }),
     vscode.commands.registerCommand(

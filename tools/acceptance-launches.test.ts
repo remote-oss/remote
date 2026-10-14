@@ -120,7 +120,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30, tooling-33, containers-09: only the explorer launches install the explorer and the containers launches Dev Containers, they and the trust launches open a debugging port, and only explorer-alone disables remote-ssh', () => {
+  it('tooling-30, tooling-33, containers-09: only the explorer launches install the explorer and the containers launches Dev Containers, they and the trust launches open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -153,7 +153,12 @@ describe('the launches of the VSCodium run', () => {
         ],
         ['trust', undefined, true, undefined],
         ['trust-terminal', undefined, true, undefined],
-        ['containers', ['remote-oss.remote-containers'], true, undefined],
+        [
+          'containers',
+          ['remote-oss.remote-containers'],
+          true,
+          ['ms-vscode-remote.remote-containers'],
+        ],
         [
           'containers-standdown',
           ['remote-oss.remote-containers'],
@@ -170,7 +175,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('containers-09: the containers launches draw dialogs in the window and download the server from the run’s host; only containers-standdown has a stand-in, and only containers-no-proposals turns the proposed API off', () => {
+  it('containers-09: the containers launches draw dialogs in the window and download the server from the run’s host; containers and containers-standdown have the other extension’s stand-in, and only containers-no-proposals turns the proposed API off', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -190,9 +195,9 @@ describe('the launches of the VSCodium run', () => {
             'window.dialogStyle': 'custom',
             'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
           },
-          label === 'containers-standdown'
-            ? ['ms-vscode-remote.remote-containers']
-            : undefined,
+          label === 'containers-no-proposals'
+            ? undefined
+            : ['ms-vscode-remote.remote-containers'],
           label === 'containers-no-proposals' ? false : undefined,
         ],
       ),
