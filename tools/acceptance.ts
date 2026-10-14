@@ -366,6 +366,10 @@ export function harnessSshConfig(
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
     ]),
+    'Host blackhole',
+    '  HostName 192.0.2.1',
+    '  BatchMode yes',
+    '',
   ].join('\n');
 }
 

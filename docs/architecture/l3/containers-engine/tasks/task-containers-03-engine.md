@@ -137,6 +137,10 @@ Each run uses `run(argv, {kind: 'none'}, {cancellation})`:
 | both exited 0, and `isBelowMinimum(serverApiOf(stdout of query 2))` | `tooOld` (7.E6) |
 | both exited 0 | `passed` |
 
+**Amended by containers-10 (#862, ADR-0010 rule 2):** the two stderr rows apply only after the Docker CLI's own
+`WARNING:` lines are skipped, and after a line that starts with one of its transport or daemon prefixes has decided
+`engineError`. containers-10 §3 has the rule, and its §2 has the measured forms.
+
 The second query runs only when the first exited 0. No other query is made, so a Buildx or server-version query can't
 fail the check (AC-48).
 
@@ -174,6 +178,8 @@ for a trusted folder.
 | `notFound` from `executableOf`, or a `failed` outcome (any spawn failure) | `failed`, detail **S339** (7.E14) |
 | exit non-zero with stderr `/permission denied/i` | `failed`, detail **S104** (7.E16) |
 | any other exit, or the timeout | `failed`, detail **S144** (7.E12, 5.0 step 5) |
+
+**Amended by containers-10 (#862):** the permission row reads stderr through the same classifier as §3.2.
 
 ### 3.5 The current context (ruling 10, F-0501 BR-2a)
 

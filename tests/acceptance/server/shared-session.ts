@@ -21,6 +21,7 @@ import {
   type SshRequest,
 } from 'lib-ssh';
 import type {RunningHost} from './host-fixture.ts';
+import {runFactsOf} from './real-connection.ts';
 
 const PARAMETERS = 'REMOTE_OSS_HELPER_PARAMETERS';
 
@@ -131,20 +132,25 @@ export async function attemptSharedSession(
       folder: path.join(runtimeFolder, 'registry'),
       hostString: 'harness',
       script: 'unused: the helper runs in this process',
-      options: {
-        request: JSON.stringify(request),
-        unboundedWaitSeconds: 60,
-        runtimeFolder,
-        runtime: process.execPath,
-        askpassProgram: 'unused: key login asks nothing',
-        displayHost: 'harness',
-        externalAskpass: false,
-        askpassFirstMessageMilliseconds: 5000,
-      },
+      prepare: () =>
+        Promise.resolve({
+          kind: 'ready' as const,
+          runFacts: runFactsOf(host.base),
+          options: {
+            request: JSON.stringify(request),
+            unboundedWaitSeconds: 60,
+            runtimeFolder,
+            runtime: process.execPath,
+            askpassProgram: 'unused: key login asks nothing',
+            displayHost: 'harness',
+            externalAskpass: false,
+            askpassFirstMessageMilliseconds: 5000,
+          },
+        }),
       policy: {kind: 'graceAfterLastLease', milliseconds: GRACE_MILLISECONDS},
       cancellation: new AbortController().signal,
     },
-    {requestMilliseconds: 10000, loginMilliseconds: 60000},
+    () => ({requestMilliseconds: 10000, loginMilliseconds: 60000}),
   );
   if (acquired.kind !== 'acquired') {
     throw new Error(`no lease on the helper: ${acquired.failure}`);
