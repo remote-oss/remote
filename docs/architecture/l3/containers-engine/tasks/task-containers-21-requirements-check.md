@@ -75,14 +75,16 @@ if [ "$REQUIREMENTS_HELPER" = yes ]; then
     REQUIREMENTS_OUTPUT=$(sh "$REQUIREMENTS_SCRIPT" 2>&1) || REQUIREMENTS_STATUS=$?
     if [ "$REQUIREMENTS_STATUS" = 99 ]; then
       REQUIREMENTS_LINE=0
-      while IFS= read -r REQUIREMENTS_TEXT; do
-        [ "$REQUIREMENTS_LINE" -lt 20 ] || break
-        REQUIREMENTS_LINE=$((REQUIREMENTS_LINE + 1))
-        REQUIREMENTS_TEXT=$(printf '%s' "$REQUIREMENTS_TEXT" | tr -d '\r' | cut -c1-500)
-        fact "server.prerequisites.$REQUIREMENTS_LINE" "$REQUIREMENTS_TEXT"
-      done <<REQUIREMENTS_END
+      if [ -n "$REQUIREMENTS_OUTPUT" ]; then
+        while IFS= read -r REQUIREMENTS_TEXT; do
+          [ "$REQUIREMENTS_LINE" -lt 20 ] || break
+          REQUIREMENTS_LINE=$((REQUIREMENTS_LINE + 1))
+          REQUIREMENTS_TEXT=$(printf '%s' "$REQUIREMENTS_TEXT" | tr -d '\r' | cut -c1-500)
+          fact "server.prerequisites.$REQUIREMENTS_LINE" "$REQUIREMENTS_TEXT"
+        done <<REQUIREMENTS_END
 $REQUIREMENTS_OUTPUT
 REQUIREMENTS_END
+      fi
       leave LinuxPrereqs
     fi
   else
@@ -91,6 +93,9 @@ REQUIREMENTS_END
 fi
 ```
 
+- **The `while` runs only when there's output** (triton on #904): a here-document of an empty value still holds one
+  empty line, which would give `server.prerequisites.1=`. Checked in dash and bash with the guard: no output gives no
+  fact, and `a\r\nb` gives `a` and `b`.
 - **The `while` reads a here-document**, not a pipe. So it runs in the script's own shell, and `fact`'s
   `RESULT_FACTS` keeps what it adds, under BusyBox ash, dash and bash alike.
 - **The helper runs through `sh`,** so a server tree on a `noexec` volume still runs it. Its stdout and stderr are
@@ -106,7 +111,7 @@ ExtraStartOption[]` becomes `startPolicy: Pick<ServerPolicyRecord, 'allowedExtra
 - `useHostProxy` and `fileWatcherPolling` read `startPolicy.allowedExtraStartOptions` as before;
 - `requirementsHelper` is `startPolicy.requirementsCheck === 'bundledHelper'`.
 
-remote-ssh's call (`pipeline/server-steps.ts:432`) passes `dependencies.policy` in place of
+remote-ssh's call (`pipeline/server-steps.ts:441` on main) passes `dependencies.policy` in place of
 `dependencies.policy.allowedExtraStartOptions`, and containers-08's call does the same. That's the only remote-ssh
 change, and its behaviour doesn't change: its row is `serverBundled`.
 
