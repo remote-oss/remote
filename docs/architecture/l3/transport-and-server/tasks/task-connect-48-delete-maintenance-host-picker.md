@@ -34,6 +34,9 @@ pick: `MAINTENANCE_PICKER_OPTIONS` and `maintenanceStep`.
 | `F-2411.6.3`: spaces kept, `-oProxyCommand=x`, `a b.invalid` and three spaces not refused | the run gets the text unchanged | `connect-picker-model.test.ts`'s `outcomeOfPick` rows, if they cover these four; otherwise add them there |
 | `F-2411.6.4` / `F-2412.6.5`: the add-host and configure rows end the command | the row runs its command (F-2204's flow or F-2203's picker), and the kill or uninstall doesn't continue. F-2411 6.4 says so (`remote-oss/remote-ssh#56`). That's `pickedTarget`'s hand-over | `maintenance-commands.test.ts`: re-cite the existing hand-over rows, or add one per command. It asserts `commandsRun` holds the row's command id, and `scenario.runs` is empty |
 
+3. If tooling-31 (#741) has merged with an allowlist entry for this module (card `#744`), remove that entry in the
+   same PR. A stale entry fails `check-consumed`.
+
 ## 4. Gates and review
 
 Run all gates: typecheck, lint, format:check, dupes, dead, check-layout, check-identifiers, check-coverage and coverage.
