@@ -9,3 +9,5 @@ dist-*/
 .vscode-test/
 # The editor's own declaration files, kept as published.
 vscode-dts/
+# The tooling-46 golden is byte-exact data the rows assert (#824).
+tools/fixtures/

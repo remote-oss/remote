@@ -78,6 +78,8 @@ const IMPOSED_PROPERTY_KEYS = [
   // VS Code: the `all` of `extensions.all`, and the `get` of a `Memento` (an extension's global state).
   'all',
   'get',
+  // The environment: the `CI` flag every runner sets, which the package run's mode reads (tooling-46).
+  'CI',
 ];
 
 // Phrases that address a reader of a conversation rather than of the code (ADR-0003, comments). An entry with an
