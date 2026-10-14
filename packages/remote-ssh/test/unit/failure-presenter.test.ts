@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
-import {KIND_MAY_RECOVER} from '../../src/pipeline/failure.ts';
+import {KIND_MAY_RECOVER, ofConnection} from '../../src/pipeline/failure.ts';
 import {mitigationPickOf} from '../../src/surfaces/mitigation-picker.ts';
 import {
   type FailureActions,
@@ -123,6 +123,21 @@ describe('the failure presenter', () => {
     deepStrictEqual(
       await textFor({reason: {id: 'S027'}}),
       'Could not establish connection to "box": Connecting was canceled.',
+    );
+  });
+
+  it('F-2601 AC-28: a timed out wait shows "Connecting with SSH timed out."', async () => {
+    deepStrictEqual(
+      await textFor({reason: {id: 'sshTimedOut'}}),
+      'Could not establish connection to "box": Connecting with SSH timed out.',
+    );
+  });
+
+  it('F-2601 AC-28: a shared connection whose own wait passed shows the reason in the dialog', async () => {
+    const {kind, reason} = ofConnection({kind: 'timeout'});
+    deepStrictEqual(
+      await textFor(reason === undefined ? {kind} : {kind, reason}),
+      'Could not establish connection to "box": Connecting with SSH timed out.',
     );
   });
 

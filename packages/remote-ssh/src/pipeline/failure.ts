@@ -188,6 +188,12 @@ export function ofAcquire(failure: AcquireFailure): FailureDetail {
   return failure === 'cancelled' ? {kind: 'cancelled'} : {kind: 'unknown'};
 }
 
+/** The failure of the extension's own connect wait, in either mode: its reason is the extension's own text. */
+export const CONNECT_WAIT_TIMEOUT: FailureDetail = {
+  kind: 'timeout',
+  reason: {id: 'sshTimedOut'},
+};
+
 /**
  * The failure of a shared connection's login, with the hints the login classification gave. An `ssh` that could not
  * be started is `prerequisiteMissing` when the client vanished after it was found, else unknown; the other cases of the
@@ -210,7 +216,7 @@ export function ofConnection(
     case 'helperRefused':
       return logged('unknown', failure.reason);
     case 'timeout':
-      return {kind: 'timeout'};
+      return CONNECT_WAIT_TIMEOUT;
     case 'cancelled':
       return {kind: 'cancelled'};
     default:
