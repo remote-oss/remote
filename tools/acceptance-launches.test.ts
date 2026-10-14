@@ -812,3 +812,60 @@ describe('the further extensions of the launches', () => {
     );
   });
 });
+
+describe('the platform cases (card coverage-12)', () => {
+  const launches = launchesOf(REPOSITORY_ROOT);
+  const cases = hostCases(REPOSITORY_ROOT, 'suite-platform');
+
+  it('coverage-12: the cases file gives the 24 launches, each named platform-<label>, in the file’s order', () => {
+    deepStrictEqual(
+      [
+        launches
+          .filter(launch => launch.label.startsWith('platform-'))
+          .map(launch => launch.label),
+        cases.length,
+      ],
+      [cases.map(each => `platform-${each.label}`), 24],
+    );
+  });
+
+  it('coverage-12: each launch gets its case’s settings and names its case for the window', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.label.startsWith('platform-'))
+        .map(launch => [
+          launch.settings,
+          launch.kind === undefined ? launch.environment : undefined,
+        ]),
+      cases.map(each => [each.settings, {HARNESS_PLATFORM_CASE: each.label}]),
+    );
+  });
+
+  it('coverage-12: the typed user case and the mute case open their authorities', () => {
+    deepStrictEqual(
+      ['platform-typed-user', 'platform-mute-default', 'platform-default'].map(
+        label => launches.find(launch => launch.label === label)?.folderUri,
+      ),
+      [
+        'vscode-remote://ssh-remote+harness@harness/home/harness',
+        'vscode-remote://ssh-remote+mute/home/harness',
+        'vscode-remote://ssh-remote+harness/home/harness',
+      ],
+    );
+  });
+
+  it('coverage-12: the broken settings case writes its syntax error after members the editor still reads, the configuration file and the local server setting first', () => {
+    const broken = cases.find(each => each.label === 'broken-settings');
+    deepStrictEqual(
+      [
+        Object.keys(broken?.settings ?? {}),
+        launches.find(launch => launch.label === 'platform-broken-settings')
+          ?.settingsTail,
+      ],
+      [
+        ['remote.SSH.useLocalServer'],
+        '"acceptance.broken": 1 "acceptance.brokenToo": 2',
+      ],
+    );
+  });
+});

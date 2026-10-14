@@ -125,6 +125,22 @@ window's first phase is now S157, and its later `initializing` after the takeove
 4). So the connector's phase events say which carry it (a `details` flag set by area A), and the host's progress
 renders the link on every phase that has it, whatever its position.
 
+**When the progress opens** (ruled 2026-10-14, connect-78, #866): the host opens the notification lazily, at the first
+of:
+1. a phase that is not `quiet`;
+2. 1500 ms after the resolve started (F-2304 BR-11: visible "within about 1.5 s of the resolve starting").
+
+A `quiet` phase sets the text the notification shows without opening it. Once open, the notification stays open, and
+every phase updates it, quiet or not, until the connect settles. A connect that settles first shows none, which is
+F-2304 §6.1 and F-2501 §6.3 step 2: a reload that reuses the connection.
+
+**A connector reports a phase that is not quiet before it shows any prompt.** So a prompt never shows without its
+notification (F-2304 BR-11, "no later than the first prompt").
+
+Area A decides which of its phases are quiet: for `ssh-remote`, the pipeline's first `initializing` and every
+`settingUpTunnel`. A family that never sends a quiet phase opens the notification at its first phase, as before.
+The host's timer is the editor port's `startTimer`.
+
 Cancellation: core's resolve carries no cancellation. Progress offers Cancel only when the resolver registered as
 `cancellable` (never for `ssh-remote`, F-2304 BR-2). Otherwise the host calls `connector.cancel` only when the window
 tears down (the extension host deactivates, "Close Remote Connection", the window closes). Area A then ends prompts and
