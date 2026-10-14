@@ -39,6 +39,7 @@ container or in unit form, on 2026-10-14.
 | P12 | X11, `DISPLAY` | `remote-ssh/src/environment/display.ts:30-48` | 4 | The session's `DISPLAY`, read from a `fact` line, is passed through unchanged with no `XAUTHORITY`. The log says only "DISPLAY is …". Nothing concludes X11 works. With a `~/.ssh/rc`, the cookie is that script's job (sshd(8), SSHRC) | conforms; row |
 | P13 | containers exec channel failures | containers-02, #808 (in review) | 2, 3 | contracts §1 as amended (#808): only the Docker client's line prefixes, with no substring of script output. iris has dropped the `is not running` match | row as an **amendment to #808** (§4) |
 | P14 | the dev container CLI's lines | containers-04 (#763, not built) | 2 | The JSON result line and `--log-format json` events (ADR-0009). The card already parses non-JSON stderr as plain log lines only | row as an **amendment to containers-04** (§4) |
+| P15 | C2's pre-flight classifier | `remote-containers/src/engine/check-outcome.ts` (containers-03, #842) | 2, 3 | The spawn error, the timer, the exit status and the JSON `Server.ApiVersion` conform. `/permission denied/i` and `/not ?found/i` over the whole stderr don't: measured on Docker 29.9, a `WARNING:` line, a daemon reply and an ssh host's stderr change the dialog | row and fix in **containers-10** (#862) (§4) |
 
 ## 3. The noisy-neighbour rows (this card, for the conforming parsers)
 
@@ -80,6 +81,9 @@ Restore the files in `after`.
   its own status and isn't `channelClosed`.
 - **containers-04 (#763):** a parser row. Non-JSON stderr lines that look like a result
   (`{"outcome":"success"}` with a prefix, N1–N5) aren't read as the result or as events.
+- **containers-10 (#862), the follow-up to containers-03 (#842):** C2's stderr classifier. It skips `WARNING:`
+  lines, decides `engineError` on the Docker CLI's transport and daemon prefixes, and only then applies F-0201
+  BR-3. Its rows R5 and R8–R12 are the noisy-neighbour rows.
 
 ## 5. Gates and review
 
