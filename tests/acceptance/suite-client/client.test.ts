@@ -13,6 +13,11 @@ import {
   usingLine,
 } from '../../../packages/remote-ssh/src/diagnostics/log-content.ts';
 import {connectionLog, recordLines} from '../suite/harness.ts';
+import {
+  recordAfterDialog,
+  type RecordLine,
+  type ScriptEntry,
+} from '../suite-local/script.ts';
 import casesFile from './cases.json' with {type: 'json'};
 
 /** One launch of the client search, as tests/acceptance/suite-client/cases.json lists it. */
@@ -20,7 +25,12 @@ interface ClientCase {
   label: string;
   cite: string;
   checked: string[];
-  used: string;
+  /** The program the lookup and the connection ran; null when no program was used for either. */
+  used: string | null;
+  /** The failure dialog's text, for a case that fails. */
+  dialog?: string;
+  /** The case's answers. */
+  script?: ScriptEntry[];
 }
 
 const cases = (casesFile as {cases: ClientCase[]}).cases;
@@ -80,31 +90,82 @@ if (launched === undefined) {
     `no client case for "${String(process.env.HARNESS_CLIENT_CASE)}"`,
   );
 }
-const {cite, label, checked, used} = launched;
+const {cite, label, checked, used, dialog} = launched;
+
+/** The case's record once its dialog's pick of actions was answered, without the display-only lines. */
+let dialogRecord: RecordLine[] = [];
 
 describe(`the client search of ${label}`, () => {
-  it(`${cite} (${label}): the window connected`, () => {
-    strictEqual(vscode.env.remoteName, 'ssh-remote');
-  });
+  if (dialog !== undefined) {
+    before(async () => {
+      dialogRecord = (await recordAfterDialog()).filter(
+        line => !['progress', 'downloadProgress'].includes(line.surface),
+      );
+    });
+  }
+
+  if (dialog === undefined) {
+    it(`${cite} (${label}): the window connected`, () => {
+      strictEqual(vscode.env.remoteName, 'ssh-remote');
+    });
+
+    it(`${cite} (${label}): no notification or dialog of the client search`, () => {
+      const shown = recordLines().filter(
+        line => line.surface === 'failureDialog' || line.surface === 'notice',
+      );
+      deepStrictEqual(
+        shown,
+        [],
+        `${JSON.stringify(shown)}\nthe connection log:\n${connectionLog().join('\n')}`,
+      );
+    });
+  } else {
+    it(`${cite} (${label}): the connect failed with the case's dialog`, () => {
+      strictEqual(
+        dialogRecord.find(line => line.surface === 'failureDialog')?.question,
+        dialog,
+      );
+    });
+
+    it(`${cite} (${label}): the dialog has Close Remote, Retry and More Actions...`, () => {
+      deepStrictEqual(
+        dialogRecord.find(line => line.surface === 'failureDialog')?.buttons,
+        ['Close Remote', 'Retry', 'More Actions...'],
+      );
+    });
+
+    it(`${cite} (${label}): no notice`, () => {
+      deepStrictEqual(
+        dialogRecord.filter(line => line.surface === 'notice'),
+        [],
+      );
+    });
+  }
 
   it(`${cite} (${label}): the programs checked and run are the table's`, () => {
-    deepStrictEqual(calls(), [
-      ...checked.map(name => `${name}\tcheck`),
-      `${used}\toptions`,
-      `${used}\tconnect`,
-    ]);
+    deepStrictEqual(
+      calls(),
+      used === null
+        ? checked.map(name => `${name}\tcheck`)
+        : [
+            ...checked.map(name => `${name}\tcheck`),
+            `${used}\toptions`,
+            `${used}\tconnect`,
+          ],
+    );
   });
 
-  it(`${cite} (${label}): no notification or dialog of the client search`, () => {
-    const shown = recordLines().filter(
-      line => line.surface === 'failureDialog' || line.surface === 'notice',
-    );
-    deepStrictEqual(
-      shown,
-      [],
-      `${JSON.stringify(shown)}\nthe connection log:\n${connectionLog().join('\n')}`,
-    );
-  });
+  if (label === 'client-silent') {
+    it("F-2101 AC-20 (client-silent): the window connected within 30 s of the connect's first progress line", () => {
+      const first = recordLines('progress')[0];
+      strictEqual(
+        first === undefined
+          ? 'the record has no progress line'
+          : Date.now() - first.time <= 30_000,
+        true,
+      );
+    });
+  }
 
   if (label === 'client-fails') {
     it('F-2101 AC-26 (client-fails): the log gives the setting, the rejection, the search path, the program checked, its banner and the program used, in order', () => {

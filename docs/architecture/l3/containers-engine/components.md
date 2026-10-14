@@ -43,8 +43,8 @@ when.
 5. **The window side and the container side of a rebuild:** C6 removes nothing. It reloads with a rebuild intent in the
    payload's own field (`contracts.md` §3), and C7 removes and recreates inside the resolve (F-0405 BR-17), so a
    failed rebuild still shows F-0410's dialog in the container window.
-6. **No code of ours runs in the container** except lib-server's install and start scripts and C11's relay script
-   (brief ruling 1).
+6. **No code of ours runs in the container** except lib-server's install and start scripts, C11's relay script, and
+   C10's root step for the `vscode` volume's shared folders (contracts §5.2; amended 2026-10-14) (brief ruling 1).
 
 ## 3. Dependencies
 
