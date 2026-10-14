@@ -31,6 +31,7 @@ interface Setup {
   rejects: string | undefined;
   dockerPath: unknown;
   waitOnCheck: Promise<void>;
+  targets: unknown[];
 }
 
 function setup(): Setup {
@@ -48,6 +49,7 @@ function setup(): Setup {
     rejects: undefined,
     dockerPath: 'docker',
     waitOnCheck: Promise.resolve(),
+    targets: [],
   };
 }
 
@@ -88,6 +90,7 @@ function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
     },
     bridge: {
       readConfiguration: target => {
+        state.targets.push(target);
         state.calls.push(`readConfiguration ${target.workspaceFolder}`);
         return Promise.resolve(state.read);
       },
@@ -136,6 +139,8 @@ describe('Reopen in Container', () => {
         (state.commands[0]?.parameters[0] as {path: string}).path,
         state.commands[0]?.parameters[1],
         'hostPath' in target ? target.hostPath : target,
+        'localDocker' in target ? target.localDocker : target,
+        state.targets,
       ],
       [
         ['firstCheck /w/p', 'readConfiguration /w/p', 'currentContext'],
@@ -144,6 +149,18 @@ describe('Reopen in Container', () => {
         '/workspaces/p',
         {forceNewWindow: false, forceReuseWindow: true},
         '/w/p',
+        false,
+        [
+          {
+            workspaceFolder: '/w/p',
+            configFile: CONFIG,
+            dockerPath: 'docker',
+            idLabels: [],
+            mountWorkspaceGitRoot: true,
+            mounts: [],
+            logLevel: 'info',
+          },
+        ],
       ],
     );
   });
