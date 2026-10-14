@@ -112,7 +112,12 @@ export async function beforeReload(
 1. `progress = startPreReloadProgress(ports.progress)`.
 2. `closing = {...ports.dialogs, showError: (…) => { progress.close(); return ports.dialogs.showError(…); }}`. Wrap each
    `ConfigSurfaces` method the same way.
-3. `engineCheck = ports.firstCheck(request.folder, closing)`. Don't await it here.
+3. `engineCheck = ports.firstCheck(request.folder, closing).catch(caught => { … })`. Don't await it here.
+   - **The `catch` is attached at once,** so a rejection is never unhandled while `chooseConfiguration` works (dike on
+     #931).
+   - A rejected check logs at error `the engine check failed: <message>` (the `Error`'s message, else `String(caught)`),
+     closes the progress, and answers `stopped`. `firstCheck` maps every Docker outcome to a dialog, so a rejection is
+     a defect of ours, and the command ends with the log line.
 4. `choice = await chooseConfiguration({...request, engineCheck}, {...ports.config, surfaces: <wrapped>})`.
 5. Return `{choice, progress}`. The caller closes `progress` before its reload, and in its `finally`.
 
@@ -131,8 +136,8 @@ export async function beforeReload(
     reloads. When that takes longer than half a second, a "Connecting to Dev Container" notification shows meanwhile."
     Then one line citing F-0401 5.0 step 2 and #929;
   - containers-13's interim notice (`noConfiguration`), as containers-13 §1 asks.
-- **The catalogue:** F-0401 AC rows that cite 5.0 step 2's timing gain the note `deviation: #929` in their remark
-  column. Their status doesn't change.
+- **Not in the catalogue.** check-coverage allows a reason only on `core` and `deferred` rows, so the deviation lives in
+  `release-1-notes.md` alone (dike on #931).
 
 ## 3. Files
 
@@ -144,7 +149,7 @@ export async function beforeReload(
 | `test/unit/pre-reload-progress.test.ts`, `test/unit/pre-reload.test.ts` | new: §4.1, §4.2 |
 | `test/unit/choose-configuration.test.ts`, `test/unit/reopen.test.ts` | §4.3 |
 | `tests/acceptance/containers/gate.test.ts` or containers-13's acceptance file | §4.4 |
-| `docs/architecture/l3/containers-engine/release-1-notes.md`, the catalogue | §2.4 |
+| `docs/architecture/l3/containers-engine/release-1-notes.md` | §2.4 |
 
 ## 4. Rows
 
@@ -168,6 +173,7 @@ export async function beforeReload(
 | `ruling (c): the picker waits for a passing check` | two candidates; the check settles `proceed` after the labels are read: `pick` is called after it, not before |
 | `ruling (c): a surface closes the progress` | the progress fired; then a `showError` (check) / `pick` / `showWarning` / `showInformation` / `openPreview`: `close` comes before each surface's call |
 | `ruling (c): a fast run never shows the progress` | both settle before the timer fires; the caller closes: no `showProgress` |
+| `ruling (c): a check that rejects answers stopped, logs it, and leaves no unhandled rejection` | `firstCheck` rejects with `new Error('boom')` while the CLI read is pending: the answer is `stopped`; the log has `the engine check failed: boom` at error; the progress is closed; no surface is called; an `unhandledRejection` listener installed for the row sees nothing |
 
 ### 4.3 `choose-configuration.test.ts` and `reopen.test.ts`
 
