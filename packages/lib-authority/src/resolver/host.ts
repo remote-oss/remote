@@ -152,6 +152,10 @@ export interface ResolverHandle {
   lastResolve(): LastResolve;
   /** Calls `listener` once, when the first resolve of this extension host settles. */
   onFirstResolveSettled(listener: () => void): void;
+  /** The window is about to leave its remote: later resolves end at once, handled and silent, until `stay()`. */
+  leave(): void;
+  /** Puts the resolver back after `leave()`, so the next resolve runs as before. */
+  stay(): void;
   /** Stops following the connector, unregisters the resolver and cancels the connect: the window is torn down. */
   dispose(): void;
 }
@@ -237,7 +241,7 @@ export async function registerResolver(
     listeners: [],
   };
   const {connector} = options;
-  const state = {disposed: false, queue: Promise.resolve()};
+  const state = {disposed: false, leaving: false, queue: Promise.resolve()};
 
   function applyAndAnnounce(
     event: Parameters<ConnectionTracker['apply']>[0],
@@ -318,6 +322,9 @@ export async function registerResolver(
     if ('malformed' in decoded || decoded.family !== options.family) {
       throw editor.notAvailable(undefined, false);
     }
+    if (state.leaving) {
+      throw editor.notAvailable(undefined, true);
+    }
     const isReconnection = memory.connectedBefore;
     applyAndAnnounce({
       kind: 'resolveStarted',
@@ -384,6 +391,12 @@ export async function registerResolver(
         } else {
           memory.listeners.push(listener);
         }
+      },
+      leave: () => {
+        state.leaving = true;
+      },
+      stay: () => {
+        state.leaving = false;
       },
       dispose: () => {
         state.disposed = true;

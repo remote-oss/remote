@@ -1,7 +1,7 @@
 import {deepStrictEqual, match, rejects} from 'node:assert';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {buildPackages} from './build.ts';
+import {buildPackages, COPIED_FILES} from './build.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
 describe('build', () => {
@@ -102,7 +102,7 @@ describe('build', () => {
   it('F-5001.AC-15: a web entry that imports a node module is refused', async () => {
     workspace.write(
       'packages/remote-a/src/web-extension.ts',
-      "import {readFileSync} from 'node:fs';\nvoid readFileSync;\n",
+      "import {existsSync, readFileSync} from 'node:fs';\nvoid readFileSync;\n",
     );
     await rejects(buildPackages(workspace.root, ['remote-a']));
   });
@@ -111,5 +111,88 @@ describe('build', () => {
     deepStrictEqual(await buildPackages(workspace.root, ['remote-a']), [
       'remote-a: dist/extension.js',
     ]);
+  });
+
+  describe('files shipped from a dependency (card containers-04)', () => {
+    const SHIPPED = {
+      'remote-a': {
+        from: 'fake-dependency',
+        files: ['a.txt', 'sub/b.bin'],
+        into: 'dist/copied',
+      },
+    };
+
+    beforeEach(() => {
+      workspace.write(
+        'packages/remote-a/node_modules/fake-dependency/package.json',
+        '{"name": "fake-dependency", "version": "1.0.0"}',
+      );
+      workspace.write(
+        'packages/remote-a/node_modules/fake-dependency/a.txt',
+        'text\r\nwith ends\n',
+      );
+      workspace.write(
+        'packages/remote-a/node_modules/fake-dependency/sub/b.bin',
+        '\u0000\u00ff bytes',
+      );
+    });
+
+    it('C3: the files of the dependency are copied byte for byte under the target, keeping their paths', async () => {
+      await buildPackages(workspace.root, ['remote-a'], SHIPPED);
+      deepStrictEqual(
+        ['a.txt', 'sub/b.bin'].map(file =>
+          readFileSync(
+            path.join(workspace.root, 'packages/remote-a/dist/copied', file),
+          ).equals(
+            readFileSync(
+              path.join(
+                workspace.root,
+                'packages/remote-a/node_modules/fake-dependency',
+                file,
+              ),
+            ),
+          ),
+        ),
+        [true, true],
+      );
+    });
+
+    it('C3: the outcome names the folder of the copied files', async () => {
+      deepStrictEqual(
+        await buildPackages(workspace.root, ['remote-a'], SHIPPED),
+        ['remote-a: dist/extension.js', 'remote-a: dist/copied'],
+      );
+    });
+
+    it('C3: a missing source file fails the build, naming it', async () => {
+      await rejects(
+        buildPackages(workspace.root, ['remote-a'], {
+          'remote-a': {...SHIPPED['remote-a'], files: ['missing.txt']},
+        }),
+        /remote-a: fake-dependency has no file missing\.txt/,
+      );
+    });
+
+    it('C3: a package without an entry copies nothing', async () => {
+      await buildPackages(workspace.root, ['remote-a'], {});
+      deepStrictEqual(
+        existsSync(path.join(workspace.root, 'packages/remote-a/dist/copied')),
+        false,
+      );
+    });
+
+    it('C3: the real entry ships the five files of the dev container CLI to dist/devcontainers-cli', () => {
+      deepStrictEqual(COPIED_FILES['remote-containers'], {
+        from: '@devcontainers/cli',
+        files: [
+          'devcontainer.js',
+          'dist/spec-node/devContainersSpecCLI.js',
+          'scripts/updateUID.Dockerfile',
+          'LICENSE.txt',
+          'ThirdPartyNotices.txt',
+        ],
+        into: 'dist/devcontainers-cli',
+      });
+    });
   });
 });

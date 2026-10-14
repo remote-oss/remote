@@ -4,6 +4,7 @@
  */
 
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {withNoise} from 'lib-host/testing/noise';
 import {parseProgressLine, progressLines} from '../../src/index.ts';
 
 describe('progress-line parser (card server-08 table)', () => {
@@ -119,5 +120,23 @@ describe('progress-line parser (card server-08 table)', () => {
 
   it('progressLines([]) -> []', () => {
     deepStrictEqual(progressLines([]), []);
+  });
+
+  it('ADR-0010: the progress lines: noise around and inside its stream changes nothing', () => {
+    deepStrictEqual(
+      progressLines(
+        withNoise([
+          'remote-oss-server-progress download 10',
+          'remote-oss-server-progress unpack 50 extra',
+          ' remote-oss-server-progress unpack 50',
+          'xremote-oss-server-progress unpack 70',
+          'remote-oss-server-progress unpack 60',
+        ]),
+      ),
+      [
+        {step: 'download', percent: 10},
+        {step: 'unpack', percent: 60},
+      ],
+    );
   });
 });

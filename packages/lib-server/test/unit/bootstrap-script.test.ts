@@ -17,6 +17,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {NOISE_LINES} from 'lib-host/testing/noise';
 import {
   type BootstrapRequest,
   scriptFor,
@@ -200,6 +201,21 @@ describe('the POSIX bootstrap script', () => {
           'host.arch',
         ]),
         {status: 'Ok', 'host.os': 'linux', 'host.arch': 'x64'},
+      );
+    });
+
+    it('ADR-0010: the probe: noise around and inside its stream changes nothing', () => {
+      const noise = NOISE_LINES.map(line => `printf '%s\\n' '${line}'`);
+      function loud(script: string): string {
+        return [...noise, ...noise.map(line => `${line} >&2`), script].join(
+          '\n',
+        );
+      }
+      deepStrictEqual(
+        blockOf(host, single('probe'), parametersFor(), {
+          rewriteScript: loud,
+        }),
+        blockOf(host, single('probe'), parametersFor()),
       );
     });
 
@@ -1435,6 +1451,210 @@ describe('the POSIX bootstrap script', () => {
           environment: {SERVER_SILENT: 'yes'},
         }),
         'ServerFailedToStart',
+      );
+    });
+
+    /** The noise of ADR-0010 that a user's shell or the server's neighbours may write. */
+    const NOISE = [
+      'ERROR: Your fridge is not running',
+      'see remote-oss-server-result-begin for details',
+      'status=Ok',
+      'fact host.arch x64',
+      'motd: Permission denied (publickey) is a test',
+      'ERROR: Your fridge is not running\r',
+    ].join('\n');
+
+    /** A start whose wait is one second, so a server that never gives the ready line fails fast. */
+    function quickStart(): ScriptParameters {
+      const parameters = parametersFor();
+      parameters.start.readySeconds = 1;
+      return parameters;
+    }
+
+    it('ADR-0010: a line that only contains the ready phrase is not the ready line', () => {
+      deepStrictEqual(
+        statusOf(host, single('start'), quickStart(), {
+          environment: {
+            SERVER_SILENT: 'yes',
+            SERVER_LOG_BEFORE:
+              'debug: Extension host agent listening on 1234 (old)',
+          },
+        }),
+        'ServerFailedToStart',
+      );
+    });
+
+    it('ADR-0010: a ready line behind a prefix is not the ready line, in port mode and in socket mode', () => {
+      const socketStart = quickStart();
+      socketStart.start.socketMode = true;
+      deepStrictEqual(
+        [
+          statusOf(host, single('start'), quickStart(), {
+            environment: {
+              SERVER_SILENT: 'yes',
+              SERVER_LOG_BEFORE: 'noise Extension host agent listening on 9999',
+            },
+          }),
+          statusOf(host, single('start'), socketStart, {
+            environment: {
+              SERVER_SILENT: 'yes',
+              SERVER_LOG_BEFORE:
+                'noise Extension host agent listening on /tmp/code-noise',
+            },
+          }),
+        ],
+        ['ServerFailedToStart', 'ServerFailedToStart'],
+      );
+    });
+
+    it('ADR-0010: the ready port is digits only', () => {
+      deepStrictEqual(
+        statusOf(host, single('start'), quickStart(), {
+          environment: {SERVER_READY_TEXT: '5abc'},
+        }),
+        'ServerFailedToStart',
+      );
+    });
+
+    it('ADR-0010: port 0 and a port with a leading zero are not a port', () => {
+      deepStrictEqual(
+        ['0', '041000'].map(port =>
+          statusOf(host, single('start'), quickStart(), {
+            environment: {SERVER_READY_TEXT: port},
+          }),
+        ),
+        ['ServerFailedToStart', 'ServerFailedToStart'],
+      );
+    });
+
+    it('ADR-0010: a failure phrase mid-line is not the failure', () => {
+      deepStrictEqual(
+        statusAndFacts(
+          host,
+          single('start'),
+          quickStart(),
+          ['server.failure'],
+          {
+            environment: {
+              SERVER_EXIT: '1',
+              SERVER_LOG_BEFORE:
+                'note: Could not find free port in range earlier',
+            },
+          },
+        ),
+        {status: 'ServerFailedToStart', 'server.failure': undefined},
+      );
+    });
+
+    it('F-2409: the measured ready line after the server binding line gives the port', () => {
+      deepStrictEqual(
+        statusAndFacts(
+          host,
+          single('start'),
+          parametersFor(),
+          ['server.port'],
+          {
+            environment: {
+              SERVER_LOG_BEFORE: 'Server bound to 127.0.0.1:4321 (IPv4)',
+            },
+          },
+        ),
+        {status: 'Ok', 'server.port': '4321'},
+      );
+    });
+
+    it("F-2409.6.2: the server's measured no-free-port line is noFreePort", () => {
+      deepStrictEqual(
+        statusAndFacts(
+          host,
+          single('start'),
+          quickStart(),
+          ['server.failure'],
+          {
+            environment: {
+              SERVER_EXIT: '1',
+              SERVER_LOG_BEFORE:
+                '--port: Could not find free port in range: 1 - 2 (inclusive).',
+            },
+          },
+        ),
+        {status: 'ServerFailedToStart', 'server.failure': 'noFreePort'},
+      );
+    });
+
+    it("F-2409.AC-30: the server's measured CVE-2020-1416 block is cveTerminated", () => {
+      deepStrictEqual(
+        statusAndFacts(
+          host,
+          single('start'),
+          quickStart(),
+          ['server.failure'],
+          {
+            environment: {
+              SERVER_EXIT: '0',
+              SERVER_LOG_BEFORE: [
+                '',
+                '*',
+                '* !!!! Server terminated due to presence of CVE-2020-1416 !!!!',
+                '*',
+              ].join('\n'),
+            },
+          },
+        ),
+        {status: 'ServerFailedToStart', 'server.failure': 'cveTerminated'},
+      );
+    });
+
+    it('ADR-0010: the CVE text mid-line is not the CVE failure', () => {
+      deepStrictEqual(
+        statusAndFacts(
+          host,
+          single('start'),
+          quickStart(),
+          ['server.failure'],
+          {
+            environment: {
+              SERVER_EXIT: '1',
+              SERVER_LOG_BEFORE:
+                'note: * !!!! Server terminated due to presence of CVE-2020-1416 !!!!',
+            },
+          },
+        ),
+        {status: 'ServerFailedToStart', 'server.failure': undefined},
+      );
+    });
+
+    it('ADR-0010: the CVE line with text after it is not the CVE failure', () => {
+      deepStrictEqual(
+        statusAndFacts(
+          host,
+          single('start'),
+          quickStart(),
+          ['server.failure'],
+          {
+            environment: {
+              SERVER_EXIT: '1',
+              SERVER_LOG_BEFORE:
+                '* !!!! Server terminated due to presence of CVE-2020-1416 !!!! (quoted)',
+            },
+          },
+        ),
+        {status: 'ServerFailedToStart', 'server.failure': undefined},
+      );
+    });
+
+    it('ADR-0010: noise around the ready line changes nothing', () => {
+      deepStrictEqual(
+        statusAndFacts(
+          host,
+          single('start'),
+          parametersFor(),
+          ['server.port'],
+          {
+            environment: {SERVER_LOG_BEFORE: NOISE, SERVER_LOG_AFTER: NOISE},
+          },
+        ),
+        {status: 'Ok', 'server.port': '4321'},
       );
     });
 

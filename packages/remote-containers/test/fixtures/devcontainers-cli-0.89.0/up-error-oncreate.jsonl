@@ -1,0 +1,1 @@
+{"outcome":"error","message":"Command failed: /bin/sh -c exit 4","description":"onCreateCommand from devcontainer.json failed.","containerId":"fcf59aa9b58801c6a6eeb0b70b92c6f887a54a64b0117f6666e059afa4616a15"}

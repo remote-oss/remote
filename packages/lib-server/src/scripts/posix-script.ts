@@ -10,6 +10,14 @@ import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
 /** The server's own line that says it is ready; the port follows it. */
 export const READY_LINE = 'Extension host agent listening on';
 
+/** The start of the server's own line when no port of its `--port` range is free, as a `grep` pattern. */
+export const NO_FREE_PORT_PREFIX =
+  '--port: Could not find free port in range: ';
+
+/** The server's whole line when it ends for CVE-2020-1416, as a `grep` pattern: its leading `*` is escaped. */
+export const CVE_LINE =
+  '\\* !!!! Server terminated due to presence of CVE-2020-1416 !!!!';
+
 /** Quote a value for the shell as one word, whatever it holds. */
 export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
