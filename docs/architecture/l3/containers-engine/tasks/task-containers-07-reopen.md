@@ -198,14 +198,14 @@ unreadable files and the picker, and takes this function over.
   "Dev Containers: Reopen in Container"). The title's nls key is the one the identifiers tool generates for it, as
   for remote-ssh's commands. There's no keybinding and no icon.
 - **`commandPalette`**, one entry, with `when`:
-  `!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers.standingDown`.
+  `!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown`.
 - **`statusBar/remoteIndicator`**, group `remote_30_dev-container_2_actions@8`, with the same `when`.
 - **What differs from the reference:**
   - only the local clause of BR-2 is contributed. The `wsl|ssh-remote|tunnel` clause and the recovery-container
     clause come with those features;
   - `isWorkspaceTrusted` is slice 1's interim (§4.2 step 3). C5's card removes it, so the command is listed in
     Restricted Mode again, as F-0401 PRE-7 says;
-  - `!remote-containers.standingDown` is the family's guard (containers-01 §2.3).
+  - `!remote-containers:standingDown` is the family's guard (containers-01 §2.3).
 - **`hideConnectCommands`:** F-0504 BR-8 (decision 2026-09-26) says the extension defines it, defaults it to false and
   never sets it, and keeps the `when` clause verbatim (D-14, F-1406).
   - Add it to `identifiers.json`'s `contextKeys` with `"setter": "extension"`.
