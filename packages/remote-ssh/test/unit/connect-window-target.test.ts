@@ -108,7 +108,7 @@ describe('argumentChoice (card remote-ssh-02)', () => {
 });
 
 describe('activeHostTarget (card remote-ssh-02)', () => {
-  it('F-2303.AC-19: a port of 22 is dropped with the user kept', () => {
+  it('F-2303.AC-11: a port of 22 is dropped with the user kept', () => {
     deepStrictEqual(activeHostTarget({host: 'h', user: 'u', port: 22}), {
       host: 'h',
       user: 'u',

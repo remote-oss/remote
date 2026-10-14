@@ -43,7 +43,7 @@ describe('writeHostBlock (the file text with the block placed)', () => {
     );
   });
 
-  it('F-2204.BR-11b: the block goes before the first block, after the globals', () => {
+  it('F-2204 AC-17: BR-11b, the block goes before the first block, after the globals', () => {
     const file =
       '# top\nInclude x\nServerAliveInterval 5\n\nHost old\n  Port 1\n';
     deepStrictEqual(
@@ -74,11 +74,11 @@ describe('writeHostBlock (the file text with the block placed)', () => {
     );
   });
 
-  it('F-2204.BR-11c: a file without a final newline gains one before the block', () => {
+  it('F-2204 AC-18: BR-11c, a file without a final newline gains one before the block', () => {
     deepStrictEqual(write('# c'), `# c\n\n${blockText('', '  ')}`);
   });
 
-  it('F-2204.BR-11c: a trailing blank line stays one', () => {
+  it('F-2204 AC-18: BR-11c, a trailing blank line stays one', () => {
     deepStrictEqual(write('# c\n\n'), `# c\n\n${blockText('', '  ')}`);
   });
 
@@ -156,7 +156,7 @@ describe('writeHostBlock (the file text with the block placed)', () => {
     deepStrictEqual(write(file), `${blockText('', '  ')}\n${file}`);
   });
 
-  it('F-2204.BR-14: a duplicate host is written as it is', () => {
+  it('F-2204 AC-20: BR-14, a duplicate host is written as it is', () => {
     deepStrictEqual(
       write('Host host4\n  HostName host4\n'),
       `${blockText('', '  ')}\nHost host4\n  HostName host4\n`,
