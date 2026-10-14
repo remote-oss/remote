@@ -141,6 +141,7 @@ describe('helper client', () => {
             ) as HelperParameters;
             void serve({
               ...parameters,
+              files,
               handler,
               port: endpoints,
               clock: () => clock.now(),
@@ -164,6 +165,7 @@ describe('helper client', () => {
         {
           endpoint: '/run/rh.sock',
           nonce: 'n',
+          recordFile: '/registry/ssh.connection/n.json',
           policy: {kind: 'idleAfterLastLease', milliseconds: 1},
           payload: {},
           options: {},
@@ -201,6 +203,7 @@ describe('helper client', () => {
         {
           endpoint: '/run/rh.sock',
           nonce: 'secret-nonce',
+          recordFile: '/registry/ssh.connection/n.json',
           policy: {kind: 'idleAfterLastLease', milliseconds: 1},
           payload: {},
           options: {},
@@ -347,6 +350,8 @@ describe('helper client', () => {
         void serve({
           endpoint: '/run/starting.sock',
           nonce: 'old',
+          recordFile: RECORD_PATH,
+          files,
           payload: {},
           policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
           handler,
@@ -512,6 +517,69 @@ describe('helper client', () => {
 
     it('is done when the record is unreadable', async () => {
       files.files.set(RECORD_PATH, '{broken');
+      await stop(environment, '/registry', 'ssh.connection', 'user@host:22');
+    });
+
+    /** A helper that listens at `endpoint`, closes on a stop when it is told to, and never removes a record. */
+    function listenWithoutRemoving(endpoint: string, closesOnStop: boolean) {
+      return endpoints.listen(endpoint, connection => {
+        connection.onMessage(message => {
+          if (closesOnStop && (message as {type: string}).type === 'stop') {
+            connection.close();
+          }
+        });
+      });
+    }
+
+    function removals(): number {
+      return files.calls.filter(call => call.operation === 'remove').length;
+    }
+
+    it('contracts X1: stop waits for the helper to close and removes nothing itself', async () => {
+      files.files.set(RECORD_PATH, recordAt('/run/quiet.sock'));
+      await listenWithoutRemoving('/run/quiet.sock', true);
+      await drive(
+        stop(environment, '/registry', 'ssh.connection', 'user@host:22'),
+      );
+      strictEqual(removals(), 0);
+    });
+
+    it('contracts X1: stop removes the record of a helper that no longer answers', async () => {
+      files.files.set(RECORD_PATH, recordAt('/run/gone.sock'));
+      await stop(environment, '/registry', 'ssh.connection', 'user@host:22');
+      strictEqual(files.files.has(RECORD_PATH), false);
+    });
+
+    it("contracts X1: stop removes the record of a helper that doesn't end in time", async () => {
+      files.files.set(RECORD_PATH, recordAt('/run/hung.sock'));
+      await listenWithoutRemoving('/run/hung.sock', false);
+      await drive(
+        stop(environment, '/registry', 'ssh.connection', 'user@host:22'),
+      );
+      strictEqual(files.files.has(RECORD_PATH), false);
+    });
+
+    it('contracts X1: on the stale path stop keeps a record another helper wrote', async () => {
+      files.files.set(RECORD_PATH, recordAt('/run/gone.sock'));
+      endpoints.connect = () => {
+        files.files.set(
+          RECORD_PATH,
+          recordAt('/run/other.sock').replace('"old"', '"new"'),
+        );
+        return Promise.reject(new Error('gone'));
+      };
+      await stop(environment, '/registry', 'ssh.connection', 'user@host:22');
+      strictEqual(removals(), 0);
+    });
+
+    it('contracts X1: stop with no record is done and removes nothing', async () => {
+      await stop(environment, '/registry', 'ssh.connection', 'user@host:22');
+      strictEqual(removals(), 0);
+    });
+
+    it('contracts X1: a failing remove leaves stop done', async () => {
+      files.files.set(RECORD_PATH, recordAt('/run/gone.sock'));
+      files.remove = () => Promise.reject(new Error('read-only folder'));
       await stop(environment, '/registry', 'ssh.connection', 'user@host:22');
     });
   });

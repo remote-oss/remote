@@ -329,7 +329,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       );
     });
 
-    it('F-2411: kill stops the server and removes the install', async () => {
+    it('contracts V8: F-2411, kill stops the server and removes the install', async () => {
       await kill(host.channel, installation.parameters, CANCELLATION);
       deepStrictEqual(
         host

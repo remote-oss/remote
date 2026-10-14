@@ -16,6 +16,7 @@ import type * as vscode from 'vscode';
 import {activateExplorer, silentHandlers} from './activation.ts';
 import {commands, standDown, views} from './identifiers.generated.ts';
 import {companionCallsOf} from './view/companion-calls.ts';
+import {connectHandlers} from './view/connect.ts';
 import {createTargets, type ViewSession} from './view/targets.ts';
 import {
   configFileChangesOf,
@@ -59,6 +60,7 @@ export async function activateInWindow(
     handlers: {
       ...silentHandlers(commands),
       refresh: {execute: () => session?.targets.rebuild()},
+      ...connectHandlers(() => session),
     },
     setup,
   });

@@ -86,13 +86,13 @@ describe('the maintenance of the host server', function () {
   }
 
   describe('F-2411 kill', () => {
-    it('F-2411: stops the server of the data folder', async () => {
+    it('contracts V8: F-2411, stops the server of the data folder', async () => {
       const {parameters, processId} = await running();
       await kill(host.channel, parameters, CANCELLATION);
       deepStrictEqual(alive(processId), false);
     });
 
-    it('F-2411: removes the installed servers, keeping the data folder', async () => {
+    it('contracts V8: F-2411, removes the installed servers, keeping the data folder', async () => {
       const {parameters} = await running();
       await kill(host.channel, parameters, CANCELLATION);
       deepStrictEqual(
@@ -104,7 +104,7 @@ describe('the maintenance of the host server', function () {
       );
     });
 
-    it('F-2411: succeeds silently when nothing runs', async () => {
+    it('contracts V8: F-2411, succeeds silently when nothing runs', async () => {
       deepStrictEqual(await kill(host.channel, parametersFor(), CANCELLATION), {
         kind: 'done',
       });
@@ -112,7 +112,7 @@ describe('the maintenance of the host server', function () {
   });
 
   describe('F-2412 uninstall', () => {
-    it('F-2412: stops the server and deletes the data folder', async () => {
+    it('F-2412 AC-5: stops the server and deletes the data folder', async () => {
       const {parameters, processId} = await running();
       await uninstall(host.channel, parameters, CANCELLATION);
       deepStrictEqual(
@@ -121,14 +121,14 @@ describe('the maintenance of the host server', function () {
       );
     });
 
-    it('F-2412: leaves the rest of the home folder alone', async () => {
+    it('contracts V8: F-2412, leaves the rest of the home folder alone', async () => {
       host.onHost('sh', '-c', `echo mine > '${HOST_HOME}/keep-me'`);
       const {parameters} = await running();
       await uninstall(host.channel, parameters, CANCELLATION);
       deepStrictEqual(exists(`${HOST_HOME}/keep-me`), true);
     });
 
-    it('F-2412: succeeds when there is nothing to remove', async () => {
+    it('contracts V8: F-2412, succeeds when there is nothing to remove', async () => {
       deepStrictEqual(
         await uninstall(host.channel, parametersFor(), CANCELLATION),
         {kind: 'done'},

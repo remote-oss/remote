@@ -122,10 +122,10 @@ describe('the manifest of the Remote Explorer package', () => {
           'MIT',
           {
             type: 'git',
-            ['url']: 'https://github.com/remote-oss/remote.git',
+            url: 'https://github.com/remote-oss/remote.git',
             directory: 'packages/remote-explorer',
           },
-          {['url']: 'https://github.com/remote-oss/remote/issues'},
+          {url: 'https://github.com/remote-oss/remote/issues'},
           {vscode: '^1.139.0'},
           ['Other'],
           ['remote development', 'remote', 'explorer'],

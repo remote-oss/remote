@@ -100,12 +100,14 @@ describe('the window side against a helper that does not follow the protocol', (
     garbage = [];
     heard = [];
     const endpoints = new FakeEndpointPort();
+    const files = new MemoryFilePort();
     environment = clientEnvironment(
       {
-        files: new MemoryFilePort(),
+        files,
         endpoints,
         spawn: specification => {
           void serve({
+            files,
             ...(JSON.parse(
               specification.environment[PARAMETERS] ?? '',
             ) as HelperParameters),

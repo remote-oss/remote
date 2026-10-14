@@ -84,6 +84,9 @@ function fakeCalls(): FakeCalls {
       calls.hosts.push(call);
       return call.promise;
     },
+    open: () => {
+      throw new Error('the targets never open a host');
+    },
   };
   return calls;
 }

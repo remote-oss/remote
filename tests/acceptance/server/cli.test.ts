@@ -547,7 +547,7 @@ describe('V7a the CLI on a real host', function () {
     );
   });
 
-  it('F-2411.BR-3, BR-4: after a CLI served the real server, kill ends the server, leaves the CLI and its supervisor, and keeps cli/servers and the agent-host token of the CLI', async () => {
+  it('F-2411 AC-6: BR-3, BR-4, after a CLI served the real server, kill ends the server, leaves the CLI and its supervisor, and keeps cli/servers and the agent-host token of the CLI', async () => {
     await install();
     const first = await servedBy(session);
     const killed = await kill(session.channel, parameters, NEVER_CANCELLED);

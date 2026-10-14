@@ -2,7 +2,7 @@ import {deepStrictEqual, strictEqual} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {MemoryFilePort} from 'lib-helper/testing/memory-file-port';
-import type {EndpointConnection} from 'lib-helper';
+import {type EndpointConnection, serializeRecord} from 'lib-helper';
 import {
   type ConnectionHelperOptions,
   runConnectionHelper,
@@ -16,6 +16,20 @@ const ENDPOINT = '/run/rh-0123456789abcdef.sock';
 const NONCE = 'nonce-1';
 const RECORD_FILE = '/registry/record.json';
 const ASKPASS_NONCE = 'askpass-nonce';
+
+/** The text of the record of a helper with `nonce`. */
+function recordWith(nonce: string): string {
+  return serializeRecord({
+    version: 1,
+    namespace: 'ssh.connection',
+    recordKey: 'h.invalid',
+    endpoint: ENDPOINT,
+    nonce,
+    startedByProcessId: 1,
+    startedAt: 0,
+    payload: {},
+  });
+}
 const REQUEST: SshRequest = {
   purpose: 'connection',
   target: {host: 'h.invalid'},
@@ -79,6 +93,7 @@ describe('connection helper', () => {
       parameters: {
         endpoint: ENDPOINT,
         nonce: NONCE,
+        recordFile: RECORD_FILE,
         policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
         payload: {socksPort: 41000},
         options: {...options},
@@ -138,7 +153,7 @@ describe('connection helper', () => {
     port = new FakeEndpointPort();
     clock = new FakeClock();
     files = new MemoryFilePort();
-    files.files.set(RECORD_FILE, '{}');
+    files.files.set(RECORD_FILE, recordWith(NONCE));
     spawner = new ScriptedSpawner(() => undefined);
     received = [];
     launchers = new Map();
@@ -238,6 +253,36 @@ describe('connection helper', () => {
     deepStrictEqual(await killedAt(connection, 7000, ended), [false, true]);
   });
 
+  it("contracts X2: the connection helper's record is removed before its endpoint closes", async () => {
+    const recordWhenClosed: boolean[] = [];
+    const listen = port.listen.bind(port);
+    port.listen = async (endpoint, onConnection) => {
+      const server = await listen(endpoint, onConnection);
+      return {
+        close: () => {
+          if (endpoint === ENDPOINT) {
+            recordWhenClosed.push(files.files.has(RECORD_FILE));
+          }
+          return server.close();
+        },
+      };
+    };
+    const ended = start();
+    const connection = await join();
+    connection.send({type: 'stop'});
+    await ended;
+    deepStrictEqual(recordWhenClosed, [false]);
+  });
+
+  it('contracts X2: an ended connection helper keeps a record a newer helper wrote', async () => {
+    files.files.set(RECORD_FILE, recordWith('nonce-2'));
+    const ended = start();
+    const connection = await join();
+    connection.send({type: 'stop'});
+    await ended;
+    strictEqual(files.files.get(RECORD_FILE), recordWith('nonce-2'));
+  });
+
   it('removes its registry record when a stop ends it', async () => {
     const ended = start();
     const connection = await join();
@@ -258,7 +303,7 @@ describe('connection helper', () => {
     );
   });
 
-  it('removes its registry record when serving fails', async () => {
+  it('contracts X2: a connection helper that fails before it listens removes its own record', async () => {
     port.listen = () => Promise.reject(new Error('no endpoint'));
     await start().catch(() => undefined);
     strictEqual(files.files.has(RECORD_FILE), false);
@@ -374,6 +419,7 @@ describe('connection helper', () => {
         parameters: {
           endpoint: ENDPOINT,
           nonce: NONCE,
+          recordFile: RECORD_FILE,
           policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
           payload: {},
           options: {
