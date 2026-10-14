@@ -37,9 +37,28 @@ the default mode, Uninstall picking `harness` does turn `u1` into an empty local
    - `register-connect.ts:145` (`maintenanceHandlers({…})`, the only place that builds `MaintenancePorts`) wires them
      to `resolver?.leave()` and `resolver?.stay()`, using the `resolver` already in scope there.
    - Without a resolver, the window has no remote to leave, so both do nothing.
-3. **`uninstallOwnHost`, when `plan.switchesToLocalWindow` is set:** it calls `ports.leaveWindow()`, then
-   `killLocalServer`, then `switchToLocalWindow()`. If an exception escapes the kill or the switch, it calls
-   `ports.stayInWindow()` and rethrows.
+3. **`uninstallOwnHost`, after the `actsOnHost` return** (athena, #860). There `switchesToLocalWindow` is always
+   true (`own-host.ts:57`), so lines 108–111 become:
+
+   ```ts
+   ports.leaveWindow();
+   try {
+     await ports.killLocalServer(payloadOf(held.target));
+     await ports.editor.switchToLocalWindow();
+   } finally {
+     ports.stayInWindow();
+   }
+   ```
+
+   - The `finally` runs only on this branch, after `leaveWindow()`. When the switch happens, the extension host goes
+     away and nothing after it runs. When the kill or the switch throws, the flag is cleared and the error reaches the
+     caller unchanged.
+   - **A switch that returns without switching** (`vscode.newWindow` resolves while the window stays, for example when
+     the user cancels a save prompt) also clears the flag. F-2412 doesn't define this case, so the end state is ours
+     (athena, #860): the local server has ended, so the window stays **disconnected until a reload**. The reconnection
+     core started during the leave was refused (handled, silent), and the reload resolves again and reconnects, since
+     `leaving` lives in the extension host. That matches 6.2's "Disconnected from SSH" end state. There's no message of
+     ours.
    - The `actsOnHost` branch (`useLocalServer` false, 6.2 step 4) is unchanged. Its window is reconnected by core, as
      AC-36 wants.
 4. **Kill Current and Kill on the own host (`killOwnHost`, `maintenance-commands.ts:83-97`) are unchanged.** They have
@@ -55,6 +74,8 @@ the default mode, Uninstall picking `harness` does turn `u1` into an empty local
 | lib-authority `resolver-host.test.ts` | `F-2412 AC-17: a resolve after leave() leaves the connection state alone` | connected, then `leave()` and a resolve | `currentConnection().state` as before the resolve |
 | remote-ssh `maintenance-commands.test.ts` | `F-2412 AC-17: the own-host uninstall leaves the window before it ends the local server` | default mode, the held host picked | the ports' calls in order: `leaveWindow`, `killLocalServer`, `switchToLocalWindow` |
 | remote-ssh `maintenance-commands.test.ts` | `F-2412 AC-17: a switch that throws puts the window back` | `switchToLocalWindow` rejects | `stayInWindow` called once; the rejection reaches the caller |
+| remote-ssh `maintenance-commands.test.ts` | `F-2412 AC-17: a switch that returns without switching puts the window back` | `switchToLocalWindow` resolves | `stayInWindow` called once, after `switchToLocalWindow`; `uninstall()` resolves, nothing thrown |
+| remote-ssh `maintenance-commands.test.ts` | `F-2412 AC-17: a kill that throws puts the window back without a switch` | `killLocalServer` rejects | `stayInWindow` called once; no `switchToLocalWindow`; the rejection reaches the caller |
 | remote-ssh `maintenance-commands.test.ts` | `F-2412 BR-6: the own-host uninstall with useLocalServer false never leaves the window` | terminal mode, the held host picked | no `leaveWindow` |
 | remote-ssh `maintenance-commands.test.ts` | `F-2411 6.1: the own-host kill doesn't leave the window` | Kill Current in default mode | no `leaveWindow` |
 
@@ -71,12 +92,9 @@ The first, fourth and fifth rows fail on main, where the operations don't exist.
 
 ## 4. Open rows
 
-**Measure:** does `vscode.newWindow` with `reuseWindow` resolve while the window stays, when the user cancels a save
-prompt for a dirty editor? If it does, `uninstallOwnHost` calls `ports.stayInWindow()` after the switch returns, so a
-window that stayed is reconnected by core. Record the measurement in the PR.
-- If the extension host has gone by then, the call never runs, which is harmless.
-- If the measurement shows no way to tell, keep the leave without `stay()` after a normal return, and say so in the
-  PR for athena.
+**Measure, and record it in the PR:** in the acceptance build, does `vscode.newWindow` with `reuseWindow` resolve while
+the window stays, when the user cancels a save prompt for a dirty editor? §2.3's `finally` is right either way, so the
+answer changes no code. It tells the release notes whether the "disconnected until a reload" state can be reached.
 
 ## 5. Gates and review
 
