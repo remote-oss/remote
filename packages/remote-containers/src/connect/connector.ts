@@ -398,6 +398,7 @@ export function containerConnectorOf(
     const server = await dependencies.runServer(
       {
         channel,
+        rootChannel: execChannelOf(engine, prepared.containerId, 'root'),
         remoteUser: prepared.remoteUser,
         volumeMounted: prepared.volumeMounted,
         onPhase: phase => {

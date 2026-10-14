@@ -25,7 +25,9 @@ import {
   type ServerRequest,
   type ServerResult,
   type ServerStepDependencies,
+  transferredDetail,
 } from '../../src/connect/server-steps.ts';
+import {VOLUME_FOLDERS_SCRIPT} from '../../src/connect/volume-folders.ts';
 
 const PROFILE: ProductProfile = {
   applicationName: 'fixture',
@@ -250,11 +252,35 @@ function dependenciesOf(
   };
 }
 
+/** A root channel whose one script prints `lines` and ends as `ending` says; `onRun` sees when it runs. */
+function rootChannelOf(
+  lines: readonly string[] = blockOf('Ok', 'server.created='),
+  ending: ScriptAnswer['ending'] = {kind: 'exit', status: 0},
+  onRun: () => void = () => undefined,
+): RecordingChannel {
+  return new RecordingChannel({
+    identity: 'c1',
+    platformHint: 'linux',
+    scripts: [
+      {
+        interpreter: 'posixShell',
+        matches: script => script === VOLUME_FOLDERS_SCRIPT,
+        lines: () => {
+          onRun();
+          return lines;
+        },
+        ending,
+      },
+    ],
+  });
+}
+
 async function runSteps(
   channel: RecordingChannel,
   options: Parameters<typeof dependenciesOf>[1] & {
     volume?: boolean;
     cancellation?: AbortSignal;
+    root?: RecordingChannel;
   } = {},
 ): Promise<{result: ServerResult; seen: Seen}> {
   const seen: Seen = {
@@ -266,6 +292,7 @@ async function runSteps(
   };
   const request: ServerRequest = {
     channel,
+    rootChannel: options.root ?? rootChannelOf(),
     remoteUser: 'node',
     volumeMounted: options.volume ?? false,
     onPhase: phase => {
@@ -813,5 +840,165 @@ describe('the server steps of a connect (card containers-08)', () => {
     });
     const {result} = await runSteps(channel);
     deepStrictEqual(failureKind(result), 'serverFailed');
+  });
+});
+
+describe("the server steps with the volume's root step (card containers-25)", () => {
+  it('contracts §5.2: with the volume, the root step runs after the first probe and before the second', async () => {
+    const channel = channelOf({volume: true});
+    const userCallsAtRoot: number[] = [];
+    const root = rootChannelOf(undefined, undefined, () => {
+      userCallsAtRoot.push(channel.calls.length);
+    });
+    const {result} = await runSteps(channel, {volume: true, root});
+    const [call] = root.calls;
+    deepStrictEqual(
+      [
+        result.kind,
+        userCallsAtRoot,
+        root.calls.length,
+        call?.operation === 'runScript' ? call.request.environment : undefined,
+      ],
+      [
+        'started',
+        [1],
+        1,
+        {
+          SHARED_FOLDER_1: '/vscode/fixture-server',
+          SHARED_FOLDER_2: '/vscode/fixture-server/bin',
+          SHARED_FOLDER_3: '/vscode/fixture-server/bin/linux-x64',
+        },
+      ],
+    );
+  });
+
+  it('contracts §5.2: the second probe waits until the root step has ended', async () => {
+    const channel = channelOf({volume: true});
+    let release: (() => void) | undefined;
+    const late = new RecordingChannel({
+      identity: 'c1',
+      platformHint: 'linux',
+      scripts: [],
+    });
+    const root: RecordingChannel = Object.assign(late, {
+      runScript: async () => {
+        await new Promise<void>(resolve => {
+          release = resolve;
+        });
+        return {kind: 'exited' as const, status: 0};
+      },
+    });
+    const running = runSteps(channel, {volume: true, root});
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+    const callsWhileHeld = channel.calls.length;
+    release?.();
+    const {result} = await running;
+    deepStrictEqual([callsWhileHeld, result.kind], [1, 'started']);
+  });
+
+  it('contracts §5.2: without the volume, the root channel is never used', async () => {
+    const root = rootChannelOf();
+    await runSteps(channelOf(), {root});
+    deepStrictEqual(root.calls, []);
+  });
+
+  it("contracts §5.2: a root step that fails doesn't fail the connect", async () => {
+    const root = rootChannelOf([], {
+      kind: 'fail',
+      failure: {kind: 'spawnFailed', detail: 'no root'},
+    });
+    const {result, seen} = await runSteps(channelOf({volume: true}), {
+      volume: true,
+      root,
+    });
+    deepStrictEqual(
+      [
+        result.kind,
+        seen.sink.lines.some(
+          line =>
+            line.message ===
+            "the volume's shared folders were not prepared: spawnFailed: no root",
+        ),
+      ],
+      ['started', true],
+    );
+  });
+
+  it('F-0419 5.0 step 6: the install’s failure logs its status and what it could not write', async () => {
+    const channel = channelOf({
+      install: blockOf(
+        'CreateInstallDirFailed',
+        'server.writeFailedPath=/vscode/fixture-server',
+        "server.writeFailedError=mkdir: can't create directory '/vscode/fixture-server': Permission denied",
+      ),
+      extra: [answer(isDiscard, blockOf('Ok'))],
+    });
+    const {result, seen} = await runSteps(channel);
+    deepStrictEqual(
+      [
+        failureKind(result),
+        seen.sink.lines
+          .map(line => line.message)
+          .filter(message =>
+            message.startsWith('the server was not installed'),
+          ),
+      ],
+      [
+        'serverFailed',
+        [
+          "the server was not installed: scriptFailed (CreateInstallDirFailed): cannot write /vscode/fixture-server: mkdir: can't create directory '/vscode/fixture-server': Permission denied",
+        ],
+      ],
+    );
+  });
+
+  it('contracts §5.2: each other transfer failure logs what it carries', () => {
+    const channelFailure = {kind: 'channelClosed' as const, detail: 'gone'};
+    deepStrictEqual(
+      [
+        transferredDetail({kind: 'scriptFailed', status: 'UnpackFailed'}),
+        transferredDetail({kind: 'serverDownload', cause: 'downloadFailed'}),
+        transferredDetail({
+          kind: 'serverDownload',
+          cause: 'downloadFailed',
+          status: 404,
+        }),
+        transferredDetail({
+          kind: 'localDownload',
+          cause: 'network',
+          detail: 'ECONNRESET',
+        }),
+        transferredDetail({kind: 'downloadTimeout', reason: 'stalled'}),
+        transferredDetail({kind: 'verification', mismatch: 'checksum'}),
+        transferredDetail({kind: 'copy', failure: channelFailure}),
+        transferredDetail({kind: 'channelFailed', failure: channelFailure}),
+        transferredDetail({kind: 'retriesExhausted', attempts: 30}),
+        transferredDetail({
+          kind: 'retriesExhausted',
+          attempts: 30,
+          lockPath: '/tmp/lock',
+        }),
+        transferredDetail({kind: 'unpack'}),
+        transferredDetail({kind: 'noResultBlock'}),
+        transferredDetail({kind: 'cancelled'}),
+      ],
+      [
+        'scriptFailed (UnpackFailed)',
+        'serverDownload (downloadFailed)',
+        'serverDownload (downloadFailed, HTTP 404)',
+        'localDownload (network): ECONNRESET',
+        'downloadTimeout (stalled)',
+        'verification (checksum)',
+        'copy (channelClosed): gone',
+        'channelFailed (channelClosed): gone',
+        'retriesExhausted (30 attempts)',
+        'retriesExhausted (30 attempts): lock /tmp/lock',
+        'unpack',
+        'noResultBlock',
+        'cancelled',
+      ],
+    );
   });
 });
