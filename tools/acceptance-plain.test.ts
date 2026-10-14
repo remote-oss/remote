@@ -378,6 +378,41 @@ describe('runPlainLaunch', () => {
     }
   });
 
+  it('tooling-51: the launch ends only once the editor has stopped, so the next launch never meets it', async () => {
+    const {steps, happened} = recordingSteps('pass');
+    let release: (() => void) | undefined;
+    const launching = runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, {
+      ...steps,
+      start: program => {
+        steps.start(program);
+        return {
+          stop: () =>
+            new Promise<void>(resolve => {
+              release = () => {
+                happened.push('stopped');
+                resolve();
+              };
+            }),
+        };
+      },
+    });
+    let settled = false;
+    void launching.then(() => {
+      settled = true;
+    });
+    while (release === undefined) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const settledWhileStopping = settled;
+    release();
+    await launching;
+    deepStrictEqual(
+      [settledWhileStopping, happened],
+      [false, ['start', 'tests', 'stopped']],
+    );
+  });
+
   it('D-85: it stops the editor when the tests fail', async () => {
     const {steps, happened} = recordingSteps('fail');
     await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
