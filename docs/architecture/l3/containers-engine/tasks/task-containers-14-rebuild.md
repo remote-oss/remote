@@ -307,7 +307,8 @@ entry, for `rebuildContainer` only. `hideRebuildCommands` among the context keys
   - AC-7: the Dockerfile path, containers-15;
   - AC-13's first half and AC-32's Use Template: authoring, increment 2;
   - AC-16: Close Remote Connection during a build;
-  - AC-25 and AC-26: containers-11's dialog, with an acceptance row in containers-19;
+  - AC-25 and AC-26, and F-0201 AC-50 (S339 after an in-container rebuild with a bogus `dockerPath`): containers-11's
+    dialog after this card's reload, with acceptance rows in containers-19;
   - AC-33: the preferred outcome isn't built.
 
 ## 8. Gates and review
