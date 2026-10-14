@@ -138,6 +138,7 @@ async function registered(
           return Promise.resolve();
         },
         runCommand: () => Promise.resolve(),
+        switchToLocalWindow: () => Promise.resolve(),
         remoteName: () => 'ssh-remote',
       },
       openExternal: address => {
@@ -297,6 +298,7 @@ describe("the connect's registration", () => {
         )
         .sort(),
       [
+        'opensshremotes.cleanCurrentRemoteServer',
         'opensshremotes.cleanDevBox',
         'opensshremotes.cleanLocalServer',
         'opensshremotes.cleanRemoteServer',
@@ -441,6 +443,7 @@ describe("the connect's registration", () => {
           'opensshremotes.cleanLocalServer',
           'opensshremotes.cleanRemoteServer',
           'opensshremotes.cleanDevBox',
+          'opensshremotes.cleanCurrentRemoteServer',
           'opensshremotes.addNewSshHost',
         ].sort(),
         'unregister ssh-remote',

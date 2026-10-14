@@ -16,12 +16,13 @@ import {ownText} from '../surfaces/own-strings.ts';
 import type {NoticePort} from '../surfaces/notice.ts';
 import type {Translate} from '../surfaces/strings.ts';
 import type {MaintenanceRun} from './maintenance-run.ts';
-import {killedNotice, killFailedNotice} from './target.ts';
+import {killCurrentPlan, uninstallOwnHostPlan} from './own-host.ts';
+import {isOwnHost, killedNotice, killFailedNotice} from './target.ts';
 
 /** What the maintenance commands take from the editor. */
 export type MaintenanceEditor = Pick<
   ConnectCommandEditor,
-  'listHosts' | 'pickHost' | 'runCommand'
+  'listHosts' | 'pickHost' | 'runCommand' | 'switchToLocalWindow'
 >;
 
 /** What the commands run a maintenance step through, and show its result with. */
@@ -32,6 +33,8 @@ export interface MaintenancePorts {
     action: 'kill' | 'uninstall',
     target: SshTarget,
   ): Promise<MaintenanceRun>;
+  /** The host and the connection mode of the window's held connection, or nothing when it holds none that is open. */
+  heldHost(): {target: SshTarget; terminalMode: boolean} | undefined;
   /** Ends the local connection server of the host string and forgets its stored details; silent when none runs. */
   killLocalServer(hostString: string): PromiseLike<void>;
   notice: NoticePort;
@@ -48,6 +51,7 @@ const UNINSTALL_FAILED = 'Failed to run command';
 export function maintenanceHandlers(ports: MaintenancePorts): {
   cleanRemoteServer: CommandHandler;
   cleanDevBox: CommandHandler;
+  cleanCurrentRemoteServer: CommandHandler;
 } {
   const {translate} = ports;
   const openLogs = ownText({id: 'S101', values: []}, translate);
@@ -65,6 +69,72 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
     }
   }
 
+  /** The window's own host when `target` is it, and the held connection's mode. */
+  function ownHostOf(
+    target: SshTarget,
+  ): {target: SshTarget; terminalMode: boolean} | undefined {
+    const held = ports.heldHost();
+    return held !== undefined && isOwnHost(target.host, held.target.host)
+      ? held
+      : undefined;
+  }
+
+  /** The kill on the window's own host: the plan of the connection mode decides what happens to the window. */
+  async function killOwnHost(held: {
+    target: SshTarget;
+    terminalMode: boolean;
+  }): Promise<void> {
+    const plan = killCurrentPlan(!held.terminalMode);
+    if (plan.actsOnHost) {
+      await killOnHost(held.target);
+      return;
+    }
+    await ports.killLocalServer(payloadOf(held.target));
+    void notify(killedNotice(held.target.host));
+    if (plan.switchesToLocalWindow) {
+      await ports.editor.switchToLocalWindow();
+    }
+  }
+
+  /** The uninstall on the window's own host, by the same plan. */
+  async function uninstallOwnHost(held: {
+    target: SshTarget;
+    terminalMode: boolean;
+  }): Promise<void> {
+    const plan = uninstallOwnHostPlan(!held.terminalMode);
+    if (plan.actsOnHost) {
+      await uninstallOnHost(held.target);
+      return;
+    }
+    await ports.killLocalServer(payloadOf(held.target));
+    if (plan.switchesToLocalWindow) {
+      await ports.editor.switchToLocalWindow();
+    }
+  }
+
+  async function killOnHost(target: SshTarget): Promise<void> {
+    const outcome = await ports.perform('kill', target);
+    if (outcome.result === 'connectionFailed') {
+      ports.logger.warn(`the kill failed: ${outcome.cause}`);
+    } else {
+      await ports.killLocalServer(payloadOf(target));
+    }
+    await notify(
+      outcome.result === 'stepRan'
+        ? killedNotice(target.host)
+        : killFailedNotice(target.host),
+    );
+  }
+
+  async function uninstallOnHost(target: SshTarget): Promise<void> {
+    const outcome = await ports.perform('uninstall', target);
+    if (outcome.result === 'connectionFailed') {
+      ports.logger.warn(`the uninstall failed: ${outcome.cause}`);
+      throw new Error(UNINSTALL_FAILED);
+    }
+    await ports.killLocalServer(payloadOf(target));
+  }
+
   return {
     cleanRemoteServer: {
       execute: async () => {
@@ -72,17 +142,8 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
         if (target === undefined) {
           return;
         }
-        const outcome = await ports.perform('kill', target);
-        if (outcome.result === 'connectionFailed') {
-          ports.logger.warn(`the kill failed: ${outcome.cause}`);
-        } else {
-          await ports.killLocalServer(payloadOf(target));
-        }
-        await notify(
-          outcome.result === 'stepRan'
-            ? killedNotice(target.host)
-            : killFailedNotice(target.host),
-        );
+        const own = ownHostOf(target);
+        await (own === undefined ? killOnHost(target) : killOwnHost(own));
       },
     },
     cleanDevBox: {
@@ -91,12 +152,18 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
         if (target === undefined) {
           return;
         }
-        const outcome = await ports.perform('uninstall', target);
-        if (outcome.result === 'connectionFailed') {
-          ports.logger.warn(`the uninstall failed: ${outcome.cause}`);
-          throw new Error(UNINSTALL_FAILED);
+        const own = ownHostOf(target);
+        await (own === undefined
+          ? uninstallOnHost(target)
+          : uninstallOwnHost(own));
+      },
+    },
+    cleanCurrentRemoteServer: {
+      execute: async () => {
+        const held = ports.heldHost();
+        if (held !== undefined) {
+          await killOwnHost(held);
         }
-        await ports.killLocalServer(payloadOf(target));
       },
     },
   };
