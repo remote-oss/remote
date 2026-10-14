@@ -40,6 +40,7 @@ const REAL_TOOLS = [
   'id',
   'ln',
   'ls',
+  'readlink',
   'mkdir',
   'mv',
   'nohup',
@@ -251,6 +252,7 @@ export function parametersFor(): ScriptParameters {
     removeArchive: false,
     archiveFormat: 'tar.gz',
     epochMilliseconds: 1700000000000,
+    installTree: '',
     proxy: {http: '', https: ''},
     downloader: {useConfigurationFiles: false, timeoutSeconds: 30},
     lock: {
@@ -267,6 +269,7 @@ export function parametersFor(): ScriptParameters {
       graceSeconds: 0,
       extensions: [],
       fileWatcherPollingMilliseconds: 0,
+      useHostProxy: false,
       readySeconds: 3,
       socketMode: false,
     },

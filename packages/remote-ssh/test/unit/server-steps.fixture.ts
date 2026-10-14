@@ -198,6 +198,7 @@ export const HOST: ProbedHost = {
   display: '',
   installed: false,
   installFolder: '/home/alex/.fixture-server/bin/abc123',
+  treeComplete: false,
 };
 
 /** The connect's surfaces over `settings`, showing nothing and answering every question with no; `revealLog` counts. */
