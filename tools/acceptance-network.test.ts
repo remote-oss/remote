@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {throws} from 'node:assert';
 import {cutNetwork, restoreNetwork} from './acceptance-network.ts';
-import {type CommandResult} from './acceptance-run.ts';
+import {type CommandResult} from './command-runner.ts';
 
 /** A container whose `iptables` holds the chains in `held` and records each change of the rules. */
 function containerHolding(held: string[] = [], refused: string[] = []) {

@@ -2,6 +2,7 @@
 *.md
 docs/
 tests/conformance/runner/
+tests/conformance/packages/
 pnpm-lock.yaml
 dist/
 dist-*/

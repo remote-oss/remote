@@ -6,14 +6,19 @@ import {
   throws,
 } from 'node:assert';
 import type {PortHolder} from './acceptance-occupy.ts';
+import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
   existsSync,
+  mkdirSync,
+  mkdtempSync,
   readdirSync,
+  rmSync,
   readFileSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   acceptanceConfiguration,
@@ -37,6 +42,7 @@ import {
   runCommand,
   runLaunches,
   runTestCli,
+  standInEngines,
   unpackArchive,
   USAGE,
   VSCODIUM_RELEASE,
@@ -55,7 +61,8 @@ import {
   type Launch,
   type RunnerLaunch,
 } from './acceptance-launches.ts';
-import {acceptanceRunId, type CommandRunner} from './acceptance-run.ts';
+import {acceptanceRunId} from './acceptance-run.ts';
+import type {CommandRunner} from './command-runner.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -75,6 +82,8 @@ class FakeHarness implements HarnessDependencies {
   /** The files of the run's folder as the first launch found them, by name. */
   readonly firstLaunchFiles = new Map<string, string>();
   readonly answers = new Map<string, CommandResult>();
+  /** What a launch with stand-ins found in its extensions folder when it started: the stand-in's manifest, the list's last entry. */
+  standInFound: [unknown, unknown] | undefined = undefined;
   /** What a client-search launch found in the run's folder when it started. */
   readonly clientLaunches: Array<{
     label: string;
@@ -92,6 +101,30 @@ class FakeHarness implements HarnessDependencies {
     const answer = this.answers.get(`${program} ${programArguments[0] ?? ''}`);
     if (answer !== undefined) {
       return answer;
+    }
+    const extensionsFolder = programArguments
+      .find(argument => argument.startsWith('--extensions-dir='))
+      ?.slice('--extensions-dir='.length);
+    if (extensionsFolder !== undefined) {
+      // The editor's install lists what it installed in the folder's extensions.json; a stand-in copies an entry of it.
+      mkdirSync(extensionsFolder, {recursive: true});
+      writeFileSync(
+        path.join(extensionsFolder, 'extensions.json'),
+        JSON.stringify([
+          {
+            identifier: {id: 'remote-oss.installed'},
+            version: '1.0.0',
+            location: {
+              $mid: 1,
+              fsPath: path.join(extensionsFolder, 'installed'),
+              path: path.join(extensionsFolder, 'installed'),
+              scheme: 'file',
+            },
+            relativeLocation: 'installed',
+            metadata: {source: 'vsix'},
+          },
+        ]),
+      );
     }
     if (program === 'ssh-keygen' || program === 'env') {
       const keyFile = programArguments.at(-1) ?? '';
@@ -159,6 +192,29 @@ class FakeHarness implements HarnessDependencies {
   ): Promise<AttemptResult> => {
     this.variables = variables;
     this.launched.push(launch.label);
+    if (launch.kind === 'plain' && launch.standIns !== undefined) {
+      const folder = path.join(
+        variables.HARNESS_RUN_FOLDER,
+        `extensions-${launch.label}`,
+      );
+      this.standInFound = [
+        JSON.parse(
+          readFileSync(
+            path.join(
+              folder,
+              `${launch.standIns[0] ?? ''}-0.0.0`,
+              'package.json',
+            ),
+            'utf8',
+          ),
+        ),
+        (
+          JSON.parse(
+            readFileSync(path.join(folder, 'extensions.json'), 'utf8'),
+          ) as unknown[]
+        ).at(-1),
+      ];
+    }
     return Promise.resolve(
       this.labelResults.get(launch.label) ?? this.testResult,
     );
@@ -273,8 +329,12 @@ const LAUNCH_ORDER = [
   'explorer-no-proposals',
   'trust',
   'trust-terminal',
+  'containers',
+  'containers-standdown',
+  'containers-no-proposals',
   'ports-probe',
   'install-probe',
+  'platform-probe',
 ];
 
 const CLIENT_CASE = {
@@ -293,6 +353,10 @@ describe('acceptance', () => {
     workspace = new TemporaryWorkspace('acceptance');
     harness = new FakeHarness();
     workspace.write(
+      'packages/remote-containers/package.json',
+      JSON.stringify({engines: {vscode: '^1.139.0'}}),
+    );
+    workspace.write(
       'tests/acceptance/suite-failure/cases.json',
       JSON.stringify({cases: [FAILURE]}),
     );
@@ -303,6 +367,19 @@ describe('acceptance', () => {
           {
             label: 'probe',
             cite: 'F-2409 AC-2 (probe)',
+            settings: {},
+            outcome: 'connected',
+          },
+        ],
+      }),
+    );
+    workspace.write(
+      'tests/acceptance/suite-platform/cases.json',
+      JSON.stringify({
+        cases: [
+          {
+            label: 'probe',
+            cite: 'F-2206 AC-1 (platform-probe)',
             settings: {},
             outcome: 'connected',
           },
@@ -583,6 +660,24 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-16: the control sockets of the master aliases are in the control folder when it is not the run folder', () => {
+    deepStrictEqual(
+      ['master', 'master-ask', 'master-yes', 'master-autoask'].map(alias =>
+        harnessSshConfig(49153, '/run', '/run/agent.sock', '/tmp/control-x')
+          .split('\n\n')
+          .find(block => block.startsWith(`Host ${alias}\n`))
+          ?.split('\n')
+          .find(line => line.includes('ControlPath')),
+      ),
+      [
+        '  ControlPath /tmp/control-x/cm-%C',
+        '  ControlPath /tmp/control-x/cm-ask-%C',
+        '  ControlPath /tmp/control-x/cm-yes-%C',
+        '  ControlPath /tmp/control-x/cm-autoask-%C',
+      ],
+    );
+  });
+
   it('D-85: Host master is the password account behind a ControlMaster that starts on demand', () => {
     strictEqual(
       accountBlock('master'),
@@ -637,6 +732,23 @@ describe('acceptance', () => {
         ),
       ),
       {'remote.SSH.configFile': '/run/ssh_config'},
+    );
+  });
+
+  it('coverage-12: a settings tail goes after the last member, with no comma before it, so that the editor reads what comes before it', () => {
+    writeUserSettings(
+      workspace.root,
+      '/run/ssh_config',
+      {'remote.SSH.useLocalServer': false},
+      undefined,
+      '"acceptance.broken": 1 "acceptance.brokenToo": 2',
+    );
+    strictEqual(
+      readFileSync(
+        path.join(workspace.root, 'user-data', 'User', 'settings.json'),
+        'utf8',
+      ),
+      '{\n  "remote.SSH.configFile": "/run/ssh_config",\n  "remote.SSH.useLocalServer": false\n  "acceptance.broken": 1 "acceptance.brokenToo": 2\n}\n',
     );
   });
 
@@ -702,8 +814,9 @@ describe('acceptance', () => {
   });
 
   describe('installsOf (card tooling-30)', () => {
-    it('tooling-30: the run installs once into its folder, and once into each explorer launch’s folder with the explorer', () => {
+    it('tooling-30, containers-09: the run installs once into its folder, and once into each explorer and containers launch’s folder with its own extension', () => {
       workspace.write('dist/remote-explorer-0.0.0.vsix', '');
+      workspace.write('dist/remote-containers-0.1.0.vsix', '');
       deepStrictEqual(
         installsOf(
           workspace.root,
@@ -726,6 +839,18 @@ describe('acceptance', () => {
               ],
             }),
           ),
+          ...[
+            'containers',
+            'containers-standdown',
+            'containers-no-proposals',
+          ].map(label => ({
+            folder: path.join('/run', `extensions-${label}`),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+          })),
         ],
       );
     });
@@ -791,13 +916,14 @@ describe('acceptance', () => {
       );
     });
 
-    it('passes the harness variables to the tests', async () => {
+    it("passes the harness variables to the tests, the run's id among them (containers-09)", async () => {
       await runAcceptance(workspace.root, harness);
       deepStrictEqual(harness.variables, {
         REMOTE_OSS_ACCEPTANCE: '1',
         HARNESS_SSH_CONFIG: path.join(harness.runFolder, 'ssh_config'),
         HARNESS_CONTAINER: CONTAINER,
         HARNESS_RUN_FOLDER: harness.runFolder,
+        HARNESS_RUN_ID: acceptanceRunId(process.env, process.pid),
         HARNESS_PASSWORD_FILE: path.join(harness.runFolder, 'password'),
         REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(
           harness.runFolder,
@@ -1464,6 +1590,111 @@ describe('acceptance', () => {
       );
     });
 
+    it("containers-09: the VSCodium run sweeps other runs' stale dev containers, then builds the run's dev container image, and passes its tag", async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      const sweep = harness.calls.indexOf(
+        'docker ps --all --quiet --filter label=remote-oss.acceptance.devcontainer=1',
+      );
+      const build = harness.calls.findIndex(
+        call =>
+          call.startsWith('docker build') &&
+          call.endsWith(
+            path.join(
+              workspace.root,
+              'tests',
+              'acceptance',
+              'devcontainer-image',
+            ),
+          ),
+      );
+      deepStrictEqual(
+        [
+          sweep >= 0 && sweep < build,
+          harness.variables?.HARNESS_DEVCONTAINER_IMAGE,
+        ],
+        [
+          true,
+          `remote-oss-acceptance-devcontainer:${acceptanceRunId(process.env, process.pid)}`,
+        ],
+      );
+    });
+
+    it('containers-09: the VS Code run builds no dev container image and puts no stand-in in', async () => {
+      await runAcceptance(workspace.root, harness);
+      deepStrictEqual(
+        [
+          harness.calls.some(call => call.includes('devcontainer')),
+          harness.variables?.HARNESS_DEVCONTAINER_IMAGE,
+        ],
+        [false, undefined],
+      );
+    });
+
+    it("containers-09: the stand-in of containers-standdown goes into that launch's own extensions folder, a manifest with the other extension's id, listed after the editor's own entry", async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium');
+      const location = path.join(
+        harness.runFolder,
+        'extensions-containers-standdown',
+        'ms-vscode-remote.remote-containers-0.0.0',
+      );
+      deepStrictEqual(harness.standInFound, [
+        {
+          publisher: 'ms-vscode-remote',
+          name: 'remote-containers',
+          version: '0.0.0',
+          engines: {vscode: '^1.139.0'},
+          displayName: 'Acceptance stand-in (not the reference)',
+        },
+        {
+          identifier: {id: 'ms-vscode-remote.remote-containers'},
+          version: '0.0.0',
+          location: {$mid: 1, path: location, scheme: 'file'},
+          relativeLocation: 'ms-vscode-remote.remote-containers-0.0.0',
+          metadata: {source: 'vsix'},
+        },
+      ]);
+    });
+
+    it("containers-09: a stand-in's engines are those of the launch's own extension, and none for a launch without one or a manifest without them", () => {
+      workspace.write(
+        'packages/remote-explorer/package.json',
+        JSON.stringify({}),
+      );
+      deepStrictEqual(
+        [
+          standInEngines(workspace.root, {
+            label: 'a',
+            kind: 'plain',
+            suite: 'a',
+            withExtensions: ['remote-oss.remote-containers'],
+          }),
+          standInEngines(workspace.root, {
+            label: 'b',
+            kind: 'plain',
+            suite: 'b',
+            withExtensions: ['remote-oss.remote-explorer'],
+          }),
+          standInEngines(workspace.root, {
+            label: 'c',
+            kind: 'plain',
+            suite: 'c',
+          }),
+          standInEngines(workspace.root, {
+            label: 'd',
+            kind: 'plain',
+            suite: 'd',
+            withExtensions: ['remote-oss.unknown'],
+          }),
+          standInEngines(workspace.root, {
+            label: 'e',
+            runner: 'runner',
+            suite: 'e',
+          }),
+        ],
+        ['^1.139.0', '', '', '', ''],
+      );
+    });
+
     it("tooling-27: the download host's variables reach the launches", async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
       strictEqual(
@@ -1710,7 +1941,7 @@ describe('acceptance', () => {
 
     it('coverage-11: the run waits for the helper of the launch before to end, 5 s before a client-search launch and the grace before each host-case launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [5000, 3000, 3000]);
+      deepStrictEqual(harness.sleeps, [5000, 3000, 3000, 3000]);
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {
@@ -1781,7 +2012,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 13}, () => EXECUTABLE),
+        Array.from({length: 14}, () => EXECUTABLE),
       );
     });
 
@@ -1792,7 +2023,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 13}, () => true),
+        Array.from({length: 14}, () => true),
       );
     });
 
@@ -1816,6 +2047,7 @@ describe('acceptance', () => {
           ['client-unset', 'dist-client/**/*.test.cjs'],
           ['ports-probe', 'dist-ports/**/*.test.cjs'],
           ['install-probe', 'dist-install/**/*.test.cjs'],
+          ['platform-probe', 'dist-platform/**/*.test.cjs'],
         ],
       );
     });
@@ -1963,6 +2195,7 @@ describe('acceptance', () => {
           'client-unset',
           'ports-probe',
           'install-probe',
+          'platform-probe',
         ].map(label => path.join('/run', `${label}-log.txt`)),
       );
     });
@@ -1986,6 +2219,7 @@ describe('acceptance', () => {
           'client-unset',
           'ports-probe',
           'install-probe',
+          'platform-probe',
         ].map(label => path.join('/run', label, 'agent', 'pids')),
       );
     });
@@ -1997,7 +2231,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        Array.from({length: 12}, () =>
+        Array.from({length: 13}, () =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -2232,6 +2466,7 @@ describe('acceptance', () => {
       workspace.write('tests/acceptance/suite-socket/window.test.ts', '');
       workspace.write('tests/acceptance/suite-slow/window.test.ts', '');
       workspace.write('tests/acceptance/suite-ports/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-platform/window.test.ts', '');
       workspace.write(
         'tests/acceptance/slow-remote/src/extension.ts',
         'export function activate(): void {}\n',
@@ -2336,10 +2571,11 @@ describe('acceptance', () => {
           'dist-socket',
           'dist-slow',
           'dist-ports',
+          'dist-platform',
         ].map(folder =>
           existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
         ),
-        [false, false, false, false, false, false, false, false, false],
+        [false, false, false, false, false, false, false, false, false, false],
       );
     });
 
@@ -2382,6 +2618,7 @@ describe('acceptance', () => {
           'dist-socket',
           'dist-slow',
           'dist-ports',
+          'dist-platform',
         ].map(folder =>
           existsSync(
             path.join(
@@ -2392,7 +2629,7 @@ describe('acceptance', () => {
             ),
           ),
         ),
-        [true, true, true, true, true, true, true, true],
+        [true, true, true, true, true, true, true, true, true],
       );
     });
   });
@@ -2415,6 +2652,7 @@ describe('acceptance', () => {
           HARNESS_SSH_CONFIG: '',
           HARNESS_CONTAINER: '',
           HARNESS_RUN_FOLDER: '',
+          HARNESS_RUN_ID: '',
           HARNESS_PASSWORD_FILE: '',
           REMOTE_OSS_ACCEPTANCE_SCRIPT: '',
           REMOTE_OSS_ACCEPTANCE_RECORD: '',
@@ -2426,5 +2664,30 @@ describe('acceptance', () => {
       ).exitCode,
       0,
     );
+  });
+});
+
+describe('the harness of the windows suites, bundled for the editor', () => {
+  it("coverage-19: the harness bundle loads with an argv[1] set and no import.meta.url, as in the editor's extension host", async () => {
+    const {build} = await import('esbuild');
+    const folder = mkdtempSync(path.join(tmpdir(), 'harness-bundle-'));
+    try {
+      const bundle = path.join(folder, 'harness.cjs');
+      await build({
+        entryPoints: [
+          path.join(REPOSITORY_ROOT, 'tests/acceptance/windows/harness.ts'),
+        ],
+        outfile: bundle,
+        bundle: true,
+        platform: 'node',
+        format: 'cjs',
+        external: ['vscode'],
+        logLevel: 'silent',
+      });
+      const loaded = spawnSync(process.execPath, [bundle], {encoding: 'utf8'});
+      deepStrictEqual([loaded.status, loaded.stderr], [0, '']);
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
   });
 });

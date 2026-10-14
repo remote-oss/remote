@@ -81,6 +81,35 @@
       "key": "src/exec/tar-stream.ts",
       "card": "#776",
       "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/lifecycle/container-lifecycle.ts",
+      "card": "#769",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/lifecycle/labels.ts",
+      "card": "#769",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/lifecycle/inspect-lines.ts",
+      "card": "#769",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "contextKeys",
+      "key": "hideConnectCommands",
+      "card": "#766",
+      "slice": "containers release 1",
+      "decision": "F-0504 BR-8 (2026-09-26): defined, never set"
     }
   ]
 }

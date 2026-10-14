@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {NOISE_LINES} from 'lib-host/testing/noise';
 import {classifyPrompt} from '../../src/index.ts';
 import type {PickItem, PromptSurface} from '../../src/index.ts';
 
@@ -65,6 +66,17 @@ describe('classifyPrompt (the surface a question is shown on)', () => {
   it('F-2305.AC-8: the known fingerprint and the question are a pick', () => {
     deepStrictEqual(
       classifyPrompt(AC8_TEXT, DISPLAY_HOST),
+      pick(DISPLAY_HOST, 'SHA256:abcDEF123+/xyz'),
+    );
+  });
+
+  it('ADR-0010: the prompt classifier: noise around and inside its stream changes nothing', () => {
+    const noise = `${NOISE_LINES.join('\n')}\n`;
+    deepStrictEqual(
+      classifyPrompt(
+        `${noise}${AUTHENTICITY}${noise}ED25519 key fingerprint is SHA256:abcDEF123+/xyz.\n${noise}This key is not known by any other names.\n${noise}${CONTINUE}`,
+        DISPLAY_HOST,
+      ),
       pick(DISPLAY_HOST, 'SHA256:abcDEF123+/xyz'),
     );
   });

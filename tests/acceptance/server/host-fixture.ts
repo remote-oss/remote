@@ -21,10 +21,9 @@ import {
 } from 'lib-ssh';
 import {
   acceptanceRunId,
-  checked,
-  runCommand,
   startHostContainer,
 } from '../../../tools/acceptance-run.ts';
+import {checked, runCommand} from '../../../tools/command-runner.ts';
 import {harnessSshConfig} from '../../../tools/acceptance.ts';
 import {downloadHostArguments} from '../../../tools/acceptance-downloads.ts';
 import {makeRunKeys} from '../../../tools/acceptance-keys.ts';

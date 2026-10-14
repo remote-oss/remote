@@ -38,6 +38,8 @@ interface PickOptions<Answer> {
   choices: ReadonlyArray<Choice<Answer>>;
   /** Whether the pick stays open when the focus moves away. */
   ignoreFocusOut: boolean;
+  /** The index of the focused choice; the first when absent. */
+  active?: number;
 }
 
 /**
@@ -71,7 +73,8 @@ function pickOne<Answer>(
     pick.canSelectMany = false;
     pick.ignoreFocusOut = options.ignoreFocusOut;
     pick.items = items;
-    pick.activeItems = items.slice(0, 1);
+    const focused = options.active ?? 0;
+    pick.activeItems = items.slice(focused, focused + 1);
     let answer: Answer | undefined;
     function onAbort(): void {
       pick.hide();
@@ -213,6 +216,7 @@ export function platformPickPortOf(
             answer: item.platform,
           })),
           ignoreFocusOut: false,
+          active: pick.items.findIndex(item => item.platform === pick.active),
         },
         cancellation,
       ),

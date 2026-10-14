@@ -10,7 +10,7 @@ import {
   makeCertificate,
   startDownloadHost,
 } from '../../../tools/acceptance-downloads.ts';
-import {runCommand} from '../../../tools/acceptance-run.ts';
+import {runCommand} from '../../../tools/command-runner.ts';
 import {type RunningHost, startHost} from './host-fixture.ts';
 
 const execFileAsync = promisify(execFile);

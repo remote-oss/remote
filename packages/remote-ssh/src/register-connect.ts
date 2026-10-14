@@ -147,6 +147,12 @@ export async function registerConnect(
         perform: (action, target) => assembly.maintain(action, target),
         heldHost: () => assembly.connector.heldHost(),
         killLocalServer: hostString => connection.killLocalServer(hostString),
+        leaveWindow: () => {
+          resolver?.leave();
+        },
+        stayInWindow: () => {
+          resolver?.stay();
+        },
         notice: host.notice,
         translate: host.translate,
         revealLog: () => {

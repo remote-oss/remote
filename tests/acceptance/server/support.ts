@@ -8,6 +8,7 @@ import {tmpdir} from 'node:os';
 import {createServer} from 'node:net';
 import path from 'node:path';
 import {type Duplex, type WaitLimits} from 'lib-forwarding';
+import type {HostChannel} from 'lib-host';
 import {
   type HostLockLoop,
   hostLockLoopOf,
@@ -112,9 +113,12 @@ export function placeStandInArchive(
   }
 }
 
-/** Runs the install step once and returns the result block's status, or the way the run failed. */
+/**
+ * Runs the install step once on the channel of a host or of a session, and returns the result block's status, or the
+ * way the run failed.
+ */
 export async function installStatus(
-  host: RunningHost,
+  host: {channel: HostChannel},
   parameters: ScriptParameters,
 ): Promise<string> {
   const stepRun = await runStep(

@@ -36,13 +36,14 @@ import {
 } from './acceptance-downloads.ts';
 import {
   acceptanceRunId,
-  checked,
+  buildDevContainerImage,
   startHostContainer,
-  type CommandRunner,
-  runCommand,
+  sweepStaleDevContainers,
 } from './acceptance-run.ts';
+import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {
   agentSocketPath,
+  controlFolderOf,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
   startRunAgent,
@@ -63,6 +64,7 @@ import {
   type Launch,
   type RunnerLaunch,
   launchesOf,
+  needsDevContainerImage,
   HOST_CASE_SUITES,
   hostCaseLabel,
   hostCases,
@@ -79,6 +81,7 @@ import {
   runPlainLaunch,
   startDetached,
   type Started,
+  writeStandIns,
 } from './acceptance-plain.ts';
 import {
   isMainModule,
@@ -88,8 +91,9 @@ import {
 } from './repository.ts';
 
 /** The port mapping and the real runner, re-exported for the tests. */
-export {mappedPort, runCommand} from './acceptance-run.ts';
-export type {CommandResult} from './acceptance-run.ts';
+export {mappedPort} from './acceptance-run.ts';
+export {runCommand} from './command-runner.ts';
+export type {CommandResult} from './command-runner.ts';
 
 /** The editor version the tests run on: the floor of ADR-0007. */
 const EDITOR_VERSION = '1.139.1';
@@ -146,6 +150,10 @@ export interface HarnessVariables {
   HARNESS_CONTAINER: string;
   /** The run's folder: user data, extensions, keys. */
   HARNESS_RUN_FOLDER: string;
+  /** The run's id, which every Docker object of the run carries in its run label. */
+  HARNESS_RUN_ID: string;
+  /** The run's dev container image tag, when a launch of the run installs Dev Containers; VSCodium run only. */
+  HARNESS_DEVCONTAINER_IMAGE?: string;
   /** The file with the bare password of the host's user `harness-pw`, mode 600: a test puts it in a script entry. */
   HARNESS_PASSWORD_FILE: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
@@ -215,18 +223,19 @@ const READY_ATTEMPTS = 40;
 
 const READY_INTERVAL = 500;
 
-/** The password account behind an OpenSSH ControlMaster of the given mode, its socket `socket` in the run's folder. */
+/** The password account behind an OpenSSH ControlMaster of the given mode, its socket `socket` in `controlFolder`. */
 function masterAlias(
   name: string,
   mode: string,
   socket: string,
   port: number,
   runFolder: string,
+  controlFolder: string,
 ): string[] {
   return accountAlias(name, 'harness-pw', port, runFolder, [
     ...PASSWORD_LINES,
     `ControlMaster ${mode}`,
-    `ControlPath ${path.join(runFolder, socket)}`,
+    `ControlPath ${path.join(controlFolder, socket)}`,
     'ControlPersist 600',
   ]);
 }
@@ -239,14 +248,16 @@ function masterAlias(
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `mute` (a login shell that does not answer), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
- * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11; and three
- * for the authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed)
- * and `127.0.0.2` (the loopback name that reaches the host with a refused key, the port coming from the authority).
+ * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11; three for the
+ * authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed) and
+ * `127.0.0.2` (the loopback name that reaches the host with a refused key, the port coming from the authority). The
+ * sockets of the ControlMaster aliases are in `controlFolder`.
  */
 export function harnessSshConfig(
   port: number,
   runFolder: string,
   agentSocket: string,
+  controlFolder = runFolder,
 ): string {
   return [
     'Host harness',
@@ -330,15 +341,30 @@ export function harnessSshConfig(
       runFolder,
       keyLines(runFolder),
     ),
-    ...masterAlias('master', 'auto', 'cm-%C', port, runFolder),
-    ...masterAlias('master-ask', 'ask', 'cm-ask-%C', port, runFolder),
-    ...masterAlias('master-yes', 'yes', 'cm-yes-%C', port, runFolder),
+    ...masterAlias('master', 'auto', 'cm-%C', port, runFolder, controlFolder),
+    ...masterAlias(
+      'master-ask',
+      'ask',
+      'cm-ask-%C',
+      port,
+      runFolder,
+      controlFolder,
+    ),
+    ...masterAlias(
+      'master-yes',
+      'yes',
+      'cm-yes-%C',
+      port,
+      runFolder,
+      controlFolder,
+    ),
     ...masterAlias(
       'master-autoask',
       'autoask',
       'cm-autoask-%C',
       port,
       runFolder,
+      controlFolder,
     ),
     ...keyAlias('passkey', 'harness', port, runFolder, ['id_passphrase']),
     ...keyAlias('passkey-then-second', 'harness', port, runFolder, [
@@ -484,15 +510,25 @@ export function packagedExtensions(
 /**
  * The editor's user settings of the run: the extensions under test read the harness's ssh_config, and `extra` is a
  * launch's own settings. With `label`, the same bytes go to `<run folder>/<label>-settings.json`, so a row compares
- * the file the editor read with the one its launch got.
+ * the file the editor read with the one its launch got. A `tail` is text put after the last member with no comma
+ * before it: a syntax error, after members the editor still reads.
  */
 export function writeUserSettings(
   runFolder: string,
   configFile: string,
   extra: Readonly<Record<string, unknown>> = {},
   label?: string,
+  tail?: string,
 ): void {
-  const bytes = `${JSON.stringify({'remote.SSH.configFile': configFile, ...extra}, null, 2)}\n`;
+  const written = JSON.stringify(
+    {'remote.SSH.configFile': configFile, ...extra},
+    null,
+    2,
+  );
+  const bytes =
+    tail === undefined
+      ? `${written}\n`
+      : `${written.slice(0, -2)}\n  ${tail}\n}\n`;
   const folder = path.join(runFolder, 'user-data', 'User');
   mkdirSync(folder, {recursive: true});
   writeFileSync(path.join(folder, 'settings.json'), bytes);
@@ -593,7 +629,10 @@ async function prepare(
   started.push(host.container);
   const port = host.port;
   const configFile = path.join(runFolder, 'ssh_config');
-  writeFileSync(configFile, harnessSshConfig(port, runFolder, agentSocket));
+  writeFileSync(
+    configFile,
+    harnessSshConfig(port, runFolder, agentSocket, controlFolderOf(runFolder)),
+  );
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
   await dependencies.bundleSuite(root);
@@ -626,11 +665,24 @@ async function prepare(
       ]);
     }
   }
+  const launches = editor === 'vscodium' ? launchesOf(root) : [];
+  for (const launch of launches) {
+    if (launch.kind === 'plain' && launch.standIns !== undefined) {
+      writeStandIns(runFolder, launch, standInEngines(root, launch));
+    }
+  }
+  const devContainerImage = launches.some(needsDevContainerImage)
+    ? devContainerImageFor(command, root, runId)
+    : undefined;
   return {
     REMOTE_OSS_ACCEPTANCE: '1',
     HARNESS_SSH_CONFIG: configFile,
     HARNESS_CONTAINER: host.container,
     HARNESS_RUN_FOLDER: runFolder,
+    HARNESS_RUN_ID: runId,
+    ...(devContainerImage === undefined
+      ? {}
+      : {HARNESS_DEVCONTAINER_IMAGE: devContainerImage}),
     HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
@@ -648,6 +700,32 @@ async function prepare(
           HARNESS_PASSPHRASE_FILE: keys.passphraseFile,
         }),
   };
+}
+
+/**
+ * The run's dev container image: other runs' stale dev containers and images swept first, then the image built with the
+ * run's labels.
+ */
+function devContainerImageFor(
+  command: CommandRunner,
+  root: string,
+  runId: string,
+): string {
+  sweepStaleDevContainers(command, runId, Date.now() / 1000);
+  return buildDevContainerImage(command, root, runId);
+}
+
+/** The `engines.vscode` of a launch's stand-ins: the one of the first extension the launch installs of its own. */
+export function standInEngines(root: string, launch: Launch): string {
+  const own = launch.kind === 'plain' ? launch.withExtensions?.[0] : undefined;
+  const folder = own === undefined ? undefined : LAUNCH_EXTENSIONS.get(own);
+  if (folder === undefined) {
+    return '';
+  }
+  const manifest = JSON.parse(
+    readFileSync(path.join(root, 'packages', folder, 'package.json'), 'utf8'),
+  ) as {engines?: {vscode?: string}};
+  return manifest.engines?.vscode ?? '';
 }
 
 /** Copies the host extensions of the launches into the host's home folder of the user harness. */
@@ -748,6 +826,7 @@ export async function runLaunches(
               process.env.PATH ?? '',
             ),
             launch.label,
+            launch.settingsTail,
           );
           await beforeAttempt(launch);
         }
