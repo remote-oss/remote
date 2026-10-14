@@ -337,6 +337,11 @@ describe('resolveServerArchive', () => {
       ['linux', 'armhf', 'linux-armhf'],
       ['alpine', 'x64', 'linux-alpine'],
       ['alpine', 'arm64', 'alpine-arm64'],
+      ['linux', 'ppc64le', 'linux-ppc64le'],
+      ['linux', 'riscv64', 'linux-riscv64'],
+      ['linux', 'loong64', 'linux-loong64'],
+      ['linux', 's390x', 'linux-s390x'],
+      ['darwin', 'arm64', 'darwin-arm64'],
     ];
     for (const [operatingSystem, architecture, platform] of cases) {
       it(`appends the archive path with server-${platform} for ${operatingSystem}/${architecture}`, () => {
@@ -356,26 +361,6 @@ describe('resolveServerArchive', () => {
         );
       });
     }
-
-    it('reports a host the base-URL form has no archive for as unsupportedPlatform', () => {
-      deepStrictEqual(
-        resolveServerArchive(
-          fixtureProfile('vscode-reduced'),
-          {operatingSystem: 'darwin', architecture: 'arm64'},
-          CONTAINERS_POLICY,
-          {value: 'https://mirror.example.invalid/base', layer: 'profileUser'},
-        ),
-        {
-          kind: 'invalidOverride',
-          settingKey: 'remote.serverDownloadBaseUrl',
-          problem: {
-            kind: 'unsupportedPlatform',
-            operatingSystem: 'darwin',
-            architecture: 'arm64',
-          },
-        },
-      );
-    });
 
     it('uses a remote-ssh value without placeholders as one URL, never a base', () => {
       deepStrictEqual(

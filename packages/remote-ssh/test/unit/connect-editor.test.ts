@@ -258,6 +258,14 @@ describe('the opening and the commands of the connect commands (card connect-21)
     deepStrictEqual(fake.commandsRun, [['opensshremotes.openConfigFile']]);
   });
 
+  it('F-2411 AC-19: the window switches to a local one with the same window and no remote authority', async () => {
+    const fake = fakeEditor();
+    await adapterOf(fake).switchToLocalWindow();
+    deepStrictEqual(fake.commandsRun, [
+      ['vscode.newWindow', {reuseWindow: true, remoteAuthority: null}],
+    ]);
+  });
+
   it("connect-21: the remote name is the editor's", () => {
     strictEqual(adapterOf(fakeEditor('ssh-remote')).remoteName(), 'ssh-remote');
   });

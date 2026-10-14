@@ -279,6 +279,47 @@ describe('probe (V2)', () => {
     );
   });
 
+  for (const token of [
+    'x64',
+    'arm64',
+    'armhf',
+    'ppc64le',
+    'riscv64',
+    'loong64',
+    's390x',
+  ]) {
+    it(`#670 R1: a host of the architecture ${token} is read`, async () => {
+      const outcome = await probe(
+        recording(
+          block(
+            'Ok',
+            'host.os=linux',
+            `host.arch=${token}`,
+            'host.tool.tar=yes',
+          ),
+        ),
+        parametersFor(),
+        NEVER_CANCELLED,
+      );
+      deepStrictEqual(
+        outcome.kind === 'probed' ? outcome.host.architecture : outcome.kind,
+        token,
+      );
+    });
+  }
+
+  it('#670 R1: x86 is not an architecture token, so the facts are unreadable', async () => {
+    const outcome = await probe(
+      recording(block('Ok', 'host.os=linux', 'host.arch=x86')),
+      parametersFor(),
+      NEVER_CANCELLED,
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'unreadableFacts', field: 'arch'},
+    );
+  });
+
   it('F-2401.7.E5: an unsupported platform with no fact names nothing', async () => {
     const outcome = await probe(
       recording(block('UnsupportedPlatform')),
@@ -317,13 +358,13 @@ describe('probe (V2)', () => {
 
   it('F-2401.AC-10: UnsupportedArch names the machine it found', async () => {
     const outcome = await probe(
-      recording(block('UnsupportedArch', 'host.arch=riscv64')),
+      recording(block('UnsupportedArch', 'host.arch=i686')),
       parametersFor(),
       NEVER_CANCELLED,
     );
     deepStrictEqual(
       outcome.kind === 'failed' ? outcome.failure : outcome.kind,
-      {kind: 'unsupportedArch', reported: 'riscv64'},
+      {kind: 'unsupportedArch', reported: 'i686'},
     );
   });
 

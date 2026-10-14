@@ -1,6 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import type {MemorySink} from 'lib-log/testing/memory-sink';
-import type {StartOutcome, TransferPhase} from 'lib-server';
+import type {
+  ProbedHost,
+  StartOutcome,
+  TransferOutcome,
+  TransferPhase,
+} from 'lib-server';
 import {
   connect,
   portOf,
@@ -13,7 +18,9 @@ import type {
 } from '../../src/pipeline/steps.ts';
 import {
   CHANNEL_CLOSED,
+  DOWNLOAD,
   endTunnel,
+  HOST,
   INPUT,
   leaseOf,
   type Recording,
@@ -392,6 +399,75 @@ describe('the connect pipeline, when a step fails', () => {
     );
     return {result, logSink};
   }
+
+  /** A connect to a host of `architecture` whose transfer answers `outcome` for the plan resolved at `step`. */
+  async function connectOver(
+    architecture: ProbedHost['architecture'],
+    step: 'override' | 'productTemplate' | 'builtInTable',
+    outcome: TransferOutcome,
+  ) {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        probe: () =>
+          Promise.resolve({
+            kind: 'probed',
+            host: {...HOST, architecture},
+          }),
+        plan: () => ({plan: DOWNLOAD, step}),
+        transfer: () => Promise.resolve(outcome),
+      }),
+      options,
+    );
+    return {result, recording, logSink};
+  }
+
+  const DOWNLOADED: TransferOutcome = {
+    kind: 'transferred',
+    installFolder: '/home/dev/.server/bin/abc',
+  };
+  const NOT_FOUND: TransferOutcome = {
+    kind: 'failed',
+    failure: {kind: 'serverDownload', cause: 'downloadFailed', status: 404},
+  };
+
+  it('#670 F-2401 AC-21, F-2405 BR-2: a ppc64le host whose server download works, from the host or from the client, goes on to the start with no S146', async () => {
+    const {result, recording} = await connectOver(
+      'ppc64le',
+      'builtInTable',
+      DOWNLOADED,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        recording.calls.includes('start'),
+        JSON.stringify(result).includes('S146'),
+      ],
+      [true, true, false],
+    );
+  });
+
+  it('#670 F-2401 AC-20: a host-side 404 from a built-in source fails with S146, the start never runs, and the log names ppc64le', async () => {
+    const {result, recording, logSink} = await connectOver(
+      'ppc64le',
+      'builtInTable',
+      NOT_FOUND,
+    );
+    deepStrictEqual(
+      [
+        'reason' in result ? result.reason : result,
+        recording.calls.includes('start'),
+        logSink.lines.some(line => line.message.includes('ppc64le')),
+      ],
+      [{id: 'S146'}, false, true],
+    );
+  });
+
+  it('F-2403 AC-10: the same 404 from the user template is the download failure S043', async () => {
+    const {result} = await connectOver('ppc64le', 'override', NOT_FOUND);
+    deepStrictEqual('reason' in result ? result.reason : result, {id: 'S043'});
+  });
 
   it('a transfer that fails is read by the transfer table', async () => {
     const {result} = await downloadFailed();

@@ -132,6 +132,7 @@ export async function registerConnect(
       addNewSshHost: commands.addNewSshHost,
       cleanRemoteServer: commands.cleanRemoteServer,
       cleanDevBox: commands.cleanDevBox,
+      cleanCurrentRemoteServer: commands.cleanCurrentRemoteServer,
     },
     {
       ...connectCommandHandlers(host.connectEditor, connection),
@@ -144,6 +145,7 @@ export async function registerConnect(
       ...maintenanceHandlers({
         editor: host.connectEditor,
         perform: (action, target) => assembly.maintain(action, target),
+        heldHost: () => assembly.connector.heldHost(),
         killLocalServer: hostString => connection.killLocalServer(hostString),
         notice: host.notice,
         translate: host.translate,
