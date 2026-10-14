@@ -14,8 +14,7 @@ function linesOf(stderr: string): string[] {
 function isDaemonLine(line: string): boolean {
   return (
     line.startsWith('Error response from daemon:') ||
-    line.startsWith('Error: No such container:') ||
-    line.includes('is not running')
+    line.startsWith('Error: No such container:')
   );
 }
 

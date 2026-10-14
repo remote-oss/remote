@@ -23,11 +23,18 @@ describe('what a finished docker exec means (card containers-02)', () => {
     );
   });
 
-  it('contracts §5: a line saying the container is not running is a closed channel', () => {
+  it('contracts §5: the daemon’s line saying the container is not running is a closed channel', () => {
     deepStrictEqual(
-      exitOutcome(137, 'cannot exec: container is not running', 'script'),
-      failure('channelClosed', 'cannot exec: container is not running'),
+      exitOutcome(1, STOPPED, 'script'),
+      failure('channelClosed', STOPPED),
     );
+  });
+
+  it('contracts §5: a script’s own stderr line saying something is not running is its result', () => {
+    deepStrictEqual(exitOutcome(0, 'nginx is not running', 'script'), {
+      kind: 'exited',
+      status: 0,
+    });
   });
 
   it('contracts §5: status 125 is a closed channel with the last stderr line', () => {
