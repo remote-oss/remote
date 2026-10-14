@@ -135,7 +135,9 @@ async function discover(
     if (listed.kind === 'failed') {
       return {kind: 'discoveryFailed', detail: listed.detail};
     }
-    for (const identifier of listed.stdout.split('\n').filter(line => line !== '')) {
+    for (const identifier of listed.stdout
+      .split('\n')
+      .filter(line => line !== '')) {
       if (!identifiers.includes(identifier)) {
         identifiers.push(identifier);
       }
@@ -259,7 +261,12 @@ export function containerLifecycleOf(dependencies: {
         : idLabels(folder, configFile);
     // a rebuild removes a legacy container the CLI's remove would miss: the CLI only finds the labels it's given
     for (const container of discovery.containers) {
-      if (rebuilding && isLegacy(folder, container)) {
+      if (
+        rebuilding &&
+        isLegacy(folder, container) &&
+        // a container that is already removing will be gone on its own, and the rm would only fail on it
+        container.status !== 'removing'
+      ) {
         const removed = await askEngine(
           engine,
           ['rm', '--force', container.id],

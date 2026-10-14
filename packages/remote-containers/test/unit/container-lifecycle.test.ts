@@ -32,6 +32,7 @@ const CONFIG = '/w/a/.devcontainer/devcontainer.json';
 const OLD = 'a'.repeat(64);
 const NEW = 'b'.repeat(64);
 const LEGACY = 'c'.repeat(64);
+const SECOND = 'd'.repeat(64);
 const REQUEST: ContainerRequest = {
   folder: FOLDER,
   configFile: CONFIG,
@@ -71,10 +72,12 @@ function inspected(
   );
 }
 
-/** The `inspect` output of one legacy-labelled container, with the volume mounted. */
-function legacyInspected(containerId: string, status: string): string {
-  return JSON.stringify([
-    {
+/** The `inspect` output of legacy-labelled containers, each `[id, status]`, with the volume mounted. */
+function legacyInspected(
+  containers: ReadonlyArray<readonly [string, string]>,
+): string {
+  return JSON.stringify(
+    containers.map(([containerId, status]) => ({
       Id: containerId,
       Created: '2026-10-14T03:00:28.1Z',
       State: {Status: status},
@@ -85,19 +88,16 @@ function legacyInspected(containerId: string, status: string): string {
         },
       },
       Mounts: [{Type: 'volume', Name: 'vscode', Destination: '/vscode'}],
-    },
-  ]);
+    })),
+  );
 }
-
 
 /** The engine's script of a discovery that finds the standard container `OLD` alone, in `status`. */
 function standardListing(status: string): Record<string, EngineRunOutcome[]> {
   return {
     [LISTING]: [ran(`${OLD}\n`)],
     [LEGACY_LISTING]: [ran('')],
-    [`inspect --type container ${OLD}`]: [
-      ran(inspected([[OLD, status]])),
-    ],
+    [`inspect --type container ${OLD}`]: [ran(inspected([[OLD, status]]))],
   };
 }
 
@@ -107,7 +107,7 @@ function legacyListing(): Record<string, EngineRunOutcome[]> {
     [LISTING]: [ran('')],
     [LEGACY_LISTING]: [ran(`${LEGACY}\n`)],
     [`inspect --type container ${LEGACY}`]: [
-      ran(legacyInspected(LEGACY, 'running')),
+      ran(legacyInspected([[LEGACY, 'running']])),
     ],
   };
 }
@@ -183,9 +183,10 @@ async function settle(): Promise<void> {
 
 /** Runs one `prepare`, giving the steps, the outcome, the log lines and the bridge. */
 /** What a run's single `up` was given for its mounts, and whether the run read a mounted volume. */
-function mountings(
-  result: {bridge: FakeBridge; outcome: ContainerOutcome},
-): [unknown, boolean] {
+function mountings(result: {
+  bridge: FakeBridge;
+  outcome: ContainerOutcome;
+}): [unknown, boolean] {
   return [
     result.bridge.ups.length === 1
       ? result.bridge.ups[0]?.target.mounts
@@ -197,7 +198,7 @@ function mountings(
 /** What a run's single `up` was given for its id labels, or none when it never ran. */
 function targetIdLabels(result: {bridge: FakeBridge}): readonly string[] {
   return result.bridge.ups.length === 1
-    ? result.bridge.ups[0]?.target.idLabels ?? []
+    ? (result.bridge.ups[0]?.target.idLabels ?? [])
     : [];
 }
 
@@ -308,9 +309,7 @@ describe('containerLifecycleOf', () => {
   it("F-0409 AC-7 (C7's half) and AC-46 (C7's half): a paused or restarting container is unusable and the CLI is not called", async () => {
     const outcomes = [];
     for (const status of ['paused', 'restarting']) {
-      const result = await prepared(
-        scriptedEngine(standardListing(status)),
-      );
+      const result = await prepared(scriptedEngine(standardListing(status)));
       outcomes.push({
         outcome: result.outcome,
         ups: result.bridge.ups.length,
@@ -823,22 +822,22 @@ describe('containerLifecycleOf', () => {
         ],
       }),
     );
-    deepStrictEqual(
-      mountings(result),
-      [['type=volume,source=vscode,target=/vscode'], true],
-    );
+    deepStrictEqual(mountings(result), [
+      ['type=volume,source=vscode,target=/vscode'],
+      true,
+    ]);
   });
 
-
-/** A rebuild `prepare` over the engine, with the default bridge and a fresh signal. */
-async function rebuilt(engine: EngineHost) {
-  return prepared(
-    engine,
-    fakeBridge(),
-    new AbortController().signal,
-    {...REQUEST, rebuild: {buildNoCache: false}},
-  );
-}
+  /** A rebuild `prepare` over the engine, with the default bridge and a fresh signal. */
+  async function rebuilt(
+    engine: EngineHost,
+    cancellation: AbortSignal = new AbortController().signal,
+  ) {
+    return prepared(engine, fakeBridge(), cancellation, {
+      ...REQUEST,
+      rebuild: {buildNoCache: false},
+    });
+  }
 
   it('F-0405 with F-0409: a rebuild removes the legacy container first, and uses the standard labels', async () => {
     const engine = scriptedEngine({
@@ -899,6 +898,57 @@ async function rebuilt(engine: EngineHost) {
           `rm --force ${LEGACY}`,
         ],
       },
+    );
+  });
+
+  it('F-0405 with F-0409: an abort during a legacy removal is cancelled, with no up and no further removals', async () => {
+    const abort = new AbortController();
+    const engine = scriptedEngine(
+      {
+        [LISTING]: [ran('')],
+        [LEGACY_LISTING]: [ran(`${LEGACY}\n${SECOND}\n`)],
+        [`inspect --type container ${LEGACY} ${SECOND}`]: [
+          ran(
+            legacyInspected([
+              [LEGACY, 'running'],
+              [SECOND, 'running'],
+            ]),
+          ),
+        ],
+        [`rm --force ${LEGACY}`]: [ran('')],
+      },
+      {controller: abort, on: `rm --force ${LEGACY}`},
+    );
+    const result = await rebuilt(engine, abort.signal);
+    deepStrictEqual(
+      {
+        outcome: result.outcome,
+        ups: result.bridge.ups.length,
+        removals: engine.commands.filter(command => command.startsWith('rm ')),
+      },
+      {
+        outcome: {kind: 'cancelled'},
+        ups: 0,
+        removals: [`rm --force ${LEGACY}`],
+      },
+    );
+  });
+
+  it('F-0405 with F-0409: a rebuild does not remove a legacy container that is already removing', async () => {
+    const engine = scriptedEngine({
+      [LISTING]: [ran('')],
+      [LEGACY_LISTING]: [ran(`${LEGACY}\n`)],
+      [`inspect --type container ${LEGACY}`]: [
+        ran(legacyInspected([[LEGACY, 'removing']])),
+      ],
+    });
+    const result = await rebuilt(engine);
+    deepStrictEqual(
+      {
+        kind: result.outcome.kind,
+        removals: engine.commands.filter(command => command.startsWith('rm ')),
+      },
+      {kind: 'ready', removals: []},
     );
   });
 
