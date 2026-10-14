@@ -96,7 +96,7 @@ names no product.
 This card contributes no command, setting, menu or view. tooling-31's check fails on a contribution that no
 production code consumes, and a command registered with a placeholder handler would do nothing visible in a built
 VSIX. So every later card adds its own contribution, in the same PR as the code that consumes it:
-- **C2 (containers-02):** `dev.containers.dockerPath`.
+- **C2 (containers-03, #758):** `dev.containers.dockerPath`.
 - **C6 (Reopen in Container and the rest):** its commands, with their titles and `when` clauses copied from F-0401,
   F-0403 and F-0405, each menu entry gated with `&& !remote-containers.standingDown`.
 - **The other cards:** whatever they consume.
