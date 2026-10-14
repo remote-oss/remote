@@ -12,14 +12,17 @@ import {
   windowState,
 } from './harness.ts';
 
-/** The process ids of the servers the host runs from a commit folder: the processes whose arguments name one. */
+/** The process ids the pid files of the host's servers hold: the long-lived server of each kind, not its per-window children. */
 async function serverProcesses(): Promise<string[]> {
   const output = await onHost(
     'sh',
     '-c',
-    "ps -o pid=,args= | grep -- '/bin/' | grep -- 'server' | grep -v grep | awk '{print $1}'",
+    'for f in "$HOME"/.*/.*.pid; do [ -f "$f" ] && cat "$f" && echo; done',
   );
-  return output.split('\n').filter(line => line !== '');
+  return output
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => /^\d+$/.test(line));
 }
 
 describe('Kill Current VS Code Server in a window (card connect-43)', function () {
