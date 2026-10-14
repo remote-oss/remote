@@ -188,9 +188,11 @@ its own (F-0410 5.0 step 2, AC-2).
 
 - Escape on the quick pick does nothing more. The window stays disconnected (F-0202 AC-19's second half).
 - The pick has no title, is single-select, and has no Back button: `showQuickPick(labels, {placeHolder})`.
-- **Not here:** "Rebuild Container" (S285, F-0410 BR-4 and AC-6). It runs `remote-containers.rebuildContainer`, which
-  containers-14 (#884) registers. containers-14 adds the item, after `Reload Window`, with its check that a container
-  exists for the folder and configuration. This card leaves room for it and adds no check.
+- **Not in release 1:** "Rebuild Container" (S285, F-0410 BR-4 and AC-6; F-0405 6.9). containers-14 (#884)
+  registers `remote-containers.rebuildContainer`, but the item, with its check that a container exists for the folder
+  and configuration, is the recovery path: no gate row needs it, and containers-14 §1 leaves it out (daedalus,
+  2026-10-14). This card adds no item and no check. Retry after a failed rebuild is an ordinary open, which creates
+  the container.
 
 ### 3.6 The documentation address
 
@@ -241,7 +243,7 @@ The exact English templates, from the specs' string tables:
 | The recovery container, the 4-button dialog, S159, S372, S076, the reset command (F-0410 6.1, 6.2; AC-14 to AC-19, AC-16a–c, AC-24 to AC-26, AC-28 to AC-32) | Clone in Volume is later (brief §2, "Later") | `deferred`, "containers release 1: later (volumes, F-07xx)" |
 | S160, S161, S162, the SSH, Tunnel and WSL wording (AC-20, AC-22, AC-23; F-0202 AC-63) | remote engines and WSL are later | `deferred`, "containers release 1: later (remote engines, WSL)" |
 | S420 (AC-21) | no subcommand outside `up` fails a connect in release 1 (containers-08 F-0504 BR-2 only logs) | `deferred`, "containers release 1: no CLI subcommand outside `up` fails a connect" |
-| "Rebuild Container" in the quick pick (AC-6, AC-11b's item, AC-12b's Rebuild) | containers-14 (#884) | stays `todo`, reason containers-14 |
+| "Rebuild Container" in the quick pick (AC-6, AC-11b's item, AC-12b's Rebuild) | not in release 1 (the recovery path; containers-14 §1) | `deferred`, reason `containers release 1: the More Actions... rebuild item is the recovery path, later` |
 | AC-10, the disconnected-state menu | already deferred under brief ruling 8 | unchanged |
 | AC-4's and AC-8's configuration tab and log group | open row 1 | `todo` |
 
