@@ -87,7 +87,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('connect-39: the forwarding launches) open their aliases with the case named, and agent-off turns agent forwarding off', () => {
+  it('connect-39: the forwarding launches open their aliases with the case named, and agent-off turns agent forwarding off', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.suite === 'suite-forwarding')

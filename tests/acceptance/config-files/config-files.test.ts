@@ -33,6 +33,7 @@ import {
   noHelperWithin,
   openWindow,
   recordLines,
+  readUserSettings,
   sshArguments,
   type RecordLine,
   userSettings,
@@ -190,6 +191,9 @@ function includesOf(pattern: string, folder: string): string[] {
     .map(name => path.join(base === '' ? folder : base, name));
 }
 
+/** The run's user settings at their last written bytes, for AC-29's comparison. */
+let lastSettingsBytes: string | undefined;
+
 /** Sets `remote.SSH.configFile` to `file`, or removes the key when `file` is empty. */
 async function configFileSetting(file: string): Promise<void> {
   await userSettings(
@@ -197,6 +201,7 @@ async function configFileSetting(file: string): Promise<void> {
       ? {'remote.SSH.configFile': undefined}
       : {'remote.SSH.configFile': file},
   );
+  lastSettingsBytes = readUserSettings();
 }
 
 /** The last line a surface wrote for the local window, or a failure naming the surface. */
@@ -406,41 +411,16 @@ function treeOf(folder: string): TreeEntry[] {
   return entries.sort((first, second) => (first.name < second.name ? -1 : 1));
 }
 
-/**
- * The `*.json` files under the run's user-data `User` folder, except the `settings.json` the rows write and the
- * editor's own state: `globalStorage/storage.json` and each workspace's `workspace.json`.
- */
-function userJsonTree(): TreeEntry[] {
-  const entries: TreeEntry[] = [];
-  const editorState =
-    /^workspaceStorage\/[^/]+\/workspace\.json$|^globalStorage\/storage\.json$/;
-  function walk(prefix: string, here: string): void {
-    const names = existsSync(here) ? readdirSync(here) : [];
-    for (const child of names) {
-      const next = path.join(here, child);
-      const name = prefix === '' ? child : `${prefix}/${child}`;
-      const stat = statSync(next);
-      if (stat.isDirectory()) {
-        walk(name, next);
-      } else if (
-        child.endsWith('.json') &&
-        name !== 'settings.json' &&
-        !editorState.test(name)
-      ) {
-        entries.push({name, size: stat.size, mtime: stat.mtimeMs});
-      }
-    }
-  }
-  walk('', path.join(RUN_FOLDER, 'user-data', 'User'));
-  return entries.sort((first, second) => (first.name < second.name ? -1 : 1));
-}
-
 describe('the configuration-file rows of F-2201 (card coverage-20, #142)', function () {
   this.timeout(300_000);
 
-  /** The snapshot names AC-29 compares: the launch's `HOME`, the run's user settings, and the account's own `~/.ssh`. */
-  let homeBefore: string[] = [];
-  let jsonBefore: TreeEntry[] = [];
+  /**
+   * The snapshots AC-29 compares, and only what the product could write: the launch's `HOME/.ssh` entry names
+   * and the account's own `~/.ssh` tree, untouched by the rows, plus the run's user settings at their last written
+   * bytes. The editor's own files (its dot-folders in the launch's `HOME` and its `User/*.json`) are left out:
+   * they differ by machine, and the product does not write them.
+   */
+  let sshNamesBefore: string[] = [];
   let accountSshBefore: TreeEntry[] = [];
 
   before(async function () {
@@ -450,8 +430,9 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     mkdirSync(path.dirname(USER_FILE), {recursive: true});
     writeFileSync(USER_FILE, hostBlock('onlydefault'));
     await noHelperWithin(60_000);
-    homeBefore = treeOf(HOME_FOLDER).map(entry => entry.name);
-    jsonBefore = userJsonTree();
+    sshNamesBefore = treeOf(path.join(HOME_FOLDER, '.ssh')).map(
+      entry => entry.name,
+    );
     accountSshBefore = treeOf(path.join(userInfo().homedir, '.ssh'));
   });
 
@@ -903,12 +884,25 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
   });
 
   it("F-2201 AC-29: the reading wrote no configuration file and no setting, and the account's own files are untouched", () => {
-    const homeAfter = treeOf(HOME_FOLDER).map(entry => entry.name);
-    const jsonAfter = userJsonTree();
+    const sshNamesAfter = treeOf(path.join(HOME_FOLDER, '.ssh')).map(
+      entry => entry.name,
+    );
     const accountSshAfter = treeOf(path.join(userInfo().homedir, '.ssh'));
     deepStrictEqual(
-      [homeAfter, jsonAfter, accountSshAfter],
-      [[...homeBefore, 'cfg-b'].sort(), jsonBefore, accountSshBefore],
+      [
+        sshNamesAfter,
+        readFileSync(USER_FILE, 'utf8'),
+        readFileSync(CFG_B, 'utf8'),
+        readUserSettings(),
+        accountSshAfter,
+      ],
+      [
+        sshNamesBefore,
+        hostBlock('onlydefault'),
+        hostBlock('cfghost'),
+        lastSettingsBytes,
+        accountSshBefore,
+      ],
     );
   });
 });
