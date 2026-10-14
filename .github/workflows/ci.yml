@@ -2,8 +2,7 @@
 # Triggers (athena on #142, ruling 4): every pull request from this repository runs the checks and the cheap acceptance
 # jobs (slice 1, server lifecycle) at its head, so that "passing in CI" means the head, not the last dispatch. The
 # costly jobs (real server, VSCodium, host variants) stay opt-in on a manual dispatch, and always run on the tag of a
-# release (`<package>-v<semver>`). Every push to main runs the VSCodium job alone (R-112: the backstop for main's
-# launches). The jobs run on the self-hosted runners, so they use no Actions minutes.
+# release (`<package>-v<semver>`). Every push to main runs the VSCodium job alone: the backstop for main's launches. The jobs run on the self-hosted runners, so they use no Actions minutes.
 # A draft pull request runs nothing: its pushes would hold the runners while merge-ready heads wait. Marking it ready for
 # review starts its run (`ready_for_review`), and that run, at the head, is the one green-at-head looks for.
 name: ci
@@ -27,8 +26,8 @@ on:
         description: Also run the host-variant rows, once per login shell and download tool of the SSH host
         type: boolean
         default: false
-  # a push to main runs the VSCodium job alone (athena, R-112): the backstop that shows whether main's launches are green,
-  # which PR CI never runs; the other jobs ran on the pull request's merge ref
+  # a push to main runs the VSCodium job alone: the backstop that shows whether main's launches are green, which PR CI
+  # never runs; the other jobs ran on the pull request's merge ref
   push:
     branches: [main]
     tags: ['*-v*']
@@ -245,7 +244,7 @@ jobs:
   acceptance-vscodium:
     name: acceptance (vscodium)
     if: inputs.vscodium || (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'))
-    # one VSCodium job at a time, whatever its ref (athena, R-112: hermes's watcher no longer needs a lock of its own).
+    # one VSCodium job at a time, whatever its ref, so dispatches need no lock of their own.
     # GitHub keeps one pending job per group: a newer one replaces a pending one, which then reports cancelled
     concurrency:
       group: acceptance-vscodium
