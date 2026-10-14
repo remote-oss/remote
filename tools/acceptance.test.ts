@@ -329,6 +329,7 @@ const LAUNCH_ORDER = [
   'containers-no-proposals',
   'ports-probe',
   'install-probe',
+  'platform-probe',
 ];
 
 const CLIENT_CASE = {
@@ -361,6 +362,19 @@ describe('acceptance', () => {
           {
             label: 'probe',
             cite: 'F-2409 AC-2 (probe)',
+            settings: {},
+            outcome: 'connected',
+          },
+        ],
+      }),
+    );
+    workspace.write(
+      'tests/acceptance/suite-platform/cases.json',
+      JSON.stringify({
+        cases: [
+          {
+            label: 'probe',
+            cite: 'F-2206 AC-1 (platform-probe)',
             settings: {},
             outcome: 'connected',
           },
@@ -663,6 +677,23 @@ describe('acceptance', () => {
         ),
       ),
       {'remote.SSH.configFile': '/run/ssh_config'},
+    );
+  });
+
+  it('coverage-12: a settings tail goes after the last member, with no comma before it, so that the editor reads what comes before it', () => {
+    writeUserSettings(
+      workspace.root,
+      '/run/ssh_config',
+      {'remote.SSH.useLocalServer': false},
+      undefined,
+      '"acceptance.broken": 1 "acceptance.brokenToo": 2',
+    );
+    strictEqual(
+      readFileSync(
+        path.join(workspace.root, 'user-data', 'User', 'settings.json'),
+        'utf8',
+      ),
+      '{\n  "remote.SSH.configFile": "/run/ssh_config",\n  "remote.SSH.useLocalServer": false\n  "acceptance.broken": 1 "acceptance.brokenToo": 2\n}\n',
     );
   });
 
@@ -1855,7 +1886,7 @@ describe('acceptance', () => {
 
     it('coverage-11: the run waits for the helper of the launch before to end, 5 s before a client-search launch and the grace before each host-case launch', async () => {
       await runAcceptance(workspace.root, harness, 'vscodium');
-      deepStrictEqual(harness.sleeps, [5000, 3000, 3000]);
+      deepStrictEqual(harness.sleeps, [5000, 3000, 3000, 3000]);
     });
 
     it("coverage-11: a client-search launch finds its settings with the run's folder in place of the token", async () => {
@@ -1926,7 +1957,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 13}, () => EXECUTABLE),
+        Array.from({length: 14}, () => EXECUTABLE),
       );
     });
 
@@ -1937,7 +1968,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 13}, () => true),
+        Array.from({length: 14}, () => true),
       );
     });
 
@@ -1961,6 +1992,7 @@ describe('acceptance', () => {
           ['client-unset', 'dist-client/**/*.test.cjs'],
           ['ports-probe', 'dist-ports/**/*.test.cjs'],
           ['install-probe', 'dist-install/**/*.test.cjs'],
+          ['platform-probe', 'dist-platform/**/*.test.cjs'],
         ],
       );
     });
@@ -2108,6 +2140,7 @@ describe('acceptance', () => {
           'client-unset',
           'ports-probe',
           'install-probe',
+          'platform-probe',
         ].map(label => path.join('/run', `${label}-log.txt`)),
       );
     });
@@ -2131,6 +2164,7 @@ describe('acceptance', () => {
           'client-unset',
           'ports-probe',
           'install-probe',
+          'platform-probe',
         ].map(label => path.join('/run', label, 'agent', 'pids')),
       );
     });
@@ -2142,7 +2176,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        Array.from({length: 12}, () =>
+        Array.from({length: 13}, () =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -2377,6 +2411,7 @@ describe('acceptance', () => {
       workspace.write('tests/acceptance/suite-socket/window.test.ts', '');
       workspace.write('tests/acceptance/suite-slow/window.test.ts', '');
       workspace.write('tests/acceptance/suite-ports/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-platform/window.test.ts', '');
       workspace.write(
         'tests/acceptance/slow-remote/src/extension.ts',
         'export function activate(): void {}\n',
@@ -2481,10 +2516,11 @@ describe('acceptance', () => {
           'dist-socket',
           'dist-slow',
           'dist-ports',
+          'dist-platform',
         ].map(folder =>
           existsSync(path.join(workspace.root, 'tests/acceptance', folder)),
         ),
-        [false, false, false, false, false, false, false, false, false],
+        [false, false, false, false, false, false, false, false, false, false],
       );
     });
 
@@ -2527,6 +2563,7 @@ describe('acceptance', () => {
           'dist-socket',
           'dist-slow',
           'dist-ports',
+          'dist-platform',
         ].map(folder =>
           existsSync(
             path.join(
@@ -2537,7 +2574,7 @@ describe('acceptance', () => {
             ),
           ),
         ),
-        [true, true, true, true, true, true, true, true],
+        [true, true, true, true, true, true, true, true, true],
       );
     });
   });

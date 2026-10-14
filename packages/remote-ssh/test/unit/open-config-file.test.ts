@@ -1,4 +1,6 @@
 import {deepStrictEqual, rejects} from 'node:assert';
+import {existsSync} from 'node:fs';
+import path from 'node:path';
 import type {FileChoice, FileChoiceItem} from '../../src/config/file-choice.ts';
 import type {Template} from '../../src/config/new-file.ts';
 import {starterTemplate} from '../../src/config/new-file.ts';
@@ -8,6 +10,7 @@ import {
   type ConfigFilePlaces,
   type ConfigFiles,
   type OpenedEditor,
+  CONFIG_FILE_HELP_ADDRESS,
   openConfigFileHandler,
 } from '../../src/config/open-config-file.ts';
 
@@ -437,7 +440,7 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
     );
   });
 
-  it('F-2203 AC-14: the Settings row opens the settings of the extension and its pack, and creates nothing', async () => {
+  it('F-2203 AC-14, F-2201 AC-6: the Settings row opens the settings of the extension and its pack, and creates nothing', async () => {
     const world = worldWith();
     world.take = choice => rowKind(choice, 'settings');
     await handlerOf(world).execute();
@@ -453,13 +456,27 @@ describe('the Open SSH Configuration File command (card remote-ssh-19)', () => {
     );
   });
 
-  it('F-2203 AC-15: the Help row opens the help once and creates nothing', async () => {
+  it('F-2203 AC-15, F-2201 AC-7: the Help row opens the help once and creates nothing', async () => {
     const world = worldWith();
     world.take = choice => rowKind(choice, 'help');
     await handlerOf(world).execute();
     deepStrictEqual(
       world.calls.filter(call => call.call !== 'pick'),
       [{call: 'help'}],
+    );
+  });
+
+  it("F-2201 AC-7: the Help row's page is the project's own", () => {
+    const prefix = 'https://github.com/remote-oss/remote/blob/main/';
+    const root = path.join(import.meta.dirname, '..', '..', '..', '..');
+    deepStrictEqual(
+      [
+        CONFIG_FILE_HELP_ADDRESS.startsWith(prefix),
+        existsSync(
+          path.join(root, CONFIG_FILE_HELP_ADDRESS.slice(prefix.length)),
+        ),
+      ],
+      [true, true],
     );
   });
 

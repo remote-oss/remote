@@ -20,6 +20,14 @@ const HOSTS: HostListResult = {
   ],
 };
 
+/** The listing of a configuration file the parser cannot read. */
+const UNPARSEABLE: HostListResult = {
+  parseError: {
+    file: '/home/alex/.ssh/config',
+    reason: 'Unexpected line break',
+  },
+};
+
 /** What the fake editor was asked, in order, and what the user does at the pick. */
 interface Fakes {
   editor: ConnectCommandEditor;
@@ -275,12 +283,7 @@ describe('Connect to Host... (card connect-21)', () => {
 
   it('F-2201 AC-19: a configuration file that cannot be parsed shows no pick and fails with the parser message', async () => {
     const fakes = runWith(undefined, {
-      listing: {
-        parseError: {
-          file: '/home/alex/.ssh/config',
-          reason: 'Unexpected line break',
-        },
-      },
+      listing: UNPARSEABLE,
     });
     const message = await connectCommandHandlers(fakes.editor, fakes.connection)
       .openEmptyWindow.execute()
@@ -292,6 +295,32 @@ describe('Connect to Host... (card connect-21)', () => {
       [message, fakes.asked],
       ['/home/alex/.ssh/config: Unexpected line break', ['listHosts']],
     );
+  });
+
+  it('F-2201 AC-32: Connect Current Window to Host with an unparsable file shows no pick, opens nothing and fails with the parser message', async () => {
+    const fakes = runWith(undefined, {
+      listing: UNPARSEABLE,
+    });
+    const message = await connectCommandHandlers(fakes.editor, fakes.connection)
+      .openEmptyWindowInCurrentWindow.execute()
+      .then(
+        () => 'completed',
+        (caught: unknown) => (caught as Error).message,
+      );
+    deepStrictEqual(
+      [message, fakes.asked, fakes.opened],
+      ['/home/alex/.ssh/config: Unexpected line break', ['listHosts'], []],
+    );
+  });
+
+  it('F-2201 AC-32: Connect to Host with an unparsable file opens nothing', async () => {
+    const fakes = runWith(undefined, {
+      listing: UNPARSEABLE,
+    });
+    await connectCommandHandlers(fakes.editor, fakes.connection)
+      .openEmptyWindow.execute()
+      .catch(() => undefined);
+    deepStrictEqual([fakes.opened, fakes.commandsRun], [[], []]);
   });
 
   it("connect-21: a refused open fails the command with the editor's reason", async () => {

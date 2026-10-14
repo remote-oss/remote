@@ -1,0 +1,483 @@
+{
+  "cases": [
+    {
+      "label": "default",
+      "cite": "F-2206 AC-1 (platform-default)",
+      "settings": {},
+      "asked": false,
+      "outcome": "connected",
+      "after": "absent"
+    },
+    {
+      "label": "pick-linux",
+      "cite": "F-2206 AC-2, AC-5, AC-6, F-2501 AC-27 (platform-pick-linux)",
+      "settings": {
+        "remote.SSH.useLocalServer": false
+      },
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "harness",
+          "answer": "linux"
+        }
+      ],
+      "asked": true,
+      "placeholder": "Select the platform of the remote host \"harness\"",
+      "outcome": "connected",
+      "after": {
+        "harness": "linux"
+      }
+    },
+    {
+      "label": "pick-macos",
+      "cite": "F-2206 AC-7, AC-31 (platform-pick-macos)",
+      "settings": {
+        "remote.SSH.useLocalServer": false
+      },
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "harness",
+          "answer": "macOS"
+        }
+      ],
+      "asked": true,
+      "outcome": "connected",
+      "after": {
+        "harness": "linux"
+      }
+    },
+    {
+      "label": "exact-linux",
+      "cite": "F-2206 AC-8 (platform-exact-linux)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "harness": "linux"
+        }
+      },
+      "asked": false,
+      "outcome": "connected",
+      "after": "unchanged"
+    },
+    {
+      "label": "escape",
+      "cite": "F-2206 AC-9, F-2501 AC-29, AC-31 (platform-escape)",
+      "settings": {
+        "remote.SSH.useLocalServer": false
+      },
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "harness",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "failureDialog",
+          "match": "Could not establish connection",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "asked": true,
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\": Connecting was canceled.",
+      "after": "absent"
+    },
+    {
+      "label": "pick-windows",
+      "cite": "F-2206 AC-10, AC-31 (platform-pick-windows)",
+      "settings": {
+        "remote.SSH.useLocalServer": false
+      },
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "harness",
+          "answer": "windows"
+        },
+        {
+          "surface": "failureDialog",
+          "match": "Could not establish connection",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "asked": true,
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\".",
+      "after": "absent"
+    },
+    {
+      "label": "windows-default",
+      "cite": "F-2206 AC-11, AC-31 (platform-windows-default)",
+      "settings": {
+        "remote.SSH.remotePlatform": {
+          "harness": "windows"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "Could not establish connection",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "asked": false,
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\".",
+      "after": "unchanged"
+    },
+    {
+      "label": "windows-terminal",
+      "cite": "F-2206 AC-12, AC-31 (platform-windows-terminal)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "harness": "windows"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "Could not establish connection",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "asked": false,
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\".",
+      "after": "unchanged"
+    },
+    {
+      "label": "wildcard-linux",
+      "cite": "F-2206 AC-13 (platform-wildcard-linux)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "harn*": "linux"
+        }
+      },
+      "asked": false,
+      "outcome": "connected",
+      "after": {
+        "harn*": "linux",
+        "harness": "linux"
+      }
+    },
+    {
+      "label": "exact-macos",
+      "cite": "F-2206 AC-14, AC-31 (platform-exact-macos)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "harness": "macOS"
+        }
+      },
+      "asked": false,
+      "outcome": "connected",
+      "after": {
+        "harness": "linux"
+      }
+    },
+    {
+      "label": "macos-default",
+      "cite": "F-2206 AC-15, AC-31 (platform-macos-default)",
+      "settings": {
+        "remote.SSH.remotePlatform": {
+          "harness": "macOS"
+        }
+      },
+      "asked": false,
+      "outcome": "connected",
+      "after": "unchanged"
+    },
+    {
+      "label": "out-of-enum-solaris",
+      "cite": "F-2206 AC-16 (platform-out-of-enum-solaris)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "harness": "solaris"
+        }
+      },
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "harness",
+          "answer": "linux"
+        }
+      ],
+      "asked": true,
+      "outcome": "connected",
+      "after": {
+        "harness": "linux"
+      }
+    },
+    {
+      "label": "out-of-enum-windows",
+      "cite": "F-2206 AC-16 (platform-out-of-enum-windows)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "harness": "Windows"
+        }
+      },
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "harness",
+          "answer": "linux"
+        }
+      ],
+      "asked": true,
+      "outcome": "connected",
+      "after": {
+        "harness": "linux"
+      }
+    },
+    {
+      "label": "out-of-enum-linux",
+      "cite": "F-2206 AC-16 (platform-out-of-enum-linux)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "harness": "Linux"
+        }
+      },
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "harness",
+          "answer": "linux"
+        }
+      ],
+      "asked": true,
+      "outcome": "connected",
+      "after": {
+        "harness": "linux"
+      }
+    },
+    {
+      "label": "wrong-case-upper",
+      "cite": "F-2206 AC-17 (platform-wrong-case-upper)",
+      "settings": {
+        "remote.SSH.remotePlatform": {
+          "harness": "WINDOWS"
+        }
+      },
+      "asked": false,
+      "outcome": "connected",
+      "after": "unchanged"
+    },
+    {
+      "label": "wrong-case-title",
+      "cite": "F-2206 AC-17 (platform-wrong-case-title)",
+      "settings": {
+        "remote.SSH.remotePlatform": {
+          "harness": "Windows"
+        }
+      },
+      "asked": false,
+      "outcome": "connected",
+      "after": "unchanged"
+    },
+    {
+      "label": "listed-default",
+      "cite": "F-2206 AC-21, AC-31 (platform-listed-default)",
+      "settings": {
+        "remote.SSH.windowsRemotes": ["harness"]
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "Could not establish connection",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "asked": false,
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\".",
+      "after": "absent"
+    },
+    {
+      "label": "listed-terminal",
+      "cite": "F-2206 AC-21, AC-31 (platform-listed-terminal)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.windowsRemotes": ["harness"]
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "Could not establish connection",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "asked": false,
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\".",
+      "after": "absent"
+    },
+    {
+      "label": "listed-linux-entry",
+      "cite": "F-2206 AC-21, AC-31 (platform-listed-linux-entry)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "harness": "linux"
+        },
+        "remote.SSH.windowsRemotes": ["harness"]
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "Could not establish connection",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "asked": false,
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\".",
+      "after": "unchanged"
+    },
+    {
+      "label": "typed-user",
+      "cite": "F-2206 AC-24 (platform-typed-user)",
+      "settings": {
+        "remote.SSH.useLocalServer": false
+      },
+      "authority": "harness@harness",
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "harness",
+          "answer": "linux"
+        }
+      ],
+      "asked": true,
+      "placeholder": "Select the platform of the remote host \"harness\"",
+      "outcome": "connected",
+      "after": {
+        "harness": "linux"
+      }
+    },
+    {
+      "label": "wildcard-windows",
+      "cite": "F-2206 AC-32, AC-31 (platform-wildcard-windows)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "harn*": "windows"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "Could not establish connection",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "asked": false,
+      "outcome": "dialog",
+      "dialog": "Could not establish connection to \"harness\".",
+      "after": "unchanged"
+    },
+    {
+      "label": "mute-default",
+      "cite": "F-2206 AC-28, AC-31 (platform-mute-default)",
+      "settings": {},
+      "authority": "mute",
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "Could not establish connection",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "asked": false,
+      "outcome": "dialog",
+      "after": "absent"
+    },
+    {
+      "label": "broken-settings",
+      "cite": "F-2206 AC-36 (platform-broken-settings)",
+      "settings": {
+        "remote.SSH.useLocalServer": false
+      },
+      "script": [
+        {
+          "surface": "platformPick",
+          "match": "harness",
+          "answer": "linux"
+        }
+      ],
+      "asked": true,
+      "outcome": "connected",
+      "after": "bytes",
+      "settingsTail": "\"acceptance.broken\": 1 \"acceptance.brokenToo\": 2"
+    },
+    {
+      "label": "middle-key",
+      "cite": "F-2206 AC-37 (platform-middle-key)",
+      "settings": {
+        "remote.SSH.useLocalServer": false,
+        "remote.SSH.remotePlatform": {
+          "aaa": "linux",
+          "harness": "macOS",
+          "zzz": "windows"
+        }
+      },
+      "asked": false,
+      "outcome": "connected",
+      "after": {
+        "aaa": "linux",
+        "harness": "linux",
+        "zzz": "windows"
+      }
+    }
+  ]
+}

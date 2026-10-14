@@ -17,6 +17,8 @@ interface LaunchCommon {
   folderUri?: string;
   /** Settings merged over the run's base settings for this launch only. */
   settings?: Readonly<Record<string, unknown>>;
+  /** Text written after the last member of the user settings file with no comma before it: a syntax error after the members. */
+  settingsTail?: string;
   /** Variables added to the extension host's environment for this launch only. */
   environment?: Readonly<Record<string, string>>;
   /** Whether the editor is started with the proposed API enabled for the extensions under test; true when absent. */
@@ -296,6 +298,8 @@ export interface HostCase {
   authority?: string;
   /** Settings merged over the run's base settings for the case's launch. */
   settings: Record<string, unknown>;
+  /** Text written after the last member of the settings file with no comma before it: a syntax error. */
+  settingsTail?: string;
   /** The ports a non-product listener holds on the host before the connect. */
   holders?: number[];
   /** Keeps the previous launch's server, running, and its files on the host, so the case reuses them. */
@@ -333,6 +337,12 @@ export const HOST_CASE_SUITES: readonly HostCaseSuite[] = [
     prefix: 'install',
     caseVariable: 'HARNESS_INSTALL_CASE',
     removed: ['/home/harness/.vscodium-server-insiders', '/tmp/srv'],
+  },
+  {
+    suite: 'suite-platform',
+    prefix: 'platform',
+    caseVariable: 'HARNESS_PLATFORM_CASE',
+    removed: [],
   },
 ];
 
@@ -609,6 +619,9 @@ export function launchesOf(root: string): Launch[] {
           hostCase.authority ?? 'harness'
         }/home/harness`,
         settings: hostCase.settings,
+        ...(hostCase.settingsTail === undefined
+          ? {}
+          : {settingsTail: hostCase.settingsTail}),
         environment: {[suite.caseVariable]: hostCase.label},
         ownScript: true,
         hostSetup: hostSetupOf(hostCase, suite),
