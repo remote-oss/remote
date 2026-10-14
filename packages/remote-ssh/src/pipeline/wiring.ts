@@ -4,6 +4,11 @@
  * imports the editor; the extension passes the real ports and a test passes fakes.
  */
 
+import type {DefaultForwards} from 'lib-forwarding';
+import {
+  applyDefaults as applyDefaultForwards,
+  type TunnelOpener,
+} from '../forwarding/default-forwards.ts';
 import type {FailurePresenter} from 'lib-authority';
 import {environmentTunnels, type LocalPort} from 'lib-forwarding';
 import type {Scheduler} from 'lib-helper';
@@ -89,6 +94,8 @@ interface WiringSettings {
   agentForwarding: () => boolean;
   /** `remote.SSH.enableX11Forwarding`, on unless it is false. */
   x11Forwarding: () => boolean;
+  /** `remote.SSH.defaultForwardedPorts`, as it is when the call is made. */
+  defaultForwards: () => DefaultForwards;
 }
 
 /** What the channel of one connect is made from: the host as written, the runs' shared part, and the terms. */
@@ -117,6 +124,8 @@ interface CliWiring {
 /** What the steps of every connect are made from. */
 export interface WiringPorts {
   settings: WiringSettings;
+  /** The editor's tunnel service, which the default forwarded ports are opened through. */
+  tunnels: TunnelOpener;
   terms: TermsStepDependencies;
   /** The client step's dependencies, apart from this connect's state and what the settings give. */
   locate: Omit<
@@ -487,5 +496,11 @@ export function stepsOf(
       serverSteps(input).installExtensions(input, ...rest),
     ...tunnelStep,
     rememberPlatform: terms.rememberPlatform,
+    applyDefaults: () =>
+      applyDefaultForwards(
+        ports.settings.defaultForwards(),
+        ports.tunnels,
+        ports.logger,
+      ),
   };
 }

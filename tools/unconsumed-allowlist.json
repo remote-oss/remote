@@ -3,13 +3,6 @@
     {
       "package": "remote-ssh",
       "kind": "settings",
-      "key": "defaultForwardedPorts",
-      "card": "#677",
-      "slice": "0.2 slice 2"
-    },
-    {
-      "package": "remote-ssh",
-      "kind": "settings",
       "key": "enhancedSessionLogs",
       "card": "#674",
       "slice": "deferred",

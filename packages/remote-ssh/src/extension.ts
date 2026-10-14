@@ -400,6 +400,8 @@ async function registerConnectOf(
       applyTerminalEnvironment: terminalEnvironmentOf(
         context.environmentVariableCollection,
       ),
+      // The tunnel service is a proposed API the manifest enables; a window without it logs the failure of each forward.
+      tunnels: vscode.workspace,
     },
   );
   const machine = nodeMachineOf(
