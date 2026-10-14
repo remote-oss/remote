@@ -118,8 +118,9 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
       if (plan.switchesToLocalWindow) {
         await ports.editor.switchToLocalWindow();
       }
-    } finally {
+    } catch (caught) {
       ports.stayInWindow();
+      throw caught;
     }
   }
 

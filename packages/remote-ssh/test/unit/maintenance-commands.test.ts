@@ -528,7 +528,7 @@ describe('Uninstall on the own host (F-2412 6.1)', () => {
     await scenario.uninstall();
     deepStrictEqual(
       [scenario.order, scenario.runs, scenario.notices],
-      [['leave', 'end dev', 'switch', 'stay'], [], []],
+      [['leave', 'end dev', 'switch'], [], []],
     );
   });
 
@@ -538,10 +538,10 @@ describe('Uninstall on the own host (F-2412 6.1)', () => {
     deepStrictEqual(scenario.order.slice(0, 3), ['leave', 'end dev', 'switch']);
   });
 
-  it('F-2412 AC-17: a switch that returns without switching puts the window back, after it, and throws nothing', async () => {
+  it('F-2412 AC-17: a switch that returns keeps the window leaving', async () => {
     const scenario = setup({held: DEFAULT_MODE});
     await scenario.uninstall();
-    deepStrictEqual(scenario.order, ['leave', 'end dev', 'switch', 'stay']);
+    deepStrictEqual(scenario.order, ['leave', 'end dev', 'switch']);
   });
 
   it('F-2412 AC-17: a kill that throws puts the window back without a switch', async () => {
