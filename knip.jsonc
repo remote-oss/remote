@@ -85,8 +85,6 @@
   "ignoreIssues": {
     ".vscode-test.mjs": ["exports"],
     "tests/acceptance/vscode-test.mjs": ["exports"],
-    // cutRoute and restoreRoute wait for the windows rows that cut the route (card tooling-47, section 4).
-    "tests/acceptance/windows/harness.ts": ["exports"],
     // The editor calls an extension's activate().
     "packages/*/src/extension.ts": ["exports"],
     "packages/*/src/web-extension.ts": ["exports"],

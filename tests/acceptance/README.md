@@ -332,7 +332,7 @@ networks that a killed or cancelled run left are swept by the next run once they
 container; a run's clean-up removes its own network, and a network that is left fails the run.
 
 `cutRoute` and `restoreRoute` of `tools/acceptance-network.ts` (each takes a command runner, the container id and the
-address; the windows harness has `cutRoute(cut)` and `restoreRoute()` over the run's container and address) insert one
+address) insert one
 rule inside the container, scoped to that address, so Docker's published port is not touched:
 
 | Cut | Rule | What `ssh routed` prints |
