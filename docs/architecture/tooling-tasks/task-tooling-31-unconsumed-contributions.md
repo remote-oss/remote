@@ -44,9 +44,21 @@ exports reachable from entries that include tests.
     - A command key that no such call carries is reported as unconsumed.
   - **`runtimeCommands`, `internalCommands` with role `served`, `contextKeys` with setter `extension`:** a reference
     to the key (§3.2);
+    - **served by id** (athena, 2026-10-14): an `internalCommands` entry with role `served` is also consumed when a
+      production call to a function named `serve` passes, as its argument's `commandId` property, an expression whose
+      checker type is the entry's id literal type. That covers `packages/remote-ssh/src/companion/slice-endpoints.ts`,
+      which serves `SSH_ENDPOINTS.<x>.commandId` (lib-companion's `as const` table);
+    - **the stand-down key** (athena, 2026-10-14): a `contextKeys` entry with setter `extension` is also consumed when
+      its id equals the package's generated `standDown.contextKey`, and production code references
+      `standDown.contextKey` under §3.2 rule 1. That covers both `standingDown` keys (`remote-ssh/src/activation.ts:136`
+      and `remote-explorer/src/activation.ts:52`, through lib-standdown's `setContext`);
   - **`views`:** a reference to the key inside the argument list of a call to a function named `createTreeView`,
     `registerTreeDataProvider` or `registerWebviewViewProvider`, directly or on any object (an editor port of that
     name counts);
+    - **one-level pass-through** (athena, 2026-10-14), as for commands: when that argument is a parameter of the
+      enclosing function, the check takes the references to the key at that function's production call sites, one
+      level only. That covers `packages/remote-explorer/src/window-activation.ts:87`, which passes `views.remoteTargets`
+      to `showTargets`, which calls `createTreeView(viewId, …)` (`view/tree-adapter.ts:38`);
   - **menus and keybindings** aren't table kinds. Each one names a command, so it's consumed through that command. The
     check doesn't report a menu or keybinding entry of its own. If its command is unconsumed, the command's line
     reports it once;
@@ -57,6 +69,8 @@ exports reachable from entries that include tests.
   allowlist must be empty, except for entries whose slice is out of that release by a recorded decision.
 - **R4. Dead modules are knip's.** Modules that only tests import are found by a **production-mode** knip run
   (`knip --production`, where test files aren't entries), filtered by the same allowlist. There's no second detector.
+  Its findings under `packages/<x>/src/testing/**` are dropped (athena, 2026-10-14): R2 already says those aren't
+  production, so a test-only module there is expected. That covers `packages/lib-log/src/testing/fake-editor-port.ts`.
 
 ## 3. Changes
 
@@ -79,8 +93,12 @@ The check builds one TypeScript program per package from that package's `tsconfi
 that's already a dependency, as `tools/check-workspace.ts` does. It then walks every production source file.
 
 For a table `T` (an exported `const` of `identifiers.generated.ts`), a key `K` of `T` is **referenced** by:
-1. **Member access:** a property access `x.K`, or an element access `x['K']`, where the type of `x` is `typeof T`. That
-   covers `settings.logLevel`, an import alias, and a parameter typed `typeof settings`.
+1. **Member access:** a property access `x.K`, an element access `x['K']`, or a destructuring `{K: …} = x` (or
+   `const {K} = x`), where the declared type of `x` is `typeof T`, **or** a type that has a property `K` and to which
+   `typeof T` is assignable (athena, 2026-10-14). That covers `settings.logLevel`, an import alias, a parameter typed
+   `typeof settings`, and an interface a table is passed through, as `packages/remote-ssh/src/activation.ts:150` reads
+   `table.settings.logLevel` with `table.settings: {readonly logLevel: SettingEntry}`. The assignability is the guard:
+   an unrelated object with a property of the same name doesn't count.
 2. **A contextually typed key:** a string literal `'K'` (or a no-substitution template literal) whose **contextual
    type** is assignable to `keyof typeof T`, and which isn't itself a property name of an object literal. That covers
    remote-ssh's `valueOf(host, 'defaultExtensions')`, whose parameter is `entry: keyof typeof settings`. A string
@@ -197,6 +215,13 @@ athena's, and the check's real output decides whether it's complete.
 | #674 R2 | a commands table no `registerCommands` call carries | every command reported |
 | #674 R2 | a views table `{remoteTargets}`; `src/a.ts` calls `editor.window.createTreeView(views.remoteTargets, …)` | consumed; the same key referenced only in a `const` that never reaches a registration is reported |
 | #674 R2 | a `contextKeys` entry with setter `core`; an `internalCommands` entry with role `called` | neither reported |
+| #674 R2 rule 1 (amended) | `interface Inputs {readonly settings: {readonly logLevel: SettingEntry}}`; `src/a.ts` has `function read(table: Inputs) { return table.settings.logLevel; }` and passes `{settings}` | `logLevel` consumed; `path` reported |
+| #674 R2 rule 1 (trap) | `const other = {logLevel: 1}; other.logLevel` (a type `typeof settings` isn't assignable to) | `logLevel` reported |
+| #674 R2 rule 1 | `const {logLevel} = settings` | `logLevel` consumed |
+| #674 R2 views pass-through | `function show(viewId: string) { editor.window.createTreeView(viewId, …) }`, called in `src/` as `show(views.remoteTargets)` | consumed; with the only call in a test, reported |
+| #674 R2 served by id | an `internalCommands` entry `alpha` (role `served`, id `remote-internal.alpha`); `const ENDPOINTS = {alpha: {commandId: 'remote-internal.alpha'}} as const`; `src/a.ts` calls `protocol.serve({commandId: ENDPOINTS.alpha.commandId, …})` | consumed; the same with `commandId: 'remote-internal.' + name` (type `string`) is reported |
+| #674 R2 stand-down | a `contextKeys` entry `standingDown` (setter `extension`, id `x.standingDown`), and `standDown.contextKey` `'x.standingDown'`; `src/a.ts` reads `table.standDown.contextKey` | consumed; with a different `standDown.contextKey` id, reported |
+| #674 R4 (amended) | the stubbed knip report lists `packages/x/src/testing/fake.ts` as unused | no module line |
 | #674 R3 | an allowlist entry for a reported key | not reported; exit 0 |
 | #674 R3 | an allowlist entry for a key that's consumed | `allowlist: … is consumed now; remove it (card …)`; exit 1 |
 | #674 R3 | an allowlist entry for a missing key; one with an unknown field | `names nothing`, exit 1; exit 2 with the field named |
@@ -211,7 +236,8 @@ Only the repository row runs the real one.
 **Mutations to run, and list in the PR:**
 - making R2 rule 2 (contextual keys) count every string literal: the trap row fails;
 - dropping the test-file exclusion: the test-only row fails;
-- skipping the stale-entry check: the "consumed now" row fails.
+- skipping the stale-entry check: the "consumed now" row fails;
+- dropping rule 1's assignability guard: the rule 1 trap row fails.
 
 ## 5. Gates and review
 
