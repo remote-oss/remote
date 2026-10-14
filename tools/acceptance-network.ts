@@ -90,10 +90,10 @@ const ROUTE_CUTS: readonly RouteCut[] = ['unreachable', 'silent'];
 /** The rule of a route cut, scoped to the host's address on the run network, so the published port keeps working. */
 function routeRule(
   address: string,
-  cut: RouteCut,
+  kind: RouteCut,
 ): {chain: string; match: readonly string[]} {
   const port = ['-d', address, '-p', 'tcp', '--dport', '22'];
-  return cut === 'unreachable'
+  return kind === 'unreachable'
     ? {
         chain: 'INPUT',
         match: [
@@ -116,12 +116,12 @@ export function cutRoute(
   command: CommandRunner,
   container: string,
   address: string,
-  cut: RouteCut,
+  kind: RouteCut,
 ): void {
-  for (const other of ROUTE_CUTS.filter(each => each !== cut)) {
+  for (const other of ROUTE_CUTS.filter(each => each !== kind)) {
     deleteHeldRule(command, container, routeRule(address, other));
   }
-  const rule = routeRule(address, cut);
+  const rule = routeRule(address, kind);
   if (!holdsRule(command, container, rule)) {
     insertRule(command, container, rule);
   }
@@ -133,7 +133,7 @@ export function restoreRoute(
   container: string,
   address: string,
 ): void {
-  for (const cut of ROUTE_CUTS) {
-    deleteHeldRule(command, container, routeRule(address, cut));
+  for (const kind of ROUTE_CUTS) {
+    deleteHeldRule(command, container, routeRule(address, kind));
   }
 }

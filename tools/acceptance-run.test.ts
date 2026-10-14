@@ -576,20 +576,50 @@ describe('the run network (card tooling-47)', () => {
   });
 });
 
+/** Scripts the answers of one clean-up: what the first listings hold and what the second listings still hold. */
+function scriptCleanRun(
+  scripted: ReturnType<typeof scriptedCommands>,
+  state: {
+    containers?: string[];
+    networks?: string[];
+    leftContainers?: string;
+    leftNetworks?: string;
+    imageGone?: boolean;
+  } = {},
+): void {
+  const {
+    containers = [],
+    networks = [],
+    leftContainers = '',
+    leftNetworks = '',
+  } = state;
+  scripted.passes(''); // docker ps, the dev containers' images
+  scripted.passes(containers.map(name => `${name}\n`).join('')); // docker ps, the first listing
+  containers.forEach(() => {
+    scripted.passes();
+  }); // docker rm --force
+  scripted.passes(networks.map(name => `${name}\n`).join('')); // docker network ls, the run's networks
+  networks.forEach(() => {
+    scripted.passes();
+  }); // docker network rm
+  scripted.passes(); // pkill
+  scripted.passes(); // pkill, stale editors
+  for (let index = 0; index < 2; index += 1) {
+    // docker image rm --force, the host tag and the dev container tag
+    if (state.imageGone) {
+      scripted.fails(1, 'No such image');
+    } else {
+      scripted.passes();
+    }
+  }
+  scripted.passes(leftContainers); // docker ps, the second listing
+  scripted.passes(leftNetworks); // docker network ls, the second listing
+}
+
 describe('cleanRun (card tooling-10)', () => {
   it("removes the run's containers by label and its image tag, then proves nothing is left", () => {
     const scripted = scriptedCommands();
-    scripted.passes(''); // docker ps, the dev containers' images
-    scripted.passes('c1\nc2\n'); // docker ps, the first listing
-    scripted.passes(); // docker rm --force c1
-    scripted.passes(); // docker rm --force c2
-    scripted.passes(''); // docker network ls, the run's networks
-    scripted.passes(); // pkill
-    scripted.passes(); // pkill, stale editors
-    scripted.passes(); // docker image rm --force
-    scripted.passes(); // docker image rm --force, the dev container tag
-    scripted.passes(''); // docker ps, the second listing
-    scripted.passes(''); // docker network ls, the second listing
+    scriptCleanRun(scripted, {containers: ['c1', 'c2']});
 
     cleanRun(scripted, RUN_ID);
 
@@ -681,15 +711,7 @@ describe('cleanRun (card tooling-10)', () => {
 
   it('does not throw when the image is already gone', () => {
     const scripted = scriptedCommands();
-    scripted.passes(''); // docker ps, the dev containers' images
-    scripted.passes(''); // docker ps
-    scripted.passes(''); // docker network ls, the run's networks
-    scripted.passes(); // pkill
-    scripted.passes(); // pkill, stale editors
-    scripted.fails(1, 'No such image'); // docker image rm --force
-    scripted.fails(1, 'No such image'); // docker image rm --force, the dev container tag
-    scripted.passes(''); // docker ps
-    scripted.passes(''); // docker network ls, the second listing
+    scriptCleanRun(scripted, {imageGone: true});
 
     cleanRun(scripted, RUN_ID);
 
@@ -698,15 +720,7 @@ describe('cleanRun (card tooling-10)', () => {
 
   it("throws naming the container when one still carries the run's label", () => {
     const scripted = scriptedCommands();
-    scripted.passes(''); // docker ps, the dev containers' images
-    scripted.passes(''); // docker ps
-    scripted.passes(''); // docker network ls, the run's networks
-    scripted.passes(); // pkill
-    scripted.passes(); // pkill, stale editors
-    scripted.passes(); // docker image rm --force
-    scripted.passes(); // docker image rm --force, the dev container tag
-    scripted.passes('c9\n'); // docker ps, the second listing
-    scripted.passes(''); // docker network ls, the second listing
+    scriptCleanRun(scripted, {leftContainers: 'c9\n'});
 
     throws(
       () => {
@@ -718,18 +732,7 @@ describe('cleanRun (card tooling-10)', () => {
 
   it("tooling-47: removes the run's networks after its containers and before the images", () => {
     const scripted = scriptedCommands();
-    scripted.passes(''); // docker ps, the dev containers' images
-    scripted.passes('c1\n'); // docker ps
-    scripted.passes(); // docker rm --force c1
-    scripted.passes('n1\nn2\n'); // docker network ls, the run's networks
-    scripted.passes(); // docker network rm n1
-    scripted.passes(); // docker network rm n2
-    scripted.passes(); // pkill
-    scripted.passes(); // pkill, stale editors
-    scripted.passes(); // docker image rm --force
-    scripted.passes(); // docker image rm --force, the dev container tag
-    scripted.passes(''); // docker ps, the second listing
-    scripted.passes(''); // docker network ls, the second listing
+    scriptCleanRun(scripted, {containers: ['c1'], networks: ['n1', 'n2']});
 
     cleanRun(scripted, RUN_ID);
 
@@ -754,15 +757,7 @@ describe('cleanRun (card tooling-10)', () => {
 
   it("tooling-47: throws naming the network when one still carries the run's label", () => {
     const scripted = scriptedCommands();
-    scripted.passes(''); // docker ps, the dev containers' images
-    scripted.passes(''); // docker ps
-    scripted.passes(''); // docker network ls
-    scripted.passes(); // pkill
-    scripted.passes(); // pkill, stale editors
-    scripted.passes(); // docker image rm --force
-    scripted.passes(); // docker image rm --force, the dev container tag
-    scripted.passes(''); // docker ps, the second listing
-    scripted.passes('n9\n'); // docker network ls, the second listing
+    scriptCleanRun(scripted, {leftNetworks: 'n9\n'});
 
     throws(
       () => {
@@ -776,15 +771,7 @@ describe('cleanRun (card tooling-10)', () => {
 
   it('tooling-47: names the containers and the networks when both are left', () => {
     const scripted = scriptedCommands();
-    scripted.passes(''); // docker ps, the dev containers' images
-    scripted.passes(''); // docker ps
-    scripted.passes(''); // docker network ls
-    scripted.passes(); // pkill
-    scripted.passes(); // pkill, stale editors
-    scripted.passes(); // docker image rm --force
-    scripted.passes(); // docker image rm --force, the dev container tag
-    scripted.passes('c9\n'); // docker ps, the second listing
-    scripted.passes('n9\n'); // docker network ls, the second listing
+    scriptCleanRun(scripted, {leftContainers: 'c9\n', leftNetworks: 'n9\n'});
 
     throws(
       () => {
@@ -798,16 +785,7 @@ describe('cleanRun (card tooling-10)', () => {
 
   it("prunes nothing and filters every container listing by the run's label alone", () => {
     const scripted = scriptedCommands();
-    scripted.passes(''); // docker ps, the dev containers' images
-    scripted.passes('c1\n'); // docker ps
-    scripted.passes(); // docker rm --force c1
-    scripted.passes(''); // docker network ls, the run's networks
-    scripted.passes(); // pkill
-    scripted.passes(); // pkill, stale editors
-    scripted.passes(); // docker image rm --force
-    scripted.passes(); // docker image rm --force, the dev container tag
-    scripted.passes(''); // docker ps
-    scripted.passes(''); // docker network ls, the second listing
+    scriptCleanRun(scripted, {containers: ['c1']});
 
     cleanRun(scripted, RUN_ID);
 
@@ -851,15 +829,7 @@ describe('cleanRun (card tooling-10)', () => {
 
   it('does not throw when no editor of the run is running', () => {
     const scripted = scriptedCommands();
-    scripted.passes(''); // docker ps, the dev containers' images
-    scripted.passes(''); // docker ps
-    scripted.passes(''); // docker network ls, the run's networks
-    scripted.fails(1, ''); // pkill matched nothing
-    scripted.fails(1, ''); // pkill, stale editors, matched nothing
-    scripted.passes(); // docker image rm --force
-    scripted.passes(); // docker image rm --force, the dev container tag
-    scripted.passes(''); // docker ps
-    scripted.passes(''); // docker network ls, the second listing
+    scriptCleanRun(scripted);
 
     cleanRun(scripted, RUN_ID);
 

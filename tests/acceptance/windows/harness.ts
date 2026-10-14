@@ -947,17 +947,21 @@ export async function batchLogin(alias: string): Promise<boolean> {
   return (await sshStatus(['-o', 'BatchMode=yes', alias, 'true'])) === 0;
 }
 
-/** Cuts the route to the host's own address (the `routed` alias); the published port keeps working. */
-export function cutRoute(cut: RouteCut): void {
+/**
+ * Cuts the route to the host's own address (the `routed` alias); the published port keeps working.
+ */
+export function cutRoute(kind: RouteCut): void {
   cutRouteOf(
     runCommand,
     variable('HARNESS_CONTAINER'),
     variable('HARNESS_ROUTED_ADDRESS'),
-    cut,
+    kind,
   );
 }
 
-/** Brings the route back; harmless when nothing was cut. A test that cuts restores in a `finally` or an `afterEach`. */
+/**
+ * Brings the route back; harmless when nothing was cut. A test that cuts restores in a `finally` or an `afterEach`.
+ */
 export function restoreRoute(): void {
   restoreRouteOf(
     runCommand,

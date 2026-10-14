@@ -111,7 +111,7 @@ function containerHoldingRules(held: string[] = [], refused: string[] = []) {
   const rules = new Set(held);
   const changes: string[] = [];
 
-  function command(_program: string, argv: readonly string[]): CommandResult {
+  function command(tool: string, argv: readonly string[]): CommandResult {
     const [, , , flag, ...rule] = argv;
     const text = rule.join(' ');
     if (refused.includes(flag ?? '')) {

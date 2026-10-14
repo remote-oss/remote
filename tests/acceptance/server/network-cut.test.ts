@@ -130,7 +130,7 @@ describe("the route to the host's own address (card tooling-47)", function () {
     };
   }
 
-  function cut(cutKind: RouteCut): void {
+  function cutTo(cutKind: RouteCut): void {
     cutRoute(runCommand, host.container, host.routedAddress, cutKind);
   }
 
@@ -139,7 +139,7 @@ describe("the route to the host's own address (card tooling-47)", function () {
   });
 
   it("tooling-47: an unreachable route gives ssh's No route to host", () => {
-    cut('unreachable');
+    cutTo('unreachable');
     const result = connecting('routed');
     deepStrictEqual(
       [
@@ -153,7 +153,7 @@ describe("the route to the host's own address (card tooling-47)", function () {
   });
 
   it('tooling-47: a silent route times the connect out', () => {
-    cut('silent');
+    cutTo('silent');
     const result = connecting('routed', '-o', 'ConnectTimeout=5');
     deepStrictEqual(
       [
@@ -169,13 +169,13 @@ describe("the route to the host's own address (card tooling-47)", function () {
 
   for (const kind of ['unreachable', 'silent'] as const) {
     it(`tooling-47: the route cut as ${kind} leaves the published port working`, () => {
-      cut(kind);
+      cutTo(kind);
       strictEqual(connecting('harness').status, 0);
     });
   }
 
   it('tooling-47: after restoreRoute the routed alias connects again', () => {
-    cut('unreachable');
+    cutTo('unreachable');
     const during = connecting('routed').status;
     restoreRoute(runCommand, host.container, host.routedAddress);
     deepStrictEqual([during, connecting('routed').status], [255, 0]);
