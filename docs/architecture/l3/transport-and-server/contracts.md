@@ -492,11 +492,11 @@ setting at run time are filled in by the extension's adapter before the call.
 |---|---|---|---|---|
 | `downloadPlacement` | `hostFirst` with `auto`, `always` or `off`; `clientFirstThenHost`; `clientOnly` | `hostFirst`, from `remote.SSH.localServerDownload` (F-2405) | `clientOnly`: the client machine downloads and copies into the container (F-1402) | `clientFirstThenHost`: a silent `wget` fallback in the distro (F-6301 BR-1, BR-7) |
 | `cache` | `none`; `kept` | `none` (F-3902 rule 6) | `kept` (F-0503 host cache) | `kept`, shared per user across windows and editor instances (F-6301 BR-4, BR-5, BR-14) |
-| `verification` | ordered list from `headerHash`, `lengthOnly`, `none` | `none` until the room names one | open (F-1402 Q4) | `headerHash`, then `lengthOnly` (F-6301 BR-6, Q3) |
+| `verification` | ordered list from `headerHash`, `lengthOnly`, `none` | `none` until the room names one | `none` until the room names one (athena, containers contracts §5) | `headerHash`, then `lengthOnly` (F-6301 BR-6, Q3) |
 | `environmentSetup` | a host path to source before install and start, never on reuse; or none | none | none | the distro's server-env-setup (F-6303 BR-1 to BR-5) |
 | `requirementsCheck` | `none`; `serverBundled` (the server's own check after unpack) | `serverBundled` (F-2401) | `serverBundled` (F-0503) | `serverBundled` plus the Alpine libstdc++ probe (F-6302) |
 | `allowedExtraStartOptions` | a list from an allow-list | none | none | `fileWatcherPolling` for WSL 1 (F-6601) |
-| `cleanup` | `keepNewest(n)`; `onlyCurrentRemoveLeftovers`; `onlyCurrentKeepLeftovers` | `keepNewest(5)` (F-2413 BR-9) | to be set by area C | stepwise: `onlyCurrentRemoveLeftovers` (F-6304 BR-8, AC-9); single script: `onlyCurrentKeepLeftovers` (BR-7) |
+| `cleanup` | `keepNewest(n)`; `onlyCurrentRemoveLeftovers`; `onlyCurrentKeepLeftovers` | `keepNewest(5)` (F-2413 BR-9) | `onlyCurrentKeepLeftovers`: the `vscode` volume is shared by every dev container (athena, containers contracts §5) | stepwise: `onlyCurrentRemoveLeftovers` (F-6304 BR-8, AC-9); single script: `onlyCurrentKeepLeftovers` (BR-7) |
 | `installMode` | `singleScript`; `stepwise` | `singleScript` | `singleScript` | from `remote.WSL.experimental.scriptLessStartup`, read by the WSL package and passed in (F-6304) |
 | `prefetch` | `none`; `onProductUpdate` with setting key, feed check interval, platform window, licence handling | `none` | `none` | `onProductUpdate`: `remote.WSL.downloadInBackground`, hourly, platforms used in the last 14 days, `skipUnaccepted` (F-6301 6.6, BR-13) |
 
@@ -836,6 +836,11 @@ CLI path's first `serve` keeps its own bound
 
 Rule: an entry downloaded from another gallery is never reused (R-58, F-0419 BR-18). The container transport's
 contract (area C) defines the volume.
+
+**Install into the volume (athena, 2026-10-14, containers contracts §5):** lib-server's install step takes an optional
+`installTree`, V9's `serverTree`. When it's set, the archive is extracted into `installTree` unless that folder already
+holds a complete server, renamed into place only once extraction has finished (F-0503 5.0 step 5), and
+`<dataFolder>/bin/<commit>` becomes a symlink to it, created or kept (F-0503 BR-3). Without it, nothing changes.
 
 ---
 

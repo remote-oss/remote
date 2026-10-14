@@ -157,7 +157,9 @@ reviewed yet.
 
 ## 4. What must exist before the first card
 
-Area C has a dossier only, so these come first, in this order. Each is a docs PR with my design check.
+Area C had a dossier only. Items 1–3 were done on 2026-10-14: `components.md`, `contracts.md` (with the
+remote-containers policy cells and lib-server's `installTree` added to the transport contracts) and ADR-0009. Dossier Q3, Q6 and Q10
+turned out to be answered by code already on main (`Connected.trusted`, `Failed.silent`, V9's `cacheFolders`).
 1. **The component view** for release 1's subset of the dossier's components:
    - C1 package-shell;
    - C2 engine;
