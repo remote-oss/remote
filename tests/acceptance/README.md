@@ -76,6 +76,11 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   `vscode-remote://ssh-remote+harness/home/harness`, with the tests of `suite-remote/` bundled into `dist-remote/`;
 - `reconnect`: the same window in a second launch, with `suite-reconnect/`. It compares the host's server with the
   one the `remote` launch kept in the run's folder, so it shows that a new connection reuses the server;
+- `agent`, `agent-off` and `x11`: `runner-remote/` with `suite-forwarding/`, in windows on
+  `vscode-remote://ssh-remote+agentfwd/home/harness` (`ForwardAgent` with the run's agent socket; `agent-off` on
+  `agentfwd-off`, the same alias under another name so that it finds no connection of `agent`, with
+  `remote.SSH.enableAgentForwarding` false) and `vscode-remote://ssh-remote+x11fwd/home/harness` (`ForwardX11`). They
+  find the server the `remote` launch's session started, and `HARNESS_FORWARDING_CASE` names the case;
 - `failure-<alias>`: one launch per entry of `suite-failure/cases.json`, in a window on
   `vscode-remote://ssh-remote+<alias>/home/harness`, with `suite-failure/`. Its alias fails to connect (the harness
   `ssh_config` has `refused`, `nowhere` and `stranger`), and its window answers from the entry's own script, which the
@@ -106,6 +111,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 - `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.
 
 - `explorer`, `explorer-alone` and `explorer-no-proposals`: plain launches with Remote Explorer installed in an extensions folder of their own and a debugging port (see "Reading the window"); `explorer-alone` starts with Remote - SSH disabled, and `explorer-no-proposals` without the proposed API.
+
+- `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
@@ -209,8 +216,17 @@ fields:
 | `extraExtensions` | further development extensions, folders under `tests/acceptance`, loaded after the runner in the local extension host |
 | `hostExtensions` | development extensions that run in the remote extension host: folders under `tests/acceptance`, copied into the host's home folder before the launches and loaded from there |
 
-To add a launch: add a row to `launchesOf`, put its tests in the suite folder it names, and add that folder to
-`tests/acceptance/tsconfig.json` and to the entries of `knip.jsonc`.
+**Trust.** Every runner launch runs with workspace trust off: test-electron adds `--disable-workspace-trust` to the
+editor's arguments whatever the launch's own are. The `trust` launches are plain launches, which start the editor
+themselves, so they leave the flag out (`workspaceTrust`). The window agent declares that it supports untrusted
+workspaces, so it runs in Restricted Mode too and reports `trusted` in its state (`isTrusted`). Rows read and answer
+core's trust dialogs with `dialogOf`, `waitForDialog` and `answerDialog` of `windows/renderer.ts`. Each row opens a
+folder of its own, so no trust decision carries over from another row.
+
+To add a launch: add a row to `launchesOf` and put its tests in the suite folder it names. A runner suite's folder goes
+in `tests/acceptance/tsconfig.json`'s `include`. A plain suite has a `tsconfig.json` of its own, which goes in the root
+`tsconfig.json`'s `references` and in `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`. Either kind's test files go in the
+entries of `knip.jsonc`.
 
 ### Ports cases
 

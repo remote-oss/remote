@@ -50,6 +50,16 @@ export function localDownloadModeOf(host: SettingHost): LocalDownloadMode {
   return mode === 'always' || mode === 'off' ? mode : 'auto';
 }
 
+/** `remote.SSH.enableAgentForwarding`: on unless it is the boolean false, as its default of true reads. */
+export function agentForwardingOf(host: SettingHost): boolean {
+  return valueOf(host, 'enableAgentForwarding') !== false;
+}
+
+/** `remote.SSH.enableX11Forwarding`: on unless it is the boolean false, as its default of true reads. */
+export function x11ForwardingOf(host: SettingHost): boolean {
+  return valueOf(host, 'enableX11Forwarding') !== false;
+}
+
 /** The per-host server settings, as written. */
 export function serverSettingsOf(host: SettingHost): RawServerSettings {
   return {

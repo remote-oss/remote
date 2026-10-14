@@ -81,18 +81,62 @@ describe('the session start (card ssh-34, #443)', () => {
     );
   });
 
-  it('#443: a wait of 20 s is a bound of 20', () => {
+  it("F-2105 BR-3: a host's ConnectTimeout 10 bounds the login shell at the wait, 12", () => {
+    deepStrictEqual(
+      sessionStartFor({
+        connectTimeoutSeconds: 10,
+        fromHost: true,
+        unboundedWaitSeconds: 600,
+      }),
+      sessionStart(12),
+    );
+  });
+
+  it('F-2105 BR-3: the default 15 bounds it at 17', () => {
+    deepStrictEqual(
+      sessionStartFor({
+        connectTimeoutSeconds: 15,
+        fromHost: false,
+        unboundedWaitSeconds: 600,
+      }),
+      sessionStart(17),
+    );
+  });
+
+  it('F-2105 BR-3: a setting of 7 bounds it at 9', () => {
+    deepStrictEqual(
+      sessionStartFor({
+        connectTimeoutSeconds: 7,
+        fromHost: false,
+        unboundedWaitSeconds: 600,
+      }),
+      sessionStart(9),
+    );
+  });
+
+  it('F-2105 BR-3: a wait of 20 s is a bound of 22', () => {
     deepStrictEqual(
       sessionStartFor({
         connectTimeoutSeconds: 20,
         fromHost: false,
         unboundedWaitSeconds: 600,
       }),
-      sessionStart(20),
+      sessionStart(22),
     );
   });
 
-  it("#443: a host's own 0 takes the unbounded wait", () => {
+  it("F-2105 BR-4: the setting's 0 is a bound of 2", () => {
+    deepStrictEqual(
+      sessionStartFor({
+        connectTimeoutSeconds: 0,
+        fromHost: false,
+        unboundedWaitSeconds: 600,
+      }),
+      sessionStart(2),
+    );
+  });
+
+  it("F-2105 BR-4: a host's own 0 takes the unbounded wait", () => {
     deepStrictEqual(
       sessionStartFor({
         connectTimeoutSeconds: 0,
@@ -103,29 +147,18 @@ describe('the session start (card ssh-34, #443)', () => {
     );
   });
 
-  it("#443: the setting's 0 is the shortest bound, 1", () => {
-    deepStrictEqual(
-      sessionStartFor({
-        connectTimeoutSeconds: 0,
-        fromHost: false,
-        unboundedWaitSeconds: 600,
-      }),
-      sessionStart(1),
-    );
-  });
-
-  it('#443: a wait of 7.5 s rounds up to 8', () => {
+  it('F-2105 BR-3: a wait of 7.5 s rounds up to 10', () => {
     deepStrictEqual(
       sessionStartFor({
         connectTimeoutSeconds: 7.5,
         fromHost: false,
         unboundedWaitSeconds: 600,
       }),
-      sessionStart(8),
+      sessionStart(10),
     );
   });
 
-  it('#443: a wait past the ceiling is the ceiling', () => {
+  it('F-2105 BR-3: a wait past the ceiling is the ceiling', () => {
     deepStrictEqual(
       sessionStartFor({
         connectTimeoutSeconds: 5000,

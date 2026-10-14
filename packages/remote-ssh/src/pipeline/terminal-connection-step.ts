@@ -176,7 +176,7 @@ export function openTerminalConnectionStep(
         authenticated = true;
         reader.stop();
         dropQuestions();
-        // The login shell's startup gets a wait of its own, which the bootstrap's bound ends first.
+        // The login shell's startup gets a wait of its own, as long as the bootstrap's bound.
         wait.start();
         const runner: TerminalSessionRunner = new TerminalSessionRunner({
           terminal,
@@ -224,6 +224,7 @@ export function openTerminalConnectionStep(
           value: {
             channel,
             socksPort: socksPort ?? 0,
+            storedRecord: undefined,
             storeSharedRecord: () => Promise.resolve(false),
             onNotice: listener => {
               noticeListeners.push(listener);

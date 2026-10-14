@@ -9,6 +9,7 @@ import type {FilePickPort} from './config/file-choice.ts';
 import type {DownloadProgressPort} from './cli/server-download-progress.ts';
 import type {HostPickPort} from './surfaces/host-pick.ts';
 import type {LoginTerminals} from 'lib-ssh';
+import type {LinkTerminals} from './pipeline/forwarding-step.ts';
 import {
   pickRemotePlatform,
   type PlatformPickPort,
@@ -45,6 +46,8 @@ import type {SettingHost} from 'lib-identifiers';
 export interface EditorAdapters {
   prompts: PromptEditor;
   terminals: LoginTerminals;
+  /** The terminals that make the agent link, real also under the harness: the editor's checks come before them. */
+  linkTerminals: LinkTerminals;
   failureDialog: FailureDialogPort;
   licenceDialog: LicenceDialogPort;
   platformPick: PlatformPickPort;
@@ -89,6 +92,10 @@ export interface SurfaceContext {
   noticeState: AcceptanceState;
   /** The window's log, where a notice that could not be shown is noted. */
   logger: Logger;
+  /** Makes these the only variables the window's terminals get from the extension. */
+  applyTerminalEnvironment: (
+    variables: Readonly<Record<string, string>>,
+  ) => void;
 }
 
 /** The setting the platform is written to. */
@@ -130,6 +137,8 @@ export function editorSurfacesOf(
     translate,
     prompts: adapters.prompts,
     terminals: adapters.terminals,
+    linkTerminals: adapters.linkTerminals,
+    applyTerminalEnvironment: context.applyTerminalEnvironment,
     pickPlatform: async (alias, cancellation) => {
       const picked = await pickRemotePlatform(
         adapters.platformPick,

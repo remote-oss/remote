@@ -11,6 +11,7 @@ import type {
   Connector,
   Failed,
 } from 'lib-authority';
+import {forwardingEnvironment} from '../environment/forwarding.ts';
 import {
   connect,
   type Connection,
@@ -32,6 +33,8 @@ export interface ConnectorDependencies {
   options: Omit<ConnectOptions, 'cancellation' | 'onPhase'>;
   /** Reveals the connection's log: what the progress's details link shows. */
   revealLog(): void;
+  /** Makes these the only variables the window's terminals get from the extension, for the connect that worked. */
+  applyTerminalEnvironment(variables: Readonly<Record<string, string>>): void;
 }
 
 /** A set of listeners that each hear an event; one that throws does not keep it from the others. */
@@ -190,6 +193,9 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
           stop,
           lost: false,
         };
+        dependencies.applyTerminalEnvironment(
+          forwardingEnvironment(result.forwarding),
+        );
         return result.connected;
       } finally {
         if (running === controller) {

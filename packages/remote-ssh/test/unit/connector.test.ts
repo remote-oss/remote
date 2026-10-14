@@ -7,6 +7,7 @@ import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
   endTunnel,
   INPUT,
+  LINKED,
   type Recording,
   setup,
   steps,
@@ -37,9 +38,11 @@ function connectorFor(
   connector: SshConnector;
   recording: Recording;
   revealed: string[];
+  environments: Array<Readonly<Record<string, string>>>;
 } {
   const {recording, options} = setup();
   const revealed: string[] = [];
+  const environments: Array<Readonly<Record<string, string>>> = [];
   return {
     connector: connectorOf({
       stepsFor: () => steps(recording, changes),
@@ -48,9 +51,13 @@ function connectorFor(
       revealLog: () => {
         revealed.push('log');
       },
+      applyTerminalEnvironment: variables => {
+        environments.push(variables);
+      },
     }),
     recording,
     revealed,
+    environments,
   };
 }
 
@@ -59,6 +66,31 @@ describe('the connector over the connect pipeline', () => {
     const {connector} = connectorFor();
     const result = await connector.connect(HOST_INPUT);
     deepStrictEqual('address' in result ? result.address.port : result, 50000);
+  });
+
+  it("F-2311.AC-6, F-2312.AC-5: a connect that works gives the window's terminals exactly its plans' variables", async () => {
+    const {connector, environments} = connectorFor({
+      planForwarding: () => Promise.resolve(LINKED),
+    });
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(environments, [
+      {
+        SSH_AUTH_SOCK: '/tmp/vscode-ssh-auth-sock-42',
+        DISPLAY: 'localhost:10.0',
+      },
+    ]);
+  });
+
+  it("F-2311.AC-6, F-2312.AC-5: a connect with none plans gives the window's terminals no variables", async () => {
+    const {connector, environments} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(environments, [{}]);
+  });
+
+  it("F-2311 7.E6: a connect that fails leaves the window's terminal variables as they were", async () => {
+    const {connector, environments} = connectorFor({openTunnel: tunnelFails});
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(environments, []);
   });
 
   it('contracts §3.2: a connect that fails gives the failure', async () => {
@@ -322,6 +354,7 @@ describe('the connector over the connect pipeline', () => {
       terminalMode: () => false,
       options: connectorOptions(options),
       revealLog: () => undefined,
+      applyTerminalEnvironment: () => undefined,
     });
     const heard: ConnectPhase[] = [];
     connector.onPhase(given => {
@@ -360,6 +393,7 @@ describe('the connector over the connect pipeline', () => {
       terminalMode: () => false,
       options: connectorOptions(options),
       revealLog: () => undefined,
+      applyTerminalEnvironment: () => undefined,
     });
     await connector.connect(HOST_INPUT);
     await connector.connect({...HOST_INPUT, attempt: 2, isReconnection: true});

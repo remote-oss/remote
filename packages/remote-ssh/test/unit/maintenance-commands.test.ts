@@ -139,6 +139,20 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
     );
   });
 
+  it('F-2206 AC-26: Escape at the platform pick ends the kill with the kill-failed notice and no local end', async () => {
+    const scenario = setup({
+      outcome: {
+        result: 'cancelled',
+        cause: 'the platform pick was dismissed',
+      },
+    });
+    await scenario.kill();
+    deepStrictEqual(
+      [scenario.notices, scenario.ended],
+      [[['Failed to kill VS Code Server on dev.', ['Open Logs']]], []],
+    );
+  });
+
   it('F-2411.AC-8: Open Logs reveals the log', async () => {
     const scenario = setup({answer: 'Open Logs'});
     await scenario.kill();
@@ -214,6 +228,24 @@ describe('Uninstall VS Code Server from Host... (F-2412)', () => {
     const scenario = setup();
     await scenario.uninstall();
     deepStrictEqual([scenario.runs, scenario.notices], [['uninstall dev'], []]);
+  });
+
+  it('F-2206 AC-33: Escape at the platform pick ends the uninstall with no error, notice or local end', async () => {
+    const scenario = setup({
+      outcome: {
+        result: 'cancelled',
+        cause: 'the platform pick was dismissed',
+      },
+    });
+    await scenario.uninstall();
+    deepStrictEqual(
+      [
+        scenario.notices,
+        scenario.ended,
+        scenario.sink.lines.map(line => line.message),
+      ],
+      [[], [], []],
+    );
   });
 
   it('F-2412.AC-3: Escape on the pick runs nothing', async () => {
@@ -329,6 +361,21 @@ describe('Kill Current VS Code Server (F-2411 6.1, 6.2, 6.5)', () => {
     deepStrictEqual(scenario.order, [
       'notice Failed to kill VS Code Server on dev.',
     ]);
+  });
+
+  it('F-2206 AC-26: Kill Current with Escape at the platform pick ends no local server', async () => {
+    const scenario = setup({
+      held: TERMINAL_MODE,
+      outcome: {
+        result: 'cancelled',
+        cause: 'the platform pick was dismissed',
+      },
+    });
+    await scenario.killCurrent();
+    deepStrictEqual(
+      [scenario.ended, scenario.order],
+      [[], ['notice Failed to kill VS Code Server on dev.']],
+    );
   });
 
   it('F-2411.AC-21: Kill on Host picking the window’s own alias acts as Kill Current in default mode', async () => {

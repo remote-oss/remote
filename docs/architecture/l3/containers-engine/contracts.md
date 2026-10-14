@@ -9,14 +9,14 @@ sections. A builder doesn't change a contract; a question goes to the architect.
 
 | Operation | Rule |
 |---|---|
-| `runScript` | `docker exec -i --user <user> [-e NAME …] <containerId> sh -s` for `posixShell` (no `powershell` in release 1: `spawnFailed`). The script is written to stdin, then `ScriptInput` (text or a local file's bytes, unchanged), then stdin is closed. Each stdout line goes to `onLine` in order before the outcome settles. The exit status is the outcome's `status`. **Environment values are passed as `-e NAME` with the value in the `docker` process's own environment, never `-e NAME=value`**, so no value appears in `docker`'s argv or in `ps` (R-26). |
+| `runScript` | `docker exec -i --user <user> [-e NAME …] <containerId> sh -c '<prelude>'` for `posixShell`, where `<prelude>` is lib-host's `preludeCommand(<script byte count>)` (`eval "$(dd bs=1 count=<n> 2>/dev/null)"`; measured on BusyBox ash, dash and bash; `sh -s` gives a script's input to the shell on ash and dash). No `powershell` in release 1 (`spawnFailed`). stdin carries exactly the script's bytes, then `ScriptInput` (a text, or a local file's bytes, unchanged), then it is closed; only the byte count is in argv. Each stdout line goes to `onLine` in order before the outcome settles. The exit status is the outcome's `status`. **Environment values are passed as `-e NAME` with the value in the `docker` process's own environment, never `-e NAME=value`**, so no value appears in `docker`'s argv or in `ps` (R-26). |
 | `copyToHost` | streams a one-file tar archive of `localFile` into `docker exec -i --user <user> <containerId> tar -x -C <dir>`, renamed to `remotePath`'s basename (F-1402 §6: the archive is piped, never `docker cp` from a path the engine reads). A container without `tar` is `copyToolMissing`. |
 | `identity` | the container id. |
 | `platformHint` | `linux`. |
 | `clientPathOnHost` | not implemented (a container never reads a client path directly). |
 
 **Failures:** a `docker` that can't start is `spawnFailed`; a container that stopped or vanished during an operation
-(exit 125, or the daemon's "is not running" / "No such container") is `channelClosed`; an abort is `cancelled`. The
+(exit 125, or the daemon's "is not running" / "No such container", or exit 137 or 143 with an empty stderr while one `docker inspect` through the same `EngineHost` says the container no longer runs; measured on Docker 29.9, amended 2026-10-14 on #808) is `channelClosed`; an abort is `cancelled`. The
 channel never retries.
 
 **The exec dialer:** `execDialer(engine, containerId, user, relayScriptPath): Dialer` (lib-forwarding's `Dialer`).
@@ -72,7 +72,7 @@ its content:
 | Port | Operations | Real adapter |
 |---|---|---|
 | `EngineHost` (C2) | `run(argv, {stdin?, environment?, cancellation}) → {status, stdout, stderr}`; `spawn(argv, …) → a live process` | `child_process.spawn` with `shell: false` (F-0201) |
-| `CliHost` (C3) | `run(arguments, onJsonLine, cancellation) → {result: <the JSON result line>, status}` | spawns `process.execPath` with `ELECTRON_RUN_AS_NODE=1` on the bundled CLI's entry script (ADR-0009) |
+| `CliHost` (C3) | `run(arguments, onJsonLine, cancellation) → {kind: 'ran', result: <the first stdout line, or undefined>, status: <the exit status, or null after an abort>}`, or `{kind: 'spawnFailed', message}` when the process can't start (amended 2026-10-14 on #764) | spawns `process.execPath` with `ELECTRON_RUN_AS_NODE=1` on the bundled CLI's entry script (ADR-0009) |
 | `TrustPort` (C5) | `isTrusted()`, `request(message) → granted or not` | `vscode.workspace` (proposal `workspaceTrust`) |
 | `ConfigFiles` (C4) | `exists`, `read`, `list` over workspace URIs | `vscode.workspace.fs` |
 | notices and dialogs | as remote-ssh's surfaces: an adapter per surface, scripted in the harness | `vscode.window` |
@@ -95,13 +95,28 @@ its content:
    extraction has finished (F-0503 5.0 step 5), and `<dataFolder>/bin/<commit>` becomes a symlink to it, created or
    kept (F-0503 BR-3). Without it, nothing changes. This is area A's code with area C's input, and it's carded with
    C10.
+   **One tree per connection (amended 2026-10-14 on #806):** C10 gives every lib-server script of a connection the same
+   `installTree`: the probe, install, start and cleanup scripts alike. Build the script parameters once per connection,
+   not once per step. A script without the tree takes its host lock under `bin/<commit>`, which is then a link, so the
+   lock would land inside the shared tree (containers-05 R6). C10's rows check `INSTALL_TREE` in each step's script.
 3. **lib-authority:** nothing new. `Failed.silent`, `Connected.trusted` and the container codec already exist (dossier
    Q3 and Q6 are answered by them).
 
 ## 6. Rows every card keeps
 
-- **R-26:** no token, password or secret in any argv (`docker`, `docker exec`, the CLI) or log line. A unit row per
-  spawn site checks the argv against the secrets of its fixture.
+- **R-26:** no token, password or secret in any argv **we** build (`docker`, `docker exec`, the CLI's) or in any log
+  line or message of ours. A unit row per spawn site checks the argv against the secrets of its fixture.
+  - **The CLI's own `docker run`** (athena, 2026-10-14, dike on #764): the dev container CLI passes the configuration's
+    `containerEnv` to `docker run` as `-e NAME=value`. That process is the CLI's, the values are the user's own
+    configuration, and changing it would mean forking the CLI (ADR-0009). It's a **documented deviation**: those values
+    are briefly in that process's argv on the user's machine, and they're in the container's configuration anyway
+    (`docker inspect`). The reference, which bundles the same CLI, does the same. It goes in the release notes.
+  - **What C3 passes on is ours, and is scrubbed:** before any CLI log event, error message or description reaches our
+    log, a failure or a dialog, C3 replaces each occurrence of the value of every editor environment variable that the
+    chosen configuration references as `${localEnv:VAR}` or `${env:VAR}` (values of 8 characters or more) with that
+    reference text. lib-log's standard redaction then applies, as to every line. It's a pure function with rows: a token
+    in a `Run:` line and in `Command failed:` is replaced, a short value isn't, and an unreferenced variable isn't
+    touched.
 - **No shell:** every engine and CLI spawn has `shell: false`, and a row proves a value with spaces and quotes reaches
   the program unchanged (F-0201).
 - **Pure parts first:** the payload codec, the label matching (F-0409's tiers), the CLI argument builder and the

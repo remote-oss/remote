@@ -23,6 +23,8 @@ import type {
 } from 'lib-server';
 import type {Connected, Failed} from 'lib-authority';
 import type {CliBridge} from '../cli/cli-bridge.ts';
+import type {AgentLinkPlan} from '../environment/agent-link.ts';
+import type {ForwardingPlans} from '../environment/forwarding.ts';
 import type {PortRange, TunnelPath} from 'lib-forwarding';
 import type {HostChannel, PlatformHint} from 'lib-host';
 import type {ConnectionNotice, FailureHint, SharedRecord} from 'lib-ssh';
@@ -77,6 +79,8 @@ export interface ConnectionLease {
   channel: HostChannel;
   /** The loopback port of the connection's SOCKS relay, which the window's tunnel rides. */
   socksPort: number;
+  /** What an earlier window of the connection left for reuse; none when nothing was stored. */
+  storedRecord: SharedRecord | undefined;
   /** Leaves what a later window needs to reuse the server; true when the connection took it. */
   storeSharedRecord(record: SharedRecord): Promise<boolean>;
   /** Gives the lease back, or ends the direct session; called once, after a failure or when the window ends. */
@@ -142,6 +146,21 @@ export interface ConnectSteps {
     lease: ConnectionLease,
     cancellation: AbortSignal,
   ): Promise<ProbeOutcome>;
+  /**
+   * The window's agent link and display, from the settings and the probe's facts, or the plans the connection's stored
+   * record keeps; they make the window's environment for the rest of the connect.
+   */
+  planForwarding(
+    input: ConnectInput,
+    lease: ConnectionLease,
+    host: ProbedHost,
+    cancellation: AbortSignal,
+  ): Promise<ForwardingPlans>;
+  /**
+   * Makes a `link` plan's link on the host from a hidden terminal, and reads it back over the lease's channel once the
+   * terminal ended; returns at once, and only logs a failure.
+   */
+  linkAgent(lease: ConnectionLease, plan: AgentLinkPlan): void;
   /** The install plan; `direct` plans without the CLI path, as its fallback does. */
   plan(
     input: ConnectInput,
