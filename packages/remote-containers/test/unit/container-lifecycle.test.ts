@@ -164,6 +164,24 @@ function recordingPresenter(): {
   };
 }
 
+/** A lifecycle over the scripted engine with an empty listing, and the calls its presenter gets. */
+function lifecycleOver(bridge: CliBridge): {
+  calls: string[];
+  lifecycle: ReturnType<typeof containerLifecycleOf>;
+} {
+  const {calls, presenter} = recordingPresenter();
+  return {
+    calls,
+    lifecycle: containerLifecycleOf({
+      engine: scriptedEngine(EMPTY_LISTING),
+      cli: bridge,
+      logger: createLogger(undefined, {minimumLevel: () => 'info'}),
+      presenter,
+      clock: () => 0,
+    }),
+  };
+}
+
 /** A raw or start event of the `postCreate` channel, or of no channel. */
 function lifecycleEvent(
   type: 'raw' | 'start' | 'stop',
@@ -606,13 +624,7 @@ describe('containerLifecycleOf', () => {
   it('stopBackground aborts the signal the bridge got, and a second prepare aborts the first run', async () => {
     const bridge = fakeBridge();
     bridge.runResult = new Promise(() => undefined);
-    const lifecycle = containerLifecycleOf({
-      engine: scriptedEngine(EMPTY_LISTING),
-      cli: bridge,
-      logger: createLogger(undefined, {minimumLevel: () => 'info'}),
-      presenter: recordingPresenter().presenter,
-      clock: () => 0,
-    });
+    const {lifecycle} = lifecycleOver(bridge);
     const signal = new AbortController().signal;
     lifecycle.stopBackground();
     await lifecycle.prepare(
@@ -713,14 +725,7 @@ describe('containerLifecycleOf', () => {
   it('F-0415 AC-38: a window torn down while the commands run ends the run once; before it started, nothing', async () => {
     const bridge = fakeBridge();
     bridge.runResult = new Promise(() => undefined);
-    const {calls, presenter} = recordingPresenter();
-    const lifecycle = containerLifecycleOf({
-      engine: scriptedEngine(EMPTY_LISTING),
-      cli: bridge,
-      logger: createLogger(undefined, {minimumLevel: () => 'info'}),
-      presenter,
-      clock: () => 0,
-    });
+    const {calls, lifecycle} = lifecycleOver(bridge);
     lifecycle.stopBackground();
     const before = [...calls];
     await lifecycle.prepare(
@@ -736,18 +741,11 @@ describe('containerLifecycleOf', () => {
 
   it('F-0415 AC-38: a run that a second prepare replaced does not end the second one when it settles', async () => {
     const bridge = fakeBridge();
-    let settleFirst: (result: RunUserCommandsResult) => void = () => undefined;
+    const first: {settle?: (result: RunUserCommandsResult) => void} = {};
     bridge.runResult = new Promise(resolve => {
-      settleFirst = resolve;
+      first.settle = resolve;
     });
-    const {calls, presenter} = recordingPresenter();
-    const lifecycle = containerLifecycleOf({
-      engine: scriptedEngine(EMPTY_LISTING),
-      cli: bridge,
-      logger: createLogger(undefined, {minimumLevel: () => 'info'}),
-      presenter,
-      clock: () => 0,
-    });
+    const {calls, lifecycle} = lifecycleOver(bridge);
     const signal = new AbortController().signal;
     await lifecycle.prepare(
       REQUEST,
@@ -762,7 +760,7 @@ describe('containerLifecycleOf', () => {
       () => undefined,
       signal,
     );
-    settleFirst({kind: 'cancelled'});
+    first.settle?.({kind: 'cancelled'});
     await settle();
     deepStrictEqual(calls, ['started', 'started']);
   });
