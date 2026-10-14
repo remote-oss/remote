@@ -250,15 +250,23 @@ describe('the window side of the shared connection (S9)', () => {
     );
   });
 
-  it('#253 Q12: a window that owns the login from its first request is never told it took over', async () => {
+  /** The notices of a window that asked to connect first and was accepted, of the `type` given. */
+  async function noticesOfFirstRequest(type: string): Promise<unknown[]> {
     const connection = await acquired();
     const heard = notices(connection);
     void connection.connect(new AbortController().signal);
     await drive();
-    deepStrictEqual(
-      heard.filter(notice => notice.type === 'loginOwned'),
-      [],
-    );
+    return heard.filter(notice => notice.type === type);
+  }
+
+  it('#253 Q12: a window that owns the login from its first request is never told it took over', async () => {
+    deepStrictEqual(await noticesOfFirstRequest('loginOwned'), []);
+  });
+
+  it('F-2304 BR-11: a window whose first request is accepted is told the login started, once', async () => {
+    deepStrictEqual(await noticesOfFirstRequest('loginStarted'), [
+      {type: 'loginStarted'},
+    ]);
   });
 
   it('reports a failed login to the window that asked for it, with the kind and the reason', async () => {

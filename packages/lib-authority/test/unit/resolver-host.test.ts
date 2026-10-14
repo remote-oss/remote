@@ -138,7 +138,10 @@ class FakeEditor implements ResolverEditor {
   refuses = false;
   disposed = 0;
   progressRuns: Array<ProgressRequest & {updates: string[]}> = [];
+  progressEnded = 0;
   actions: string[] = [];
+  timers: Array<{milliseconds: number; callback: () => void; live: boolean}> =
+    [];
   readonly progress = {
     withProgress: async <Result>(
       request: ProgressRequest,
@@ -148,11 +151,33 @@ class FakeEditor implements ResolverEditor {
     ): Promise<Result> => {
       const entry = {...request, updates: [] as string[]};
       this.progressRuns.push(entry);
-      return task((title, details) => {
-        entry.updates.push(details ? `${title} (details)` : title);
-      });
+      try {
+        return await task((title, details) => {
+          entry.updates.push(details ? `${title} (details)` : title);
+        });
+      } finally {
+        this.progressEnded += 1;
+      }
     },
   };
+
+  startTimer(milliseconds: number, callback: () => void): () => void {
+    const timer = {milliseconds, callback, live: true};
+    this.timers.push(timer);
+    return () => {
+      timer.live = false;
+    };
+  }
+
+  /** Runs the timers that are still live, as if their time had passed. */
+  fireTimers(): void {
+    for (const timer of this.timers) {
+      if (timer.live) {
+        timer.live = false;
+        timer.callback();
+      }
+    }
+  }
 
   registerRemoteAuthorityResolver(
     prefix: string,
@@ -445,6 +470,7 @@ describe('the resolver host: a connection (F-2501)', () => {
 describe('the resolver host: progress (F-2304)', () => {
   it("F-2304: the progress starts with the extension's title", async () => {
     const context = await setup();
+    context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     deepStrictEqual(
       context.editor.progressRuns.map(entry => entry.title),
@@ -486,6 +512,7 @@ describe('the resolver host: progress (F-2304)', () => {
 
   it('F-2304: the progress offers Cancel only to a family that allows it', async () => {
     const context = await setup({cancellable: true});
+    context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     deepStrictEqual(
       context.editor.progressRuns.map(entry => entry.cancellable),
@@ -495,6 +522,7 @@ describe('the resolver host: progress (F-2304)', () => {
 
   it('F-2304.AC-2: BR-2, the progress of the ssh family has no Cancel', async () => {
     const context = await setup();
+    context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     deepStrictEqual(
       context.editor.progressRuns.map(entry => entry.cancellable),
@@ -504,6 +532,7 @@ describe('the resolver host: progress (F-2304)', () => {
 
   it("F-2304: the user's Cancel cancels the connector", async () => {
     const context = await setup({cancellable: true});
+    context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     context.editor.progressRuns[0]?.onCancel();
     deepStrictEqual(context.connector.cancels, 1);
@@ -511,6 +540,7 @@ describe('the resolver host: progress (F-2304)', () => {
 
   it('F-2304: the details link reveals the detail of the connect', async () => {
     const context = await setup();
+    context.connector.phases = [{name: 'installing'}];
     await resolve(context);
     context.editor.progressRuns[0]?.onDetails();
     deepStrictEqual(context.connector.reveals, 1);
@@ -526,6 +556,83 @@ describe('the resolver host: progress (F-2304)', () => {
     const context = await setup();
     await resolve(context);
     deepStrictEqual(context.connector.listenerCount(), 2);
+  });
+});
+
+describe('the resolver host: the progress opens lazily (card connect-78)', () => {
+  it('F-2304 6.1: a connect whose phases are all quiet and that settles before the fallback opens no progress', async () => {
+    const context = await setup();
+    context.connector.phases = [
+      {name: 'initializing', quiet: true},
+      {name: 'settingUpTunnel', quiet: true},
+    ];
+    await resolve(context);
+    context.editor.fireTimers();
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.length,
+        context.editor.timers.map(timer => timer.milliseconds),
+      ],
+      [0, [1500]],
+    );
+  });
+
+  it('F-2304 BR-11: the first phase that is not quiet opens the progress with its title', async () => {
+    const context = await setup();
+    context.connector.phases = [
+      {name: 'initializing', quiet: true},
+      {name: 'downloading'},
+    ];
+    await resolve(context);
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.map(entry => entry.title),
+        context.editor.progressRuns[0]?.updates,
+      ],
+      [['starting'], ['phase downloading']],
+    );
+  });
+
+  it('F-2304 BR-11: a connect with no phase that opens it shows the progress at the fallback', async () => {
+    const context = await setup();
+    context.connector.phases = [
+      {name: 'initializing', details: true, quiet: true},
+    ];
+    context.connector.during = () => {
+      context.editor.fireTimers();
+    };
+    await resolve(context);
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.map(entry => entry.title),
+        context.editor.progressRuns[0]?.updates,
+      ],
+      [['starting'], ['phase initializing (details)']],
+    );
+  });
+
+  it('contracts §3.2: once open, a quiet phase updates the progress', async () => {
+    const context = await setup();
+    context.connector.phases = [
+      {name: 'downloading'},
+      {name: 'settingUpTunnel', quiet: true},
+    ];
+    await resolve(context);
+    deepStrictEqual(
+      [
+        context.editor.progressRuns.length,
+        context.editor.progressRuns[0]?.updates,
+      ],
+      [1, ['phase downloading', 'phase settingUpTunnel']],
+    );
+  });
+
+  it('contracts §3.2: the progress ends when the connect settles', async () => {
+    const context = await setup();
+    context.connector.phases = [{name: 'downloading'}];
+    await resolve(context);
+    await Promise.resolve();
+    deepStrictEqual(context.editor.progressEnded, 1);
   });
 });
 

@@ -13,11 +13,15 @@ export interface RecordingResolverEditor {
   registered(): EditorResolver | undefined;
   /** Cancels the progress that is running, as the user's Cancel would; does nothing when none runs. */
   cancelProgress(): void;
+  /** Calls each timer that is still pending once, as if its time had passed. */
+  fireTimers(): void;
+  /** Whether every progress the editor was asked for has ended. */
+  progressSettled(): boolean;
 }
 
 /**
  * The fake editor. It records `register <prefix>`, `unregister <prefix>`, `progress <title>`, `phase <text>`,
- * `phase <text> (details)`, `notAvailable <message> <handled>`, `temporarilyNotAvailable <message>`, `reload` and `closeRemote`.
+ * `phase <text> (details)`, `timer <milliseconds>`, `notAvailable <message> <handled>`, `temporarilyNotAvailable <message>`, `reload` and `closeRemote`.
  */
 export function recordingResolverEditor(
   events: string[],
@@ -25,6 +29,8 @@ export function recordingResolverEditor(
 ): RecordingResolverEditor {
   let resolver: EditorResolver | undefined;
   let cancel: (() => void) | undefined;
+  const timers = new Set<() => void>();
+  let running = 0;
   const editor: ResolverEditor = {
     registerRemoteAuthorityResolver: (authorityPrefix, registered) => {
       events.push(`register ${authorityPrefix}`);
@@ -39,14 +45,23 @@ export function recordingResolverEditor(
       withProgress: async (request, task) => {
         events.push(`progress ${request.title}`);
         cancel = request.onCancel;
+        running += 1;
         try {
           return await task((text, details) => {
             events.push(details ? `phase ${text} (details)` : `phase ${text}`);
           });
         } finally {
           cancel = undefined;
+          running -= 1;
         }
       },
+    },
+    startTimer: (milliseconds, callback) => {
+      events.push(`timer ${String(milliseconds)}`);
+      timers.add(callback);
+      return () => {
+        timers.delete(callback);
+      };
     },
     notAvailable: (message, handled) => {
       events.push(`notAvailable ${String(message)} ${String(handled)}`);
@@ -73,5 +88,12 @@ export function recordingResolverEditor(
     cancelProgress: () => {
       cancel?.();
     },
+    fireTimers: () => {
+      for (const callback of [...timers]) {
+        timers.delete(callback);
+        callback();
+      }
+    },
+    progressSettled: () => running === 0,
   };
 }

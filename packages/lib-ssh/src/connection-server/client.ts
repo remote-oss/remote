@@ -98,6 +98,8 @@ export type ConnectionNotice =
   | {type: 'waitingForOtherWindow'}
   /** The login fell to this window after it had been told to wait: the owner gave up. */
   | {type: 'loginOwned'}
+  /** This window's first request started the login: it was accepted without a wait. */
+  | {type: 'loginStarted'}
   | {type: 'transportLost'}
   | {type: 'helperGone'};
 
@@ -142,6 +144,7 @@ interface LoginSteps {
   waiting(): void;
   /** The login fell to this window after it was told to wait. */
   owned(): void;
+  started(): void;
 }
 
 /**
@@ -215,6 +218,8 @@ class LoginWait {
       this.owner = true;
       if (this.waited) {
         this.steps.owned();
+      } else {
+        this.steps.started();
       }
     } else if (asked.reply.type === 'refused') {
       await this.refused(asked.reply.reason);
@@ -368,6 +373,9 @@ export class SharedConnection {
           },
           owned: () => {
             this.notify({type: 'loginOwned'});
+          },
+          started: () => {
+            this.notify({type: 'loginStarted'});
           },
         },
         outcome => {

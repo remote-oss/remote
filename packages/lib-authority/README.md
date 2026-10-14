@@ -43,10 +43,10 @@ family's own form, and gives the label the resource label formatter uses.
 
 ## For maintainers
 
-| | |
-|---|---|
-| Maintainers | remote-oss |
-| Entry points | `lib-authority` (`src/index.ts`) |
-| Allowed imports | `lib-identifiers`, `lib-standdown`, `lib-log`; the `vscode` module for types only |
+|                     |                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Maintainers         | remote-oss                                                                                                                                                                                                                                                                                                                                                    |
+| Entry points        | `lib-authority` (`src/index.ts`)                                                                                                                                                                                                                                                                                                                              |
+| Allowed imports     | `lib-identifiers`, `lib-standdown`, `lib-log`; the `vscode` module for types only                                                                                                                                                                                                                                                                             |
 | Editor declarations | `vscode-dts/` holds the editor's declaration files for the proposals the family uses (`resolvers`, `tunnels`, `contribViewsRemote`, `contribRemoteHelp`, `extensionsAny`, `terminalDataWriteEvent`), exactly as published for the supported editor floor (1.139.1), so the package compiles against the editor it supports. They are not linted or formatted. |
-| Coverage exclusions | `src/codecs/types.ts` and `src/connector/results.ts`: types only, no executable code |
+| Coverage exclusions | `src/codecs/types.ts` and `src/connector/results.ts`: types only, no executable code                                                                                                                                                                                                                                                                          |
