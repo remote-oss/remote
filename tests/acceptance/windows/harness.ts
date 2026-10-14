@@ -493,7 +493,6 @@ export async function windowState(name: string): Promise<{
   remoteName: string | null;
   remoteAuthority: string | null;
   folders: string[];
-  remoteSshActive: boolean;
 }> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
@@ -502,7 +501,6 @@ export async function windowState(name: string): Promise<{
       remoteName: last?.remoteName ?? null,
       remoteAuthority: last?.remoteAuthority ?? null,
       folders: last?.folders ?? [],
-      remoteSshActive: last?.remoteSshActive ?? false,
     };
     if (
       state.remoteName === null ||
@@ -513,6 +511,11 @@ export async function windowState(name: string): Promise<{
     }
     await new Promise(resolve => setTimeout(resolve, 200));
   }
+}
+
+/** Whether window `name`'s Remote - SSH extension is active, as its `state` reports it now. */
+export async function remoteSshActive(name: string): Promise<boolean> {
+  return (await reportedState(name))?.remoteSshActive ?? false;
 }
 
 /** Whether window `name`'s workspace is trusted, as it reports now; it does not wait for the window's connect. */

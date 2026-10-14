@@ -17,6 +17,7 @@ import path from 'node:path';
 import {
   closeWindow,
   inWindow,
+  remoteSshActive,
   variable,
   windowEvents,
   windowState,
@@ -99,14 +100,16 @@ describe('a remote-internal command in a fresh window (F-2202)', function () {
     await agentActivated('fr1');
 
     const before = await windowState('fr1');
+    const activeBefore = await remoteSshActive('fr1');
     await inWindow('fr1', 'remote-internal.getConfiguredHostnames');
-    const after = await windowState('fr1');
+    await windowState('fr1');
+    const activeAfter = await remoteSshActive('fr1');
     await inWindow('fr1', 'acceptance.agent.writeFile', 'usable.txt', 'usable');
 
     deepStrictEqual(
       [
-        [before.remoteName, before.remoteSshActive],
-        after.remoteSshActive,
+        [before.remoteName, activeBefore],
+        activeAfter,
         [
           readFileSync(sshConfig),
           readFileSync(settingsPath),
