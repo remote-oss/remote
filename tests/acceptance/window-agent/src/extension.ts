@@ -199,6 +199,28 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand(
+      'acceptance.agent.commands',
+      async (prefix: string) => {
+        report(agentFolder, name, {
+          event: 'commands',
+          prefix,
+          commandIds: (await vscode.commands.getCommands(true))
+            .filter(commandId => commandId.startsWith(prefix))
+            .sort(),
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.extensionPresent',
+      (extensionId: string) => {
+        report(agentFolder, name, {
+          event: 'extension',
+          extensionId,
+          present: vscode.extensions.getExtension(extensionId) !== undefined,
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
       'acceptance.agent.updateSetting',
       (settingId: string, value: unknown) =>
         vscode.workspace
