@@ -476,46 +476,40 @@ function relativeToPackage(root: string, folder: string, file: string): string {
 }
 
 /**
- * The one-level pass-through for a member access whose object isn't the table's own type: `x.K` counts when `x`
- * is reached from a production function's parameter and the generated table is passed there at a production call
- * site. The object's type is the parameter's, structurally narrowed, so the table's own type isn't seen; the
- * call site is.
+ * Whether the rules count `source` as the table for key `key` (the amended rule 1): the type of `source` is the
+ * table's, or a declared type that has the property `key` and to which the table's type is assignable.
  */
-function passThroughTableKey(
+function isTableReference(
   state: WalkState,
-  x: typescript.Expression,
+  source: typescript.Expression,
   table: TableInfo,
+  key: string,
 ): boolean {
-  const targetType = state.checker.getTypeAtLocation(x);
-  const passState: PassThroughState = {
-    checker: state.checker,
-    productionFiles: state.productionFiles,
-  };
-  const declaring = declaringFunctionOf(passState, x, targetType);
-  if (declaring === undefined) {
+  const sourceType = state.checker.getTypeAtLocation(source);
+  if (isSameType(state.checker, sourceType, table.type)) {
+    return true;
+  }
+  return structuralTableReceiver(state.checker, sourceType, table.type, key);
+}
+
+/**
+ * The structural receiver of the amended rule 1: a declared type that has the property `key` and to which the
+ * table's type is assignable. The assignability is the guard: an unrelated object with a property of the same
+ * name doesn't count, so the table's type must be assignable to the receiver's type, not the other way around.
+ */
+function structuralTableReceiver(
+  checker: typescript.TypeChecker,
+  receiverType: typescript.Type,
+  tableType: typescript.Type,
+  key: string,
+): boolean {
+  if (receiverType.flags & typescript.TypeFlags.Any) {
     return false;
   }
-  const sites = declaringCallSites(passState, declaring.node);
-  for (const site of sites) {
-    const argument = site.arguments[declaring.argumentIndex];
-    if (argument === undefined) {
-      continue;
-    }
-    const reached = argumentOfPropertyPath(argument, declaring.propertyPath);
-    if (reached === undefined) {
-      continue;
-    }
-    if (
-      isSameType(
-        state.checker,
-        state.checker.getTypeAtLocation(reached),
-        table.type,
-      )
-    ) {
-      return true;
-    }
+  if (receiverType.getProperty(key) === undefined) {
+    return false;
   }
-  return false;
+  return checker.isTypeAssignableTo(tableType, receiverType);
 }
 
 /**
@@ -573,15 +567,14 @@ function forwardsParameterToViewRegistration(
 }
 
 /**
- * The key an access on a table names, and which access it is: a member access `x.K` or an element access `x['K']`
- * where the type of `x` is the table's.
+ * The key an access on a table names: a member access `x.K` or an element access `x['K']` whose object the
+ * reference rules count as the table for the key.
  */
 function referenceKeyOf(
   state: WalkState,
   node:
     typescript.PropertyAccessExpression | typescript.ElementAccessExpression,
 ): string | undefined {
-  const objectType = state.checker.getTypeAtLocation(node.expression);
   let key: string | undefined;
   if (typescript.isPropertyAccessExpression(node)) {
     key = node.name.text;
@@ -605,10 +598,7 @@ function referenceKeyOf(
     ) {
       continue;
     }
-    if (
-      !isSameType(state.checker, objectType, table.type) &&
-      !passThroughTableKey(state, node.expression, table)
-    ) {
+    if (!isTableReference(state, node.expression, table, key)) {
       continue;
     }
     if (
@@ -624,6 +614,83 @@ function referenceKeyOf(
     }
   }
   return key;
+}
+
+/**
+ * The key a binding element names: its property name, a computed one only when the expression is a string
+ * literal, or its own name for a shorthand. The grammar admits no other name in a binding position.
+ */
+function keyOfBindingName(name: typescript.PropertyName): string | undefined {
+  if (typescript.isComputedPropertyName(name)) {
+    const inner = name.expression;
+    return typescript.isStringLiteral(inner) ? inner.text : undefined;
+  }
+  return typescript.isIdentifier(name) || typescript.isStringLiteral(name)
+    ? name.text
+    : undefined;
+}
+
+/**
+ * The keys a destructuring names: its binding elements, or, for an assignment's object-literal left side, its
+ * properties. A spread names nothing.
+ */
+function bindingNamesOf(
+  node: typescript.ObjectBindingPattern | typescript.ObjectLiteralExpression,
+): ReadonlyArray<string | undefined> {
+  if (typescript.isObjectBindingPattern(node)) {
+    return node.elements.map(element => {
+      const name = element.propertyName;
+      if (name !== undefined) {
+        return keyOfBindingName(name);
+      }
+      return typescript.isIdentifier(element.name)
+        ? element.name.text
+        : undefined;
+    });
+  }
+  return node.properties.map(property => {
+    if (typescript.isShorthandPropertyAssignment(property)) {
+      return property.name.text;
+    }
+    if (typescript.isPropertyAssignment(property)) {
+      return keyOfBindingName(property.name);
+    }
+    return undefined;
+  });
+}
+
+/**
+ * A destructuring as a table reference: `const {K} = x`, `{K: y} = x` and the like, with the same guard as the
+ * member access (the amended rule 1). A destructuring names its keys, so it is a reference, not a whole-table
+ * use; the commands and views tables are decided by their own rules, which a statement-level binding never
+ * reaches.
+ */
+function bindingReference(
+  state: WalkState,
+  names: ReadonlyArray<string | undefined>,
+  source: typescript.Expression,
+): void {
+  for (const table of state.tables) {
+    if (
+      table.name === 'commands' ||
+      table.name === 'views' ||
+      table.entries.size === 0
+    ) {
+      continue;
+    }
+    for (const key of names) {
+      if (key === undefined || !table.keys.has(key)) {
+        continue;
+      }
+      if (!isTableReference(state, source, table, key)) {
+        continue;
+      }
+      const entry = table.entries.get(key);
+      if (entry !== undefined) {
+        state.consumed.add(`${table.name} ${entry.key}`);
+      }
+    }
+  }
 }
 
 /** Whether the literal is a property name, which the object rule (3) decides, not the literal rule (2). */
@@ -744,6 +811,12 @@ function isWholeTableUse(
       (parent.expression === node || parent.name === node)) ||
     (typescript.isElementAccessExpression(parent) &&
       parent.expression === node) ||
+    (typescript.isVariableDeclaration(parent) &&
+      parent.initializer === node &&
+      typescript.isObjectBindingPattern(parent.name)) ||
+    (typescript.isBinaryExpression(parent) &&
+      parent.right === node &&
+      typescript.isObjectLiteralExpression(parent.left)) ||
     parent.kind === typescript.SyntaxKind.TypeQuery ||
     parent.kind === typescript.SyntaxKind.QualifiedName
   ) {
@@ -1256,6 +1329,18 @@ function walkNode(
     typescript.isElementAccessExpression(node)
   ) {
     referenceKeyOf(state, node);
+  } else if (
+    typescript.isVariableDeclaration(node) &&
+    typescript.isObjectBindingPattern(node.name) &&
+    node.initializer !== undefined
+  ) {
+    bindingReference(state, bindingNamesOf(node.name), node.initializer);
+  } else if (
+    typescript.isBinaryExpression(node) &&
+    node.operatorToken.kind === typescript.SyntaxKind.EqualsToken &&
+    typescript.isObjectLiteralExpression(node.left)
+  ) {
+    bindingReference(state, bindingNamesOf(node.left), node.right);
   } else if (
     typescript.isStringLiteral(node) ||
     typescript.isNoSubstitutionTemplateLiteral(node)

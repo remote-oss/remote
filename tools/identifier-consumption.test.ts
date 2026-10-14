@@ -155,21 +155,6 @@ export function activateWith<Commands extends Record<string, CommandEntry>>(
 }
 `;
 
-/**
- * The shape of a §3.4 problem line: an unconsumed entry or module, a registerCommands line the tool can't read, and
- * the stale, nameless and unwired allowlist lines. The repository row asserts every line has this form, so it holds
- * as the repository moves instead of pinning a snapshot a rebasing card breaks.
- */
-const PROBLEM_LINE_FORM = new RegExp(
-  [
-    '^knip output not understood$',
-    '^packages/[a-z][a-z0-9-]*: [a-z][a-zA-Z0-9]+ [^ ]+ [(].+[)] is contributed but no production source consumes it$',
-    '^packages/[a-z][a-z0-9-]*: module src/[^:]+ is imported only by tests$',
-    '^packages/[a-z][a-z0-9-]*: src/[^:]+:[0-9]+: .+$',
-    '^allowlist: [a-z][a-z0-9-]+ [a-z][a-zA-Z0-9]+ [^ ]+ (names nothing|is consumed now; remove it [(]card #[0-9]+[)]|must be wired before a release [(]card #[0-9]+, .+[)])$',
-  ].join('|'),
-);
-
 describe('identifier-consumption', () => {
   let workspace: TemporaryWorkspace;
 
@@ -346,6 +331,86 @@ void name;
           ],
         },
       );
+    });
+
+    it('counts a key read through a structurally typed receiver of the table (#674 R2 rule 1)', async () => {
+      const source = `import {settings} from './identifiers.generated.ts';
+
+interface SettingEntry {
+  readonly id: string;
+  readonly scope: string;
+}
+interface Inputs {
+  readonly settings: {readonly logLevel: SettingEntry};
+}
+function read(table: Inputs): SettingEntry {
+  const {settings: theSettings} = table;
+  void theSettings;
+  return table.settings.logLevel;
+}
+void read({settings});
+`;
+      addPackage('remote-x', SETTINGS_TABLE, {'a.ts': source});
+      deepStrictEqual(await check(), {
+        problems: [
+          'packages/remote-x: settings path (remote-x.path) is contributed but no production source consumes it',
+        ],
+        notes: [
+          `whole table: packages/remote-x/src/a.ts:${String(
+            lineOf(source, 'void read'),
+          )} uses settings`,
+        ],
+      });
+    });
+
+    it('reports a key an unrelated object carries, in an access and a destructuring, and not through an any (#674 R2 rule 1 trap)', async () => {
+      addPackage('remote-x', SETTINGS_TABLE, {
+        'a.ts': `import {settings} from './identifiers.generated.ts';
+
+const other = {logLevel: 1};
+void other.logLevel;
+const {logLevel: notTheKey} = other;
+void notTheKey;
+const anything: any = settings;
+void anything.logLevel;
+void settings.path;
+`,
+      });
+      deepStrictEqual((await check()).problems, [
+        'packages/remote-x: settings logLevel (remote-x.logLevel) is contributed but no production source consumes it',
+      ]);
+    });
+
+    it('counts the keys a destructuring names, in a rename, a quote and a computed form (#674 R2 rule 1)', async () => {
+      addPackage('remote-x', SETTINGS_TABLE, {
+        'a.ts': `import {settings} from './identifiers.generated.ts';
+
+const {logLevel} = settings;
+const {logLevel: level} = settings;
+const {'path': thePath} = settings;
+const {['path']: theQuoted} = settings;
+const which = 'logLevel';
+const {[which]: theWhich} = settings;
+let assigned: {id: string; scope: string} = {id: 'none', scope: 'none'};
+({logLevel: assigned} = settings);
+let path: {id: string; scope: string} = {id: 'none', scope: 'none'};
+({path} = settings);
+let level2: {id: string; scope: string} = {id: 'none', scope: 'none'};
+let rest: {path: {id: string; scope: string}} = {path: {id: 'none', scope: 'none'}};
+({logLevel: level2, ...rest} = settings);
+void logLevel;
+void level;
+void thePath;
+void theQuoted;
+void theWhich;
+void assigned;
+void path;
+void level2;
+void rest;
+void settings.path;
+`,
+      });
+      deepStrictEqual(await check(), {problems: [], notes: []});
     });
   });
 
@@ -770,6 +835,88 @@ void status;
       ]);
     });
 
+    it('counts a views key a function forwards to a registration, and reports the one no production call forwards (#674 R2)', async () => {
+      addPackage('remote-x', VIEWS_TABLE, {
+        'a.ts': `import {views} from './identifiers.generated.ts';
+
+const editor = {
+  window: {
+    createTreeView: (name: string, provider: unknown) => ({dispose: () => undefined}),
+  },
+};
+function show(viewId: string): {dispose: () => undefined} {
+  return editor.window.createTreeView(viewId, undefined);
+}
+void show(views.remoteTargets);
+const {remoteStatus: theStatus} = views;
+void theStatus;
+export function showStatus(statusId: string): {dispose: () => undefined} {
+  return editor.window.createTreeView(statusId, undefined);
+}
+`,
+      });
+      workspace.write(
+        'packages/remote-x/test/unit/a.test.ts',
+        `import {showStatus} from '../../src/a.ts';
+import {views} from '../../src/identifiers.generated.ts';
+
+void showStatus(views.remoteStatus);
+`,
+      );
+      deepStrictEqual((await check()).problems, [
+        'packages/remote-x: views remoteStatus (remote-x.remoteStatus) is contributed but no production source consumes it',
+      ]);
+    });
+
+    it('counts a served internal command by the id a const carries, and not the one widened to a string (#674 R2)', async () => {
+      const SERVED_TABLE = `export const internalCommands = {
+  alpha: {id: 'remote-internal.alpha', role: 'served', kind: 'query'},
+} as const;
+`;
+      addPackage('remote-x', SERVED_TABLE, {
+        'a.ts': `const ENDPOINTS = {alpha: {commandId: 'remote-internal.alpha'}} as const;
+const protocol = {serve: (descriptor: {commandId: string}) => undefined};
+void protocol.serve({commandId: ENDPOINTS.alpha.commandId});
+`,
+      });
+      addPackage('remote-y', SERVED_TABLE, {
+        'a.ts': `const name = 'alpha';
+const protocol = {serve: (descriptor: {commandId: string}) => undefined};
+void protocol.serve({commandId: 'remote-internal.' + name});
+`,
+      });
+      deepStrictEqual((await check()).problems, [
+        'packages/remote-y: internalCommands alpha (remote-internal.alpha) is contributed but no production source consumes it',
+      ]);
+    });
+
+    it('counts a context key its stand-down key sets, and not the one a different stand-down key names (#674 R2)', async () => {
+      function standDownTable(contextKey: string): string {
+        return `export const contextKeys = {
+  standingDown: {id: 'x.standingDown', setter: 'extension'},
+} as const;
+
+export const standDown = {
+  standsDownFor: 'x.standsDownFor',
+  contextKey: '${contextKey}',
+} as const;
+`;
+      }
+      const STAND_DOWN_SOURCE = `import {standDown} from './identifiers.generated.ts';
+
+void standDown.contextKey;
+`;
+      addPackage('remote-x', standDownTable('x.standingDown'), {
+        'a.ts': STAND_DOWN_SOURCE,
+      });
+      addPackage('remote-y', standDownTable('x.other'), {
+        'a.ts': STAND_DOWN_SOURCE,
+      });
+      deepStrictEqual((await check()).problems, [
+        'packages/remote-y: contextKeys standingDown (x.standingDown) is contributed but no production source consumes it',
+      ]);
+    });
+
     it('leaves out a core context key and a called internal command (#674 R2)', async () => {
       addPackage('remote-x', UNCHECKED_TABLE, {
         'a.ts':
@@ -842,7 +989,7 @@ void activateWith({...parts});
     });
   });
 
-  it('counts a pass-through argument two levels deep, and names the one it cannot reach (#674 R2)', async () => {
+  it('counts a pass-through argument at two property levels of one argument, and names the one it cannot reach (#674 R2)', async () => {
     const source = `import {commands} from './identifiers.generated.ts';
 import {
   registerCommands,
@@ -1068,6 +1215,26 @@ void deepActivate({outer: wrapped.otherProp});
       ]);
     });
 
+    it('drops the unused files under src/testing, and reports the rest of the knip run (#674 R4)', async () => {
+      function knip(): Promise<string> {
+        return Promise.resolve(
+          JSON.stringify({
+            issues: [
+              {
+                files: [
+                  {name: 'packages/remote-x/src/m.ts'},
+                  {name: 'packages/remote-x/src/testing/fake.ts'},
+                ],
+              },
+            ],
+          }),
+        );
+      }
+      deepStrictEqual((await check([], false, knip)).problems, [
+        'packages/remote-x: module src/m.ts is imported only by tests',
+      ]);
+    });
+
     it('does not report an allowlisted production-only module', async () => {
       workspace.write('packages/remote-x/src/m.ts', 'export const m = 1;\n');
       deepStrictEqual(
@@ -1149,15 +1316,9 @@ void deepActivate({outer: wrapped.otherProp});
         release: false,
         runKnip: undefined,
       });
-      // The check must run to completion: an unbuildable program is the fatal, exit-2 line, so it stays undefined, and
-      // no finding line may leave the §3.4 shape.
-      deepStrictEqual(
-        [
-          report.fatal,
-          report.problems.find(problem => !PROBLEM_LINE_FORM.test(problem)),
-        ],
-        [undefined, undefined],
-      );
+      // The committed allowlist covers main as it is: the check runs to completion and names no problem. Notes carry
+      // line numbers that move with main, so the row asserts the problems only.
+      deepStrictEqual([report.fatal, report.problems], [undefined, []]);
     });
   });
 });
