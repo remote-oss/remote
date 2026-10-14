@@ -10,6 +10,7 @@ import {
   unlinkSync,
   mkdirSync,
   readdirSync,
+  readlinkSync,
   readFileSync,
   rmSync,
   utimesSync,
@@ -135,6 +136,37 @@ function holdLinkLock(host: FakeHost): string {
   writeFileSync(lock, '');
   writeFileSync(`${lock}.target`, '');
   return lock;
+}
+
+/**
+ * Replaces the host's `ln` with one whose first call plays a window that released the lock between this window's
+ * `ln` and its check: it removes both names and fails with "File exists". The second call does what `mode` says:
+ * `real` links for real, `taken` creates the target as another window would and fails, `refused` fails without a target.
+ */
+function stubLink(host: FakeHost, mode: 'real' | 'taken' | 'refused'): void {
+  const link = path.join(host.tools, 'ln');
+  const realLink = readlinkSync(link);
+  unlinkSync(link);
+  const count = `${host.callsFile}.ln`;
+  writeFileSync(
+    link,
+    [
+      '#!/bin/sh',
+      `COUNT=$(cat "${count}" 2>/dev/null || echo 0)`,
+      `echo $((COUNT + 1)) >"${count}"`,
+      'if [ "$COUNT" = 0 ]; then',
+      '  rm -f "$1" "$2"',
+      '  echo "ln: File exists" >&2',
+      '  exit 1',
+      'fi',
+      mode === 'real' ? `exec "${realLink}" "$@"` : '',
+      mode === 'taken' ? 'touch "$2"; echo "ln: File exists" >&2; exit 1' : '',
+      mode === 'refused'
+        ? 'echo "ln: Operation not permitted" >&2; exit 1'
+        : '',
+    ].join('\n'),
+  );
+  chmodSync(link, 0o755);
 }
 
 describe('the POSIX bootstrap script', () => {
@@ -440,6 +472,28 @@ describe('the POSIX bootstrap script', () => {
       const lock = holdLinkLock(host);
       runScript(host, single('install'), parametersFor());
       deepStrictEqual(existsSync(`${lock}.target`), true);
+    });
+
+    it('#701: a lock released between ln and the holder check is taken on the second try', () => {
+      stubLink(host, 'real');
+      deepStrictEqual(statusOf(host, single('install'), parametersFor()), 'Ok');
+    });
+
+    it('#701: a lock taken by another window during the second try is LockBusy', () => {
+      stubLink(host, 'taken');
+      deepStrictEqual(
+        statusOf(host, single('install'), parametersFor()),
+        'LockBusy',
+      );
+    });
+
+    it('#701: a second ln refused without a holder reports the second error', () => {
+      stubLink(host, 'refused');
+      deepStrictEqual(
+        serverFactsOf(host, single('install'), parametersFor())
+          .writeFailedError,
+        'ln: Operation not permitted',
+      );
     });
 
     it('F-2408.6.3: the link lock is removed when the install ends', () => {
