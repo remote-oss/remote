@@ -51,6 +51,15 @@ The builder re-measures 1 and 3 in the PR with the same steps (§6 row 2).
 
 ### 3.1 The intent store (`src/open/rebuild-intent.ts`, pure over a port)
 
+**Shared with containers-11 (#892, §3.9):** the expiring map is `src/state/timed-store.ts`, which containers-11's
+pending edit uses too. Whichever of the two cards is built first writes it, with the rules and rows below, and the
+other reuses it. `rebuild-intent.ts` is then a thin layer:
+- `storeRebuildIntent` calls `storeTimedEntry(memento, REBUILD_INTENTS_KEY, payload, {removeExistingContainer: true,
+  buildNoCache}, now)`;
+- `takeRebuildIntent` calls `takeTimedEntry` with an `isValue` guard for that shape.
+
+The stored entry is `{at, value: {removeExistingContainer, buildNoCache}}`. The returned `RebuildIntent` flattens it.
+
 Contracts §3 and containers-07 §6 fix the key and the shape:
 
 ```ts
@@ -214,7 +223,8 @@ All under `packages/remote-containers/`:
 
 | File | What |
 |---|---|
-| `src/open/rebuild-intent.ts` | new, pure over `IntentMemento` (§3.1) |
+| `src/state/timed-store.ts` | new unless containers-11 built it (§3.1) |
+| `src/open/rebuild-intent.ts` | new, the intent's layer over `timed-store.ts` (§3.1) |
 | `src/open/rebuild.ts` | new, the in-container pair (§3.2) |
 | `src/open/reopen.ts`, `src/open/reopen-ports.ts` | the `rebuild` argument and the two ports (§3.3) |
 | `src/connector/connector.ts`, `src/connector/register-connector.ts` | §3.4 item 1 (containers-08's paths, whatever they are on main) |
@@ -225,7 +235,10 @@ All under `packages/remote-containers/`:
 
 ## 5. Rows
 
-### 5.1 `rebuild-intent.test.ts` (pure, a memento fake that records `update`)
+### 5.1 `timed-store.test.ts` and `rebuild-intent.test.ts` (pure, a memento fake that records `update`)
+
+The expiry, cleaning and writing rows below belong to `timed-store.test.ts`. If containers-11 already built them, add
+only the first row, as the intent layer's own.
 
 | Name | Given | Expected |
 |---|---|---|
