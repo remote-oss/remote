@@ -167,6 +167,7 @@ function contextOf(
 
 /** The checks that come first, in the order of their failures. */
 const CHECKS = [
+  'checkConfigFile',
   'checkStartSettings',
   'validate',
   'checkInstallFolder',

@@ -44,6 +44,7 @@ import {
   type ClientEnvironment,
   type ClientPlatform,
   type ConnectionClientEnvironment,
+  type HostListResult,
   killConnection,
   type LocalFiles,
   type LoginTerminals,
@@ -110,6 +111,8 @@ import {attachTerminalQuestions} from './surfaces/terminal-questions.ts';
 /** The editor's surfaces a connect shows, each over the editor. */
 export interface ConnectSurfaces {
   settings: SettingHost;
+  /** The hosts of the configuration files in effect, read at each call: the connect's first check. */
+  configuredHosts(): HostListResult;
   translate: Translate;
   prompts: PromptEditor;
   /** The editor's login terminals, where terminal mode runs `ssh`. */
@@ -262,6 +265,7 @@ export function wiringPortsOf(
     processEnvironment: machine.processEnvironment,
   };
   return {
+    configuredHosts: () => surfaces.configuredHosts(),
     settings: {
       preconnect: () => valueOf(settings, 'preconnect'),
       server: () => serverSettingsOf(settings),
