@@ -8,7 +8,9 @@ alongside the 0.2 gate, not instead of it. Sources:
 - ADR-0002 to ADR-0008;
 - the register (`remote-oss/remote-development`, `decisions.md`).
 
-The release number is the PM's. Open decisions and the spec questions are on the design issue, remote-oss/remote#737.
+D-87 (the user, 2026-10-14) settled the open items: authoring and ports go to increment 2, the recorded gate is F-0201
+and F-0409, and containers uses only capacity the 0.2 gate frees, with no release number or date yet. The spec
+questions are on the design issue, remote-oss/remote#737.
 
 ## 1. The job
 
@@ -206,7 +208,6 @@ release 1:
 Besides these rows:
 - **Coverage:** `check-coverage` must be green with the containers tags.
 - **A manual check:** proteus opens a dev container from the built VSIX.
-- **Recorded evidence**, if the PM and the user want it, as D-65 is for 0.2: the three published suites F-0201 (73),
-  F-0409 (64) and F-0419 (66) are arm64 recordings that need x86_64 confirms. The recording runner enables no proposed
-  API for `remote-oss.*` (dossier §6), so proteus must say whether the kit's arrangement for remote-ssh extends to
-  remote-containers.
+- **Recorded evidence (D-87, the user, 2026-10-14):** a recorded gate from F-0201 and F-0409 only, 180 of 253
+  cases confirmable on x86_64. F-0419 is architecture-sensitive (0 of 69), so its server-cache half is proven by
+  rows 1–3 above. The runner enables our proposals since cleanroom-kit #238.
