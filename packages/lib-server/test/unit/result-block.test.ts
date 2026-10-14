@@ -169,6 +169,12 @@ describe('parseResult (card server-02 table)', () => {
     });
   });
 
+  it('ADR-0010: the result block: noise with a status, then an end marker, is no result block', () => {
+    deepStrictEqual(parseResult([...NOISE_LINES, RESULT_END]), {
+      failure: 'noResultBlock',
+    });
+  });
+
   it('ADR-0010: the result block: noise around and inside its stream changes nothing', () => {
     deepStrictEqual(
       parseResult([

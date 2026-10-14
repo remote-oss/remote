@@ -129,6 +129,7 @@ describe('progress-line parser (card server-08 table)', () => {
           'remote-oss-server-progress download 10',
           'remote-oss-server-progress unpack 50 extra',
           ' remote-oss-server-progress unpack 50',
+          'xremote-oss-server-progress unpack 70',
           'remote-oss-server-progress unpack 60',
         ]),
       ),
