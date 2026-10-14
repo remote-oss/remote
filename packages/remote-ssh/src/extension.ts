@@ -35,6 +35,7 @@ import {
 } from './config/config-file-editor.ts';
 import {
   type ConfigFilePlaces,
+  CONFIG_FILE_HELP_ADDRESS,
   openConfigFileHandler,
 } from './config/open-config-file.ts';
 import {
@@ -90,10 +91,6 @@ import {
   linkTerminalsOf,
   terminalEnvironmentOf,
 } from './surfaces/window-forwarding.ts';
-
-/** The page about SSH configuration files that the picker's Help row opens. */
-const CONFIG_HELP_ADDRESS =
-  'https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/ssh-config.md';
 
 /** The file the system-wide SSH configuration lives in. */
 const SYSTEM_CONFIG_FILE = '/etc/ssh/ssh_config';
@@ -246,7 +243,7 @@ export async function activate(
       nodeConfigFiles,
       {
         openSettings: filter => help.openSettings(filter),
-        openHelp: () => help.openExternal(CONFIG_HELP_ADDRESS),
+        openHelp: () => help.openExternal(CONFIG_FILE_HELP_ADDRESS),
       },
       configPlaces,
       () => textOf(host, 'configFile'),
@@ -387,6 +384,7 @@ async function registerConnectOf(
     }),
     {
       settings: host,
+      configuredHosts: () => configuredHosts(host),
       translate,
       help: served.help,
       names: {

@@ -20,6 +20,7 @@ import {
   windowEvents,
   windowNameOrder,
   windowState,
+  withoutActivity,
 } from './harness.ts';
 
 /** Waits the given number of milliseconds. */
@@ -97,7 +98,7 @@ describe('windows of one editor on the same host (the first window is local)', f
         name,
         next,
         empty: emptyWindows(),
-        state: await windowState(name),
+        state: withoutActivity(await windowState(name)),
         localActivationsGained:
           windowEvents('local').filter(each => each.event === 'activated')
             .length - localBefore,

@@ -1,0 +1,23 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "mocha"],
+    "tsBuildInfoFile": "${configDir}/.tsc/containers-cli.tsbuildinfo"
+  },
+  "include": ["${configDir}"],
+  "references": [
+    {
+      "path": "../../../packages/lib-log"
+    },
+    {
+      "path": "../../../packages/lib-log/tsconfig.test.json"
+    },
+    {
+      "path": "../../../packages/remote-containers"
+    },
+    {
+      "path": "../../../packages/remote-containers/tsconfig.test.json"
+    }
+  ],
+  "exclude": ["${configDir}/.tsc"]
+}

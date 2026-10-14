@@ -226,6 +226,7 @@ export function openTerminalConnectionStep(
           kind: 'done',
           value: {
             channel,
+            waits: undefined,
             socksPort: socksPort ?? 0,
             storedRecord: undefined,
             storeSharedRecord: () => Promise.resolve(false),

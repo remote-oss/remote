@@ -9,22 +9,30 @@ import {
   type ConnectWaitSettings,
   connectWaitMilliseconds,
 } from '../process/connect-wait.ts';
+import {posixQuote} from 'lib-host';
 import {preludeProgram} from '../process/remote-program.ts';
 
 /** The fewest and the most seconds the login shell's startup may take. */
 const LAYER_ONE_SECONDS = {minimum: 1, maximum: 600} as const;
 
 /**
- * The script of the bootstrap. The user's login shell runs as a login shell on a command that prints the environment it
- * built; a watchdog kills it after `LAYER1_SECONDS`. The session reaches `exec sh` unless the login shell outlasts its
- * bound or ends by itself without starting the command: it then prints one line, `LAYER1-TIMEOUT <seconds>` or
- * `LAYER1-EXITED <status>`, and ends, so the connect never goes on without the user's environment. Before `exec sh` it
- * prints `LAYER1-READY`: the connect is set up only when a reader has seen that line.
+ * What the login shell runs once its startup files are done: `export -p` into a file of its own, which a rename puts in
+ * place only when the command has finished. The startup files write to another file that nothing reads, so nothing
+ * they print can reach what the bootstrap evaluates.
+ */
+const WRITE_ENVIRONMENT = 'export -p >"$1.part" && mv "$1.part" "$1"';
+
+/**
+ * The script of the bootstrap. The user's login shell runs as a login shell on a command that writes the environment it
+ * built to a file; a watchdog kills it after `LAYER1_SECONDS`. The session reaches `exec sh` unless the login shell
+ * outlasts its bound or ends by itself without starting the command: it then prints one line, `LAYER1-TIMEOUT
+ * <seconds>` or `LAYER1-EXITED <status>`, and ends, so the connect never goes on without the user's environment. Before
+ * `exec sh` it prints `LAYER1-READY`: the connect is set up only when a reader has seen that line.
  */
 const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   'LAYER1_DIR=$(mktemp -d 2>/dev/null) || LAYER1_DIR=',
   'if [ -n "$LAYER1_DIR" ] && [ -n "${SHELL:-}" ] && [ -x "$SHELL" ]; then',
-  '  printf \'%s\\n\' \'exec sh -c "echo LAYER1-START; export -p" </dev/null\' >"$LAYER1_DIR/in"',
+  `  printf 'exec sh -c %s sh "%s"\\n' ${posixQuote(posixQuote(WRITE_ENVIRONMENT))} "$LAYER1_DIR/env" >"$LAYER1_DIR/in"`,
   '  if command -v setsid >/dev/null 2>&1; then',
   '    setsid "$SHELL" -l <"$LAYER1_DIR/in" >"$LAYER1_DIR/out" 2>/dev/null &',
   '  else',
@@ -45,8 +53,8 @@ const SESSION_BOOTSTRAP_LINES: readonly string[] = [
   '  kill -TERM "$LAYER1_WATCH" 2>/dev/null',
   '  wait "$LAYER1_WATCH" 2>/dev/null',
   '  kill -9 -"$LAYER1_PID" 2>/dev/null',
-  '  if grep -q \'^LAYER1-START$\' "$LAYER1_DIR/out"; then',
-  '    eval "$(sed -n \'/^LAYER1-START$/,$p\' "$LAYER1_DIR/out" | sed 1d)"',
+  '  if [ -f "$LAYER1_DIR/env" ]; then',
+  '    eval "$(cat "$LAYER1_DIR/env")"',
   '  elif [ -e "$LAYER1_DIR/timeout" ]; then',
   '    rm -rf "$LAYER1_DIR"',
   '    printf \'LAYER1-TIMEOUT %s\\n\' "$LAYER1_SECONDS"',

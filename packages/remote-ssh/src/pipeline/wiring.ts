@@ -16,7 +16,11 @@ import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {OverrideValue} from 'lib-product';
 import {type LocalDownloadMode, sshPolicyFor} from 'lib-server';
-import {buildInvocation, connectWaitMilliseconds} from 'lib-ssh';
+import {
+  buildInvocation,
+  connectWaitMilliseconds,
+  type HostListResult,
+} from 'lib-ssh';
 import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
@@ -33,6 +37,7 @@ import {
 import type {ServerDownloadProgress} from '../cli/server-download-progress.ts';
 import {
   connectionLimitsFor,
+  connectWaitsFor,
   effectiveConnectTimeoutSeconds,
   FIRST_SERVE_MILLISECONDS,
   HELPER_REQUEST_MILLISECONDS,
@@ -67,7 +72,12 @@ import {
   createServerSteps,
   type ServerStepDependencies,
 } from './server-steps.ts';
-import type {ConnectInput, ConnectionTerms, ConnectSteps} from './steps.ts';
+import type {
+  ConnectInput,
+  ConnectionTerms,
+  ConnectSteps,
+  StepFailure,
+} from './steps.ts';
 import {createTermsSteps, type TermsStepDependencies} from './terms-steps.ts';
 import {
   openTerminalConnectionStep,
@@ -123,6 +133,8 @@ interface CliWiring {
 
 /** What the steps of every connect are made from. */
 export interface WiringPorts {
+  /** The hosts of the configuration files in effect, the reading the host pick uses: the connect's first check. */
+  configuredHosts(): HostListResult;
   settings: WiringSettings;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
@@ -132,11 +144,11 @@ export interface WiringPorts {
     LocateStepDependencies,
     'state' | 'configFile' | 'connectTimeout'
   >;
-  /** Takes a lease on the host's helper with the client's waits for this connect. */
+  /** Takes a lease on the host's helper, with the limits of the login wait when it starts. */
   acquire: (
-    request: ConnectionAcquireRequest,
-    limits: ConnectionLimits,
-  ) => Promise<AcquireConnectionOutcome>;
+    request: ConnectionAcquireRequest<StepFailure>,
+    limits: () => ConnectionLimits,
+  ) => Promise<AcquireConnectionOutcome<StepFailure>>;
   requestEnvironment: ConnectionRequestEnvironment;
   /** The channel of the server steps over a connection's session, in either mode. */
   channelFor: (session: SessionRunner, channelRun: ChannelRun) => HostChannel;
@@ -298,12 +310,17 @@ export function stepsOf(
   }
 
   const terms = createTermsSteps(ports.terms);
+  const locateClient = locateClientStep({
+    ...ports.locate,
+    configFile: () => connectionSettings().configFile,
+    connectTimeout: () => connectionSettings().connectTimeout,
+    state,
+  });
   const sharedConnection = openConnectionStep({
     acquire: request =>
-      ports.acquire(
-        request,
+      ports.acquire(request, () =>
         connectionLimitsFor(
-          lookedUp(state).connectTimeout,
+          state.effective?.connectTimeout,
           connectionSettings().connectTimeout,
         ),
       ),
@@ -314,6 +331,21 @@ export function stepsOf(
         state,
         connectionSettings(),
         ports.requestEnvironment,
+        () => locateClient(input),
+      ),
+    adoptRunFacts: runFacts => {
+      state.programs ??= {
+        sshProgram: runFacts.sshProgram,
+        scpProgram: runFacts.scpProgram,
+      };
+      state.effective ??= runFacts.effective;
+    },
+    waits: () =>
+      connectWaitsFor(
+        effectiveConnectTimeoutSeconds(
+          lookedUp(state).connectTimeout,
+          connectionSettings().connectTimeout,
+        ),
       ),
     channelFor: channelOf,
     attachLogin: (login, input) =>
@@ -375,6 +407,22 @@ export function stepsOf(
       ),
   });
   return {
+    checkConfigFile: () => {
+      const listing = ports.configuredHosts();
+      if ('parseError' in listing) {
+        return {
+          kind: 'failed',
+          failure: {
+            kind: 'configFileUnparsable',
+            reason: {
+              text: `${listing.parseError.file}: ${listing.parseError.reason}`,
+            },
+            logDetail: `the SSH configuration file cannot be parsed: ${listing.parseError.file}: ${listing.parseError.reason}`,
+          },
+        };
+      }
+      return {kind: 'done', value: undefined};
+    },
     checkStartSettings: input => serverSteps(input).checkStartSettings(input),
     validate: input => serverSteps(input).validate(input),
     checkInstallFolder: input => serverSteps(input).checkInstallFolder(input),
@@ -383,12 +431,8 @@ export function stepsOf(
       logger: ports.logger,
     }),
     decideTerms: terms.decideTerms,
-    locateClient: locateClientStep({
-      ...ports.locate,
-      configFile: () => connectionSettings().configFile,
-      connectTimeout: () => connectionSettings().connectTimeout,
-      state,
-    }),
+    lookupBeforeConnection: () => ports.locate.mode() === 'terminal',
+    locateClient,
     openConnection: (input, connectTerms, cancellation) => {
       held.opening = {input, terms: connectTerms};
       return (

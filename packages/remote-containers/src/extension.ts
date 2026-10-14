@@ -3,7 +3,7 @@
  * proposed-API setup and the strings of the notices.
  */
 
-import {readFile} from 'node:fs/promises';
+import {readdir, readFile, stat} from 'node:fs/promises';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {familySetupPortsOf} from 'lib-authority';
@@ -11,7 +11,21 @@ import {identifierHost} from 'lib-identifiers';
 import {profileOf} from 'lib-product';
 import {standDownHost} from 'lib-standdown';
 import {activateContainers} from './activation.ts';
-import {enabledApiProposals, standDown} from './identifiers.generated.ts';
+import {serializedUriOf} from './authority/payload.ts';
+import {cliBridgeOf} from './cli/cli-bridge.ts';
+import {cliPathsOf} from './cli/cli-paths.ts';
+import {nodeCliHost} from './cli/node-cli-host.ts';
+import {systemCliPorts} from './cli/node-cli-ports.ts';
+import {overrideStoreOf} from './cli/override-files.ts';
+import {nodeEngineHost} from './engine/node-engine-host.ts';
+import {currentContext, firstCheck} from './engine/preflight.ts';
+import {
+  commands,
+  enabledApiProposals,
+  settings,
+  standDown,
+} from './identifiers.generated.ts';
+import {reopenInContainer} from './open/reopen.ts';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
 const STAND_DOWN_WARNING =
@@ -49,16 +63,21 @@ export async function activate(
   const profile = profileOf(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
+  let logChannel: vscode.OutputChannel | undefined;
   const result = await activateContainers({
-    // The generated table has no `commands` until the manifest contributes one.
-    table: {commands: {}, standDown},
+    table: {commands, standDown},
     standDownTexts: {
       warning: translate(STAND_DOWN_WARNING),
       button: translate(STAND_DOWN_BUTTON),
     },
     standDown: standDownHost(vscode),
     commands: identifierHost(vscode, manifest),
-    channels: vscode.window,
+    channels: {
+      createOutputChannel: name => {
+        logChannel = vscode.window.createOutputChannel(name);
+        return logChannel;
+      },
+    },
     clock: Date.now,
     banner: {
       displayName: manifest.displayName,
@@ -77,7 +96,107 @@ export async function activate(
         dataFolderName: () => Promise.resolve(profile.dataFolderName),
         logFailure,
       }),
-    handlers: () => ({}),
+    preflight: logger => ({
+      engineFor: nodeEngineHost,
+      dockerPath: () =>
+        vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+      dialogs: {
+        showError: (message, detail, items) =>
+          Promise.resolve(
+            vscode.window.showErrorMessage(
+              message,
+              {modal: true, detail},
+              ...items,
+            ),
+          ),
+        openExternal: address =>
+          Promise.resolve(vscode.env.openExternal(vscode.Uri.parse(address))),
+        revealLog: () => {
+          logChannel?.show(true);
+        },
+      },
+      translate,
+      setTimer: (milliseconds, callback) => {
+        const timer = setTimeout(callback, milliseconds);
+        return () => {
+          clearTimeout(timer);
+        };
+      },
+      clock: Date.now,
+      logger,
+      searchPath: () => process.env.PATH ?? '',
+    }),
+    handlers: served => {
+      function firstFolder(): string | undefined {
+        return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      }
+      return {
+        reopenInContainer: {
+          execute: reopenInContainer({
+            window: {
+              remoteName: () => vscode.env.remoteName,
+              folders: () =>
+                (vscode.workspace.workspaceFolders ?? []).map(folder => ({
+                  scheme: folder.uri.scheme,
+                  fsPath: folder.uri.fsPath,
+                })),
+              isTrusted: () => vscode.workspace.isTrusted,
+              serializedFile: file => serializedUriOf(vscode.Uri.file(file)),
+            },
+            files: {
+              isFile: file =>
+                stat(file).then(
+                  found => found.isFile(),
+                  () => false,
+                ),
+              subfolders: folder =>
+                readdir(folder, {withFileTypes: true}).then(
+                  entries =>
+                    entries
+                      .filter(entry => entry.isDirectory())
+                      .map(entry => entry.name),
+                  () => [],
+                ),
+            },
+            settings: {
+              dockerPath: () =>
+                vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+            },
+            engine: {
+              firstCheck: base =>
+                firstCheck(
+                  served.preflight,
+                  base,
+                  new AbortController().signal,
+                ),
+              currentContext: () =>
+                currentContext(
+                  served.preflight,
+                  firstFolder(),
+                  new AbortController().signal,
+                ),
+            },
+            bridge: cliBridgeOf(
+              nodeCliHost(
+                {...cliPathsOf(context.extensionPath), node: process.execPath},
+                process.env,
+                systemCliPorts,
+              ),
+              {readText: file => readFile(file, 'utf8')},
+              overrideStoreOf(context.globalStorageUri.fsPath),
+              process.env,
+              served.logger,
+            ),
+            opener: {
+              executeCommand: (command, ...parameters) =>
+                vscode.commands.executeCommand(command, ...parameters),
+              addressOf: parts => vscode.Uri.from(parts),
+            },
+            logger: served.logger,
+          }),
+        },
+      };
+    },
   });
   if (result.kind === 'serving') {
     context.subscriptions.push({

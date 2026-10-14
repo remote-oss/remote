@@ -79,6 +79,11 @@ export interface ConnectWaits {
 /** The connection to the host once the login is done: a channel for the server steps, and the end of it. */
 export interface ConnectionLease {
   channel: HostChannel;
+  /**
+   * The waits the connection's host asks for, when the connection step found them itself: the shared step, whose
+   * lookup is inside the acquire. None in terminal mode, where the lookup came first.
+   */
+  waits: ConnectWaits | undefined;
   /** The loopback port of the connection's SOCKS relay, which the window's tunnel rides. */
   socksPort: number;
   /** What an earlier window of the connection left for reuse; none when nothing was stored. */
@@ -112,6 +117,8 @@ export interface TunnelOpening {
 
 /** The steps of one connect, each over the real thing in the extension and over a fake in a test. */
 export interface ConnectSteps {
+  /** The SSH configuration files in effect, read and parsed before anything runs. */
+  checkConfigFile(input: ConnectInput): StepResult<undefined>;
   /** The settings that decide how the server starts, checked before anything runs; a window's connect alone runs it. */
   checkStartSettings(input: ConnectInput): StepResult<undefined>;
   /** The target, checked before anything runs. */
@@ -123,6 +130,12 @@ export interface ConnectSteps {
     input: ConnectInput,
     cancellation: AbortSignal,
   ): Promise<StepResult<undefined>>;
+  /**
+   * Whether the client is looked up before the connection is opened: in terminal mode, where every connect starts its
+   * own `ssh`. In shared mode the lookup runs inside the acquire, only when this window starts the helper, so a reload
+   * that reuses a running helper runs no lookup.
+   */
+  lookupBeforeConnection(): boolean;
   /** Finds the `ssh` client and reads the host's configuration, which decides how long the later waits may take. */
   locateClient(input: ConnectInput): Promise<StepResult<ConnectWaits>>;
   /**

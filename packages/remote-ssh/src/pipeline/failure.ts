@@ -30,6 +30,8 @@ export type FailedKind =
   | 'serverInstall'
   | 'serverStart'
   | 'invalidSetting'
+  /** The in-effect SSH configuration files cannot be parsed; core's own notification names the problem. */
+  | 'configFileUnparsable'
   | 'preconnectFailed'
   /** Reserved for the client-side lock on the host; no step reports it yet. */
   | 'lockTimeout'
@@ -399,6 +401,7 @@ export const KIND_MAY_RECOVER: Readonly<Record<FailedKind, boolean>> = {
   serverInstall: true,
   serverStart: true,
   invalidSetting: false,
+  configFileUnparsable: false,
   preconnectFailed: false,
   lockTimeout: false,
   retriesExhausted: false,
@@ -449,7 +452,7 @@ export function failedWith(
         context.attempt,
         context.maximumReconnectionAttempts,
       ),
-    silent: false,
+    silent: detail.kind === 'configFileUnparsable',
     userAlreadyNotified: context.userAlreadyNotified,
     hints: context.hints,
     diagnostics: context.diagnostics,

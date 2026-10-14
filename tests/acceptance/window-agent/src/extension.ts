@@ -137,6 +137,14 @@ async function execute(
   }
 }
 
+/** The name of the output channel an editor of the window shows, or none: an output channel's document is `output:`. */
+function visibleOutputChannelOf(
+  documents: readonly vscode.Uri[],
+): string | null {
+  const shown = documents.find(each => each.scheme === 'output');
+  return shown === undefined ? null : shown.path.replace(/^.*-#\d+-/, '');
+}
+
 /** Starts the agent: reports the window's activation, registers its own commands and polls for the test's commands. */
 export function activate(context: vscode.ExtensionContext): void {
   const agentFolder = agentFolderOf();
@@ -174,7 +182,14 @@ export function activate(context: vscode.ExtensionContext): void {
         folders: (vscode.workspace.workspaceFolders ?? []).map(each =>
           each.uri.toString(),
         ),
+        visibleOutputChannel: visibleOutputChannelOf(
+          vscode.window.visibleTextEditors.map(editor => editor.document.uri),
+        ),
         trusted: vscode.workspace.isTrusted,
+        remoteSshActive:
+          vscode.extensions.getExtension('remote-oss.remote-ssh')?.isActive ??
+          false,
+        terminals: vscode.window.terminals.map(terminal => terminal.name),
       });
     }),
     vscode.commands.registerCommand(
@@ -184,6 +199,28 @@ export function activate(context: vscode.ExtensionContext): void {
           event: 'setting',
           settingId,
           value: vscode.workspace.getConfiguration().get(settingId) ?? null,
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.commands',
+      async (prefix: string) => {
+        report(agentFolder, name, {
+          event: 'commands',
+          prefix,
+          commandIds: (await vscode.commands.getCommands(true))
+            .filter(commandId => commandId.startsWith(prefix))
+            .sort(),
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.extensionPresent',
+      (extensionId: string) => {
+        report(agentFolder, name, {
+          event: 'extension',
+          extensionId,
+          present: vscode.extensions.getExtension(extensionId) !== undefined,
         });
       },
     ),

@@ -7,7 +7,6 @@ import {once} from 'node:events';
 import {access, stat} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import path from 'node:path';
-import {StringDecoder} from 'node:string_decoder';
 import {
   type CopyOutcome,
   type CopyRequest,
@@ -23,6 +22,7 @@ import {
   scriptArguments,
 } from './exec-arguments.ts';
 import {exitOutcome} from './exec-failures.ts';
+import {lineSplitter} from '../line-splitter.ts';
 import {ustarHeader, ustarTrailer} from './tar-stream.ts';
 
 /** How much of a file goes into one write. */
@@ -80,33 +80,6 @@ async function writeFile(
   })) {
     await write(process, piece as Buffer);
   }
-}
-
-/** Splits what a stream prints into lines: `\n` ends a line, and a `\r` before it goes. */
-function lineSplitter(onLine: (line: string) => void): {
-  push(chunk: Buffer): void;
-  flush(): void;
-} {
-  const decoder = new StringDecoder('utf8');
-  let pending = '';
-  return {
-    push: chunk => {
-      const text = pending + decoder.write(chunk);
-      const lineEnd = text.lastIndexOf('\n');
-      pending = text.slice(lineEnd + 1);
-      const complete = lineEnd < 0 ? [] : text.slice(0, lineEnd).split('\n');
-      for (const part of complete) {
-        onLine(part.endsWith('\r') ? part.slice(0, -1) : part);
-      }
-    },
-    flush: () => {
-      const rest = pending + decoder.end();
-      pending = '';
-      if (rest !== '') {
-        onLine(rest.endsWith('\r') ? rest.slice(0, -1) : rest);
-      }
-    },
-  };
 }
 
 /** Follows what the process prints on stderr; the function gives its last lines, joined by newlines. */

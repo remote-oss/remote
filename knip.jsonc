@@ -35,6 +35,7 @@
         "suite-forwarding/*.test.ts",
         "suite-failure/*.test.ts",
         "suite-ports/*.test.ts",
+        "suite-platform/*.test.ts",
         "suite-install/*.test.ts",
         "suite-terminal/*.test.ts",
         "suite-socket/*.test.ts",
@@ -51,8 +52,12 @@
         "explorer-no-proposals/*.test.ts",
         "trust/*.test.ts",
         "trust-terminal/*.test.ts",
+        "containers/*.test.ts",
+        "containers-standdown/*.test.ts",
+        "containers-no-proposals/*.test.ts",
         "window-agent/src/extension.ts",
         "server/*.test.ts",
+        "containers-cli/*.test.ts",
       ],
       "project": ["**/*.ts", "vscode-test.mjs"],
       "includeEntryExports": false,
@@ -96,5 +101,7 @@
     "c8",
     // tools/package-extensions.ts starts it the same way.
     "@vscode/vsce",
+    // tools/build.ts copies its files into the VSIX; nothing imports it.
+    "@devcontainers/cli",
   ],
 }

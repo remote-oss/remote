@@ -44,6 +44,7 @@ describe('the connect pipeline, when it works', () => {
     const {recording, options} = setup();
     await connect(INPUT, steps(recording), options);
     deepStrictEqual(recording.calls, [
+      'checkConfigFile',
       'checkStartSettings',
       'validate',
       'checkInstallFolder',
@@ -257,7 +258,7 @@ describe('the connect pipeline, when a step fails', () => {
           hints: [],
           diagnostics: [],
         },
-        ['checkStartSettings'],
+        ['checkConfigFile', 'checkStartSettings'],
       ],
     );
   });
@@ -289,7 +290,7 @@ describe('the connect pipeline, when a step fails', () => {
           hints: [],
           diagnostics: [],
         },
-        [],
+        ['checkConfigFile'],
       ],
     );
   });
@@ -306,7 +307,81 @@ describe('the connect pipeline, when a step fails', () => {
       }),
       options,
     );
-    deepStrictEqual(recording.calls, ['checkStartSettings', 'validate']);
+    deepStrictEqual(recording.calls, [
+      'checkConfigFile',
+      'checkStartSettings',
+      'validate',
+    ]);
+  });
+
+  it('F-2201 AC-22: an unparsable file in effect fails the connect before the client check, naming the problem', async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        checkConfigFile: () => ({
+          kind: 'failed',
+          failure: {
+            kind: 'configFileUnparsable',
+            reason: {text: '/h/.ssh/config: unterminated quote after Host'},
+          },
+        }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [result, recording.calls],
+      [
+        {
+          kind: 'configFileUnparsable',
+          reason: {text: '/h/.ssh/config: unterminated quote after Host'},
+          retryable: false,
+          silent: true,
+          userAlreadyNotified: false,
+          hints: [],
+          diagnostics: [],
+        },
+        [],
+      ],
+    );
+  });
+
+  it('F-2201 BR-8: the configuration check runs first', async () => {
+    const {recording, options} = setup();
+    function failedCheck(): StepResult<undefined> {
+      return {kind: 'failed', failure: {kind: 'invalidSetting'}};
+    }
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        checkConfigFile: () => ({
+          kind: 'failed',
+          failure: {
+            kind: 'invalidSetting',
+            reason: {text: 'the file: its problem'},
+          },
+        }),
+        checkStartSettings: failedCheck,
+        validate: failedCheck,
+        checkInstallFolder: failedCheck,
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [result, recording.calls],
+      [
+        {
+          kind: 'invalidSetting',
+          reason: {text: 'the file: its problem'},
+          retryable: false,
+          silent: false,
+          userAlreadyNotified: false,
+          hints: [],
+          diagnostics: [],
+        },
+        [],
+      ],
+    );
   });
 
   it('a pre-connection script that failed tells the window the user was already told', async () => {
@@ -1404,6 +1479,70 @@ describe('the default forwarded ports of a connect (card connect-40)', () => {
           ],
         ],
       ],
+    );
+  });
+});
+
+describe('the client lookup of a connect (card connect-57)', () => {
+  it('F-2101 AC-14: in shared mode the pipeline runs no lookup, and the probe is bound by the waits the connection brings', async () => {
+    const {recording, options} = setup();
+    const started = Date.now();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        lookupBeforeConnection: () => false,
+        openConnection: () =>
+          Promise.resolve({
+            kind: 'done',
+            value: {
+              ...leaseOf(recording),
+              waits: {probeMilliseconds: 20, tunnelMilliseconds: 20},
+            },
+          }),
+        probe: () => never(),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        recording.calls.includes('locateClient'),
+        Date.now() - started < 500,
+      ],
+      ['timeout', false, true],
+    );
+  });
+
+  it('F-2101 6.5 step 3: in terminal mode the lookup comes first and its waits bind the probe', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        lookupBeforeConnection: () => true,
+        locateClient: waitsOf({...WAITS, probeMilliseconds: 20}),
+        probe: () => never(),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      recording.calls.slice(
+        recording.calls.indexOf('decideTerms'),
+        recording.calls.indexOf('openConnection') + 1,
+      ),
+      ['decideTerms', 'openConnection'],
+    );
+  });
+
+  it('contracts: a connection opened with no waits and no lookup is a defect, and the connect fails as unknown', async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {lookupBeforeConnection: () => false}),
+      options,
+    );
+    deepStrictEqual(
+      ['kind' in result ? result.kind : result, recording.releases],
+      ['unknown', 1],
     );
   });
 });

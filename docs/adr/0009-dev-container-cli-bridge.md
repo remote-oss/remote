@@ -18,7 +18,7 @@ outlive its result line for background lifecycle commands (`src/spec-node/devCon
 The reference was recorded against a build that bundles CLI 0.89.0 (F-1201). Image names, labels, lifecycle markers
 and the `-uid` image are the CLI's, so they match the recordings only at that version.
 
-The specs differ from the CLI's own behaviour in six known places (dossier §4):
+The specs differ from the CLI's own behaviour in seven known places (dossier §4, and 7 from containers-15):
 1. an empty `${localEnv:VAR:default}` gives the default (F-0304 BR-5a);
 2. `${containerEnv}` in `initializeCommand` is empty;
 3. `localEnv` is the editor's resolved environment;
@@ -28,7 +28,10 @@ The specs differ from the CLI's own behaviour in six known places (dossier §4):
    `name` (F-0301 BR-3). A surface that needs the substituted name before the container exists brings that pass
    back, under its own card;
 5. the workspace mount needs `--mount-workspace-git-root=false` (F-0301 §6.5, F-0302 BR-14);
-6. attach configurations can't go through `up --config` (not in release 1).
+6. attach configurations can't go through `up --config` (not in release 1);
+7. with a top-level `image` beside a `build` or `dockerFile`, the build wins and is tagged `vsc-<name>-<hash>`, and a
+   local image under the `image` name keeps its tag (F-0412 7.E8, decision Q-1 (B); added 2026-10-14 on #900). The CLI
+   0.89.0 tags the build with the `image` name, which takes that tag from the user's image.
 
 ## Decision
 
@@ -44,7 +47,8 @@ The specs differ from the CLI's own behaviour in six known places (dossier §4):
 
    Each deviation goes through the first mechanism that reaches it, and C3's card records which (amended 2026-10-14
    on #764, measured on CLI 0.89.0):
-   - deviation 1 is the pre-pass, the only one that needs it;
+   - deviations 1 and 7 are the pre-pass, the only ones that need it (7 removes the top-level `image` from the
+     override; no flag of the CLI reaches it);
    - deviation 2 needs no mechanism, because the CLI already makes `${containerEnv}` empty in `initializeCommand`;
    - deviation 3 is the spawn environment;
    - deviation 4 is post-processing;
@@ -78,7 +82,7 @@ The specs differ from the CLI's own behaviour in six known places (dossier §4):
   third-party notices.
 - A behaviour the specs require and the CLI can't be bent into is either an upstream issue we file, citing the
   spec, or a recorded deviation in the release notes. It's never a local patch.
-- The six known deviations each get a row naming which of the three mechanisms absorbs them.
+- The seven known deviations each get a row naming which of the three mechanisms absorbs them.
 
 ## Check
 

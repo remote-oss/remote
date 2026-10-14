@@ -5,14 +5,17 @@
 
 import type {DiagnosticStringId, FailureKind} from './rules.ts';
 import {
+  CONNECTION_CLOSED_TEXT,
   FAILING_CONNECTIONS_TOPIC,
   DEBUG1_PREFIX,
-  FAILURE_TEXTS,
+  FAILURE_PATTERNS,
   FORWARDING_SETTING,
   NETWORK_RULES,
+  PERMISSION_DENIED_START,
   SENTENCE_ENDINGS,
   SERVER_HOST_KEY_TEXT,
 } from './rules.ts';
+import {setupMarkerOf} from './setup-report.ts';
 
 /** What the `ssh` run was for. */
 export type ClassifyPurpose = 'connection' | 'tunnel' | 'oneShot' | 'copy';
@@ -52,9 +55,17 @@ export interface Classification {
   logLines: DiagnosticStringId[];
 }
 
+/** A line with one trailing carriage return removed, the form the rules read. */
+function withoutReturn(line: string): string {
+  return line.endsWith('\r') ? line.slice(0, -1) : line;
+}
+
 /**
- * Classifies the error lines of one run, in the order `ssh` wrote them. The exit status is part of the contract and
- * does not change the outcome: every rule is decided by the text.
+ * Classifies the error lines of one run, in the order `ssh` wrote them. Only the lines before `Authenticated to` are
+ * ssh's own diagnostics: a login's startup files run after it, and what they print is remote text. So every rule reads
+ * that window, in its anchored form. The four rules for failures ssh reports after authentication (forwarding
+ * prohibited or disabled, a broken pipe, a closed connection) also read the later lines, only when ssh itself exited
+ * with 255. A run in which no authentication was seen has no window to cut: all its lines count.
  */
 export function classify(
   errorLines: readonly string[],
@@ -62,47 +73,54 @@ export function classify(
   purpose: ClassifyPurpose,
   mode: ConnectionMode,
 ): Classification {
-  function contains(text: string): boolean {
-    return errorLines.some(line => line.includes(text));
+  const lines = errorLines.map(withoutReturn);
+  const authenticated = lines.findIndex(
+    line => setupMarkerOf(line) === 'authenticated',
+  );
+  const window = authenticated < 0 ? lines : lines.slice(0, authenticated);
+  const after = authenticated < 0 ? [] : lines.slice(authenticated);
+  function contains(form: RegExp): boolean {
+    return window.some(line => form.test(line));
+  }
+  function containsAfterSession(form: RegExp): boolean {
+    return (
+      contains(form) ||
+      (exitStatus === 255 && after.some(line => form.test(line)))
+    );
   }
   if (
     mode === 'shared' &&
-    contains(FAILURE_TEXTS.hostKeyChanged) &&
-    !contains(FAILURE_TEXTS.forwardingDisabledByClient)
+    contains(FAILURE_PATTERNS.hostKeyChanged) &&
+    !containsAfterSession(FAILURE_PATTERNS.forwardingDisabledByClient)
   ) {
     return plain('hostKeyChanged', {id: 'S111'});
   }
-  if (contains(FAILURE_TEXTS.hostKeyRejected)) {
+  if (contains(FAILURE_PATTERNS.hostKeyRejected)) {
     return plain('hostKeyRejected');
   }
-  const configDenied = errorLines.some(
-    line =>
-      line.includes(FAILURE_TEXTS.configFileUnreadable) &&
-      line.endsWith(': Permission denied'),
-  );
-  if (configDenied) {
+  if (contains(FAILURE_PATTERNS.configFileUnreadable)) {
     return plain('unknown', {text: 'Permission denied'});
   }
-  const denied = lastPermissionDenied(errorLines);
+  const denied = lastPermissionDenied(window);
   if (denied !== undefined) {
     return withHint('authentication', 'PermissionDenied', {text: denied});
   }
-  if (purpose === 'connection' && contains(FAILURE_TEXTS.invalidHostName)) {
+  if (purpose === 'connection' && contains(FAILURE_PATTERNS.invalidHostName)) {
     return withHint('unreachable', 'InvalidHostName', {id: 'S079'});
   }
-  const network = NETWORK_RULES.find(rule => contains(rule.text));
+  const network = NETWORK_RULES.find(rule => contains(rule.pattern));
   if (network !== undefined) {
     return withHint(network.kind, 'OfflineError', {id: network.reason});
   }
   if (
     mode === 'terminal' &&
-    contains(FAILURE_TEXTS.forwardingDisabledByClient)
+    containsAfterSession(FAILURE_PATTERNS.forwardingDisabledByClient)
   ) {
     return withHint('forwardingDisabled', 'MitmPortForwardingDisabled', {
       id: 'S107',
     });
   }
-  if (contains(FAILURE_TEXTS.forwardingProhibited)) {
+  if (containsAfterSession(FAILURE_PATTERNS.forwardingProhibited)) {
     return {
       kind: 'forwardingDisabled',
       hints: [
@@ -122,7 +140,7 @@ export function classify(
       logLines: ['S046'],
     };
   }
-  if (contains(FAILURE_TEXTS.brokenPipe)) {
+  if (containsAfterSession(FAILURE_PATTERNS.brokenPipe)) {
     return {
       kind: 'brokenPipe',
       hints: [
@@ -136,8 +154,8 @@ export function classify(
       logLines: [],
     };
   }
-  if (contains(FAILURE_TEXTS.connectionClosed)) {
-    return plain('channelClosed', {text: FAILURE_TEXTS.connectionClosed});
+  if (containsAfterSession(FAILURE_PATTERNS.connectionClosed)) {
+    return plain('channelClosed', {text: CONNECTION_CLOSED_TEXT});
   }
   return plain('unknown');
 }
@@ -192,9 +210,9 @@ function lastPermissionDenied(
   errorLines: readonly string[],
 ): string | undefined {
   const line = errorLines.findLast(errorLine =>
-    errorLine.includes(FAILURE_TEXTS.permissionDenied),
+    FAILURE_PATTERNS.permissionDenied.test(errorLine),
   );
-  return line?.slice(line.indexOf(FAILURE_TEXTS.permissionDenied)).trimEnd();
+  return line?.slice(line.indexOf(PERMISSION_DENIED_START)).trimEnd();
 }
 
 /**

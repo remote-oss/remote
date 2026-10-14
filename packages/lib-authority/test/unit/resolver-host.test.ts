@@ -786,6 +786,43 @@ describe("the resolver host: the window's connection (F-8201.BR-3)", () => {
   });
 });
 
+describe('the resolver host: leaving the remote (F-2412 AC-17)', () => {
+  it('F-2412 AC-17: a resolve after leave() starts no progress and no connect, and ends handled', async () => {
+    const context = await setup();
+    handleOf(context.registration).leave();
+    deepStrictEqual(
+      [
+        await failureOf(context),
+        context.editor.progressRuns.length,
+        context.connector.inputs.length,
+      ],
+      ['notAvailable(handled=true): ', 0, 0],
+    );
+  });
+
+  it('F-2412 AC-17: stay() puts the resolver back', async () => {
+    const context = await setup();
+    handleOf(context.registration).leave();
+    handleOf(context.registration).stay();
+    await resolve(context);
+    deepStrictEqual(
+      [context.editor.progressRuns.length, context.connector.inputs.length],
+      [1, 1],
+    );
+  });
+
+  it('F-2412 AC-17: a resolve after leave() leaves the connection state alone', async () => {
+    const context = await setup();
+    await resolve(context);
+    handleOf(context.registration).leave();
+    await failureOf(context, 2);
+    deepStrictEqual(
+      handleOf(context.registration).currentConnection()?.state,
+      'connected',
+    );
+  });
+});
+
 describe('the resolver host: teardown (F-2304.BR-8)', () => {
   it('F-2304.BR-8: disposing unregisters the resolver', async () => {
     const context = await setup();

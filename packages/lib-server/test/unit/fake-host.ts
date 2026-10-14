@@ -107,7 +107,10 @@ const FLOCK = [
   'exit 0',
 ].join('\n');
 
-/** The stand-in server launcher: it records its arguments and the ready line, then stays up a while. */
+/**
+ * The stand-in server launcher: it records its arguments, writes `SERVER_LOG_BEFORE`, the ready line and
+ * `SERVER_LOG_AFTER` to its log, then stays up a while.
+ */
 const LAUNCHER = [
   '#!/bin/sh',
   'if [ "$1" = --install-extension ]; then',
@@ -120,11 +123,13 @@ const LAUNCHER = [
   'fi',
   'echo "$*" >"$SERVER_ARGUMENTS"',
   'echo started >>"$SERVER_STARTS"',
+  '[ -z "$SERVER_LOG_BEFORE" ] || printf \'%s\\n\' "$SERVER_LOG_BEFORE"',
   '[ -z "$SERVER_EXIT" ] || exit "$SERVER_EXIT"',
   '[ -z "$SERVER_READY_AFTER" ] || sleep "$SERVER_READY_AFTER"',
   'ENDPOINT=4321',
   'while [ $# -gt 0 ]; do [ "$1" = --socket-path ] && ENDPOINT=$2; shift; done',
   '[ "$SERVER_SILENT" = yes ] || echo "Extension host agent listening on ${SERVER_READY_TEXT:-$ENDPOINT}"',
+  '[ -z "$SERVER_LOG_AFTER" ] || printf \'%s\\n\' "$SERVER_LOG_AFTER"',
   'sleep 20',
 ].join('\n');
 

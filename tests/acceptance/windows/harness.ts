@@ -18,6 +18,8 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {cutNetwork, restoreNetwork} from '../../../tools/acceptance-network.ts';
+import {runCommand} from '../../../tools/acceptance-run.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
 import {
   appendScriptTo,
@@ -40,7 +42,9 @@ export interface AgentEvent {
     | 'failed'
     | 'state'
     | 'setting'
-    | 'forwarded';
+    | 'forwarded'
+    | 'commands'
+    | 'extension';
   time: number;
   id?: string;
   message?: string;
@@ -49,12 +53,24 @@ export interface AgentEvent {
   folders?: string[];
   /** Whether the window's workspace is trusted, as `state` reports it. */
   trusted?: boolean;
+  /** Whether the remote-ssh extension has activated in the window, as `state` reports it. */
+  remoteSshActive?: boolean;
   /** The setting a `setting` event reports, and its value. */
   settingId?: string;
   value?: unknown;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
+  /** The prefix a `commands` event was asked for, and the registered command ids that start with it, sorted. */
+  prefix?: string;
+  commandIds?: string[];
+  /** The extension an `extension` event was asked about, and whether the window's editor has it. */
+  extensionId?: string;
+  present?: boolean;
+  /** The output channel a `state` event saw shown in the window, or null. */
+  visibleOutputChannel?: string | null;
+  /** The names of the window's terminals, hidden ones included, as a `state` event saw them. */
+  terminals?: string[];
 }
 
 /** One line of the record the extensions append to. */
@@ -114,6 +130,14 @@ function agentFile(name: string, kind: 'events' | 'commands'): string {
   return path.join(agentFolder(), `${name}.${kind}.jsonl`);
 }
 
+/** The names of the windows whose agent has reported anything, in no particular order. */
+export function windowNames(): string[] {
+  const folder = agentFolder();
+  return (existsSync(folder) ? readdirSync(folder) : [])
+    .filter(file => file.endsWith('.events.jsonl'))
+    .map(file => file.slice(0, -'.events.jsonl'.length));
+}
+
 /** The events the agent of window `name` has reported, in order. */
 export function windowEvents(name: string): AgentEvent[] {
   return linesOf<AgentEvent>(agentFile(name, 'events'));
@@ -153,16 +177,24 @@ export function heldLines(window?: string): RecordLine[] {
   return recordLines(undefined, window).filter(line => line.held === true);
 }
 
-/** The output of a command run in the host container as the user harness. */
-export async function onHost(...command: string[]): Promise<string> {
+/** The output of a command run in the host container as `user`. */
+export async function onHostAs(
+  user: string,
+  ...command: string[]
+): Promise<string> {
   const {stdout} = await execFileAsync('docker', [
     'exec',
     '--user',
-    'harness',
+    user,
     variable('HARNESS_CONTAINER'),
     ...command,
   ]);
   return stdout;
+}
+
+/** The output of a command run in the host container as the user harness. */
+export function onHost(...command: string[]): Promise<string> {
+  return onHostAs('harness', ...command);
 }
 
 /** The bare password of the host's user `harness-pw`, from the run's file. */
@@ -187,19 +219,78 @@ export function appendScript(entries: readonly AppendedEntry[]): void {
 }
 
 /**
- * The number of logins the host's sshd counted for the password account: the `Accepted password` lines of the
- * container's log, which sshd gets with `-e` — read from both of the container's streams, since its log is its
- * stderr.
+ * The number of the container's log lines that contain `line`: sshd runs with `-e`, so its log is the container's
+ * stderr, and both streams are read.
  */
-export async function acceptedPasswords(): Promise<number> {
+async function acceptedLogins(line: string): Promise<number> {
   const {stdout, stderr} = await execFileAsync(
     'docker',
     ['logs', variable('HARNESS_CONTAINER')],
     {encoding: 'utf8'},
   );
-  return `${stdout}\n${stderr}`
+  return `${stdout}\n${stderr}`.split('\n').filter(each => each.includes(line))
+    .length;
+}
+
+/** The number of logins the host's sshd counted for the password account. */
+export function acceptedPasswords(): Promise<number> {
+  return acceptedLogins('Accepted password for harness-pw');
+}
+
+/** The lower-case hex of the JSON of a target, the form of an authority's payload that F-2501 BR-1 defines. */
+export function hexOf(target: Readonly<Record<string, unknown>>): string {
+  return Buffer.from(JSON.stringify(target)).toString('hex');
+}
+
+/** The port the host container publishes for its sshd, as the run's `Host harness` block names it. */
+export function hostPort(): number {
+  const text = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
+  const match = /^Host harness\n(?:.*\n)*?\s+Port (\d+)$/m.exec(text);
+  if (match?.[1] === undefined) {
+    throw new Error('the ssh_config of the run has no port for Host harness');
+  }
+  return Number(match[1]);
+}
+
+/** The lines of the host container's log since `since` (an RFC 3339 time), from both of its streams. */
+export async function sshdLog(since: string): Promise<string[]> {
+  const {stdout, stderr} = await execFileAsync(
+    'docker',
+    ['logs', '--since', since, variable('HARNESS_CONTAINER')],
+    {encoding: 'utf8'},
+  );
+  return `${stdout}\n${stderr}`.split('\n').filter(line => line !== '');
+}
+
+/** The number of logins by key the host's sshd counted for the user harness since `since`. */
+export async function acceptedKeyLogins(since: string): Promise<number> {
+  return (await sshdLog(since)).filter(line =>
+    line.includes('Accepted publickey for harness'),
+  ).length;
+}
+
+/**
+ * The established TCP connections of this machine whose peer is the host container's published address, each with
+ * the name of the program that holds it, from `ss -tnpH state established`.
+ */
+export async function hostConnections(): Promise<Array<{program: string}>> {
+  const {stdout} = await execFileAsync('ss', ['-tnpH', 'state', 'established']);
+  const peer = `127.0.0.1:${String(hostPort())}`;
+  return stdout
     .split('\n')
-    .filter(line => line.includes('Accepted password for harness-pw')).length;
+    .map(line => /^\s*\d+\s+\d+\s+\S+\s+(\S+)\s+users:\(\("([^"]+)"/.exec(line))
+    .filter(match => match?.[1] === peer)
+    .map(match => ({program: match?.[2] ?? ''}));
+}
+
+/** Cuts the host container's network, as a lost network is cut; a row that cuts restores it in a `finally`. */
+export function cutHostNetwork(): void {
+  cutNetwork(runCommand, variable('HARNESS_CONTAINER'));
+}
+
+/** Brings the host container's network back. */
+export function restoreHostNetwork(): void {
+  restoreNetwork(runCommand, variable('HARNESS_CONTAINER'));
 }
 
 /** Polls until `ready` holds, for up to a minute; it fails naming what it waited for. */
@@ -402,17 +493,55 @@ export async function closeWindow(name: string): Promise<void> {
   );
 }
 
-/** Has window `name` report its state once, and gives that report. */
-async function reportedState(name: string): Promise<AgentEvent | undefined> {
-  const before = countOf(name, 'state');
-  await inWindow(name, 'acceptance.agent.state');
+/** Has window `name` run the agent's `command`, which reports one `event`, and gives that report. */
+async function reported(
+  name: string,
+  event: AgentEvent['event'],
+  command: string,
+  ...parameters: unknown[]
+): Promise<AgentEvent | undefined> {
+  const before = countOf(name, event);
+  await inWindow(name, command, ...parameters);
   await waitUntil(
-    `window ${name} to report its state`,
-    () => countOf(name, 'state') > before,
+    `window ${name} to report its ${event}`,
+    () => countOf(name, event) > before,
   );
   return windowEvents(name)
-    .filter(each => each.event === 'state')
+    .filter(each => each.event === event)
     .at(-1);
+}
+
+/** Has window `name` report its state once, and gives that report. */
+function reportedState(name: string): Promise<AgentEvent | undefined> {
+  return reported(name, 'state', 'acceptance.agent.state');
+}
+
+/** The commands window `name` has registered whose ids start with `prefix`, sorted. */
+export async function commandsOf(
+  name: string,
+  prefix: string,
+): Promise<string[]> {
+  return (
+    (await reported(name, 'commands', 'acceptance.agent.commands', prefix))
+      ?.commandIds ?? []
+  );
+}
+
+/** Whether window `name`'s editor has the extension `extensionId`, enabled or not. */
+export async function extensionPresent(
+  name: string,
+  extensionId: string,
+): Promise<boolean> {
+  return (
+    (
+      await reported(
+        name,
+        'extension',
+        'acceptance.agent.extensionPresent',
+        extensionId,
+      )
+    )?.present === true
+  );
 }
 
 /**
@@ -424,6 +553,7 @@ export async function windowState(name: string): Promise<{
   remoteName: string | null;
   remoteAuthority: string | null;
   folders: string[];
+  remoteSshActive: boolean;
 }> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
@@ -432,6 +562,7 @@ export async function windowState(name: string): Promise<{
       remoteName: last?.remoteName ?? null,
       remoteAuthority: last?.remoteAuthority ?? null,
       folders: last?.folders ?? [],
+      remoteSshActive: last?.remoteSshActive ?? false,
     };
     if (
       state.remoteName === null ||
@@ -442,6 +573,26 @@ export async function windowState(name: string): Promise<{
     }
     await new Promise(resolve => setTimeout(resolve, 200));
   }
+}
+
+/**
+ * A window's state without `remoteSshActive`, which changes when the extension activates; for rows that compare what
+ * a window shows of itself before and after something that may activate it.
+ */
+export function withoutActivity(state: {
+  remoteName: string | null;
+  remoteAuthority: string | null;
+  folders: string[];
+}): {
+  remoteName: string | null;
+  remoteAuthority: string | null;
+  folders: string[];
+} {
+  return {
+    remoteName: state.remoteName,
+    remoteAuthority: state.remoteAuthority,
+    folders: state.folders,
+  };
 }
 
 /** Whether window `name`'s workspace is trusted, as it reports now; it does not wait for the window's connect. */
@@ -495,6 +646,19 @@ async function withAgent(
 export async function fingerprintOf(file: string): Promise<string> {
   const {stdout} = await execFileAsync('ssh-keygen', ['-l', '-f', file]);
   return stdout.split(' ')[1] ?? '';
+}
+
+/** Makes a new ed25519 key pair without a passphrase at `file` and `file.pub`. */
+export async function newKeyPair(file: string): Promise<void> {
+  await execFileAsync('ssh-keygen', [
+    '-q',
+    '-t',
+    'ed25519',
+    '-N',
+    '',
+    '-f',
+    file,
+  ]);
 }
 
 /** The fingerprints of the keys the run's agent holds; none when it holds none. */

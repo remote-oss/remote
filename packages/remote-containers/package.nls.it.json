@@ -1,4 +1,7 @@
 {
   "description": "Develop inside a container that carries its own toolchain, so each project brings its environment with it.",
-  "capabilities.untrustedWorkspaces.description": "Opening a folder in a container requires workspace trust."
+  "capabilities.untrustedWorkspaces.description": "Opening a folder in a container requires workspace trust.",
+  "configuration.title": "Dev Containers",
+  "commands.Reopenincontainer.title": "Reopen in Container",
+  "setting.Dockerpath.description": "Docker (or Podman or WSLc) executable name or path."
 }

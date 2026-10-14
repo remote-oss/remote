@@ -18,9 +18,10 @@ import {
   type ConnectOutcome,
   killConnection,
   runConnectionHelper,
+  type RunFacts,
   SharedConnection,
 } from '../../src/index.ts';
-import {authenticate, SSH_REQUEST} from './connection-fixture.ts';
+import {authenticate, RUN_FACTS, SSH_REQUEST} from './connection-fixture.ts';
 import {ScriptedSpawner, startError} from './fake-client-process.ts';
 
 const PARAMETERS = 'REMOTE_OSS_HELPER_PARAMETERS';
@@ -51,23 +52,30 @@ describe('the window side of the shared connection (S9)', () => {
     freePort: () => Promise<number>;
   };
 
+  /** A request whose preparation finds `runFacts`. */
   function request(
     changes: Partial<ConnectionAcquireRequest> = {},
+    runFacts: RunFacts = RUN_FACTS,
   ): ConnectionAcquireRequest {
     return {
       folder: '/registry',
       hostString: 'harness',
       script: '/ext/dist/helpers/connection-server.js',
-      options: {
-        request: JSON.stringify(SSH_REQUEST),
-        unboundedWaitSeconds: 120,
-        runtimeFolder: '/run/user',
-        runtime: '/editor/code',
-        askpassProgram: '/ext/dist/helpers/askpass.js',
-        displayHost: 'harness',
-        externalAskpass: false,
-        askpassFirstMessageMilliseconds: 5000,
-      },
+      prepare: () =>
+        Promise.resolve({
+          kind: 'ready' as const,
+          runFacts,
+          options: {
+            request: JSON.stringify(SSH_REQUEST),
+            unboundedWaitSeconds: 120,
+            runtimeFolder: '/run/user',
+            runtime: '/editor/code',
+            askpassProgram: '/ext/dist/helpers/askpass.js',
+            displayHost: 'harness',
+            externalAskpass: false,
+            askpassFirstMessageMilliseconds: 5000,
+          },
+        }),
       policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
       cancellation: new AbortController().signal,
       ...changes,
@@ -80,7 +88,7 @@ describe('the window side of the shared connection (S9)', () => {
     changes: Partial<ConnectionAcquireRequest> = {},
   ): Promise<SharedConnection> {
     const outcome: AcquireConnectionOutcome = await driven(
-      acquireConnection(environment, request(changes), LIMITS),
+      acquireConnection(environment, request(changes), () => LIMITS),
     );
     if (outcome.kind !== 'acquired') {
       throw new Error(`no connection: ${outcome.failure}`);
@@ -150,11 +158,13 @@ describe('the window side of the shared connection (S9)', () => {
   });
 
   /** The first window connects: the login is done when `ssh` reports the authentication. */
-  async function connectFirst(): Promise<{
+  async function connectFirst(
+    changes: Partial<ConnectionAcquireRequest> = {},
+  ): Promise<{
     connection: SharedConnection;
     outcome: Promise<ConnectOutcome>;
   }> {
-    const connection = await acquired();
+    const connection = await acquired(changes);
     const outcome = connection.connect(new AbortController().signal);
     await drive();
     return {connection, outcome};
@@ -166,6 +176,7 @@ describe('the window side of the shared connection (S9)', () => {
     await drive();
     deepStrictEqual(await outcome, {
       kind: 'connected',
+      runFacts: RUN_FACTS,
       socksPort: SOCKS_PORT,
       sharedRecord: null,
     });
@@ -188,6 +199,7 @@ describe('the window side of the shared connection (S9)', () => {
     const second = await acquired();
     deepStrictEqual(await second.connect(new AbortController().signal), {
       kind: 'connected',
+      runFacts: RUN_FACTS,
       socksPort: SOCKS_PORT,
       sharedRecord: RECORD,
     });
@@ -216,6 +228,7 @@ describe('the window side of the shared connection (S9)', () => {
     await drive();
     deepStrictEqual(await waiting, {
       kind: 'connected',
+      runFacts: RUN_FACTS,
       socksPort: SOCKS_PORT,
       sharedRecord: null,
     });
@@ -382,7 +395,7 @@ describe('the window side of the shared connection (S9)', () => {
     } as unknown as HelperLease;
     return new SharedConnection(
       lease,
-      {requestMilliseconds: 1000, loginMilliseconds: 60000},
+      () => ({requestMilliseconds: 1000, loginMilliseconds: 60000}),
       () => () => undefined,
     );
   }
@@ -620,10 +633,48 @@ describe('the window side of the shared connection (S9)', () => {
 
   it('passes on the failure of the helper to start', async () => {
     spawnFails = true;
-    deepStrictEqual(await acquireConnection(environment, request(), LIMITS), {
-      kind: 'failed',
-      failure: 'spawnFailed',
+    deepStrictEqual(
+      await acquireConnection(environment, request(), () => LIMITS),
+      {
+        kind: 'failed',
+        failure: 'spawnFailed',
+      },
+    );
+  });
+
+  it('F-2101 6.4: a window that joins gets the run facts of the window that started the helper, which it never looked up', async () => {
+    const starterFacts = {...RUN_FACTS, sshProgram: '/opt/starter/ssh'};
+    const {outcome} = await connectFirst(request({}, starterFacts));
+    authenticate(sshRuns.started[0]);
+    await outcome;
+    const joiner = await acquired({
+      prepare: () => {
+        throw new Error('the joiner must not prepare');
+      },
     });
+    const joined = await joiner.connect(new AbortController().signal);
+    deepStrictEqual(
+      joined.kind === 'connected' ? joined.runFacts : joined,
+      starterFacts,
+    );
+  });
+
+  it('F-2101 BR-9: a refusal of the preparation is the outcome and starts no helper', async () => {
+    const outcome = await driven(
+      acquireConnection<string>(
+        environment,
+        {
+          ...request(),
+          prepare: () =>
+            Promise.resolve({kind: 'refused' as const, refusal: 'no client'}),
+        },
+        () => LIMITS,
+      ),
+    );
+    deepStrictEqual(
+      [outcome, files.files.size],
+      [{kind: 'refused', refusal: 'no client'}, 0],
+    );
   });
 
   it('gives the helper the SOCKS port and its record file as start values', async () => {

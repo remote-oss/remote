@@ -59,6 +59,8 @@ export interface RecordLine {
   buttons?: string[];
   /** The labels of the rows the pick was shown with, in order; only the lines of a `mitigationPick`, a `hostPick` or a `filePick` surface have it. */
   items?: string[];
+  /** The label of the row focused when the pick opened; only the lines of a `platformPick` have it. */
+  active?: string;
   /** The detail text the licence modal was shown with; only the lines of a `licenceModal` surface have it. */
   detail?: string;
 }

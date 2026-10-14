@@ -25,6 +25,78 @@ export function extensionsFolderOf(runFolder: string, launch?: Launch): string {
     : path.join(runFolder, 'extensions');
 }
 
+/** An entry of an extensions folder's `extensions.json`, as far as a stand-in's copy reads it. */
+interface ExtensionEntry {
+  identifier: {id: string};
+  version: string;
+  location: Record<string, unknown>;
+  relativeLocation: string;
+}
+
+/** The version every stand-in has. */
+const STAND_IN_VERSION = '0.0.0';
+
+/**
+ * Puts the stand-ins of a launch into its own extensions folder, after the run's installs: for each id, a folder with a
+ * manifest only (no code, no contribution, nothing from the extension it stands for) and an entry in the folder's
+ * `extensions.json`, copied from the first entry the editor's own install wrote, with the stand-in's identifier,
+ * version and location. `engines` is the manifest's `engines.vscode`. The run's clean-up removes the run's folder, so
+ * the stand-ins go with it.
+ */
+export function writeStandIns(
+  runFolder: string,
+  launch: Launch,
+  engines: string,
+): void {
+  if (launch.kind !== 'plain' || launch.standIns === undefined) {
+    return;
+  }
+  const folder = extensionsFolderOf(runFolder, launch);
+  const listFile = path.join(folder, 'extensions.json');
+  const entries = JSON.parse(
+    readFileSync(listFile, 'utf8'),
+  ) as ExtensionEntry[];
+  const template = entries[0];
+  if (template === undefined) {
+    throw new Error(
+      `${listFile} lists no extension to copy a stand-in's entry from`,
+    );
+  }
+  for (const extensionId of launch.standIns) {
+    const [publisher = '', name = ''] = extensionId.split('.');
+    const relativeLocation = `${extensionId}-${STAND_IN_VERSION}`;
+    const location = path.join(folder, relativeLocation);
+    mkdirSync(location, {recursive: true});
+    writeFileSync(
+      path.join(location, 'package.json'),
+      `${JSON.stringify(
+        {
+          publisher,
+          name,
+          version: STAND_IN_VERSION,
+          engines: {vscode: engines},
+          displayName: 'Acceptance stand-in (not the reference)',
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    entries.push({
+      ...template,
+      identifier: {id: extensionId},
+      version: STAND_IN_VERSION,
+      // The editor's own fields of a file URI; its cached `fsPath` and `external` would name the copied entry's folder.
+      location: {
+        $mid: template.location.$mid,
+        path: location,
+        scheme: template.location.scheme,
+      },
+      relativeLocation,
+    });
+  }
+  writeFileSync(listFile, JSON.stringify(entries));
+}
+
 /**
  * What every run's editor is started with: the run's own user-data, shared-data and extensions folders, the proposed
  * API of the extensions unless a launch turns it off, and workspace trust off unless a plain launch turns it on. A

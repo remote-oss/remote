@@ -1032,7 +1032,7 @@ describe("the assembly's maintenance run (card connect-23)", () => {
     deepStrictEqual(outcome.result, 'connectionFailed');
   });
 
-  /** The record files a helper client on a fresh file port reads during `action`. */
+  /** The record files a helper client on a fresh file port reads during `action`, each once. */
   async function recordsRead(
     action: (
       assembly: ReturnType<typeof connectAssemblyOf>,
@@ -1040,9 +1040,13 @@ describe("the assembly's maintenance run (card connect-23)", () => {
   ): Promise<string[]> {
     const files = new MemoryFilePort();
     await action(assemblyOverFiles(files));
-    return files.calls
-      .filter(call => call.operation === 'read')
-      .map(call => call.path);
+    return [
+      ...new Set(
+        files.calls
+          .filter(call => call.operation === 'read')
+          .map(call => call.path),
+      ),
+    ];
   }
 
   it("F-2411 AC-33: each kill ends a helper of its own after the run, never the window's, also when the run fails", async () => {

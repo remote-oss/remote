@@ -1,4 +1,4 @@
-import {deepStrictEqual, doesNotThrow, strictEqual} from 'node:assert';
+import {deepStrictEqual, doesNotThrow, strictEqual, throws} from 'node:assert';
 import {existsSync, statSync} from 'node:fs';
 import path from 'node:path';
 import {
@@ -12,6 +12,7 @@ import {
   type Program,
   runPlainLaunch,
   startDetached,
+  writeStandIns,
 } from './acceptance-plain.ts';
 import {launchesOf, type PlainLaunch} from './acceptance-launches.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -529,6 +530,46 @@ describe('packageWindowAgent', () => {
     deepStrictEqual(
       [vsix, existsSync(vsix)],
       [path.join(workspace.root, 'window-agent.vsix'), true],
+    );
+  });
+});
+
+describe('the stand-ins of a launch (card containers-09)', () => {
+  const STAND_IN: PlainLaunch = {
+    label: 'standing',
+    kind: 'plain',
+    suite: 'standing',
+    withExtensions: ['remote-oss.remote-containers'],
+    standIns: ['ms-vscode-remote.remote-containers'],
+  };
+  let workspace: TemporaryWorkspace;
+
+  beforeEach(() => {
+    workspace = new TemporaryWorkspace('stand-ins');
+  });
+
+  afterEach(() => {
+    workspace.remove();
+  });
+
+  it('containers-09: a launch without stand-ins writes nothing', () => {
+    writeStandIns(
+      workspace.root,
+      {label: 'plain', kind: 'plain', suite: 'plain'},
+      '^1.139.0',
+    );
+    strictEqual(existsSync(path.join(workspace.root, 'extensions')), false);
+  });
+
+  it('containers-09: an extensions folder whose list names no extension fails, naming the file', () => {
+    workspace.write('extensions-standing/extensions.json', []);
+    throws(
+      () => {
+        writeStandIns(workspace.root, STAND_IN, '^1.139.0');
+      },
+      {
+        message: `${path.join(workspace.root, 'extensions-standing', 'extensions.json')} lists no extension to copy a stand-in's entry from`,
+      },
     );
   });
 });

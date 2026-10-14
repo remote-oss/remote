@@ -18,10 +18,17 @@ const FAILED: MaintenanceRun = {
   cause: 'the connection failed: x',
 };
 
+const STEP_FAILED: MaintenanceRun = {
+  result: 'stepFailed',
+  cause: 'the probe failed: channelFailed',
+};
+
 interface Setup {
   /** What the ports did, in order: the local server ended, a notice, the switch to a local window. */
   order: string[];
   runs: string[];
+  /** The target each run was given, in order. */
+  targets: SshTarget[];
   notices: Array<[string, readonly string[]]>;
   commands: string[];
   revealed: number;
@@ -43,11 +50,16 @@ function setup(
     noticeOpen?: boolean;
     /** What the window holds: its host and the mode of its connection. */
     held?: {target: SshTarget; terminalMode: boolean};
+    /** The switch to a local window rejects. */
+    switchFails?: boolean;
+    /** Ending the local server rejects. */
+    killFails?: boolean;
   } = {},
 ): Setup {
   const seen: Setup = {
     order: [],
     runs: [],
+    targets: [],
     notices: [],
     commands: [],
     revealed: 0,
@@ -67,20 +79,31 @@ function setup(
     },
     switchToLocalWindow: () => {
       seen.order.push('switch');
-      return Promise.resolve();
+      return options.switchFails === true
+        ? Promise.reject(new Error('no window'))
+        : Promise.resolve();
     },
   };
   const handlers = maintenanceHandlers({
     editor,
     perform: (action, target: SshTarget) => {
       seen.runs.push(`${action} ${target.host}`);
+      seen.targets.push(target);
       return Promise.resolve(options.outcome ?? RAN_OK);
     },
     heldHost: () => options.held,
     killLocalServer: hostString => {
       seen.order.push(`end ${hostString}`);
       seen.ended.push(hostString);
-      return Promise.resolve();
+      return options.killFails === true
+        ? Promise.reject(new Error('no server'))
+        : Promise.resolve();
+    },
+    leaveWindow: () => {
+      seen.order.push('leave');
+    },
+    stayInWindow: () => {
+      seen.order.push('stay');
     },
     notice: {
       showInformation: (message, buttons) => {
@@ -128,6 +151,15 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
     deepStrictEqual(scenario.notices, [
       ['Failed to kill VS Code Server on dev.', ['Open Logs']],
     ]);
+  });
+
+  it('F-2411.AC-14: a kill whose step failed on the host shows the kill-failed notice', async () => {
+    const scenario = setup({outcome: STEP_FAILED});
+    await scenario.kill();
+    deepStrictEqual(
+      [scenario.notices, scenario.ended],
+      [[['Failed to kill VS Code Server on dev.', ['Open Logs']]], []],
+    );
   });
 
   it('F-2411.7.E1: a failed kill is logged at warn with its cause', async () => {
@@ -181,7 +213,23 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
     );
   });
 
-  it('F-2411.AC-12: Configure SSH Hosts... runs the configuration command and does not kill', async () => {
+  it('F-2411 AC-11, F-2411 6.3: a typed user@host:port runs on its parsed target', async () => {
+    const scenario = setup({
+      picked: {
+        kind: 'typed',
+        label: '➤ lab@x.invalid:2222',
+        text: 'lab@x.invalid:2222',
+        keepVisible: true,
+      },
+    });
+    await scenario.kill();
+    deepStrictEqual(
+      [scenario.runs, scenario.targets],
+      [['kill x.invalid'], [{host: 'x.invalid', user: 'lab', port: 2222}]],
+    );
+  });
+
+  it('F-2411 AC-12, F-2411 6.4: Configure SSH Hosts... runs the configuration command and does not kill', async () => {
     const scenario = setup({
       picked: {
         kind: 'configure',
@@ -196,7 +244,7 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
     );
   });
 
-  it('F-2411.AC-12: Add New SSH Host... runs the add-host command and does not kill', async () => {
+  it('F-2411 AC-12, F-2411 6.4: Add New SSH Host... runs the add-host command and does not kill', async () => {
     const scenario = setup({
       picked: {
         kind: 'addHost',
@@ -275,6 +323,63 @@ describe('Uninstall VS Code Server from Host... (F-2412)', () => {
     );
   });
 
+  it('F-2412.5.0: a listed host runs on its alias as the text, case kept', async () => {
+    const scenario = setup({
+      picked: {kind: 'host', label: 'Dev-Box', keepVisible: false},
+    });
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.runs, scenario.targets],
+      [['uninstall Dev-Box'], [{host: 'Dev-Box'}]],
+    );
+  });
+
+  it('F-2412 AC-22: a typed user@alias is uninstalled with the typed user', async () => {
+    const scenario = setup({
+      picked: {
+        kind: 'typed',
+        label: '➤ me@dev',
+        text: 'me@dev',
+        keepVisible: true,
+      },
+    });
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.runs, scenario.targets],
+      [['uninstall dev'], [{host: 'dev', user: 'me'}]],
+    );
+  });
+
+  it('F-2412 6.5: the add-host row runs its command and the uninstall does not continue', async () => {
+    const scenario = setup({
+      picked: {
+        kind: 'addHost',
+        label: {id: 'S167', values: ['$(plus)']},
+        keepVisible: true,
+      },
+    });
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.commands, scenario.runs],
+      [['opensshremotes.addNewSshHost'], []],
+    );
+  });
+
+  it('F-2412 6.5: the configure row runs its command and the uninstall does not continue', async () => {
+    const scenario = setup({
+      picked: {
+        kind: 'configure',
+        label: {id: 'S024', values: []},
+        keepVisible: true,
+      },
+    });
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.commands, scenario.runs],
+      [['opensshremotes.openConfigFile'], []],
+    );
+  });
+
   it('F-2412.AC-3: Escape on the pick runs nothing', async () => {
     const scenario = setup({picked: undefined});
     await scenario.uninstall();
@@ -292,6 +397,19 @@ describe('Uninstall VS Code Server from Host... (F-2412)', () => {
     deepStrictEqual(
       [scenario.notices, scenario.sink.lines.map(line => line.message)],
       [[], ['the uninstall failed: the connection failed: x']],
+    );
+  });
+
+  it('F-2412 AC-32: an uninstall whose step failed on the host shows nothing and ends nothing', async () => {
+    const scenario = setup({outcome: STEP_FAILED});
+    await scenario.uninstall();
+    deepStrictEqual(
+      [
+        scenario.notices,
+        scenario.ended,
+        scenario.sink.lines.map(line => line.message),
+      ],
+      [[], [], ['the uninstall failed: the probe failed: channelFailed']],
     );
   });
 });
@@ -423,13 +541,51 @@ describe('Kill Current VS Code Server (F-2411 6.1, 6.2, 6.5)', () => {
   });
 });
 
+/** What a run ended in: `resolved`, or the text of its rejection. */
+function rejectionOf(running: Promise<void>): Promise<string> {
+  return running.then(
+    () => 'resolved',
+    (caught: unknown) => String(caught),
+  );
+}
+
 describe('Uninstall on the own host (F-2412 6.1)', () => {
   it('F-2412.6.1: in default mode it ends the local server, shows nothing and switches the window to a local one', async () => {
     const scenario = setup({held: DEFAULT_MODE});
     await scenario.uninstall();
     deepStrictEqual(
       [scenario.order, scenario.runs, scenario.notices],
-      [['end dev', 'switch'], [], []],
+      [['leave', 'end dev', 'switch'], [], []],
+    );
+  });
+
+  it('F-2412 AC-17: the own-host uninstall leaves the window before it ends the local server', async () => {
+    const scenario = setup({held: DEFAULT_MODE});
+    await scenario.uninstall();
+    deepStrictEqual(scenario.order.slice(0, 3), ['leave', 'end dev', 'switch']);
+  });
+
+  it('F-2412 AC-17: a switch that returns keeps the window leaving', async () => {
+    const scenario = setup({held: DEFAULT_MODE});
+    await scenario.uninstall();
+    deepStrictEqual(scenario.order, ['leave', 'end dev', 'switch']);
+  });
+
+  it('F-2412 AC-17: a kill that throws puts the window back without a switch', async () => {
+    const scenario = setup({held: DEFAULT_MODE, killFails: true});
+    const outcome = await rejectionOf(scenario.uninstall());
+    deepStrictEqual(
+      [scenario.order, outcome],
+      [['leave', 'end dev', 'stay'], 'Error: no server'],
+    );
+  });
+
+  it('F-2412 AC-17: a switch that throws puts the window back and the rejection reaches the caller', async () => {
+    const scenario = setup({held: DEFAULT_MODE, switchFails: true});
+    const outcome = await rejectionOf(scenario.uninstall());
+    deepStrictEqual(
+      [scenario.order, outcome],
+      [['leave', 'end dev', 'switch', 'stay'], 'Error: no window'],
     );
   });
 
