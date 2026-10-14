@@ -122,7 +122,21 @@ remote-ssh does.
 ### 3.4 `lib-server/src/policy/rows.ts`
 `CONTAINERS_POLICY.cleanup` becomes `{kind: 'onlyCurrentKeepLeftovers'}`, and its JSDoc becomes "The containers policy:
 the client downloads and keeps the archive and copies it into the container; one window never removes another commit's
-server from the shared volume". The other cells are unchanged, and they already match §5.0.
+server from the shared volume". Its `allowedExtraStartOptions` becomes `['useHostProxy']` (F-0503 BR-18; athena on
+remote-oss/remote-containers#122 Q6, transport contracts §5.0 as amended on main). The other cells are unchanged.
+
+### 3.5 `useHostProxy`, the second extra start option (F-0503 BR-18)
+
+Every in-container server start runs in host-proxy mode, with the server's `--use-host-proxy` option.
+- **`policy/record.ts`:** `ExtraStartOption` becomes `'fileWatcherPolling' | 'useHostProxy'`.
+- **`policy/validate.ts`:** the allow-list check accepts both, so the `option !== 'fileWatcherPolling'` test becomes a
+  membership test of one constant list of the two.
+- **`lifecycle/runtime.ts`:** `startOrReuse` sets a new `StartParameters.useHostProxy: boolean` to
+  `allowedExtraOptions.includes('useHostProxy')`, beside `fileWatcherPollingMilliseconds`. No setting reads it: the
+  policy alone decides.
+- **`scripts/bootstrap.ts`:** `startOptions` adds `--use-host-proxy` to the optional words when `useHostProxy` is true,
+  after `--file-watcher-polling`.
+- **Remote-SSH:** `SSH_POLICY` and its rows are unchanged, and its start line has no `--use-host-proxy`.
 
 ## 4. Rows
 
@@ -145,7 +159,11 @@ If a row already exists for one of these, add the cite to its name instead of wr
 | `cache-folders.test.ts` | F-0503 AC-38 | `archiveKeyOf('builtInTable', {commit: 'c0ffee', version: '1.106.0', release: '25090'})` | `'1.106.025090'` |
 | `cache-folders.test.ts` | F-0503 AC-38 | the same with `override`, then `productTemplate` | `'c0ffee'`, twice |
 | `cache-folders.test.ts` | F-0503 AC-38 | `clientArchiveFolder('/c', product('codium', 'stable'), archiveKeyOf('builtInTable', …))` | `/c/codium/stable/1.106.025090` |
-| `policy-rows.test.ts` | transport contracts §5.0 | `CONTAINERS_POLICY` | deep-equals §5.0's column, cell by cell, `cleanup` `{kind: 'onlyCurrentKeepLeftovers'}` included |
+| `policy-rows.test.ts` | transport contracts §5.0 | `CONTAINERS_POLICY` | deep-equals §5.0's column, cell by cell, `cleanup` `{kind: 'onlyCurrentKeepLeftovers'}` and `allowedExtraStartOptions` `['useHostProxy']` included |
+| `policy-validate.test.ts` | F-0503 BR-18 | a record with `allowedExtraStartOptions: ['useHostProxy']`, then `['fileWatcherPolling', 'useHostProxy']`, then `['other']` | valid, valid, the existing `invalid value` problem |
+| `runtime.test.ts` | F-0503 BR-18 | `startOrReuse` with `['useHostProxy']`, then with `[]` | the start parameters' `useHostProxy` is `true`, then `false` |
+| `bootstrap-script.test.ts` (the script text) | F-0503 BR-18 | the start body with `useHostProxy` true, then false | the `set --` line holds `--use-host-proxy` once, then not at all |
+| `bootstrap-script.test.ts` | containers-05 R1 | the start body for `SSH_POLICY`'s options | byte-identical to main's (the existing regression comparison) |
 | `plan.test.ts` | F-0503 BR-4 | `installTree` set, the layouts `[{kind: 'tree', …}]` | `reuse` with the tree layout; no source read (a `noSource` input still gives `reuse`) |
 | `plan.test.ts` | F-0503 BR-4 | `installTree` set, the layouts `[{kind: 'bin', …}, {kind: 'tree', …}]` | `reuse` with the bin layout |
 | `plan.test.ts` | F-1402 | `installTree` set, no layouts, `clientOnly`, a resolved source | `download`, `where: 'client'`, `clientFallback: false`, `installTree` the input's, `installFolder` `<dataFolder>/bin/<commit>` |
