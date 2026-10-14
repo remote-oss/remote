@@ -198,10 +198,9 @@ function parameterBlock(parameters: ScriptParameters): string[] {
  * two file variables as words the script expands.
  */
 function startOptions(start: StartParameters): string {
-  const quoted = (words: readonly string[]) => words.map(shellQuote);
   const endpoint = start.socketMode
-    ? [...quoted(['--socket-path']), '"$SOCKET_FILE"']
-    : quoted(['--host', start.bindHost, '--port', start.port]);
+    ? [shellQuote('--socket-path'), '"$SOCKET_FILE"']
+    : ['--host', start.bindHost, '--port', start.port].map(shellQuote);
   const tail = ['--telemetry-level', 'off', '--enable-remote-auto-shutdown'];
   const optional = [
     ...(start.licenceAccepted ? ['--accept-server-license-terms'] : []),
@@ -218,11 +217,11 @@ function startOptions(start: StartParameters): string {
     ...(start.useHostProxy ? ['--use-host-proxy'] : []),
   ];
   const words = [
-    ...quoted(['--start-server']),
+    shellQuote('--start-server'),
     ...endpoint,
-    ...quoted(['--connection-token-file']),
+    shellQuote('--connection-token-file'),
     '"$TOKEN_FILE"',
-    ...quoted([...tail, ...optional]),
+    ...[...tail, ...optional].map(shellQuote),
   ];
   return `set -- ${words.join(' ')}`;
 }
