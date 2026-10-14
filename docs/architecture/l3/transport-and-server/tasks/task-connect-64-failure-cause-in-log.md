@@ -1,7 +1,12 @@
 # Task card connect-64: a failed connect logs ssh's own error lines and exit status
 
-Issue: #840. Milestone 0.2. Size: M. Builder: assigned by hermes (`task:claude`). Reported by proteus, from a trace
-capture on main 6e180cc (pinned VSCodium x64, `remote.SSH.logLevel` trace).
+Issue: #840. Release 0.2, **gating** (athena's F-2003 scope ruling, register 2bb86d6: BR-6 item 11 with BR-7). Size: S.
+Builder: assigned by hermes (`task:claude`). Reported by proteus, from a trace capture on main 6e180cc (pinned VSCodium
+x64, `remote.SSH.logLevel` trace).
+
+**One ssh-stderr pipeline (athena, 2bb86d6).** connect-66 (#845) collects ssh's error lines once, as `SshLines`, and
+logs them live as `[ssh] …`, filtered by level. connect-60 (#833) classifies from the same collection. So this card
+never logs ssh's error lines itself. Its part is what's left of the cause: ssh's exit status, and the failure line.
 
 ## 1. The defect
 
@@ -31,73 +36,62 @@ no exit status.
   connection shows `Could not establish connection to "<alias>".` with no reason. So the dialog stays as it is, and only
   the log changes.
 
-**Gating, for athena:**
-- What the log carries belongs to F-2003, which isn't in slice 1.
-- F-2601 AC-18 only requires that the "Remote - SSH" channel is shown behind the dialog. Today we show a channel that
-  names no cause.
-- athena's ruling on #668 ("a connect that ends in `retriesExhausted` logs the last attempt's cause") covered only
-  `retriesExhausted` (server-19).
-- This card proposes the same rule for every failed connect and asks her to rule it gating. It's filed on 0.2 until
-  then.
+**Gating:** athena ruled BR-6 item 11 with BR-7 (the final error, with its cause) gating for 0.2 (register 2bb86d6).
 
 ## 2. The fix
 
-**One rule:** the log carries the lines the classifier read, and ssh's exit status, before `connect failed: <kind>`.
+**One rule:** before `connect failed: <kind>`, the log carries ssh's exit status. ssh's error lines themselves are
+connect-66's: they're already in the log, live and marked `[ssh]`, by the time the connect fails. This card logs them
+nowhere.
 
 1. **lib-ssh, the helper's event** (`messages.ts`, `handler.ts`).
-   - `loginFailed` gains:
-     - `errorLines: string[]`: the array the handler passed to `classify`, its last 40 lines;
-     - `exitStatus: number | null`: `status`, or `null` when ssh ended on a signal.
-   - The bootstrap-exited branch (`handler.ts:334-339`) sends them too.
-   - `readLoginFailed` accepts the event with or without the two fields. A helper of an earlier build that's still
-     running sends neither, and that's no error. When present, the fields are validated: an array of strings, and a
-     number or `null`.
-2. **lib-ssh, the client** (`client.ts`). `ConnectionFailure` `loginFailed` gains `errorLines?: readonly string[]` and
-   `exitStatus?: number | null`, passed through.
-3. **remote-ssh, the step failure** (`pipeline/steps.ts`). `StepFailure` gains
-   `sshOutput?: {lines: readonly string[]; exitStatus: number | null | undefined}`.
-   - **Shared mode:** `ofConnection`'s `loginFailed` sets it from the two fields.
-   - **Terminal mode:** `failureOf(end, lines)` sets it from `lines` and `end.code`. The cancelled-trust branch sets
-     nothing.
-4. **remote-ssh, `connect.ts`'s `failure()`.** Before its `connect failed: <kind>` line, when `step.sshOutput` is set:
-   - each line of `logLinesOf(lines)` (lib-ssh's existing filter, which drops `debug1:` lines except the server host
-     key) as `[ssh] <line>` at **warn**;
-   - each other line (the dropped `debug1:` lines) as `[ssh] <line>` at **trace**, so a trace capture holds all of them;
-   - `ssh exited with status <n>`, or `ssh ended on a signal` for `null`, at **warn**.
+   - `loginFailed` gains `exitStatus: number | null`: `status`, or `null` when ssh ended on a signal.
+   - The bootstrap-exited branch (`handler.ts:334-339`) sends it too.
+   - `readLoginFailed` accepts the event with or without the field. A helper of an earlier build that's still running
+     doesn't send it, and that's no error. When present, it's validated: a number or `null`.
+   - **No line array in the event.** The lines reach the window through connect-66's `sshLines` events.
+2. **lib-ssh, the client** (`client.ts`). `ConnectionFailure` `loginFailed` gains `exitStatus?: number | null`, passed
+   through.
+3. **remote-ssh, the step failure** (`pipeline/steps.ts`). `StepFailure` gains `sshExitStatus?: number | null`.
+   - **Shared mode:** `ofConnection`'s `loginFailed` sets it from the event's field.
+   - **Terminal mode:** `failureOf(end, …)` sets it from `end.code`. The cancelled-trust branch sets nothing.
+4. **remote-ssh, `connect.ts`'s `failure()`.** Before its `connect failed: <kind>` line, when `step.sshExitStatus` is
+   set (not `undefined`): `ssh exited with status <n>`, or `ssh ended on a signal` for `null`, at **warn**. Nothing else
+   is added.
 
-   The logger's redaction applies as for every line. ssh's stderr before the session holds no secret of ours:
-   passwords go through the askpass, never stderr.
-
-**How it composes with connect-60 (#833, card PR #837).** connect-60 narrows what the classifier reads to the lines
-before `Authenticated to`. This card logs exactly the array `classify` receives, so whichever card lands second
-inherits the other's window: a `.bashrc`'s noise after authentication is neither classified nor logged as the cause.
-
-- **If connect-60 lands first,** pass its narrowed array.
-- **If this card lands first,** connect-60 changes the one array that both the classifier and the log use.
-
-A refused connection never authenticates, so all its lines are in either window.
+**With connect-66 and connect-60 (whichever lands second):**
+- **If this card lands first:** connect-66 removes nothing from it, because this card never carried the lines. If an
+  earlier build of this card did carry `errorLines` or an `sshOutput` log, connect-66 removes that duplication, as its
+  §4 says.
+- **If connect-66 lands first:** this card adds only the status field and the status line, and the failure line stays
+  as today.
+- **connect-60** changes only what the classifier reads (`SshLines.beforeAuthentication()`). This card doesn't depend
+  on it.
 
 ## 3. Rows
 
 | File | Name | Given | Expected |
 |---|---|---|---|
-| lib-ssh `connection-handler.test.ts` (the helper over a fake ssh) | `connect-64: a refused login tells the windows ssh's error lines and its exit status` | the fake ssh writes `ssh: connect to host 127.0.0.1 port 1: Connection refused` and exits 255 | the broadcast `loginFailed` has `kind` `unknown`, `errorLines` holding that line, and `exitStatus` 255 |
-| same | `connect-64: the event keeps the last 40 lines` | 50 stderr lines | `errorLines` is the last 40 |
-| lib-ssh `connection-messages.test.ts` | `connect-64: a loginFailed event with and without the error lines and the status` | both shapes; then `errorLines: [1]` and `exitStatus: 'x'` | read as given; read as given without the fields; `undefined` (refused) for each bad shape |
-| remote-ssh `failure.test.ts` | `connect-64: a failed shared login keeps ssh's output for the log` | `ofConnection` of `loginFailed` with lines and 255 | `sshOutput` is `{lines, exitStatus: 255}` |
-| remote-ssh `terminal-connection-step.test.ts` | `connect-64: a failed terminal login keeps its lines and exit code for the log` | a login terminal that prints the refusal line and ends with code 255 | the step's failure has `sshOutput` with that line and 255 |
-| remote-ssh `connect.test.ts` (the pipeline fixture, a recording logger) | `connect-64: a failed connect logs ssh's lines and status before the failure line` | a step failure with `sshOutput` `{lines: ['debug1: connect to address 127.0.0.1 port 1: Connection refused', 'ssh: connect to host 127.0.0.1 port 1: Connection refused'], exitStatus: 255}` | in order: trace `[ssh] debug1: connect …`; warn `[ssh] ssh: connect to host 127.0.0.1 port 1: Connection refused`; warn `ssh exited with status 255`; warn `connect failed: unknown` |
-| same | `connect-64: an ssh that ended on a signal` | `exitStatus: null` | warn `ssh ended on a signal` |
-| same | `connect-64: a failure without ssh output logs as today` | no `sshOutput` | only `connect failed: <kind>`, and its detail line if any |
+| lib-ssh `connection-handler.test.ts` (the helper over a fake ssh) | `connect-64: a refused login tells the windows ssh's exit status` | the fake ssh writes `ssh: connect to host 127.0.0.1 port 1: Connection refused` and exits 255 | the broadcast `loginFailed` has `kind` `unknown` and `exitStatus` 255, and no line array |
+| lib-ssh `connection-messages.test.ts` | `connect-64: a loginFailed event with and without the exit status` | both shapes; then `exitStatus: 'x'` | read as given; read as given without the field; `undefined` (refused) for the bad shape |
+| remote-ssh `failure.test.ts` | `connect-64: a failed shared login keeps ssh's exit status for the log` | `ofConnection` of `loginFailed` with 255 | `sshExitStatus` 255 |
+| remote-ssh `terminal-connection-step.test.ts` | `connect-64: a failed terminal login keeps its exit code for the log` | a login terminal that prints the refusal line and ends with code 255 | the step's failure has `sshExitStatus` 255 |
+| remote-ssh `connect.test.ts` (the pipeline fixture, a recording logger) | `connect-64: a failed connect logs ssh's exit status before the failure line` | a step failure with `sshExitStatus` 255 | in order: warn `ssh exited with status 255`; warn `connect failed: unknown`; and no `[ssh]` line from this path |
+| same | `connect-64: an ssh that ended on a signal` | `sshExitStatus: null` | warn `ssh ended on a signal` |
+| same | `connect-64: a failure without an exit status logs as today` | no `sshExitStatus` | only `connect failed: <kind>`, and its detail line if any |
 
-**Defect rule:** the first, fourth, fifth and sixth rows must fail on main and pass with the fix. Paste both runs.
+**The `[ssh]` lines are connect-66's rows**, not this card's: `F-2003 BR-8` and `F-2003 BR-9 point 1` (`ssh-log.test.ts`),
+and `F-2003 BR-6 item 6: the window logs each line once` (`connection-step.test.ts`). Cite them in this card's PR as the
+proof of the lines' half.
+
+**Defect rule:** the first, third, fourth and fifth rows must fail on main and pass with the fix. Paste both runs.
 
 **Acceptance proof** (the windows suite, the `refused` alias that coverage-19 adds, `HostName 127.0.0.1` and a closed
-port): after the failure dialog, `connectionLog()` holds `[ssh] ssh: connect to host 127.0.0.1 port <P>: Connection
-refused` and `ssh exited with status 255`, before `connect failed: unknown`. The dialog text is unchanged:
-`Could not establish connection to "refused".` Add the row to `tests/acceptance/windows/authority.test.ts` beside
-coverage-19's F-2501 AC-17 row, cited `connect-64`. If coverage-19 hasn't merged, add the `refused` alias as its card
-§1 defines it.
+port): after the failure dialog, `connectionLog()` holds `ssh exited with status 255` before `connect failed: unknown`.
+Once connect-66 has merged, the same row also asserts `[ssh] ssh: connect to host 127.0.0.1 port <P>: Connection
+refused` before it, cited connect-66 (F-2003 AC-24). The dialog text is unchanged: `Could not establish connection to
+"refused".` Add the row to `tests/acceptance/windows/authority.test.ts` beside coverage-19's F-2501 AC-17 row, cited
+`connect-64`. If coverage-19 hasn't merged, add the `refused` alias as its card §1 defines it.
 
 ## 4. Gates and review
 
@@ -108,7 +102,5 @@ Request athena only; hermes assigns the peer.
 
 ## 5. Open rows (stop and report on #840)
 
-1. athena rules the card non-gating. Then it stays on the board with no milestone. Build nothing until it's
-   re-planned.
-2. A test on main asserts that a failed connect logs exactly one line. Name it, and change only its expectation,
+1. A test on main asserts that a failed connect logs exactly one line. Name it, and change only its expectation,
    citing this card.
