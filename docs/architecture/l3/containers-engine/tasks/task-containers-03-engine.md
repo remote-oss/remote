@@ -209,11 +209,25 @@ for a trusted folder.
 
 | Outcome | Message | Detail | Items passed (primary first) | Row seen on Linux | Buttons' targets |
 |---|---|---|---|---|---|
-| `notFound`, `written` ≠ `docker` | S146 `Docker version 17.12.0 or later required.` | S079 + one space + S061: `Command not found: '<written>'. Check the license for details.` | S204 `Install`, S221 `License` | License \| Cancel \| Install | Install opens `https://aka.ms/download-docker-linux-vscode`; License opens `https://aka.ms/docker-subscription-service-agreement`; both resolve `'stopped'` and re-run nothing |
+| `notFound`, `written` ≠ `docker` | S146 `Docker version 17.12.0 or later required.` | S079 + one space + S061: `Command not found: '<written>'. Check the license for details.` | S204 `Install`, S221 `License` | License \| Cancel \| Install | Install opens `ENGINE_LINKS.install`; License opens `ENGINE_LINKS.licence`; both resolve `'stopped'` and re-run nothing |
 | `notFound`, `written` = `docker` (the exact value) | S146 | S061 `Check the license for details.` | Install, License | as above | as above (AC-15) |
-| `permission` | S103 `Current user does not have permission to run 'docker'.` | S380 `Try adding the user to the 'docker' group.` | S147 `Documentation` | Cancel \| Documentation | opens `https://go.microsoft.com/fwlink/?linkid=2079224` |
+| `permission` | S103 `Current user does not have permission to run 'docker'.` | S380 `Try adding the user to the 'docker' group.` | S147 `Documentation` | Cancel \| Documentation | opens `ENGINE_LINKS.permission` |
 | `tooOld` | S146 | S061 | Install, License, S201 `Ignore` | Ignore \| License \| Cancel \| Install | Ignore → `'proceed'`; Install and License as above, `'stopped'` |
 | `engineError` | S143 `Docker returned an error.` (F-0202) | S226 `Make sure the Docker daemon is running.` (F-0202) | S324 `Show Log` | Cancel \| Show Log | `revealLog()`, then `'stopped'` |
+
+**The buttons' destinations** (athena on #761; R-31, ADR-0008, #382): no `aka.ms` or `go.microsoft.com` link. Each
+button opens its destination directly, from one exported constant in `src/surfaces/engine-dialogs.ts`:
+
+```ts
+export const ENGINE_LINKS = {
+  install: 'https://docs.docker.com/engine/install/',
+  licence: 'https://www.docker.com/legal/docker-subscription-service-agreement/',
+  permission: 'https://docs.docker.com/engine/install/linux-postinstall/',
+} as const;
+```
+
+A row checks that no value contains `aka.ms` or `microsoft.com`. The URL halves of AC-3 and its siblings assert these
+values; their texts, order and outcomes stay F-0201's. athena has asked the dirty side to restate those halves.
 
 **The name in S103:** S103 names `'docker'` literally, whatever the value (AC-32).
 
@@ -252,6 +266,7 @@ uses them, so C2 carries them (§6, row 2).
 | `preflight.test.ts` | contracts §6, R-26 | a fixture whose process environment holds a token `secret-0201` | no argv the fake saw contains it |
 | `preflight.test.ts` | contracts §6, no shell | value `/opt/my docker/dk 'q'` (spaces and quotes) | `engineFor` got exactly that file name, unchanged |
 | `engine-dialogs.test.ts` | F-0201 3.4 | the table of §4 | every text equals the spec's, and every id is in the string table |
+| `engine-dialogs.test.ts` | R-31 | `ENGINE_LINKS` | each value is an `https:` address that contains neither `aka.ms` nor `microsoft.com`; Install, License and Documentation open exactly `ENGINE_LINKS.install`, `.licence` and `.permission` |
 
 **The acceptance row** (gate row 8: a bogus `dockerPath` shows F-0201's dialog before any reload) needs a containers
 launch, which card (11) and the harness card (10) of slice 1 provide. It isn't written here. Card (11) writes it
