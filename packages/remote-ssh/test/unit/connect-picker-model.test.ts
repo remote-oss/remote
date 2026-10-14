@@ -1,5 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
-import type {HostListResult} from 'lib-ssh';
+import {
+  type ClientLocations,
+  type ConfigFileReader,
+  type HostListResult,
+  listHosts,
+} from 'lib-ssh';
 import {
   outcomeOfPick,
   pickerModel,
@@ -16,6 +21,18 @@ const HOSTS: HostListResult = {
 };
 
 const NONE: HostListResult = {hosts: []};
+
+/** A Linux client whose home is /home/dev. */
+const LINUX: ClientLocations = {homeFolder: '/home/dev', platform: 'linux'};
+
+/** The host listing of a client whose only configuration file is the user file with `text`. */
+function listingOf(text: string): HostListResult {
+  const reader: ConfigFileReader = {
+    readText: file => (file === '/home/dev/.ssh/config' ? text : undefined),
+    listFolder: () => undefined,
+  };
+  return listHosts('', LINUX, reader);
+}
 
 const ADD_LABEL: StringRef = {id: 'S167', values: ['$(plus)']};
 const CONF_LABEL: StringRef = {id: 'S024', values: []};
@@ -77,6 +94,51 @@ describe('pickerModel (card remote-ssh-02)', () => {
         ['alpha', false],
         ['Beta-Upper', false],
       ]),
+    );
+  });
+
+  it('F-2202 AC-1: the names of the Host lines, in file order, are host rows with a label only, before the fixed rows', () => {
+    deepStrictEqual(
+      pickerModel(
+        listingOf('Host one\nHost two three   four\nHost last\n'),
+        '',
+      ),
+      expected([
+        ['one', false],
+        ['two', false],
+        ['three', false],
+        ['four', false],
+        ['last', false],
+      ]),
+    );
+  });
+
+  it('F-2202 AC-19: 4200 names reach the picker in file order, within a second of a two-host file', () => {
+    const text = [
+      ...[...Array(2000).keys()].map(
+        index => `Host a-${String(index)} b-${String(index)}`,
+      ),
+      ...[...Array(200).keys()].map(index => `Match host m-${String(index)}`),
+    ].join('\n');
+    function timed(text: string): {labels: unknown[]; took: number} {
+      const before = performance.now();
+      const model = pickerModel(listingOf(text), '');
+      return {
+        labels: 'items' in model ? model.items.map(item => item.label) : [],
+        took: performance.now() - before,
+      };
+    }
+    const large = timed(text);
+    const small = timed('Host x y');
+    deepStrictEqual(
+      [
+        large.labels.length,
+        large.labels[0],
+        large.labels[1],
+        large.labels[4199],
+        large.took - small.took < 1000,
+      ],
+      [4202, 'a-0', 'b-0', 'm-199', true],
     );
   });
 

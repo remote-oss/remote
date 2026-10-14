@@ -37,6 +37,7 @@ describe('a maintenance run (F-2411, F-2412)', () => {
     await perform('kill');
     deepStrictEqual(recording.calls, [
       'validate',
+      'checkInstallFolder',
       'locateClient',
       'decideTerms',
       'openConnection',
@@ -67,6 +68,41 @@ describe('a maintenance run (F-2411, F-2412)', () => {
     );
   });
 
+  it("F-2411 §10: a kill does not take the start settings' checks", async () => {
+    await perform('kill', {
+      checkStartSettings: () => FAILED,
+    });
+    deepStrictEqual(
+      [recording.calls.includes('checkStartSettings'), recording.calls.at(-1)],
+      [false, 'kill'],
+    );
+  });
+
+  it("F-2412 §10: an uninstall does not take the start settings' checks", async () => {
+    const outcome = await perform('uninstall', {
+      checkStartSettings: () => FAILED,
+    });
+    strictEqual(outcome.result, 'stepRan');
+  });
+
+  it('F-2412 §10: an uninstall does not check the install folder', async () => {
+    const outcome = await perform('uninstall', {
+      checkInstallFolder: () => FAILED,
+    });
+    deepStrictEqual(
+      [outcome.result, recording.calls.includes('checkInstallFolder')],
+      ['stepRan', false],
+    );
+  });
+
+  it('F-2411 §10: a kill whose install folder fails is a failed connection, and nothing runs after it', async () => {
+    const outcome = await perform('kill', {checkInstallFolder: () => FAILED});
+    deepStrictEqual(
+      [outcome.result, recording.calls],
+      ['connectionFailed', ['validate']],
+    );
+  });
+
   it('F-2411.7.E2: a client that is not found is a failed connection', async () => {
     const outcome = await perform('kill', {
       locateClient: () => Promise.resolve(FAILED),
@@ -76,7 +112,7 @@ describe('a maintenance run (F-2411, F-2412)', () => {
 
   it('F-2411.7.E2: a client that is not found stops the run before a login', async () => {
     await perform('kill', {locateClient: () => Promise.resolve(FAILED)});
-    deepStrictEqual(recording.calls, ['validate']);
+    deepStrictEqual(recording.calls, ['validate', 'checkInstallFolder']);
   });
 
   it('F-2411.7.E2: terms that were not decided are a failed connection', async () => {

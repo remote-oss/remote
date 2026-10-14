@@ -181,15 +181,21 @@ describe('the failure presenter', () => {
     ['Retry', 'reload'],
     ['Close Remote', 'closeRemote'],
     ['More Actions...', 'moreActions channelClosed'],
-    [undefined, 'moreActions channelClosed'],
   ] as const) {
-    it(`F-2601: ${String(button)} calls ${called} once`, async () => {
+    it(`F-2601: ${button} calls ${called} once`, async () => {
       const {presenter, seen} = surroundings(() => Promise.resolve(button));
       await presenter.present(failedWith());
       await settle();
       deepStrictEqual(seen.calls, [called]);
     });
   }
+
+  it('F-2501 AC-28: Escape on the failure dialog neither reloads nor closes the remote, and opens only the pick of More Actions', async () => {
+    const {presenter, seen} = surroundings(() => Promise.resolve(undefined));
+    await presenter.present(failedWith());
+    await settle();
+    deepStrictEqual(seen.calls, ['moreActions channelClosed']);
+  });
 
   it('contracts 3.2: a dialog that rejects leaves "handled" and no unhandled rejection', async () => {
     const {presenter, seen} = surroundings(() =>

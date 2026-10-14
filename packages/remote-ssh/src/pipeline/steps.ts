@@ -110,8 +110,12 @@ export interface TunnelOpening {
 
 /** The steps of one connect, each over the real thing in the extension and over a fake in a test. */
 export interface ConnectSteps {
-  /** The target and the settings that apply to it, checked before anything runs. */
+  /** The settings that decide how the server starts, checked before anything runs; a window's connect alone runs it. */
+  checkStartSettings(input: ConnectInput): StepResult<undefined>;
+  /** The target, checked before anything runs. */
   validate(input: ConnectInput): StepResult<undefined>;
+  /** The install folder setting, checked before anything runs. */
+  checkInstallFolder(input: ConnectInput): StepResult<undefined>;
   /** The pre-connection script, when one is set; the pipeline calls it on the first attempt only. */
   preconnect(
     input: ConnectInput,

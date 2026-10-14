@@ -58,6 +58,18 @@ describe('S3 session spawner', () => {
       );
     });
 
+    it("F-2101 AC-17, AC-18: the connection keeps the editor's HOME, PATH and SSH_AUTH_SOCK, an empty SSH_AUTH_SOCK as it is, under our askpass", () => {
+      const environment = sessionEnvironment(
+        {HOME: '/home/user', PATH: '/bin', SSH_AUTH_SOCK: ''},
+        {...INVOCATION, environment: {}},
+        {SSH_ASKPASS: '/ext/askpass.sh', SSH_ASKPASS_REQUIRE: 'force'},
+      );
+      deepStrictEqual(
+        [environment.HOME, environment.PATH, environment.SSH_AUTH_SOCK],
+        ['/home/user', '/bin', ''],
+      );
+    });
+
     it('leaves out an editor variable that has no value', () => {
       deepStrictEqual(
         sessionEnvironment(

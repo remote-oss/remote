@@ -44,7 +44,9 @@ describe('the connect pipeline, when it works', () => {
     const {recording, options} = setup();
     await connect(INPUT, steps(recording), options);
     deepStrictEqual(recording.calls, [
+      'checkStartSettings',
       'validate',
+      'checkInstallFolder',
       'preconnect',
       'decideTerms',
       'locateClient',
@@ -105,14 +107,19 @@ describe('the connect pipeline, when it works', () => {
     );
   });
 
-  it('skips the transfer when the plan reuses an installed server', async () => {
+  it('F-3902 AC-10, AC-11: a plan that reuses an installed server asks the gate before the start, and transfers nothing', async () => {
     const {recording, options} = setup();
     await connect(
       INPUT,
       steps(recording, {plan: () => ({plan: REUSE})}),
       options,
     );
-    deepStrictEqual(recording.calls.includes('transfer'), false);
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['gate', 'transfer', 'start'].includes(call),
+      ),
+      ['gate', 'start'],
+    );
   });
 
   it('runs the pre-connection script on the first attempt only', async () => {
@@ -249,9 +256,56 @@ describe('the connect pipeline, when a step fails', () => {
           hints: [],
           diagnostics: [],
         },
+        ['checkStartSettings'],
+      ],
+    );
+  });
+
+  it("F-2409 BR-2: start settings that fail are the connect's failure, and validate was not called", async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        checkStartSettings: () => ({
+          kind: 'failed',
+          failure: {
+            kind: 'invalidSetting',
+            reason: {id: 'reversedPortRange', values: []},
+          },
+        }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [result, recording.calls],
+      [
+        {
+          kind: 'invalidSetting',
+          reason: {id: 'reversedPortRange', values: []},
+          retryable: false,
+          silent: false,
+          userAlreadyNotified: false,
+          hints: [],
+          diagnostics: [],
+        },
         [],
       ],
     );
+  });
+
+  it("F-2407: an install folder that fails is the connect's failure, after the start settings and the target were checked", async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        checkInstallFolder: () => ({
+          kind: 'failed',
+          failure: {kind: 'invalidSetting'},
+        }),
+      }),
+      options,
+    );
+    deepStrictEqual(recording.calls, ['checkStartSettings', 'validate']);
   });
 
   it('a pre-connection script that failed tells the window the user was already told', async () => {

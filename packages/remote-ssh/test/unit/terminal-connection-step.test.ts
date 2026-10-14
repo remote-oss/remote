@@ -188,6 +188,11 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     );
   });
 
+  it('F-2101 AC-30: the connection in terminal mode adds no variable to the editor environment, so no SSH_ASKPASS', async () => {
+    const {terminal} = await started(fixture());
+    deepStrictEqual(terminal.invocation.environment, {});
+  });
+
   it('F-2704 BR-1: the invocation runs sh without a terminal on the host', async () => {
     const {terminal} = await started(fixture());
     const invoked = terminal.invocation.arguments;
