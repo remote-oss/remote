@@ -316,6 +316,38 @@ closed port (`Connection refused`) during the cut and a different published port
 was dropped. `docker pause` is no cut, since it freezes the server's processes as well.
 `server/network-cut.test.ts` holds the rows that prove the capability.
 
+## Cutting the route to the host
+
+The network cut above never makes ssh's connect fail: Docker's published port on `127.0.0.1` accepts the TCP connect
+for the container, so a cut host only ever times out in the banner exchange. The two reasons the specs ask for,
+`ssh: connect to host … port …: No route to host` and `… Connection timed out`, need a connect that goes to the
+host's own address.
+
+The run has a Docker network of its own, `remote-oss-acceptance-<run id>` (`runNetworkOf`), labelled with the run.
+`connectRunNetwork` of `tools/acceptance-run.ts` connects the host container to it, as well as to Docker's default
+network, and gives its address there; the published port keeps working. The address is `HARNESS_ROUTED_ADDRESS` (and
+`routedAddress` of the server fixture's host), and the run's ssh_config names it in the `routed` alias: the `harness`
+account at that address, port 22, with no `ConnectTimeout`, so a connect that times out takes ssh's default. The
+networks that a killed or cancelled run left are swept by the next run once they are older than two hours and hold no
+container; a run's clean-up removes its own network, and a network that is left fails the run.
+
+`cutRoute` and `restoreRoute` of `tools/acceptance-network.ts` (each takes a command runner, the container id and the
+address; the windows harness has `cutRoute(cut)` and `restoreRoute()` over the run's container and address) insert one
+rule inside the container, scoped to that address, so Docker's published port is not touched:
+
+| Cut | Rule | What `ssh routed` prints |
+|---|---|---|
+| `'unreachable'` | `iptables -I INPUT -d <address> -p tcp --dport 22 -j REJECT --reject-with icmp-host-unreachable` | `ssh: connect to host <address> port 22: No route to host` |
+| `'silent'` | `iptables -I INPUT -d <address> -p tcp --dport 22 --syn -j DROP` | `ssh: connect to host <address> port 22: Connection timed out`, after the connect timeout |
+
+proteus measured both in a room and on the CI runners ci-2, ci-6 and ci-7 (Docker 29, OpenSSH 10.2), and
+`server/network-cut.test.ts` proves them in every run. Switching from one cut to the other leaves exactly one rule, and
+both functions are idempotent. A test that cuts restores in a `finally` or an `afterEach`.
+
+Which cut: the network cut above for a session that stalls once it is open (the connect works, the server never
+answers, and a new connection times out in the banner exchange); a route cut for a connect that fails, which is what
+F-2303 AC-17 (`No route to host`), F-2501 AC-18 and F-2601 AC-4 (`Connection timed out`) name.
+
 ## Host variants
 
 The default host has the login shell BusyBox `sh` and BusyBox `wget`. One image carries every variant, and the variant

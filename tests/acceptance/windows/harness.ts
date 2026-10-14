@@ -18,7 +18,13 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
-import {cutNetwork, restoreNetwork} from '../../../tools/acceptance-network.ts';
+import {
+  cutNetwork,
+  cutRoute as cutRouteOf,
+  restoreNetwork,
+  restoreRoute as restoreRouteOf,
+  type RouteCut,
+} from '../../../tools/acceptance-network.ts';
 import {runCommand} from '../../../tools/command-runner.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
 import {
@@ -939,4 +945,23 @@ export async function masterExit(alias: string): Promise<void> {
 /** Whether a login to `alias` with no question succeeds, which it does only through a master that runs. */
 export async function batchLogin(alias: string): Promise<boolean> {
   return (await sshStatus(['-o', 'BatchMode=yes', alias, 'true'])) === 0;
+}
+
+/** Cuts the route to the host's own address (the `routed` alias); the published port keeps working. */
+export function cutRoute(cut: RouteCut): void {
+  cutRouteOf(
+    runCommand,
+    variable('HARNESS_CONTAINER'),
+    variable('HARNESS_ROUTED_ADDRESS'),
+    cut,
+  );
+}
+
+/** Brings the route back; harmless when nothing was cut. A test that cuts restores in a `finally` or an `afterEach`. */
+export function restoreRoute(): void {
+  restoreRouteOf(
+    runCommand,
+    variable('HARNESS_CONTAINER'),
+    variable('HARNESS_ROUTED_ADDRESS'),
+  );
 }
