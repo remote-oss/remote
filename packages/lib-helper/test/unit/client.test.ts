@@ -359,6 +359,20 @@ describe('helper client', () => {
       );
     });
 
+    it('F-2101 BR-9: the record the claim writes holds no payload, and the starter and a joiner both get the prepared one', async () => {
+      const starter = leaseOf(await drive(acquire(environment, request())));
+      const joiner = leaseOf(await drive(acquire(environment, request())));
+      const text = files.files.get(RECORD_PATH);
+      deepStrictEqual(
+        [
+          text === undefined ? undefined : parseRecord(text)?.payload,
+          starter.payload,
+          joiner.payload,
+        ],
+        [{}, {port: 49152}, {port: 49152}],
+      );
+    });
+
     it('F-2101 6.4: a window that joins a running helper prepares nothing', async () => {
       leaseOf(await drive(acquire(environment, request())));
       leaseOf(await drive(acquire(environment, request())));
