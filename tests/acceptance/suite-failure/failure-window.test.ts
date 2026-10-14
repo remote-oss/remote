@@ -5,6 +5,7 @@ import {
   type ScriptEntry,
 } from '../suite-local/script.ts';
 import {connectionLog} from '../suite/harness.ts';
+import {requestsOfLaunch} from '../suite-install/install.ts';
 import casesFile from './cases.json' with {type: 'json'};
 
 /** One failing connect of the run, as tests/acceptance/suite-failure/cases.json lists it. */
@@ -21,6 +22,8 @@ interface FailureCase {
   bound?: {from: string; milliseconds: number; cite: string};
   /** A text the connection log holds in a line. */
   logIncludes?: string;
+  /** Whether the download host must have seen no request while the case ran. */
+  noDownloadRequests?: boolean;
 }
 
 /** The failing connects, bundled from the file the harness reads to launch them. */
@@ -105,6 +108,12 @@ describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () =
         connectionLog().some(line => line.includes(wanted)),
         true,
       );
+    });
+  }
+
+  if (failure?.noDownloadRequests === true) {
+    it(`${failure.cite}: the download host saw no request`, () => {
+      deepStrictEqual(requestsOfLaunch(`failure-${nameOf(failure)}`), []);
     });
   }
 

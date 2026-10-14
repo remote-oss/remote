@@ -49,7 +49,7 @@ describe("the editor's operations of the connect's surfaces", () => {
     deepStrictEqual(asked.commands, [['workbench.action.reloadWindow']]);
   });
 
-  it('F-2601: Close Remote closes the remote', async () => {
+  it("F-2501 AC-21: Close Remote runs core's workbench.action.remote.close, which makes the same window local", async () => {
     const {operations, asked} = operationsOver();
     await operations.closeRemote();
     deepStrictEqual(asked.commands, [['workbench.action.remote.close']]);

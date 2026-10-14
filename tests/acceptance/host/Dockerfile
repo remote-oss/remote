@@ -1,8 +1,8 @@
 # The SSH host of the acceptance tests: OpenSSH's server, key login only, and one user whose login shell is POSIX sh
-# unless HOST_SHELL names another of the shells installed here. Five more users serve tests that need another kind of account:
+# unless HOST_SHELL names another of the shells installed here. Six more users serve tests that need another kind of account:
 # harness-pw (password login only), harness-nofwd (TCP forwarding refused), harness-mute (a login shell that
-# answers only a command given with -c), harness-ro (a server data folder that exists and cannot be written), and
-# harness-cert, which accepts only a certificate signed by the run's own authority (CA_PUBLIC_KEY, written to
+# answers only a command given with -c), harness-ro (a server data folder that exists and cannot be written),
+# harness-i686 (a host whose `uname -m` says i686) and harness-cert, which accepts only a certificate signed by the run's own authority (CA_PUBLIC_KEY, written to
 # /etc/ssh/ca.pub by start-sshd).
 # libstdc++ is what a musl server's node needs to start on Alpine (F-6302). curl and GNU wget are installed so that
 # start-sshd can leave the host with the one download tool a run asks for (HOST_FETCH). iptables lets a test drop the
@@ -20,6 +20,8 @@ RUN apk add --no-cache openssh-server iptables libstdc++ curl wget bash zsh dash
   && adduser -D -s /bin/sh harness-pw \
   && adduser -D -s /bin/sh harness-nofwd \
   && sed -i 's/^harness-nofwd:!/harness-nofwd:*/' /etc/shadow \
+  && adduser -D -s /bin/sh harness-i686 \
+  && sed -i 's/^harness-i686:!/harness-i686:*/' /etc/shadow \
   && adduser -D -s /bin/sh harness-ro \
   && sed -i 's/^harness-ro:!/harness-ro:*/' /etc/shadow \
   && mkdir -p /home/harness-ro/.vscodium-server-insiders/bin \
@@ -32,6 +34,11 @@ RUN apk add --no-cache openssh-server iptables libstdc++ curl wget bash zsh dash
     'PermitRootLogin no' \
     'AllowTcpForwarding yes' \
     > /etc/ssh/sshd_config.d/harness.conf
+
+COPY i686-uname /opt/i686/bin/uname
+RUN chmod 755 /opt/i686/bin/uname \
+  && printf '%s\n' 'PATH=/opt/i686/bin:$PATH' 'export PATH' > /home/harness-i686/.profile \
+  && chown harness-i686:harness-i686 /home/harness-i686/.profile
 
 COPY mute-shell /usr/local/bin/mute-shell
 RUN echo /usr/local/bin/mute-shell >> /etc/shells \

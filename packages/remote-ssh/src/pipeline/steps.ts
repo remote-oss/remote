@@ -106,8 +106,12 @@ export interface TunnelOpening {
 
 /** The steps of one connect, each over the real thing in the extension and over a fake in a test. */
 export interface ConnectSteps {
-  /** The target and the settings that apply to it, checked before anything runs. */
+  /** The settings that decide how the server starts, checked before anything runs; a window's connect alone runs it. */
+  checkStartSettings(input: ConnectInput): StepResult<undefined>;
+  /** The target, checked before anything runs. */
   validate(input: ConnectInput): StepResult<undefined>;
+  /** The install folder setting, checked before anything runs. */
+  checkInstallFolder(input: ConnectInput): StepResult<undefined>;
   /** The pre-connection script, when one is set; the pipeline calls it on the first attempt only. */
   preconnect(
     input: ConnectInput,
@@ -143,7 +147,13 @@ export interface ConnectSteps {
     input: ConnectInput,
     host: ProbedHost,
     options?: {direct: boolean},
-  ): {plan: Plan} | {failure: PlanFailure};
+  ):
+    | {
+        plan: Plan;
+        /** The step that resolved the archive's address; none when the plan has no archive to download. */
+        step?: 'override' | 'productTemplate' | 'builtInTable' | undefined;
+      }
+    | {failure: PlanFailure};
   /** Asks for the licence when the server needs it; the wait for the user's answer has no limit. */
   gate(input: ConnectInput, cancellation: AbortSignal): Promise<GateOutcome>;
   transfer(

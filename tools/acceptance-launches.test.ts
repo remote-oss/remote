@@ -178,6 +178,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-refused-shown',
         'failure-platform-escape',
         'failure-port-range-busy',
+        'failure-i686',
         'terminal',
         'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
@@ -215,6 +216,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-readonly',
         'failure-platform-escape',
         'failure-port-range-busy',
+        'failure-i686',
       ],
     );
   });
@@ -236,6 +238,7 @@ describe('the launches of the VSCodium run', () => {
         ['failure-readonly', 'readonly'],
         ['failure-platform-escape', 'platform-escape'],
         ['failure-port-range-busy', 'port-range-busy'],
+        ['failure-i686', 'i686'],
       ],
     );
   });
@@ -254,6 +257,7 @@ describe('the launches of the VSCodium run', () => {
         ['failure-readonly', undefined],
         ['failure-platform-escape', undefined],
         ['failure-port-range-busy', [41060, 41061]],
+        ['failure-i686', undefined],
       ],
     );
   });

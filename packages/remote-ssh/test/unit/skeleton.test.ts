@@ -782,8 +782,16 @@ describe('the manifest rows of slice 1', () => {
     activationEvents: string[];
     contributes: {
       configuration: {properties: Record<string, Record<string, unknown>>};
-      commands: Array<{command: string; title: string; category: string}>;
-      menus: Record<string, Array<{command: string; when?: string}>>;
+      commands: Array<{
+        command: string;
+        title: string;
+        category: string;
+        icon?: unknown;
+      }>;
+      menus: Record<
+        string,
+        Array<{command: string; group?: string; when?: string}>
+      >;
       keybindings?: Array<{command: string}>;
     };
   };
@@ -809,6 +817,20 @@ describe('the manifest rows of slice 1', () => {
         .filter(binding => binding.command === command)
         .map(() => 'keybinding'),
     ];
+  }
+
+  /** The remote-indicator entries of the Remote-SSH section, as [command, group, when]. */
+  function indicatorEntries(): Array<
+    [string, string | undefined, string | undefined]
+  > {
+    const section = (
+      manifest.contributes.menus['statusBar/remoteIndicator'] ?? []
+    ).filter(entry => entry.group?.startsWith('remote_20_ssh-remote'));
+    const entries: Array<[string, string | undefined, string | undefined]> = [];
+    for (const entry of section) {
+      entries.push([entry.command, entry.group, entry.when]);
+    }
+    return entries;
   }
 
   it('F-2001 AC-19: extensionKind ui, untrusted workspaces supported, no virtual-workspace limit, no * or onStartupFinished, and an engines floor of at least 1.133.0 (BR-1, BR-2, BR-7, BR-13)', () => {
@@ -898,6 +920,206 @@ describe('the manifest rows of slice 1', () => {
         ) ?? [],
       ],
       ['Remote-SSH', 'Connect to Host...', [], []],
+    );
+  });
+
+  it('F-2204 AC-1: Add New SSH Host... is in no menu, so no when-clause hides it from the palette, and has no keybinding', () => {
+    const command = manifest.contributes.commands.find(
+      entry => entry.command === 'opensshremotes.addNewSshHost',
+    );
+    deepStrictEqual(
+      [
+        placesOf('opensshremotes.addNewSshHost'),
+        command?.category,
+        resolved(command?.title),
+      ],
+      [[], 'Remote-SSH', 'Add New SSH Host...'],
+    );
+  });
+
+  it('F-2302 AC-2, AC-34: the Remote-SSH section of the indicator menu is Connect to Host... then Connect Current Window to Host..., without icons', () => {
+    deepStrictEqual(
+      [
+        indicatorEntries().map(entry => [entry[0], entry[1]]),
+        ...(
+          [
+            'opensshremotes.openEmptyWindow',
+            'opensshremotes.openEmptyWindowInCurrentWindow',
+          ] as const
+        ).map(
+          commandId =>
+            manifest.contributes.commands.find(
+              entry => entry.command === commandId,
+            )?.icon,
+        ),
+      ],
+      [
+        [
+          ['opensshremotes.openEmptyWindow', 'remote_20_ssh-remote_1general@1'],
+          [
+            'opensshremotes.openEmptyWindowInCurrentWindow',
+            'remote_20_ssh-remote_1general@2',
+          ],
+        ],
+        undefined,
+        undefined,
+      ],
+    );
+  });
+
+  it("F-2302 AC-3: the two entries are shown whatever the connection's state", () => {
+    deepStrictEqual(
+      indicatorEntries().map(entry => entry[2]),
+      ['!opensshremotes.standingDown', '!opensshremotes.standingDown'],
+    );
+  });
+
+  it('F-2303 AC-3: New Window on Active Host is in no indicator menu', () => {
+    deepStrictEqual(placesOf('opensshremotes.openEmptyWindowOnCurrentHost'), [
+      'commandPalette',
+    ]);
+  });
+
+  it("F-2411 AC-1: Kill on Host is in every palette, Kill Current only in a connected SSH window's", () => {
+    deepStrictEqual(
+      [
+        placesOf('opensshremotes.cleanRemoteServer'),
+        manifest.contributes.menus.commandPalette
+          ?.filter(
+            entry =>
+              entry.command === 'opensshremotes.cleanCurrentRemoteServer',
+          )
+          .map(entry => entry.when),
+      ],
+      [
+        [],
+        [
+          'remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected && !opensshremotes.standingDown',
+        ],
+      ],
+    );
+  });
+
+  it('F-2412 AC-1: Uninstall VS Code Server from Host... is in the palette of every window', () => {
+    const command = manifest.contributes.commands.find(
+      entry => entry.command === 'opensshremotes.cleanDevBox',
+    );
+    deepStrictEqual(
+      [placesOf('opensshremotes.cleanDevBox'), resolved(command?.title)],
+      [[], 'Uninstall VS Code Server from Host...'],
+    );
+  });
+
+  it('F-2605 AC-18: the clear command is in the palette of local and remote windows', () => {
+    const command = manifest.contributes.commands.find(
+      entry => entry.command === 'opensshremotes.clearAllSessionHints',
+    );
+    deepStrictEqual(
+      [
+        placesOf('opensshremotes.clearAllSessionHints'),
+        command?.category,
+        resolved(command?.title),
+      ],
+      [
+        [],
+        'Remote-SSH',
+        'Clear previous session metadata (used for enhanced error reporting)',
+      ],
+    );
+  });
+
+  it('F-2302 AC-1: Connect Current Window to Host... is in the palette unconditionally and has no keybinding', () => {
+    const command = manifest.contributes.commands.find(
+      entry =>
+        entry.command === 'opensshremotes.openEmptyWindowInCurrentWindow',
+    );
+    deepStrictEqual(
+      [
+        command?.category,
+        resolved(command?.title),
+        manifest.contributes.menus.commandPalette?.filter(
+          entry =>
+            entry.command === 'opensshremotes.openEmptyWindowInCurrentWindow',
+        ),
+        manifest.contributes.keybindings?.filter(
+          binding =>
+            binding.command === 'opensshremotes.openEmptyWindowInCurrentWindow',
+        ) ?? [],
+      ],
+      ['Remote-SSH', 'Connect Current Window to Host...', [], []],
+    );
+  });
+
+  it('F-2102 AC-2, AC-3, AC-23: the Kill command is in the palette exactly while remote.SSH.useLocalServer is true, in Restricted Mode too', () => {
+    const command = manifest.contributes.commands.find(
+      entry => entry.command === 'opensshremotes.cleanLocalServer',
+    );
+    deepStrictEqual(
+      [
+        command?.category,
+        resolved(command?.title),
+        manifest.contributes.menus.commandPalette
+          ?.filter(entry => entry.command === 'opensshremotes.cleanLocalServer')
+          .map(entry => entry.when),
+        manifest.capabilities.untrustedWorkspaces,
+      ],
+      [
+        'Remote-SSH',
+        'Kill Local Connection Server For Host...',
+        ['config.remote.SSH.useLocalServer && !opensshremotes.standingDown'],
+        {supported: true},
+      ],
+    );
+  });
+
+  it("F-2501 AC-28: a disconnected window's remote indicator offers Connect to Host... and then Connect Current Window to Host..., as every window that is not standing down", () => {
+    deepStrictEqual(
+      manifest.contributes.menus['statusBar/remoteIndicator']?.map(entry => {
+        const command = manifest.contributes.commands.find(
+          declared => declared.command === entry.command,
+        );
+        return [
+          entry.command,
+          entry.group,
+          entry.when,
+          command?.category,
+          resolved(command?.title),
+        ];
+      }),
+      [
+        [
+          'opensshremotes.openEmptyWindow',
+          'remote_20_ssh-remote_1general@1',
+          '!opensshremotes.standingDown',
+          'Remote-SSH',
+          'Connect to Host...',
+        ],
+        [
+          'opensshremotes.openEmptyWindowInCurrentWindow',
+          'remote_20_ssh-remote_1general@2',
+          '!opensshremotes.standingDown',
+          'Remote-SSH',
+          'Connect Current Window to Host...',
+        ],
+      ],
+    );
+  });
+
+  it('F-2403 AC-18: remote.SSH.useCurlAndWgetConfigurationFiles is a boolean, false by default, application scope, with the description of 3.2', () => {
+    const setting = properties['remote.SSH.useCurlAndWgetConfigurationFiles'];
+    deepStrictEqual(
+      [
+        setting?.type,
+        setting?.default,
+        setting?.scope,
+        resolved(setting?.markdownDescription),
+      ],
+      [
+        'boolean',
+        false,
+        'application',
+        "Respect configuration from remote environment's 'curlrc' and 'wgetrc' files (placed in their respective default locations).  Enabling this setting may be useful in certain cases (i.e: proxy configuration) but can interfere with this extension's operation. Setting may be ignored on platforms that do not support the necessary flags (i.e: busybox).",
+      ],
     );
   });
 });

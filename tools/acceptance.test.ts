@@ -494,6 +494,13 @@ describe('acceptance', () => {
     );
   });
 
+  it('#670: Host i686 logs in to harness-i686 with the run key', () => {
+    strictEqual(
+      accountBlock('i686'),
+      [...sharedLines('i686', 'harness-i686'), ...KEY_ALIAS_LINES].join('\n'),
+    );
+  });
+
   it('#668: Host readonly logs in to harness-ro with the run key', () => {
     strictEqual(
       accountBlock('readonly'),

@@ -132,6 +132,12 @@ describe('the failure presenter', () => {
       'Could not establish connection to "box": Network is unreachable.',
     );
   });
+  it('F-2101 AC-21: a missing ssh shows its text in the dialog', async () => {
+    deepStrictEqual(
+      await textFor({reason: {id: 'S009'}}),
+      'Could not establish connection to "box": An SSH installation couldn\'t be found.',
+    );
+  });
 
   it('F-2601 S031: a reason with values resolves through the table, no second full stop', async () => {
     deepStrictEqual(
@@ -175,15 +181,21 @@ describe('the failure presenter', () => {
     ['Retry', 'reload'],
     ['Close Remote', 'closeRemote'],
     ['More Actions...', 'moreActions channelClosed'],
-    [undefined, 'moreActions channelClosed'],
   ] as const) {
-    it(`F-2601: ${String(button)} calls ${called} once`, async () => {
+    it(`F-2601: ${button} calls ${called} once`, async () => {
       const {presenter, seen} = surroundings(() => Promise.resolve(button));
       await presenter.present(failedWith());
       await settle();
       deepStrictEqual(seen.calls, [called]);
     });
   }
+
+  it('F-2501 AC-28: Escape on the failure dialog neither reloads nor closes the remote, and opens only the pick of More Actions', async () => {
+    const {presenter, seen} = surroundings(() => Promise.resolve(undefined));
+    await presenter.present(failedWith());
+    await settle();
+    deepStrictEqual(seen.calls, ['moreActions channelClosed']);
+  });
 
   it('contracts 3.2: a dialog that rejects leaves "handled" and no unhandled rejection', async () => {
     const {presenter, seen} = surroundings(() =>

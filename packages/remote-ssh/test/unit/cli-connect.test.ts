@@ -175,7 +175,11 @@ function failing<Name extends 'installCli' | 'startCli'>(
 
 const DOWNLOAD_404 = {
   kind: 'failed' as const,
-  failure: {kind: 'serverDownload' as const, cause: 'downloadFailed' as const},
+  failure: {
+    kind: 'serverDownload' as const,
+    cause: 'downloadFailed' as const,
+    status: 404,
+  },
 };
 
 const NO_READY_LINE = {
@@ -370,6 +374,14 @@ describe("the connect's CLI path: the fallback before the window resolves", () =
   function startFails(): ReturnType<typeof connectOverCli> {
     return connectOverCli(undefined, failing('startCli', NO_READY_LINE));
   }
+
+  it('F-3902 rule 5: a 404 for the CLI archive is not an architecture failure, the connect installs the server directly', async () => {
+    const {result, recording} = await installFails();
+    deepStrictEqual(
+      [kindOf(result), recording.calls.includes('plan direct')],
+      ['connected', true],
+    );
+  });
 
   it('§6: a CLI download that fails runs the direct install once', async () => {
     const {recording} = await installFails();

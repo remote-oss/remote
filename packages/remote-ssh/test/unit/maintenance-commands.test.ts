@@ -19,6 +19,8 @@ const FAILED: MaintenanceRun = {
 };
 
 interface Setup {
+  /** What the ports did, in order: the local server ended, a notice, the switch to a local window. */
+  order: string[];
   runs: string[];
   notices: Array<[string, readonly string[]]>;
   commands: string[];
@@ -28,6 +30,7 @@ interface Setup {
   sink: MemorySink;
   kill(): Promise<void>;
   uninstall(): Promise<void>;
+  killCurrent(): Promise<void>;
 }
 
 function setup(
@@ -36,9 +39,14 @@ function setup(
     listing?: HostListResult;
     outcome?: MaintenanceRun;
     answer?: string;
+    /** The notice stays open and never answers. */
+    noticeOpen?: boolean;
+    /** What the window holds: its host and the mode of its connection. */
+    held?: {target: SshTarget; terminalMode: boolean};
   } = {},
 ): Setup {
   const seen: Setup = {
+    order: [],
     runs: [],
     notices: [],
     commands: [],
@@ -47,6 +55,7 @@ function setup(
     sink: new MemorySink(),
     kill: () => Promise.resolve(),
     uninstall: () => Promise.resolve(),
+    killCurrent: () => Promise.resolve(),
   };
   const editor: MaintenanceEditor = {
     listHosts: () => options.listing ?? {hosts: [{name: 'dev', file: '/f'}]},
@@ -56,6 +65,10 @@ function setup(
       seen.commands.push(commandId);
       return Promise.resolve();
     },
+    switchToLocalWindow: () => {
+      seen.order.push('switch');
+      return Promise.resolve();
+    },
   };
   const handlers = maintenanceHandlers({
     editor,
@@ -63,14 +76,19 @@ function setup(
       seen.runs.push(`${action} ${target.host}`);
       return Promise.resolve(options.outcome ?? RAN_OK);
     },
+    heldHost: () => options.held,
     killLocalServer: hostString => {
+      seen.order.push(`end ${hostString}`);
       seen.ended.push(hostString);
       return Promise.resolve();
     },
     notice: {
       showInformation: (message, buttons) => {
+        seen.order.push(`notice ${message}`);
         seen.notices.push([message, buttons]);
-        return Promise.resolve(options.answer);
+        return options.noticeOpen === true
+          ? new Promise<undefined>(() => undefined)
+          : Promise.resolve(options.answer);
       },
       showWarning: () => Promise.resolve(undefined),
       showError: () => Promise.resolve(undefined),
@@ -83,6 +101,8 @@ function setup(
   });
   seen.kill = () => handlers.cleanRemoteServer.execute() as Promise<void>;
   seen.uninstall = () => handlers.cleanDevBox.execute() as Promise<void>;
+  seen.killCurrent = () =>
+    handlers.cleanCurrentRemoteServer.execute() as Promise<void>;
   return seen;
 }
 
@@ -190,13 +210,13 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
 });
 
 describe('Uninstall VS Code Server from Host... (F-2412)', () => {
-  it('F-2412.AC-5: the picked host is uninstalled and nothing is shown', async () => {
+  it('F-2412.AC-4: the picked host is uninstalled and nothing is shown', async () => {
     const scenario = setup();
     await scenario.uninstall();
     deepStrictEqual([scenario.runs, scenario.notices], [['uninstall dev'], []]);
   });
 
-  it('F-2412.AC-4: Escape on the pick runs nothing', async () => {
+  it('F-2412.AC-3: Escape on the pick runs nothing', async () => {
     const scenario = setup({picked: undefined});
     await scenario.uninstall();
     deepStrictEqual(scenario.runs, []);
@@ -253,5 +273,98 @@ describe('the local connection server after a maintenance run (F-2411 POST-3, F-
     });
     await scenario.kill();
     deepStrictEqual(scenario.ended.length, 1);
+  });
+});
+
+const OWN_TARGET: SshTarget = {host: 'dev'};
+const DEFAULT_MODE = {target: OWN_TARGET, terminalMode: false};
+const TERMINAL_MODE = {target: OWN_TARGET, terminalMode: true};
+
+describe('Kill Current VS Code Server (F-2411 6.1, 6.2, 6.5)', () => {
+  it('F-2411.AC-22: with no held connection it does nothing at all', async () => {
+    const scenario = setup();
+    await scenario.killCurrent();
+    deepStrictEqual(
+      [scenario.order, scenario.runs, scenario.notices],
+      [[], [], []],
+    );
+  });
+
+  it('F-2411.AC-19: in default mode it ends the local server of the own host, says so, and switches the window to a local one', async () => {
+    const scenario = setup({held: DEFAULT_MODE});
+    await scenario.killCurrent();
+    deepStrictEqual(
+      [scenario.order, scenario.runs],
+      [['end dev', 'notice Killed VS Code Server on dev.', 'switch'], []],
+    );
+  });
+
+  it('F-2411.AC-19: the notice of the default mode carries Open Logs and does not hold the switch back', async () => {
+    const scenario = setup({held: DEFAULT_MODE, answer: 'Open Logs'});
+    await scenario.killCurrent();
+    deepStrictEqual(
+      [scenario.notices, scenario.revealed],
+      [[['Killed VS Code Server on dev.', ['Open Logs']]], 1],
+    );
+  });
+
+  it('F-2411.AC-19: a notice that stays open does not hold the switch back', async () => {
+    const scenario = setup({held: DEFAULT_MODE, noticeOpen: true});
+    await scenario.killCurrent();
+    deepStrictEqual(scenario.order.at(-1), 'switch');
+  });
+
+  it('F-2411.AC-20: in terminal mode it kills over a new connection and says so, and the window stays', async () => {
+    const scenario = setup({held: TERMINAL_MODE});
+    await scenario.killCurrent();
+    deepStrictEqual(
+      [scenario.runs, scenario.order],
+      [['kill dev'], ['end dev', 'notice Killed VS Code Server on dev.']],
+    );
+  });
+
+  it('F-2411.AC-20: in terminal mode a connection that fails says the kill failed, and the window stays', async () => {
+    const scenario = setup({held: TERMINAL_MODE, outcome: FAILED});
+    await scenario.killCurrent();
+    deepStrictEqual(scenario.order, [
+      'notice Failed to kill VS Code Server on dev.',
+    ]);
+  });
+
+  it('F-2411.AC-21: Kill on Host picking the window’s own alias acts as Kill Current in default mode', async () => {
+    const scenario = setup({held: DEFAULT_MODE});
+    await scenario.kill();
+    deepStrictEqual(
+      [scenario.order, scenario.runs],
+      [['end dev', 'notice Killed VS Code Server on dev.', 'switch'], []],
+    );
+  });
+
+  it('F-2411.AC-21: Kill on Host picking another alias leaves the window and kills that host', async () => {
+    const scenario = setup({
+      held: {target: {host: 'other'}, terminalMode: false},
+    });
+    await scenario.kill();
+    deepStrictEqual(scenario.runs, ['kill dev']);
+  });
+});
+
+describe('Uninstall on the own host (F-2412 6.1)', () => {
+  it('F-2412.6.1: in default mode it ends the local server, shows nothing and switches the window to a local one', async () => {
+    const scenario = setup({held: DEFAULT_MODE});
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.order, scenario.runs, scenario.notices],
+      [['end dev', 'switch'], [], []],
+    );
+  });
+
+  it('F-2412.6.1: in terminal mode it uninstalls over a new connection as for another host, and the window stays', async () => {
+    const scenario = setup({held: TERMINAL_MODE});
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.runs, scenario.order],
+      [['uninstall dev'], ['end dev']],
+    );
   });
 });

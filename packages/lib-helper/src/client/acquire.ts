@@ -4,9 +4,14 @@
  */
 
 import {endpointPath} from '../endpoint/path.ts';
-import type {EndpointPort, HelperMessage} from '../endpoint/protocol.ts';
+import type {
+  EndpointConnection,
+  EndpointPort,
+  HelperMessage,
+} from '../endpoint/protocol.ts';
 import {claim} from '../registry/claim.ts';
 import {recordPath, type RegistryFilePort} from '../registry/file-port.ts';
+import {removeOwnRecord} from '../registry/own-record.ts';
 import {isStale, replaceStale} from '../registry/stale.ts';
 import {type EndPolicy, type HelperRecord, parseRecord} from '../types.ts';
 import {HelperLease, type Timer} from './lease.ts';
@@ -150,6 +155,11 @@ async function start(
         {
           endpoint: record.endpoint,
           nonce: record.nonce,
+          recordFile: recordPath(
+            request.folder,
+            request.namespace,
+            request.helperKey,
+          ),
           policy: request.policy,
           payload: request.payload,
           options: request.options,
@@ -247,27 +257,52 @@ export async function acquire(
     : {kind: 'acquired', lease};
 }
 
-/** Tells the helper that holds the key to end; done also when no helper runs or it cannot be reached. */
+/** Sends hello and stop; whether the connection closes, as it does once the helper has ended, within the limit. */
+function closesAfterStop(
+  environment: ClientEnvironment,
+  connection: EndpointConnection,
+  nonce: string,
+): Promise<boolean> {
+  return new Promise(resolve => {
+    const cancel = environment.timer(environment.helloLimitMilliseconds, () => {
+      connection.close();
+      resolve(false);
+    });
+    connection.onClose(() => {
+      cancel();
+      resolve(true);
+    });
+    connection.send({type: 'hello', nonce});
+    connection.send({type: 'stop'});
+  });
+}
+
+/**
+ * Tells the helper that holds the key to end and waits for it to close, which means it has removed its own record.
+ * A helper that does not answer or does not close within the limit is gone or hung: its record is removed then, if it
+ * still carries the nonce read here. Done also when no helper runs.
+ */
 export async function stop(
   environment: ClientEnvironment,
   folder: string,
   namespace: string,
   helperKey: string,
 ): Promise<void> {
-  const text = await environment.files.read(
-    recordPath(folder, namespace, helperKey),
-  );
+  const recordFile = recordPath(folder, namespace, helperKey);
+  const text = await environment.files.read(recordFile);
   const record = text === undefined ? undefined : parseRecord(text);
-  const connection =
-    record === undefined
-      ? undefined
-      : await environment.endpoints
-          .connect(record.endpoint)
-          .catch(() => undefined);
-  if (record === undefined || connection === undefined) {
+  if (record === undefined) {
     return;
   }
-  connection.send({type: 'hello', nonce: record.nonce});
-  connection.send({type: 'stop'});
-  connection.close();
+  const connection = await environment.endpoints
+    .connect(record.endpoint)
+    .catch(() => undefined);
+  const closed =
+    connection !== undefined &&
+    (await closesAfterStop(environment, connection, record.nonce));
+  if (!closed) {
+    await removeOwnRecord(environment.files, recordFile, record.nonce).catch(
+      () => undefined,
+    );
+  }
 }

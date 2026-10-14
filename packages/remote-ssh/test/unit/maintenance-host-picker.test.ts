@@ -64,7 +64,7 @@ describe('maintenanceStep (card task-remote-ssh-05)', () => {
     });
   });
 
-  it('F-2411.6.3: a typed user@host:port runs on its parsed target', () => {
+  it('F-2411 AC-11: 6.3, a typed user@host:port runs on its parsed target', () => {
     deepStrictEqual(maintenanceStep(typed('lab@203.0.113.6:2222')), {
       proceed: {
         text: 'lab@203.0.113.6:2222',
@@ -73,7 +73,7 @@ describe('maintenanceStep (card task-remote-ssh-05)', () => {
     });
   });
 
-  it('F-2412.6.4: a typed alias runs on its parsed target', () => {
+  it('F-2412 AC-22: 6.4, a typed alias runs on its parsed target', () => {
     deepStrictEqual(maintenanceStep(typed('lab@alias.invalid')), {
       proceed: {
         text: 'lab@alias.invalid',

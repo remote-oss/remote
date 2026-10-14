@@ -252,6 +252,11 @@ describe('the server steps: plan, the CLI path', () => {
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'cli');
   });
 
+  it("#670 R3: a plan from the user's own template says so", () => {
+    const {result} = planned(CLI_TEMPLATE, {useExecServer: false});
+    deepStrictEqual('plan' in result ? result.step : result, 'override');
+  });
+
   it('F-3902 rule 5 (i): the CLI is placed as <applicationName>-<commit> in the data folder', () => {
     const {result} = planned(CLI_TEMPLATE);
     deepStrictEqual(
@@ -614,7 +619,7 @@ describe('the server steps: gate', () => {
     );
   });
 
-  it('asks about a reused server of a product that lists licence lines, and clears it on accept', async () => {
+  it('F-3902 AC-10, AC-11: asks about a reused server of a product that lists licence lines, and clears it on accept', async () => {
     const asked: string[] = [];
     const steps = createServerSteps(
       dependencies({
@@ -707,7 +712,7 @@ describe('the server steps: transfer and start', () => {
     });
   });
 
-  it('starts the server with the licence flag only when the gate cleared it', async () => {
+  it('F-3902 AC-13: starts the server with the licence flag only when the gate cleared it', async () => {
     const steps = createServerSteps(dependencies());
     const withFlag = channelAnswering(STARTED);
     const without = channelAnswering(STARTED);
@@ -742,13 +747,13 @@ describe('the server steps: validate and the names', () => {
     deepStrictEqual(steps.validate(INPUT), {kind: 'done', value: undefined});
   });
 
-  it('fails an install folder the setting does not allow, as an invalid setting', () => {
+  it('F-2407: checkInstallFolder fails an install folder the setting does not allow, as an invalid setting', () => {
     const steps = createServerSteps(
       dependencies({
         settings: settingsWith({serverInstallPath: {devbox: '/data/$HOME'}}),
       }),
     );
-    deepStrictEqual(steps.validate(INPUT), {
+    deepStrictEqual(steps.checkInstallFolder(INPUT), {
       kind: 'failed',
       failure: {
         kind: 'invalidSetting',
@@ -757,7 +762,7 @@ describe('the server steps: validate and the names', () => {
     });
   });
 
-  it('F-2409 7.E1: validate shows the notice for a refused bind host and goes on', () => {
+  it('F-2409 7.E1: checkStartSettings shows the notice for a refused bind host and goes on', () => {
     const rejected: Array<[string, string]> = [];
     const steps = createServerSteps(
       dependencies({
@@ -768,12 +773,12 @@ describe('the server steps: validate and the names', () => {
       }),
     );
     deepStrictEqual(
-      [steps.validate(INPUT), rejected],
+      [steps.checkStartSettings(INPUT), rejected],
       [{kind: 'done', value: undefined}, [['devbox', 'not a host!']]],
     );
   });
 
-  it('F-2409 7.E1: validate shows no notice for an accepted bind host', () => {
+  it('F-2409 7.E1: checkStartSettings shows no notice for an accepted bind host', () => {
     const rejected: string[] = [];
     const steps = createServerSteps(
       dependencies({
@@ -783,7 +788,7 @@ describe('the server steps: validate and the names', () => {
         },
       }),
     );
-    steps.validate(INPUT);
+    steps.checkStartSettings(INPUT);
     deepStrictEqual(rejected, []);
   });
 
@@ -795,7 +800,7 @@ describe('the server steps: validate and the names', () => {
         }),
       }),
     );
-    deepStrictEqual(steps.validate(INPUT), {
+    deepStrictEqual(steps.checkStartSettings(INPUT), {
       kind: 'failed',
       failure: {
         kind: 'invalidSetting',
@@ -813,7 +818,7 @@ describe('the server steps: validate and the names', () => {
           }),
         }),
       );
-      deepStrictEqual(steps.validate(INPUT), {
+      deepStrictEqual(steps.checkStartSettings(INPUT), {
         kind: 'failed',
         failure: {kind: 'invalidSetting'},
       });
@@ -821,7 +826,7 @@ describe('the server steps: validate and the names', () => {
   }
 
   for (const entry of ['45000-45010', '', undefined]) {
-    it(`F-2409 BR-2: the range ${JSON.stringify(entry)} passes validate`, () => {
+    it(`F-2409 BR-2: the range ${JSON.stringify(entry)} passes checkStartSettings`, () => {
       const steps = createServerSteps(
         dependencies({
           settings: settingsWith({
@@ -829,7 +834,10 @@ describe('the server steps: validate and the names', () => {
           }),
         }),
       );
-      deepStrictEqual(steps.validate(INPUT), {kind: 'done', value: undefined});
+      deepStrictEqual(steps.checkStartSettings(INPUT), {
+        kind: 'done',
+        value: undefined,
+      });
     });
   }
 
@@ -846,8 +854,44 @@ describe('the server steps: validate and the names', () => {
         },
       }),
     );
-    steps.validate(INPUT);
+    steps.checkStartSettings(INPUT);
     deepStrictEqual(rejected, []);
+  });
+
+  it('F-2407: validate is done for an install folder the setting does not allow', () => {
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({serverInstallPath: {devbox: '/data/$HOME'}}),
+      }),
+    );
+    deepStrictEqual(steps.validate(INPUT), {kind: 'done', value: undefined});
+  });
+
+  it('F-2409 BR-2: validate is done for a reversed range', () => {
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({
+          serverPickPortsFromRange: {devbox: '5000-4000'},
+        }),
+      }),
+    );
+    deepStrictEqual(steps.validate(INPUT), {kind: 'done', value: undefined});
+  });
+
+  it('F-2409 7.E1: validate is done and shows no notice for a refused bind host', () => {
+    const rejected: string[] = [];
+    const steps = createServerSteps(
+      dependencies({
+        settings: settingsWith({bindHost: {devbox: 'not a host!'}}),
+        rejectBindHost: configured => {
+          rejected.push(configured);
+        },
+      }),
+    );
+    deepStrictEqual(
+      [steps.validate(INPUT), rejected],
+      [{kind: 'done', value: undefined}, []],
+    );
   });
 
   it('F-2205 7.E1: a host that is an option name fails as an invalid setting', () => {

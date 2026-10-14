@@ -164,7 +164,7 @@ F-2309	42	remote-ssh	feature	spec:draft	E23	External SSH_ASKPASS	A	ssh.askpass-p
 F-2310	43	remote-ssh	feature	spec:draft	E23	Jump hosts and proxy commands	A	ssh.hop-prompt-relay	lib-ssh	36	9	True	0	0	0	0	ssh-remote	resolvers	ssh;scp;nc;ssh -W	openssh	25
 F-2311	44	remote-ssh	feature	spec:draft	E23	SSH agent forwarding into the remote environment	A	ssh.agent-env-fixer	lib-ssh	26	8	True	0	2	0	0	ssh-remote	resolvers	ssh;sshd;ssh-add;remote hidden terminal process creating symlink	openssh	16
 F-2312	45	remote-ssh	feature	spec:draft	E23	X11 forwarding into the remote environment	A	ssh.display-env-fixer	lib-ssh	33	6	True	0	1	0	0	ssh-remote	resolvers	ssh;sshd;xauth;xdpyinfo	openssh	16
-F-2401	46	remote-ssh	feature	spec:draft	E24	Host prerequisites: glibc, libstdc++, architecture and legacy servers	A	ssh.host-prereq-check	lib-server	19	12	True	0	0	0	0	ssh-remote	resolvers	uname;ldd;getconf	openssh	14
+F-2401	46	remote-ssh	feature	spec:draft	E24	Host prerequisites: glibc, libstdc++, architecture and legacy servers	A	ssh.host-prereq-check	lib-server	21	12	True	0	0	0	0	ssh-remote	resolvers	uname;ldd;getconf	openssh	14
 F-2402	47	remote-ssh	feature	spec:draft	E24	Required commands on the host (curl/wget, tar and others)	A	ssh.host-tool-probe	lib-server	28	8	True	0	0	0	0	ssh-remote	resolvers	curl;wget;tar;gzip;sh;bash;ln;flock;getconf;ldd;uname	openssh	18
 F-2403	48	remote-ssh	feature	spec:draft	E24	Server download and install on the host	A	ssh.server-installer	lib-server	27	9	True	0	1	0	0	ssh-remote	resolvers	curl;wget;tar;code	openssh;editor-cli	24
 F-2404	49	remote-ssh	feature	spec:draft	E24	HTTP(S) proxy for the server install and launch	A	ssh.proxy-env	lib-server	40	8	True	0	3	0	0	ssh-remote	resolvers	curl;wget	openssh	15

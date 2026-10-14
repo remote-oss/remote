@@ -10,6 +10,8 @@ import {
   type PlainData,
   readClientMessage,
 } from '../endpoint/protocol.ts';
+import {removeOwnRecord} from '../registry/own-record.ts';
+import type {RegistryFilePort} from '../registry/file-port.ts';
 import type {EndPolicy} from '../types.ts';
 import {
   EndPolicyRunner,
@@ -54,6 +56,9 @@ export interface MessageHandler {
 export interface ServeOptions {
   endpoint: string;
   nonce: string;
+  /** The helper's own registry record, which it removes when it ends, before it closes anything. */
+  recordFile: string;
+  files: Pick<RegistryFilePort, 'read' | 'remove'>;
   payload: Record<string, string | number | boolean>;
   policy: EndPolicy;
   handler: MessageHandler;
@@ -73,7 +78,8 @@ function failureText(caught: unknown): string {
 }
 
 /**
- * Serves until the end policy fires or a client sends stop, then closes every connection and the endpoint.
+ * Serves until the end policy fires or a client sends stop, then removes its own record and closes every connection and
+ * the endpoint, in that order, so that no window reconnects while the old record stands.
  * Throws PolicyError before listening when the policy cannot run.
  */
 export async function serve(options: ServeOptions): Promise<ServeEnd> {
@@ -203,6 +209,11 @@ export async function serve(options: ServeOptions): Promise<ServeEnd> {
       logLine(`the end action failed: ${failureText(caught)}`);
     });
   }
+  await removeOwnRecord(options.files, options.recordFile, options.nonce).catch(
+    (caught: unknown) => {
+      logLine(`the helper's record was not removed: ${failureText(caught)}`);
+    },
+  );
   for (const connection of [...connections.values()]) {
     connection.close();
   }

@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {createProtocol, type Timers} from 'lib-companion';
+import {createProtocol, type Timers, writeEnvelope} from 'lib-companion';
 import {
   type RecordingFake,
   createRecordingFake,
@@ -8,6 +8,7 @@ import {companionCallsOf} from '../../src/view/companion-calls.ts';
 
 const ACTIVE = 'remote-internal.getActiveSshRemote';
 const HOSTNAMES = 'remote-internal.getConfiguredHostnames';
+const OPEN = 'remote-internal.openRemoteSshTarget';
 const VERSION = {major: 1, minor: 0};
 
 /** A clock with one timer that a test runs by hand. */
@@ -87,5 +88,31 @@ describe('the companion calls of the view (card explorer-04)', () => {
         {status: 'unavailable', cause: 'unknownMajor'},
       ],
     );
+  });
+
+  it('F-5902.5.rules: an open request carries the version, the host key and the window, and no path or kind', async () => {
+    const fake = createRecordingFake();
+    const received: unknown[] = [];
+    fake.registerCommand(OPEN, argument => {
+      received.push(argument);
+      return writeEnvelope();
+    });
+    const outcome = await callsOver(fake).open('Alias', 'new');
+    deepStrictEqual(
+      [received, outcome.status],
+      [
+        [{interfaceVersion: VERSION, hostKey: 'Alias', window: 'new'}],
+        'answered',
+      ],
+    );
+  });
+
+  it('F-5902.AC-21: an open that the companion rejects is unavailable and throws nothing', async () => {
+    const fake = createRecordingFake();
+    fake.answerWith(OPEN, {kind: 'reject', reason: new Error('no')});
+    deepStrictEqual(await callsOver(fake).open('Alias', 'current'), {
+      status: 'unavailable',
+      cause: 'rejected',
+    });
   });
 });

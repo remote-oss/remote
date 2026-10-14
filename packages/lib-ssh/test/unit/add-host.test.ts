@@ -41,7 +41,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     });
   }
 
-  it('F-2204.BR-1: a user at the destination names the User line', () => {
+  it('F-2204 AC-10: BR-1, a user at the destination names the User line', () => {
     deepStrictEqual(parse('user@host'), block('host', [['User', 'user']]));
   });
 
@@ -67,7 +67,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     deepStrictEqual(parse('HOST20'), block('HOST20'));
   });
 
-  it('F-2204.BR-10: flags before the destination', () => {
+  it('F-2204 AC-12: BR-10, flags before the destination', () => {
     deepStrictEqual(
       parse('ssh -p 2222 -i ~/.ssh/key user@host4'),
       block('host4', [
@@ -107,7 +107,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     ['-w 0:0 h', ['TunnelDevice', '0:0']],
   ];
   for (const [command, line] of VALUE_FLAG_COMMANDS) {
-    it(`F-2204.BR-5: the flag of ${command} writes one line`, () => {
+    it(`F-2204 AC-14: BR-5, the flag of ${command} writes one line`, () => {
       deepStrictEqual(parse(command), block('h', [line]));
     });
   }
@@ -127,12 +127,12 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     ['-M h', ['ControlMaster', 'yes']],
   ];
   for (const [command, line] of FIXED_FLAG_COMMANDS) {
-    it(`F-2204.BR-5: the flag of ${command} writes its fixed line`, () => {
+    it(`F-2204 AC-14: BR-5, the flag of ${command} writes its fixed line`, () => {
       deepStrictEqual(parse(command), block('h', [line]));
     });
   }
 
-  it('F-2204.BR-5: a local forward splits at the last colon pair', () => {
+  it('F-2204 AC-14: BR-5, a local forward splits at the last colon pair', () => {
     deepStrictEqual(
       parse('-L 8080:localhost:80 h'),
       block('h', [['LocalForward', '8080 localhost:80']]),
@@ -146,7 +146,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     );
   });
 
-  it('F-2204.BR-5 (adapted): the ciphers and the provider flag', () => {
+  it('F-2204 AC-14: BR-5 (adapted), the ciphers and the provider flag', () => {
     deepStrictEqual(
       parse('-c aes128-ctr -I /usr/lib/p.so h'),
       block('h', [
@@ -174,7 +174,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     'a',
   ] as const;
   for (const letter of SILENT_FLAGS) {
-    it(`F-2204.BR-6: the flag -${letter} writes nothing`, () => {
+    it(`F-2204 AC-14: BR-6, the flag -${letter} writes nothing`, () => {
       deepStrictEqual(parse(`-${letter} h`), block('h'));
     });
   }
@@ -188,7 +188,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     ['Q', 'cipher'],
   ];
   for (const [letter, argument] of SILENT_ARGUMENT_FLAGS) {
-    it(`F-2204.BR-6: the flag -${letter} consumes its argument ${argument}`, () => {
+    it(`F-2204 AC-14: BR-6, the flag -${letter} consumes its argument ${argument}`, () => {
       deepStrictEqual(parse(`-${letter} ${argument} h`), block('h'));
     });
   }
@@ -223,14 +223,14 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     );
   });
 
-  it('F-2204.BR-8: a quoted identity file', () => {
+  it('F-2204 AC-16: BR-8, a quoted identity file', () => {
     deepStrictEqual(
       parse('-i "~/my key" h'),
       block('h', [['IdentityFile', '"~/my key"']]),
     );
   });
 
-  it('F-2204.BR-8: a quoted user', () => {
+  it('F-2204 AC-16: BR-8, a quoted user', () => {
     deepStrictEqual(parse("-l 'bo b' h"), block('h', [['User', '"bo b"']]));
   });
 
@@ -268,7 +268,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     deepStrictEqual(parse('ssh -p 22 -- h'), block('h', [['Port', '22']]));
   });
 
-  it('F-2204.BR-9: the flag user outranks the destination user', () => {
+  it('F-2204 AC-13: BR-9, the flag user outranks the destination user', () => {
     deepStrictEqual(
       parse('-l bob carol@host46'),
       block('host46', [['User', 'bob']]),
@@ -288,7 +288,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     ],
   ];
   for (const [command, rest] of LAST_VALUE_COMMANDS) {
-    it(`F-2204.BR-9: one line per keyword in ${command}`, () => {
+    it(`F-2204 AC-13: BR-9, one line per keyword in ${command}`, () => {
       deepStrictEqual(parse(command), block('h', rest));
     });
   }
@@ -301,7 +301,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     'user@',
   ] as const;
   for (const command of MISSING_HOST_COMMANDS) {
-    it(`F-2204.7.E1: a command of ${JSON.stringify(command)} names no host`, () => {
+    it(`F-2204 AC-21: 7.E1, a command of ${JSON.stringify(command)} names no host`, () => {
       deepStrictEqual(parse(command), missingHost());
     });
   }
@@ -444,7 +444,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     ['host73#c', '#'],
   ] as const;
   for (const [command, character] of SHELL_CHARACTERS) {
-    it(`F-2204.7.E5: ${command} names the shell character ${character}`, () => {
+    it(`F-2204 AC-25: 7.E5, ${command} names the shell character ${character}`, () => {
       deepStrictEqual(parse(command), {
         problem: {kind: 'shellCharacter', character},
       });
@@ -459,7 +459,7 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     ['host70{a,b}', 'host70{a,b}'],
   ] as const;
   for (const [command, alias] of QUOTED_OR_ORDINARY) {
-    it(`F-2204.7.E5: ${command} is the alias ${alias}`, () => {
+    it(`F-2204 AC-38: 7.E5, ${command} is the alias ${alias}`, () => {
       deepStrictEqual(parse(command), block(alias));
     });
   }
@@ -467,5 +467,51 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
     deepStrictEqual(parseAddHostCommand('ssh \\dev'), {
       block: {alias: 'dev', lines: [{keyword: 'HostName', value: 'dev'}]},
     });
+  });
+
+  it('F-2204 AC-11: every way of giving port 2222 writes Port 2222', () => {
+    deepStrictEqual(
+      [
+        parse('ssh -p 2222 h'),
+        parse('ssh -p2222 h'),
+        parse('ssh -o Port=2222 h'),
+        parse('user@h:2222'),
+        parse('ssh://user@h:2222'),
+      ],
+      [
+        block('h', [['Port', '2222']]),
+        block('h', [['Port', '2222']]),
+        block('h', [['Port', '2222']]),
+        block('h', [
+          ['User', 'user'],
+          ['Port', '2222'],
+        ]),
+        block('h', [
+          ['User', 'user'],
+          ['Port', '2222'],
+        ]),
+      ],
+    );
+  });
+
+  it('F-2204 AC-15: -o options keep their spelling and order, and -o HostName is dropped', () => {
+    deepStrictEqual(
+      [
+        parse('ssh -o Foo=bar -o "ProxyCommand=nc %h %p" h'),
+        parse('ssh -o HostName=10.1.2.3 alias43'),
+        parse('ssh -o port=2201 -o hostname=h44 alias44'),
+      ],
+      [
+        block('h', [
+          ['Foo', 'bar'],
+          ['ProxyCommand', 'nc %h %p'],
+        ]),
+        block('alias43'),
+        block('alias44', [
+          ['port', '2201'],
+          ['hostname', 'h44'],
+        ]),
+      ],
+    );
   });
 });

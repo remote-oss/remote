@@ -10,6 +10,7 @@ import {
   unlinkSync,
   mkdirSync,
   readdirSync,
+  readlinkSync,
   readFileSync,
   rmSync,
   utimesSync,
@@ -137,6 +138,37 @@ function holdLinkLock(host: FakeHost): string {
   return lock;
 }
 
+/**
+ * Replaces the host's `ln` with one whose first call plays a window that released the lock between this window's
+ * `ln` and its check: it removes both names and fails with "File exists". The second call does what `mode` says:
+ * `real` links for real, `taken` creates the target as another window would and fails, `refused` fails without a target.
+ */
+function stubLink(host: FakeHost, mode: 'real' | 'taken' | 'refused'): void {
+  const link = path.join(host.tools, 'ln');
+  const realLink = readlinkSync(link);
+  unlinkSync(link);
+  const count = `${host.callsFile}.ln`;
+  writeFileSync(
+    link,
+    [
+      '#!/bin/sh',
+      `COUNT=$(cat "${count}" 2>/dev/null || echo 0)`,
+      `echo $((COUNT + 1)) >"${count}"`,
+      'if [ "$COUNT" = 0 ]; then',
+      '  rm -f "$1" "$2"',
+      '  echo "ln: File exists" >&2',
+      '  exit 1',
+      'fi',
+      mode === 'real' ? `exec "${realLink}" "$@"` : '',
+      mode === 'taken' ? 'touch "$2"; echo "ln: File exists" >&2; exit 1' : '',
+      mode === 'refused'
+        ? 'echo "ln: Operation not permitted" >&2; exit 1'
+        : '',
+    ].join('\n'),
+  );
+  chmodSync(link, 0o755);
+}
+
 describe('the POSIX bootstrap script', () => {
   let host: FakeHost;
 
@@ -176,6 +208,11 @@ describe('the POSIX bootstrap script', () => {
       ['arm64', 'arm64'],
       ['armv7l', 'armhf'],
       ['armv8l', 'armhf'],
+      ['x86_64', 'x64'],
+      ['ppc64le', 'ppc64le'],
+      ['riscv64', 'riscv64'],
+      ['loongarch64', 'loong64'],
+      ['s390x', 's390x'],
     ] as const;
     for (const [machine, expected] of ARCHITECTURES) {
       it(`F-2401.BR-2: ${machine} is the architecture ${expected}`, () => {
@@ -203,13 +240,17 @@ describe('the POSIX bootstrap script', () => {
       });
     }
 
-    for (const machine of ['i686', 'riscv64', 'ppc64le']) {
-      it(`F-2401.AC-10: ${machine} is UnsupportedArch`, () => {
+    for (const machine of ['i686', 'armv6l', 'aarch64_be', 'ppc64']) {
+      it(`#670 R1: ${machine} is UnsupportedArch and is reported as written`, () => {
         deepStrictEqual(
-          statusOf(host, single('probe'), parametersFor(), {
-            environment: {STUB_UNAME_M: machine},
-          }),
-          'UnsupportedArch',
+          statusAndFacts(
+            host,
+            single('probe'),
+            parametersFor(),
+            ['host.arch'],
+            {environment: {STUB_UNAME_M: machine}},
+          ),
+          {status: 'UnsupportedArch', 'host.arch': machine},
         );
       });
     }
@@ -355,6 +396,87 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
+    const DOWNLOAD_ERRORS: Array<[string, Stub, string, string | undefined]> = [
+      ['GNU wget', 'wget', '  HTTP/1.0 404 File not found', '404'],
+      [
+        'GNU wget after a redirect',
+        'wget',
+        '  HTTP/1.1 302 Found\n  HTTP/1.1 404 Not Found',
+        '404',
+      ],
+      [
+        'BusyBox wget',
+        'wget',
+        'wget: server returned error: HTTP/1.0 404 File not found',
+        '404',
+      ],
+      [
+        'curl',
+        'curl',
+        'curl: (22) The requested URL returned error: 404',
+        '404',
+      ],
+      [
+        'GNU wget on a 503',
+        'wget',
+        '  HTTP/1.1 503 Service Unavailable',
+        undefined,
+      ],
+      [
+        'GNU wget on a 404 after a redirect that ended in a 503',
+        'wget',
+        '  HTTP/1.1 404 Not Found\n  HTTP/1.1 503 Service Unavailable',
+        undefined,
+      ],
+      [
+        'curl on a 503',
+        'curl',
+        'curl: (22) The requested URL returned error: 503',
+        undefined,
+      ],
+      [
+        'curl on a refused connection',
+        'curl',
+        'curl: (7) Failed to connect',
+        undefined,
+      ],
+    ];
+    for (const [name, stub, text, status] of DOWNLOAD_ERRORS) {
+      it(`#670 R3: ${name} gives the download status ${status ?? 'nothing'}`, () => {
+        useHost([stub]);
+        deepStrictEqual(
+          statusAndFacts(
+            host,
+            single('install'),
+            parametersFor(),
+            ['server.downloadStatus'],
+            {environment: {STUB_FETCH_ERROR: text}},
+          ),
+          {status: 'ServerDownloadFailed', 'server.downloadStatus': status},
+        );
+      });
+    }
+
+    it('R-26: the headers a failed fetch printed, a redirect location with a query included, are in no fact', () => {
+      useHost(['wget']);
+      const block = blockOf(host, single('install'), parametersFor(), {
+        environment: {
+          STUB_FETCH_ERROR:
+            '  HTTP/1.1 302 Found\n  Location: https://cdn.example/a.tgz?token=SECRET123\n  HTTP/1.1 404 Not Found',
+        },
+      });
+      deepStrictEqual(
+        block === 'none'
+          ? block
+          : JSON.stringify([
+              block.hostFacts,
+              block.serverFacts,
+              block.cliFacts,
+            ]).includes('SECRET123'),
+        false,
+      );
+    });
+
     it('F-2403.BR-7: a failed download is ServerDownloadFailed', () => {
       deepStrictEqual(
         statusOf(host, single('install'), parametersFor(), {
@@ -440,6 +562,28 @@ describe('the POSIX bootstrap script', () => {
       const lock = holdLinkLock(host);
       runScript(host, single('install'), parametersFor());
       deepStrictEqual(existsSync(`${lock}.target`), true);
+    });
+
+    it('#701: a lock released between ln and the holder check is taken on the second try', () => {
+      stubLink(host, 'real');
+      deepStrictEqual(statusOf(host, single('install'), parametersFor()), 'Ok');
+    });
+
+    it('#701: a lock taken by another window during the second try is LockBusy', () => {
+      stubLink(host, 'taken');
+      deepStrictEqual(
+        statusOf(host, single('install'), parametersFor()),
+        'LockBusy',
+      );
+    });
+
+    it('#701: a second ln refused without a holder reports the second error', () => {
+      stubLink(host, 'refused');
+      deepStrictEqual(
+        serverFactsOf(host, single('install'), parametersFor())
+          .writeFailedError,
+        'ln: Operation not permitted',
+      );
     });
 
     it('F-2408.6.3: the link lock is removed when the install ends', () => {
@@ -1809,9 +1953,12 @@ describe('the POSIX bootstrap script', () => {
       return marker;
     }
 
-    /** Runs a kill, gives the signals time to arrive, and says which of the markers were written. */
-    function afterKill(markers: Record<string, string>): string[] {
-      runScript(host, single('kill'), parametersFor());
+    /** Runs the step, gives the signals time to arrive, and says which of the markers were written. */
+    function afterStep(
+      step: 'kill' | 'uninstall',
+      markers: Record<string, string>,
+    ): string[] {
+      runScript(host, single(step), parametersFor());
       spawnSync('/bin/sleep', ['1.5']);
       return Object.keys(markers).filter(name =>
         existsSync(markers[name] ?? ''),
@@ -1826,7 +1973,7 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, single('install'), parametersFor());
       const markers = {server: started('server', serverFile())};
       spawnSync('/bin/sleep', ['0.5']);
-      deepStrictEqual(afterKill(markers), ['server']);
+      deepStrictEqual(afterStep('kill', markers), ['server']);
     });
 
     it("F-2411.BR-3: kill stops the server's launcher, a shell running a script under cli/servers/", () => {
@@ -1835,7 +1982,7 @@ describe('the POSIX bootstrap script', () => {
         launcher: startedScript('launcher', 'sh', launcherScript()),
       };
       spawnSync('/bin/sleep', ['0.5']);
-      deepStrictEqual(afterKill(markers), ['launcher']);
+      deepStrictEqual(afterStep('kill', markers), ['launcher']);
     });
 
     it('F-2412 AC-27: kill leaves a sleep that only names a path under cli/servers/', () => {
@@ -1844,14 +1991,14 @@ describe('the POSIX bootstrap script', () => {
         sleeper: started('sleeper', 'sleep', ['30', serverFile()]),
       };
       spawnSync('/bin/sleep', ['0.5']);
-      deepStrictEqual(afterKill(markers), []);
+      deepStrictEqual(afterStep('kill', markers), []);
     });
 
     it('F-2412 AC-27: kill leaves an editor that only names a path under cli/servers/', () => {
       runScript(host, single('install'), parametersFor());
       const markers = {editor: started('editor', 'vim', [serverFile()])};
       spawnSync('/bin/sleep', ['0.5']);
-      deepStrictEqual(afterKill(markers), []);
+      deepStrictEqual(afterStep('kill', markers), []);
     });
 
     it('F-2412 AC-27: kill leaves a program that is not a shell and has a script under cli/servers/ as its first argument', () => {
@@ -1860,7 +2007,7 @@ describe('the POSIX bootstrap script', () => {
         editor: startedScript('editor', 'vim', launcherScript()),
       };
       spawnSync('/bin/sleep', ['0.5']);
-      deepStrictEqual(afterKill(markers), []);
+      deepStrictEqual(afterStep('kill', markers), []);
     });
 
     it('F-2412 AC-27: kill leaves a shell that is not one of the four, running a script under cli/servers/', () => {
@@ -1869,7 +2016,7 @@ describe('the POSIX bootstrap script', () => {
         fish: startedScript('fish', '/usr/bin/fish', launcherScript()),
       };
       spawnSync('/bin/sleep', ['0.5']);
-      deepStrictEqual(afterKill(markers), []);
+      deepStrictEqual(afterStep('kill', markers), []);
     });
 
     it('F-2412 AC-27: kill leaves a program whose file only contains the path under cli/servers/', () => {
@@ -1878,7 +2025,7 @@ describe('the POSIX bootstrap script', () => {
         copy: started('copy', `/copy${serverFile()}`),
       };
       spawnSync('/bin/sleep', ['0.5']);
-      deepStrictEqual(afterKill(markers), []);
+      deepStrictEqual(afterStep('kill', markers), []);
     });
 
     it('F-2412 AC-27: kill leaves a shell whose script only contains the path under cli/servers/', () => {
@@ -1891,7 +2038,7 @@ describe('the POSIX bootstrap script', () => {
         ),
       };
       spawnSync('/bin/sleep', ['0.5']);
-      deepStrictEqual(afterKill(markers), []);
+      deepStrictEqual(afterStep('kill', markers), []);
     });
 
     it('F-2412 AC-27: kill leaves a node that runs another file', () => {
@@ -1900,7 +2047,7 @@ describe('the POSIX bootstrap script', () => {
         other: started('other', '/usr/bin/node', ['/home/user/app.js']),
       };
       spawnSync('/bin/sleep', ['0.5']);
-      deepStrictEqual(afterKill(markers), []);
+      deepStrictEqual(afterStep('kill', markers), []);
     });
 
     it("F-2411.BR-3: kill leaves the CLI's command-shell and its supervisor", () => {
@@ -1920,7 +2067,7 @@ describe('the POSIX bootstrap script', () => {
         ]),
       };
       spawnSync('/bin/sleep', ['0.5']);
-      deepStrictEqual(afterKill(markers), []);
+      deepStrictEqual(afterStep('kill', markers), []);
     });
 
     it('F-2411.BR-4: kill keeps cli/servers/, the connection token and the agent-host token, and removes bin/', () => {
@@ -1952,6 +2099,19 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, single('uninstall'), parametersFor());
       spawnSync('/bin/sleep', ['1.5']);
       deepStrictEqual(existsSync(marker), true);
+    });
+
+    it('F-2412 AC-27: uninstall stops the server and leaves the launcher, a node, a MainThread and a process that names the server folder', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        server: started('server', serverFile()),
+        launcher: started('launcher', path.join(dataFolder(), 'code-abc123')),
+        node: started('node', '/usr/bin/node', ['/home/user/app.js']),
+        mainThread: started('mainThread', 'MainThread'),
+        naming: started('naming', 'sleep', ['30', serverFile()]),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('uninstall', markers), ['server']);
     });
 
     it('V1: a fact value with a line end cannot forge a result line', () => {

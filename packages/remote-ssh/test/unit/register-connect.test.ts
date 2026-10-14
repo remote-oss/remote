@@ -138,6 +138,7 @@ async function registered(
           return Promise.resolve();
         },
         runCommand: () => Promise.resolve(),
+        switchToLocalWindow: () => Promise.resolve(),
         remoteName: () => 'ssh-remote',
       },
       openExternal: address => {
@@ -297,6 +298,7 @@ describe("the connect's registration", () => {
         )
         .sort(),
       [
+        'opensshremotes.cleanCurrentRemoteServer',
         'opensshremotes.cleanDevBox',
         'opensshremotes.cleanLocalServer',
         'opensshremotes.cleanRemoteServer',
@@ -353,7 +355,7 @@ describe("the connect's registration", () => {
     deepStrictEqual(seen.revealed, 1);
   });
 
-  it('F-2412.AC-5: Uninstall VS Code Server from Host... runs the uninstall on the picked host and shows nothing', async () => {
+  it('F-2412.AC-4: Uninstall VS Code Server from Host... runs the uninstall on the picked host and shows nothing', async () => {
     const {seen} = await registered(true);
     await seen.commands.get('opensshremotes.cleanDevBox')?.();
     deepStrictEqual([seen.maintained, seen.notices], [['uninstall dev'], []]);
@@ -441,6 +443,7 @@ describe("the connect's registration", () => {
           'opensshremotes.cleanLocalServer',
           'opensshremotes.cleanRemoteServer',
           'opensshremotes.cleanDevBox',
+          'opensshremotes.cleanCurrentRemoteServer',
           'opensshremotes.addNewSshHost',
         ].sort(),
         'unregister ssh-remote',

@@ -141,7 +141,7 @@ describe('install planner (card server-04 table)', () => {
     );
   });
 
-  it('an existing bin layout with the plan commit and source noSource -> reuse of that layout (reuse before source)', () => {
+  it('F-3902 AC-11: an existing bin layout with the plan commit and source noSource -> reuse of that layout (reuse before source)', () => {
     const layout = binLayout('abc');
     deepStrictEqual(
       plan(input({facts: {...facts, existingLayouts: [layout]}})),
@@ -158,7 +158,7 @@ describe('install planner (card server-04 table)', () => {
     );
   });
 
-  it('an existing cliServers layout with the commit and no bin layout -> reuse of the cliServers layout', () => {
+  it('F-3902 AC-10: an existing cliServers layout with the commit and no bin layout -> reuse of the cliServers layout', () => {
     const layout = cliLayout('abc');
     const result = plan(input({facts: {...facts, existingLayouts: [layout]}}));
     const planOf = asPlan(result);

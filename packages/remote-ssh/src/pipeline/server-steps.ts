@@ -105,7 +105,9 @@ type BoundedStop = (
 ) => Promise<void>;
 
 type ServerStepNames =
+  | 'checkStartSettings'
   | 'validate'
+  | 'checkInstallFolder'
   | 'probe'
   | 'plan'
   | 'gate'
@@ -245,7 +247,7 @@ export function createServerSteps(
   }
 
   return {
-    validate: input => {
+    checkStartSettings: input => {
       if (settings.rangeProblem !== undefined) {
         return {
           kind: 'failed',
@@ -263,6 +265,9 @@ export function createServerSteps(
           settings.bindHost.rejected,
         );
       }
+      return {kind: 'done', value: undefined};
+    },
+    validate: input => {
       const problem = validateTarget(sshTargetOf(input.target));
       if (problem !== undefined) {
         return {
@@ -273,7 +278,10 @@ export function createServerSteps(
           },
         };
       }
-      return settings.installFolder.kind === 'invalid'
+      return {kind: 'done', value: undefined};
+    },
+    checkInstallFolder: () =>
+      settings.installFolder.kind === 'invalid'
         ? {
             kind: 'failed',
             failure: {
@@ -284,8 +292,7 @@ export function createServerSteps(
               },
             },
           }
-        : {kind: 'done', value: undefined};
-    },
+        : {kind: 'done', value: undefined},
     probe: (input, lease, cancellation) =>
       probe(lease.channel, parametersFor({}), cancellation),
     maintain: (input, lease, action, cancellation) =>
@@ -378,7 +385,9 @@ export function createServerSteps(
       } else {
         licenceFacts = {...noLicenceFacts, step: 'reuse'};
       }
-      return result;
+      return 'plan' in result && resolution.kind === 'resolved'
+        ? {...result, step: resolution.step}
+        : result;
     },
     gate: (input, cancellation) => {
       const classification = classifyServerLicence(licenceFacts, {

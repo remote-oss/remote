@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {type ChildProcess, spawn} from 'node:child_process';
-import {mkdtempSync, rmSync} from 'node:fs';
+import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createLogger} from 'lib-log';
@@ -25,6 +25,13 @@ import {
   parametersFor,
   placeStandInArchive,
 } from './support.ts';
+import {
+  bridgeGateway,
+  type DownloadHost,
+  makeCertificate,
+  startDownloadHost,
+} from '../../../tools/acceptance-downloads.ts';
+import {runCommand} from '../../../tools/acceptance-run.ts';
 import {fetchVariantsToRun} from '../../../tools/host-variants.ts';
 
 const CANCELLATION = new AbortController().signal;
@@ -285,6 +292,69 @@ for (const variant of fetchVariantsToRun(process.env)) {
           },
         );
         deepStrictEqual(outcome.kind, 'failed');
+      });
+    }
+
+    if (variant !== 'none') {
+      describe('against the download host that fails', () => {
+        let failingHost: RunningHost;
+        let downloads: DownloadHost;
+        let folder = '';
+
+        before(async () => {
+          folder = mkdtempSync(path.join(tmpdir(), 'fetch-tools-downloads-'));
+          writeFileSync(path.join(folder, 'archive.tar.gz'), 'archive');
+          writeFileSync(path.join(folder, 'requests.log'), '');
+          downloads = await startDownloadHost({
+            addresses: ['127.0.0.1', bridgeGateway(runCommand)],
+            archiveFile: path.join(folder, 'archive.tar.gz'),
+            ...makeCertificate(folder),
+            logFile: path.join(folder, 'requests.log'),
+          });
+          failingHost = await startHost({fetch: variant, downloads: true});
+        });
+
+        after(async () => {
+          failingHost.stop();
+          await downloads.stop();
+          rmSync(folder, {recursive: true, force: true});
+        });
+
+        const configurations =
+          variant === 'busybox-wget' ? [false] : [false, true];
+        for (const useConfigurationFiles of configurations) {
+          const label = useConfigurationFiles
+            ? 'with the configuration files'
+            : 'without the configuration files';
+
+          it(`#670 R3: a 404 ${label} is ServerDownloadFailed with status 404`, async () => {
+            const {outcome} = await installFrom(
+              failingHost,
+              `http://downloads:${String(downloads.httpPort)}/missing/x`,
+              {useConfigurationFiles},
+            );
+            deepStrictEqual(outcome, {
+              kind: 'failed',
+              failure: {
+                kind: 'serverDownload',
+                cause: 'downloadFailed',
+                status: 404,
+              },
+            });
+          });
+
+          it(`#670 R3: a 503 ${label} is ServerDownloadFailed with no status`, async () => {
+            const {outcome} = await installFrom(
+              failingHost,
+              `http://downloads:${String(downloads.httpPort)}/busy/x`,
+              {useConfigurationFiles},
+            );
+            deepStrictEqual(outcome, {
+              kind: 'failed',
+              failure: {kind: 'serverDownload', cause: 'downloadFailed'},
+            });
+          });
+        }
       });
     }
 

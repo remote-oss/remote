@@ -93,6 +93,7 @@ function downloader(name: string, outputFlag: string): string {
     'done',
     '[ -z "$STUB_FETCH_SLEEP" ] || sleep "$STUB_FETCH_SLEEP"',
     '[ "${STUB_FETCH_FAILS:-no}" = yes ] && exit 1',
+    '[ -z "${STUB_FETCH_ERROR:-}" ] || { printf "%s\\n" "$STUB_FETCH_ERROR" >&2; exit 1; }',
     'cp "$STUB_ARCHIVE" "$OUT"',
   ].join('\n');
 }

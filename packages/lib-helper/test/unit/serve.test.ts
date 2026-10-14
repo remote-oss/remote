@@ -1,4 +1,5 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {serializeRecord} from '../../src/index.ts';
 import type {EndpointConnection} from '../../src/endpoint/protocol.ts';
 import type {EndPolicy} from '../../src/index.ts';
 import {
@@ -9,9 +10,25 @@ import {
 } from '../../src/runtime/serve.ts';
 import {FakeClock} from '../../src/testing/fake-clock.ts';
 import {FakeEndpointPort} from '../../src/testing/fake-endpoint.ts';
+import {MemoryFilePort} from '../../src/testing/memory-file-port.ts';
 
 const ENDPOINT = '/run/rh-0123456789abcdef.sock';
 const NONCE = 'nonce-1';
+const RECORD_FILE = '/registry/ssh.connection/record.json';
+
+/** The text of the record of a helper with `nonce`. */
+function recordWith(nonce: string): string {
+  return serializeRecord({
+    version: 1,
+    namespace: 'ssh.connection',
+    recordKey: 'user@host:22',
+    endpoint: ENDPOINT,
+    nonce,
+    startedByProcessId: 1,
+    startedAt: 0,
+    payload: {},
+  });
+}
 const GRACE: EndPolicy = {kind: 'graceAfterLastLease', milliseconds: 3000};
 
 /** A client end that collects what the helper sends and whether it was closed. */
@@ -30,6 +47,7 @@ async function settled(): Promise<void> {
 describe('serve', () => {
   let port: FakeEndpointPort;
   let clock: FakeClock;
+  let files: MemoryFilePort;
   let logged: string[];
   let actions: string[];
   let ending: Promise<ServeEnd>;
@@ -39,6 +57,8 @@ describe('serve', () => {
     ending = serve({
       endpoint: ENDPOINT,
       nonce: NONCE,
+      recordFile: RECORD_FILE,
+      files,
       payload: {port: 49152},
       policy,
       handler,
@@ -71,6 +91,8 @@ describe('serve', () => {
   beforeEach(() => {
     port = new FakeEndpointPort();
     clock = new FakeClock();
+    files = new MemoryFilePort();
+    files.files.set(RECORD_FILE, recordWith(NONCE));
     logged = [];
     actions = [];
     handler = {
@@ -222,6 +244,66 @@ describe('serve', () => {
     deepStrictEqual(
       [await ending, client.closed, port.isListening(ENDPOINT)],
       ['stopped', true, false],
+    );
+  });
+
+  it('contracts X2: a stopped helper removes its own record before it closes', async () => {
+    const order: string[] = [];
+    const remove = files.remove.bind(files);
+    files.remove = async file => {
+      order.push('remove');
+      await remove(file);
+    };
+    const listen = port.listen.bind(port);
+    port.listen = async (endpoint, onConnection) => {
+      const server = await listen(endpoint, connection => {
+        const close = connection.close.bind(connection);
+        connection.close = () => {
+          order.push('connection closed');
+          close();
+        };
+        onConnection(connection);
+      });
+      return {
+        close: () => {
+          order.push('server closed');
+          return server.close();
+        },
+      };
+    };
+    start();
+    const client = await connect();
+    client.connection.send({type: 'stop'});
+    await ending;
+    deepStrictEqual(order, ['remove', 'connection closed', 'server closed']);
+  });
+
+  it('contracts X2: a helper ended by its end policy removes its own record', async () => {
+    start();
+    await settled();
+    clock.advance(3000);
+    await ending;
+    strictEqual(files.files.has(RECORD_FILE), false);
+  });
+
+  it('contracts X2: a helper ended by its end policy keeps a record with another nonce', async () => {
+    files.files.set(RECORD_FILE, recordWith('nonce-2'));
+    start();
+    await settled();
+    clock.advance(3000);
+    await ending;
+    strictEqual(files.files.has(RECORD_FILE), true);
+  });
+
+  it('contracts X2: a failing record removal is logged and the helper still closes', async () => {
+    files.remove = () => Promise.reject(new Error('read-only folder'));
+    start();
+    const client = await connect();
+    client.connection.send({type: 'stop'});
+    await ending;
+    deepStrictEqual(
+      [logged, port.isListening(ENDPOINT)],
+      [["the helper's record was not removed: read-only folder"], false],
     );
   });
 

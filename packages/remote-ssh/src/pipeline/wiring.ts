@@ -330,7 +330,9 @@ export function stepsOf(
       windowEnvironment(lookedUp(state).localForwards, ports.logger),
   });
   return {
+    checkStartSettings: input => serverSteps(input).checkStartSettings(input),
     validate: input => serverSteps(input).validate(input),
+    checkInstallFolder: input => serverSteps(input).checkInstallFolder(input),
     preconnect: preconnectStep({
       setting: ports.settings.preconnect,
       logger: ports.logger,

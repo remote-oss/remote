@@ -1,11 +1,10 @@
-import {execFile} from 'node:child_process';
-import {promisify} from 'node:util';
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import path from 'node:path';
 import {
   acceptedPasswords,
   appendScript,
   closeWindow,
+  connectionHelpers,
   emptyWindows,
   heldLines,
   hostPassword,
@@ -23,24 +22,9 @@ import {
   windowState,
 } from './harness.ts';
 
-const execFileAsync = promisify(execFile);
-
 /** Waits the given number of milliseconds. */
 function pause(milliseconds: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
-}
-
-/** How many connection-helper processes of this run's extensions folder run on this machine. */
-async function connectionHelpers(): Promise<number> {
-  try {
-    const {stdout} = await execFileAsync('pgrep', [
-      '-fc',
-      `${process.env.HARNESS_RUN_FOLDER ?? ''}/extensions/.*connection-helper`,
-    ]);
-    return Number(stdout.trim());
-  } catch {
-    return 0;
-  }
 }
 
 describe('windows of one editor on the same host (the first window is local)', function () {
@@ -71,7 +55,7 @@ describe('windows of one editor on the same host (the first window is local)', f
 
   it('D-85: a second window on the same host shares the connection server', async () => {
     await openWindow('harness', 'c');
-    strictEqual(await connectionHelpers(), 1);
+    strictEqual((await connectionHelpers()).length, 1);
   });
 
   it('D-85: reloading a window activates its agent again', async () => {
@@ -100,6 +84,7 @@ describe('windows of one editor on the same host (the first window is local)', f
       each => each.event === 'activated',
     ).length;
     const next = nextEmptyName();
+    const known = emptyWindows();
     const name = await nextEmptyWindow(() =>
       inWindow(
         'local',
@@ -118,9 +103,9 @@ describe('windows of one editor on the same host (the first window is local)', f
             .length - localBefore,
       },
       {
-        name: 'empty-1',
-        next: 'empty-1',
-        empty: ['empty-1'],
+        name: next,
+        next,
+        empty: [...known, next],
         state: {
           remoteName: 'ssh-remote',
           remoteAuthority: 'ssh-remote+harness',

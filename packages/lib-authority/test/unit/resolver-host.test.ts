@@ -574,7 +574,7 @@ describe('the resolver host: a failure (contracts section 3.2)', () => {
     deepStrictEqual(context.presenter.seen, [FAILURE]);
   });
 
-  it('F-2601: a presenter that handled it makes the error handled', async () => {
+  it('F-2501 AC-15: a first resolve that fails reaches core as a handled error once the presenter has shown it, so core adds no notification', async () => {
     const context = await setup();
     context.connector.answer = FAILURE;
     deepStrictEqual(

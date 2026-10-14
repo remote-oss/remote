@@ -1,5 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
-import {writeHostBlock} from '../../src/index.ts';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {parseAddHostCommand, writeHostBlock} from '../../src/index.ts';
 import type {HostBlock} from '../../src/index.ts';
 
 /** The block of the row's notation HOST_BLOCK: alias host4, the HostName line and the port. */
@@ -43,7 +47,7 @@ describe('writeHostBlock (the file text with the block placed)', () => {
     );
   });
 
-  it('F-2204.BR-11b: the block goes before the first block, after the globals', () => {
+  it('F-2204 AC-17: BR-11b, the block goes before the first block, after the globals', () => {
     const file =
       '# top\nInclude x\nServerAliveInterval 5\n\nHost old\n  Port 1\n';
     deepStrictEqual(
@@ -74,11 +78,11 @@ describe('writeHostBlock (the file text with the block placed)', () => {
     );
   });
 
-  it('F-2204.BR-11c: a file without a final newline gains one before the block', () => {
+  it('F-2204 AC-18: BR-11c, a file without a final newline gains one before the block', () => {
     deepStrictEqual(write('# c'), `# c\n\n${blockText('', '  ')}`);
   });
 
-  it('F-2204.BR-11c: a trailing blank line stays one', () => {
+  it('F-2204 AC-18: BR-11c, a trailing blank line stays one', () => {
     deepStrictEqual(write('# c\n\n'), `# c\n\n${blockText('', '  ')}`);
   });
 
@@ -156,7 +160,7 @@ describe('writeHostBlock (the file text with the block placed)', () => {
     deepStrictEqual(write(file), `${blockText('', '  ')}\n${file}`);
   });
 
-  it('F-2204.BR-14: a duplicate host is written as it is', () => {
+  it('F-2204 AC-20: BR-14, a duplicate host is written as it is', () => {
     deepStrictEqual(
       write('Host host4\n  HostName host4\n'),
       `${blockText('', '  ')}\nHost host4\n  HostName host4\n`,
@@ -175,5 +179,49 @@ describe('writeHostBlock (the file text with the block placed)', () => {
 
   it('F-2204.BR-11c (provisional): a file of blank lines keeps them', () => {
     deepStrictEqual(write('\n\n'), `\n\n${blockText('', '  ')}`);
+  });
+
+  it('F-2204 AC-19: the new block copies the indentation of the file, or uses two spaces', () => {
+    const files: Array<[string, string, string]> = [
+      ['Host a\n    X 1\n', '  ', '    '],
+      ['Host a\n\tX 1\n', '', '\t'],
+      ['Host a\nHostName x\n\nHost b\n    HostName y\n', '  ', '    '],
+      ['Host a\n      # note\nHostName x\n', '    ', '      '],
+      ['Host a\nHostName x\n', '', '  '],
+    ];
+    deepStrictEqual(
+      files.map(([file]) => write(file)),
+      files.map(
+        ([file, hostIndent, optionIndent]) =>
+          `${blockText(hostIndent, optionIndent)}\n${file}`,
+      ),
+    );
+  });
+
+  it('F-2204 AC-37: ssh reads the written block of ssh -p 2222 -l bob h as host h, port 2222 and user bob', () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'writer-'));
+    try {
+      const parsed = parseAddHostCommand('ssh -p 2222 -l bob h');
+      if (!('block' in parsed)) {
+        throw new Error(`no block for the row: ${JSON.stringify(parsed)}`);
+      }
+      const config = path.join(folder, 'config');
+      writeFileSync(config, writeHostBlock('', parsed.block));
+      const lookedUp = spawnSync('ssh', ['-G', '-F', config, 'h'], {
+        encoding: 'utf8',
+      });
+      const lines = lookedUp.stdout
+        .split('\n')
+        .filter(
+          line =>
+            line.startsWith('hostname ') ||
+            line.startsWith('port ') ||
+            line.startsWith('user '),
+        )
+        .sort();
+      deepStrictEqual(lines, ['hostname h', 'port 2222', 'user bob']);
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
   });
 });

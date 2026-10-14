@@ -1,8 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {
   type ArchiveResolution,
   OVERRIDE_POLICIES,
   type OverridePolicy,
+  readProfile,
   resolveServerArchive,
 } from '../../src/index.ts';
 import {fixtureProfile} from './fixture.ts';
@@ -72,6 +75,60 @@ describe('resolveServerArchive', () => {
           ),
         ),
         'https://github.com/VSCodium/vscodium/releases/download/1.135.06055/vscodium-reh-alpine-arm64-1.135.06055.tar.gz',
+      );
+    });
+
+    it('F-3902 AC-2: a VSCodium product.json without the template takes the built-in codium entry, which names the archive of its own template', () => {
+      const fields = JSON.parse(
+        readFileSync(
+          path.join(
+            import.meta.dirname,
+            '..',
+            'fixtures',
+            'vscodium-reduced.json',
+          ),
+          'utf8',
+        ),
+      ) as Record<string, unknown>;
+      delete fields.serverDownloadUrlTemplate;
+      const reading = readProfile(JSON.stringify(fields));
+      if (reading.kind !== 'profile') {
+        throw new Error(`the fixture is unreadable: ${reading.reason}`);
+      }
+      const removed = resolveServerArchive(
+        reading.profile,
+        LINUX_X64,
+        SSH_POLICY,
+      );
+      const own = resolveServerArchive(
+        fixtureProfile('vscodium-reduced'),
+        LINUX_X64,
+        SSH_POLICY,
+      );
+      deepStrictEqual(
+        [
+          removed.kind === 'resolved' ? removed.step : removed.kind,
+          resolvedAddress(removed),
+        ],
+        ['builtInTable', resolvedAddress(own)],
+      );
+    });
+
+    it('F-3902 AC-4: an override with the six placeholders names alpine, arm64, the version, the commit, the quality and an empty release', () => {
+      deepStrictEqual(
+        resolvedAddress(
+          resolveServerArchive(
+            fixtureProfile('vscodium-reduced'),
+            {operatingSystem: 'alpine', architecture: 'arm64'},
+            SSH_POLICY,
+            {
+              value:
+                'http://downloads.example.invalid/x?os=${os}&arch=${arch}&version=${version}&commit=${commit}&quality=${quality}&release=${release}',
+              layer: 'defaultProfileUser',
+            },
+          ),
+        ),
+        'http://downloads.example.invalid/x?os=alpine&arch=arm64&version=1.135.06055&commit=1a46a584&quality=stable&release=',
       );
     });
 
@@ -280,6 +337,11 @@ describe('resolveServerArchive', () => {
       ['linux', 'armhf', 'linux-armhf'],
       ['alpine', 'x64', 'linux-alpine'],
       ['alpine', 'arm64', 'alpine-arm64'],
+      ['linux', 'ppc64le', 'linux-ppc64le'],
+      ['linux', 'riscv64', 'linux-riscv64'],
+      ['linux', 'loong64', 'linux-loong64'],
+      ['linux', 's390x', 'linux-s390x'],
+      ['darwin', 'arm64', 'darwin-arm64'],
     ];
     for (const [operatingSystem, architecture, platform] of cases) {
       it(`appends the archive path with server-${platform} for ${operatingSystem}/${architecture}`, () => {
@@ -299,26 +361,6 @@ describe('resolveServerArchive', () => {
         );
       });
     }
-
-    it('reports a host the base-URL form has no archive for as unsupportedPlatform', () => {
-      deepStrictEqual(
-        resolveServerArchive(
-          fixtureProfile('vscode-reduced'),
-          {operatingSystem: 'darwin', architecture: 'arm64'},
-          CONTAINERS_POLICY,
-          {value: 'https://mirror.example.invalid/base', layer: 'profileUser'},
-        ),
-        {
-          kind: 'invalidOverride',
-          settingKey: 'remote.serverDownloadBaseUrl',
-          problem: {
-            kind: 'unsupportedPlatform',
-            operatingSystem: 'darwin',
-            architecture: 'arm64',
-          },
-        },
-      );
-    });
 
     it('uses a remote-ssh value without placeholders as one URL, never a base', () => {
       deepStrictEqual(

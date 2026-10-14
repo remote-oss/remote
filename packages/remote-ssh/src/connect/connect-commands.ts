@@ -42,6 +42,8 @@ export interface ConnectCommandEditor {
   openRemote(authority: string, window: WindowTarget): PromiseLike<unknown>;
   /** Runs an editor command by its id. */
   runCommand(commandId: string): PromiseLike<unknown>;
+  /** Turns the window into an empty local window, the same window. */
+  switchToLocalWindow(): PromiseLike<unknown>;
   /** The remote name of the window, such as `ssh-remote`; nothing in a local window. */
   remoteName(): string | undefined;
 }

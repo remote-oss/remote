@@ -8,7 +8,7 @@ const REQUEST = {
 };
 
 describe('askpass environment', () => {
-  it('points ssh at our launcher and forces its use, with the endpoint and the nonce', () => {
+  it('F-2101 AC-30: points ssh at our launcher and forces its use, with the endpoint and the nonce', () => {
     deepStrictEqual(askpassEnvironment({...REQUEST, external: false}), {
       SSH_ASKPASS: '/run/rh-askpass/rh-askpass-0123456789abcdef',
       SSH_ASKPASS_REQUIRE: 'force',
@@ -17,7 +17,7 @@ describe('askpass environment', () => {
     });
   });
 
-  it("adds nothing when the user's own askpass applies, neither SSH_ASKPASS_REQUIRE nor DISPLAY", () => {
+  it("F-2101 AC-17: adds nothing when the user's own askpass applies, neither SSH_ASKPASS_REQUIRE nor DISPLAY", () => {
     deepStrictEqual(askpassEnvironment({...REQUEST, external: true}), {});
   });
 });
