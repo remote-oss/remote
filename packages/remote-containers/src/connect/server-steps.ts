@@ -172,6 +172,7 @@ function parametersOf(
       extensions: [],
       fileWatcherPollingMilliseconds: 0,
       useHostProxy: false,
+      requirementsHelper: false,
       readySeconds: READY_SECONDS,
       socketMode: false,
     },
@@ -409,7 +410,7 @@ export async function runServerSteps(
       readySeconds: READY_SECONDS,
       socketMode: false,
     },
-    CONTAINERS_POLICY.allowedExtraStartOptions,
+    CONTAINERS_POLICY,
     {
       lockLoop: hostLockLoopOf(
         dependencies.clock,
@@ -424,8 +425,15 @@ export async function runServerSteps(
     logger.info(`the server was not started: ${started.failure.kind}`);
     return failedWith(
       started.failure.kind === 'prerequisitesMissing'
-        ? requirementsNotMet('')
+        ? requirementsNotMet(started.failure.detail)
         : serverFailed(),
+    );
+  }
+  if (
+    started.notices.some(notice => notice.kind === 'requirementsHelperMissing')
+  ) {
+    logger.warn(
+      "the server has no requirements helper; the container's requirements weren't checked",
     );
   }
   const {server} = started;

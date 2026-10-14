@@ -428,7 +428,7 @@ export function createServerSteps(
           licenceAccepted,
           dependencies.socketMode(),
         ),
-        dependencies.policy.allowedExtraStartOptions,
+        dependencies.policy,
         {lockLoop: dependencies.lockLoop, logger: dependencies.logger},
         cancellation,
       ),
