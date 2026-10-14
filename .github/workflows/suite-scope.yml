@@ -12,6 +12,8 @@ permissions:
 
 jobs:
   suite-scope:
+    # this repository keeps the workflow for the ruleset; its own pull requests are not a suite's
+    if: github.repository != 'remote-oss/remote'
     runs-on: ${{ vars.SUITE_SCOPE_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
