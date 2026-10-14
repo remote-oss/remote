@@ -2,8 +2,10 @@
  * @fileoverview identifiers: writes each package's generated identifier table and runs the CI check
  * `identifiers` (ADR draft "Identifier tables", decisions 2 and 5).
  *
- *     node tools/identifiers.ts           write packages/<x>/src/identifiers.generated.ts
- *     node tools/identifiers.ts --check   check the sources of every package
+ *     node tools/identifiers.ts                    write packages/<x>/src/identifiers.generated.ts
+ *     node tools/identifiers.ts --check             check the sources of every package
+ *     node tools/identifiers.ts --consumed          check what production source consumes
+ *     node tools/identifiers.ts --consumed --release   the tag run: the allowlist must be wired
  *
  * An extension package with a src/ folder must have identifiers.json and gets a table; one whose kinds are all
  * empty gets none. Libraries have neither. The check applies the rules of tools/identifier-rules.ts to every package
@@ -11,7 +13,7 @@
  * exist.
  */
 
-import {rmSync, writeFileSync} from 'node:fs';
+import {readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {format, resolveConfig} from 'prettier';
 import {checkPackageRules} from './identifier-rules.ts';
@@ -28,6 +30,11 @@ import {
   packageFolders,
   REPOSITORY_ROOT,
 } from './repository.ts';
+import {
+  checkConsumption,
+  parseAllowlist,
+  type AllowlistEntry,
+} from './identifier-consumption.ts';
 
 /** The check's result over the repository. */
 export interface IdentifierReport {
@@ -112,9 +119,54 @@ export function checkIdentifiers(root: string): IdentifierReport {
   return {problems, notes};
 }
 
+const ALLOWLIST_FILE = 'tools/unconsumed-allowlist.json';
+
+/**
+ * The --consumed mode: reads the allowlist of `root`, runs the check, prints the report, and sets the exit code: 2
+ * when the allowlist can't be read or a program can't be built, 1 with problem lines, 0 otherwise.
+ */
+export async function runConsumptionCheck(
+  release: boolean,
+  root: string = REPOSITORY_ROOT,
+  runKnip?: (packageRoot: string) => Promise<string>,
+): Promise<void> {
+  let allowlist: readonly AllowlistEntry[];
+  try {
+    const text = readFileSync(path.join(root, ALLOWLIST_FILE), 'utf8');
+    allowlist = parseAllowlist(text);
+  } catch (error) {
+    console.error(`identifiers: ${messageOf(error)}`);
+    process.exitCode = 2;
+    return;
+  }
+  try {
+    const report = await checkConsumption(root, allowlist, {release, runKnip});
+    if (report.fatal !== undefined) {
+      console.error(`identifiers: ${report.fatal}`);
+      process.exitCode = 2;
+      return;
+    }
+    for (const problem of report.problems) {
+      console.error(`identifiers: ${problem}`);
+    }
+    for (const note of report.notes) {
+      console.log(`identifiers: note: ${note}`);
+    }
+    if (report.problems.length === 0) {
+      console.log('identifiers: consumed: ok');
+    }
+    process.exitCode = report.problems.length === 0 ? 0 : 1;
+  } catch (error) {
+    console.error(`identifiers: ${messageOf(error)}`);
+    process.exitCode = 2;
+  }
+}
+
 if (isMainModule(import.meta.url)) {
   try {
-    if (process.argv.includes('--check')) {
+    if (process.argv.includes('--consumed')) {
+      await runConsumptionCheck(process.argv.includes('--release'));
+    } else if (process.argv.includes('--check')) {
       const report = checkIdentifiers(REPOSITORY_ROOT);
       for (const note of report.notes) {
         console.log(`identifiers: ${note}`);

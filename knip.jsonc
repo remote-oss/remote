@@ -6,21 +6,21 @@
       // The scripts package.json runs (tools/check-layout is a shim to check-layout.ts); their exports are
       // checked like any other module's.
       "entry": [
-        "tools/check-layout.ts",
-        "tools/build.ts",
-        "tools/coverage.ts",
-        "tools/integration-tests.ts",
-        "tools/licences.ts",
-        "tools/acceptance.ts",
-        "tools/identifiers.ts",
-        "tools/public-surface.ts",
-        "tools/string-tables.ts",
-        "tools/check-coverage.ts",
-        "tools/seed-coverage.ts",
-        "tools/package-extensions.ts",
-        ".vscode-test.mjs",
+        "tools/check-layout.ts!",
+        "tools/build.ts!",
+        "tools/coverage.ts!",
+        "tools/integration-tests.ts!",
+        "tools/licences.ts!",
+        "tools/acceptance.ts!",
+        "tools/identifiers.ts!",
+        "tools/public-surface.ts!",
+        "tools/string-tables.ts!",
+        "tools/check-coverage.ts!",
+        "tools/seed-coverage.ts!",
+        "tools/package-extensions.ts!",
+        ".vscode-test.mjs!",
       ],
-      "project": ["tools/**/*.ts", "*.config.ts"],
+      "project": ["tools/**/*.ts!", "*.config.ts!"],
     },
     // Tests only: no coverage unit; the code is exercised by the acceptance job.
     "tests/acceptance": {
@@ -47,6 +47,8 @@
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
         "explorer-no-proposals/*.test.ts",
+        "trust/*.test.ts",
+        "trust-terminal/*.test.ts",
         "window-agent/src/extension.ts",
         "server/*.test.ts",
       ],
@@ -57,19 +59,19 @@
     // as unused; everything behind the index is.
     "packages/lib-*": {
       // Test fixtures run as separate processes.
-      "entry": ["src/index.ts", "test/**/*.test.ts", "test/fixtures/*.ts"],
-      "project": ["src/**/*.ts", "test/**/*.ts"],
+      "entry": ["src/index.ts!", "test/**/*.test.ts", "test/fixtures/*.ts"],
+      "project": ["src/**/*.ts!", "test/**/*.ts"],
       "includeEntryExports": false,
     },
     // Each package's entry points are the ones tools/build.ts bundles; its tests are entries of their own.
     "packages/*": {
       "entry": [
-        "src/extension.ts",
-        "src/web-extension.ts",
-        "src/programs/*.ts",
+        "src/extension.ts!",
+        "src/web-extension.ts!",
+        "src/programs/*.ts!",
         "test/**/*.test.ts",
       ],
-      "project": ["src/**/*.ts", "test/**/*.ts"],
+      "project": ["src/**/*.ts!", "test/**/*.ts"],
     },
   },
   // A system tool: preinstalled on the CI runner, installed with Homebrew or the package manager elsewhere.

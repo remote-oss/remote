@@ -36,7 +36,7 @@ function hostLaunchLabels(): string[] {
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, no-proposals, the three explorer launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, no-proposals, the three explorer launches, the two trust launches and the ports cases in the order of theirs', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -59,6 +59,8 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
+        'trust',
+        'trust-terminal',
         ...hostLaunchLabels(),
       ],
     );
@@ -97,7 +99,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30: only the three explorer launches install the explorer and open a debugging port, and only explorer-alone disables remote-ssh', () => {
+  it('tooling-30, tooling-33: only the explorer launches install the explorer, they and the trust launches open a debugging port, and only explorer-alone disables remote-ssh', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -127,6 +129,37 @@ describe('the launches of the VSCodium run', () => {
           ['remote-oss.remote-explorer'],
           true,
           undefined,
+        ],
+        ['trust', undefined, true, undefined],
+        ['trust-terminal', undefined, true, undefined],
+      ],
+    );
+  });
+
+  it('tooling-33: the two trust launches are the only ones with workspace trust on; trust turns core’s startup prompt on, and trust-terminal keeps core’s defaults with the terminal mode', () => {
+    deepStrictEqual(
+      launches.flatMap(launch =>
+        launch.kind === 'plain' && launch.workspaceTrust !== undefined
+          ? [[launch.label, launch.workspaceTrust, launch.settings]]
+          : [],
+      ),
+      [
+        [
+          'trust',
+          true,
+          {
+            'window.title': '[${rootName}]',
+            'security.workspace.trust.startupPrompt': 'once',
+          },
+        ],
+        [
+          'trust-terminal',
+          true,
+          {
+            'window.title': '[${rootName}]',
+            'remote.SSH.useLocalServer': false,
+            'remote.SSH.remotePlatform': {harness: 'linux'},
+          },
         ],
       ],
     );
@@ -172,7 +205,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, the explorer launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, the explorer and trust launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -190,6 +223,8 @@ describe('the launches of the VSCodium run', () => {
         'explorer',
         'explorer-alone',
         'explorer-no-proposals',
+        'trust',
+        'trust-terminal',
         ...hostLaunchLabels(),
       ],
     );

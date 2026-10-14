@@ -141,6 +141,12 @@
     },
     {
       "path": "tests/acceptance/explorer-no-proposals"
+    },
+    {
+      "path": "tests/acceptance/trust"
+    },
+    {
+      "path": "tests/acceptance/trust-terminal"
     }
   ]
 }
