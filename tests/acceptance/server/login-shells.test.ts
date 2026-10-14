@@ -4,6 +4,9 @@ import {
   SHELL_VARIANTS,
   shellVariantsToRun,
 } from '../../../tools/host-variants.ts';
+import {NOISE_LINES} from 'lib-host/testing/noise';
+import {createLogger} from 'lib-log';
+import {probe, type RuntimeOptions, startOrReuse} from 'lib-server';
 import {connectWaitMilliseconds} from 'lib-ssh';
 import {startHost, type RunningHost} from './host-fixture.ts';
 import {
@@ -11,6 +14,13 @@ import {
   openSharedSession,
   type SharedSession,
 } from './shared-session.ts';
+import {
+  installFolderOf,
+  installStatus,
+  lockLoop,
+  parametersFor,
+  placeStandInArchive,
+} from './support.ts';
 
 /** The connect timeout the session is opened with, as the host's own value. */
 const CONNECT_SECONDS = 5;
@@ -28,6 +38,25 @@ const WAIT_AND_MARGIN_MILLISECONDS = CONNECT_WAIT_MILLISECONDS + 2000;
 const HOME = '/home/harness';
 
 const TEXT_BYTES = 70_000;
+
+const CANCELLATION = new AbortController().signal;
+
+const SILENT = createLogger(undefined, {minimumLevel: () => 'info'});
+
+/** The options of a start on the stand-in server. */
+const START_OPTIONS: RuntimeOptions = {
+  bindHost: '127.0.0.1',
+  portRange: '',
+  licenceAccepted: false,
+  graceSeconds: 0,
+  defaultExtensions: [],
+  fileWatcherPollingMilliseconds: 0,
+  readySeconds: 10,
+  socketMode: false,
+};
+
+/** An address on the host where nothing listens, so its download is refused. */
+const REFUSED_ADDRESS = 'http://127.0.0.1:1/server.tar.gz';
 
 /** A startup file to place in the home of the user before a session opens. */
 interface StartupFile {
@@ -506,6 +535,80 @@ describe('F-2206 AC-28, #443: a login shell that does not answer fails the conne
         milliseconds < WAIT_AND_MARGIN_MILLISECONDS,
       ],
       [{kind: 'loginFailed', failure: 'timeout', hints: []}, true, true],
+    );
+  });
+});
+
+describe('ADR-0010, connect-59: a .profile and a ~/.ssh/rc that print noise', function () {
+  this.timeout(240000);
+  let host: RunningHost;
+
+  /** Every noise line, written to standard output and to standard error. */
+  const NOISY_PROFILE = NOISE_LINES.map(
+    line => `printf '%s\\n' '${line}'\nprintf '%s\\n' '${line}' >&2\n`,
+  ).join('');
+
+  before(async () => {
+    host = await startHost();
+    placeStandInArchive(host);
+  });
+
+  after(() => {
+    host.onHost('rm', '-f', `${HOME}/.profile`, `${HOME}/.ssh/rc`);
+    host.stop();
+  });
+
+  /** What the probe, the install, the start and an install whose download is refused give over a new session. */
+  async function serverSteps(): Promise<unknown[]> {
+    const session = await openSharedSession(boundedHost(host));
+    try {
+      const parameters = parametersFor();
+      const probed = await probe(session.channel, parameters, CANCELLATION);
+      const installed = await installStatus(session, parameters);
+      const started = await startOrReuse(
+        session.channel,
+        parameters,
+        START_OPTIONS,
+        [],
+        {lockLoop: lockLoop(), logger: SILENT},
+        CANCELLATION,
+      );
+      const refused = await installStatus(
+        session,
+        parametersFor({archivePath: '', archiveUrl: REFUSED_ADDRESS}),
+      );
+      return [
+        probed.kind === 'probed'
+          ? {
+              ...probed.host,
+              installFolder:
+                probed.host.installFolder === installFolderOf(parameters),
+            }
+          : probed,
+        installed,
+        started.kind,
+        refused,
+      ];
+    } finally {
+      await session.stop();
+    }
+  }
+
+  it('ADR-0010: the probe, install, start and a refused download give the same results as without them', async () => {
+    const quiet = await serverSteps();
+    host.onHost(
+      'sh',
+      '-c',
+      'printf "%s" "$2" > "$1/.profile" && printf "%s" "$3" > "$1/.ssh/rc"',
+      'sh',
+      HOME,
+      NOISY_PROFILE,
+      `printf '%s\\n' '${NOISE_LINES[0] ?? ''}' >&2\n`,
+    );
+    const noisy = await serverSteps();
+    deepStrictEqual(
+      [noisy, quiet.slice(1)],
+      [quiet, ['Ok', 'started', 'ServerDownloadFailed']],
     );
   });
 });

@@ -377,6 +377,9 @@ importers:
       lib-helper:
         specifier: workspace:*
         version: link:../../packages/lib-helper
+      lib-host:
+        specifier: workspace:*
+        version: link:../../packages/lib-host
       lib-log:
         specifier: workspace:*
         version: link:../../packages/lib-log
