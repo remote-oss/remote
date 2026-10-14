@@ -38,8 +38,9 @@ not new runtime code, apart from the two changes below.
 - the "Configuring..." terminal and S153 (F-0415 5.0 step 10, BR-8, the terminal halves of 7.E1 to 7.E3, and 7.E6 and
   7.E7). It's the next F-0415 card, carded after this one. Until then, the lifecycle output reaches the Dev
   Containers log through `onCliEvent`, as slice 1 does;
-- S343, the Debian 8 `jessie-updates` dialog (F-0412 7.E5, AC-20 to AC-30's S343 rows): §5 row 3 asks athena whether
-  it's release 1;
+- S343, the Debian 8 `jessie-updates` dialog (F-0412 7.E5, the S343 rows of AC-20 to AC-30): **not release 1**
+  (athena on #900). Recognising it means matching apt's text anywhere in a build's output, which ADR-0010 doesn't
+  allow. Those rows are `deferred` with that reason (§6);
 - `waitFor`'s edge values (F-0415 6.1, VS-6) beyond the CLI's own handling: they're covered by the CLI, and the rows
   stay `todo` until the terminal card measures them.
 
@@ -98,8 +99,11 @@ Details:
 In `chooseConfiguration` (containers-13 §3.6), after the container-source check passes and before `readConfiguration`:
 1. The Dockerfile path is `build.dockerfile` when `build` is an object with a string `dockerfile`, otherwise the
    top-level `dockerFile` when it's a string, otherwise none. A Compose configuration has none.
-2. It's resolved against the folder that holds the configuration file: `path.resolve(dirname(configFile), value)`.
-3. When `ports.files.exists(<that path>)` is false:
+2. **A value containing `${` is skipped** (athena on #900): it holds a variable the CLI substitutes, such as
+   `${localWorkspaceFolder}`, so its path isn't known before the CLI reads it. The CLI's own `ENOENT` (§2 item 4) is
+   then the outcome, through C8's S034.
+3. It's resolved against the folder that holds the configuration file: `path.resolve(dirname(configFile), value)`.
+4. When `ports.files.exists(<that path>)` is false:
    - show `dialogs.showError('', <S004 with {0} = the absolute path>, [<Open {0}>])`. The message line is empty.
      `{0}` in the button is the configuration file's base name (`devcontainer.json` or `.devcontainer.json`). Core
      adds Cancel, and Escape is Cancel;
@@ -114,7 +118,7 @@ In `chooseConfiguration` (containers-13 §3.6), after the container-source check
 | Id | Text | Source |
 |---|---|---|
 | S004 | `"{0}" does not exist.` | F-0301 3.4 (owner), F-0412 7.E3 |
-| `openConfiguration` (ours, no S-id) | `Open {0}` | F-0412 7.E3 and F-0301 7.E6 show the button as "Open devcontainer.json", but no string table lists it. §5 row 1 asks athena about it |
+| `openConfiguration` | `Open {0}` | the spec's own button, "Open devcontainer.json" (F-0412 7.E3, F-0301 7.E6), not an invented string (athena on #900). No string table gives it an S-id yet; the question is on F-0301's issue (remote-oss/remote-containers#20), and the key is renamed to the S-id when the table has one |
 
 Both go in containers-13's `CONFIG_TEMPLATES` and the l10n bundle, every locale, as containers-13 does.
 
@@ -144,6 +148,7 @@ Both go in containers-13's `CONFIG_TEMPLATES` and the l10n bundle, every locale,
 | `F-0412 7.E3: the path resolves from the configuration's folder` | `.devcontainer/sub/devcontainer.json` with `dockerfile` `../Dockerfile` | `exists` is asked for `.devcontainer/Dockerfile` |
 | `F-0412 5.1: an existing Dockerfile goes on` | `exists` true | `readConfiguration` runs |
 | `F-0412 BR-16: an image configuration isn't checked` | `image` only | no `exists` call |
+| `F-0412 7.E3: a dockerfile with a variable isn't checked` | `build.dockerfile` `${localWorkspaceFolder}/Dockerfile` | no `exists` call; `readConfiguration` runs |
 
 ### 4.3 Gate rows 2 and 6 (`tests/acceptance/containers/gate.test.ts`, containers-09's launch)
 
@@ -160,12 +165,11 @@ user's tag moved (§2 item 3 happened during this card's measurements and was re
 
 ## 5. Open rows (stop and report on #893)
 
-1. **athena:** the `Open {0}` button has no S-id in any string table. Use it as ours (ADR-0008), or does F-0301's
-   table need an id first?
+1. **F-0301's answer** on remote-oss/remote-containers#20 gives the "Open devcontainer.json" button an S-id: use it
+   as the key, with the same text.
 2. **A re-measurement differs from §2**, for example the override doesn't stop the `image` tag from moving: report
    the CLI's output, and don't build §3.1 on a guess.
-3. **athena:** is S343's dialog (F-0412 7.E5) release 1? This card leaves it `todo` for a later card.
-4. **Row 6's background stage takes more than 30 s on the runner:** report the time, and don't raise the bound past
+3. **Row 6's background stage takes more than 30 s on the runner:** report the time, and don't raise the bound past
    60 s without saying so.
 
 ## 6. Catalogue (`docs/architecture/catalogue/coverage-containers-r1.tsv`)
@@ -178,8 +182,9 @@ user's tag moved (§2 item 3 happened during this card's measurements and was re
     `postStartCommand`), all through row 6;
   - brief §5 gate rows 2 and 6.
 - **`unit`, through §4.1 and §4.2:** F-0412 AC-18 (also), and the 7.E8 override rule. 7.E8 has no AC beyond AC-43.
+- **`deferred`, `containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't
+  allow`:** the S343 rows of F-0412 AC-20 to AC-30.
 - **`todo`, with the card that brings it:**
-  - F-0412 AC-20 to AC-30: S343 (§5 row 3);
   - F-0415 AC-11's terminal half, and the S153 and terminal ACs: the next F-0415 card;
   - F-0412 AC-41 (folder-name sanitizing): a row of containers-19, since it's the CLI's rule and needs three folders;
   - F-0412 AC-44: core's JSON validation, which release 1 contributes no schema for. Brief ruling 8, `deferred`,
