@@ -12,6 +12,7 @@ const PARAMETERS: ScriptParameters = {
   removeArchive: false,
   archiveFormat: 'tar.gz',
   epochMilliseconds: 1700000000000,
+  installTree: '',
   proxy: {http: '', https: ''},
   downloader: {useConfigurationFiles: false, timeoutSeconds: 30},
   lock: {
@@ -28,6 +29,7 @@ const PARAMETERS: ScriptParameters = {
     graceSeconds: 0,
     extensions: [],
     fileWatcherPollingMilliseconds: 0,
+    useHostProxy: false,
     readySeconds: 10,
     socketMode: false,
   },
@@ -88,12 +90,13 @@ describe('F-2401 the probe of a host', function () {
   });
 
   it('F-2407: finds no server installed on a fresh host, and where it would go', async () => {
-    const {installed, installFolder} = await probed();
+    const {installed, installFolder, treeComplete} = await probed();
     deepStrictEqual(
-      {installed, installFolder},
+      {installed, installFolder, treeComplete},
       {
         installed: false,
         installFolder: '/home/harness/.stand-in-data/bin/acceptancecommit',
+        treeComplete: false,
       },
     );
   });

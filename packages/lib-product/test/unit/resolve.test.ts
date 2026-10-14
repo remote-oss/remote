@@ -409,4 +409,92 @@ describe('resolveServerArchive', () => {
       );
     });
   });
+
+  describe('the containers source order (card containers-05)', () => {
+    const LAYERS = [
+      'defaultProfileUser',
+      'profileUser',
+      'remote',
+      'workspace',
+      'workspaceFolder',
+    ] as const;
+
+    for (const layer of LAYERS) {
+      it(`F-0503 AC-35: a base URL from the ${layer} layer is the override, with the commit, platform and quality appended`, () => {
+        const resolution = resolveServerArchive(
+          fixtureProfile('vscodium-reduced'),
+          LINUX_X64,
+          CONTAINERS_POLICY,
+          {value: 'https://mirror.test/base', layer},
+        );
+        deepStrictEqual(
+          resolution.kind === 'resolved'
+            ? [resolution.step, resolution.address]
+            : resolution.kind,
+          [
+            'override',
+            'https://mirror.test/base/commit:1a46a584/server-linux-x64/stable',
+          ],
+        );
+      });
+    }
+
+    it("F-0503 AC-53: without an override the product's template is used and the built-in table is not consulted", () => {
+      const resolution = resolveServerArchive(
+        fixtureProfile('vscodium-reduced'),
+        LINUX_X64,
+        CONTAINERS_POLICY,
+      );
+      deepStrictEqual(
+        resolution.kind === 'resolved'
+          ? [resolution.step, resolution.address]
+          : resolution.kind,
+        [
+          'productTemplate',
+          'https://github.com/VSCodium/vscodium/releases/download/1.135.06055/vscodium-reh-linux-x64-1.135.06055.tar.gz',
+        ],
+      );
+    });
+
+    for (const [applicationName, repository] of [
+      ['codium', 'vscodium'],
+      ['codium-insiders', 'vscodium-insiders'],
+    ] as const) {
+      it(`F-0503 AC-36: ${applicationName} with no template resolves from the built-in table of ${repository}`, () => {
+        const resolution = resolveServerArchive(
+          fixtureProfile('vscodium-reduced', {
+            applicationName,
+            serverDownloadUrlTemplate: '',
+          }),
+          LINUX_X64,
+          CONTAINERS_POLICY,
+        );
+        deepStrictEqual(
+          resolution.kind === 'resolved'
+            ? [
+                resolution.step,
+                resolution.address.startsWith(
+                  `https://github.com/VSCodium/${repository}/releases/download/`,
+                ),
+              ]
+            : resolution.kind,
+          ['builtInTable', true],
+        );
+      });
+    }
+
+    it('F-0503 AC-37: code with no override and no template has no source and names the setting', () => {
+      const resolution = resolveServerArchive(
+        fixtureProfile('vscode-reduced'),
+        LINUX_X64,
+        CONTAINERS_POLICY,
+      );
+      deepStrictEqual(
+        resolution.kind === 'noSource'
+          ? resolution.settingKey
+          : resolution.kind,
+        'remote.serverDownloadBaseUrl',
+      );
+    });
+  });
 });

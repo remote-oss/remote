@@ -36,6 +36,7 @@ function hostWith(sshAuthSock: string, display: string): ProbedHost {
     display,
     installed: true,
     installFolder: '/home/harness/.server/bin/abc',
+    treeComplete: false,
   };
 }
 

@@ -41,6 +41,8 @@ export interface ProbedHost {
   /** Whether the server of the probed commit is already installed, and where it would be. */
   installed: boolean;
   installFolder: string;
+  /** Whether the shared tree the install goes into is complete; false when the install has no tree. */
+  treeComplete: boolean;
 }
 
 /** Why the probe gave no host. */
@@ -96,6 +98,7 @@ function hostOf(
       display: facts.display ?? '',
       installed: block.serverFacts.installed === 'yes',
       installFolder: block.serverFacts.installDir ?? '',
+      treeComplete: block.serverFacts.treeComplete === 'yes',
     },
   };
 }

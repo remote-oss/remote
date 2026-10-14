@@ -470,4 +470,84 @@ describe('install planner, the CLI mode (card cli-02 table)', () => {
     delete withName.cliName;
     throws(() => plan(withName), /cliName/);
   });
+
+  function treeLayout(): ExistingLayout {
+    return {
+      kind: 'tree',
+      commit: 'abc',
+      path: '/vscode/codium-server/bin/linux-x64/abc',
+    };
+  }
+
+  it('F-0503 BR-4: a complete tree and no source is reused without reading the source', () => {
+    const result = asPlan(
+      plan(
+        input({
+          installTree: '/vscode/codium-server/bin/linux-x64/abc',
+          facts: {...facts, existingLayouts: [treeLayout()]},
+        }),
+      ),
+    );
+    deepStrictEqual(
+      [result.kind, result.kind === 'reuse' ? result.layout : undefined],
+      ['reuse', treeLayout()],
+    );
+  });
+
+  it('F-0503 BR-4: a bin layout is reused before a tree', () => {
+    const result = asPlan(
+      plan(
+        input({
+          installTree: '/vscode/codium-server/bin/linux-x64/abc',
+          facts: {...facts, existingLayouts: [treeLayout(), binLayout('abc')]},
+        }),
+      ),
+    );
+    deepStrictEqual(
+      result.kind === 'reuse' ? result.layout : undefined,
+      binLayout('abc'),
+    );
+  });
+
+  it('F-1402: a tree and a client-only placement download on the client into the bin link, naming the tree', () => {
+    const result = asPlan(
+      plan(
+        input({
+          installTree: '/vscode/codium-server/bin/linux-x64/abc',
+          placement: {kind: 'clientOnly'},
+          source: {kind: 'resolved', address: 'https://a.test/x.tar.gz'},
+        }),
+      ),
+    );
+    deepStrictEqual(
+      result.kind === 'download'
+        ? [
+            result.where,
+            result.clientFallback,
+            result.installTree,
+            result.installFolder,
+          ]
+        : result.kind,
+      [
+        'client',
+        false,
+        '/vscode/codium-server/bin/linux-x64/abc',
+        '/home/u/.vscode-server/bin/abc',
+      ],
+    );
+  });
+
+  it('containers-05 R1: a plan without a tree downloads with an empty tree', () => {
+    const result = asPlan(
+      plan(
+        input({
+          source: {kind: 'resolved', address: 'https://a.test/x.tar.gz'},
+        }),
+      ),
+    );
+    deepStrictEqual(
+      result.kind === 'download' ? result.installTree : result.kind,
+      '',
+    );
+  });
 });
