@@ -16,7 +16,7 @@ sections. A builder doesn't change a contract; a question goes to the architect.
 | `clientPathOnHost` | not implemented (a container never reads a client path directly). |
 
 **Failures:** a `docker` that can't start is `spawnFailed`; a container that stopped or vanished during an operation
-(exit 125, or the daemon's "is not running" / "No such container", or exit 137 or 143 with an empty stderr while one `docker inspect` through the same `EngineHost` says the container no longer runs; measured on Docker 29.9, amended 2026-10-14 on #808) is `channelClosed`; an abort is `cancelled`. The
+(exit 125, or a stderr line that **starts with** the Docker client's own `Error response from daemon:` or `Error: No such container:`, never a line that merely contains such words, since a script's own stderr is merged into the same stream (amended 2026-10-14, iris and triton on #808), or exit 137 or 143 with an empty stderr while one `docker inspect` through the same `EngineHost` says the container no longer runs; measured on Docker 29.9, amended 2026-10-14 on #808) is `channelClosed`; an abort is `cancelled`. The
 channel never retries.
 
 **The exec dialer:** `execDialer(engine, containerId, user, relayScriptPath): Dialer` (lib-forwarding's `Dialer`).
