@@ -13,19 +13,20 @@
 A login shell and its startup files (`.bashrc`, `.bash_profile`, `.profile`, `/etc/motd`, `~/.ssh/rc`, a container's
 profile scripts) can print anything, before, between and after what we run. That includes text that resembles our
 own lines or a program's messages. A program we run (a script's own commands, `tar`, `node`) can print anything on
-the same stream. So any parser that matches free-form text can be fooled by ordinary user configuration. That has
-happened twice: a stderr substring ("is not running") on the exec channel (#808), and lines nobody expected around a
-login.
+the same stream. So any parser that matches free-form text can be fooled by ordinary user configuration. The user
+ruled that we never trust such text. The exec channel's stderr substring "is not running" (#808) was a case of it.
 
 ## Decision
 
 1. **Text from a remote shell or a container is untrusted.** A value we need from it travels only inside our own
    markers:
-   - a marker is a **whole line**, matched exactly after removing one trailing `\r`;
-   - every marker starts with our namespace, `remote-oss-` (as `remote-oss-server-result-begin`,
-     `remote-oss-server-progress`, the bootstrap's layer-1 lines);
+   - a marker is a **whole line** of our own vocabulary, matched exactly after removing one trailing `\r`. The
+     existing families conform as they are: the result block (`remote-oss-server-result-begin`/`-end`), the progress
+     lines (`remote-oss-server-progress`) and the bootstrap's `LAYER1-*` lines. A **new** family starts with
+     `remote-oss-`;
    - a value is a line inside a block that our script opened and closed (`fact <key> <value>` inside the result block),
-     or a marker line's own fields.
+     a marker line's own fields, or what our own command prints after a marker into a file only it writes (the
+     bootstrap's `LAYER1-START`, then `export -p`).
 
    Text outside our markers is logged (scrubbed, as every line) and otherwise **ignored**. It's never matched for
    meaning, never by substring, and never by "the first line that looks like". When the same block appears twice, the
@@ -36,9 +37,12 @@ login.
      lines, `Authenticated to`), never a substring anywhere in a line;
    - a structured form where the program offers one: the dev container CLI's JSON result line and `--log-format json`
      events (ADR-0009), and JSON from `docker inspect -f`;
-   - only where the stream can't yet carry remote text. ssh's own diagnostics are read **before** the session starts:
-     a login's startup files run only after authentication, so a marker read before it can't come from them. After
-     the session starts, only rule 1 applies.
+   - matched as narrowly as that form allows;
+   - only from a stream nothing else writes into: the program's own file or pipe (the server's log file, which our
+     non-login start script redirects, for the server's ready line), or the time before a session starts. ssh's own
+     diagnostics are read **before** the session starts, since a login's startup files run only after
+     authentication. After the session starts, ssh's streams carry remote text, so rule 1 applies, and so does an exit
+     status (rule 3).
 3. **Prefer an exit status or a process event to text** wherever it answers the question (exit 125, 137/143 with
    `docker inspect`, a process's `close`).
 4. **What we don't read, we don't assume.** Passing a value through isn't parsing it, so the session's `DISPLAY`, read
@@ -51,9 +55,13 @@ login.
 - Every parser of remote or program output has a **noisy-neighbour row**. Noise goes before, between and after the
   block: lines that contain our marker text as a substring, a fake `fact` line outside the block, a line with a
   program's message embedded mid-line, and CR-terminated lines. The result is the same as without the noise.
-- The audit of today's parsers (daedalus's card) checks each against rules 1–3. It **gates the 0.2 tag** for the
-  remote-ssh side (lib-ssh, lib-server, lib-host, remote-ssh), and **gates containers release 1** for
-  remote-containers. A parser that breaks a rule is a defect, fixed under its own card.
+- The audit of today's parsers (daedalus's card) checks each against rules 1–3. For each classifier of ssh's output
+  it names the **window** it reads: the stderr classifier (S5), the prompt classifier (S6), the setup report and
+  `PromptReader`. ssh's own messages count only before the session starts. After that, a `.bashrc` that prints
+  "Permission denied" must not change a dialog.
+- **The audit and its fixes gate** the 0.2 tag for the remote-ssh side (lib-ssh, lib-server, lib-host, remote-ssh),
+  and containers release 1 for remote-containers. A parser whose noisy-neighbour row fails is a gating defect, fixed
+  under its own card.
 - A new marker family needs no ADR. It follows rule 1's form, and its card names it.
 
 ## Check
