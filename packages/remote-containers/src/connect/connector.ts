@@ -353,9 +353,12 @@ export function containerConnectorOf(
     if (outcome.kind === 'cancelled') {
       return cancelled();
     }
-    return outcome.kind === 'unusable'
-      ? containerUnusable()
-      : containerSetupFailed();
+    if (outcome.kind === 'unusable') {
+      return containerUnusable();
+    }
+    return containerSetupFailed(
+      outcome.kind === 'setupFailed' ? outcome.refusal : undefined,
+    );
   }
 
   /** What the CLI is told to read the configuration of the container's folder. */

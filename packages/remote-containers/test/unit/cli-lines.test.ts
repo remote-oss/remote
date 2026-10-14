@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   type CliEvent,
+  daemonRefusalOf,
   parseLogLine,
   readConfigurationResult,
   readRunUserCommandsResult,
@@ -387,5 +388,42 @@ describe('the output of the dev container CLI (card containers-04)', () => {
       kind: 'malformedResult',
       field: 'result',
     });
+  });
+});
+
+describe('the daemon refusal (card containers-11)', () => {
+  const MOUNT_MISSING =
+    'docker: Error response from daemon: invalid mount config for type "bind": bind source path does not exist: /nonexistent-c11-src';
+  const MOUNT_EMPTY =
+    'docker: Error response from daemon: invalid mount config for type "bind": field Source must not be empty';
+  const MOUNT_RESTART =
+    'Error response from daemon: invalid mount config for type "bind": bind source path does not exist: /tmp/c11src';
+  const PORT_TAKEN =
+    'docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint laughing_pare (da74): Bind for 0.0.0.0:47321 failed: port is already allocated';
+
+  it('F-0410 7.E1, AC-11: a refused bind mount, with or without the docker prefix, is invalidMount', () => {
+    deepStrictEqual(
+      [MOUNT_MISSING, MOUNT_EMPTY, MOUNT_RESTART].map(daemonRefusalOf),
+      ['invalidMount', 'invalidMount', 'invalidMount'],
+    );
+  });
+
+  it('F-0410 7.E2, AC-12: a port that is already allocated is portAllocated, with or without the docker prefix', () => {
+    deepStrictEqual(
+      [PORT_TAKEN, PORT_TAKEN.slice('docker: '.length)].map(daemonRefusalOf),
+      ['portAllocated', 'portAllocated'],
+    );
+  });
+
+  it('ADR-0010: a line with text before the daemon words, another daemon error, text after the port words, or nothing is no refusal', () => {
+    deepStrictEqual(
+      [
+        `[hook] ${MOUNT_MISSING}`,
+        'Error response from daemon: No such container: x',
+        `${PORT_TAKEN} (retrying)`,
+        '',
+      ].map(daemonRefusalOf),
+      [undefined, undefined, undefined, undefined],
+    );
   });
 });

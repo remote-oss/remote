@@ -130,6 +130,27 @@ describe('the container connector: the connect (card containers-08)', () => {
     ]);
   });
 
+  it("F-0410 AC-11, AC-12: a setup failure carries the daemon's refusal as its reason (card containers-11)", async () => {
+    const reasons: unknown[] = [];
+    for (const refusal of [
+      'invalidMount',
+      'portAllocated',
+      undefined,
+    ] as const) {
+      const scene = sceneOf();
+      scene.outcome = {
+        kind: 'setupFailed',
+        message: 'x',
+        description: 'y',
+        containerId: undefined,
+        ...(refusal === undefined ? {} : {refusal}),
+      };
+      const result = await scene.connector.connect(inputOf(PAYLOAD));
+      reasons.push('reason' in result ? result.reason : result);
+    }
+    deepStrictEqual(reasons, [{id: 'S018'}, {id: 'S019'}, {id: 'S034'}]);
+  });
+
   it('contracts §2 steps 4–6: everything succeeding gives the host port and the token, untrusted, with no environment and no tunnels, and the phases in order', async () => {
     const scene = sceneOf();
     const phases: ConnectPhase[] = [];

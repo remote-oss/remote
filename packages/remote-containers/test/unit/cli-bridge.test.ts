@@ -506,3 +506,117 @@ describe('the CLI bridge (card containers-04)', () => {
     }
   });
 });
+
+describe('the daemon refusal in the bridge (card containers-11)', () => {
+  const SETUP_FAILED =
+    '{"outcome":"error","message":"Command failed: docker run x","description":"An error occurred setting up the container.","containerId":"c1"}';
+  const MOUNT =
+    'docker: Error response from daemon: invalid mount config for type "bind": bind source path does not exist: /nope\n\nRun \'docker run --help\' for more information\n';
+  const PORT =
+    'docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint e (da74): Bind for 0.0.0.0:47321 failed: port is already allocated\n';
+
+  /** A script that prints each stderr event, then ends with `result`. */
+  function printing(
+    events: Array<{type: string; text: string; channel?: string}>,
+    result: string,
+  ): Script {
+    return (cliArguments, onLine) => {
+      for (const event of events) {
+        onLine({stream: 'stderr', line: JSON.stringify(event)});
+      }
+      return Promise.resolve({kind: 'ran', result, status: 1});
+    };
+  }
+
+  /** What `up` gave under `events`. */
+  async function upGave(
+    events: Array<{type: string; text: string; channel?: string}>,
+    result = SETUP_FAILED,
+  ) {
+    const {bridge} = setup(printing(events, result));
+    return bridge.up(TARGET, UP_OPTIONS, () => undefined, NEVER);
+  }
+
+  it('F-0410 AC-11: a run whose raw stderr refuses the mount fails setupFailed with refusal invalidMount', async () => {
+    const result = await upGave([{type: 'raw', text: MOUNT}]);
+    deepStrictEqual(
+      result.kind === 'setupFailed' ? result.refusal : result,
+      'invalidMount',
+    );
+  });
+
+  it('F-0410 7.E1: the restart path coloured text event gives invalidMount', async () => {
+    const coloured =
+      '\u001b[1m\u001b[31mError response from daemon: invalid mount config for type "bind": bind source path does not exist: /tmp/x\u001b[39m\u001b[22m\r\n';
+    const result = await upGave([{type: 'text', text: coloured}]);
+    deepStrictEqual(
+      result.kind === 'setupFailed' ? result.refusal : result,
+      'invalidMount',
+    );
+  });
+
+  it('F-0410 7.E2: a port refusal that ends with a CR and an LF is read without the CR', async () => {
+    const result = await upGave([
+      {type: 'text', text: PORT.replace('\n', '\r\n')},
+    ]);
+    deepStrictEqual(
+      result.kind === 'setupFailed' ? result.refusal : result,
+      'portAllocated',
+    );
+  });
+
+  it('F-0410: two refusals in one event, the later line wins', async () => {
+    const result = await upGave([{type: 'raw', text: MOUNT + PORT}]);
+    deepStrictEqual(
+      result.kind === 'setupFailed' ? result.refusal : result,
+      'portAllocated',
+    );
+  });
+
+  it('F-0410 AC-12: a port refusal gives portAllocated, and the containerId stays', async () => {
+    const result = await upGave([{type: 'raw', text: PORT}]);
+    deepStrictEqual(
+      result.kind === 'setupFailed'
+        ? [result.refusal, result.containerId]
+        : result,
+      ['portAllocated', 'c1'],
+    );
+  });
+
+  it("ADR-0010: a hook's raw output with the refusal line on its own channel gives no refusal", async () => {
+    const result = await upGave([
+      {type: 'raw', text: MOUNT, channel: 'postCreate'},
+    ]);
+    deepStrictEqual(
+      result.kind === 'setupFailed' ? 'refusal' in result : result,
+      false,
+    );
+  });
+
+  it('F-0410: two refusals, the last one wins', async () => {
+    const result = await upGave([
+      {type: 'raw', text: MOUNT},
+      {type: 'raw', text: PORT},
+    ]);
+    deepStrictEqual(
+      result.kind === 'setupFailed' ? result.refusal : result,
+      'portAllocated',
+    );
+  });
+
+  it('F-0410: a refusal on a run that fails some other way leaves that result unchanged', async () => {
+    const result = await upGave(
+      [{type: 'raw', text: MOUNT}],
+      '{"outcome":"error","message":"Command failed: docker buildx build x","description":"d"}',
+    );
+    deepStrictEqual(result.kind, 'buildFailed');
+  });
+
+  it('F-0410: a setupFailed with no refusal line has no refusal key', async () => {
+    const result = await upGave([{type: 'raw', text: 'plain output\n'}]);
+    deepStrictEqual(
+      result.kind === 'setupFailed' ? 'refusal' in result : result,
+      false,
+    );
+  });
+});
