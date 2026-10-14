@@ -4,13 +4,14 @@
  *     node tools/build.ts                  every package in packages/
  *     node tools/build.ts remote-ssh ...   the named package folders
  *
- * A package without an entry point is skipped. Each `src/programs/<name>.ts` of a package is bundled on its own into
+ * A package without an entry point is skipped. A package may ship files of a dependency unchanged (`COPIED_FILES`). Each `src/programs/<name>.ts` of a package is bundled on its own into
  * `dist/<name>.js`: a program that runs outside the editor, so nothing in it may import `vscode`. Types are checked
  * by `pnpm typecheck`, not here. A package's `src/web-extension.ts` is bundled for the web extension host into
  * `dist/web/extension.js`; nothing in it may import a `node:` module.
  */
 
-import {existsSync, readdirSync} from 'node:fs';
+import {copyFileSync, existsSync, mkdirSync, readdirSync} from 'node:fs';
+import {createRequire} from 'node:module';
 import path from 'node:path';
 import {build} from 'esbuild';
 import {NODE_TARGET} from './editor-floor.ts';
@@ -33,6 +34,28 @@ const WEB_ENTRY_PATH = 'src/web-extension.ts';
 
 const WEB_BUNDLE_PATH = 'dist/web/extension.js';
 
+/** Files a package ships unchanged from a dependency: the dependency, the files by relative path, and where they go. */
+export interface CopiedFiles {
+  from: string;
+  files: readonly string[];
+  into: string;
+}
+
+/** The packages that ship files of a dependency byte for byte, which esbuild never bundles or touches. */
+export const COPIED_FILES: Readonly<Record<string, CopiedFiles>> = {
+  'remote-containers': {
+    from: '@devcontainers/cli',
+    files: [
+      'devcontainer.js',
+      'dist/spec-node/devContainersSpecCLI.js',
+      'scripts/updateUID.Dockerfile',
+      'LICENSE.txt',
+      'ThirdPartyNotices.txt',
+    ],
+    into: 'dist/devcontainers-cli',
+  },
+};
+
 /** Where a package keeps the entry points of its programs, and where their bundles go. */
 const PROGRAMS_PATH = 'src/programs';
 
@@ -49,6 +72,29 @@ function programEntries(directory: string): string[] {
     : [];
 }
 
+/** Copies the files of a dependency into the package, byte for byte, and says so; a missing file fails, naming it. */
+function copyShipped(
+  directory: string,
+  folder: string,
+  shipped: CopiedFiles,
+): string {
+  const source = path.dirname(
+    createRequire(path.join(directory, 'package.json')).resolve(
+      `${shipped.from}/package.json`,
+    ),
+  );
+  for (const file of shipped.files) {
+    const from = path.join(source, file);
+    if (!existsSync(from)) {
+      throw new Error(`${folder}: ${shipped.from} has no file ${file}`);
+    }
+    const target = path.join(directory, shipped.into, file);
+    mkdirSync(path.dirname(target), {recursive: true});
+    copyFileSync(from, target);
+  }
+  return `${folder}: ${shipped.into}`;
+}
+
 /**
  * Bundles the entry point of each named package folder under `<root>/packages`, or of every folder when `folders`
  * is empty, and returns one line per folder saying what happened. Throws for a folder that does not exist.
@@ -56,6 +102,7 @@ function programEntries(directory: string): string[] {
 export async function buildPackages(
   root: string,
   folders: string[],
+  copied: Readonly<Record<string, CopiedFiles>> = COPIED_FILES,
 ): Promise<string[]> {
   const selected = folders.length > 0 ? folders : packageFolders(root);
   const outcomes: string[] = [];
@@ -115,6 +162,10 @@ export async function buildPackages(
       outcomes.push(
         `${folder}: ${programs.map(entry => `${PROGRAM_BUNDLES_PATH}/${path.basename(entry, '.ts')}.js`).join(', ')}`,
       );
+    }
+    const shipped = copied[folder];
+    if (shipped !== undefined) {
+      outcomes.push(copyShipped(directory, folder, shipped));
     }
   }
   return outcomes;

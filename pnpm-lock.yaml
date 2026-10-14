@@ -277,6 +277,12 @@ importers:
 
   packages/remote-containers:
     dependencies:
+      '@devcontainers/cli':
+        specifier: 0.89.0
+        version: 0.89.0
+      jsonc-parser:
+        specifier: 3.3.1
+        version: 3.3.1
       lib-authority:
         specifier: workspace:*
         version: link:../lib-authority
@@ -462,6 +468,11 @@ packages:
 
   '@cacheable/utils@2.5.0':
     resolution: {integrity: sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA==}
+
+  '@devcontainers/cli@0.89.0':
+    resolution: {integrity: sha512-LzaoOGKQ/Zql6PsiZ4hVIYVZagzWkD65aG/1ou5/Kly5Y1PtjLg1yn7qu+LZCzVoAl6DZZ/pbz8qOO4RLNlqMg==}
+    engines: {node: '>=20.0.0'}
+    hasBin: true
 
   '@emnapi/core@1.11.2':
     resolution: {integrity: sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA==}
@@ -2610,6 +2621,8 @@ snapshots:
     dependencies:
       hashery: 1.5.1
       keyv: 5.6.0
+
+  '@devcontainers/cli@0.89.0': {}
 
   '@emnapi/core@1.11.2':
     dependencies:
