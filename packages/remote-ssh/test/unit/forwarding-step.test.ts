@@ -1,4 +1,4 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual} from 'node:assert';
 import type {ChannelFailure} from 'lib-host';
 import {
   RecordingChannel,
@@ -8,7 +8,6 @@ import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {ProbedHost} from 'lib-server';
 import type {SharedRecord} from 'lib-ssh';
-import type {AgentLinkPlan} from '../../src/environment/agent-link.ts';
 import type {ForwardingPlans} from '../../src/environment/forwarding.ts';
 import {forwardingEnvironment} from '../../src/environment/forwarding.ts';
 import {
@@ -56,23 +55,10 @@ function listingAnswer(
   };
 }
 
-/** The answer to the `ln` of the link. */
-function linkAnswer(
-  ending: ScriptAnswer['ending'],
-  lines: readonly string[] = [],
-): ScriptAnswer {
-  return {
-    interpreter: 'posixShell',
-    matches: script => script.includes('ln -sfn'),
-    lines,
-    ending,
-  };
-}
-
-/** A terminal the fake editor holds: its name, and the work it runs when the editor opens it. */
+/** A terminal the fake editor ran: its name and its command, the program first. */
 interface FakeTerminal {
   name: string;
-  work: () => Promise<void>;
+  command: string[];
 }
 
 /** The forwarding over fakes, with the draws, the terminals opened and the log they write. */
@@ -82,6 +68,8 @@ function forwardingOf(
     x11Forwarding?: boolean;
     draws?: number[];
     windowLink?: string;
+    /** How the link terminal ends: its exit status, or a rejection. */
+    linkEnd?: Promise<number | undefined>;
   } = {},
 ): {
   dependencies: ForwardingDependencies;
@@ -98,8 +86,9 @@ function forwardingOf(
       draw: () => draws.shift() ?? 99,
       windowLink: {path: changes.windowLink},
       linkTerminals: {
-        open: (name, work) => {
-          terminals.push({name, work});
+        runProgram: (name, program, programArguments) => {
+          terminals.push({name, command: [program, ...programArguments]});
+          return changes.linkEnd ?? Promise.resolve(0);
         },
       },
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
@@ -109,23 +98,13 @@ function forwardingOf(
   };
 }
 
-/** A channel answering the listing with `names`, then each of `answers`. */
-function channelWith(
-  names: readonly string[],
-  ...answers: ScriptAnswer[]
-): RecordingChannel {
+/** A channel answering the listing with `names`. */
+function channelWith(names: readonly string[]): RecordingChannel {
   return new RecordingChannel({
     identity: 'harness',
     platformHint: 'linux',
-    scripts: [listingAnswer(names), ...answers],
+    scripts: [listingAnswer(names)],
   });
-}
-
-/** The scripts the channel ran, in order. */
-function scriptsOf(channel: RecordingChannel): string[] {
-  return channel.calls.map(call =>
-    call.operation === 'runScript' ? call.request.script : call.operation,
-  );
 }
 
 /** The plans of one connect over `channel` whose lease holds `storedRecord`. */
@@ -364,90 +343,64 @@ const LINK = {
   target: AGENT_SOCKET,
 } as const;
 
-/** The link of `plan` made over a channel with `answers`, after the editor opened its terminal. */
-async function linkedOver(
-  plan: AgentLinkPlan,
-  ...answers: ScriptAnswer[]
-): Promise<{channel: RecordingChannel; sink: MemorySink}> {
-  const {dependencies, terminals, sink} = forwardingOf();
-  const channel = new RecordingChannel({
-    identity: 'harness',
-    platformHint: 'linux',
-    scripts: answers,
-  });
-  linkAgent(dependencies, channel, plan);
-  await terminals[0]?.work();
-  return {channel, sink};
+/** The warn lines of the link of `plan` whose terminal ends with `linkEnd`, once it has ended. */
+async function linkWarnings(
+  linkEnd: Promise<number | undefined>,
+): Promise<string[]> {
+  const {dependencies, sink} = forwardingOf({linkEnd});
+  linkAgent(dependencies, LINK);
+  await linkEnd.catch(() => undefined);
+  await new Promise(resolve => setImmediate(resolve));
+  return warnings(sink);
 }
 
-const LINK_SCRIPT = `cd /tmp && ln -sfn -- '${AGENT_SOCKET}' '/tmp/vscode-ssh-auth-sock-42'`;
-
 describe('the agent link of a connect', () => {
-  it('F-2311 5.0 step 5: a link plan opens one terminal, and nothing runs before the editor opens it', () => {
+  it('F-2311 5.0 steps 5-6: a link plan runs ln in one hidden terminal, its paths as arguments of their own', () => {
     const {dependencies, terminals} = forwardingOf();
-    const channel = channelWith([], linkAnswer({kind: 'exit', status: 0}));
-    linkAgent(dependencies, channel, LINK);
-    deepStrictEqual(
-      [terminals.map(terminal => terminal.name), channel.calls],
-      [[LINK_TERMINAL_NAME], []],
-    );
+    linkAgent(dependencies, LINK);
+    deepStrictEqual(terminals, [
+      {
+        name: LINK_TERMINAL_NAME,
+        command: [
+          '/bin/sh',
+          '-c',
+          'ln -sfn -- "$1" "$2"',
+          'sh',
+          AGENT_SOCKET,
+          '/tmp/vscode-ssh-auth-sock-42',
+        ],
+      },
+    ]);
   });
 
-  it('F-2311 5.0 step 6: when the editor opens it, ln runs once in /tmp with its paths quoted', async () => {
-    const {channel} = await linkedOver(
-      LINK,
-      linkAnswer({kind: 'exit', status: 0}),
-    );
-    deepStrictEqual(scriptsOf(channel), [LINK_SCRIPT]);
-  });
-
-  it('F-2311 BR-4: a path with a quote stays one word', async () => {
-    const {channel} = await linkedOver(
-      {...LINK, target: "/tmp/it's/agent"},
-      linkAnswer({kind: 'exit', status: 0}),
-    );
-    strictEqual(
-      scriptsOf(channel)[0]?.includes(`-- '/tmp/it'\\''s/agent' `),
-      true,
-    );
-  });
-
-  it('F-2311 5.0 step 5: a none plan opens no terminal', () => {
+  it('F-2311 5.0 step 5: a none plan runs no terminal', () => {
     const {dependencies, terminals} = forwardingOf();
-    linkAgent(dependencies, channelWith([]), {
-      kind: 'none',
-      reason: 'noForwardedSocket',
-    });
+    linkAgent(dependencies, {kind: 'none', reason: 'noForwardedSocket'});
     deepStrictEqual(terminals, []);
   });
 
-  it('F-2311 7.E7: an ln that fails is a warn line with its output', async () => {
-    const {sink} = await linkedOver(
-      LINK,
-      linkAnswer({kind: 'exit', status: 1}, ['ln: Permission denied']),
-    );
-    deepStrictEqual(warnings(sink), [
-      'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: ln exited with 1: ln: Permission denied',
+  it('F-2311 7.E7: an ln that exits 0 logs nothing', async () => {
+    deepStrictEqual(await linkWarnings(Promise.resolve(0)), []);
+  });
+
+  it('F-2311 7.E7: an ln that fails is a warn line with its exit status', async () => {
+    deepStrictEqual(await linkWarnings(Promise.resolve(1)), [
+      'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: ln exited with 1',
     ]);
   });
 
-  it('F-2311 7.E7: a channel that fails is a warn line', async () => {
-    const {sink} = await linkedOver(
-      LINK,
-      linkAnswer({
-        kind: 'fail',
-        failure: {kind: 'channelClosed', detail: 'session ended'},
-      }),
-    );
-    deepStrictEqual(warnings(sink), [
-      'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: session ended',
+  it('F-2311 7.E7: a terminal that closes with no exit status is a warn line', async () => {
+    deepStrictEqual(await linkWarnings(Promise.resolve(undefined)), [
+      'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: ln exited with undefined',
     ]);
   });
 
-  it('F-2311 7.E7: a run that throws is a warn line, and the work still settles', async () => {
-    const {sink} = await linkedOver(LINK);
-    deepStrictEqual(warnings(sink), [
-      `the agent link /tmp/vscode-ssh-auth-sock-42 was not made: Error: no scripted answer left for a posixShell script: ${LINK_SCRIPT}`,
-    ]);
+  it('F-2311 7.E7: a terminal the editor could not run is a warn line', async () => {
+    deepStrictEqual(
+      await linkWarnings(Promise.reject(new Error('no terminal'))),
+      [
+        'the agent link /tmp/vscode-ssh-auth-sock-42 was not made: Error: no terminal',
+      ],
+    );
   });
 });

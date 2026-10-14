@@ -97,8 +97,8 @@ interface WiringSeen {
   presented: string[];
   /** What the S045 notifications did, in order. */
   progress: string[];
-  /** The link terminals opened, by name, with the work each runs when it opens. */
-  linkTerminals: Array<{name: string; work: () => Promise<void>}>;
+  /** The link terminals run, by name, with the program and its arguments. */
+  linkTerminals: Array<{name: string; command: string[]}>;
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -283,8 +283,12 @@ function portsOf(
       draw: () => 7,
       windowLink: {path: undefined},
       linkTerminals: {
-        open: (name, work) => {
-          seen.linkTerminals.push({name, work});
+        runProgram: (name, program, programArguments) => {
+          seen.linkTerminals.push({
+            name,
+            command: [program, ...programArguments],
+          });
+          return Promise.resolve(0);
         },
       },
     },
@@ -1045,29 +1049,26 @@ describe("the composition's channel and window environment", () => {
     );
   });
 
-  it("F-2311 5.0 steps 5-6: the link step opens the agent link terminal, which runs ln over the lease's channel", async () => {
+  it('F-2311 5.0 steps 5-6: the link step runs ln in the agent link terminal of the window', () => {
     const {ports, seen} = portsOf();
-    const channel = channelAnswering([]);
-    stepsOf(ports).linkAgent(inputFor('dev'), leaseOn(channel), {
+    stepsOf(ports).linkAgent({
       kind: 'link',
       linkPath: '/tmp/vscode-ssh-auth-sock-7',
       target: '/tmp/ssh-x/agent.1',
     });
-    await seen.linkTerminals[0]?.work();
-    deepStrictEqual(
-      [
-        seen.linkTerminals.map(terminal => terminal.name),
-        channel.calls.map(call =>
-          call.operation === 'runScript' ? call.request.script : '',
-        ),
-      ],
-      [
-        ['Remote - SSH agent link'],
-        [
-          "cd /tmp && ln -sfn -- '/tmp/ssh-x/agent.1' '/tmp/vscode-ssh-auth-sock-7'",
+    deepStrictEqual(seen.linkTerminals, [
+      {
+        name: 'Remote - SSH agent link',
+        command: [
+          '/bin/sh',
+          '-c',
+          'ln -sfn -- "$1" "$2"',
+          'sh',
+          '/tmp/ssh-x/agent.1',
+          '/tmp/vscode-ssh-auth-sock-7',
         ],
-      ],
-    );
+      },
+    ]);
   });
 
   it('F-2507: an entry left out is logged with its position and why', async () => {

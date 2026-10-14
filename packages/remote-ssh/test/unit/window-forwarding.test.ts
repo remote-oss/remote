@@ -5,116 +5,120 @@ import {
   terminalEnvironmentOf,
 } from '../../src/surfaces/window-forwarding.ts';
 
-/** An event emitter as the editor's: listeners, a fire and a disposal, recorded. */
-class FakeEmitter<Value> {
-  readonly fired: Value[] = [];
-  disposals = 0;
-  private readonly listeners: Array<(value: Value) => void> = [];
-
-  readonly event = (listener: (value: Value) => void): {dispose(): void} => {
-    this.listeners.push(listener);
-    return {dispose: () => undefined};
-  };
-
-  fire(value: Value): void {
-    this.fired.push(value);
-    for (const listener of this.listeners) {
-      listener(value);
-    }
-  }
-
-  dispose(): void {
-    this.disposals += 1;
-  }
+/** A terminal the fake editor made: the options it was given, its exit status and its disposals. */
+interface FakeTerminal {
+  options: vscode.TerminalOptions;
+  exitStatus: {code: number | undefined} | undefined;
+  disposals: number;
+  dispose(): void;
 }
 
-/** The options a created terminal was given, its pseudoterminal included. */
-interface CreatedTerminal {
-  name: string;
-  pty: vscode.Pseudoterminal;
-}
-
-/** An editor whose `createTerminal` records the options, with the emitters it made. */
+/** An editor whose terminals are recorded, and that closes one when the test says so. */
 function fakeEditor(): {
-  editor: Pick<typeof vscode, 'window' | 'EventEmitter'>;
-  created: CreatedTerminal[];
-  emitters: Array<FakeEmitter<unknown>>;
+  editor: Pick<typeof vscode, 'window'>;
+  created: FakeTerminal[];
+  close: (terminal: unknown, code?: number) => void;
 } {
-  const created: CreatedTerminal[] = [];
-  const emitters: Array<FakeEmitter<unknown>> = [];
+  const created: FakeTerminal[] = [];
+  const closeListeners: Array<(terminal: unknown) => void> = [];
   const editor = {
-    ['EventEmitter']: class extends FakeEmitter<unknown> {
-      constructor() {
-        super();
-        emitters.push(this);
-      }
-    },
     window: {
-      createTerminal: (options: CreatedTerminal) => {
-        created.push(options);
-        return {};
+      onDidCloseTerminal: (listener: (closed: unknown) => void) => {
+        closeListeners.push(listener);
+        return {
+          dispose: () =>
+            closeListeners.splice(closeListeners.indexOf(listener), 1),
+        };
+      },
+      createTerminal: (options: vscode.TerminalOptions) => {
+        const terminal: FakeTerminal = {
+          options,
+          exitStatus: undefined,
+          disposals: 0,
+          dispose: () => {
+            terminal.disposals += 1;
+          },
+        };
+        created.push(terminal);
+        return terminal;
       },
     },
-  } as unknown as Pick<typeof vscode, 'window' | 'EventEmitter'>;
-  return {editor, created, emitters};
+  } as unknown as Pick<typeof vscode, 'window'>;
+  return {
+    editor,
+    created,
+    close: (terminal, code) => {
+      if (code !== undefined) {
+        (terminal as FakeTerminal).exitStatus = {code};
+      }
+      for (const listener of [...closeListeners]) {
+        listener(terminal);
+      }
+    },
+  };
+}
+
+/** Runs the link command in a link terminal of `fake`, the way the forwarding does. */
+function runIn(
+  fake: ReturnType<typeof fakeEditor>,
+): Promise<number | undefined> {
+  return linkTerminalsOf(fake.editor).runProgram(
+    'Remote - SSH agent link',
+    '/bin/sh',
+    [
+      '-c',
+      'ln -sfn -- "$1" "$2"',
+      'sh',
+      '/tmp/ssh-x/agent.1',
+      '/tmp/vscode-ssh-auth-sock-42',
+    ],
+  );
 }
 
 describe('the link terminals in the editor', () => {
-  it('F-2311 5.0 step 5: one open creates one extension terminal of that name, and runs nothing yet', () => {
-    const {editor, created} = fakeEditor();
-    const runs: string[] = [];
-    linkTerminalsOf(editor).open('Remote - SSH agent link', () => {
-      runs.push('run');
-      return Promise.resolve();
-    });
+  it('F-2311 5.0 step 5, R6: one run creates one hidden, transient terminal of the program, with no folder', () => {
+    const fake = fakeEditor();
+    void runIn(fake);
     deepStrictEqual(
-      [created.map(options => Object.keys(options).sort()), runs],
-      [[['name', 'pty']], []],
-    );
-  });
-
-  it('F-2311 5.0 step 6: the editor opening it runs the work, then the terminal closes', async () => {
-    const {editor, created, emitters} = fakeEditor();
-    const order: string[] = [];
-    linkTerminalsOf(editor).open('Remote - SSH agent link', () => {
-      order.push('run');
-      return Promise.resolve();
-    });
-    const terminal = created[0];
-    terminal?.pty.onDidClose?.(() => {
-      order.push('close');
-    });
-    terminal?.pty.open(undefined);
-    await new Promise(resolve => setImmediate(resolve));
-    deepStrictEqual(
-      [order, emitters.map(emitter => emitter.disposals)],
+      fake.created.map(terminal => terminal.options),
       [
-        ['run', 'close'],
-        [1, 1],
+        {
+          name: 'Remote - SSH agent link',
+          shellPath: '/bin/sh',
+          shellArgs: [
+            '-c',
+            'ln -sfn -- "$1" "$2"',
+            'sh',
+            '/tmp/ssh-x/agent.1',
+            '/tmp/vscode-ssh-auth-sock-42',
+          ],
+          hideFromUser: true,
+          isTransient: true,
+        },
       ],
     );
   });
 
-  it('F-2311 7.E7: work that rejects still closes the terminal', async () => {
-    const {editor, created} = fakeEditor();
-    linkTerminalsOf(editor).open('Remote - SSH agent link', () =>
-      Promise.reject(new Error('no channel')),
-    );
-    const order: string[] = [];
-    created[0]?.pty.onDidClose?.(() => {
-      order.push('close');
-    });
-    created[0]?.pty.open(undefined);
-    await new Promise(resolve => setImmediate(resolve));
-    deepStrictEqual(order, ['close']);
+  it('F-2311 7.E7: the run gives the exit status once the terminal closed, and disposes it', async () => {
+    const fake = fakeEditor();
+    const running = runIn(fake);
+    fake.close(fake.created[0], 1);
+    deepStrictEqual([await running, fake.created[0]?.disposals], [1, 1]);
   });
 
-  it('F-2311 R6: a close the user asks for does nothing more', () => {
-    const {editor, created} = fakeEditor();
-    linkTerminalsOf(editor).open('Remote - SSH agent link', () =>
-      Promise.resolve(),
-    );
-    deepStrictEqual(created[0]?.pty.close(), undefined);
+  it('F-2311 7.E7: a terminal that closes with no exit status gives none', async () => {
+    const fake = fakeEditor();
+    const running = runIn(fake);
+    fake.close(fake.created[0]);
+    deepStrictEqual(await running, undefined);
+  });
+
+  it("F-2311 R6: another terminal's close is not the link terminal's", async () => {
+    const fake = fakeEditor();
+    const running = runIn(fake);
+    fake.close({other: true}, 2);
+    fake.close(fake.created[0], 0);
+    deepStrictEqual(await running, 0);
   });
 });
 

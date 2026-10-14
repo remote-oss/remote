@@ -225,7 +225,7 @@ export function surfacesOf(
     downloadProgress: SILENT_PROGRESS,
     revealLog,
     rejectBindHost: () => undefined,
-    linkTerminals: {open: () => undefined},
+    linkTerminals: {runProgram: () => Promise.resolve(0)},
     applyTerminalEnvironment: () => undefined,
   };
 }

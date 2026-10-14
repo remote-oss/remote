@@ -1,19 +1,18 @@
 /**
  * @fileoverview The forwarding of a connect: the window's agent link and display plans, from the settings and the
- * probe's facts or from the connection's stored record, and the agent link made on the host from an extension
- * terminal, so that the editor's own trust check comes before it. Nothing here shows anything; it logs.
+ * probe's facts or from the connection's stored record, and the agent link made on the host from a hidden terminal,
+ * so that the editor's own trust check comes before it. Nothing here shows anything; it logs.
  */
 
 import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {ProbedHost} from 'lib-server';
-import {posixQuote} from 'lib-ssh';
 import {type AgentLinkPlan, planAgentLink} from '../environment/agent-link.ts';
 import {type DisplayPlan, planDisplay} from '../environment/display.ts';
 import type {ForwardingPlans} from '../environment/forwarding.ts';
 import type {ConnectionLease} from './steps.ts';
 
-/** The name of the extension terminal that makes the agent link. */
+/** The name of the hidden terminal that makes the agent link. */
 export const LINK_TERMINAL_NAME = 'Remote - SSH agent link';
 
 /** The start of every agent link's path. */
@@ -26,10 +25,17 @@ const LISTING_SCRIPT = [
   'done',
 ].join('\n');
 
-/** The editor's extension terminals, each running one piece of work. */
+/** The window's hidden terminals, each running one program. */
 export interface LinkTerminals {
-  /** Creates a terminal named `name`; when the editor opens it, `work` runs, and then the terminal closes. */
-  open(name: string, work: () => Promise<void>): void;
+  /**
+   * Runs `program` with `programArguments` in a hidden terminal named `name`, on the host in a remote window, and
+   * gives its exit status once the terminal has closed; none when the editor reports none.
+   */
+  runProgram(
+    name: string,
+    program: string,
+    programArguments: readonly string[],
+  ): Promise<number | undefined>;
 }
 
 /** What the forwarding of a connect reads and where it makes the link. */
@@ -129,51 +135,41 @@ export async function planForwarding(
   return {agentLink, display};
 }
 
-/** Runs `ln` in /tmp over the channel; a failure is a warn line and nothing else. */
-async function makeLink(
-  channel: HostChannel,
-  plan: Extract<AgentLinkPlan, {kind: 'link'}>,
-  logger: Logger,
-): Promise<void> {
-  const output: string[] = [];
-  const outcome = await channel.runScript(
-    {
-      script: `cd /tmp && ln -sfn -- ${posixQuote(plan.target)} ${posixQuote(plan.linkPath)}`,
-      interpreter: 'posixShell',
-      environment: {},
-      input: {kind: 'text', text: ''},
-      cancellation: new AbortController().signal,
-    },
-    line => {
-      output.push(line);
-    },
-  );
-  if (outcome.kind === 'failed') {
-    logger.warn(
-      `the agent link ${plan.linkPath} was not made: ${outcome.failure.detail}`,
-    );
-  } else if (outcome.status !== 0) {
-    logger.warn(
-      `the agent link ${plan.linkPath} was not made: ln exited with ${String(outcome.status)}: ${output.join(' ')}`,
-    );
-  }
-}
+/** The command of the link terminal: `ln` with the target and the link path as its own arguments, never in its text. */
+const LINK_COMMAND = 'ln -sfn -- "$1" "$2"';
 
-/** Opens the extension terminal that makes a `link` plan's link once the editor opens it; a `none` plan opens none. */
+/**
+ * Makes a `link` plan's link from a hidden terminal of the window, which the editor starts on the host after its own
+ * trust check; a `none` plan makes none. It returns at once; an exit status other than 0 is a warn line.
+ */
 export function linkAgent(
   dependencies: Pick<ForwardingDependencies, 'linkTerminals' | 'logger'>,
-  channel: HostChannel,
   plan: AgentLinkPlan,
 ): void {
   if (plan.kind !== 'link') {
     return;
   }
   const {logger} = dependencies;
-  dependencies.linkTerminals.open(LINK_TERMINAL_NAME, () =>
-    makeLink(channel, plan, logger).catch((caught: unknown) => {
-      logger.warn(
-        `the agent link ${plan.linkPath} was not made: ${String(caught)}`,
-      );
-    }),
-  );
+  const {linkPath} = plan;
+  function warn(detail: string): void {
+    logger.warn(`the agent link ${linkPath} was not made: ${detail}`);
+  }
+  dependencies.linkTerminals
+    .runProgram(LINK_TERMINAL_NAME, '/bin/sh', [
+      '-c',
+      LINK_COMMAND,
+      'sh',
+      plan.target,
+      linkPath,
+    ])
+    .then(
+      status => {
+        if (status !== 0) {
+          warn(`ln exited with ${String(status)}`);
+        }
+      },
+      (caught: unknown) => {
+        warn(String(caught));
+      },
+    );
 }

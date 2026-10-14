@@ -394,8 +394,8 @@ export function stepsOf(
       );
       return held.forwarding;
     },
-    linkAgent: (input, lease, plan) => {
-      linkAgent(forwarding, lease.channel, plan);
+    linkAgent: plan => {
+      linkAgent(forwarding, plan);
     },
     plan: (input, ...rest) => serverSteps(input).plan(input, ...rest),
     gate: (input, ...rest) => serverSteps(input).gate(input, ...rest),

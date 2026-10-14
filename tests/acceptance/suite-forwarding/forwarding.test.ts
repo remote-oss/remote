@@ -1,4 +1,5 @@
 import {deepStrictEqual, match, strictEqual} from 'node:assert';
+import {lstatSync} from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import {connectionLog, onHost} from '../suite/harness.ts';
@@ -61,10 +62,20 @@ async function hostLinks(): Promise<string[]> {
   return listed.split('\n').filter(line => line !== '');
 }
 
+/** Whether `file` exists on the client, as a link or anything else: a link made on the host never does. */
+function existsOnClient(file: string): boolean {
+  try {
+    lstatSync(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The rows of each case, registered only in the launch of that case. */
 const ROWS: Readonly<Record<string, () => void>> = {
   agent: () => {
-    it('F-2311 AC-2, AC-3, AC-13: a window with ForwardAgent gets the agent in its terminals', async () => {
+    it('F-2311 AC-2, AC-3, AC-13: a window with ForwardAgent gets the agent in its terminals, through a link made on the host', async () => {
       const keyFile = path.join(
         process.env.HARNESS_RUN_FOLDER ?? '',
         'id_second',
@@ -76,13 +87,22 @@ const ROWS: Readonly<Record<string, () => void>> = {
       );
       const keys = await terminalWrites('ssh-add -l', 'agent-keys.txt');
       const links = await hostLinks();
+      const target = await onHost('readlink', socket).catch(() => '');
       deepStrictEqual(
         {
           links,
           isLink: /^\/tmp\/vscode-ssh-auth-sock-\d+$/.test(socket),
+          targetsSession: /^\/tmp\/ssh-[^/]+\/agent\.\d+$/.test(target.trim()),
+          onClient: existsOnClient(socket),
           listsKey: keys.includes(await fingerprintOf(keyFile)),
         },
-        {links: [`harness ${socket}`], isLink: true, listsKey: true},
+        {
+          links: [`harness ${socket}`],
+          isLink: true,
+          targetsSession: true,
+          onClient: false,
+          listsKey: true,
+        },
         `${socket}\n${keys}\n${forwardingLines()}`,
       );
     });
