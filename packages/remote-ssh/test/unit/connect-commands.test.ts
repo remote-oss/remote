@@ -87,6 +87,7 @@ function runWith(
         fakes.commandsRun.push(command);
         return Promise.resolve();
       },
+      switchToLocalWindow: () => Promise.resolve(),
       remoteName: () => options.remoteName,
     },
     connection: {
