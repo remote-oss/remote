@@ -9,6 +9,7 @@ import {filled, type Translate} from './strings.ts';
 
 /** The string ids of the progress and of the failure dialog. */
 export type FailureStringId =
+  | 'S009'
   | 'S014'
   | 'S015'
   | 'S022'
@@ -71,6 +72,7 @@ export type FailureStringId =
 
 /** The English template of each string id, with `{0}`, `{1}` for the values. */
 export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
+  S009: "An SSH installation couldn't be found",
   S014: "Can't assign requested address",
   S015: 'Cancel',
   S022: 'Close Remote',
