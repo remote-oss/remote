@@ -70,14 +70,20 @@ When step 1 passes, post the three records on #456 with the cause, and build §3
 
   | Label | Suite | Settings beyond `RENDERER_LAUNCH`'s |
   |---|---|---|
-  | `trust` | `trust` | none |
+  | `trust` | `trust` | `security.workspace.trust.startupPrompt: 'once'` (§3.1a) |
   | `trust-terminal` | `trust-terminal` | `remote.SSH.useLocalServer: false`, `remote.SSH.remotePlatform: {harness: 'linux'}` |
 
   `trust-terminal`'s other alias for a platform question is `refused` (no platform set, and the host is never reached
   once trust is refused). The connect timeout stays at its default of 15 s, which F-2601's "about 17 s" and F-2304
   AC-23's "+ 2 s" assume.
-- **The folders:** each row opens a folder of its own name, so no trust decision carries over. `security.workspace.*`
-  settings stay at their defaults: F-2501 AC-22 is about core's default prompt.
+- **§3.1a, the startup prompt** (step 1, measured on #716): core's `security.workspace.trust.startupPrompt` defaults
+  to `never` in OSS ([oss] `src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts`). With that value,
+  an untrusted folder shows the Restricted Mode banner and no dialog. The dialog of F-2501 AC-22 and F-2001 AC-14 is core's
+  own rendering under that setting. Our half is that the resolver doesn't grant trust. So the `trust` launch turns the
+  prompt on with `once`, which changes nothing of ours. `trust-terminal` keeps core's defaults, so that the request
+  dialog a feature raises is observed with no setting.
+- **The folders:** each row opens a folder of its own name, so no trust decision carries over. Apart from §3.1a, the
+  `security.workspace.*` settings stay at their defaults.
 
 ### 3.2 `tools/acceptance-plain.ts`
 
@@ -120,7 +126,7 @@ leaves `window.dialogStyle` alone.
 | Dialog | Message | Buttons |
 |---|---|---|
 | Startup prompt (opening an untrusted folder) | `Do you trust the authors of the files in this folder?` | `Yes, I trust the authors`, `No, I don't trust the authors` |
-| Trust request (a feature asks, such as a terminal) | the same | `Trust Folder & Continue`, `Manage`, `Cancel` |
+| Trust request (a feature asks, such as a terminal) | the same | `Manage`, `Cancel`, `Trust Folder & Continue` (DOM order, measured on #716) |
 
 The rows quote the labels step 1 measured, which should be these.
 
@@ -153,6 +159,7 @@ The rows quote the labels step 1 measured, which should be these.
 | `openWindow('harness', 's1')` | `isTrusted('s1')` is false; `waitForDialog('s1')` gives the startup prompt of §3.4 |
 | `answerDialog('s1', 'Yes, I trust the authors')` | the dialog is gone, and `isTrusted('s1')` becomes true within 10 s |
 | `openWindow('harness', 's2')`; `answerDialog('s2', "No, I don't trust the authors")` | `isTrusted('s2')` stays false; `dialogOf('s2')` is `undefined` |
+| in `trust-terminal` (core's defaults), `openWindow('harness', 's3')` | `isTrusted('s3')` false, and no dialog until the connect asks for trust; then `waitForDialog('s3')` gives the trust request of §3.4 |
 | `answerDialog('s2', 'No such button')` | fails, listing the dialog's labels (when one is open; else naming the window) |
 
 **Criterion rows written in this PR** (`trust/trust.test.ts`):
