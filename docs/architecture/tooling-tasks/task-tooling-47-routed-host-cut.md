@@ -23,11 +23,22 @@ never fails ssh's connect: ssh only times out in the banner exchange. The two re
 ### 2.1 `tools/acceptance-run.ts`: the run network
 
 1. `export function runNetworkOf(runId: string): string`, which gives `remote-oss-acceptance-${runId}`.
-2. `export function connectRunNetwork(command: CommandRunner, runId: string, container: string): string`:
-   1. `docker network inspect <name>`: when its status isn't 0, run `checked(command, 'docker', ['network', 'create',
+2. `export function connectRunNetwork(command: CommandRunner, runId: string, container: string, now: () => number =
+   Date.now): string`:
+   1. **The sweep of left-over networks** (proteus, #874: killed and cancelled runs leave theirs, and Docker's default
+      address pool runs out after about 30). For each id of `docker network ls --quiet --filter label=${RUN_LABEL}`
+      (the label's key, any run), read `docker network inspect --format '{{.Created.Unix}} {{len .Containers}}' <id>`.
+      When the network is older than `STALE_RUN_SECONDS` (`now() / 1000 - created`) and has no container, run
+      `command('docker', ['network', 'rm', id])`, ignoring its status, since another job may remove it first. A
+      network that's younger, or has a container, is another job's: leave it. An `inspect` that fails or doesn't
+      give two numbers skips that network.
+      - Rename `STALE_EDITOR_SECONDS` (`acceptance-run.ts:22`) to `STALE_RUN_SECONDS`, and make its JSDoc "How old
+        an editor or a network of a CI run is before the opening clean takes it for one a killed job left behind:
+        two hours". The editor sweep in `cleanRun` uses the new name.
+   2. `docker network inspect <name>`: when its status isn't 0, run `checked(command, 'docker', ['network', 'create',
       '--label', `${RUN_LABEL}=${runId}`, name])`. A run with two host containers (the variants) shares one network.
-   2. `checked(command, 'docker', ['network', 'connect', name, container])`.
-   3. `checked(command, 'docker', ['inspect', '--format', `{{(index .NetworkSettings.Networks "${name}").IPAddress}}`,
+   3. `checked(command, 'docker', ['network', 'connect', name, container])`.
+   4. `checked(command, 'docker', ['inspect', '--format', `{{(index .NetworkSettings.Networks "${name}").IPAddress}}`,
       container]).trim()` is the address. An empty address throws `the host ${container} has no address on ${name}`.
    - JSDoc: "Connects the host container to the run's own network as well as Docker's default one, and returns its
      address there: the address the `routed` alias reaches without Docker's published port."
@@ -125,6 +136,8 @@ function routeRule(address: string, cut: RouteCut): {chain: string; match: reado
 | same | `tooling-47: restoreRoute deletes the held rules and nothing else` | only the held rule is deleted; with neither held, no `-D` |
 | same | `tooling-47: a refused rule throws with iptables' error` | as the existing `cutNetwork` row |
 | `tools/acceptance-run.test.ts` | `tooling-47: connectRunNetwork creates the labelled network once, connects the host and gives its address` | the calls in order; a second container with `inspect` status 0 gets no `create`; returns the trimmed address |
+| same | `tooling-47: the opening sweep removes a labelled network older than two hours with no container` | `inspect` gives `<now − 7201> 0`, so there's one `network rm <id>`, before the run's own `network create` |
+| same | `tooling-47: the sweep leaves a younger network, one with a container, and one it can't read` | `<now − 7199> 0`, `<now − 9000> 1` and an `inspect` with status 1 give no `network rm` |
 | same | `tooling-47: a host with no address on the run network throws` | `inspect` gives `''`, so it throws, naming the container and the network |
 | same | `tooling-47: cleanRun removes the run's networks after its containers` | `network ls --filter label=…` then `network rm <id>`, after `rm --force`, before `image rm` |
 | same | `tooling-47: a network left after the clean-up fails the run` | the error names it |
@@ -160,5 +173,7 @@ unreachable or silent (card tooling-47, #873)`. Request athena only; hermes assi
 1. `docker network connect` to a running container with a published port changes the published port, or breaks it.
 2. A runner refuses `docker network create`, for example from the address pool: report the error, don't change the
    pool.
-3. ssh's line differs from §3's text (for example `Connection refused` for the REJECT): report it with the iptables
+3. `docker network inspect --format '{{.Created.Unix}} …'` isn't accepted by a runner's Docker: report the error and
+   the Docker version.
+4. ssh's line differs from §3's text (for example `Connection refused` for the REJECT): report it with the iptables
    rule and the OpenSSH version.
