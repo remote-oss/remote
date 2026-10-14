@@ -13,11 +13,18 @@ import {
 } from 'lib-authority';
 import type {CommandHost} from 'lib-identifiers';
 import type {Logger} from 'lib-log';
+import {
+  type DevContainerFolder,
+  decodedFolderOf,
+} from '../authority/payload.ts';
 import {runtimeCommands} from '../identifiers.generated.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
+import {
+  type RecoveryPorts,
+  recoveryPresenterOf,
+} from '../surfaces/recovery-presenter.ts';
 import type {ContainerConnector} from './connector.ts';
 import {phaseTitleOf, startTitleOf} from './progress-titles.ts';
-import {type PresenterPorts, slicePresenterOf} from './slice-presenter.ts';
 import {workspaceSuffixOf} from './window-identity.ts';
 
 /** What the registration needs of the editor. */
@@ -25,7 +32,7 @@ export interface ConnectorRegistrationHost {
   resolverEditor: ResolverEditor;
   labels: LabelFormatterHost;
   commands: CommandHost;
-  presenter: PresenterPorts;
+  presenter: RecoveryPorts;
   translate: Translate;
 }
 
@@ -45,12 +52,21 @@ export async function registerContainerResolver(
   served: ConnectorServed,
 ): Promise<{registration: Registration['kind']; dispose(): void}> {
   const {translate} = host;
+  let handle:
+    Extract<Registration, {kind: 'registered'}>['resolver'] | undefined;
+  function currentTarget(): DevContainerFolder | undefined {
+    return decodedFolderOf(handle?.currentConnection()?.decodedTarget);
+  }
   const registration = await registerResolver(
     host.resolverEditor,
     {
       family: 'dev-container',
       connector,
-      presenter: slicePresenterOf(host.presenter, translate),
+      presenter: recoveryPresenterOf(
+        host.presenter,
+        () => currentTarget(),
+        translate,
+      ),
       cancellable: false,
       allowsTrust: false,
       titleOf: phase => phaseTitleOf(phase, translate),
@@ -77,6 +93,7 @@ export async function registerContainerResolver(
   let disposed = false;
   if (registration.kind === 'registered') {
     const {resolver} = registration;
+    handle = resolver;
     resolver.onFirstResolveSettled(() => {
       const connection = resolver.currentConnection();
       if (connection?.state === 'connected' && !disposed) {

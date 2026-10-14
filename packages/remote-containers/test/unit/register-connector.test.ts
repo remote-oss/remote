@@ -3,6 +3,7 @@ import {
   type ConnectPhase,
   type Connected,
   encodeAuthority,
+  type Failed,
   type ProgressRequest,
   type ResourceLabelFormatter,
 } from 'lib-authority';
@@ -10,6 +11,9 @@ import {recordingResolverEditor} from 'lib-authority/testing/recording-resolver-
 import type {CommandHost} from 'lib-identifiers';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
+import {devContainerPayloadOf} from '../../src/authority/payload.ts';
+import {containerSetupFailed} from '../../src/connect/failures.ts';
+import {inertRecoveryPorts} from './inert-recovery-ports.ts';
 import type {ContainerConnector} from '../../src/connect/connector.ts';
 import {registerContainerResolver} from '../../src/connect/register-connector.ts';
 
@@ -31,6 +35,7 @@ const CONNECTED: Connected = {
 async function registered(
   options: {
     resolversGranted?: boolean;
+    failure?: Failed;
     identity?: {name: string | undefined; context: string | undefined};
     canonical?: (
       authority: string,
@@ -40,6 +45,7 @@ async function registered(
 ) {
   const warned: string[] = [];
   const events: string[] = [];
+  const shown: string[][] = [];
   const requests: ProgressRequest[] = [];
   const formatters: ResourceLabelFormatter[] = [];
   const disposed: string[] = [];
@@ -51,7 +57,7 @@ async function registered(
       for (const listener of listeners) {
         listener({name: 'installing'});
       }
-      return Promise.resolve(CONNECTED);
+      return Promise.resolve(options.failure ?? CONNECTED);
     },
     cancel: () => undefined,
     revealDetails: () => undefined,
@@ -98,10 +104,12 @@ async function registered(
         },
       },
       commands: host,
-      presenter: {
-        showError: () => Promise.resolve(undefined),
-        openSetting: () => Promise.resolve(),
-      },
+      presenter: inertRecoveryPorts({
+        showError: (message, detail, buttons) => {
+          shown.push([...buttons]);
+          return Promise.resolve('Retry');
+        },
+      }),
       translate: template => template,
     },
     connector,
@@ -121,6 +129,7 @@ async function registered(
   return {
     result,
     events,
+    shown,
     requests,
     formatters,
     disposed,
@@ -261,5 +270,42 @@ describe('the registration of the container connector (card containers-08)', () 
         ],
       ],
     );
+  });
+
+  it('F-0410 AC-1: a failed connect shows the dialog with Edit for the folder of the window’s authority', async () => {
+    const payload = devContainerPayloadOf({
+      kind: 'folder',
+      hostPath: '/w',
+      localDocker: false,
+      configFile: {
+        $mid: 1,
+        path: '/w/.devcontainer/devcontainer.json',
+        scheme: 'file',
+      },
+    });
+    const seen = await registered({failure: containerSetupFailed()});
+    await seen.recording
+      .registered()
+      ?.resolve(
+        encodeAuthority({
+          family: 'dev-container',
+          target: {payload},
+          rawHostString: payload,
+        }),
+        {resolveAttempt: 1},
+      )
+      .catch(() => undefined);
+    deepStrictEqual(seen.shown, [
+      ['Retry', 'Edit devcontainer.json Locally', 'More Actions...'],
+    ]);
+  });
+
+  it('F-0410: a failed connect of an authority that names no folder shows the dialog without Edit', async () => {
+    const seen = await registered({failure: containerSetupFailed()});
+    await seen.recording
+      .registered()
+      ?.resolve(AUTHORITY, {resolveAttempt: 1})
+      .catch(() => undefined);
+    deepStrictEqual(seen.shown, [['Retry', 'More Actions...']]);
   });
 });

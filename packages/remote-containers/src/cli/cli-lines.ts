@@ -3,6 +3,22 @@
  * differently for each subcommand), and the events of stderr, one JSON object a line. Nothing here throws.
  */
 
+/** Why the Docker daemon refused to create or start the container, by its own words. */
+export type DaemonRefusal = 'invalidMount' | 'portAllocated';
+
+const INVALID_MOUNT =
+  /^(?:docker: )?Error response from daemon: invalid mount config for type "/u;
+const PORT_ALLOCATED =
+  /^(?:docker: )?Error response from daemon: .*: Bind for \S+ failed: port is already allocated$/u;
+
+/** The refusal one line of the Docker client says, or undefined; the line has no colour codes and no CR. */
+export function daemonRefusalOf(line: string): DaemonRefusal | undefined {
+  if (INVALID_MOUNT.test(line)) {
+    return 'invalidMount';
+  }
+  return PORT_ALLOCATED.test(line) ? 'portAllocated' : undefined;
+}
+
 /** Why a subcommand did not give its result. */
 export type CliFailure =
   | {
@@ -20,6 +36,8 @@ export type CliFailure =
       message: string;
       description: string;
       containerId: string | undefined;
+      /** Why the daemon refused, when the CLI relayed its words; absent otherwise. */
+      refusal?: DaemonRefusal;
     }
   | {kind: 'noResult'; status: number | null}
   | {kind: 'malformedResult'; field: string}

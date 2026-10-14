@@ -38,14 +38,16 @@ import {
 } from './identifiers.generated.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
+import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
+import {rebuildContainer} from './open/rebuild.ts';
+import {reopenInContainer} from './open/reopen.ts';
+import {licenceModalOf} from './surfaces/licence-modal.ts';
 import {
   lifecyclePresenterOf,
   type StatusProgressPort,
   type TerminalPort,
 } from './surfaces/lifecycle-terminal.ts';
-import {licenceModalOf} from './surfaces/licence-modal.ts';
-import {rebuildContainer} from './open/rebuild.ts';
-import {reopenInContainer} from './open/reopen.ts';
+import {recoveryPortsOf} from './surfaces/recovery-editor.ts';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
 const STAND_DOWN_WARNING =
@@ -69,6 +71,14 @@ interface Manifest {
   displayName: string;
   version: string;
   contributes?: {commands?: Array<{command: string; title: string}>};
+}
+
+/** The folders the window has open, by scheme and path on this machine. */
+function windowFolders(): Array<{scheme: string; fsPath: string}> {
+  return (vscode.workspace.workspaceFolders ?? []).map(folder => ({
+    scheme: folder.uri.scheme,
+    fsPath: folder.uri.fsPath,
+  }));
 }
 
 function translate(template: string): string {
@@ -246,11 +256,7 @@ export async function activate(
           execute: reopenInContainer({
             window: {
               remoteName: () => vscode.env.remoteName,
-              folders: () =>
-                (vscode.workspace.workspaceFolders ?? []).map(folder => ({
-                  scheme: folder.uri.scheme,
-                  fsPath: folder.uri.fsPath,
-                })),
+              folders: windowFolders,
               isTrusted: () => vscode.workspace.isTrusted,
               serializedFile: file => serializedUriOf(vscode.Uri.file(file)),
             },
@@ -336,6 +342,15 @@ export async function activate(
   if (result.kind === 'serving') {
     const {served} = result;
     const logger = served.logger;
+    void openPendingEdit({
+      memento: context.globalState,
+      remoteName: () => vscode.env.remoteName,
+      folders: windowFolders,
+      now: Date.now,
+      open: file =>
+        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file)),
+      logger,
+    });
     const host = identifierHost(vscode, manifest);
     void moveInstallIfLocal({
       userValue: key =>
@@ -460,21 +475,16 @@ export async function activate(
         }),
         labels: vscode.workspace,
         commands: host,
-        presenter: {
-          showError: (message, detail, items) =>
-            Promise.resolve(
-              vscode.window.showErrorMessage(
-                message,
-                {modal: true, detail},
-                ...items,
-              ),
+        presenter: recoveryPortsOf(vscode, {
+          keepEdit: (folder, configFile) =>
+            storePendingEdit(
+              context.globalState,
+              folder,
+              configFile,
+              Date.now(),
             ),
-          openSetting: setting =>
-            vscode.commands.executeCommand(
-              'workbench.action.openSettings',
-              setting,
-            ),
-        },
+          logger,
+        }),
         translate,
       },
       connector,

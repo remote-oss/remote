@@ -47,6 +47,17 @@ describe('the failures of the container connector (card containers-08)', () => {
     );
   });
 
+  it('F-0410 AC-11, AC-12: row 5 gives S018 for a refused mount, S019 for a port in use and S034 otherwise (card containers-11)', () => {
+    deepStrictEqual(
+      [
+        containerSetupFailed('invalidMount').reason,
+        containerSetupFailed('portAllocated').reason,
+        containerSetupFailed(undefined).reason,
+      ],
+      [{id: 'S018'}, {id: 'S019'}, {id: 'S034'}],
+    );
+  });
+
   it('contracts §2: rows 6 to 10 of the table', () => {
     deepStrictEqual(
       [
