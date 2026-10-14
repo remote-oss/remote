@@ -87,6 +87,20 @@ describe('the remote window of the VSCodium run', () => {
     strictEqual(await isRunning(server.processId), true);
   });
 
+  it('F-2401 AC-2: the Alpine host with libstdc++ and libgcc connected with no prerequisite message', async () => {
+    const packages = await onHost('apk', 'info', '-e', 'libstdc++', 'libgcc');
+    deepStrictEqual(
+      [
+        /^\d+\.\d+/.test(await onHost('cat', '/etc/alpine-release')),
+        ['libstdc++', 'libgcc'].map(name => packages.includes(name)),
+        vscode.env.remoteName,
+        recordLines().some(line => line.question.includes('prerequisites')),
+        connectionLog().some(line => line.includes('prerequisites')),
+      ],
+      [true, [true, true], 'ssh-remote', false, false],
+    );
+  });
+
   /** The texts of the connect's progress, title first, and the phases' details flags. */
   function progress(): Array<{text: string; details: boolean | undefined}> {
     return recordLines('progress').map(line => ({
