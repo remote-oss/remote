@@ -19,7 +19,7 @@ import {
   runConnectionHelper,
   SharedSessionChannel,
 } from '../../src/index.ts';
-import {AUTHENTICATED, SSH_REQUEST} from './connection-fixture.ts';
+import {AUTHENTICATED, RUN_FACTS, SSH_REQUEST} from './connection-fixture.ts';
 
 const PARAMETERS = 'REMOTE_OSS_HELPER_PARAMETERS';
 const DIGEST_SCRIPT =
@@ -182,20 +182,25 @@ describe('host channel over the shared ssh session: the lib-host contract', func
         folder: '/registry',
         hostString: 'harness',
         script: '/helper.js',
-        options: {
-          request: JSON.stringify(SSH_REQUEST),
-          unboundedWaitSeconds: 120,
-          runtimeFolder: '/run',
-          runtime: '/editor',
-          askpassProgram: '/askpass.js',
-          displayHost: 'harness',
-          externalAskpass: false,
-          askpassFirstMessageMilliseconds: 5000,
-        },
+        prepare: () =>
+          Promise.resolve({
+            kind: 'ready' as const,
+            runFacts: RUN_FACTS,
+            options: {
+              request: JSON.stringify(SSH_REQUEST),
+              unboundedWaitSeconds: 120,
+              runtimeFolder: '/run',
+              runtime: '/editor',
+              askpassProgram: '/askpass.js',
+              displayHost: 'harness',
+              externalAskpass: false,
+              askpassFirstMessageMilliseconds: 5000,
+            },
+          }),
         policy: {kind: 'graceAfterLastLease', milliseconds: 50},
         cancellation: new AbortController().signal,
       },
-      {requestMilliseconds: 5000, loginMilliseconds: 10000},
+      () => ({requestMilliseconds: 5000, loginMilliseconds: 10000}),
     );
     if (acquired.kind !== 'acquired') {
       throw new Error(`no lease: ${acquired.failure}`);

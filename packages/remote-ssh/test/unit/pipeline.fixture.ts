@@ -213,6 +213,7 @@ export function endTunnel(recording: Recording, detail: string): void {
 export function leaseOf(recording: Recording): ConnectionLease {
   return {
     channel: {} as unknown as HostChannel,
+    waits: undefined,
     socksPort: 1080,
     storedRecord: undefined,
     storeSharedRecord: record => {
@@ -251,6 +252,7 @@ export function steps(
       note('checkInstallFolder', {kind: 'done', value: undefined}),
     preconnect: () =>
       Promise.resolve(note('preconnect', {kind: 'done', value: undefined})),
+    lookupBeforeConnection: () => true,
     locateClient: () =>
       Promise.resolve(note('locateClient', {kind: 'done', value: WAITS})),
     decideTerms: () =>

@@ -16,6 +16,7 @@ import {
   stop,
   type Timer,
 } from 'lib-helper';
+import type {EffectiveOptions} from '../config/effective.ts';
 import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
 import type {SpawnFailure} from '../process/session.ts';
@@ -33,16 +34,37 @@ import {
 /** The registry namespace of the connection helpers. */
 export const CONNECTION_NAMESPACE = 'ssh.connection';
 
+/** What the client lookup found: the programs to run and the options `ssh` computes for the host. */
+export interface RunFacts {
+  sshProgram: string;
+  scpProgram: string;
+  effective: EffectiveOptions;
+}
+
+/** What a window that starts the helper decides once it has the key: the helper's start values, or why it won't. */
+export type PreparedConnection<Rejection> =
+  | {
+      kind: 'ready';
+      /** The helper's start values; the client adds the SOCKS port and the record's file. */
+      options: Omit<ConnectionHelperOptions, 'socksPort' | 'recordFile'>;
+      /** The lookup's results, which every window that joins the helper reads from its welcome. */
+      runFacts: RunFacts;
+    }
+  | {kind: 'refused'; refusal: Rejection};
+
 /** What a window asks of the helper registry: the host's helper, started if none runs. */
-export interface ConnectionAcquireRequest {
+export interface ConnectionAcquireRequest<Rejection = never> {
   /** The registry folder of the profile. */
   folder: string;
   /** The host string exactly as written: one helper per host string. */
   hostString: string;
   /** The bundled helper script. */
   script: string;
-  /** The helper's start values; the client adds the SOCKS port and the record's file. */
-  options: Omit<ConnectionHelperOptions, 'socksPort' | 'recordFile'>;
+  /**
+   * Called once, only when this window starts the helper: it makes the helper's start values, which includes the
+   * client lookup. A window that joins a running helper never calls it.
+   */
+  prepare: () => Promise<PreparedConnection<Rejection>>;
   /** The end policy of the helper: the grace after its last lease (a policy value, 2 to 4 seconds). */
   policy: EndPolicy;
   cancellation: AbortSignal;
@@ -97,6 +119,8 @@ export type ConnectionFailure =
 /** The connection a window holds once the login is done. */
 export interface ConnectedState {
   socksPort: number;
+  /** What the window that started the helper found when it looked the client up. */
+  runFacts: RunFacts;
   /** What an earlier window left for reuse, or null when nothing was stored yet. */
   sharedRecord: SharedRecord | null;
 }
@@ -291,7 +315,7 @@ type Asked =
 /** The shared connection of one host, as one window holds it. */
 export class SharedConnection {
   private readonly lease: HelperLease;
-  private readonly limits: ConnectionLimits;
+  private readonly limits: () => ConnectionLimits;
   private readonly timer: Timer;
   private readonly listeners = new Set<(notice: ConnectionNotice) => void>();
   private readonly openPrompts = new Set<number>();
@@ -301,7 +325,11 @@ export class SharedConnection {
     ((event: ConnectionEvent | 'helperGone') => void) | undefined;
 
   /** A connection over `lease`. */
-  constructor(lease: HelperLease, limits: ConnectionLimits, timer: Timer) {
+  constructor(
+    lease: HelperLease,
+    limits: () => ConnectionLimits,
+    timer: Timer,
+  ) {
     this.lease = lease;
     this.limits = limits;
     this.timer = timer;
@@ -330,7 +358,7 @@ export class SharedConnection {
       }
       const wait = new LoginWait(
         {
-          limitMilliseconds: this.limits.loginMilliseconds,
+          limitMilliseconds: this.limits().loginMilliseconds,
           timer: this.timer,
           leaseId: this.lease.leaseId,
           askConnect: () => this.askHelper({type: 'connect'}),
@@ -445,6 +473,13 @@ export class SharedConnection {
         failure: {kind: 'helperRefused', reason: 'no SOCKS port'},
       };
     }
+    const runFacts = runFactsOf(this.lease.payload.runFacts);
+    if (runFacts === undefined) {
+      return {
+        kind: 'failed',
+        failure: {kind: 'helperRefused', reason: 'no run facts'},
+      };
+    }
     const asked = await this.askHelper({type: 'sharedRecord'});
     if (asked.kind === 'failed') {
       return asked;
@@ -452,6 +487,7 @@ export class SharedConnection {
     return {
       kind: 'connected',
       socksPort,
+      runFacts,
       sharedRecord:
         asked.reply.type === 'sharedRecord' ? asked.reply.record : null,
     };
@@ -460,7 +496,7 @@ export class SharedConnection {
   private async askHelper(body: PlainData): Promise<Asked> {
     const outcome = await this.lease.request(
       body,
-      this.limits.requestMilliseconds,
+      this.limits().requestMilliseconds,
     );
     switch (outcome.kind) {
       case 'reply': {
@@ -537,36 +573,65 @@ export class SharedConnection {
 }
 
 /** Why no connection was acquired, or the connection to wait on. */
-export type AcquireConnectionOutcome =
+export type AcquireConnectionOutcome<Rejection = never> =
   | {kind: 'acquired'; connection: SharedConnection}
+  | ([Rejection] extends [never]
+      ? never
+      : {kind: 'refused'; refusal: Rejection})
   | {kind: 'failed'; failure: AcquireFailure};
+
+/** The run facts a helper welcomed with, or undefined when the value is missing or unreadable. */
+function runFactsOf(value: unknown): RunFacts | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value) as Partial<RunFacts> | null;
+    return typeof parsed?.sshProgram === 'string' &&
+      typeof parsed.scpProgram === 'string' &&
+      typeof parsed.effective === 'object'
+      ? (parsed as RunFacts)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Takes this window's lease on the helper of a host, starting the helper when none runs. The login is not waited
  * for: the window subscribes to the notices it needs, then calls `connect`.
  */
-export async function acquireConnection(
+export async function acquireConnection<Rejection = never>(
   environment: ConnectionClientEnvironment,
-  request: ConnectionAcquireRequest,
-  limits: ConnectionLimits,
-): Promise<AcquireConnectionOutcome> {
-  const socksPort = await environment.freePort();
-  const outcome = await acquire(environment.helper, {
+  request: ConnectionAcquireRequest<Rejection>,
+  limits: () => ConnectionLimits,
+): Promise<AcquireConnectionOutcome<Rejection>> {
+  const outcome = await acquire<Rejection>(environment.helper, {
     folder: request.folder,
     namespace: CONNECTION_NAMESPACE,
     helperKey: request.hostString,
     script: request.script,
-    options: {
-      ...request.options,
-      socksPort,
-      recordFile: recordPath(
-        request.folder,
-        CONNECTION_NAMESPACE,
-        request.hostString,
-      ),
-    },
     policy: request.policy,
-    payload: {socksPort},
+    prepare: async () => {
+      const socksPort = await environment.freePort();
+      const prepared = await request.prepare();
+      if (prepared.kind === 'refused') {
+        return prepared;
+      }
+      return {
+        kind: 'ready',
+        options: {
+          ...prepared.options,
+          socksPort,
+          recordFile: recordPath(
+            request.folder,
+            CONNECTION_NAMESPACE,
+            request.hostString,
+          ),
+        },
+        payload: {socksPort, runFacts: JSON.stringify(prepared.runFacts)},
+      };
+    },
     cancellation: request.cancellation,
   });
   return outcome.kind === 'acquired'

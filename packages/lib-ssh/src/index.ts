@@ -191,6 +191,8 @@ export {
   type ConnectionLimits,
   type ConnectionNotice,
   type ConnectionAcquireRequest,
+  type PreparedConnection,
+  type RunFacts,
   CONNECTION_NAMESPACE,
   type ConnectOutcome,
   killConnection,

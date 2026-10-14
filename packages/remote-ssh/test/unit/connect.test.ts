@@ -1322,3 +1322,67 @@ describe('the connect pipeline, the transport of a connection that worked', () =
     deepStrictEqual(heard, []);
   });
 });
+
+describe('the client lookup of a connect (card connect-57)', () => {
+  it('F-2101 AC-14: in shared mode the pipeline runs no lookup, and the probe is bound by the waits the connection brings', async () => {
+    const {recording, options} = setup();
+    const started = Date.now();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        lookupBeforeConnection: () => false,
+        openConnection: () =>
+          Promise.resolve({
+            kind: 'done',
+            value: {
+              ...leaseOf(recording),
+              waits: {probeMilliseconds: 20, tunnelMilliseconds: 20},
+            },
+          }),
+        probe: () => never(),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'kind' in result ? result.kind : result,
+        recording.calls.includes('locateClient'),
+        Date.now() - started < 500,
+      ],
+      ['timeout', false, true],
+    );
+  });
+
+  it('F-2101 6.5 step 3: in terminal mode the lookup comes first and its waits bind the probe', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        lookupBeforeConnection: () => true,
+        locateClient: waitsOf({...WAITS, probeMilliseconds: 20}),
+        probe: () => never(),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      recording.calls.slice(
+        recording.calls.indexOf('decideTerms'),
+        recording.calls.indexOf('openConnection') + 1,
+      ),
+      ['decideTerms', 'openConnection'],
+    );
+  });
+
+  it('contracts: a connection opened with no waits and no lookup is a defect, and the connect fails as unknown', async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {lookupBeforeConnection: () => false}),
+      options,
+    );
+    deepStrictEqual(
+      ['kind' in result ? result.kind : result, recording.releases],
+      ['unknown', 1],
+    );
+  });
+});
