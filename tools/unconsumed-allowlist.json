@@ -43,20 +43,6 @@
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/engine/engine-host.ts",
-      "card": "#776",
-      "slice": "containers release 1"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/engine/node-engine-host.ts",
-      "card": "#776",
-      "slice": "containers release 1"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
       "key": "src/exec/exec-arguments.ts",
       "card": "#776",
       "slice": "containers release 1"
