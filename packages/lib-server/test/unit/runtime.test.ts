@@ -96,7 +96,7 @@ function dependencies(loop: HostLockLoop = runOnce): {
 async function start(
   channel: RecordingChannel,
   options: Partial<RuntimeOptions> = {},
-  allowed: ReadonlyArray<'fileWatcherPolling'> = [],
+  allowed: ReadonlyArray<'fileWatcherPolling' | 'useHostProxy'> = [],
   loop?: HostLockLoop,
 ): Promise<StartOutcome> {
   return startOrReuse(
@@ -884,5 +884,17 @@ describe('startOrReuse (V7) over a real shell', () => {
       [started[0]?.[0] === started[1]?.[0], started[0]?.[1], started[1]?.[1]],
       [true, false, true],
     );
+  });
+
+  it('F-0503 BR-18: the host-proxy option goes when the policy allows it', async () => {
+    const channel = recording(STARTED);
+    await start(channel, {}, ['useHostProxy']);
+    deepStrictEqual(scriptOf(channel).includes("'--use-host-proxy'"), true);
+  });
+
+  it('F-0503 BR-18: the host-proxy option stays out when the policy does not allow it', async () => {
+    const channel = recording(STARTED);
+    await start(channel);
+    deepStrictEqual(scriptOf(channel).includes('--use-host-proxy'), false);
   });
 });

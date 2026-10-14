@@ -51,6 +51,7 @@ export const COMMON_FUNCTIONS: readonly string[] = [
   'CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT',
   'CLI_FILE=$DATA_DIR/$CLI_NAME',
   'BOOT_PREFIX=$DATA_DIR/.$COMMIT',
+  '[ -z "$INSTALL_TREE" ] || LOCK_IN_TEMPORARY=yes',
 ];
 
 /** The port the CLI reports in its log: the first line that is exactly `Listening on 127.0.0.1:<port>`. */
@@ -268,6 +269,49 @@ export const UNPACK_FUNCTIONS: readonly string[] = [
   '  done',
   '  rm -rf "$1"',
   '  [ "$MOVED" = 1 ]',
+  '}',
+];
+
+/**
+ * The install into a shared tree: the unpack goes into a sibling of the tree that is renamed once it is whole, and
+ * `bin/<commit>` is a link to the tree. A tree is complete exactly when its launcher is executable.
+ */
+export const TREE_FUNCTIONS: readonly string[] = [
+  'ensure_install_link() {',
+  '  if [ -L "$INSTALL_DIR" ]; then',
+  '    if [ "$(readlink "$INSTALL_DIR")" = "$INSTALL_TREE" ]; then',
+  '      fact server.installLink kept',
+  '      return 0',
+  '    fi',
+  '    rm -f "$INSTALL_DIR"',
+  '  elif [ -d "$INSTALL_DIR" ]; then',
+  '    if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+  '      fact server.installLink realFolder',
+  '      return 0',
+  '    fi',
+  '    rm -rf "$INSTALL_DIR"',
+  '  fi',
+  '  LINK_ERROR=$(mkdir -p "$DATA_DIR/bin" 2>&1) || write_failed_leave "$DATA_DIR/bin" "$LINK_ERROR"',
+  '  LINK_ERROR=$(ln -s "$INSTALL_TREE" "$INSTALL_DIR" 2>&1) || {',
+  '    if [ -L "$INSTALL_DIR" ] && [ "$(readlink "$INSTALL_DIR")" = "$INSTALL_TREE" ]; then',
+  '      fact server.installLink kept',
+  '      return 0',
+  '    fi',
+  '    write_failed_leave "$INSTALL_DIR" "$LINK_ERROR"',
+  '  }',
+  '  fact server.installLink made',
+  '}',
+  'install_tree() {',
+  '  TREE_STAGING=${INSTALL_TREE}_$STAGING_SUFFIX',
+  '  unpack_into "$1" "$TREE_STAGING" || return 1',
+  '  [ -x "$TREE_STAGING/$LAUNCHER" ] || return 1',
+  '  if [ -x "$INSTALL_TREE/$LAUNCHER" ]; then',
+  '    rm -rf "$TREE_STAGING"',
+  '    return 0',
+  '  fi',
+  '  mv "$TREE_STAGING" "$INSTALL_TREE" || return 1',
+  '  rm -rf "${INSTALL_TREE:?}/${TREE_STAGING##*/}"',
+  '  [ -x "$INSTALL_TREE/$LAUNCHER" ]',
   '}',
 ];
 

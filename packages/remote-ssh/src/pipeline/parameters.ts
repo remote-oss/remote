@@ -100,6 +100,7 @@ export function scriptParametersFor(input: ParameterInput): ScriptParameters {
     removeArchive: false,
     archiveFormat: archiveFormatOf(input.archiveUrl),
     epochMilliseconds: input.epochMilliseconds,
+    installTree: '',
     proxy: {
       http: proxyVariableText(settings.httpProxy),
       https: proxyVariableText(settings.httpsProxy),
@@ -125,6 +126,7 @@ export function scriptParametersFor(input: ParameterInput): ScriptParameters {
       graceSeconds: options.graceSeconds,
       extensions: options.defaultExtensions,
       fileWatcherPollingMilliseconds: options.fileWatcherPollingMilliseconds,
+      useHostProxy: false,
       readySeconds: options.readySeconds,
       socketMode: options.socketMode,
     },

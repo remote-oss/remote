@@ -73,6 +73,7 @@ describe('the texts of the failure dialog and the progress', () => {
       'S167',
       'installPathProvided',
       'reversedPortRange',
+      'sshTimedOut',
       'templateNotHttp',
       'templateUnknownPlaceholder',
       'trustRefused',

@@ -248,4 +248,20 @@ describe('policy record (card server-01 table)', () => {
       },
     );
   });
+
+  for (const [options, problems] of [
+    [['useHostProxy'], []],
+    [['fileWatcherPolling', 'useHostProxy'], []],
+    [
+      ['other'],
+      [{path: 'allowedExtraStartOptions[0]', problem: 'invalid value'}],
+    ],
+  ] as const) {
+    it(`F-0503 BR-18: allowedExtraStartOptions ${JSON.stringify(options)} is judged by the allow-list`, () => {
+      const result = validatePolicyRecord(
+        recordWith({allowedExtraStartOptions: options}),
+      );
+      deepStrictEqual('problems' in result ? result.problems : [], problems);
+    });
+  }
 });

@@ -558,7 +558,7 @@ describe('acceptance', () => {
         ...PASSWORD_ALIAS_LINES,
         '  ControlMaster auto',
         '  ControlPath /run/cm-%C',
-        '  ControlPersist 60',
+        '  ControlPersist 600',
       ].join('\n'),
     );
   });
@@ -571,10 +571,28 @@ describe('acceptance', () => {
         ...PASSWORD_ALIAS_LINES,
         '  ControlMaster ask',
         '  ControlPath /run/cm-ask-%C',
-        '  ControlPersist 60',
+        '  ControlPersist 600',
       ].join('\n'),
     );
   });
+
+  for (const [alias, mode] of [
+    ['master-yes', 'yes'],
+    ['master-autoask', 'autoask'],
+  ] as const) {
+    it(`coverage-16: Host ${alias} is the password account behind a ControlMaster that is ${mode}`, () => {
+      strictEqual(
+        accountBlock(alias),
+        [
+          ...sharedLines(alias, 'harness-pw'),
+          ...PASSWORD_ALIAS_LINES,
+          `  ControlMaster ${mode}`,
+          `  ControlPath /run/cm-${mode}-%C`,
+          '  ControlPersist 600',
+        ].join('\n'),
+      );
+    });
+  }
 
   it("gives the editor's user settings the harness ssh_config as remote.SSH.configFile", () => {
     writeUserSettings(workspace.root, '/run/ssh_config');
