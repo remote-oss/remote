@@ -42,7 +42,9 @@ export interface AgentEvent {
     | 'failed'
     | 'state'
     | 'setting'
-    | 'forwarded';
+    | 'forwarded'
+    | 'commands'
+    | 'extension';
   time: number;
   id?: string;
   message?: string;
@@ -59,6 +61,12 @@ export interface AgentEvent {
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
+  /** The prefix a `commands` event was asked for, and the registered command ids that start with it, sorted. */
+  prefix?: string;
+  commandIds?: string[];
+  /** The extension an `extension` event was asked about, and whether the window's editor has it. */
+  extensionId?: string;
+  present?: boolean;
   /** The output channel a `state` event saw shown in the window, or null. */
   visibleOutputChannel?: string | null;
 }
@@ -483,17 +491,55 @@ export async function closeWindow(name: string): Promise<void> {
   );
 }
 
-/** Has window `name` report its state once, and gives that report. */
-async function reportedState(name: string): Promise<AgentEvent | undefined> {
-  const before = countOf(name, 'state');
-  await inWindow(name, 'acceptance.agent.state');
+/** Has window `name` run the agent's `command`, which reports one `event`, and gives that report. */
+async function reported(
+  name: string,
+  event: AgentEvent['event'],
+  command: string,
+  ...parameters: unknown[]
+): Promise<AgentEvent | undefined> {
+  const before = countOf(name, event);
+  await inWindow(name, command, ...parameters);
   await waitUntil(
-    `window ${name} to report its state`,
-    () => countOf(name, 'state') > before,
+    `window ${name} to report its ${event}`,
+    () => countOf(name, event) > before,
   );
   return windowEvents(name)
-    .filter(each => each.event === 'state')
+    .filter(each => each.event === event)
     .at(-1);
+}
+
+/** Has window `name` report its state once, and gives that report. */
+function reportedState(name: string): Promise<AgentEvent | undefined> {
+  return reported(name, 'state', 'acceptance.agent.state');
+}
+
+/** The commands window `name` has registered whose ids start with `prefix`, sorted. */
+export async function commandsOf(
+  name: string,
+  prefix: string,
+): Promise<string[]> {
+  return (
+    (await reported(name, 'commands', 'acceptance.agent.commands', prefix))
+      ?.commandIds ?? []
+  );
+}
+
+/** Whether window `name`'s editor has the extension `extensionId`, enabled or not. */
+export async function extensionPresent(
+  name: string,
+  extensionId: string,
+): Promise<boolean> {
+  return (
+    (
+      await reported(
+        name,
+        'extension',
+        'acceptance.agent.extensionPresent',
+        extensionId,
+      )
+    )?.present === true
+  );
 }
 
 /**

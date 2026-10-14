@@ -283,6 +283,44 @@ const DIALOG_EXPRESSION = `(() => {
   };
 })()`;
 
+/**
+ * The text of each notification toast of window `name`, in the order shown: the toasts on screen only, with the
+ * notification centre closed (card coverage-25a §2.3).
+ */
+export async function notifications(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.notifications-toasts .notification-list-item-message')].map(each => each.textContent ?? '')`,
+  );
+}
+
+/** The notification centre once open, and the status bar's bell that opens it ([oss] `src/vs/workbench/browser/parts/notifications/`). */
+const OPEN_CENTRE = '.notifications-center.visible';
+
+const CENTRE_BELL = '[id="status.notifications"] a';
+
+/**
+ * The text of each notification of window `name`, newest first, read in the notification centre, which this opens
+ * when it is closed. Unlike the toasts, the centre holds a notification core did not raise as a toast.
+ */
+export async function notificationCentre(name: string): Promise<string[]> {
+  return settled(
+    () => `the notification centre of window ${name}`,
+    async () =>
+      (await evaluate<string[] | null>(
+        name,
+        `(() => {
+  const centre = document.querySelector('${OPEN_CENTRE}');
+  if (centre === null) {
+    document.querySelector('${CENTRE_BELL}')?.click();
+    return null;
+  }
+  return [...centre.querySelectorAll('.notification-list-item-message')].map(each => each.textContent ?? '');
+})()`,
+      )) ?? undefined,
+  );
+}
+
 /** The dialog open in window `name`, or `undefined` when none is. */
 export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
   return (

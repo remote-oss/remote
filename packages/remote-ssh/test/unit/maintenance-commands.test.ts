@@ -45,6 +45,10 @@ function setup(
     noticeOpen?: boolean;
     /** What the window holds: its host and the mode of its connection. */
     held?: {target: SshTarget; terminalMode: boolean};
+    /** The switch to a local window rejects. */
+    switchFails?: boolean;
+    /** Ending the local server rejects. */
+    killFails?: boolean;
   } = {},
 ): Setup {
   const seen: Setup = {
@@ -70,7 +74,9 @@ function setup(
     },
     switchToLocalWindow: () => {
       seen.order.push('switch');
-      return Promise.resolve();
+      return options.switchFails === true
+        ? Promise.reject(new Error('no window'))
+        : Promise.resolve();
     },
   };
   const handlers = maintenanceHandlers({
@@ -84,7 +90,15 @@ function setup(
     killLocalServer: hostString => {
       seen.order.push(`end ${hostString}`);
       seen.ended.push(hostString);
-      return Promise.resolve();
+      return options.killFails === true
+        ? Promise.reject(new Error('no server'))
+        : Promise.resolve();
+    },
+    leaveWindow: () => {
+      seen.order.push('leave');
+    },
+    stayInWindow: () => {
+      seen.order.push('stay');
     },
     notice: {
       showInformation: (message, buttons) => {
@@ -500,13 +514,51 @@ describe('Kill Current VS Code Server (F-2411 6.1, 6.2, 6.5)', () => {
   });
 });
 
+/** What a run ended in: `resolved`, or the text of its rejection. */
+function rejectionOf(running: Promise<void>): Promise<string> {
+  return running.then(
+    () => 'resolved',
+    (caught: unknown) => String(caught),
+  );
+}
+
 describe('Uninstall on the own host (F-2412 6.1)', () => {
   it('F-2412.6.1: in default mode it ends the local server, shows nothing and switches the window to a local one', async () => {
     const scenario = setup({held: DEFAULT_MODE});
     await scenario.uninstall();
     deepStrictEqual(
       [scenario.order, scenario.runs, scenario.notices],
-      [['end dev', 'switch'], [], []],
+      [['leave', 'end dev', 'switch'], [], []],
+    );
+  });
+
+  it('F-2412 AC-17: the own-host uninstall leaves the window before it ends the local server', async () => {
+    const scenario = setup({held: DEFAULT_MODE});
+    await scenario.uninstall();
+    deepStrictEqual(scenario.order.slice(0, 3), ['leave', 'end dev', 'switch']);
+  });
+
+  it('F-2412 AC-17: a switch that returns keeps the window leaving', async () => {
+    const scenario = setup({held: DEFAULT_MODE});
+    await scenario.uninstall();
+    deepStrictEqual(scenario.order, ['leave', 'end dev', 'switch']);
+  });
+
+  it('F-2412 AC-17: a kill that throws puts the window back without a switch', async () => {
+    const scenario = setup({held: DEFAULT_MODE, killFails: true});
+    const outcome = await rejectionOf(scenario.uninstall());
+    deepStrictEqual(
+      [scenario.order, outcome],
+      [['leave', 'end dev', 'stay'], 'Error: no server'],
+    );
+  });
+
+  it('F-2412 AC-17: a switch that throws puts the window back and the rejection reaches the caller', async () => {
+    const scenario = setup({held: DEFAULT_MODE, switchFails: true});
+    const outcome = await rejectionOf(scenario.uninstall());
+    deepStrictEqual(
+      [scenario.order, outcome],
+      [['leave', 'end dev', 'switch', 'stay'], 'Error: no window'],
     );
   });
 

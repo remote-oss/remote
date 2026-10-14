@@ -1,0 +1,1 @@
+{"outcome":"error","message":"Command failed: docker pull remote-oss-no-such-image:0","description":"An error occurred setting up the container."}
