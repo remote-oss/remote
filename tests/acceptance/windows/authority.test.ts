@@ -187,6 +187,31 @@ describe('the ssh-remote authorities of F-2501 (card coverage-19)', function () 
     }
   });
 
+  it('F-2501 AC-10: a reload of a connected window shows no question and keeps the helper and the login', async () => {
+    const since = now();
+    await openWindow('harness', 'a1');
+    await connectedWithin('a1', 90_000);
+    const helpers = await connectionHelpers();
+    const logins = await acceptedKeyLogins(since);
+    const mark = Date.now();
+    await reloadWindow('a1');
+    await connectedWithin('a1', 10_000);
+    deepStrictEqual(
+      [
+        recordLines(undefined, 'a1')
+          .filter(
+            line =>
+              line.time >= mark &&
+              ['maskedInput', 'pick', 'progress'].includes(line.surface),
+          )
+          .map(line => line.surface),
+        await connectionHelpers(),
+        await acceptedKeyLogins(since),
+      ],
+      [[], helpers, logins],
+    );
+  });
+
   it('F-2501 AC-20: a reload of a window whose connect failed shows the failure dialog again', async () => {
     const mark = Date.now();
     appendScript([...dismissals('a1'), ...dismissals('a1')]);
