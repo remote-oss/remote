@@ -20,31 +20,46 @@ export function withoutFooter(body: string): string | undefined {
   return kept.length === lines.length ? undefined : kept.join('\n').trimEnd();
 }
 
-async function main(): Promise<void> {
-  const event = JSON.parse(
-    readFileSync(process.env.GITHUB_EVENT_PATH ?? '', 'utf8'),
-  ) as {pull_request: {url: string; body: string | null}};
-  const body = withoutFooter(event.pull_request.body ?? '');
-  if (body === undefined) {
-    console.log('no footer');
-    return;
+type Request = (url: string, init?: RequestInit) => Promise<Response>;
+
+/**
+ * Reads the pull request's current body (not the event's snapshot, which an edit made since would make stale) and
+ * writes it back without its footer; says which it did.
+ */
+export async function stripFooter(
+  url: string,
+  token: string,
+  request: Request = fetch,
+): Promise<'no footer' | 'footer removed'> {
+  const headers = {
+    authorization: `Bearer ${token}`,
+    accept: 'application/vnd.github+json',
+  };
+  const current = await request(url, {headers});
+  if (!current.ok) {
+    throw new Error(`GET ${url}: ${String(current.status)}`);
   }
-  const response = await fetch(event.pull_request.url, {
+  const {body: currentBody} = (await current.json()) as {body: string | null};
+  const body = withoutFooter(currentBody ?? '');
+  if (body === undefined) {
+    return 'no footer';
+  }
+  const response = await request(url, {
     method: 'PATCH',
-    headers: {
-      authorization: `Bearer ${process.env.GITHUB_TOKEN ?? ''}`,
-      accept: 'application/vnd.github+json',
-    },
+    headers,
     body: JSON.stringify({body}),
   });
   if (!response.ok) {
-    throw new Error(
-      `PATCH ${event.pull_request.url}: ${String(response.status)}`,
-    );
+    throw new Error(`PATCH ${url}: ${String(response.status)}`);
   }
-  console.log('footer removed');
+  return 'footer removed';
 }
 
 if (isMainModule(import.meta.url)) {
-  await main();
+  const event = JSON.parse(
+    readFileSync(process.env.GITHUB_EVENT_PATH ?? '', 'utf8'),
+  ) as {pull_request: {url: string}};
+  console.log(
+    await stripFooter(event.pull_request.url, process.env.GITHUB_TOKEN ?? ''),
+  );
 }
