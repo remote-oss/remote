@@ -86,6 +86,11 @@ export interface EditorResolver {
     authority: string,
     context: {resolveAttempt: number},
   ): Promise<ResolvedConnection>;
+  /** The local path a URI of this window stands for, for a family that maps one (windows contracts §3.2). */
+  canonicalPath?: (
+    authority: string,
+    path: string,
+  ) => Promise<string | undefined>;
 }
 
 /** What the progress shows and how the user can act on it. */
@@ -136,6 +141,17 @@ export interface ResolverOptions {
   titleOf(phase: ConnectPhase, target: DecodedTarget): string;
   /** The title the progress starts with. */
   startTitle(target: DecodedTarget): string;
+  /**
+   * The family's canonical mapping, registered as the resolver's `getCanonicalURI` (windows contracts §3.2): the local
+   * path a `vscode-remote` URI of this window stands for, or nothing. `warn` logs a mapping that failed.
+   */
+  canonical?: {
+    pathOf(
+      uri: {authority: string; path: string},
+      decodedTarget: DecodedTarget,
+    ): Promise<string | undefined>;
+    warn(message: string): void;
+  };
 }
 
 /** Whether the extension registers: the other extension stands in, or the proposal is missing. */
@@ -364,6 +380,23 @@ export async function registerResolver(
       return turn;
     },
   };
+  const {canonical} = options;
+  if (canonical !== undefined) {
+    resolver.canonicalPath = async (authority, path) => {
+      const decoded = decodeAuthority(authority);
+      if (!('target' in decoded) || decoded.family !== options.family) {
+        return undefined;
+      }
+      try {
+        return await canonical.pathOf({authority, path}, decoded);
+      } catch (caught) {
+        canonical.warn(
+          `the canonical URI of ${authority}${path} could not be mapped: ${String(caught)}`,
+        );
+        return undefined;
+      }
+    };
+  }
   const registration = editor.registerRemoteAuthorityResolver(
     options.family,
     resolver,

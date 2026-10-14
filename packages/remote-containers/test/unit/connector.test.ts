@@ -27,6 +27,20 @@ function messages(scene: Scene): string[] {
   return scene.sink.lines.map(line => line.message);
 }
 
+/** Holds the preparation of the next connect until the returned function releases it. */
+function heldPreparation(scene: Scene): () => void {
+  let release: (() => void) | undefined;
+  scene.outcome = () =>
+    new Promise(resolve => {
+      release = () => {
+        resolve(READY);
+      };
+    });
+  return () => {
+    release?.();
+  };
+}
+
 async function connected(scene: Scene) {
   const result = await scene.connector.connect(inputOf(PAYLOAD));
   if (!('connectionToken' in result)) {
@@ -211,6 +225,12 @@ describe('the container connector: the connect (card containers-08)', () => {
         {name: 'Proj', context: undefined},
         [
           [
+            undefined,
+            '/work/proj',
+            '/work/proj/.devcontainer/devcontainer.json',
+            'docker',
+          ],
+          [
             'c1c1c1c1c1c1c1c1',
             '/work/proj',
             '/work/proj/.devcontainer/devcontainer.json',
@@ -280,7 +300,10 @@ describe('the container connector: the connect (card containers-08)', () => {
       [
         41000,
         undefined,
-        ["the configuration's name could not be read: configurationFailed"],
+        [
+          'the configuration of /work/proj could not be read: configurationFailed',
+          "the configuration's name could not be read: configurationFailed",
+        ],
       ],
     );
   });
@@ -472,17 +495,11 @@ describe('the container connector: the connect (card containers-08)', () => {
 describe('the container connector: cancelling (card containers-08)', () => {
   it('contracts §2 cancel: a cancel during the preparation ends the connect as cancelled, stops the background and opens no relay', async () => {
     const scene = sceneOf();
-    let release: (() => void) | undefined;
-    scene.outcome = () =>
-      new Promise(resolve => {
-        release = () => {
-          resolve(READY);
-        };
-      });
+    const release = heldPreparation(scene);
     const connecting = scene.connector.connect(inputOf(PAYLOAD));
     await tick();
     scene.connector.cancel();
-    release?.();
+    release();
     const result = await connecting;
     deepStrictEqual(
       [
@@ -492,7 +509,7 @@ describe('the container connector: cancelling (card containers-08)', () => {
         scene.configurationReads.length,
         scene.relayRequests.length,
       ],
-      ['cancelled', 1, 0, 0, 0],
+      ['cancelled', 1, 0, 1, 0],
     );
   });
 
@@ -805,5 +822,169 @@ describe('the container connector: a reconnection (card containers-08)', () => {
       [127],
     );
     deepStrictEqual(failedKind(outcome.again), 'transportLost');
+  });
+});
+
+describe('the container connector: the canonical path (card containers-22)', () => {
+  const AUTHORITY = `dev-container+${PAYLOAD}`;
+
+  /** The canonical paths of `paths` in the window of `authority`, in order. */
+  async function pathsOf(
+    scene: Scene,
+    paths: readonly string[],
+    authority = AUTHORITY,
+  ): Promise<Array<string | undefined>> {
+    const answers: Array<string | undefined> = [];
+    for (const path of paths) {
+      answers.push(await scene.connector.canonicalPathOf(authority, path));
+    }
+    return answers;
+  }
+
+  it('F-0106 6.11: the workspace folder and a file under it map to the local folder; a sibling and a path outside don’t', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    deepStrictEqual(
+      await pathsOf(scene, [
+        '/workspaces/proj',
+        '/workspaces/proj/src/a.ts',
+        '/workspaces/proj-other',
+        '/etc/hosts',
+      ]),
+      ['/work/proj', '/work/proj/src/a.ts', undefined, undefined],
+    );
+  });
+
+  it("contracts §3.2: another family's authority and a payload that isn't a folder map nothing", async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    deepStrictEqual(
+      [
+        await scene.connector.canonicalPathOf('ssh-remote+h', '/x'),
+        await scene.connector.canonicalPathOf('dev-container+zz', '/x'),
+        scene.configurationReads.length,
+      ],
+      [undefined, undefined, 2],
+    );
+  });
+
+  it('contracts §3.2 (T0): with no connection held, the answer comes from the read alone', async () => {
+    const scene = sceneOf();
+    deepStrictEqual(
+      [
+        await pathsOf(scene, ['/workspaces/proj/a']),
+        scene.configurationReads.length,
+        scene.prepared.length,
+        messages(scene).filter(message => message.startsWith('the canonical')),
+      ],
+      [
+        ['/work/proj/a'],
+        1,
+        0,
+        [
+          'the canonical path of /workspaces/proj/a is /work/proj/a (from the configuration read)',
+        ],
+      ],
+    );
+  });
+
+  it('contracts §3.2: the canonical request and the connect’s start share one read without a container, and the name keeps its own read with the container (ADR-0009 deviation 4)', async () => {
+    const scene = sceneOf();
+    await pathsOf(scene, ['/workspaces/proj']);
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.configurationReads.map(read => read.containerId),
+        scene.connector.heldIdentity()?.name,
+      ],
+      [[undefined, 'c1c1c1c1c1c1c1c1'], 'Proj'],
+    );
+  });
+
+  it('contracts §3.2: the connect first, then the canonical request, answered before prepare settles', async () => {
+    const scene = sceneOf();
+    const release = heldPreparation(scene);
+    const connecting = scene.connector.connect(inputOf(PAYLOAD));
+    await tick();
+    const answer = await scene.connector.canonicalPathOf(
+      AUTHORITY,
+      '/workspaces/proj',
+    );
+    const preparedBefore = scene.prepared.length;
+    release();
+    await connecting;
+    deepStrictEqual(
+      [answer, preparedBefore, scene.configurationReads.length],
+      ['/work/proj', 1, 2],
+    );
+  });
+
+  it('contracts §3.2: a failed read answers nothing and warns, and the next request reads again', async () => {
+    const scene = sceneOf();
+    const answers = [
+      {kind: 'configurationFailed' as const, message: 'x'},
+      {
+        kind: 'configuration' as const,
+        configuration: {},
+        workspaceFolder: '/workspaces/proj',
+        workspaceMount: undefined,
+        mergedConfiguration: undefined,
+      },
+    ];
+    scene.configuration = () =>
+      Promise.resolve(answers.shift() ?? {kind: 'cancelled'});
+    deepStrictEqual(
+      [
+        await pathsOf(scene, ['/workspaces/proj', '/workspaces/proj']),
+        scene.configurationReads.length,
+        scene.sink.lines
+          .filter(line => line.level === 'warn')
+          .map(line => line.message),
+      ],
+      [
+        [undefined, '/work/proj'],
+        2,
+        [
+          'the configuration of /work/proj could not be read: configurationFailed',
+        ],
+      ],
+    );
+  });
+
+  it('contracts §3.2: the canonical request gives up after 30 s', async () => {
+    const scene = sceneOf();
+    scene.configuration = () => new Promise(() => undefined);
+    const asking = scene.connector.canonicalPathOf(
+      AUTHORITY,
+      '/workspaces/proj',
+    );
+    for (const fire of scene.timers) {
+      fire();
+    }
+    deepStrictEqual([await asking, scene.timerDelays], [undefined, [30_000]]);
+  });
+
+  it('contracts §3.2: a read that settles first stops the timer', async () => {
+    const scene = sceneOf();
+    await pathsOf(scene, ['/workspaces/proj']);
+    deepStrictEqual([scene.timerDelays, scene.timers], [[30_000], []]);
+  });
+
+  it('contracts §3.2: a held connection wins over the read', async () => {
+    const scene = sceneOf();
+    scene.outcome = {...READY, remoteWorkspaceFolder: '/srv/app'};
+    await connected(scene);
+    deepStrictEqual(
+      [
+        await pathsOf(scene, ['/srv/app/x', '/workspaces/proj/x']),
+        messages(scene).filter(message => message.startsWith('the canonical')),
+      ],
+      [
+        ['/work/proj/x', undefined],
+        [
+          'the canonical path of /srv/app/x is /work/proj/x (from the connection)',
+        ],
+      ],
+    );
   });
 });

@@ -52,10 +52,21 @@ function editorResolverOf(
   editor: typeof vscode,
   resolver: EditorResolver,
 ): vscode.RemoteAuthorityResolver {
-  return {
+  const editorResolver: vscode.RemoteAuthorityResolver = {
     resolve: async (authority, context) =>
       resultOf(editor, await resolver.resolve(authority, context)),
   };
+  const {canonicalPath} = resolver;
+  if (canonicalPath !== undefined) {
+    editorResolver.getCanonicalURI = async uri => {
+      if (uri.scheme !== 'vscode-remote') {
+        return undefined;
+      }
+      const local = await canonicalPath(uri.authority, uri.path);
+      return local === undefined ? undefined : editor.Uri.file(local);
+    };
+  }
+  return editorResolver;
 }
 
 /** The progress of a connect as a notification, with the details link in front of each stage that has it. */

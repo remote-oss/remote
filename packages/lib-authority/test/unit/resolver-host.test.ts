@@ -930,3 +930,124 @@ describe('the resolver host: a registration the editor refuses', () => {
     deepStrictEqual([outcome, connector.listenerCount()], ['refused', 0]);
   });
 });
+
+describe('the resolver host: the canonical mapping (card containers-22)', () => {
+  /** A dev-container setup whose mapping records what it was given and answers `answer`. */
+  async function mapping(
+    answer: () => Promise<string | undefined>,
+  ): Promise<{context: Setup; given: unknown[]; warned: string[]}> {
+    const given: unknown[] = [];
+    const warned: string[] = [];
+    const context = await setup({
+      family: 'dev-container',
+      canonical: {
+        pathOf: (uri, decoded) => {
+          given.push([uri, decoded]);
+          return answer();
+        },
+        warn: message => {
+          warned.push(message);
+        },
+      },
+    });
+    return {context, given, warned};
+  }
+
+  it('contracts §3.2: a family with a mapping registers canonicalPath', async () => {
+    const {context} = await mapping(() => Promise.resolve(undefined));
+    deepStrictEqual(
+      typeof resolverOf(context.editor).canonicalPath,
+      'function',
+    );
+  });
+
+  it('contracts §3.2: a family without one registers none', async () => {
+    const context = await setup();
+    deepStrictEqual('canonicalPath' in resolverOf(context.editor), false);
+  });
+
+  it('contracts §3.2: the mapping gets the decoded target of this family', async () => {
+    const {context, given} = await mapping(() => Promise.resolve('/home/u/x'));
+    const answer = await resolverOf(context.editor).canonicalPath?.(
+      'dev-container+7b7d',
+      '/workspaces/x',
+    );
+    deepStrictEqual(
+      [answer, given],
+      [
+        '/home/u/x',
+        [
+          [
+            {authority: 'dev-container+7b7d', path: '/workspaces/x'},
+            {
+              family: 'dev-container',
+              target: {payload: '7b7d'},
+              rawHostString: '7b7d',
+            },
+          ],
+        ],
+      ],
+    );
+  });
+
+  it("contracts §3.2: another family's authority maps to nothing", async () => {
+    const {context, given} = await mapping(() => Promise.resolve('/x'));
+    deepStrictEqual(
+      [
+        await resolverOf(context.editor).canonicalPath?.('ssh-remote+h', '/x'),
+        given,
+      ],
+      [undefined, []],
+    );
+  });
+
+  it('contracts §3.2: a malformed authority maps to nothing', async () => {
+    const {context, given} = await mapping(() => Promise.resolve('/x'));
+    deepStrictEqual(
+      [
+        await resolverOf(context.editor).canonicalPath?.('dev-container', '/x'),
+        given,
+      ],
+      [undefined, []],
+    );
+  });
+
+  it('contracts §3.2: a mapping that rejects answers nothing and warns', async () => {
+    const {context, warned} = await mapping(() =>
+      Promise.reject(new Error('boom')),
+    );
+    deepStrictEqual(
+      [
+        await resolverOf(context.editor).canonicalPath?.(
+          'dev-container+7b7d',
+          '/workspaces/x',
+        ),
+        warned,
+      ],
+      [
+        undefined,
+        [
+          'the canonical URI of dev-container+7b7d/workspaces/x could not be mapped: Error: boom',
+        ],
+      ],
+    );
+  });
+
+  it('contracts §3.2: the mapping may answer later', async () => {
+    const {context} = await mapping(
+      () =>
+        new Promise(resolve => {
+          setImmediate(() => {
+            resolve('/late');
+          });
+        }),
+    );
+    deepStrictEqual(
+      await resolverOf(context.editor).canonicalPath?.(
+        'dev-container+7b7d',
+        '/workspaces/x',
+      ),
+      '/late',
+    );
+  });
+});

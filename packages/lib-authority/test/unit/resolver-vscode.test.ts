@@ -368,3 +368,80 @@ describe('the editor behind the resolver host', () => {
     ]);
   });
 });
+
+describe('the editor behind the resolver host: getCanonicalURI (card containers-22)', () => {
+  /** What the editor was given for a host resolver with the mapping `canonicalPath`, or none. */
+  function canonicalThrough(
+    canonicalPath: EditorResolver['canonicalPath'],
+  ): vscode.RemoteAuthorityResolver | undefined {
+    const seen: Seen = {events: []};
+    const editor = Object.assign(fakeEditor(seen), {
+      // eslint-disable-next-line id-length -- the editor's class is named Uri
+      Uri: {file: (path: string) => ({scheme: 'file', path})},
+    });
+    resolverEditorOf(editor, {
+      detailsCommand: DETAILS,
+    }).registerRemoteAuthorityResolver('dev-container', {
+      ...hostResolver(CONNECTION),
+      ...(canonicalPath === undefined ? {} : {canonicalPath}),
+    });
+    return seen.registered;
+  }
+
+  /** A URI of the fixture's dev container window, with `scheme` and `path`. */
+  function remoteUri(scheme: string, path: string): vscode.Uri {
+    const parts = {scheme, authority: 'dev-container+7b7d', path};
+    return parts as unknown as vscode.Uri;
+  }
+
+  it('contracts §3.2: getCanonicalURI gives the local file URI of the mapped path', async () => {
+    const registered = canonicalThrough(() => Promise.resolve('/home/u/p'));
+    deepStrictEqual(
+      await registered?.getCanonicalURI?.(remoteUri('vscode-remote', '/w/p')),
+      {scheme: 'file', path: '/home/u/p'},
+    );
+  });
+
+  it("contracts §3.2: a URI the mapping doesn't know gives undefined", async () => {
+    const registered = canonicalThrough(() => Promise.resolve(undefined));
+    deepStrictEqual(
+      await registered?.getCanonicalURI?.(remoteUri('vscode-remote', '/etc')),
+      undefined,
+    );
+  });
+
+  it("contracts §3.2: a file URI isn't asked", async () => {
+    const asked: string[] = [];
+    const registered = canonicalThrough((authority, path) => {
+      asked.push(`${authority}${path}`);
+      return Promise.resolve('/x');
+    });
+    deepStrictEqual(
+      [await registered?.getCanonicalURI?.(remoteUri('file', '/x')), asked],
+      [undefined, []],
+    );
+  });
+
+  it('contracts §3.2: getCanonicalURI waits for an async mapping', async () => {
+    const registered = canonicalThrough(
+      () =>
+        new Promise(resolve => {
+          setImmediate(() => {
+            resolve('/home/u/p');
+          });
+        }),
+    );
+    deepStrictEqual(
+      await registered?.getCanonicalURI?.(remoteUri('vscode-remote', '/w/p')),
+      {scheme: 'file', path: '/home/u/p'},
+    );
+  });
+
+  it('contracts §3.2: no mapping, no getCanonicalURI', () => {
+    const registered = canonicalThrough(undefined);
+    deepStrictEqual(
+      registered === undefined ? 'none' : 'getCanonicalURI' in registered,
+      false,
+    );
+  });
+});

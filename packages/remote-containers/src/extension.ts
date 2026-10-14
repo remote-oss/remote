@@ -339,6 +339,7 @@ export async function activate(
         revealLog: () => {
           logChannel?.show(true);
         },
+        logger,
       },
     );
     context.subscriptions.push(
