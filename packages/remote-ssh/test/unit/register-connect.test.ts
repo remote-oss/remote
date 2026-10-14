@@ -41,7 +41,7 @@ async function registered(
   surfaces?: ConnectSurfaces,
   connectResult?: Connected | Failed,
   /** The host the window holds in default mode, and whether the switch to a local window rejects. */
-  own?: {switchFails: boolean},
+  own?: {switchFails: boolean; duringSwitch?: () => Promise<void>},
 ): Promise<{
   seen: Seen;
   registration: Awaited<ReturnType<typeof registerConnect>>;
@@ -146,10 +146,12 @@ async function registered(
           return Promise.resolve();
         },
         runCommand: () => Promise.resolve(),
-        switchToLocalWindow: () =>
-          own?.switchFails === true
-            ? Promise.reject(new Error('no window'))
-            : Promise.resolve(),
+        switchToLocalWindow: async () => {
+          await own?.duringSwitch?.();
+          if (own?.switchFails === true) {
+            throw new Error('no window');
+          }
+        },
         remoteName: () => 'ssh-remote',
       },
       openExternal: address => {
@@ -372,37 +374,47 @@ describe("the connect's registration", () => {
     deepStrictEqual([seen.maintained, seen.notices], [['uninstall dev'], []]);
   });
 
-  /** What a resolve of the window ends in after the own-host uninstall: the events it left. */
-  async function eventsOfResolveAfterUninstall(
+  /** The events of one resolve of the window, run during the switch to a local window or after the uninstall. */
+  async function eventsOfResolve(
+    when: 'during' | 'after',
     switchFails: boolean,
   ): Promise<string[]> {
+    const own: NonNullable<Parameters<typeof registered>[4]> = {switchFails};
     const {seen, recording} = await registered(
       true,
       'none',
       undefined,
       undefined,
-      {switchFails},
+      own,
     );
+    async function resolve(): Promise<void> {
+      seen.events.length = 0;
+      await recording
+        .registered()
+        ?.resolve('ssh-remote+dev', {resolveAttempt: 1})
+        .catch(() => undefined);
+    }
+    if (when === 'during') {
+      own.duringSwitch = resolve;
+    }
     await Promise.resolve(
       seen.commands.get('opensshremotes.cleanDevBox')?.(),
     ).catch(() => undefined);
-    seen.events.length = 0;
-    await recording
-      .registered()
-      ?.resolve('ssh-remote+dev', {resolveAttempt: 1})
-      .catch(() => undefined);
+    if (when === 'after') {
+      await resolve();
+    }
     return seen.events;
   }
 
-  it('F-2412 AC-17: after the own-host uninstall the window’s resolves end handled with no progress', async () => {
-    deepStrictEqual(await eventsOfResolveAfterUninstall(false), [
+  it('F-2412 AC-17: while the own-host uninstall switches the window, its resolves end handled with no progress', async () => {
+    deepStrictEqual(await eventsOfResolve('during', false), [
       'notAvailable undefined true',
     ]);
   });
 
   it('F-2412 AC-17: a switch that fails puts the resolver back, so the next resolve runs', async () => {
     deepStrictEqual(
-      (await eventsOfResolveAfterUninstall(true)).some(event =>
+      (await eventsOfResolve('after', true)).some(event =>
         event.startsWith('progress'),
       ),
       true,
