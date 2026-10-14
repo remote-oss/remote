@@ -34,9 +34,9 @@ Nothing else changes.
 |---|---|---|---|
 | `failure-strings.test.ts` | the existing `F-2304, F-2601: the table holds the ids …` row | the key list | gains `'S009'` first |
 | `failure-presenter.test.ts` | `F-2101 AC-21: a missing ssh shows its text in the dialog` | `textFor({reason: {id: 'S009'}})`, beside the S094 row | `Could not establish connection to "box": An SSH installation couldn't be found.` |
-| `failure-strings.test.ts` | `contracts §3.2: every reason id the remote-ssh sources give has a text` | read each `.ts` file under `packages/remote-ssh/src` (the way `docs.test.ts` finds its package, `path.join(import.meta.dirname, '..', '..')`), and collect every `S` followed by three digits that appears as `reason: {id: '<id>'` or `reason: {id: "<id>"` | each id is a key of `FAILURE_TEMPLATES`. The row fails on main for S009 only. Paste that run in the PR |
+| `string-ids.test.ts` (new) | `contracts §3.2: every string id the remote-ssh sources name has a template` | read each `.ts` file under `packages/remote-ssh/src` (find the package as `docs.test.ts` does, `path.join(import.meta.dirname, '..', '..')`), and collect every match of `` id: ['"](S\d{3})['"] ``, in every form: a `reason: {id: …}`, a `FailureReason` constant, a nested value, a `logged(…, {id: …})` argument or an `ownText` reference | each id is a key of `FAILURE_TEMPLATES`, `PROMPT_TEMPLATES` or `OWN_TEMPLATES`, their union. Export `PROMPT_TEMPLATES` from `prompt-strings.ts` for it. The row fails on main for S009 only (dike measured it on #735); paste that run in the PR |
 
-**Defect rule:** the `F-2101 AC-21` row and the scan row must fail on main and pass with the fix. Paste both runs.
+**Defect rule:** the `F-2101 AC-21` row and the `string-ids.test.ts` row must fail on main and pass with the fix. Paste both runs.
 
 ## 4. Catalogue
 
@@ -51,6 +51,5 @@ reviews; athena gives the design check.
 
 ## 6. Open rows (stop and report on #733)
 
-1. The scan row finds an id other than S009 with no template. List it on #733, and don't add its text by guess.
-2. The scan finds no id because the sources build the reason another way, such as through a helper. Report the form
-   you found.
+1. The `string-ids.test.ts` row finds an id other than S009 with no template. List it on #733, and don't add its text by guess.
+2. An id is built in a form the pattern can't see (a template literal or a computed id). Report the form you found.
