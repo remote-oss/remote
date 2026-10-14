@@ -488,7 +488,7 @@ describe('promptEditorOf (the login questions, F-2305 and F-2306)', () => {
     deepStrictEqual([await result, fake.picks.length], [undefined, 0]);
   });
 
-  it('F-2306: the input is masked and stays open when the user looks away', () => {
+  it('F-2305 AC-2, AC-7: the input is masked and stays open when the user looks away (F-2306)', () => {
     const {inputBox} = typedInto(fakeEditor(() => undefined));
     deepStrictEqual(
       [

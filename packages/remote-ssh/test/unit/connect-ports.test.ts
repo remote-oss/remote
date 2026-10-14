@@ -84,7 +84,7 @@ function assemblyInputs(
   recorded: Recorded;
 } {
   const recorded: Recorded = {
-    spawned: {started: [], killed: []},
+    spawned: {started: [], killed: [], environments: []},
     helperStarts: [],
     revealed: 0,
     sink: new MemorySink(),

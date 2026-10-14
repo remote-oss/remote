@@ -112,7 +112,7 @@ function portsOf(
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
-    spawned: {started: [], killed: []},
+    spawned: {started: [], killed: [], environments: []},
     acquires: [],
     logins: [],
     channels: [],

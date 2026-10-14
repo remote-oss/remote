@@ -34,6 +34,7 @@ interface Scenario {
   connectTimeout?: unknown;
   mode?: ConnectionMode;
   input?: ConnectInput;
+  processEnvironment?: Readonly<Record<string, string>>;
 }
 
 /** Runs the step once and gives its result, what it kept, what the spawner saw, and the log. */
@@ -47,7 +48,7 @@ async function located(scenario: Scenario = {}): Promise<{
   /** The lines at info level: the client search. */
   searched: string[];
 }> {
-  const seen: Seen = {started: [], killed: []};
+  const seen: Seen = {started: [], killed: [], environments: []};
   const state: ConnectState = {};
   const sink = new MemorySink();
   const step = locateClientStep({
@@ -66,7 +67,7 @@ async function located(scenario: Scenario = {}): Promise<{
       scenario.lookup ?? LOOKUP,
       seen,
     ),
-    processEnvironment: {},
+    processEnvironment: scenario.processEnvironment ?? {},
     checkMilliseconds: 20,
     state,
     logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
@@ -103,9 +104,32 @@ describe('the step that finds the ssh client', () => {
     });
   });
 
-  it('F-2101: the client is checked with -V, then the accepted one looks the host up', async () => {
+  it('F-2101 AC-27: the lookup runs only the check and ssh -G, and has no port that writes a setting, a state key or a file', async () => {
     const {seen} = await located();
     deepStrictEqual(seen.started, ['ssh -V', 'ssh -G -- dev']);
+  });
+
+  it('F-2101 AC-2, AC-17: each candidate is started once, with -V alone and exactly the editor environment', async () => {
+    const editor = {
+      HOME: '/home/a',
+      PATH: '/usr/bin',
+      SSH_AUTH_SOCK: '/run/agent.sock',
+    };
+    const {seen} = await located({
+      checks: {
+        '/opt/other': {kind: 'exit', errorOutput: 'Dropbear', status: 0},
+        [SSH_PROGRAM]: OPENSSH,
+      },
+      settingValue: '/opt/other',
+      processEnvironment: editor,
+    });
+    deepStrictEqual(
+      [seen.started, seen.environments],
+      [
+        ['/opt/other -V', 'ssh -V', 'ssh -G -- dev'],
+        [editor, editor, editor],
+      ],
+    );
   });
 
   it('F-2101: a banner on standard output is accepted too', async () => {

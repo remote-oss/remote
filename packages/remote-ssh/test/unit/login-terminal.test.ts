@@ -107,7 +107,7 @@ function opened(reveal = false) {
 }
 
 describe('loginTerminalsOf (card ssh-18 table)', () => {
-  it('F-2308 §16: creates a hidden terminal in the home folder with the invocation', () => {
+  it('F-2101 AC-30: creates a hidden terminal in the home folder with the invocation (F-2308 §16)', () => {
     deepStrictEqual(opened().created, [
       {
         name: 'install',

@@ -105,14 +105,19 @@ describe('the connect pipeline, when it works', () => {
     );
   });
 
-  it('skips the transfer when the plan reuses an installed server', async () => {
+  it('F-3902 AC-10, AC-11: a plan that reuses an installed server asks the gate before the start, and transfers nothing', async () => {
     const {recording, options} = setup();
     await connect(
       INPUT,
       steps(recording, {plan: () => ({plan: REUSE})}),
       options,
     );
-    deepStrictEqual(recording.calls.includes('transfer'), false);
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['gate', 'transfer', 'start'].includes(call),
+      ),
+      ['gate', 'start'],
+    );
   });
 
   it('runs the pre-connection script on the first attempt only', async () => {
