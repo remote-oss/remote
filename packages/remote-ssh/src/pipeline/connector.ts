@@ -18,6 +18,8 @@ import {
   type PhaseEvent,
 } from './connect.ts';
 import {failedWith} from './failure.ts';
+import type {SshTarget} from 'lib-ssh';
+import {sshTargetOf} from './host-settings.ts';
 import type {ConnectInput, ConnectSteps} from './steps.ts';
 
 /** What the connector is made of. */
@@ -92,6 +94,8 @@ const NOT_SSH_TARGET: Failed = {
 /** The connection the window holds, the end of hearing its transport, and whether its transport was lost. */
 interface Held {
   connection: Connection;
+  target: SshTarget;
+  terminalMode: boolean;
   stop: () => void;
   lost: boolean;
 }
@@ -103,6 +107,11 @@ export interface SshConnector extends Connector {
    * lost, since a reconnection's server may listen elsewhere. It never throws.
    */
   serverPort(): number | 'none';
+  /**
+   * The host of the connection the window holds and whether it was made in terminal mode; nothing while the window
+   * holds none or its transport was lost.
+   */
+  heldHost(): {target: SshTarget; terminalMode: boolean} | undefined;
 }
 
 function isConnection(result: Connection | Failed): result is Connection {
@@ -174,7 +183,13 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
             (event === 'lost' ? lost : closed).tell(undefined);
           }
         });
-        held = {connection: result, stop, lost: false};
+        held = {
+          connection: result,
+          target: sshTargetOf(input.target),
+          terminalMode,
+          stop,
+          lost: false,
+        };
         return result.connected;
       } finally {
         if (running === controller) {
@@ -194,6 +209,11 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
       return held === undefined || held.lost
         ? 'none'
         : held.connection.serverPort;
+    },
+    heldHost() {
+      return held === undefined || held.lost
+        ? undefined
+        : {target: held.target, terminalMode: held.terminalMode};
     },
     onPhase: listener => phases.subscribe(listener),
     onTransportLost: listener =>
