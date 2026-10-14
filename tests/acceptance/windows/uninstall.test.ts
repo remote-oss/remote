@@ -4,9 +4,9 @@ import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   agentClear,
-  aliases,
   connectionLog,
   connectedWithin,
+  hostAliases,
   hostAnswer,
   inWindow,
   onHost,
@@ -191,7 +191,14 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
         await existsOnHost(DATA_FOLDER),
       ],
       [
-        [['local', 'hostPick', HOST_QUESTION, [...aliases(), ...FIXED_ROWS]]],
+        [
+          [
+            'local',
+            'hostPick',
+            HOST_QUESTION,
+            [...hostAliases(), ...FIXED_ROWS],
+          ],
+        ],
         true,
       ],
     );
@@ -206,9 +213,9 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       deepStrictEqual(
         [
           linesSince(mark, 'local').at(-1)?.items,
-          aliases().includes('uninstall-new'),
+          hostAliases().includes('uninstall-new'),
         ],
-        [[...aliases(), ...FIXED_ROWS], true],
+        [[...hostAliases(), ...FIXED_ROWS], true],
       );
     } finally {
       restoreConfig(original);
