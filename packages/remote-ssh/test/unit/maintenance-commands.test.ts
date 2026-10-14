@@ -22,6 +22,8 @@ interface Setup {
   /** What the ports did, in order: the local server ended, a notice, the switch to a local window. */
   order: string[];
   runs: string[];
+  /** The target each run was given, in order. */
+  targets: SshTarget[];
   notices: Array<[string, readonly string[]]>;
   commands: string[];
   revealed: number;
@@ -48,6 +50,7 @@ function setup(
   const seen: Setup = {
     order: [],
     runs: [],
+    targets: [],
     notices: [],
     commands: [],
     revealed: 0,
@@ -74,6 +77,7 @@ function setup(
     editor,
     perform: (action, target: SshTarget) => {
       seen.runs.push(`${action} ${target.host}`);
+      seen.targets.push(target);
       return Promise.resolve(options.outcome ?? RAN_OK);
     },
     heldHost: () => options.held,
@@ -181,7 +185,23 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
     );
   });
 
-  it('F-2411.AC-12: Configure SSH Hosts... runs the configuration command and does not kill', async () => {
+  it('F-2411 AC-11, F-2411 6.3: a typed user@host:port runs on its parsed target', async () => {
+    const scenario = setup({
+      picked: {
+        kind: 'typed',
+        label: '➤ lab@x.invalid:2222',
+        text: 'lab@x.invalid:2222',
+        keepVisible: true,
+      },
+    });
+    await scenario.kill();
+    deepStrictEqual(
+      [scenario.runs, scenario.targets],
+      [['kill x.invalid'], [{host: 'x.invalid', user: 'lab', port: 2222}]],
+    );
+  });
+
+  it('F-2411 AC-12, F-2411 6.4: Configure SSH Hosts... runs the configuration command and does not kill', async () => {
     const scenario = setup({
       picked: {
         kind: 'configure',
@@ -196,7 +216,7 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
     );
   });
 
-  it('F-2411.AC-12: Add New SSH Host... runs the add-host command and does not kill', async () => {
+  it('F-2411 AC-12, F-2411 6.4: Add New SSH Host... runs the add-host command and does not kill', async () => {
     const scenario = setup({
       picked: {
         kind: 'addHost',
@@ -245,6 +265,63 @@ describe('Uninstall VS Code Server from Host... (F-2412)', () => {
         scenario.sink.lines.map(line => line.message),
       ],
       [[], [], []],
+    );
+  });
+
+  it('F-2412.5.0: a listed host runs on its alias as the text, case kept', async () => {
+    const scenario = setup({
+      picked: {kind: 'host', label: 'Dev-Box', keepVisible: false},
+    });
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.runs, scenario.targets],
+      [['uninstall Dev-Box'], [{host: 'Dev-Box'}]],
+    );
+  });
+
+  it('F-2412 AC-22: a typed user@alias is uninstalled with the typed user', async () => {
+    const scenario = setup({
+      picked: {
+        kind: 'typed',
+        label: '➤ me@dev',
+        text: 'me@dev',
+        keepVisible: true,
+      },
+    });
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.runs, scenario.targets],
+      [['uninstall dev'], [{host: 'dev', user: 'me'}]],
+    );
+  });
+
+  it('F-2412 6.5: the add-host row runs its command and the uninstall does not continue', async () => {
+    const scenario = setup({
+      picked: {
+        kind: 'addHost',
+        label: {id: 'S167', values: ['$(plus)']},
+        keepVisible: true,
+      },
+    });
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.commands, scenario.runs],
+      [['opensshremotes.addNewSshHost'], []],
+    );
+  });
+
+  it('F-2412 6.5: the configure row runs its command and the uninstall does not continue', async () => {
+    const scenario = setup({
+      picked: {
+        kind: 'configure',
+        label: {id: 'S024', values: []},
+        keepVisible: true,
+      },
+    });
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.commands, scenario.runs],
+      [['opensshremotes.openConfigFile'], []],
     );
   });
 
