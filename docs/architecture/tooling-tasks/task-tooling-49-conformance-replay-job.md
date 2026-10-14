@@ -50,7 +50,7 @@ Concurrency: `conformance-${{ inputs.package }}`, `cancel-in-progress: false`: a
      skipped when `/usr/share/code/code --version` already says 1.139.1 (the runner container keeps it between jobs);
    - `actions/setup-node` 24; `npm ci` in `tests/conformance/runner/lab`;
    - environment: `CONFORMANCE_SUITE=<suite>/tests/conformance`, `CONFORMANCE_WORK=$HOME/conformance-work` (never under
-     `/tmp`, which the runner refuses), `ENCODE_SLOTS=31-31` (one slot: 2 CPUs), `ENCODE_EXTENSION=<the VSIX>`,
+     `/tmp`, which the runner refuses), `ENCODE_SLOTS=31-31` (one slot: 2 CPUs), `LAB_SLOT=31` (the fixture builds run in that slot: `fixture.py`'s `build_slot()` exits without it), `ENCODE_EXTENSION=<the VSIX>`,
      `ENCODE_IDENTITY`/`ENCODE_RULES` = `tests/conformance/packages/<package>/{identity.yaml,rules.json}`, `DISPLAY` from
      `xvfb-run`;
    - fixtures, built once per runner and kept: `bin/conformance build mirror --pull`, `build engine/base`,
