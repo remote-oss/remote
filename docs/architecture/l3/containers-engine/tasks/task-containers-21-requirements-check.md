@@ -34,6 +34,12 @@ With the pinned VSCodium server 1.135.06055 (commit `1a46a584…`, `lib-product/
    (`/srv/node: /lib/x86_64-linux-gnu/libc.so.6: version 'GLIBC_2.28' not found`). The start body's branch
    `[ "$EXIT_CODE" != 207 ] || leave LinuxPrereqs` never fires with this server.
 
+5. **The Alpine server build** (`vscodium-reh-alpine-x64-1.135.06055.tar.gz`, the same commit) ships a byte-identical
+   `bin/helpers/check-requirements.sh`. Run as `sh /srv/bin/helpers/check-requirements.sh` in `alpine:3.22` (pinned
+   `sha256:5291449c…`), it **exits 0** and prints one line, `Warning: alpine distro detected, skipping GLIBCXX check`.
+   It does the same with `libstdc++` added, which is the harness's dev container image (containers-09 §3.1). So every
+   Alpine connect runs the helper and goes on, and gate row 1 isn't affected (athena on #904).
+
 So today an old container gets the generic S034 dialog, never F-0503 7.E1's S346 with the check's text.
 **remote-ssh is in the same position** (§5).
 
@@ -193,7 +199,9 @@ F-2401's requirements dialog can never show. §1 item 4 is that measurement, wit
 
 1. **R9's image can't be pulled on the runner:** report it. Don't swap in another old-glibc image without athena's
    word.
-2. **The helper on the runner's server build differs from §1** (another path, or other exit codes): report its header
+2. **The helper exits 99 in the harness's Alpine image** (§1 item 5 measured 0): report its output. Gate row 1 would
+   then fail, so don't merge until athena has seen it.
+3. **The helper on the runner's server build differs from §1** (another path, or other exit codes): report its header
    and its exit code in `ubuntu:18.04`.
 
 ## 7. Catalogue (`docs/architecture/catalogue/coverage-containers-r1.tsv`)
