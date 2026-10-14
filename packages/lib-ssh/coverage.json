@@ -4,8 +4,8 @@
     "src/process/ports.ts": "declares types only; nothing in it runs"
   },
   "ratchet": {
-    "lines": 99.94,
-    "branches": 98.97,
+    "lines": 99.95,
+    "branches": 99.15,
     "functions": 100
   }
 }

@@ -24,6 +24,7 @@
     "check-licences": "node tools/licences.ts",
     "identifiers": "node tools/identifiers.ts",
     "check-identifiers": "node tools/identifiers.ts --check",
+    "check-consumed": "node tools/identifiers.ts && node tools/identifiers.ts --consumed",
     "check-public-surface": "node tools/public-surface.ts",
     "check-string-tables": "node tools/string-tables.ts",
     "check-coverage": "node tools/check-coverage.ts",
