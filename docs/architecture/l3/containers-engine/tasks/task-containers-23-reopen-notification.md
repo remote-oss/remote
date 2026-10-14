@@ -11,7 +11,8 @@ and the brief was amended at 82d30e9.
 - #918 (containers-09 part 2): `devContainerFolder`, `answerNotification` and `notificationButtons`.
 
 Sources:
-- F-0402 (remote-oss/remote-containers#17): 3.1, 3.4, 4 (PRE-2, PRE-3, PRE-5), 5.0, 6.1, 6.4, 7.E1 to 7.E3, BR-2 to BR-8,
+- F-0402 (remote-oss/remote-containers#17): 3.1, 3.4, 4 (PRE-2, PRE-3, PRE-5), 5.0, 6.1, 6.4, 7.E1 to 7.E3, BR-2 to BR-8
+  (BR-3 is core's, §2.1),
   BR-10 and AC-1 to AC-5, AC-8, AC-9, AC-11 to AC-14;
 - the brief (`brief-release-1.md`, the F-0402 item): the release-1 scope;
 - R-27 (the keys are ours) and R-28 (no telemetry).
@@ -109,6 +110,11 @@ than", BR-6.
 
 Steps 1 to 3 log nothing (BR-12: only the start lines).
 
+**The lifetime (BR-3) is core's.** `showInformationMessage` gives a toast that core hides after its own timeout, about
+10 s, and that stays in the notification centre. Nothing here sets a timer or closes it, and no row asserts the hiding.
+A toast that core hides isn't an answer: the promise stays pending until the user acts in the centre or the window
+closes, and nothing is stored (BR-8).
+
 **Trust.** It is offered in Restricted Mode too (PRE-5, BR-10). Nothing here reads trust. S293 runs the command, and
 containers-12's gate decides there.
 
@@ -189,7 +195,7 @@ Neither key is registered with `setKeysForSync` (R-27).
 | `F-0402 AC-11: trust isn't read` | the ports have no trust | one `show` (the row documents PRE-5; the module has no trust port) |
 | `F-0402 AC-8: the reset writes a newer reset time and deletes nothing` | global `{suppressedAt: 10}`, `now` 50 | global `{suppressedAt: 10, resetAt: 50}` |
 | `F-0402 AC-8: a reset over a malformed value starts a fresh object` | global `7` | `{resetAt: 50}` |
-| `F-0402 5.0: each chosen outcome logs one line, and nothing else logs` | S293; S035; S101; a dismissal | the three lines of §2.1, and none for the dismissal |
+| `F-0402 AC-14: each chosen outcome logs one line, and nothing else logs` | S293; S035; S101; a dismissal | the three lines of §2.1, and none for the dismissal |
 
 `manifest.test.ts`: `F-0402 3.1: the reset command is contributed under Dev Containers with no when`.
 
