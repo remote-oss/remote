@@ -16,7 +16,7 @@ sections. A builder doesn't change a contract; a question goes to the architect.
 | `clientPathOnHost` | not implemented (a container never reads a client path directly). |
 
 **Failures:** a `docker` that can't start is `spawnFailed`; a container that stopped or vanished during an operation
-(exit 125, or the daemon's "is not running" / "No such container") is `channelClosed`; an abort is `cancelled`. The
+(exit 125, or the daemon's "is not running" / "No such container", or exit 137 or 143 with an empty stderr while one `docker inspect` through the same `EngineHost` says the container no longer runs; measured on Docker 29.9, amended 2026-10-14 on #808) is `channelClosed`; an abort is `cancelled`. The
 channel never retries.
 
 **The exec dialer:** `execDialer(engine, containerId, user, relayScriptPath): Dialer` (lib-forwarding's `Dialer`).
@@ -95,6 +95,10 @@ its content:
    extraction has finished (F-0503 5.0 step 5), and `<dataFolder>/bin/<commit>` becomes a symlink to it, created or
    kept (F-0503 BR-3). Without it, nothing changes. This is area A's code with area C's input, and it's carded with
    C10.
+   **One tree per connection (amended 2026-10-14 on #806):** C10 gives every lib-server script of a connection the same
+   `installTree`: the probe, install, start and cleanup scripts alike. Build the script parameters once per connection,
+   not once per step. A script without the tree takes its host lock under `bin/<commit>`, which is then a link, so the
+   lock would land inside the shared tree (containers-05 R6). C10's rows check `INSTALL_TREE` in each step's script.
 3. **lib-authority:** nothing new. `Failed.silent`, `Connected.trusted` and the container codec already exist (dossier
    Q3 and Q6 are answered by them).
 

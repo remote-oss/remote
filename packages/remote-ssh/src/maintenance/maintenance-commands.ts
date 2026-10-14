@@ -114,7 +114,7 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
 
   async function killOnHost(target: SshTarget): Promise<void> {
     const outcome = await ports.perform('kill', target);
-    if (outcome.result === 'connectionFailed') {
+    if (outcome.result !== 'stepRan') {
       ports.logger.warn(`the kill failed: ${outcome.cause}`);
     } else {
       await ports.killLocalServer(payloadOf(target));
@@ -128,6 +128,9 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
 
   async function uninstallOnHost(target: SshTarget): Promise<void> {
     const outcome = await ports.perform('uninstall', target);
+    if (outcome.result === 'cancelled') {
+      return;
+    }
     if (outcome.result === 'connectionFailed') {
       ports.logger.warn(`the uninstall failed: ${outcome.cause}`);
       throw new Error(UNINSTALL_FAILED);

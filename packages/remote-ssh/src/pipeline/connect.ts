@@ -20,6 +20,7 @@ import {
   ofTransfer,
 } from './failure.ts';
 import {connectOverCli} from '../cli/cli-connect.ts';
+import type {ForwardingPlans} from '../environment/forwarding.ts';
 import {hostPlatformLine} from '../diagnostics/log-content.ts';
 import type {
   ConnectInput,
@@ -128,6 +129,8 @@ export interface Connection {
   connected: Connected;
   /** The TCP port the server listens on at the host's loopback. */
   serverPort: number;
+  /** The window's agent link and display plans, which set its terminals' environment. */
+  forwarding: ForwardingPlans;
   /** Closes the tunnel and gives the lease on the connection back; the connector calls it when the window ends. */
   release(): void;
   /** Hears what happens to the connection's transport; the returned function stops it. */
@@ -309,6 +312,12 @@ async function runSteps(
   }
   const {host} = probed.value;
   options.logger.info(hostPlatformLine(host));
+  const forwarding = await steps.planForwarding(
+    input,
+    lease,
+    host,
+    cancellation,
+  );
   let planned = steps.plan(input, host);
   if ('failure' in planned) {
     return failure(ofPlan(planned.failure));
@@ -341,9 +350,11 @@ async function runSteps(
       void quietly('the platform setting', () =>
         steps.rememberPlatform(input, host.operatingSystem),
       );
+      steps.linkAgent(lease, forwarding.agentLink);
       return {
         connected: overCli.connected,
         serverPort: 0,
+        forwarding,
         release: () => {
           overCli.release();
         },
@@ -441,6 +452,8 @@ async function runSteps(
         architecture: host.architecture,
         temporaryFolder: host.temporaryFolder,
         connectionToken: started.server.connectionToken,
+        agentLink: forwarding.agentLink,
+        display: forwarding.display,
       }),
     );
   }
@@ -448,6 +461,7 @@ async function runSteps(
     steps.rememberPlatform(input, host.operatingSystem),
   );
   const {opened} = tunnel.value;
+  steps.linkAgent(lease, forwarding.agentLink);
   return {
     connected: {
       ...opened,
@@ -455,6 +469,7 @@ async function runSteps(
       trusted: false,
     },
     serverPort: endpoint.kind === 'port' ? endpoint.port : 0,
+    forwarding,
     release: () => {
       tunnel.value.close();
       lease.release();

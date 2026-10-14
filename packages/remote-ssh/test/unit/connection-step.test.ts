@@ -39,6 +39,8 @@ class FakeLease {
   readonly asked: PlainData[] = [];
   /** What the helper answers to the first requests to connect, in order; it accepts after these. */
   connectReplies: PlainData[] = [];
+  /** The record an earlier window left, which the helper gives back when asked; none when unset. */
+  storedRecord: PlainData | undefined;
   private readonly listeners: Array<(event: unknown) => void> = [];
 
   onEvent(listener: (event: unknown) => void): void {
@@ -51,7 +53,9 @@ class FakeLease {
     const reply =
       type === 'connect'
         ? (this.connectReplies.shift() ?? {type: 'accepted'})
-        : {type: 'accepted'};
+        : type === 'sharedRecord' && this.storedRecord !== undefined
+          ? {type: 'sharedRecord', record: this.storedRecord}
+          : {type: 'accepted'};
     return Promise.resolve({kind: 'reply', body: reply});
   }
 
@@ -188,10 +192,11 @@ function fixture(
 }
 
 /** A fixture whose connect has gone through the login, with what the connect gave. */
-async function loggedIn(): Promise<
-  Fixture & {outcome: Awaited<ReturnType<Fixture['connecting']>>}
-> {
+async function loggedIn(
+  storedRecord?: PlainData,
+): Promise<Fixture & {outcome: Awaited<ReturnType<Fixture['connecting']>>}> {
   const ready = fixture();
+  ready.lease.storedRecord = storedRecord;
   const pending = ready.connecting();
   await settled();
   ready.lease.emit({type: 'connected', socksPort: 41000});
@@ -239,6 +244,31 @@ describe('the connection step', () => {
     deepStrictEqual(
       outcome.kind === 'done' ? outcome.value.socksPort : outcome,
       41000,
+    );
+  });
+
+  it('F-2311 R2: gives the pipeline no stored record when the helper holds none', async () => {
+    const {outcome} = await loggedIn();
+    deepStrictEqual(
+      outcome.kind === 'done' ? outcome.value.storedRecord : outcome,
+      undefined,
+    );
+  });
+
+  it('F-2311 R2: gives the pipeline the record an earlier window left, with its plans', async () => {
+    const record = {
+      remotePort: 4321,
+      operatingSystem: 'linux',
+      architecture: 'x64',
+      temporaryFolder: '/tmp',
+      connectionToken: 'token',
+      agentLink: {kind: 'none', reason: 'noForwardedSocket'},
+      display: {kind: 'display', value: 'localhost:10.0'},
+    };
+    const {outcome} = await loggedIn(record);
+    deepStrictEqual(
+      outcome.kind === 'done' ? outcome.value.storedRecord : outcome,
+      record,
     );
   });
 

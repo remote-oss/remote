@@ -19,7 +19,7 @@ export function defaultFormat(line: LogLine): string {
  * a new one.
  */
 export function createChannelSink(
-  port: EditorLogPort,
+  port: Pick<EditorLogPort, 'createOutputChannel'>,
   channelName: string,
   format?: (line: LogLine) => string,
 ): Sink & {dispose(): void} {

@@ -36,13 +36,16 @@ function hostLaunchLabels(): string[] {
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, no-proposals, the three explorer launches, the two trust launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, no-proposals, the three explorer launches, the two trust launches and the ports cases in the order of theirs', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
         'local',
         'remote',
         'reconnect',
+        'agent',
+        'agent-off',
+        'x11',
         ...failureCases(REPOSITORY_ROOT).map(
           failure => `failure-${failure.label ?? failure.alias}`,
         ),
@@ -59,6 +62,39 @@ describe('the launches of the VSCodium run', () => {
         'trust',
         'trust-terminal',
         ...hostLaunchLabels(),
+      ],
+    );
+  });
+
+  it('connect-39: the forwarding launches open their aliases with the case named, and agent-off turns agent forwarding off', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.suite === 'suite-forwarding')
+        .map(launch => [
+          launch.label,
+          launch.folderUri,
+          launch.environment,
+          launch.settings,
+        ]),
+      [
+        [
+          'agent',
+          'vscode-remote://ssh-remote+agentfwd/home/harness',
+          {HARNESS_FORWARDING_CASE: 'agent'},
+          undefined,
+        ],
+        [
+          'agent-off',
+          'vscode-remote://ssh-remote+agentfwd-off/home/harness',
+          {HARNESS_FORWARDING_CASE: 'agent-off'},
+          {'remote.SSH.enableAgentForwarding': false},
+        ],
+        [
+          'x11',
+          'vscode-remote://ssh-remote+x11fwd/home/harness',
+          {HARNESS_FORWARDING_CASE: 'x11'},
+          undefined,
+        ],
       ],
     );
   });
@@ -169,12 +205,13 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are the terminal and socket launches, the failing connects that name them, the client searches, the explorer and trust launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, the explorer and trust launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
         .map(launch => launch.label),
       [
+        'agent-off',
         'failure-refused-shown',
         'failure-platform-escape',
         'failure-port-range-busy',

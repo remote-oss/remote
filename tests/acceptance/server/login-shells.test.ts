@@ -4,6 +4,7 @@ import {
   SHELL_VARIANTS,
   shellVariantsToRun,
 } from '../../../tools/host-variants.ts';
+import {connectWaitMilliseconds} from 'lib-ssh';
 import {startHost, type RunningHost} from './host-fixture.ts';
 import {
   attemptSharedSession,
@@ -11,11 +12,18 @@ import {
   type SharedSession,
 } from './shared-session.ts';
 
-/** The connect wait the session is opened with: it is also the bound on the login shell's startup. */
+/** The connect timeout the session is opened with, as the host's own value. */
 const CONNECT_SECONDS = 5;
 
-/** What the first script of a bounded startup may wait for, in milliseconds: the bound and two seconds of margin. */
-const BOUND_AND_MARGIN_MILLISECONDS = (CONNECT_SECONDS + 2) * 1000;
+/** The connect wait of that timeout (F-2105 BR-3), which also bounds the login shell's startup (connect-49). */
+const CONNECT_WAIT_MILLISECONDS = connectWaitMilliseconds({
+  connectTimeoutSeconds: CONNECT_SECONDS,
+  fromHost: true,
+  unboundedWaitSeconds: 60,
+});
+
+/** What a bounded startup may take, in milliseconds: the connect wait and two seconds of margin. */
+const WAIT_AND_MARGIN_MILLISECONDS = CONNECT_WAIT_MILLISECONDS + 2000;
 
 const HOME = '/home/harness';
 
@@ -343,7 +351,7 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
           [
             attempt.kind,
             attempt.kind === 'failed' ? attempt.failure : undefined,
-            attempt.milliseconds < BOUND_AND_MARGIN_MILLISECONDS,
+            attempt.milliseconds < WAIT_AND_MARGIN_MILLISECONDS,
           ],
           [
             'failed',
@@ -353,12 +361,17 @@ describe('F-2704 BR-4, #443: every login shell hands the session to POSIX sh', f
         );
       });
 
-      it('F-2704 AC-11, #443: the helper logs that the login shell did not finish its startup', async () => {
+      it("F-2704 AC-11, #443, connect-49: the client's wait ends a login shell that never finishes its startup", async () => {
         write(bash, '.bash_profile', 'sleep 30\n');
         const attempt = await failedAttempt(bash);
         deepStrictEqual(
-          attempt.logged.filter(line => line.includes('login shell')),
-          ['the login shell did not finish its startup within 5 s'],
+          [
+            attempt.kind === 'failed' ? attempt.failure : attempt.kind,
+            attempt.logged.filter(line =>
+              line.includes('did not finish its startup'),
+            ),
+          ],
+          [{kind: 'loginFailed', failure: 'timeout', hints: []}, []],
         );
       });
 
@@ -489,8 +502,8 @@ describe('F-2206 AC-28, #443: a login shell that does not answer fails the conne
     deepStrictEqual(
       [
         attempt.kind === 'failed' ? attempt.failure : attempt.kind,
-        milliseconds >= CONNECT_SECONDS * 1000 - 500,
-        milliseconds < BOUND_AND_MARGIN_MILLISECONDS,
+        milliseconds >= CONNECT_WAIT_MILLISECONDS - 500,
+        milliseconds < WAIT_AND_MARGIN_MILLISECONDS,
       ],
       [{kind: 'loginFailed', failure: 'timeout', hints: []}, true, true],
     );
