@@ -1,9 +1,8 @@
 # Task card coverage-41: F-2302's Connect Current Window to Host acceptance rows
 
 Issue: #729. Release 0.2, gating (D-86 puts F-2302, `remote-oss/remote-ssh#35`, into 0.2). #722 seeds F-2302 and lists
-these criteria under "Needs an acceptance row": AC-4, 5, 7, 8, 9, 10, 17–23, 25, 27, 28, 29, 31, 32 and 33. This card
-writes rows for all 20 and tags them all. AC-26 (a
-trust-enabled launch) isn't here.
+these criteria under "Needs an acceptance row": AC-4, 5, 6, 7, 8, 9, 10, 17–23, 25, 27, 28, 29, 31, 32 and 33. This
+card writes rows for all 21 and tags them all. AC-26 (a trust-enabled launch) isn't here.
 Builder: task:claude. Size: M (about 2 agent-days). **Depends on:** #722 merged; coverage-14's helpers (#568 §1) and
 coverage-39's `serverProcesses()` and `logins()` (#727), added here if neither has merged.
 
@@ -31,7 +30,7 @@ Names start with `F-2302 AC-<n>:`.
 | # | Steps | Assertions | AC |
 |---|---|---|---|
 | 1 | open folder window `c1` locally (`acceptance.agent.openWindow` with a local folder of the run); `switchTo('c1')`, `hostPick` → `dismiss` | the `hostPick` line: question `Select configured SSH host or enter user@host`, the hosts, `$(plus) Add New SSH Host...`, `Configure SSH Hosts...`; `c1` unchanged; no window opened | AC-4, AC-20 |
-| 2 | `switchTo('c1')`, `hostPick` → `{label: 'harness'}` | a switch (§1) within about 2 s; the new name's `windowState` has the authority `ssh-remote+harness` and no folder; connected | AC-5 |
+| 2 | `switchTo('c1')`, `hostPick` → `{label: 'harness'}` | a switch (§1) within about 2 s; the new name's `windowState` has the authority `ssh-remote+harness` and no folders, so `c1`'s local folder isn't open; connected | AC-5, AC-6 |
 | 3 | open `c2` locally; `switchTo('c2')`, `hostPick` → `{typed: 'harness@127.0.0.1:<port>'}` | a switch; the authority is `ssh-remote+` and lib-authority's `sshRemoteCodec.encode({kind: 'host', hostName: '127.0.0.1', user: 'harness', port: <port>})`; the `progress` line names `127.0.0.1` | AC-7 |
 | 4 | open folder window `c3` on `harness` (`openWindow('harness', 'c3')`); `switchTo('c3')`, `hostPick` → `{label: 'password'}` and the password | a switch to `ssh-remote+password` with no folder, though `/home/harness-pw/c3` exists (create it first) | AC-8 |
 | 5 | with `c3`'s switch of row 4 the only window on `harness`, wait 10 s | no `ssh` process of the run's to the harness port for user `harness` remains on the client (`pgrep -f` on the `harness` alias), and `serverProcesses()` is not empty | AC-9 |
@@ -52,7 +51,7 @@ Names start with `F-2302 AC-<n>:`.
 
 ## 3. The catalogue
 
-In `coverage-slice1.tsv`, F-2302 AC-4, 5, 7, 8, 9, 10, 17, 18, 19, 20, 21, 22, 23, 25, 27, 28, 29, 31 and 33 go to
+In `coverage-slice1.tsv`, F-2302 AC-4, 5, 6, 7, 8, 9, 10, 17, 18, 19, 20, 21, 22, 23, 25, 27, 28, 29, 31 and 33 go to
 `acceptance`. AC-32 goes to `unit` (athena, 2026-10-14). Its keybinding half is ours, and the existing row in
 `packages/remote-ssh/test/unit/connect-commands.test.ts`,
 `connect-21: a host argument of the current-window command opens here`, proves it. Rename that row to
@@ -60,7 +59,8 @@ In `coverage-slice1.tsv`, F-2302 AC-4, 5, 7, 8, 9, 10, 17, 18, 19, 20, 21, 22, 2
 nothing else in it. Row 18 above cites AC-32 too.
 
 List these as core halves:
-- the title and indicator (AC-5, 7);
+- the title's rendering and the Explorer's empty view (AC-5, 6, 7). The indicator's text "SSH: <alias>" is ours, from
+  the F-2502 formatter: cite `label-formatter.test.ts`'s `F-2502 BR-2` rows for AC-6's indicator half in the PR;
 - the failure dialog's look (AC-22, 23);
 - AC-32's hiding of the entry while a window connects (F-2302 6.10). There is no fix card.
 

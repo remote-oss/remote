@@ -2,7 +2,7 @@
 
 Issue: #730. Release 0.2, gating (D-86 puts F-2303, `remote-oss/remote-ssh#36`, and F-2605's clear command,
 `remote-oss/remote-ssh#72`, into 0.2). #722 seeds both and lists these under "Needs an acceptance row":
-- F-2303 AC-4, 5, 6, 8, 9, 13–18, 20–23 and 26;
+- F-2303 AC-4, 5, 6, 7, 8, 9, 13–18, 20–23 and 26;
 - F-2605 AC-20, 21 and 23.
 
 This card writes them, plus F-2303's wiring row (the target decisions tagged `unit`: port 22 dropped, user and case
@@ -22,7 +22,7 @@ Names start with `F-2303 AC-<n>:`.
 
 | # | Steps | Assertions | AC |
 |---|---|---|---|
-| 1 | open `a1` on `harness`; record `logins()`; `const n = await newWindowFrom('a1')` | `a1` wrote no record line and still has its folder and authority; `n` opened within 3 s, its authority is `ssh-remote+harness` with no folder; `n` is connected within 5 s, with no `progress` line and no question of `n`; `logins()` unchanged | AC-4, AC-5, AC-6 |
+| 1 | open `a1` on `harness`; record `logins()`; `const n = await newWindowFrom('a1')` | `a1` wrote no record line and still has its folder and authority; `n` opened within 3 s, its authority is `ssh-remote+harness` with no folder; `n` is connected within 5 s, with no `progress` line and no question of `n`; `logins()` unchanged | AC-4, AC-5, AC-6, AC-7 |
 | 2 | `const m = await newWindowFrom(n)` | `m` is on `ssh-remote+harness`, connected, and `logins()` unchanged | AC-8 |
 | 3 | `closeWindow('a1')` | `n` and `m` still connected; `newWindowFrom(m)` still opens a window (close it) | AC-9 |
 | 4 | open window `a2` on the typed `harness@127.0.0.1:<port>` (the authority Connect to Host gives it: `sshRemoteCodec.encode({kind: 'host', hostName: '127.0.0.1', user: 'harness', port: <port>})`); `newWindowFrom('a2')` | the new window's authority equals `a2`'s, and it connects with no new login | F-2303 wiring (AC-10's decision end to end) |
@@ -56,10 +56,12 @@ row `F-2605.AC-20: the store's key is the only update`. Write which into the PR.
 ## 4. The catalogue
 
 In `coverage-slice1.tsv`:
-- F-2303 AC-4, 5, 6, 8, 9, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23 and 26 go to `acceptance`;
+- F-2303 AC-4, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23 and 26 go to `acceptance`;
 - F-2605 AC-20, 21 and 23 go to `acceptance`.
 
-List these as core halves: the new window's title and indicator (AC-7 is `core` already), and the failure dialog's look.
+List these as core halves: the new window's title rendering and the Explorer's empty view (AC-7), and the failure
+dialog's look. AC-7's indicator text "SSH: <alias>" is ours, from the F-2502 formatter: cite `label-formatter.test.ts`'s
+`F-2502 BR-2` rows in the PR.
 
 ## 5. Gates and review
 
