@@ -19,6 +19,7 @@ const SETUP_TEXTS = [
 ];
 
 const FAILURE_TEXTS = [
+  "An SSH installation couldn't be found",
   "Can't assign requested address",
   'Cancel',
   'Close Remote',
@@ -119,6 +120,7 @@ const ADD_HOST_TEXTS = [
 
 /** The reasons of a failed start and the notice of a refused bind host. */
 const START_TEXTS = [
+  "The remote host's architecture is not supported",
   'The VS Code Server failed to start',
   'The VS Code Server terminated due to presence of CVE-2020-1416. Check the Remote-SSH output channel for more details.',
   'Invaid port range set',

@@ -402,6 +402,24 @@ describe('the fallback from the host to the client (F-2405.BR-2, BR-4)', () => {
     );
   });
 
+  it('#670 R3: a failed host download that ended on a 404 carries the status', async () => {
+    const {outcome} = await runTransfer({
+      installs: [block('ServerDownloadFailed', 'server.downloadStatus=404')],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'serverDownload',
+      cause: 'downloadFailed',
+      status: 404,
+    });
+  });
+
+  it('#670 R3: a failed host download with no status fact carries none', async () => {
+    const {outcome} = await runTransfer({
+      installs: [block('ServerDownloadFailed')],
+    });
+    deepStrictEqual(Object.keys(failureOf(outcome) ?? {}), ['kind', 'cause']);
+  });
+
   it('F-2405.BR-4: with no fallback a failed host download is final', async () => {
     const {outcome} = await runTransfer({
       installs: [block('ServerDownloadFailed')],

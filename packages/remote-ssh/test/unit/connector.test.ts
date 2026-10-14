@@ -446,6 +446,41 @@ describe('the connector over the connect pipeline', () => {
     deepStrictEqual(connector.serverPort(), 4321);
   });
 
+  it('F-2411 R1: the held connection gives its host and that it was made in default mode', async () => {
+    const {connector} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(connector.heldHost(), {
+      target: {host: 'dev'},
+      terminalMode: false,
+    });
+  });
+
+  it('F-2411 R1: a connection made in terminal mode says so', async () => {
+    const {connector} = connectorFor({}, () => true);
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(connector.heldHost()?.terminalMode, true);
+  });
+
+  it('F-2411 R1: once the transport is lost, after a cancel, after a failed connect and before any connect there is no held host', async () => {
+    const lostOne = connectorFor();
+    await lostOne.connector.connect(HOST_INPUT);
+    lostOne.recording.notice?.({type: 'transportLost'});
+    const cancelled = connectorFor();
+    await cancelled.connector.connect(HOST_INPUT);
+    cancelled.connector.cancel();
+    const failed = connectorFor({openTunnel: tunnelFails});
+    await failed.connector.connect(HOST_INPUT);
+    deepStrictEqual(
+      [
+        lostOne.connector.heldHost(),
+        cancelled.connector.heldHost(),
+        failed.connector.heldHost(),
+        connectorFor().connector.heldHost(),
+      ],
+      [undefined, undefined, undefined, undefined],
+    );
+  });
+
   it('F-2304 BR-12: the details reveal the log', () => {
     const {connector, revealed} = connectorFor();
     connector.revealDetails();

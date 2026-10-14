@@ -8,7 +8,7 @@ import type {PromptStringId, PromptText} from 'lib-ssh';
 import {filled, type Translate} from './strings.ts';
 
 /** The English template of each string id, with `{0}`, `{1}` for the values. */
-const PROMPT_TEMPLATES: Readonly<Record<PromptStringId, string>> = {
+export const PROMPT_TEMPLATES: Readonly<Record<PromptStringId, string>> = {
   S001: '"{0}" has fingerprint "{1}".',
   S012: 'Are you sure you want to continue connecting?',
   S013: 'Are you sure you want to continue?',

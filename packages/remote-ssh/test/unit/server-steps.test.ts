@@ -252,6 +252,11 @@ describe('the server steps: plan, the CLI path', () => {
     deepStrictEqual('plan' in result ? result.plan.kind : result, 'cli');
   });
 
+  it("#670 R3: a plan from the user's own template says so", () => {
+    const {result} = planned(CLI_TEMPLATE, {useExecServer: false});
+    deepStrictEqual('plan' in result ? result.step : result, 'override');
+  });
+
   it('F-3902 rule 5 (i): the CLI is placed as <applicationName>-<commit> in the data folder', () => {
     const {result} = planned(CLI_TEMPLATE);
     deepStrictEqual(

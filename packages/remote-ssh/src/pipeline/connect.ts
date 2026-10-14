@@ -382,7 +382,13 @@ async function runSteps(
       cancellation,
     );
     if (transferred.kind === 'failed') {
-      return failure(ofTransfer(transferred.failure));
+      return failure(
+        ofTransfer(transferred.failure, {
+          step: planned.step,
+          architecture: host.architecture,
+          address: planned.plan.address,
+        }),
+      );
     }
   }
   const interrupted = cancelled();

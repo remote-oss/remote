@@ -499,3 +499,18 @@ export async function agentAdd(
 export async function agentClear(): Promise<void> {
   await withAgent('ssh-add', ['-D']);
 }
+
+/** Polls `check` every 100 ms until it holds; it fails naming `description` after `milliseconds`. */
+export async function waitFor(
+  description: string,
+  check: () => boolean | Promise<boolean>,
+  milliseconds: number,
+): Promise<void> {
+  const deadline = Date.now() + milliseconds;
+  while (!(await check())) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${description}`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}

@@ -9,6 +9,7 @@ import {filled, type Translate} from './strings.ts';
 
 /** The string ids of the progress and of the failure dialog. */
 export type FailureStringId =
+  | 'S009'
   | 'S014'
   | 'S015'
   | 'S022'
@@ -58,6 +59,7 @@ export type FailureStringId =
   | 'S137'
   | 'S140'
   | 'S142'
+  | 'S146'
   | 'S157'
   | 'S158'
   | 'S162'
@@ -71,6 +73,7 @@ export type FailureStringId =
 
 /** The English template of each string id, with `{0}`, `{1}` for the values. */
 export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
+  S009: "An SSH installation couldn't be found",
   S014: "Can't assign requested address",
   S015: 'Cancel',
   S022: 'Close Remote',
@@ -120,6 +123,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   S137: 'The connection timed out',
   S140: 'The operation timed out',
   S142: 'The process tried to write to a nonexistent pipe',
+  S146: "The remote host's architecture is not supported",
   S157: 'Waiting for other windows to connect',
   S158: 'Waiting for port forwarding to be ready',
   S162: 'about SSH configuration files',

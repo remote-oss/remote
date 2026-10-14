@@ -378,7 +378,9 @@ export function createServerSteps(
       } else {
         licenceFacts = {...noLicenceFacts, step: 'reuse'};
       }
-      return result;
+      return 'plan' in result && resolution.kind === 'resolved'
+        ? {...result, step: resolution.step}
+        : result;
     },
     gate: (input, cancellation) => {
       const classification = classifyServerLicence(licenceFacts, {

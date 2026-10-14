@@ -181,7 +181,11 @@ A server that failed to listen may stay alive without a port (7.E3). The next ca
 
 ## 4. The catalogue
 
-F-2409 AC-7, 9, 10, 12, 13, 14, 15, 19, 25, 28 and 29 go to `acceptance`. AC-30 stays `todo`: its outcome is the
+F-2409 AC-7, 9, 10, 12, 13, 14, 15, 19, 25, 28 and 29 go to `acceptance`. AC-11, 16 and 22 need no row here: the
+recorded cases cover them (the coverage list on `remote-oss/remote-ssh#54`). They stay `todo` until our x86_64 replay
+passes, and are then tagged `recorded`. F-2409 AC-18 goes to `deferred`, with the reason
+`D-86: only clearAllSessionHints of F-2605 is in 0.2` (athena, 2026-10-14): nothing writes the hint store in 0.2,
+because the session recorder belongs to F-2605. AC-30 stays `todo`: its outcome is the
 window's dialog, and no window case can make the real server end for CVE-2020-1416 (its check runs on Windows only). The
 unit row proves the dialog's text and the real-shell row proves the cause, but by athena's reading on #481 and #522 a
 server-level row doesn't carry `acceptance` for a window outcome. List AC-30 under "harness capability missing" in #142:
@@ -197,8 +201,7 @@ AC-26 waits for a slow stand-in in the VSCodium run and tooling-20's Retry.
 
 ## 5. Done when
 
-The repository's gates pass, and `pnpm test:acceptance:vscodium` passes with coverage-13's cases plus these 19. Paste
-the `suite-ports` summaries.
+The repository's gates pass, and `pnpm test:acceptance:vscodium` passes with coverage-13's cases plus these 19. Paste the `suite-ports` summaries.
 
 ## 6. Review
 

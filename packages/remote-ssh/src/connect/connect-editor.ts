@@ -117,6 +117,11 @@ export function connectCommandEditorOf(
       }
     },
     runCommand: command => editor.commands.executeCommand(command),
+    switchToLocalWindow: () =>
+      editor.commands.executeCommand('vscode.newWindow', {
+        reuseWindow: true,
+        remoteAuthority: null,
+      }),
     remoteName: () => editor.env.remoteName,
   };
 }

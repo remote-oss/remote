@@ -159,8 +159,11 @@ function ofExhausted(failure: {
 export function ofProbe(failure: ProbeFailure): FailureDetail {
   switch (failure.kind) {
     case 'unsupportedPlatform':
-    case 'unsupportedArch':
       return logged('unsupportedPlatform', `reported: ${failure.reported}`);
+    case 'unsupportedArch':
+      return logged('unsupportedPlatform', `reported: ${failure.reported}`, {
+        id: 'S146',
+      });
     case 'prerequisiteMissing':
       return logged(
         'prerequisiteMissing',
@@ -215,19 +218,14 @@ export function ofConnection(
   }
 }
 
-/** What is wrong with the user's download address template, in words of ours; nothing for a problem that is not theirs. */
-function templateReason(problem: TemplateProblem): FailureReason | undefined {
-  switch (problem.kind) {
-    case 'unknownPlaceholder':
-      return {
+/** What is wrong with the user's download address template, in words of ours. */
+function templateReason(problem: TemplateProblem): FailureReason {
+  return problem.kind === 'unknownPlaceholder'
+    ? {
         id: 'templateUnknownPlaceholder',
         values: [`\${${problem.name}}`],
-      };
-    case 'notHttpUrl':
-      return {id: 'templateNotHttp', values: []};
-    default:
-      return undefined;
-  }
+      }
+    : {id: 'templateNotHttp', values: []};
 }
 
 /** The failure of the install plan, which is made before the host is asked anything. */
@@ -246,10 +244,37 @@ export function ofPlan(failure: PlanFailure): FailureDetail {
   }
 }
 
-/** The failure of the server transfer. */
-export function ofTransfer(failure: TransferFailure): FailureDetail {
+/** Where a server download went, for the failure that names the host's architecture. */
+export interface DownloadContext {
+  /** The step of the archive's resolution; a download from the user's own template is never a missing build. */
+  step: 'override' | 'productTemplate' | 'builtInTable' | undefined;
+  /** The architecture token of the host. */
+  architecture: string;
+  address: string;
+}
+
+/**
+ * The failure of the server transfer. A host-side download of the server archive that ended on a 404 from a built-in
+ * source says the variant has no build for the host's architecture; the user's own template, and every other status,
+ * is a failed download.
+ */
+export function ofTransfer(
+  failure: TransferFailure,
+  context?: DownloadContext,
+): FailureDetail {
   switch (failure.kind) {
     case 'serverDownload':
+      if (
+        failure.status === 404 &&
+        context?.step !== undefined &&
+        context.step !== 'override'
+      ) {
+        return logged(
+          'unsupportedPlatform',
+          `no server build for ${context.architecture} at ${context.address}`,
+          {id: 'S146'},
+        );
+      }
       return logged('serverDownload', failure.cause, DOWNLOAD_FAILED);
     case 'localDownload':
       return logged('serverDownload', failure.detail, {

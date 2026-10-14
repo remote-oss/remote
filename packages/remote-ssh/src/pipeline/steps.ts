@@ -159,7 +159,13 @@ export interface ConnectSteps {
     input: ConnectInput,
     host: ProbedHost,
     options?: {direct: boolean},
-  ): {plan: Plan} | {failure: PlanFailure};
+  ):
+    | {
+        plan: Plan;
+        /** The step that resolved the archive's address; none when the plan has no archive to download. */
+        step?: 'override' | 'productTemplate' | 'builtInTable' | undefined;
+      }
+    | {failure: PlanFailure};
   /** Asks for the licence when the server needs it; the wait for the user's answer has no limit. */
   gate(input: ConnectInput, cancellation: AbortSignal): Promise<GateOutcome>;
   transfer(

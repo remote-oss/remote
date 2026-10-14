@@ -299,6 +299,13 @@ export function harnessSshConfig(
       keyLines(runFolder),
     ),
     ...accountAlias(
+      'i686',
+      'harness-i686',
+      port,
+      runFolder,
+      keyLines(runFolder),
+    ),
+    ...accountAlias(
       'readonly',
       'harness-ro',
       port,

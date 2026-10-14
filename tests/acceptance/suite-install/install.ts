@@ -26,16 +26,13 @@ function runVariable(name: string): string {
 }
 
 /**
- * The requests the download host logged since this case's launch began: the lines after the count the run noted for
- * the launch in `<run folder>/install-<label>-requests-start`.
+ * The requests the download host logged since a launch began: the lines after the count the run noted for the launch
+ * in `<run folder>/<launch>-requests-start`.
  */
-export function downloadRequests(label: string): DownloadRequest[] {
+export function requestsOfLaunch(launch: string): DownloadRequest[] {
   const start = Number(
     readFileSync(
-      path.join(
-        runVariable('HARNESS_RUN_FOLDER'),
-        `install-${label}-requests-start`,
-      ),
+      path.join(runVariable('HARNESS_RUN_FOLDER'), `${launch}-requests-start`),
       'utf8',
     ).trim(),
   );
@@ -47,6 +44,11 @@ export function downloadRequests(label: string): DownloadRequest[] {
       const [, , requestPath = '', ...agent] = line.split(' ');
       return {path: requestPath, userAgent: agent.join(' ')};
     });
+}
+
+/** The requests the download host logged since the launch of this install case began. */
+export function downloadRequests(label: string): DownloadRequest[] {
+  return requestsOfLaunch(`install-${label}`);
 }
 
 /** Whether a user agent is one of the host's downloaders, not the editor. */

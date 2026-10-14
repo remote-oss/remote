@@ -100,6 +100,7 @@ describe('windows of one editor on the same host (the first window is local)', f
       each => each.event === 'activated',
     ).length;
     const next = nextEmptyName();
+    const known = emptyWindows();
     const name = await nextEmptyWindow(() =>
       inWindow(
         'local',
@@ -118,9 +119,9 @@ describe('windows of one editor on the same host (the first window is local)', f
             .length - localBefore,
       },
       {
-        name: 'empty-1',
-        next: 'empty-1',
-        empty: ['empty-1'],
+        name: next,
+        next,
+        empty: [...known, next],
         state: {
           remoteName: 'ssh-remote',
           remoteAuthority: 'ssh-remote+harness',
