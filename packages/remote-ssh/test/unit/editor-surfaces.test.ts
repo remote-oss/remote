@@ -262,7 +262,7 @@ describe("the connect's surfaces over the editor", () => {
     ]);
   });
 
-  it('F-3902 rule 11: an acceptance is read from and kept in the profile state', async () => {
+  it('F-3902 AC-13: an acceptance is read from and kept in the profile state', async () => {
     const {surfaces, calls} = surfacesWith({accepted: {terms: true}});
     await surfaces.acceptances.accept('other');
     deepStrictEqual(

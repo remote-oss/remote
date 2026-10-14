@@ -236,7 +236,7 @@ describe('ensureAccepted (V6)', () => {
     ]);
   });
 
-  it('F-3902.AC-11: a stored acceptance is not asked again', async () => {
+  it('F-3902.AC-13: a stored acceptance is not asked again', async () => {
     const store = new MemoryStore();
     await gate(LICENSED, store, new ScriptedModal('accept'));
     const modal = new ScriptedModal('cancel');

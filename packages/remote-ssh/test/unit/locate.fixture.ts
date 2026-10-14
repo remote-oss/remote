@@ -20,6 +20,8 @@ export type Answer =
 export interface Seen {
   started: string[];
   killed: string[];
+  /** The environment of each run, in the order of `started`. */
+  environments: Array<Readonly<Record<string, string>>>;
 }
 
 /** A spawner whose programs answer `-V` from `checks` and `-G` with `lookup`. */
@@ -38,6 +40,7 @@ export function spawnerOf(
     seen.started.push(
       `${specification.program} ${specification.programArguments.join(' ')}`,
     );
+    seen.environments.push(specification.environment);
     function later(
       text: string | undefined,
       listener: (chunk: string) => void,

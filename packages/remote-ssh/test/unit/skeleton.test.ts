@@ -783,7 +783,10 @@ describe('the manifest rows of slice 1', () => {
     contributes: {
       configuration: {properties: Record<string, Record<string, unknown>>};
       commands: Array<{command: string; title: string; category: string}>;
-      menus: Record<string, Array<{command: string; when?: string}>>;
+      menus: Record<
+        string,
+        Array<{command: string; when?: string; group?: string}>
+      >;
       keybindings?: Array<{command: string}>;
     };
   };
@@ -898,6 +901,79 @@ describe('the manifest rows of slice 1', () => {
         ) ?? [],
       ],
       ['Remote-SSH', 'Connect to Host...', [], []],
+    );
+  });
+
+  it('F-2102 AC-2, AC-3, AC-23: the Kill command is in the palette exactly while remote.SSH.useLocalServer is true, in Restricted Mode too', () => {
+    const command = manifest.contributes.commands.find(
+      entry => entry.command === 'opensshremotes.cleanLocalServer',
+    );
+    deepStrictEqual(
+      [
+        command?.category,
+        resolved(command?.title),
+        manifest.contributes.menus.commandPalette
+          ?.filter(entry => entry.command === 'opensshremotes.cleanLocalServer')
+          .map(entry => entry.when),
+        manifest.capabilities.untrustedWorkspaces,
+      ],
+      [
+        'Remote-SSH',
+        'Kill Local Connection Server For Host...',
+        ['config.remote.SSH.useLocalServer && !opensshremotes.standingDown'],
+        {supported: true},
+      ],
+    );
+  });
+
+  it("F-2501 AC-28: a disconnected window's remote indicator offers Connect to Host... and then Connect Current Window to Host..., as every window that is not standing down", () => {
+    deepStrictEqual(
+      manifest.contributes.menus['statusBar/remoteIndicator']?.map(entry => {
+        const command = manifest.contributes.commands.find(
+          declared => declared.command === entry.command,
+        );
+        return [
+          entry.command,
+          entry.group,
+          entry.when,
+          command?.category,
+          resolved(command?.title),
+        ];
+      }),
+      [
+        [
+          'opensshremotes.openEmptyWindow',
+          'remote_20_ssh-remote_1general@1',
+          '!opensshremotes.standingDown',
+          'Remote-SSH',
+          'Connect to Host...',
+        ],
+        [
+          'opensshremotes.openEmptyWindowInCurrentWindow',
+          'remote_20_ssh-remote_1general@2',
+          '!opensshremotes.standingDown',
+          'Remote-SSH',
+          'Connect Current Window to Host...',
+        ],
+      ],
+    );
+  });
+
+  it('F-2403 AC-18: remote.SSH.useCurlAndWgetConfigurationFiles is a boolean, false by default, application scope, with the description of 3.2', () => {
+    const setting = properties['remote.SSH.useCurlAndWgetConfigurationFiles'];
+    deepStrictEqual(
+      [
+        setting?.type,
+        setting?.default,
+        setting?.scope,
+        resolved(setting?.markdownDescription),
+      ],
+      [
+        'boolean',
+        false,
+        'application',
+        "Respect configuration from remote environment's 'curlrc' and 'wgetrc' files (placed in their respective default locations).  Enabling this setting may be useful in certain cases (i.e: proxy configuration) but can interfere with this extension's operation. Setting may be ignored on platforms that do not support the necessary flags (i.e: busybox).",
+      ],
     );
   });
 });
