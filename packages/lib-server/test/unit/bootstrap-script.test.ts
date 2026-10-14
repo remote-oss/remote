@@ -1701,6 +1701,42 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(existsSync(path.join(host.home, '.other-data')), true);
     });
 
+    /** The custom root of the connect-75 rows, as the host's install setting names it. */
+    function custom(): string {
+      return path.join(host.home, 'custom');
+    }
+
+    it('F-2412.BR-4: with a custom root, uninstall deletes the home data folder', () => {
+      mkdirSync(path.join(host.home, '.server-data', 'bin'), {recursive: true});
+      const keep = path.join(custom(), '.server-data', 'bin', 'keep.txt');
+      mkdirSync(path.dirname(keep), {recursive: true});
+      writeFileSync(keep, '');
+      runScript(host, single('uninstall'), {
+        ...parametersFor(),
+        installRoot: custom(),
+      });
+      deepStrictEqual(
+        [existsSync(path.join(host.home, '.server-data')), existsSync(keep)],
+        [false, true],
+      );
+    });
+
+    it('F-2412.BR-4: with a custom root and no home data folder, uninstall is Ok and keeps the custom folder', () => {
+      const keep = path.join(custom(), '.server-data', 'bin', 'keep.txt');
+      mkdirSync(path.dirname(keep), {recursive: true});
+      writeFileSync(keep, '');
+      deepStrictEqual(
+        [
+          statusOf(host, single('uninstall'), {
+            ...parametersFor(),
+            installRoot: custom(),
+          }),
+          existsSync(keep),
+        ],
+        ['Ok', true],
+      );
+    });
+
     /** The names under bin/ after making folders with older and older times. */
     function binAfter(
       names: readonly string[],
@@ -2177,8 +2213,9 @@ describe('the POSIX bootstrap script', () => {
     function afterStep(
       step: 'kill' | 'uninstall',
       markers: Record<string, string>,
+      parameters: ScriptParameters = parametersFor(),
     ): string[] {
-      runScript(host, single(step), parametersFor());
+      runScript(host, single(step), parameters);
       spawnSync('/bin/sleep', ['1.5']);
       return Object.keys(markers).filter(name =>
         existsSync(markers[name] ?? ''),
@@ -2187,6 +2224,11 @@ describe('the POSIX bootstrap script', () => {
 
     function serverFile(): string {
       return `${dataFolder()}/cli/servers/Stable-abc123/server/node`;
+    }
+
+    /** The custom root of the connect-75 rows, as the host's install setting names it. */
+    function custom(): string {
+      return path.join(host.home, 'custom');
     }
 
     it('F-2411.BR-3: kill stops the server of the CLI path, which runs a file under cli/servers/', () => {
@@ -2379,6 +2421,44 @@ describe('the POSIX bootstrap script', () => {
       runScript(host, single('uninstall'), parametersFor());
       spawnSync('/bin/sleep', ['1.5']);
       deepStrictEqual(existsSync(marker), true);
+    });
+
+    /**
+     * Starts a `server` at `serverPath`, waits half a second, then uninstalls with the custom root: the markers that
+     * got their TERM.
+     */
+    function customRootUninstall(serverPath: string): string[] {
+      const marker = started('server', serverPath);
+      spawnSync('/bin/sleep', ['0.5']);
+      return afterStep(
+        'uninstall',
+        {server: marker},
+        {
+          ...parametersFor(),
+          installRoot: custom(),
+        },
+      );
+    }
+
+    it("F-2412.BR-3: with a custom root, uninstall stops the custom folder's server", () => {
+      deepStrictEqual(
+        customRootUninstall(
+          path.join(
+            custom(),
+            '.server-data',
+            'cli',
+            'servers',
+            'Stable-abc123',
+            'server',
+            'node',
+          ),
+        ),
+        ['server'],
+      );
+    });
+
+    it("F-2412.BR-3: with a custom root, uninstall stops the home folder's server too", () => {
+      deepStrictEqual(customRootUninstall(serverFile()), ['server']);
     });
 
     it('F-2412 AC-27: uninstall stops the server and leaves the launcher, a node, a MainThread and a process that names the server folder', () => {
