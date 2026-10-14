@@ -23,7 +23,7 @@ Size: L (about 3 agent-days).
 - F-0304 (#48), BR-1, BR-5a, AC-27 and AC-66.
 
 **Depends on:**
-- containers-01 (#759): the package's build and its `dist/`. Only §2's packaging and §6.4's VSIX row need it. If #759 hasn't merged when the rest passes, open the PR without those two, and add them in a second PR.
+- containers-01 (#759): the package's build and its `dist/`. Only §2's packaging and §6.5's VSIX rows need it. If #759 hasn't merged when the rest passes, open the PR without those two, and add them in a second PR.
 - C3 takes `dockerPath` as a string for `--docker-path`. It doesn't use `EngineHost` (containers-02, `src/engine/engine-host.ts`). C3's own spawn goes through `CliHost`.
 
 **What containers-01 (#759, card PR #762) fixes for this card:**
@@ -171,9 +171,17 @@ Each value is its own array element (`shell: false`), so a path with spaces or q
 | 1. an empty `localEnv` gives the default | pre-pass | this module |
 | 2. `${containerEnv}` in `initializeCommand` is empty | none needed: the CLI's own behaviour, measured | §6.5's real-CLI row |
 | 3. `localEnv` is the editor's resolved environment | the CLI's own inputs: the spawn environment (mechanism 1) | §3.4: the CLI runs with the extension host's `process.env`, minus `ELECTRON_RUN_AS_NODE` |
-| 4. the title's `name` needs a second pass | post-processing | `readConfiguration({containerId})`, §4.3, after the container exists. The caller of F-0504's title is C10 |
+| 4. the title's `name` needs a second pass | post-processing | with a container: `readConfiguration(target, containerId, …)` after `up`; C10 calls it for F-0504's title (containers-08 §3.9). Without a container: `readConfiguration(target, undefined, …)` is built and has rows, but release 1 has **no caller**; see below |
 | 5. the workspace mount | the CLI's own inputs: flags (mechanism 1) | `--mount-workspace-git-root` (§3.1, rule 5) |
 | 6. attach configurations | not in release 1 | — |
+
+**Deviation 4 without a container** (ADR-0009 line 25, dossier §4: "the window-title `name` needs the second pass even
+without a container"). C3 supports it: `readConfiguration` with no container id passes no `--container-id` (§3.1 rule
+9), and the CLI substitutes what it can without one. But no release-1 surface shows the name before the container
+exists: F-0504's title and indicator are registered by C10 once `up` has given the container (containers-08 §3.9), and
+during the connect core shows its own "Opening Remote..." text. So release 1 never makes the no-container call. **For
+athena (§8):** confirm, and amend ADR-0009 line 25 to "when a surface needs the name before the container exists", or
+name the release-1 surface that needs it, and C10's card gains the call.
 
 ### 3.3 `cli-lines.ts` (pure): the parser of the CLI's output
 
@@ -229,8 +237,9 @@ export type CliFailure =
     `workspace.workspaceFolder` is `malformedResult` naming it. `workspaceMount` and `mergedConfiguration` are optional.
   - **On error it writes no stdout line and exits 1.** Its error goes to stderr as a `text` event (measured: level 2,
     `Error: Dev container config (<path>) not found.` followed by the stack). So an exit with no stdout line is
-    `configurationFailed`, with `message` the first line of the last `text` event's text, scrubbed (§3.7); `''` if
-    there was none. That's why `readConfiguration` streams its events too (§3.6).
+    `configurationFailed`, with `message` the first line of the last log event's text, scrubbed (§3.7); `''` if there
+    was none. "Log event" means a JSON `text` event or a non-JSON stderr line (`parseLogLine`'s level-3 `log`): when the
+    CLI's output isn't set up yet, it reports the error with `console.error`, as a plain line. That's why `readConfiguration` streams its events too (§3.6).
 - **The CLI's own JSONC reading is lenient** (measured: a truncated file `{"image": "alpine:3.22", ` was read). So
   the pre-pass's "doesn't parse, `undefined`" leaves the reading to the CLI, which either reads it or fails in its own
   words (`configurationFailed` or `setupFailed`).
@@ -260,18 +269,27 @@ It never throws. The `text` is kept unchanged, ANSI codes included, because the 
 **`run(cliArguments, onJsonLine, cancellation)`:**
 1. Spawns `node` with `['--require', preload, entry, ...cliArguments]`. The options are `shell: false`, `detached: true`, `stdio: ['ignore', 'pipe', 'pipe']`, and `env` `{...editorEnvironment, ELECTRON_RUN_AS_NODE: '1'}`. `detached` makes the CLI a process-group leader, so its `docker` children are in its group.
 2. Calls `onJsonLine({stream, line})` for every line of either stream, in order.
-3. Resolves `{result: <the first stdout line>, status}` when the process exits.
+3. Resolves `{kind: 'ran', result: <the first stdout line, or undefined>, status}` when the process exits.
 4. **An abort ends the process group:** `process.kill(-pid, 'SIGTERM')`, then `process.kill(-pid, 'SIGKILL')` after 5 s
    if the CLI hasn't exited, and `run` resolves with `status: null`. The CLI installs no signal handlers, so a signal
    to its pid alone would leave its `docker` children running (dike on #764); the group reaches them. A build or pull
    the Docker **daemon** is already doing isn't a process of ours, and goes on until the daemon ends it. A `kill`
    that throws `ESRCH` (the group is gone) is ignored.
 
+**What `detached` costs** (dike on #764): the CLI's group is no longer the extension host's, so if the extension host
+dies mid-run, the CLI and its `docker` children aren't signalled with it. They finish on their own: the CLI exits
+after its result line (§4.3), and an `up` that was creating a container leaves it created, as an editor crash
+mid-connect would. Release 1 accepts this; the next connect finds the container by its labels (C7). No row: the death
+of the extension host isn't something the unit rows can stage.
+
+**The contract's shape:** contracts §4 still writes `CliHost.run` as returning `{result, status}`. The union above is
+what this card builds; athena amends contracts §4 to match (§8, for athena).
+
 **The preload** (`packages/remote-containers/src/programs/cli-preload.ts`, built by `tools/build.ts`'s existing `src/programs` rule into `dist/cli-preload.js`): its one statement is `delete process.env.ELECTRON_RUN_AS_NODE`.
 - **Why it's needed:** Electron reads the variable once, at start. Without the preload, the CLI's children would inherit it: `initializeCommand` on the host, and the value of `${localEnv:ELECTRON_RUN_AS_NODE}`. An Electron program those start, such as `code`, would then run as plain Node. helper-04 (#734) fixes the same leak for the ssh helper.
 - With the preload, deviation 3 holds exactly: the CLI sees the editor's environment.
 
-This file and `cli-preload.ts` are the only spawn sites of C3 (contracts §6 rows below).
+This file is C3's only spawn site (contracts §6 rows below). `cli-preload.ts` spawns nothing: it runs inside the CLI's process.
 
 ### 3.5 `override-files.ts` (adapter): the override file
 
@@ -319,15 +337,39 @@ export function scrubbed(text: string, secrets: readonly Secret[]): string;
 
 - `referencedSecrets` finds every `${localEnv:VAR…}` and `${env:VAR…}` in the raw configuration text. For each `VAR`
   whose value in `editorEnvironment` has **8 characters or more**, it gives `{value, reference: '${localEnv:VAR}'}` (or
-  `'${env:VAR}'`, as written), once per value, longest first.
-- `scrubbed` replaces every occurrence of each value with its reference text.
-- It runs on every event `text`, every result `message` and `description`, and `configurationFailed`'s message,
-  before they leave C3: before `onEvent`, a failure, or C8's dialog, and so before lib-log's own redaction.
+  `'${env:VAR}'`, as written). It also gives, with the same reference:
+  - **each line of a multi-line value** that is itself 8 characters or more. The CLI cuts its `Run:` text at the first
+    newline (`[devcontainers-cli]`: `` `Run: ${t} ${(i||[]).join(" ").replace(/\n.*/g,"")}` ``), so a PEM key's first
+    line appears there alone;
+  - **the value's JSON-escaped form** (`JSON.stringify(value).slice(1, -1)`), when it differs from the value. The CLI
+    writes values JSON-escaped into the `devcontainer.metadata` label of its `docker run` argv, and into the
+    trace-level `LifecycleCommandExecutionMap` line.
+- The list is de-duplicated and ordered longest first, so a whole value is replaced before any of its lines.
+- `scrubbed` replaces every occurrence of each entry with its reference text.
+- **Where it runs:** on every event's `text`, every `progress` event's `stepDetail` (the CLI puts the substituted
+  lifecycle command there; its own `--secrets-file` masking scrubs that same field, `i.type==="progress"&&i.stepDetail`),
+  every result `message` and `description`, and `configurationFailed`'s message. It runs before they leave C3: before
+  `onEvent`, a failure, or C8's dialog, and so before lib-log's own redaction.
+
+**Output split across events** (dike on #764). Lifecycle output streams as `raw` events, chunk by chunk, so a value a
+hook prints can straddle two events. C3 **buffers `raw` text by line**, per channel (the event's `channel`, or none):
+- it emits, scrubbed, each complete line (up to and including `\n`) as one `raw` event on that channel;
+- it holds an unfinished tail until the next `\n` on that channel;
+- it flushes a held tail, scrubbed, when a non-`raw` event arrives on the same channel (a `progress` `succeeded` or
+  `failed`), and when the process ends.
+- So a single-line value is never split across a line break. A multi-line value is handled line by line, by the
+  entries above.
+- The cost: output without a newline, such as a progress bar drawn with `\r`, shows at its next newline or flush. The
+  log terminal of F-0415 5.0 step 10 accepts that.
 
 **What isn't C3's.**
+- A value the user writes literally into `containerEnv`, rather than referencing from the editor's environment, isn't
+  known to C3 as a secret and isn't scrubbed. That's the user's configuration, as the deviation above.
+- `ConfigurationResult.configuration` and `mergedConfiguration` carry the substituted values. C3 returns them as the
+  CLI gives them; **callers must not log them** or show them whole. C10 reads `name` and `workspaceFolder` only, and its
+  card says so.
 
-A value the user writes literally into `containerEnv`, rather than referencing from the editor's environment,
-isn't known to C3 as a secret and isn't scrubbed. That's the user's configuration, as the deviation above.
+
 
 ## 4. The rules C7 builds on
 
@@ -358,7 +400,15 @@ In every recorded run, the process exited within 10 ms of its result line. `CliH
   - a `Command failed: docker run … -e T=s3cr3t-token …` result message reaches the `setupFailed` failure scrubbed the
     same way;
   - a referenced variable whose value is `short1` (6 characters) is left untouched;
-  - an unreferenced variable `OTHER_TOKEN=another-long-value` that appears in a line is left untouched.
+  - an unreferenced variable `OTHER_TOKEN=another-long-value` that appears in a line is left untouched;
+  - a `progress` event whose `stepDetail` is `login s3cr3t-token` reaches `onEvent` as `login ${localEnv:GITHUB_TOKEN}`;
+  - **split output:** `raw` events `echo s3cr3t-` and `token\n` on channel `postCreate` reach `onEvent` as one `raw`
+    event `echo ${localEnv:GITHUB_TOKEN}\n`; a held tail `abc` with no newline is flushed when the channel's
+    `progress` `succeeded` arrives, and when the process ends;
+  - **multi-line value:** `KEY` is `-----BEGIN KEY-----\nAAAAbbbbCCCCdddd\n-----END KEY-----`, referenced as
+    `${localEnv:KEY}`. The whole value, and a `Run:` text holding only its first line `-----BEGIN KEY-----`, are each
+    replaced by `${localEnv:KEY}`. A line shorter than 8 characters isn't an entry of its own;
+  - **JSON-escaped value:** a value `pa"ss\word12` appears in an event as `pa\"ss\\word12` and is replaced too.
 - **No shell:** the spawner options have `shell: false`. A `workspaceFolder` of `/work/a b/"q"` reaches argv as one element, unchanged.
 - **The pin:** a manifest row asserts `dependencies['@devcontainers/cli'] === '0.89.0'`, with no range characters (`^`, `~`, `>`, `<`, `*`, `x`, space).
 - **The only importer:** no file under `packages/remote-containers/src` except `src/cli/` mentions `@devcontainers/cli` or `devcontainers-cli`. C7 and C10 reach the paths through `cliPathsOf` (§2). It's a unit row that reads the sources, as `docs.test.ts` finds its package.
@@ -500,9 +550,13 @@ with `C3_EMPTY=''` in the editor environment, and the id label `remote-oss.c3-ro
 1. The installed `@devcontainers/cli` isn't byte-identical to the 0.89.0 tarball: compare the sha256 of `devContainersSpecCLI.js` with the npm registry's tarball. Don't continue on a different build.
 2. A recorded result line in your run differs from the appendix in a field C3 reads. Report it, and don't adapt the parser by guess.
 3. `jsonc-parser`'s `modify` can't keep a comment adjacent to a rewritten value. Report the text.
-4. A `kill(-pid)` reaches no `docker` child because the CLI's children start their own groups. Report the `ps`
+4. **For athena:**
+   - deviation 4's no-container half (§3.2): confirm release 1 has no caller, and amend ADR-0009 line 25, or name the
+     surface;
+   - contracts §4's `CliHost.run` result is the `ran`/`spawnFailed` union of §3.4.
+5. A `kill(-pid)` reaches no `docker` child because the CLI's children start their own groups. Report the `ps`
    output, and don't change the spawn by guess.
-5. `--require` with `ELECTRON_RUN_AS_NODE=1` doesn't run the preload in the editor's Electron. Measure it in the containers harness launch once it exists, or in a plain launch. If it fails, report it and don't drop the preload.
+6. `--require` with `ELECTRON_RUN_AS_NODE=1` doesn't run the preload in the editor's Electron. Measure it in the containers harness launch once it exists, or in a plain launch. If it fails, report it and don't drop the preload.
 
 ## Appendix: recorded 0.89.0 lines (lab machine, 2026-10-14)
 
