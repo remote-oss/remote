@@ -354,6 +354,50 @@ describe('containerLifecycleOf', () => {
     });
   }
 
+  for (const [name, stderr] of [
+    [
+      'a WARNING line that mentions it',
+      `WARNING: lost track: No such container: ${OLD}\n`,
+    ],
+    [
+      'a line with a prefix before the form',
+      `x: Error: No such container: ${OLD}\n`,
+    ],
+  ] as const) {
+    it(`reports ${name} as a failure to inspect, with no second discovery`, async () => {
+      const engine = scriptedEngine({
+        [LISTING]: [ran(`${OLD}\n`)],
+        [`inspect --type container ${OLD}`]: [exited(stderr)],
+      });
+      const result = await prepared(engine);
+      deepStrictEqual(
+        [
+          result.outcome.kind,
+          engine.commands.filter(command => command === LISTING).length,
+        ],
+        ['discoveryFailed', 1],
+      );
+    });
+  }
+
+  it('finds the form on a later line and under a carriage return', async () => {
+    const engine = scriptedEngine({
+      [LISTING]: [ran(`${OLD}\n`), ran('')],
+      [`inspect --type container ${OLD}`]: [
+        exited(`WARNING: slow\r\nError: No such container: ${OLD}\r\n`),
+      ],
+      [`inspect --type container ${NEW}`]: [ran(inspected([[NEW, 'running']]))],
+    });
+    const result = await prepared(engine);
+    deepStrictEqual(
+      [
+        result.outcome.kind,
+        engine.commands.filter(command => command === LISTING).length,
+      ],
+      ['ready', 2],
+    );
+  });
+
   it('returns each failure of up unchanged and starts no lifecycle commands', async () => {
     const failures: CliFailure[] = [
       {
