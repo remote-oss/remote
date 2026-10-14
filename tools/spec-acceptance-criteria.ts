@@ -63,11 +63,15 @@ export const CONTAINERS_RELEASE_ONE_FEATURES: readonly string[] = [
   'F-1406',
 ];
 
-/** A coverage file: where it lies under the repository root, the features it holds, and the repository of their issues. */
+/** A coverage file: its name, where it lies under the repository root, the features it holds, and the repository of their issues. */
 export interface CoverageScope {
+  /** The file's set name, the argument of `seed-coverage`'s command line. */
+  name: string;
   file: string;
   features: readonly string[];
   repository: string;
+  /** The only reasons a `deferred` line may give; any reason when absent. */
+  deferredReasons?: readonly string[];
 }
 
 /** The folder the coverage files lie in. */
@@ -75,6 +79,7 @@ const CATALOGUE_FOLDER = path.join('docs', 'architecture', 'catalogue');
 
 /** The coverage file of the first slice of Remote - SSH. */
 export const SLICE_ONE_SCOPE: CoverageScope = {
+  name: 'slice1',
   file: path.join(CATALOGUE_FOLDER, 'coverage-slice1.tsv'),
   features: SLICE_ONE_FEATURES,
   repository: 'remote-ssh',
@@ -82,15 +87,44 @@ export const SLICE_ONE_SCOPE: CoverageScope = {
 
 /** The coverage file of Remote - Containers release 1. */
 export const CONTAINERS_RELEASE_ONE_SCOPE: CoverageScope = {
+  name: 'containers-r1',
   file: path.join(CATALOGUE_FOLDER, 'coverage-containers-r1.tsv'),
   features: CONTAINERS_RELEASE_ONE_FEATURES,
   repository: 'remote-containers',
+};
+
+/** The features of Remote Explorer's slice 1, with the part of Remote - SSH that serves it. */
+export const EXPLORER_SLICE_ONE_FEATURES: readonly string[] = [
+  'F-2503',
+  'F-5001',
+  'F-5002',
+  'F-5101',
+  'F-5102',
+  'F-5103',
+  'F-5901',
+  'F-5902',
+];
+
+/** The coverage file of the first slice of Remote Explorer. */
+export const EXPLORER_SLICE_ONE_SCOPE: CoverageScope = {
+  name: 'explorer',
+  file: path.join(CATALOGUE_FOLDER, 'coverage-explorer-slice1.tsv'),
+  features: EXPLORER_SLICE_ONE_FEATURES,
+  repository: 'remote-explorer',
+  /** The only reasons a deferred line of the explorer file may give. */
+  deferredReasons: [
+    'explorer slice 1: increment 2',
+    'explorer slice 1: increment 3',
+    'D-55: no tunnel rows',
+    'F-2503 Q4: the Windows and macOS path form',
+  ],
 };
 
 /** Every coverage file the check reads. */
 export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   SLICE_ONE_SCOPE,
   CONTAINERS_RELEASE_ONE_SCOPE,
+  EXPLORER_SLICE_ONE_SCOPE,
 ];
 
 /**

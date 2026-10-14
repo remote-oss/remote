@@ -10,6 +10,8 @@ import {
 } from './seed-coverage.ts';
 import {
   CONTAINERS_RELEASE_ONE_SCOPE,
+  EXPLORER_SLICE_ONE_FEATURES,
+  EXPLORER_SLICE_ONE_SCOPE,
   SLICE_ONE_FEATURES,
   SLICE_ONE_SCOPE,
 } from './spec-acceptance-criteria.ts';
@@ -43,15 +45,26 @@ describe('seed-coverage', () => {
     deepStrictEqual(byCriterion('F-2001.AC-9', 'F-2601.AC-1') < 0, true);
   });
 
-  it('#142: reads the issue number of each Remote - SSH feature from the catalogue', () => {
+  it('tooling coverage-25a: issueNumbersOf keeps every row that has an issue, with its repository', () => {
     deepStrictEqual(
       issueNumbersOf(
-        'id\tissue\trepo\nF-2001\t11\tremote-ssh\nF-0101\t19\tremote-containers\nF-2101\t19\tremote-ssh\n',
+        'id\tissue\trepo\nF-2001\t11\tremote-ssh\nF-5101\t12\tremote-explorer\n',
       ),
       new Map([
-        ['F-2001', 11],
-        ['F-2101', 19],
+        ['F-2001', {repository: 'remote-oss/remote-ssh', issue: 11}],
+        ['F-5101', {repository: 'remote-oss/remote-explorer', issue: 12}],
       ]),
+    );
+  });
+
+  it('tooling coverage-25a: a row without an issue is not in the map', () => {
+    deepStrictEqual(
+      [
+        ...issueNumbersOf(
+          'id\tissue\trepo\nF-2001\t11\tremote-ssh\nF-2002\t\tremote-ssh\n',
+        ),
+      ],
+      [['F-2001', {repository: 'remote-oss/remote-ssh', issue: 11}]],
     );
   });
 
@@ -74,7 +87,7 @@ describe('seed-coverage', () => {
 
   it('#142: asks gh for the body of the issue in the Remote - SSH repository', () => {
     const asked: string[][] = [];
-    bodyOf(7, recording(asked));
+    bodyOf(7, 'remote-oss/remote-ssh', recording(asked));
     deepStrictEqual(asked, [
       [
         'gh',
@@ -93,14 +106,23 @@ describe('seed-coverage', () => {
 
   it('#142: gives the body gh answered', () => {
     deepStrictEqual(
-      bodyOf(7, () => ({status: 0, stdout: 'the body', stderr: ''})),
+      bodyOf(7, 'remote-oss/remote-ssh', () => ({
+        status: 0,
+        stdout: 'the body',
+        stderr: '',
+      })),
       'the body',
     );
   });
 
   it('#142: a gh that fails throws with its message', () => {
     throws(
-      () => bodyOf(7, () => ({status: 1, stdout: '', stderr: 'no access\n'})),
+      () =>
+        bodyOf(7, 'remote-oss/remote-ssh', () => ({
+          status: 1,
+          stdout: '',
+          stderr: 'no access\n',
+        })),
       {message: 'gh issue view 7: no access'},
     );
   });
@@ -137,6 +159,43 @@ describe('seed-coverage', () => {
     );
   });
 
+  it('tooling coverage-25a: the explorer set seeds each feature from its own repository', () => {
+    const features = EXPLORER_SLICE_ONE_FEATURES;
+    const catalogue = [
+      'id\tissue\trepo',
+      ...features.map(
+        (feature, index) =>
+          `${feature}\t${String(index + 300)}\t${feature === 'F-2503' ? 'remote-ssh' : 'remote-explorer'}`,
+      ),
+    ].join('\n');
+    const repositories: string[] = [];
+    /** A program that answers each issue with one criterion of its feature, recording the repository asked in. */
+    function answering(): Program {
+      return (name, programArguments) => {
+        const feature = features[Number(programArguments[2]) - 300] ?? '';
+        repositories.push(programArguments[4] ?? '');
+        return {
+          status: 0,
+          stdout: `- **${feature}.AC-1** one`,
+          stderr: '',
+        };
+      };
+    }
+    const seeded = seedFor(catalogue, answering(), EXPLORER_SLICE_ONE_SCOPE);
+    deepStrictEqual(
+      [seeded, repositories],
+      [
+        `ac\ttag\treason\n${features
+          .map(feature => `${feature}.AC-1\ttodo\t\n`)
+          .join('')}`,
+        [
+          'remote-oss/remote-ssh',
+          ...features.slice(1).map(() => 'remote-oss/remote-explorer'),
+        ],
+      ],
+    );
+  });
+
   it('containers release 1: a letter after the same number sorts after the bare number, both ways round', () => {
     deepStrictEqual(
       [
@@ -151,20 +210,42 @@ describe('seed-coverage', () => {
     deepStrictEqual(byCriterion('F-0101.AC-3b', 'F-0101.AC-3b'), 0);
   });
 
-  it('containers release 1: reads the issue numbers of another repository', () => {
-    deepStrictEqual(
-      issueNumbersOf(
-        'id\tissue\trepo\nF-2001\t11\tremote-ssh\nF-0101\t19\tremote-containers\n',
-        'remote-containers',
-      ),
-      new Map([['F-0101', 19]]),
-    );
+  it('tooling coverage-25a: bodyOf asks gh for the issue in the repository given', () => {
+    const asked: string[][] = [];
+    bodyOf(10, 'remote-oss/remote-explorer', recording(asked));
+    deepStrictEqual(asked[0]?.slice(4, 6), [
+      '-R',
+      'remote-oss/remote-explorer',
+    ]);
   });
 
-  it('containers release 1: asks gh in the repository given', () => {
+  it('tooling coverage-25a: a set restricted to one feature seeds only its criteria, from its repository', () => {
     const asked: string[][] = [];
-    bodyOf(7, recording(asked), 'remote-containers');
-    deepStrictEqual(asked[0]?.[5], 'remote-oss/remote-containers');
+    const catalogue = 'id\tissue\trepo\nF-5101\t12\tremote-explorer\n';
+    /** A program that answers the issue with the two criteria, recording the command line. */
+    function answering(): Program {
+      return (name, programArguments) => {
+        asked.push([name, ...programArguments]);
+        return {
+          status: 0,
+          stdout: '- **F-5101.AC-1** one\n- **F-5101.AC-2** two',
+          stderr: '',
+        };
+      };
+    }
+    deepStrictEqual(
+      [
+        seedFor(catalogue, answering(), {
+          ...EXPLORER_SLICE_ONE_SCOPE,
+          features: ['F-5101'],
+        }),
+        asked[0]?.slice(4, 6),
+      ],
+      [
+        'ac\ttag\treason\nF-5101.AC-1\ttodo\t\nF-5101.AC-2\ttodo\t\n',
+        ['-R', 'remote-oss/remote-explorer'],
+      ],
+    );
   });
 
   it('containers release 1: seeds the containers file from the containers repository', () => {
@@ -209,7 +290,7 @@ describe('seed-coverage', () => {
 
   it('containers release 1: an unknown name throws', () => {
     throws(() => scopeNamed('nothing'), {
-      message: 'no coverage file coverage-nothing.tsv',
+      message: 'no coverage set named nothing',
     });
   });
 });
