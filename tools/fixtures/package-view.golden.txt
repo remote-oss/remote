@@ -1,0 +1,49 @@
+
+  ╭────────────────────────────────────────────────────────╮
+  │                                                        │
+  │   📡   R E M O T E   E X T E N S I O N S               │
+  │        build · bundle · ship                           │
+  │                                                        │
+  ╰────────────────────────────────────────────────────────╯
+
+  ━━━ ① IDENTIFIERS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  🧬  remote-containers   → src/identifiers.generated.ts
+  🧬  remote-explorer     → src/identifiers.generated.ts
+  🧬  remote-ssh          → src/identifiers.generated.ts
+  🧬  remote-ssh-edit     → src/identifiers.generated.ts
+
+  ✨ 4 identifier files minted                      42ms
+
+  ━━━ ② BUILD ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ⚡  remote-containers   → dist/extension.js
+                          → dist/cli-preload.js
+                          → dist/devcontainers-cli
+  ⚡  remote-explorer     → dist/extension.js
+                          → dist/web/extension.js  🌐
+  ⚡  remote-ssh          → dist/extension.js
+                          → dist/askpass.js
+                          → dist/connection-helper.js
+  ⚡  remote-ssh-edit     → dist/extension.js
+
+  💤  15 packages napping (no src/extension.ts)
+      lib-authority · lib-companion · lib-forwarding · lib-helper
+      lib-host · lib-identifiers · lib-log · lib-product
+      lib-server · lib-ssh · lib-standdown · lib-wsl
+      remote-extensionpack · remote-server · remote-wsl
+
+  🔥 9 bundles forged                              1.31s
+
+  ━━━ ③ PACKAGE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  📦  remote-containers-0.1.0.vsix   ██████████░░ 412 KB
+  📦  remote-explorer-0.1.0.vsix     ████░░░░░░░░ 168 KB
+  📦  remote-ssh-0.1.0.vsix          ████████████ 503 KB
+  📦  remote-ssh-edit-0.1.0.vsix     ██░░░░░░░░░░  71 KB
+
+  ╭────────────────────────────────────────────────────────╮
+  │  🚀  4 extensions ready for liftoff  ·  2.9s total     │
+  │      dist/*.vsix                                       │
+  ╰────────────────────────────────────────────────────────╯
+
