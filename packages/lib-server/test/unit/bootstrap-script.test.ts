@@ -1100,12 +1100,14 @@ describe('the POSIX bootstrap script', () => {
         .trimEnd()
         .split('\n');
       deepStrictEqual(
-        words.flatMap((word, index) =>
-          words[index - 1] === '--install-extension' ? [word] : [],
-        ),
-        entries,
+        [
+          words.flatMap((word, index) =>
+            words[index - 1] === '--install-extension' ? [word] : [],
+          ),
+          existsSync(marker),
+        ],
+        [entries, false],
       );
-      deepStrictEqual(existsSync(marker), false);
     });
 
     it('F-6601: the file watcher polling option is passed with its interval', () => {

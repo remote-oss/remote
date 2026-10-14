@@ -108,6 +108,21 @@ describe('the extensions of a new container (card containers-16)', () => {
     ]);
   });
 
+  it('F-0505 BR-2: no entry of the list starts with a dash, so none can reach the server as an option', () => {
+    deepStrictEqual(
+      effectiveExtensions([
+        '-a.b',
+        'a.b',
+        '-c.d@1',
+        '-',
+        '--evil',
+        'e.f',
+        '-e.f',
+      ]).filter(entry => entry.startsWith('-')),
+      [],
+    );
+  });
+
   it('F-0505 BR-10: no sources give an empty list', () => {
     deepStrictEqual(listOf([]), []);
   });
