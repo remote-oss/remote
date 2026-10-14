@@ -171,10 +171,13 @@ describe('the override pre-pass (card containers-04)', () => {
     deepStrictEqual(
       [
         dropsImage('{"image":"a","dockerFile":"D"}'),
+        dropsImage('{"image":"a","build":{"dockerfile":"D"}}'),
         dropsImage('{"image":"a"}'),
+        dropsImage('{"build":{"dockerfile":"D"}}'),
+        dropsImage('{"dockerFile":"D"}'),
         dropsImage('{"image":'),
       ],
-      [true, false, false],
+      [true, true, false, false, false, false],
     );
   });
 });
