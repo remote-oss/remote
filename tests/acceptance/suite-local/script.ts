@@ -135,3 +135,19 @@ export function launchScript(): ScriptRun {
   ) as {entries: ScriptEntry[]};
   return runOf(entries, fileNamed('REMOTE_OSS_ACCEPTANCE_RECORD'));
 }
+
+/**
+ * The record once the failure dialog's pick of actions was answered, waiting up to 90 s: a failed connect shows
+ * the dialog and, when it is dismissed, the pick, and only then is the record complete.
+ */
+export async function recordAfterDialog(): Promise<RecordLine[]> {
+  const launched = launchScript();
+  for (let attempt = 0; attempt < 180; attempt++) {
+    const record = launched.record();
+    if (record.some(line => line.surface === 'mitigationPick')) {
+      return record;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return launched.record();
+}

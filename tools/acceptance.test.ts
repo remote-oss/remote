@@ -12,6 +12,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -83,6 +84,7 @@ class FakeHarness implements HarnessDependencies {
   readonly clientLaunches: Array<{
     label: string;
     fakes: boolean;
+    vanishing: boolean;
     tildeCopy: boolean;
     calls: string;
     settings: string;
@@ -232,9 +234,11 @@ class FakeHarness implements HarnessDependencies {
       writeFileSync(path.join(folder, 'clients', 'calls.log'), 'stale\n');
     }
     if (label?.startsWith('client-') === true) {
+      const vanishing = path.join(folder, 'clients', 'vanishing', 'ssh');
       this.clientLaunches.push({
         label,
         fakes: existsSync(path.join(folder, 'clients', 'path', 'ssh')),
+        vanishing: existsSync(vanishing),
         tildeCopy: existsSync(path.join(folder, 'home', 'clients-copy', 'ssh')),
         calls: readFileSync(path.join(folder, 'clients', 'calls.log'), 'utf8'),
         settings: readFileSync(
@@ -242,6 +246,15 @@ class FakeHarness implements HarnessDependencies {
           'utf8',
         ),
       });
+      // The first attempt of the vanishing launch finds the client, and its check deletes it: simulate the
+      // launch doing so, so a retried attempt must find it rewritten.
+      if (
+        label === 'client-vanishing' &&
+        this.launched.filter(each => each === label).length === 0 &&
+        existsSync(vanishing)
+      ) {
+        rmSync(vanishing);
+      }
     }
     if (this.launched.length === 0) {
       for (const name of readdirSync(variables.HARNESS_RUN_FOLDER).filter(
@@ -1515,6 +1528,37 @@ describe('acceptance', () => {
           harness.calls.some(call => call.startsWith('code ')),
         ],
         [false, true],
+      );
+    });
+
+    it('coverage-31: an attempt after one that deleted the vanishing client finds it rewritten', async () => {
+      workspace.write(
+        'tests/acceptance/suite-client/cases.json',
+        JSON.stringify({
+          cases: [
+            {
+              label: 'client-vanishing',
+              cite: 'F-2101 AC-19',
+              setting: '<run>/clients/vanishing/ssh',
+              checked: ['vanishing/ssh'],
+              used: null,
+            },
+          ],
+        }),
+      );
+      harness.labelResults.set('client-vanishing', {
+        exitCode: 1,
+        output: 'CodeWindow: detected unresponsive',
+      });
+      const status = await runAcceptance(workspace.root, harness, 'vscodium');
+      deepStrictEqual(
+        [
+          status,
+          harness.clientLaunches
+            .filter(each => each.label === 'client-vanishing')
+            .map(each => each.vanishing),
+        ],
+        [1, [true, true]],
       );
     });
 

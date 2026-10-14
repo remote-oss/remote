@@ -1,6 +1,7 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
 import {
   launchScript,
+  recordAfterDialog,
   type RecordLine,
   type ScriptEntry,
 } from '../suite-local/script.ts';
@@ -38,19 +39,6 @@ function nameOf(failure: FailureCase): string {
 const failure = cases.find(
   candidate => nameOf(candidate) === process.env.HARNESS_FAILURE_CASE,
 );
-
-/** The record of this window's script once the pick of actions was answered, waiting up to 90 s. */
-async function recordAfterDialog(): Promise<RecordLine[]> {
-  const launched = launchScript();
-  for (let attempt = 0; attempt < 180; attempt++) {
-    const record = launched.record();
-    if (record.some(line => line.surface === 'mitigationPick')) {
-      return record;
-    }
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  return launched.record();
-}
 
 describe(`a failed connect to "${failure?.alias ?? 'unknown'}" (ruling 1)`, () => {
   let lines: RecordLine[] = [];

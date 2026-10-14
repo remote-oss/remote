@@ -217,7 +217,7 @@ export function withHarnessBases<Value>(
   );
 }
 
-/** One launch of the client search: the `remote.SSH.path` it sets, what it extra sets, and the calls it must make. */
+/** One launch of the client search: the `remote.SSH.path` it sets, what it extra sets, the calls it must make, and, for a case that fails, its dialog and its answers. */
 export interface ClientCase {
   label: string;
   /** The criteria the case proves. */
@@ -228,8 +228,12 @@ export interface ClientCase {
   environment?: Readonly<Record<string, string>>;
   /** The programs checked, in order, by their name under `clients/`. */
   checked: readonly string[];
-  /** The program the lookup and the connection run. */
-  used: string;
+  /** The program the lookup and the connection run; null when no program was used for either. */
+  used: string | null;
+  /** The failure dialog's text, for a case that fails. */
+  dialog?: string;
+  /** The case's answers, as `FailureCase.script` holds them. */
+  script?: unknown[];
 }
 
 /** The client-search launches, from tests/acceptance/suite-client/cases.json, which the client suite also reads. */
