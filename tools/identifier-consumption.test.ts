@@ -12,6 +12,7 @@ import {
   parseAllowlist,
   type AllowlistEntry,
   type ConsumptionReport,
+  type ReleaseScope,
 } from './identifier-consumption.ts';
 import {messageOf, REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -224,7 +225,7 @@ describe('identifier-consumption', () => {
 
   async function check(
     allowlist: readonly AllowlistEntry[] = [],
-    release = false,
+    release?: ReleaseScope,
     knip = runKnip,
   ): Promise<ConsumptionReport> {
     return checkConsumption(workspace.root, allowlist, {
@@ -1197,7 +1198,7 @@ void deepActivate({outer: wrapped.otherProp});
               entry('settings', 'logLevel'),
               entry('settings', 'path', '#674', 'deferred', 'D-1'),
             ],
-            true,
+            'repository',
           )
         ).problems,
         [
@@ -1207,10 +1208,95 @@ void deepActivate({outer: wrapped.otherProp});
     });
   });
 
+  describe('the tag run of one package (tooling-45)', () => {
+    /**
+     * remote-x depends on lib-a, which depends on lib-b; remote-y and lib-c are outside remote-x's closure. remote-x
+     * also names a workspace dependency no folder declares.
+     */
+    function writeReleaseWorkspace(): void {
+      addPackage('remote-x', SETTINGS_TABLE, {'a.ts': 'export const a = 1;\n'});
+      workspace.writeManifest('remote-x', {
+        dependencies: {'lib-a': 'workspace:*', 'not-here': 'workspace:*'},
+      });
+      workspace.writeManifest('lib-a', {
+        dependencies: {
+          'lib-b': 'workspace:*',
+          'lib-identifiers': 'workspace:*',
+        },
+      });
+      workspace.writeManifest('lib-b', {
+        dependencies: {'lib-a': 'workspace:*'},
+      });
+      workspace.writeManifest('lib-c');
+      workspace.writeManifest('remote-y', {
+        dependencies: {'lib-c': 'workspace:*', typescript: '5.9.3'},
+      });
+    }
+
+    function undecided(folder: string): AllowlistEntry {
+      return {
+        package: folder,
+        kind: 'settings',
+        key: 'logLevel',
+        card: '#1',
+        slice: '0.4',
+      };
+    }
+
+    const ENTRIES = ['remote-x', 'lib-a', 'lib-b', 'lib-c', 'remote-y'].map(
+      undecided,
+    );
+
+    /** The release lines of a check over `ENTRIES` with `scope`. */
+    async function releaseLines(scope: ReleaseScope): Promise<string[]> {
+      return (await check(ENTRIES, scope)).problems.filter(line =>
+        line.endsWith('must be wired before a release (card #1, 0.4)'),
+      );
+    }
+
+    function line(folder: string): string {
+      return `allowlist: ${folder} settings logLevel must be wired before a release (card #1, 0.4)`;
+    }
+
+    it("fails a package's tag on its own entries and its libraries' entries, transitively, and on no other package's", async () => {
+      writeReleaseWorkspace();
+      deepStrictEqual(await releaseLines({package: 'remote-x'}), [
+        line('lib-a'),
+        line('lib-b'),
+        line('remote-x'),
+      ]);
+    });
+
+    it("fails another package's tag only on its own closure", async () => {
+      writeReleaseWorkspace();
+      deepStrictEqual(await releaseLines({package: 'remote-y'}), [
+        line('lib-c'),
+        line('remote-y'),
+      ]);
+    });
+
+    it('keeps the repository-wide form for --release without a package', async () => {
+      writeReleaseWorkspace();
+      deepStrictEqual(
+        await releaseLines('repository'),
+        ['lib-a', 'lib-b', 'lib-c', 'remote-x', 'remote-y'].map(line),
+      );
+    });
+
+    it('is a fatal problem when the tagged package has no folder', async () => {
+      writeReleaseWorkspace();
+      deepStrictEqual(await check(ENTRIES, {package: 'remote-z'}), {
+        problems: [],
+        notes: [],
+        fatal: 'release: no package folder packages/remote-z',
+      });
+    });
+  });
+
   describe('the knip rows of R4', () => {
     it('reports a production-only module from the knip run', async () => {
       workspace.write('packages/remote-x/src/m.ts', 'export const m = 1;\n');
-      deepStrictEqual((await check([], false, moduleKnip)).problems, [
+      deepStrictEqual((await check([], undefined, moduleKnip)).problems, [
         'packages/remote-x: module src/m.ts is imported only by tests',
       ]);
     });
@@ -1230,7 +1316,7 @@ void deepActivate({outer: wrapped.otherProp});
           }),
         );
       }
-      deepStrictEqual((await check([], false, knip)).problems, [
+      deepStrictEqual((await check([], undefined, knip)).problems, [
         'packages/remote-x: module src/m.ts is imported only by tests',
       ]);
     });
@@ -1238,7 +1324,7 @@ void deepActivate({outer: wrapped.otherProp});
     it('does not report an allowlisted production-only module', async () => {
       workspace.write('packages/remote-x/src/m.ts', 'export const m = 1;\n');
       deepStrictEqual(
-        (await check([entry('module', 'src/m.ts')], false, moduleKnip))
+        (await check([entry('module', 'src/m.ts')], undefined, moduleKnip))
           .problems,
         [],
       );
@@ -1248,7 +1334,7 @@ void deepActivate({outer: wrapped.otherProp});
       function knip(): Promise<string> {
         return Promise.resolve('not json');
       }
-      deepStrictEqual((await check([], false, knip)).problems, [
+      deepStrictEqual((await check([], undefined, knip)).problems, [
         'knip output not understood',
       ]);
     });
@@ -1270,12 +1356,14 @@ void deepActivate({outer: wrapped.otherProp});
       ];
       const answers = await Promise.all([
         ...notUnderstood.map(output =>
-          check([entry('module', 'src/m.ts')], false, () =>
+          check([entry('module', 'src/m.ts')], undefined, () =>
             Promise.resolve(output),
           ),
         ),
-        check([], false, () => Promise.resolve('{"issues": [{"name": "x"}]}')),
-        check([], false, () =>
+        check([], undefined, () =>
+          Promise.resolve('{"issues": [{"name": "x"}]}'),
+        ),
+        check([], undefined, () =>
           Promise.resolve(
             '{"issues": [{"files": [{"name": "packages/lib-log/tools/a.ts"}]}]}',
           ),
@@ -1313,7 +1401,7 @@ void deepActivate({outer: wrapped.otherProp});
         ),
       );
       const report = await checkConsumption(REPOSITORY_ROOT, allowlist, {
-        release: false,
+        release: undefined,
         runKnip: undefined,
       });
       // The committed allowlist covers main as it is: the check runs to completion and names no problem. Notes carry

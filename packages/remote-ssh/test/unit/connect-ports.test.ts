@@ -170,29 +170,36 @@ async function connected(
   return {result, recorded};
 }
 
+/** The assembly over a helper client on `files`, which starts no helper. */
+function assemblyOverFiles(
+  files: MemoryFilePort,
+): ReturnType<typeof connectAssemblyOf> {
+  const {surfaces, machine, clock, recorded} = assemblyInputs();
+  return connectAssemblyOf(
+    surfaces,
+    {
+      ...machine,
+      helpers: clientEnvironment(
+        {
+          files,
+          endpoints: new FakeEndpointPort(),
+          spawn: () => Promise.reject(new Error('no helper in a unit test')),
+        },
+        clock,
+      ),
+    },
+    loggerOf(recorded),
+  );
+}
+
 describe('the Kill Local Connection Server of the assembled connect (card connect-21)', () => {
   /** The assembly over a helper client on a file port the test can read afterwards. */
   function killing(): {
     files: MemoryFilePort;
     kill: (hostString: string) => Promise<void>;
   } {
-    const {surfaces, machine, clock, recorded} = assemblyInputs();
     const files = new MemoryFilePort();
-    const assembly = connectAssemblyOf(
-      surfaces,
-      {
-        ...machine,
-        helpers: clientEnvironment(
-          {
-            files,
-            endpoints: new FakeEndpointPort(),
-            spawn: () => Promise.reject(new Error('no helper in a unit test')),
-          },
-          clock,
-        ),
-      },
-      loggerOf(recorded),
-    );
+    const assembly = assemblyOverFiles(files);
     return {files, kill: hostString => assembly.killLocalServer(hostString)};
   }
 
@@ -1023,6 +1030,33 @@ describe("the assembly's maintenance run (card connect-23)", () => {
       loggerOf(recorded),
     ).maintain('kill', {host: 'dev'});
     deepStrictEqual(outcome.result, 'connectionFailed');
+  });
+
+  /** The record files a helper client on a fresh file port reads during `action`. */
+  async function recordsRead(
+    action: (
+      assembly: ReturnType<typeof connectAssemblyOf>,
+    ) => Promise<unknown>,
+  ): Promise<string[]> {
+    const files = new MemoryFilePort();
+    await action(assemblyOverFiles(files));
+    return files.calls
+      .filter(call => call.operation === 'read')
+      .map(call => call.path);
+  }
+
+  it("F-2411 AC-33: each kill ends a helper of its own after the run, never the window's, also when the run fails", async () => {
+    const [windowRecord] = await recordsRead(assembly =>
+      assembly.killLocalServer('dev'),
+    );
+    const kills = await recordsRead(async assembly => {
+      await assembly.maintain('kill', {host: 'dev'});
+      await assembly.maintain('kill', {host: 'dev'});
+    });
+    deepStrictEqual(
+      [kills.length, new Set(kills).size, kills.includes(windowRecord ?? '')],
+      [2, 2, false],
+    );
   });
 });
 

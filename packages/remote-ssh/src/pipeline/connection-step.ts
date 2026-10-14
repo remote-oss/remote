@@ -66,7 +66,7 @@ export function openConnectionStep(
   return async (input, terms, cancellation) => {
     const acquired = await dependencies.acquire({
       ...dependencies.requestFor(input, terms),
-      hostString: input.rawHostString,
+      hostString: input.connectionKey ?? input.rawHostString,
       cancellation,
     });
     if (acquired.kind === 'failed') {

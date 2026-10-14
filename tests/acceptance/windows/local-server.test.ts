@@ -4,20 +4,26 @@ import {sshRemoteCodec} from 'lib-authority';
 import {
   appendScript,
   closeWindow,
+  connected,
+  connectedWithin,
   connectionHelpers,
+  goneWithin,
   hostAliases,
+  hostAnswer,
   inWindow,
   isOpen,
   kill,
   messagesSince,
-  onHost,
+  newHelperWithin,
+  noHelperWithin,
   openWindow,
+  readUserSettings,
   recordLines,
   reloadWindow,
+  restoreUserSettings,
+  runs,
   settingIn,
   sshChildren,
-  readUserSettings,
-  restoreUserSettings,
   userSettings,
   variable,
   waitFor,
@@ -39,86 +45,6 @@ const PER_WINDOW = {
   'remote.SSH.useLocalServer': false,
   'remote.SSH.remotePlatform': {harness: 'linux'},
 };
-
-/** Whether window `name` is connected: it is on the remote and a file it writes reaches the host. */
-async function connected(name: string): Promise<boolean> {
-  try {
-    const state = await windowState(name);
-    await inWindow(name, 'acceptance.agent.writeFile', 'probe.txt', name);
-    return (
-      state.remoteName === 'ssh-remote' &&
-      (await onHost('cat', `/home/harness/${name}/probe.txt`)) === name
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** Waits until window `name` is connected, for up to `milliseconds`. */
-function connectedWithin(name: string, milliseconds: number): Promise<void> {
-  return waitFor(
-    `${name} to be connected`,
-    () => connected(name),
-    milliseconds,
-  );
-}
-
-/** Waits until no connection helper of the run runs, for up to `milliseconds`. */
-function noHelperWithin(milliseconds: number): Promise<void> {
-  return waitFor(
-    'no connection helper to run',
-    async () => (await connectionHelpers()).length === 0,
-    milliseconds,
-  );
-}
-
-/** Whether the process `processId` runs. */
-function runs(processId: number): boolean {
-  try {
-    process.kill(processId, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Waits until none of `processIds` runs, for up to `milliseconds`. */
-function goneWithin(
-  processIds: readonly number[],
-  milliseconds: number,
-): Promise<void> {
-  return waitFor(
-    `${processIds.join(', ')} to end`,
-    () => processIds.every(processId => !runs(processId)),
-    milliseconds,
-  );
-}
-
-/** Waits until a connection helper other than those in `known` runs, for up to `milliseconds`. */
-function newHelperWithin(
-  known: readonly number[],
-  milliseconds: number,
-): Promise<void> {
-  return waitFor(
-    'a new connection helper',
-    async () =>
-      (await connectionHelpers()).some(processId => !known.includes(processId)),
-    milliseconds,
-  );
-}
-
-/** One scripted answer of the host pick of window `window`. */
-function hostAnswer(
-  window: string,
-  answer: 'dismiss' | {label: string} | {typed: string},
-) {
-  return {
-    surface: 'hostPick',
-    match: 'Select configured SSH host',
-    answer,
-    window,
-  } as const;
-}
 
 describe('the local connection server on a key host (card coverage-14)', function () {
   this.timeout(300000);

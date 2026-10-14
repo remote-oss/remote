@@ -51,6 +51,7 @@ export const COMMON_FUNCTIONS: readonly string[] = [
   'CLI_STAGING=$DATA_DIR/cli-bin/$COMMIT',
   'CLI_FILE=$DATA_DIR/$CLI_NAME',
   'BOOT_PREFIX=$DATA_DIR/.$COMMIT',
+  '[ -z "$INSTALL_TREE" ] || LOCK_IN_TEMPORARY=yes',
 ];
 
 /** The port the CLI reports in its log: the first line that is exactly `Listening on 127.0.0.1:<port>`. */
@@ -271,6 +272,49 @@ export const UNPACK_FUNCTIONS: readonly string[] = [
   '}',
 ];
 
+/**
+ * The install into a shared tree: the unpack goes into a sibling of the tree that is renamed once it is whole, and
+ * `bin/<commit>` is a link to the tree. A tree is complete exactly when its launcher is executable.
+ */
+export const TREE_FUNCTIONS: readonly string[] = [
+  'ensure_install_link() {',
+  '  if [ -L "$INSTALL_DIR" ]; then',
+  '    if [ "$(readlink "$INSTALL_DIR")" = "$INSTALL_TREE" ]; then',
+  '      fact server.installLink kept',
+  '      return 0',
+  '    fi',
+  '    rm -f "$INSTALL_DIR"',
+  '  elif [ -d "$INSTALL_DIR" ]; then',
+  '    if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+  '      fact server.installLink realFolder',
+  '      return 0',
+  '    fi',
+  '    rm -rf "$INSTALL_DIR"',
+  '  fi',
+  '  LINK_ERROR=$(mkdir -p "$DATA_DIR/bin" 2>&1) || write_failed_leave "$DATA_DIR/bin" "$LINK_ERROR"',
+  '  LINK_ERROR=$(ln -s "$INSTALL_TREE" "$INSTALL_DIR" 2>&1) || {',
+  '    if [ -L "$INSTALL_DIR" ] && [ "$(readlink "$INSTALL_DIR")" = "$INSTALL_TREE" ]; then',
+  '      fact server.installLink kept',
+  '      return 0',
+  '    fi',
+  '    write_failed_leave "$INSTALL_DIR" "$LINK_ERROR"',
+  '  }',
+  '  fact server.installLink made',
+  '}',
+  'install_tree() {',
+  '  TREE_STAGING=${INSTALL_TREE}_$STAGING_SUFFIX',
+  '  unpack_into "$1" "$TREE_STAGING" || return 1',
+  '  [ -x "$TREE_STAGING/$LAUNCHER" ] || return 1',
+  '  if [ -x "$INSTALL_TREE/$LAUNCHER" ]; then',
+  '    rm -rf "$TREE_STAGING"',
+  '    return 0',
+  '  fi',
+  '  mv "$TREE_STAGING" "$INSTALL_TREE" || return 1',
+  '  rm -rf "${INSTALL_TREE:?}/${TREE_STAGING##*/}"',
+  '  [ -x "$INSTALL_TREE/$LAUNCHER" ]',
+  '}',
+];
+
 /** Whether a process id is a live process whose command line holds a folder, as the server under it does. */
 export const PROCESS_FUNCTIONS: readonly string[] = [
   'is_server_process() {',
@@ -292,24 +336,25 @@ export const PROCESS_FUNCTIONS: readonly string[] = [
 ];
 
 /**
- * Whether a process is a server of the CLI path: the file it runs is under `cli/servers/`, or it is a POSIX shell
- * running a script there, as the server's launcher does. The arguments of the command line are read as fields, so that a
- * program that only names a path under `cli/servers/`, such as `tail -f` or an editor, is not taken for a server.
+ * Whether a process belongs to a server tree under the folder its second argument names: the file it runs is under that
+ * folder, or it is a POSIX shell running a script there, as a server's launcher does. The arguments of the command line
+ * are read as fields, so that a program that only names a path under the folder, such as `tail -f` or an editor, is not
+ * taken for a server.
  */
-export const CLI_PROCESS_FUNCTIONS: readonly string[] = [
-  'is_cli_server_process() {',
+export const SERVER_TREE_FUNCTIONS: readonly string[] = [
+  'is_server_tree_process() {',
   "  case $1 in ''|*[!0-9]*|0|1) return 1 ;; esac",
   '  [ -r "/proc/$1/cmdline" ] || return 1',
-  "  CLI_FIELDS=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | head -n 2)",
-  '  CLI_PROGRAM=$(printf \'%s\\n\' "$CLI_FIELDS" | sed -n 1p)',
-  '  CLI_FIRST=$(printf \'%s\\n\' "$CLI_FIELDS" | sed -n 2p)',
-  '  case $CLI_PROGRAM in',
-  '    "$DATA_DIR/cli/servers/"*) return 0 ;;',
+  "  TREE_FIELDS=$(tr '\\0' '\\n' <\"/proc/$1/cmdline\" 2>/dev/null | head -n 2)",
+  '  TREE_PROGRAM=$(printf \'%s\\n\' "$TREE_FIELDS" | sed -n 1p)',
+  '  TREE_FIRST=$(printf \'%s\\n\' "$TREE_FIELDS" | sed -n 2p)',
+  '  case $TREE_PROGRAM in',
+  '    "$2"*) return 0 ;;',
   '  esac',
-  '  case ${CLI_PROGRAM##*/} in',
+  '  case ${TREE_PROGRAM##*/} in',
   '    sh|bash|dash|ash)',
-  '      case $CLI_FIRST in',
-  '        "$DATA_DIR/cli/servers/"*) return 0 ;;',
+  '      case $TREE_FIRST in',
+  '        "$2"*) return 0 ;;',
   '      esac',
   '      ;;',
   '  esac',
@@ -319,9 +364,9 @@ export const CLI_PROCESS_FUNCTIONS: readonly string[] = [
 
 /**
  * Stop the servers of the data folder: those of a direct install, whose process ids are recorded in it and whose command
- * lines hold `bin/`, and those of the CLI path, which record nothing and are found by their command lines holding
- * `cli/servers/`. A process that is not a server, such as the CLI's `command-shell` and its supervisor, which run the
- * CLI file, is left alone.
+ * lines hold `bin/`, and every process of a server tree, found by the file it runs being under `bin/` or `cli/servers/`.
+ * The sweep reaches a server's extension host and file watcher, which outlive a main process that ended. A process that
+ * is not a server, such as the CLI's `command-shell` and its supervisor, which run the CLI file, is left alone.
  */
 export const STOP_FUNCTIONS: readonly string[] = [
   'stop_servers() {',
@@ -337,7 +382,9 @@ export const STOP_FUNCTIONS: readonly string[] = [
   '  for PROC_DIR in /proc/[0-9]*; do',
   '    SERVER_PID=${PROC_DIR#/proc/}',
   '    [ "$SERVER_PID" != "$$" ] || continue',
-  '    is_cli_server_process "$SERVER_PID" || continue',
+  '    is_server_tree_process "$SERVER_PID" "$DATA_DIR/bin/" ||',
+  '      is_server_tree_process "$SERVER_PID" "$DATA_DIR/cli/servers/" ||',
+  '      continue',
   '    if have pkill; then',
   '      pkill -P "$SERVER_PID" 2>/dev/null',
   '    fi',

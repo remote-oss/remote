@@ -4,7 +4,11 @@
  * The product table decides the layout; nothing here names a product.
  */
 
-import {keepsReferenceLayout, volumeServerFolder} from 'lib-product';
+import {
+  keepsReferenceLayout,
+  type ResolutionStep,
+  volumeServerFolder,
+} from 'lib-product';
 
 /** The keys that decide a product's cache layout: its application name and quality. */
 export interface ProductKeys {
@@ -34,16 +38,29 @@ export function cacheFolders(
   };
 }
 
-/** The folder under the client's cache root where the archive of the commit is kept. */
+/**
+ * The key an archive is kept under: the version and release of an archive the built-in table resolved, the commit for
+ * every other source.
+ */
+export function archiveKeyOf(
+  step: ResolutionStep,
+  profile: {commit: string; version: string; release: string},
+): string {
+  return step === 'builtInTable'
+    ? `${profile.version}${profile.release}`
+    : profile.commit;
+}
+
+/** The folder under the client's cache root where an archive is kept: by the commit, or by the version(+release) of a built-in-table archive (`archiveKeyOf`). */
 export function clientArchiveFolder(
   cacheRoot: string,
   product: ProductKeys,
-  commit: string,
+  archiveKey: string,
 ): string {
   const base = keepsReferenceLayout(product.applicationName)
     ? cacheRoot
     : `${cacheRoot}/${product.applicationName}`;
-  return `${base}/${product.quality}/${commit}`;
+  return `${base}/${product.quality}/${archiveKey}`;
 }
 
 /** A gallery address without a trailing slash. */

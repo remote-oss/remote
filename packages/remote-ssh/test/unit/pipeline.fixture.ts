@@ -54,6 +54,7 @@ export const HOST: ProbedHost = {
   display: '',
   installed: false,
   installFolder: '/home/dev/.server/bin/abc',
+  treeComplete: false,
 };
 
 /** The plan of a server that is not on the host: a download. */
@@ -329,6 +330,10 @@ export function steps(
       ),
     rememberPlatform: () => {
       note('rememberPlatform', undefined);
+      return Promise.resolve();
+    },
+    applyDefaults: () => {
+      note('applyDefaults', undefined);
       return Promise.resolve();
     },
     ...changes,

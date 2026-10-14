@@ -335,6 +335,26 @@ describe("the connect's CLI path: the window resolves", () => {
     deepStrictEqual(recording.calls.includes('rememberPlatform'), true);
   });
 
+  it('F-2507 BR-5: a connect over the CLI applies the default forwards once, and a reconnection over the CLI does not', async () => {
+    const counts: number[] = [];
+    for (const isReconnection of [false, true]) {
+      let count = 0;
+      const {recording, options} = setup();
+      await connect(
+        {...CLI_INPUT, isReconnection},
+        cliSteps(recording, {controlEndings: 0}, undefined, () => ({
+          applyDefaults: () => {
+            count += 1;
+            return Promise.resolve();
+          },
+        })),
+        options,
+      );
+      counts.push(count);
+    }
+    deepStrictEqual(counts, [1, 0]);
+  });
+
   it('#664: a connect over the CLI resolves though the platform write never settles', async () => {
     const {result} = await connectOverCli(undefined, () => ({
       rememberPlatform: () => new Promise<void>(() => undefined),

@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import type {SettingHost} from 'lib-identifiers';
 import {
   agentForwardingOf,
+  defaultForwardsOf,
   localDownloadModeOf,
   x11ForwardingOf,
 } from '../../src/pipeline/connect-settings.ts';
@@ -89,5 +90,35 @@ describe('the forwarding switches of a connect (F-2311 R1, F-2312 R1)', () => {
       ],
       [false, false],
     );
+  });
+});
+
+describe('the default forwarded ports of a connect (card connect-40)', () => {
+  const SETTING = 'remote.SSH.defaultForwardedPorts';
+
+  it('F-2507 BR-6: the setting is read as the editor gives it, with the requests and the skipped entries', () => {
+    deepStrictEqual(
+      defaultForwardsOf(
+        hostWith({[SETTING]: [{name: 'web', remotePort: 8000}, 5]}),
+      ),
+      {
+        requests: [
+          {
+            remoteHost: 'localhost',
+            remotePort: 8000,
+            localPort: 8000,
+            label: 'web',
+          },
+        ],
+        skipped: [{index: 1, reason: 'notAnObject'}],
+      },
+    );
+  });
+
+  it('F-2507 7.E4: an unset setting asks for nothing', () => {
+    deepStrictEqual(defaultForwardsOf(hostWith({})), {
+      requests: [],
+      skipped: [],
+    });
   });
 });

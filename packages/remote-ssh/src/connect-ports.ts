@@ -4,6 +4,7 @@
  * Node; the extension passes the real surfaces and the machine, and a test passes fakes.
  */
 
+import type {TunnelOpener} from './forwarding/default-forwards.ts';
 import type {
   DecodedTarget,
   FailurePresenter,
@@ -71,6 +72,7 @@ import {
 } from './pipeline/bounds.ts';
 import {
   agentForwardingOf,
+  defaultForwardsOf,
   connectionSettingsOf,
   localDownloadModeOf,
   overrideOf,
@@ -90,6 +92,7 @@ import type {PortChoice} from './pipeline/port-choice.ts';
 import {hostAlias} from './pipeline/host-settings.ts';
 import {
   type MaintenanceRun,
+  maintenanceConnectionKey,
   maintenanceInputOf,
   runMaintenance,
 } from './maintenance/maintenance-run.ts';
@@ -136,6 +139,8 @@ export interface ConnectSurfaces {
   applyTerminalEnvironment: (
     variables: Readonly<Record<string, string>>,
   ) => void;
+  /** The editor's tunnel service, which the default forwarded ports are opened through. */
+  tunnels: TunnelOpener;
 }
 
 /** Where the extension runs and what it may use there. */
@@ -266,7 +271,9 @@ export function wiringPortsOf(
       localDownloadMode: () => localDownloadModeOf(settings),
       agentForwarding: () => agentForwardingOf(settings),
       x11Forwarding: () => x11ForwardingOf(settings),
+      defaultForwards: () => defaultForwardsOf(settings),
     },
+    tunnels: surfaces.tunnels,
     terms: {
       settings: () => termsSettingsOf(settings),
       pickPlatform: surfaces.pickPlatform,
@@ -438,13 +445,23 @@ export function connectAssemblyOf(
   let shownTitle = '';
   return {
     connector,
-    maintain: (action, target) =>
-      runMaintenance(
-        stepsOf(ports, () => undefined),
-        maintenanceInputOf(target),
-        action,
-        new AbortController().signal,
-      ),
+    maintain: async (action, target) => {
+      const runKey = machine.helpers.newNonce();
+      try {
+        return await runMaintenance(
+          stepsOf(ports, () => undefined),
+          maintenanceInputOf(target, runKey),
+          action,
+          new AbortController().signal,
+        );
+      } finally {
+        await killConnection(
+          {helper: machine.helpers, freePort: machine.freeSocksPort},
+          machine.folders.registry,
+          maintenanceConnectionKey(target, runKey),
+        );
+      }
+    },
     killLocalServer: hostString =>
       killConnection(
         {helper: machine.helpers, freePort: machine.freeSocksPort},

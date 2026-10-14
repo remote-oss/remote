@@ -142,6 +142,7 @@ export {proxyVariableText} from './proxy-variable-text.ts';
 export {
   type ProductKeys,
   cacheFolders,
+  archiveKeyOf,
   clientArchiveFolder,
   isFromSameGallery,
 } from './cache/folders.ts';

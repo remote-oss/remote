@@ -8,6 +8,7 @@
  */
 
 import type {Connected, Failed} from 'lib-authority';
+import {shouldApplyDefaults} from 'lib-forwarding';
 import type {Logger} from 'lib-log';
 import type {StartedServer, TransferPhase} from 'lib-server';
 import {
@@ -241,6 +242,13 @@ async function runSteps(
     }
   }
 
+  /** Starts the default forwards of a connect that has worked, unless it is a reconnection; never awaited. */
+  function startDefaultForwards(): void {
+    if (shouldApplyDefaults(input.isReconnection)) {
+      void quietly('the default forwards', () => steps.applyDefaults(input));
+    }
+  }
+
   function cancelled(): Failed | undefined {
     return cancellation.aborted ? failure({kind: 'cancelled'}) : undefined;
   }
@@ -350,6 +358,7 @@ async function runSteps(
       void quietly('the platform setting', () =>
         steps.rememberPlatform(input, host.operatingSystem),
       );
+      startDefaultForwards();
       steps.linkAgent(lease, forwarding.agentLink);
       return {
         connected: overCli.connected,
@@ -460,6 +469,7 @@ async function runSteps(
   void quietly('the platform setting', () =>
     steps.rememberPlatform(input, host.operatingSystem),
   );
+  startDefaultForwards();
   const {opened} = tunnel.value;
   steps.linkAgent(lease, forwarding.agentLink);
   return {
