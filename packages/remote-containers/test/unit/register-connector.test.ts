@@ -8,6 +8,8 @@ import {
 } from 'lib-authority';
 import {recordingResolverEditor} from 'lib-authority/testing/recording-resolver-editor';
 import type {CommandHost} from 'lib-identifiers';
+import {createLogger} from 'lib-log';
+import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {ContainerConnector} from '../../src/connect/connector.ts';
 import {registerContainerResolver} from '../../src/connect/register-connector.ts';
 
@@ -30,8 +32,13 @@ async function registered(
   options: {
     resolversGranted?: boolean;
     identity?: {name: string | undefined; context: string | undefined};
+    canonical?: (
+      authority: string,
+      path: string,
+    ) => Promise<string | undefined>;
   } = {},
 ) {
+  const warned: string[] = [];
   const events: string[] = [];
   const requests: ProgressRequest[] = [];
   const formatters: ResourceLabelFormatter[] = [];
@@ -49,6 +56,7 @@ async function registered(
     cancel: () => undefined,
     revealDetails: () => undefined,
     heldIdentity: () => options.identity,
+    canonicalPathOf: options.canonical ?? (() => Promise.resolve(undefined)),
     onPhase: listener => {
       listeners.push(listener);
       return () => undefined;
@@ -102,6 +110,12 @@ async function registered(
       revealLog: () => {
         revealed += 1;
       },
+      logger: {
+        ...createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
+        warn: message => {
+          warned.push(message);
+        },
+      },
     },
   );
   return {
@@ -113,6 +127,7 @@ async function registered(
     commands,
     recording,
     revealed: () => revealed,
+    warned,
   };
 }
 
@@ -213,5 +228,38 @@ describe('the registration of the container connector (card containers-08)', () 
     const seen = await registered({resolversGranted: false});
     seen.result.dispose();
     deepStrictEqual(seen.disposed, ['remote-containers.revealLogTerminal']);
+  });
+
+  it('contracts §3.2: register-connector passes the mapping and the log', async () => {
+    const asked: string[] = [];
+    const answering = await registered({
+      canonical: (authority, path) => {
+        asked.push(`${authority}${path}`);
+        return Promise.resolve('/home/u/proj');
+      },
+    });
+    const failing = await registered({
+      canonical: () => Promise.reject(new Error('boom')),
+    });
+    deepStrictEqual(
+      [
+        await answering.recording
+          .registered()
+          ?.canonicalPath?.(AUTHORITY, '/workspaces/proj'),
+        asked,
+        await failing.recording
+          .registered()
+          ?.canonicalPath?.(AUTHORITY, '/workspaces/proj'),
+        failing.warned,
+      ],
+      [
+        '/home/u/proj',
+        [`${AUTHORITY}/workspaces/proj`],
+        undefined,
+        [
+          `the canonical URI of ${AUTHORITY}/workspaces/proj could not be mapped: Error: boom`,
+        ],
+      ],
+    );
   });
 });

@@ -121,7 +121,14 @@ export interface Scene {
   outcome: ContainerOutcome | (() => Promise<ContainerOutcome>);
   steps: ContainerStep[];
   cliEvents: CliEvent[];
-  configuration: Awaited<ReturnType<CliBridge['readConfiguration']>>;
+  /** What the configuration read answers; a function to hold it or to change it from one read to the next. */
+  configuration:
+    | Awaited<ReturnType<CliBridge['readConfiguration']>>
+    | (() => ReturnType<CliBridge['readConfiguration']>);
+  /** The delay of each timer set, in order. */
+  timerDelays: number[];
+  /** The callbacks of the timers still pending. */
+  timers: Array<() => void>;
   server: ServerResult | (() => Promise<ServerResult>);
   phasesOfServer: Array<'installing' | 'startingServer'>;
   relayOutcome: 'open' | Failed;
@@ -203,6 +210,8 @@ export function sceneOf(
     killStatuses: [],
     killScripts: [],
     relayGate: undefined,
+    timerDelays: [],
+    timers: [],
     ...overrides,
   };
   const kills = fakeEngine(
@@ -283,7 +292,9 @@ export function sceneOf(
       for (const event of scene.cliEvents) {
         onEvent(event);
       }
-      return Promise.resolve(scene.configuration);
+      return typeof scene.configuration === 'function'
+        ? scene.configuration()
+        : Promise.resolve(scene.configuration);
     },
   };
   const lifecycle: ContainerLifecycle = {
@@ -322,7 +333,13 @@ export function sceneOf(
       logger: createLogger(sink, {minimumLevel: () => 'debug'}),
       searchPath: () => '/usr/bin',
       clock: () => 0,
-      setTimer: () => () => undefined,
+      setTimer: (milliseconds, callback) => {
+        scene.timerDelays.push(milliseconds);
+        scene.timers.push(callback);
+        return () => {
+          scene.timers = scene.timers.filter(each => each !== callback);
+        };
+      },
       translate: template => template,
       dialogs: silentDialogs(),
     },
