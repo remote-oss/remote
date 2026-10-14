@@ -73,11 +73,20 @@ line names the harness that started it. No pid file is needed.
    - `command('pgrep', ['-a', '-f', '--', 'acceptance-local-[0-9]+-[A-Za-z0-9]+/user-data'])`. Status 1 (none) is
      no error, and its output is one `<pid> <command line>` per line.
    - For each line, the harness pid is the first match of `/acceptance-local-(\d+)-[A-Za-z0-9]+\/user-data/`.
-     When `isHarness(harnessPid)` is false, end the editor's group:
-     `command('pkill', ['-TERM', '-g', String(pgidOf(editorPid))])`, where
-     `pgidOf` reads `command('ps', ['-o', 'pgid=', '-p', String(editorPid)]).stdout.trim()`. Skip a line whose `ps`
-     gives no number, because the process has already gone.
-   - End each group once, even when several of its processes matched.
+     When `isHarness(harnessPid)` is false, the editor is an orphan. `pgidOf` reads
+     `command('ps', ['-o', 'pgid=', '-p', String(pid)]).stdout.trim()`; skip a line whose `ps` gives no number, because
+     the process has already gone.
+   - **Which group may be signalled** (themis, #876, measured live). A runner launch's editor and its test-cli `node`
+     stay in the harness's own process group; only plain launches' editors lead a group of their own. Two harnesses
+     started from one non-interactive shell or loop share a group. So a group is ended with
+     `command('pkill', ['-TERM', '-g', String(group)])` **only when** both hold:
+     1. the group isn't the sweeper's own (`group !== pgidOf(process.pid)`, read once per sweep); and
+     2. its leader (the process whose pid is `group`) is either one of the matched orphan processes, or no longer
+        exists (`ps -o pid= -p <group>` gives nothing): a dead harness that led it.
+   - **Otherwise**, for example the sweeper's own group or a group led by a live shell, end each matched orphan process
+     on its own with `command('kill', ['-TERM', String(pid)])`. An editor's main process ends its zygotes when it
+     exits.
+   - End each group once, and each process once, even when several matched.
    - **Zygotes go through the group, never by argument** (proteus, #876, on the pinned VSCodium 1.140.06829-insider,
      x64). Of the editor's 10 processes, the three `--type=zygote` processes carry no `--user-data-dir`. The main,
      GPU, renderer and utility processes do. All 10 are in the main process's group, and a SIGTERM to that group ends
@@ -135,6 +144,10 @@ nothing removes them. On a self-hosted runner, `/tmp` outlives the job. The two 
 | `tools/acceptance-run.test.ts` | `tooling-48: an editor whose harness is gone is ended, at any age` | `pgrep` gives `501 /x/code --user-data-dir=/tmp/acceptance-local-77-AbC/user-data`; `isHarness(77)` is false; `ps` gives `500`: one `pkill -TERM -g 500` |
 | same | `tooling-48: an editor whose harness runs is left alone` | `isHarness(77)` is true: no `pkill` |
 | same | `tooling-48: a CI run's editor is not the sweep's` | `pgrep` (its pattern requires `local`) gives nothing for a `acceptance-123-1-job-AbC` folder: no `ps`, no `pkill` |
+| same | `tooling-48: the sweeper's own group is never signalled` | the orphan's `ps` pgid equals the sweeper's: no `pkill -g`; one `kill -TERM <orphan pid>` |
+| same | `tooling-48: a group led by a matched orphan is ended as a group` | the leader pid is one of the matched lines: one `pkill -TERM -g <group>` |
+| same | `tooling-48: a group whose leader is gone is ended as a group` | `ps -o pid= -p <group>` gives nothing: one `pkill -TERM -g <group>` |
+| same | `tooling-48: a group led by a live process that isn't matched gets only the orphan's own signal` | the leader exists and isn't matched: `kill -TERM <orphan pid>`, and no `pkill -g` |
 | same | `tooling-48: two processes of one group end it once` | two lines, `ps` gives the same pgid: one `pkill` |
 | same | `tooling-48: no editor running is no error` | `pgrep` status 1: nothing else runs |
 | same | `tooling-48: cleanRun sweeps by pid before the 2 h rule` | the order of the recorded commands |
