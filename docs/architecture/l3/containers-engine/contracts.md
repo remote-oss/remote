@@ -117,6 +117,9 @@ its content:
     reference text. lib-log's standard redaction then applies, as to every line. It's a pure function with rows: a token
     in a `Run:` line and in `Command failed:` is replaced, a short value isn't, and an unreferenced variable isn't
     touched.
+- **ADR-0010:** a value from a container's shell is read only between our whole-line markers. The engine's and the
+  CLI's output is read only in their documented, anchored forms (prefixes, the JSON result line, `docker inspect -f`).
+  Each parser has a noisy-neighbour row.
 - **No shell:** every engine and CLI spawn has `shell: false`, and a row proves a value with spaces and quotes reaches
   the program unchanged (F-0201).
 - **Pure parts first:** the payload codec, the label matching (F-0409's tiers), the CLI argument builder and the
