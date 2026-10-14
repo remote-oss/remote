@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {withNoise} from 'lib-host/testing/noise';
 import {
   bootstrapEventOf,
   bootstrapLogLine,
@@ -238,6 +239,36 @@ describe('the session bootstrap run by sh (card ssh-38, #443)', () => {
     deepStrictEqual([output, status], ['LAYER1-READY\nok\n', 0]);
   });
 
+  it('ADR-0010: a startup file that prints LAYER1-START is not evaluated', () => {
+    const {output, status} = bootstrapWith(
+      'echo LAYER1-START; echo "exit 3"; exec sh',
+      5,
+      'echo ok\n',
+    );
+    deepStrictEqual([output, status], ['LAYER1-READY\nok\n', 0]);
+  });
+
+  it('ADR-0010: startup output around the environment changes nothing, and the environment arrives', () => {
+    const {output, status} = bootstrapWith(
+      [
+        'echo "ERROR: Your fridge is not running"',
+        'echo "ERROR: fridge" >&2',
+        'echo "exit 3"',
+        'echo "\'; kill -9 $$; echo \'"',
+        'export FOO=bar',
+        'exec sh',
+      ].join('\n'),
+      5,
+      'echo "$FOO"\n',
+    );
+    deepStrictEqual([output, status], ['LAYER1-READY\nbar\n', 0]);
+  });
+
+  it('F-2704 AC-11: a startup that reads its input takes the command line, so the shell ends without writing the environment', () => {
+    const {output, status} = bootstrapWith('read LINE', 5);
+    deepStrictEqual([output, status], ['LAYER1-EXITED 0\n', 1]);
+  });
+
   it('#443: with no usable login shell the session still reaches the commands, after the ready line', () => {
     const fake = shellOf('exit 1');
     try {
@@ -325,6 +356,18 @@ describe('the reader of the bootstrap lines (card ssh-38, #443)', () => {
         bootstrapEventOf(''),
       ],
       [undefined, undefined, undefined, undefined],
+    );
+  });
+
+  it('ADR-0010: the bootstrap lines: noise around and inside its stream changes nothing', () => {
+    deepStrictEqual(
+      [
+        ...withNoise(['xLAYER1-READY', 'LAYER1-READY now']).map(line =>
+          bootstrapEventOf(line),
+        ),
+        bootstrapEventOf('LAYER1-READY\r'),
+      ],
+      [...withNoise(['', '']).map(() => undefined), {kind: 'ready'}],
     );
   });
 

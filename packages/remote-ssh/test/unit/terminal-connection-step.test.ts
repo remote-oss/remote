@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
+import {NOISE_LINES} from 'lib-host/testing/noise';
 import type {HostChannel} from 'lib-host';
 import {createLogger, type Level} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
@@ -256,6 +257,18 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     terminal.write("alex@dev's password: ");
     made.clock.advance(100);
     deepStrictEqual(made.questions, ["alex@dev's password: "]);
+  });
+
+  it('ADR-0010: the prompt reader after login: noise around and inside its stream changes nothing', async () => {
+    const made = fixture();
+    const {terminal} = await started(made);
+    terminal.write(AUTHENTICATED);
+    terminal.write(`${NOISE_LINES.join('\n')}\n`);
+    terminal.write('Password: ');
+    made.clock.advance(100);
+    terminal.write('\nAre you sure you want to continue connecting (yes/no)? ');
+    made.clock.advance(100);
+    deepStrictEqual(made.questions, []);
   });
 
   it('F-2308 7.E7: an end with no output and no code is a refused trust', async () => {
@@ -613,6 +626,18 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
         ? [await outcome.value.answer(1, 'x'), await outcome.value.refuse(1)]
         : outcome,
       [false, false],
+    );
+  });
+
+  it("ADR-0010: a terminal that ends after authentication is not classified from the shell's output", async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(`${AUTHENTICATED_ONLY}x@h: Permission denied (fridge).\n`);
+    terminal.end(255, 'process');
+    const outcome = await result;
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure.kind : outcome,
+      'unknown',
     );
   });
 });

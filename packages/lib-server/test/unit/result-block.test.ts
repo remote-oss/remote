@@ -1,5 +1,6 @@
 import {deepStrictEqual, fail} from 'node:assert';
 import {readFileSync} from 'node:fs';
+import {NOISE_LINES} from 'lib-host/testing/noise';
 import {
   parseResult,
   type ResultBlock,
@@ -166,5 +167,26 @@ describe('parseResult (card server-02 table)', () => {
     deepStrictEqual(parseResult(fixtureLines('key-spaces')), {
       failure: 'noResultBlock',
     });
+  });
+
+  it('ADR-0010: the result block: noise with a status, then an end marker, is no result block', () => {
+    deepStrictEqual(parseResult([...NOISE_LINES, RESULT_END]), {
+      failure: 'noResultBlock',
+    });
+  });
+
+  it('ADR-0010: the result block: noise around and inside its stream changes nothing', () => {
+    deepStrictEqual(
+      parseResult([
+        ...NOISE_LINES,
+        ...fixtureLines('with-facts'),
+        ...NOISE_LINES,
+        RESULT_BEGIN,
+        'status=Ok',
+        'host.arch=arm64',
+        ...NOISE_LINES,
+      ]),
+      parseResult(fixtureLines('with-facts')),
+    );
   });
 });

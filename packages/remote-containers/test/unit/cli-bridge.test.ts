@@ -224,6 +224,66 @@ describe('the CLI bridge (card containers-04)', () => {
     );
   });
 
+  /** The events of a run whose stderr is `lines`, with the token variable referenced. */
+  async function eventsOfStderr(lines: readonly string[]): Promise<string[]> {
+    const events: CliEvent[] = [];
+    const {bridge} = setup(
+      (cliArguments, onLine) => {
+        for (const line of lines) {
+          onLine({stream: 'stderr', line});
+        }
+        return Promise.resolve({kind: 'ran', result: UP_LINE, status: 0});
+      },
+      {
+        configText: '{"containerEnv": {"T": "${localEnv:GITHUB_TOKEN}"}}',
+        environment: {GITHUB_TOKEN: 's3cr3t-token'},
+      },
+    );
+    await bridge.up(TARGET, UP_OPTIONS, event => events.push(event), NEVER);
+    return events.map(event =>
+      event.kind === 'log'
+        ? `${event.channel ?? '-'}: ${event.text}`
+        : `progress: ${event.status}`,
+    );
+  }
+
+  function rawLine(text: string, channel = 'postCreate'): string {
+    return JSON.stringify({type: 'raw', level: 3, text, channel});
+  }
+
+  it('R-26: raw events that split a value reach the caller as one raw event with the reference', async () => {
+    deepStrictEqual(
+      await eventsOfStderr([rawLine('echo s3cr3t-'), rawLine('token\n')]),
+      ['postCreate: echo ${localEnv:GITHUB_TOKEN}\n'],
+    );
+  });
+
+  it('R-26: a held tail is flushed, scrubbed, when the progress of its channel succeeds', async () => {
+    const succeeded = JSON.stringify({
+      type: 'progress',
+      name: 'Running',
+      status: 'succeeded',
+      channel: 'postCreate',
+    });
+    deepStrictEqual(
+      await eventsOfStderr([rawLine('abc s3cr3t-token'), succeeded]),
+      ['postCreate: abc ${localEnv:GITHUB_TOKEN}', 'progress: succeeded'],
+    );
+  });
+
+  it('R-26: the progress of another channel leaves a held tail where it is, and the end of the process flushes it', async () => {
+    const other = JSON.stringify({
+      type: 'progress',
+      name: 'Running',
+      status: 'succeeded',
+      channel: 'postStart',
+    });
+    deepStrictEqual(await eventsOfStderr([rawLine('abc'), other]), [
+      'progress: succeeded',
+      'postCreate: abc',
+    ]);
+  });
+
   it('ADR-0010: stderr noise that looks like a result is a log event and never the result', async () => {
     const noise = 'npm WARN {"outcome":"success","containerId":"x"}';
     const events: CliEvent[] = [];

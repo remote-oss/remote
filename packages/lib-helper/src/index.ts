@@ -49,6 +49,7 @@ export {
   type AcquireFailure,
   type AcquireOutcome,
   type AcquireRequest,
+  type PreparedStart,
   type ClientEnvironment,
   stop,
 } from './client/acquire.ts';

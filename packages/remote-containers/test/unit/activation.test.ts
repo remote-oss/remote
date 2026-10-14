@@ -1,8 +1,10 @@
 import {deepStrictEqual} from 'node:assert';
 import type {ProposalName} from 'lib-authority';
+import {createLogger} from 'lib-log';
 import {recordingSetupPorts} from 'lib-authority/testing/recording-setup-ports';
 import type {CommandEntry} from 'lib-identifiers';
 import type {StandDownHost} from 'lib-standdown';
+import type {PreflightDependencies} from '../../src/engine/preflight.ts';
 import {
   activateContainers,
   type ContainersActivationInputs,
@@ -15,6 +17,26 @@ function command(name: string): CommandEntry {
     title: `%commands.${name}.title%`,
     palette: true,
     policy: 'silent',
+  };
+}
+
+/** A stand-in for the surroundings of the Docker checks, made once per serving window. */
+function preflightOf(label: string): PreflightDependencies {
+  return {
+    engineFor: () => {
+      throw new Error(label);
+    },
+    dockerPath: () => label,
+    dialogs: {
+      showError: () => Promise.resolve(undefined),
+      openExternal: () => Promise.resolve(undefined),
+      revealLog: () => undefined,
+    },
+    translate: template => template,
+    setTimer: () => () => undefined,
+    clock: () => 0,
+    logger: createLogger(undefined, {minimumLevel: () => 'info'}),
+    searchPath: () => '',
   };
 }
 
@@ -109,6 +131,10 @@ function surroundings(options: Options): {
     },
     clock: () => new Date(2026, 9, 14, 0, 0, 0, 0).getTime(),
     banner: BANNER,
+    preflight: () => {
+      seen.events.push('preflight');
+      return preflightOf('window');
+    },
     gate: logFailure => {
       seen.events.push('gate');
       if (options.gateThrows === true) {
@@ -177,11 +203,26 @@ describe('the activation', () => {
           'channel Dev Containers',
           'gate',
           'probe',
+          'preflight',
           'handlers',
           'register remote-containers.alpha',
           'register remote-containers.beta',
         ],
       ],
+    );
+  });
+
+  it('containers-03: the served window carries the surroundings of the Docker checks, made once', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    const result = await activateContainers(inputs);
+    deepStrictEqual(
+      [
+        result.kind === 'serving'
+          ? result.served.preflight.dockerPath()
+          : undefined,
+        seen.events.filter(event => event === 'preflight'),
+      ],
+      ['window', ['preflight']],
     );
   });
 

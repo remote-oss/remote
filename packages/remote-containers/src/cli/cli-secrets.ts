@@ -18,7 +18,8 @@ const REFERENCE = /\$\{(localEnv|env):([^:}]+)/g;
 
 /**
  * The values of the editor's variables that the configuration text references and that are long enough to be secrets,
- * once per value, longest first.
+ * with each line of a multi-line value that is long enough itself and the JSON-escaped form of a value that differs
+ * from it, all with the `${…}` text that stands for the variable; once per text, longest first, so a whole value goes before its lines.
  */
 export function referencedSecrets(
   configText: string,
@@ -27,15 +28,18 @@ export function referencedSecrets(
   const byValue = new Map<string, Secret>();
   for (const [, kind, name] of configText.matchAll(REFERENCE)) {
     const value = editorEnvironment[String(name)];
-    if (
-      value !== undefined &&
-      value.length >= MINIMUM_LENGTH &&
-      !byValue.has(value)
-    ) {
-      byValue.set(value, {
-        value,
-        reference: `\${${String(kind)}:${String(name)}}`,
-      });
+    if (value === undefined || value.length < MINIMUM_LENGTH) {
+      continue;
+    }
+    const reference = `\${${String(kind)}:${String(name)}}`;
+    const escaped = JSON.stringify(value).slice(1, -1);
+    const lines = value
+      .split(/\r?\n/)
+      .filter(line => line.length >= MINIMUM_LENGTH);
+    for (const text of [value, escaped, ...lines]) {
+      if (!byValue.has(text)) {
+        byValue.set(text, {value: text, reference});
+      }
     }
   }
   return [...byValue.values()].sort(

@@ -348,7 +348,7 @@ describe("the lookup of the host's configuration", () => {
   it("connect-14: the connect's mode reads the failure: a changed host key in a shared connection", async () => {
     const {result} = await located({
       lookup: lookupFailing(
-        'WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\n',
+        '@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n',
       ),
     });
     deepStrictEqual(
@@ -360,7 +360,7 @@ describe("the lookup of the host's configuration", () => {
   it('connect-14: the same lines in a terminal connection are not a changed host key', async () => {
     const {result} = await located({
       lookup: lookupFailing(
-        'WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\n',
+        '@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n',
       ),
       mode: 'terminal',
     });

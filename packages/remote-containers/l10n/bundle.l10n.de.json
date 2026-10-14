@@ -6,5 +6,17 @@
   "Quit and start {1} again to apply the changes to argv.json.": "Quit and start {1} again to apply the changes to argv.json.",
   "Configure Runtime Arguments": "Configure Runtime Arguments",
   "Not Now": "Not Now",
-  "Quit {1}": "Quit {1}"
+  "Quit {1}": "Quit {1}",
+  "Command not found: '{0}'.": "Command not found: '{0}'.",
+  "Documentation": "Documentation",
+  "License": "License",
+  "Try adding the user to the 'docker' group.": "Try adding the user to the 'docker' group.",
+  "Ignore": "Ignore",
+  "Install": "Install",
+  "Check the license for details.": "Check the license for details.",
+  "Docker returned an error.": "Docker returned an error.",
+  "Docker version 17.12.0 or later required.": "Docker version 17.12.0 or later required.",
+  "Show Log": "Show Log",
+  "Make sure the Docker daemon is running.": "Make sure the Docker daemon is running.",
+  "Current user does not have permission to run 'docker'.": "Current user does not have permission to run 'docker'."
 }
