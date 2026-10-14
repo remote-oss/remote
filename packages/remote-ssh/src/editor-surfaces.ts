@@ -9,7 +9,7 @@ import type {AcceptanceStore} from 'lib-server';
 import type {FilePickPort} from './config/file-choice.ts';
 import type {DownloadProgressPort} from './cli/server-download-progress.ts';
 import type {HostPickPort} from './surfaces/host-pick.ts';
-import type {LoginTerminals} from 'lib-ssh';
+import type {HostListResult, LoginTerminals} from 'lib-ssh';
 import type {LinkTerminals} from './pipeline/forwarding-step.ts';
 import {
   pickRemotePlatform,
@@ -82,6 +82,8 @@ export interface EditorOperations {
 /** What the surfaces need besides the adapters and the operations. */
 export interface SurfaceContext {
   settings: SettingHost;
+  /** The hosts of the configuration files in effect, read at each call: the connect's first check. */
+  configuredHosts(): HostListResult;
   translate: Translate;
   /** The help commands' handlers: "Open Documentation" and "Open Settings" run the same. */
   help: Pick<HelpHandlers, 'getHelp' | 'settings'>;
@@ -137,6 +139,7 @@ export function editorSurfacesOf(
   );
   return {
     settings: context.settings,
+    configuredHosts: () => context.configuredHosts(),
     translate,
     prompts: adapters.prompts,
     terminals: adapters.terminals,

@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   agentEnvironment,
   agentSocketPath,
+  controlFolderOf,
   SOCKET_PATH_LIMIT,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
@@ -13,7 +14,7 @@ import {
   type RunKeys,
   startRunAgent,
 } from './acceptance-keys.ts';
-import {type CommandRunner, runCommand} from './acceptance-run.ts';
+import {type CommandRunner, runCommand} from './command-runner.ts';
 
 /** Runs a program with extra variables and gives its status and both outputs. */
 function runProgram(
@@ -146,6 +147,19 @@ describe('makeRunKeys', function () {
     );
   });
 
+  it("coverage-19: the unauthorised key has no passphrase and isn't given to the host", () => {
+    deepStrictEqual(
+      [
+        runProgram('ssh-keygen', ['-y', '-P', '', '-f', keys.unauthorisedKey])
+          .status,
+        keys.hostArguments.some(argument =>
+          argument.includes(publicKeyOf(keys.unauthorisedKey)),
+        ),
+      ],
+      [0, false],
+    );
+  });
+
   it('tooling-29: the host is given the passphrase and second public keys, and the authority', () => {
     deepStrictEqual(keys.hostArguments, [
       '--env',
@@ -182,6 +196,37 @@ describe('the run agent', function () {
     const socket = agentSocketPath(`/${'d'.repeat(SOCKET_PATH_LIMIT)}`);
     rmSync(path.dirname(socket), {recursive: true, force: true});
     strictEqual(socket.startsWith('/tmp/agent-'), true);
+  });
+
+  it("coverage-16: the control sockets are in the run's folder when their longest name fits a Unix socket path", () => {
+    strictEqual(controlFolderOf('/tmp/run'), '/tmp/run');
+  });
+
+  it("coverage-16: a runner's deep run folder moves the control sockets to a short folder", () => {
+    strictEqual(
+      controlFolderOf(
+        '/home/runner/work/_temp/acceptance-38551981192-1-vscodium-AbCdEf',
+        () => '/tmp/control-x',
+      ),
+      '/tmp/control-x',
+    );
+  });
+
+  it('coverage-16: a folder whose longest socket name is exactly at the limit stays, and one byte more moves', () => {
+    const fits = `/${'d'.repeat(SOCKET_PATH_LIMIT - 1 - 68 - 1)}`;
+    strictEqual(
+      [
+        controlFolderOf(fits, () => 'short'),
+        controlFolderOf(`${fits}d`, () => 'short'),
+      ].join(),
+      `${fits},short`,
+    );
+  });
+
+  it('coverage-16: the short control folder is made under /tmp', () => {
+    const folder = controlFolderOf(`/${'d'.repeat(SOCKET_PATH_LIMIT)}`);
+    rmSync(folder, {recursive: true, force: true});
+    strictEqual(folder.startsWith('/tmp/control-'), true);
   });
 
   it('tooling-29: the agent sees no variable through which it could ask', () => {

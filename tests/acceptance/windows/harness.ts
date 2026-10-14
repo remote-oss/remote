@@ -18,6 +18,8 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
+import {cutNetwork, restoreNetwork} from '../../../tools/acceptance-network.ts';
+import {runCommand} from '../../../tools/command-runner.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
 import {
   appendScriptTo,
@@ -51,7 +53,7 @@ export interface AgentEvent {
   folders?: string[];
   /** Whether the window's workspace is trusted, as `state` reports it. */
   trusted?: boolean;
-  /** Whether the window's Remote - SSH extension is active, as `state` reports it. */
+  /** Whether the remote-ssh extension has activated in the window, as `state` reports it. */
   remoteSshActive?: boolean;
   /** The setting a `setting` event reports, and its value. */
   settingId?: string;
@@ -67,6 +69,8 @@ export interface AgentEvent {
   present?: boolean;
   /** The output channel a `state` event saw shown in the window, or null. */
   visibleOutputChannel?: string | null;
+  /** The names of the window's terminals, hidden ones included, as a `state` event saw them. */
+  terminals?: string[];
 }
 
 /** One line of the record the extensions append to. */
@@ -231,6 +235,62 @@ async function acceptedLogins(line: string): Promise<number> {
 /** The number of logins the host's sshd counted for the password account. */
 export function acceptedPasswords(): Promise<number> {
   return acceptedLogins('Accepted password for harness-pw');
+}
+
+/** The lower-case hex of the JSON of a target, the form of an authority's payload that F-2501 BR-1 defines. */
+export function hexOf(target: Readonly<Record<string, unknown>>): string {
+  return Buffer.from(JSON.stringify(target)).toString('hex');
+}
+
+/** The port the host container publishes for its sshd, as the run's `Host harness` block names it. */
+export function hostPort(): number {
+  const text = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
+  const match = /^Host harness\n(?:.*\n)*?\s+Port (\d+)$/m.exec(text);
+  if (match?.[1] === undefined) {
+    throw new Error('the ssh_config of the run has no port for Host harness');
+  }
+  return Number(match[1]);
+}
+
+/** The lines of the host container's log since `since` (an RFC 3339 time), from both of its streams. */
+export async function sshdLog(since: string): Promise<string[]> {
+  const {stdout, stderr} = await execFileAsync(
+    'docker',
+    ['logs', '--since', since, variable('HARNESS_CONTAINER')],
+    {encoding: 'utf8'},
+  );
+  return `${stdout}\n${stderr}`.split('\n').filter(line => line !== '');
+}
+
+/** The number of logins by key the host's sshd counted for the user harness since `since`. */
+export async function acceptedKeyLogins(since: string): Promise<number> {
+  return (await sshdLog(since)).filter(line =>
+    line.includes('Accepted publickey for harness'),
+  ).length;
+}
+
+/**
+ * The established TCP connections of this machine whose peer is the host container's published address, each with
+ * the name of the program that holds it, from `ss -tnpH state established`.
+ */
+export async function hostConnections(): Promise<Array<{program: string}>> {
+  const {stdout} = await execFileAsync('ss', ['-tnpH', 'state', 'established']);
+  const peer = `127.0.0.1:${String(hostPort())}`;
+  return stdout
+    .split('\n')
+    .map(line => /^\s*\d+\s+\d+\s+\S+\s+(\S+)\s+users:\(\("([^"]+)"/.exec(line))
+    .filter(match => match?.[1] === peer)
+    .map(match => ({program: match?.[2] ?? ''}));
+}
+
+/** Cuts the host container's network, as a lost network is cut; a row that cuts restores it in a `finally`. */
+export function cutHostNetwork(): void {
+  cutNetwork(runCommand, variable('HARNESS_CONTAINER'));
+}
+
+/** Brings the host container's network back. */
+export function restoreHostNetwork(): void {
+  restoreNetwork(runCommand, variable('HARNESS_CONTAINER'));
 }
 
 /** Polls until `ready` holds, for up to a minute; it fails naming what it waited for. */
@@ -493,6 +553,7 @@ export async function windowState(name: string): Promise<{
   remoteName: string | null;
   remoteAuthority: string | null;
   folders: string[];
+  remoteSshActive: boolean;
 }> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
@@ -501,6 +562,7 @@ export async function windowState(name: string): Promise<{
       remoteName: last?.remoteName ?? null,
       remoteAuthority: last?.remoteAuthority ?? null,
       folders: last?.folders ?? [],
+      remoteSshActive: last?.remoteSshActive ?? false,
     };
     if (
       state.remoteName === null ||
@@ -516,6 +578,26 @@ export async function windowState(name: string): Promise<{
 /** Whether window `name`'s Remote - SSH extension is active, as its `state` reports it now. */
 export async function remoteSshActive(name: string): Promise<boolean> {
   return (await reportedState(name))?.remoteSshActive ?? false;
+}
+
+/**
+ * A window's state without `remoteSshActive`, which changes when the extension activates; for rows that compare what
+ * a window shows of itself before and after something that may activate it.
+ */
+export function withoutActivity(state: {
+  remoteName: string | null;
+  remoteAuthority: string | null;
+  folders: string[];
+}): {
+  remoteName: string | null;
+  remoteAuthority: string | null;
+  folders: string[];
+} {
+  return {
+    remoteName: state.remoteName,
+    remoteAuthority: state.remoteAuthority,
+    folders: state.folders,
+  };
 }
 
 /** Whether window `name`'s workspace is trusted, as it reports now; it does not wait for the window's connect. */
@@ -645,6 +727,32 @@ export async function sshChildren(helperId: number): Promise<number[]> {
   } catch {
     return [];
   }
+}
+
+/**
+ * The argv of each `ssh` process whose parent is one of the run's connection helpers, as lists of strings, read from
+ * `/proc/<pid>/cmdline`. Call it while a connect runs and repeat it, since each process is as brief as its connect:
+ * a caller that notes the distinct lists it sees over the connect sees what `ssh` was started with. The argv holds
+ * no secret, by the register rule.
+ */
+export async function sshArguments(): Promise<string[][]> {
+  const commands: string[][] = [];
+  for (const helperId of await connectionHelpers()) {
+    for (const processId of await sshChildren(helperId)) {
+      let bytes: string;
+      try {
+        bytes = readFileSync(`/proc/${String(processId)}/cmdline`, 'utf8');
+      } catch {
+        // The process ended between the listing and the read.
+        continue;
+      }
+      const argv = bytes.split('\0').filter(part => part !== '');
+      if (argv[0] === 'ssh') {
+        commands.push(argv);
+      }
+    }
+  }
+  return commands;
 }
 
 /** Polls `check` every 100 ms until it holds; it fails naming `description` after `milliseconds`. */

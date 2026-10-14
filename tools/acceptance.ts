@@ -37,14 +37,13 @@ import {
 import {
   acceptanceRunId,
   buildDevContainerImage,
-  checked,
   startHostContainer,
   sweepStaleDevContainers,
-  type CommandRunner,
-  runCommand,
 } from './acceptance-run.ts';
+import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {
   agentSocketPath,
+  controlFolderOf,
   CERTIFIED_PRINCIPAL,
   makeRunKeys,
   startRunAgent,
@@ -52,6 +51,7 @@ import {
 import {
   clearCalls,
   writeClients,
+  writeSshRecorder,
   writeTildeCopy,
 } from './acceptance-clients.ts';
 import {
@@ -92,8 +92,9 @@ import {
 } from './repository.ts';
 
 /** The port mapping and the real runner, re-exported for the tests. */
-export {mappedPort, runCommand} from './acceptance-run.ts';
-export type {CommandResult} from './acceptance-run.ts';
+export {mappedPort} from './acceptance-run.ts';
+export {runCommand} from './command-runner.ts';
+export type {CommandResult} from './command-runner.ts';
 
 /** The editor version the tests run on: the floor of ADR-0007. */
 const EDITOR_VERSION = '1.139.1';
@@ -223,18 +224,19 @@ const READY_ATTEMPTS = 40;
 
 const READY_INTERVAL = 500;
 
-/** The password account behind an OpenSSH ControlMaster of the given mode, its socket `socket` in the run's folder. */
+/** The password account behind an OpenSSH ControlMaster of the given mode, its socket `socket` in `controlFolder`. */
 function masterAlias(
   name: string,
   mode: string,
   socket: string,
   port: number,
   runFolder: string,
+  controlFolder: string,
 ): string[] {
   return accountAlias(name, 'harness-pw', port, runFolder, [
     ...PASSWORD_LINES,
     `ControlMaster ${mode}`,
-    `ControlPath ${path.join(runFolder, socket)}`,
+    `ControlPath ${path.join(controlFolder, socket)}`,
     'ControlPersist 600',
   ]);
 }
@@ -247,12 +249,16 @@ function masterAlias(
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `mute` (a login shell that does not answer), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
- * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11.
+ * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11; three for the
+ * authority rows: `badkey` (a key the host does not accept), `blackhole` (an address that is never routed) and
+ * `127.0.0.2` (the loopback name that reaches the host with a refused key, the port coming from the authority). The
+ * sockets of the ControlMaster aliases are in `controlFolder`.
  */
 export function harnessSshConfig(
   port: number,
   runFolder: string,
   agentSocket: string,
+  controlFolder = runFolder,
 ): string {
   return [
     'Host harness',
@@ -336,15 +342,30 @@ export function harnessSshConfig(
       runFolder,
       keyLines(runFolder),
     ),
-    ...masterAlias('master', 'auto', 'cm-%C', port, runFolder),
-    ...masterAlias('master-ask', 'ask', 'cm-ask-%C', port, runFolder),
-    ...masterAlias('master-yes', 'yes', 'cm-yes-%C', port, runFolder),
+    ...masterAlias('master', 'auto', 'cm-%C', port, runFolder, controlFolder),
+    ...masterAlias(
+      'master-ask',
+      'ask',
+      'cm-ask-%C',
+      port,
+      runFolder,
+      controlFolder,
+    ),
+    ...masterAlias(
+      'master-yes',
+      'yes',
+      'cm-yes-%C',
+      port,
+      runFolder,
+      controlFolder,
+    ),
     ...masterAlias(
       'master-autoask',
       'autoask',
       'cm-autoask-%C',
       port,
       runFolder,
+      controlFolder,
     ),
     ...keyAlias('passkey', 'harness', port, runFolder, ['id_passphrase']),
     ...keyAlias('passkey-then-second', 'harness', port, runFolder, [
@@ -374,9 +395,27 @@ export function harnessSshConfig(
       'ForwardX11 yes',
       'ForwardX11Trusted yes',
     ]),
+    'Host badkey',
+    '  HostName 127.0.0.1',
+    `  Port ${String(port)}`,
+    '  User harness',
+    `  IdentityFile ${path.join(runFolder, 'id_unauthorised')}`,
+    '  IdentitiesOnly yes',
+    '  BatchMode yes',
+    '  StrictHostKeyChecking accept-new',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    '',
     'Host blackhole',
     '  HostName 192.0.2.1',
     '  BatchMode yes',
+    '',
+    'Host 127.0.0.2',
+    '  HostName 127.0.0.1',
+    '  BatchMode yes',
+    '  IdentitiesOnly yes',
+    `  IdentityFile ${path.join(runFolder, 'id_unauthorised')}`,
+    '  StrictHostKeyChecking accept-new',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
     '',
   ].join('\n');
 }
@@ -591,7 +630,10 @@ async function prepare(
   started.push(host.container);
   const port = host.port;
   const configFile = path.join(runFolder, 'ssh_config');
-  writeFileSync(configFile, harnessSshConfig(port, runFolder, agentSocket));
+  writeFileSync(
+    configFile,
+    harnessSshConfig(port, runFolder, agentSocket, controlFolderOf(runFolder)),
+  );
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
   await dependencies.bundleSuite(root);
@@ -880,6 +922,7 @@ export async function runAcceptance(
     if (editor === 'vscodium') {
       writeClients(runFolder);
       writeTildeCopy(runFolder);
+      writeSshRecorder(runFolder);
     }
     prepareHost(
       dependencies.command,

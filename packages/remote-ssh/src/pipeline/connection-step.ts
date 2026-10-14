@@ -13,8 +13,10 @@ import type {
   RunFacts,
   SharedConnection,
 } from 'lib-ssh';
+import {payloadOf} from '../connect/connect-commands.ts';
 import type {PhaseEvent} from './connect.ts';
 import {ofAcquire, ofConnection} from './failure.ts';
+import {sshTargetOf} from './host-settings.ts';
 import type {
   ConnectInput,
   ConnectionTerms,
@@ -84,7 +86,7 @@ export function openConnectionStep(
   return async (input, terms, cancellation) => {
     const acquired = await dependencies.acquire({
       ...dependencies.requestFor(input, terms),
-      hostString: input.connectionKey ?? input.rawHostString,
+      hostString: input.connectionKey ?? payloadOf(sshTargetOf(input.target)),
       cancellation,
     });
     if (acquired.kind === 'refused') {

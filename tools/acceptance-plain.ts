@@ -9,7 +9,7 @@ import {spawn, spawnSync} from 'node:child_process';
 import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {build} from 'esbuild';
-import {type Launch} from './acceptance-launches.ts';
+import {withRunTokens, type Launch} from './acceptance-launches.ts';
 import {resolveBinary} from './repository.ts';
 
 /** The extensions under test that use proposed API, enabled for them on the command line. */
@@ -320,7 +320,11 @@ export async function runPlainLaunch(
       'pids',
     ),
     REMOTE_OSS_ACCEPTANCE_SIGNALS: path.join(session.runFolder, 'signals'),
-    ...launch.environment,
+    ...withRunTokens(
+      launch.environment,
+      session.runFolder,
+      session.environment.PATH ?? '',
+    ),
   };
   // A port file an earlier launch left would name a port nobody listens on.
   rmSync(debuggingPortFile(session.runFolder), {force: true});

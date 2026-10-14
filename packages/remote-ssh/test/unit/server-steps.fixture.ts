@@ -210,6 +210,7 @@ export function surfacesOf(
 ): ConnectSurfaces {
   return {
     settings,
+    configuredHosts: () => ({hosts: []}),
     translate,
     prompts: SILENT_PROMPTS,
     terminals: new RecordingTerminals(),

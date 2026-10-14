@@ -56,6 +56,7 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'windows',
+        'config-files',
         'default-ports',
         'no-proposals',
         'explorer',
@@ -68,6 +69,21 @@ describe('the launches of the VSCodium run', () => {
         'containers-no-proposals',
         ...hostLaunchLabels(),
       ],
+    );
+  });
+
+  it('coverage-20: the config-files launch runs with its own HOME, the recorder first on the PATH and no agent socket', () => {
+    deepStrictEqual(
+      launches.find(launch => launch.label === 'config-files')?.environment,
+      {
+        HOME: '<run>/home',
+        PATH: '<run>/ssh-bin:<path>',
+        SSH_AUTH_SOCK: '',
+        XDG_CACHE_HOME: '<run>/xdg/cache',
+        XDG_CONFIG_HOME: '<run>/xdg/config',
+        XDG_DATA_HOME: '<run>/xdg/data',
+        XDG_STATE_HOME: '<run>/xdg/state',
+      },
     );
   });
 

@@ -40,7 +40,7 @@ export interface ConnectInput {
   target: ConnectTarget;
   /** The host string exactly as the authority wrote it. */
   rawHostString: string;
-  /** The record key of the connection helper the connect acquires; when absent, `rawHostString`. */
+  /** The record key of the connection helper the connect acquires; when absent, the target's connection identity, `payloadOf(sshTargetOf(target))`. */
   connectionKey?: string;
   /** The resolver call of the window: 1 for the first, more for each reconnection. */
   attempt: number;
@@ -117,6 +117,8 @@ export interface TunnelOpening {
 
 /** The steps of one connect, each over the real thing in the extension and over a fake in a test. */
 export interface ConnectSteps {
+  /** The SSH configuration files in effect, read and parsed before anything runs. */
+  checkConfigFile(input: ConnectInput): StepResult<undefined>;
   /** The settings that decide how the server starts, checked before anything runs; a window's connect alone runs it. */
   checkStartSettings(input: ConnectInput): StepResult<undefined>;
   /** The target, checked before anything runs. */

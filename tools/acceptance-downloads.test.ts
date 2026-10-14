@@ -27,7 +27,7 @@ import {
   startDownloadHost,
   startRunDownloads,
 } from './acceptance-downloads.ts';
-import {type CommandResult} from './acceptance-run.ts';
+import {type CommandResult} from './command-runner.ts';
 
 /** What a request got: the status, the declared length, the body received, and whether the connection broke. */
 interface Received {

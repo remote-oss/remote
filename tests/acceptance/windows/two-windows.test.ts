@@ -20,6 +20,7 @@ import {
   windowEvents,
   windowNameOrder,
   windowState,
+  withoutActivity,
 } from './harness.ts';
 
 /** Waits the given number of milliseconds. */
@@ -92,17 +93,12 @@ describe('windows of one editor on the same host (the first window is local)', f
         'vscode-remote://ssh-remote+harness/',
       ),
     );
-    const state = await windowState(name);
     deepStrictEqual(
       {
         name,
         next,
         empty: emptyWindows(),
-        state: {
-          remoteName: state.remoteName,
-          remoteAuthority: state.remoteAuthority,
-          folders: state.folders,
-        },
+        state: withoutActivity(await windowState(name)),
         localActivationsGained:
           windowEvents('local').filter(each => each.event === 'activated')
             .length - localBefore,

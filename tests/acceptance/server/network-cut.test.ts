@@ -2,7 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {type ChildProcess, spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 import path from 'node:path';
-import {runCommand} from '../../../tools/acceptance-run.ts';
+import {runCommand} from '../../../tools/command-runner.ts';
 import {cutNetwork, restoreNetwork} from '../../../tools/acceptance-network.ts';
 import {type RunningHost, startHost} from './host-fixture.ts';
 
