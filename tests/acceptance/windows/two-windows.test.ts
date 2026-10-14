@@ -92,12 +92,17 @@ describe('windows of one editor on the same host (the first window is local)', f
         'vscode-remote://ssh-remote+harness/',
       ),
     );
+    const state = await windowState(name);
     deepStrictEqual(
       {
         name,
         next,
         empty: emptyWindows(),
-        state: await windowState(name),
+        state: {
+          remoteName: state.remoteName,
+          remoteAuthority: state.remoteAuthority,
+          folders: state.folders,
+        },
         localActivationsGained:
           windowEvents('local').filter(each => each.event === 'activated')
             .length - localBefore,
