@@ -396,6 +396,18 @@ describe('the connector over the connect pipeline', () => {
     );
   });
 
+  it("F-2304 BR-11: an initializing stage that is not quiet, as the login's, is told not quiet", async () => {
+    deepStrictEqual(
+      (await phasesHeardAfter({kind: 'initializing'})).filter(
+        phase => phase.name === 'initializing',
+      ),
+      [
+        {name: 'initializing', details: true, quiet: true},
+        {name: 'initializing', details: true},
+      ],
+    );
+  });
+
   it('contracts §3.2: a prompt re-tells the last stage, not quiet', async () => {
     const heard = await phasesHeardAfter(
       {kind: 'downloading'},
