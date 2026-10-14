@@ -223,6 +223,33 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
   });
 });
 
+it('F-2411 AC-25: a typed user@A in a window on A kills on the host and leaves the window', async () => {
+  const scenario = setup({
+    held: DEFAULT_MODE,
+    picked: {
+      kind: 'typed',
+      label: '➤ me@dev',
+      text: 'me@dev',
+      keepVisible: true,
+    },
+  });
+  await scenario.kill();
+  deepStrictEqual(
+    [
+      scenario.runs,
+      scenario.notices,
+      scenario.order.includes('switch'),
+      scenario.order.includes('end dev'),
+    ],
+    [
+      ['kill dev'],
+      [['Killed VS Code Server on dev.', ['Open Logs']]],
+      false,
+      false,
+    ],
+  );
+});
+
 describe('Uninstall VS Code Server from Host... (F-2412)', () => {
   it('F-2412.AC-4: the picked host is uninstalled and nothing is shown', async () => {
     const scenario = setup();
@@ -412,6 +439,23 @@ describe('Uninstall on the own host (F-2412 6.1)', () => {
     deepStrictEqual(
       [scenario.runs, scenario.order],
       [['uninstall dev'], ['end dev']],
+    );
+  });
+
+  it('F-2412 6.1: a typed user@A in a window on A uninstalls on the host', async () => {
+    const scenario = setup({
+      held: DEFAULT_MODE,
+      picked: {
+        kind: 'typed',
+        label: '➤ me@dev',
+        text: 'me@dev',
+        keepVisible: true,
+      },
+    });
+    await scenario.uninstall();
+    deepStrictEqual(
+      [scenario.runs, scenario.order.includes('switch')],
+      [['uninstall dev'], false],
     );
   });
 });
