@@ -52,7 +52,7 @@ export type ContainerOutcome =
 export interface LifecyclePresenter {
   /** One event of channel `postCreate`, in order; the first `raw` or `start` opens the terminal. */
   output(event: Extract<CliEvent, {kind: 'log'}>, runStart: number): void;
-  /** `run-user-commands` has started: the progress entry shows. */
+  /** `run-user-commands` has started; the progress entry shows on the first `output` after it. */
   backgroundStarted(): void;
   /** The run has ended: the progress entry hides, and an open terminal writes its last line and closes on the next key. */
   ended(): void;
@@ -253,7 +253,7 @@ export function containerLifecycleOf(dependencies: {
     void bridge
       .runUserCommands(target, containerId, onCliEvent, own.signal)
       .then(result => {
-        if (background === own) {
+        if (background === own && !own.signal.aborted) {
           end();
         }
         if (result.kind === 'done') {

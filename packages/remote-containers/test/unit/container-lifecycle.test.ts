@@ -164,8 +164,11 @@ function recordingPresenter(): {
   };
 }
 
-/** A lifecycle over the scripted engine with an empty listing, and the calls its presenter gets. */
-function lifecycleOver(bridge: CliBridge): {
+/** A lifecycle over the scripted engine with an empty listing and `clock`, and the calls its presenter gets. */
+function lifecycleOver(
+  bridge: CliBridge,
+  clock: () => number = () => 0,
+): {
   calls: string[];
   lifecycle: ReturnType<typeof containerLifecycleOf>;
 } {
@@ -177,8 +180,37 @@ function lifecycleOver(bridge: CliBridge): {
       cli: bridge,
       logger: createLogger(undefined, {minimumLevel: () => 'info'}),
       presenter,
-      clock: () => 0,
+      clock,
     }),
+  };
+}
+
+/** A lifecycle over `bridge` after one `prepare` whose background run waits for `settleFirst`. */
+async function preparedWithHeldRun(bridge: FakeBridge): Promise<{
+  calls: string[];
+  lifecycle: ReturnType<typeof containerLifecycleOf>;
+  settleFirst: (result: RunUserCommandsResult) => void;
+  prepareAgain: () => Promise<ContainerOutcome>;
+}> {
+  const first: {settle?: (result: RunUserCommandsResult) => void} = {};
+  bridge.runResult = new Promise(resolve => {
+    first.settle = resolve;
+  });
+  const {calls, lifecycle} = lifecycleOver(bridge);
+  async function prepareAgain(): Promise<ContainerOutcome> {
+    return lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+  }
+  await prepareAgain();
+  return {
+    calls,
+    lifecycle,
+    settleFirst: result => first.settle?.(result),
+    prepareAgain,
   };
 }
 
@@ -824,27 +856,65 @@ describe('containerLifecycleOf', () => {
 
   it('F-0415 AC-38: a run that a second prepare replaced does not end the second one when it settles', async () => {
     const bridge = fakeBridge();
-    const first: {settle?: (result: RunUserCommandsResult) => void} = {};
-    bridge.runResult = new Promise(resolve => {
-      first.settle = resolve;
-    });
-    const {calls, lifecycle} = lifecycleOver(bridge);
-    const signal = new AbortController().signal;
-    await lifecycle.prepare(
-      REQUEST,
-      () => undefined,
-      () => undefined,
-      signal,
-    );
+    const {calls, settleFirst, prepareAgain} =
+      await preparedWithHeldRun(bridge);
     bridge.runResult = new Promise(() => undefined);
-    await lifecycle.prepare(
-      REQUEST,
-      () => undefined,
-      () => undefined,
-      signal,
-    );
-    first.settle?.({kind: 'cancelled'});
+    await prepareAgain();
+    settleFirst({kind: 'cancelled'});
     await settle();
     deepStrictEqual(calls, ['started', 'started']);
+  });
+
+  it('F-0415 AC-35: runStart is the clock at the start of prepare, in up and in the background', async () => {
+    const bridge = fakeBridge();
+    bridge.upEvents = [lifecycleEvent('raw', 'on-create', 'postCreate')];
+    bridge.runEvents = [lifecycleEvent('raw', 'post-create', 'postCreate')];
+    let now = 0;
+    const {calls, lifecycle} = lifecycleOver(bridge, () => (now += 1000));
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    await settle();
+    deepStrictEqual(
+      calls.filter(call => call.startsWith('output')),
+      ['output raw on-create from 1000', 'output raw post-create from 1000'],
+    );
+  });
+
+  it('F-0415 7.E6: a window torn down after the run ended adds no second end', async () => {
+    const bridge = fakeBridge();
+    const {calls, lifecycle} = lifecycleOver(bridge);
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    await settle();
+    lifecycle.stopBackground();
+    deepStrictEqual(calls, ['started', 'ended']);
+  });
+
+  it('F-0415 5.0 step 10: a stopped run that settles while a new prepare runs does not end the new run', async () => {
+    const bridge = fakeBridge();
+    const {calls, lifecycle, settleFirst, prepareAgain} =
+      await preparedWithHeldRun(bridge);
+    lifecycle.stopBackground();
+    const held: {answer?: (result: UpResult) => void} = {};
+    bridge.up = () =>
+      new Promise(resolve => {
+        held.answer = resolve;
+      });
+    bridge.runResult = new Promise(() => undefined);
+    const second = prepareAgain();
+    await settle();
+    settleFirst({kind: 'cancelled'});
+    await settle();
+    held.answer?.(UP);
+    await second;
+    deepStrictEqual(calls, ['started', 'ended', 'started']);
   });
 });
