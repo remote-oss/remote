@@ -74,8 +74,10 @@ export async function takeRebuildIntent(memento: IntentMemento, payload: string,
 - **`storeRebuildIntent`** sets `map[payload] = {at: now, removeExistingContainer: true, buildNoCache}` on the cleaned
   map, and awaits `update`.
 - **`takeRebuildIntent`** reads the entry for `payload` from the cleaned map, deletes it, and awaits `update` with
-  the rest. It then returns the entry, or `undefined` when there was none or it was stale. It calls `update` only
-  when the map changed.
+  the rest. It then returns the entry, or `undefined` when there was none or it was stale.
+- **When `update` is called:** `storeRebuildIntent` always calls it. `takeRebuildIntent` calls it only when the
+  cleaned map, after the delete, differs from the value `get` returned. A non-object value always differs from `{}`,
+  so it's written back as `{}`. An empty object, or no value at all, with nothing to take writes nothing.
 - A failed `update` rejects to the caller (§3.2 and §3.4 handle it).
 - The key isn't registered with `setKeysForSync` (R-27: our key, not synced).
 
@@ -145,15 +147,17 @@ export function reopenInContainer(ports: ReopenPorts, rebuild?: RebuildOptions):
 
 ### 3.4 The container side (C10 and C7)
 
-1. **C10 (`connector.ts`, containers-08 §3.2):** at step 3, before it calls C7, and only on the resolve's first
-   attempt (`input.attempt === 1` and not `isReconnection`):
+1. **C10 (`connector.ts`, containers-08 §3.2):** at step 5 ("The container"), right before `prepare`, after the
+   engine (step 3) and the second check (step 4). A failure there returns early and leaves the intent stored, so the
+   Retry that follows still rebuilds. Only on the resolve's first attempt (`input.attempt === 1` and not
+   `isReconnection`):
 
    ```ts
-   const rebuild = await takeRebuildIntent(dependencies.intents, input.rawHostString, dependencies.now());
+   const rebuild = await takeRebuildIntent(dependencies.intents, input.rawHostString, dependencies.clock());
    ```
 
-   - `dependencies` gains `intents: IntentMemento` and `now(): number`, wired in `register-connector.ts` to
-     `context.globalState` and `Date.now`.
+   - `dependencies` gains `intents: IntentMemento` only, wired in `register-connector.ts` to `context.globalState`.
+     The time is the existing `clock` (containers-08 §3.1, wired to `Date.now`); there's no second clock port.
    - A rejected `take` is logged at warn, `the rebuild intent could not be read: <message>`, and the connect goes on
      as an ordinary open.
    - A reconnection never takes it, so a reconnection never rebuilds (F-0502: it reuses the running container).
@@ -232,7 +236,7 @@ All under `packages/remote-containers/`:
 | `contracts §3: taking one payload keeps the others` | store `a` and `b`; take `a` | the map keeps `b` |
 | `contracts §3: storing drops stale entries of other payloads` | an entry for `old` at 0, then store `new` at 400000 | the map has only `new` |
 | `contracts §3: a malformed store counts as empty` | `get` gives `'x'`, then `[]`, then `{p: {at: 'n'}}` | take gives `undefined`, and `update` writes `{}` |
-| `contracts §3: nothing to take writes nothing` | an empty map | no `update` |
+| `contracts §3: nothing to take writes nothing` | `get` gives `{}`, then `undefined` | no `update` either time |
 | `contracts §3: a failed update rejects to the caller` | `update` rejects | `store` and `take` reject |
 
 ### 5.2 `rebuild.test.ts` (ports faked)
