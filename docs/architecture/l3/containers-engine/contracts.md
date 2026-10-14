@@ -95,6 +95,10 @@ its content:
    extraction has finished (F-0503 5.0 step 5), and `<dataFolder>/bin/<commit>` becomes a symlink to it, created or
    kept (F-0503 BR-3). Without it, nothing changes. This is area A's code with area C's input, and it's carded with
    C10.
+   **One tree per connection (amended 2026-10-14 on #806):** C10 gives every lib-server script of a connection the same
+   `installTree`: the probe, install, start and cleanup scripts alike. Build the script parameters once per connection,
+   not once per step. A script without the tree takes its host lock under `bin/<commit>`, which is then a link, so the
+   lock would land inside the shared tree (containers-05 R6). C10's rows check `INSTALL_TREE` in each step's script.
 3. **lib-authority:** nothing new. `Failed.silent`, `Connected.trusted` and the container codec already exist (dossier
    Q3 and Q6 are answered by them).
 

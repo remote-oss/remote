@@ -6,11 +6,12 @@
 # /etc/ssh/ca.pub by start-sshd).
 # libstdc++ is what a musl server's node needs to start on Alpine (F-6302). curl and GNU wget are installed so that
 # start-sshd can leave the host with the one download tool a run asks for (HOST_FETCH). iptables lets a test drop the
-# packets of port 22 and bring them back (the container runs with NET_ADMIN).
+# packets of port 22 and bring them back (the container runs with NET_ADMIN). xauth lets sshd forward X11, and
+# openssh-client brings ssh-add, with which a terminal lists the keys of a forwarded agent.
 # alpine:3.22, pinned by the digest of its multi-platform index so that every run builds the same host.
 FROM alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
 
-RUN apk add --no-cache openssh-server iptables libstdc++ curl wget bash zsh dash fish tcsh mksh shadow \
+RUN apk add --no-cache openssh-server openssh-client xauth iptables libstdc++ curl wget bash zsh dash fish tcsh mksh shadow \
   && ssh-keygen -A \
   && for shell in /bin/bash /bin/zsh /usr/bin/dash /usr/bin/fish /bin/tcsh /bin/csh /bin/mksh; do \
        grep -qx "$shell" /etc/shells || echo "$shell" >> /etc/shells; \
@@ -33,6 +34,8 @@ RUN apk add --no-cache openssh-server iptables libstdc++ curl wget bash zsh dash
     'PubkeyAuthentication yes' \
     'PermitRootLogin no' \
     'AllowTcpForwarding yes' \
+    'AllowAgentForwarding yes' \
+    'X11Forwarding yes' \
     > /etc/ssh/sshd_config.d/harness.conf
 
 COPY i686-uname /opt/i686/bin/uname

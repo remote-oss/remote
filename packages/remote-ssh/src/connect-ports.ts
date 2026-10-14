@@ -70,6 +70,7 @@ import {
   SESSION_RUN_LIMITS,
 } from './pipeline/bounds.ts';
 import {
+  agentForwardingOf,
   connectionSettingsOf,
   localDownloadModeOf,
   overrideOf,
@@ -80,8 +81,10 @@ import {
   textOf,
   tunnelSettingsOf,
   valueOf,
+  x11ForwardingOf,
 } from './pipeline/connect-settings.ts';
 import type {ConnectionRequestEnvironment} from './pipeline/connection-request.ts';
+import type {LinkTerminals} from './pipeline/forwarding-step.ts';
 import {connectorOf, type SshConnector} from './pipeline/connector.ts';
 import type {PortChoice} from './pipeline/port-choice.ts';
 import {hostAlias} from './pipeline/host-settings.ts';
@@ -127,6 +130,12 @@ export interface ConnectSurfaces {
   revealLog: () => void;
   /** Tells the user that the host's bind host entry is not valid; does not wait for the user. */
   rejectBindHost: (alias: string, configured: string) => void;
+  /** The editor's terminals that make the agent link after the editor's own checks. */
+  linkTerminals: LinkTerminals;
+  /** Makes these the only variables the window's terminals get from the extension. */
+  applyTerminalEnvironment: (
+    variables: Readonly<Record<string, string>>,
+  ) => void;
 }
 
 /** Where the extension runs and what it may use there. */
@@ -156,6 +165,8 @@ export interface ConnectMachine {
   prober: PortProber;
   /** A new token, different in every window and in every call. */
   newTemporaryToken: () => string;
+  /** A cryptographic random integer in 1..999999999, which names an agent link. */
+  drawLinkNumber: () => number;
 }
 
 /** The parts of a connect that show the connecting window. */
@@ -253,6 +264,8 @@ export function wiringPortsOf(
       override: () => overrideOf(settings),
       useExecServer: () => switchOf(settings, 'useExecServer'),
       localDownloadMode: () => localDownloadModeOf(settings),
+      agentForwarding: () => agentForwardingOf(settings),
+      x11Forwarding: () => x11ForwardingOf(settings),
     },
     terms: {
       settings: () => termsSettingsOf(settings),
@@ -364,6 +377,11 @@ export function wiringPortsOf(
           textOfId('S045', surfaces.translate),
         ),
     },
+    forwarding: {
+      draw: machine.drawLinkNumber,
+      windowLink: {path: undefined},
+      linkTerminals: surfaces.linkTerminals,
+    },
     tunnel: {
       terminals: surfaces.terminals,
       ...loginSurfaces,
@@ -414,6 +432,7 @@ export function connectAssemblyOf(
     },
     revealLog: surfaces.revealLog,
     terminalMode: () => terminalModeOf(surfaces.settings),
+    applyTerminalEnvironment: surfaces.applyTerminalEnvironment,
   });
   const {translate} = surfaces;
   let shownTitle = '';
