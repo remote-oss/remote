@@ -45,14 +45,23 @@ join. Every start path runs it itself (athena, her design check on #826, correct
   claim and the spawn would let a second window call the live claim stale, start a second helper, and have the first
   starter's cancel path remove the second's record file. `acquire` therefore:
   1. **Reads the record first,** through the registry's read: `files.read(recordPath(…))` and `parseRecord`, as
-     `stop` does.
+     `stop` does. It keeps the record's **text** as read, for step 2.
      - **None:** `prepare`, then `claim` with a record stamped `startedAt: environment.clock()` *after* `prepare`.
        - `claimed`: spawn with the prepared values.
        - `existing` (a rival won the race): drop the prepared values and join.
      - **A record:** join. On success there's no lookup (F-2101 AC-14).
-  2. **A stale record** (the join failed): `prepare`, then `replaceStale`.
+  2. **A stale record** (the join failed): `prepare`, then `replaceStale(port, folder, namespace, recordKey, record,
+     staleText)`, where `staleText` is the stale record's text as read in step 1 (or as the claim's `existing` gave it).
      - `claimed`: spawn.
-     - `existing`: join.
+     - `existing`: join the record it answers.
+  - **`replaceStale` re-reads before it removes** (athena, her re-check of #826). Today it removes unconditionally.
+    With a lookup between judging the record stale and the remove, a rival that replaced the stale record with a live
+    helper meanwhile would lose its live record, and a second helper would start. So `registry/stale.ts`'s
+    `replaceStale` takes `staleText: string`, and before removing it reads the record file again:
+    - **the same text:** remove it, then `claim` (today's path);
+    - **a different text:** don't remove it; answer `{outcome: 'existing', record: <the current record, parsed>}`, so
+      the caller joins (an unreadable text stays `corrupt`, as today);
+    - **the file gone:** `claim` directly.
   3. **A refusal or a cancellation in `prepare`** happens before any claim. It touches no record and removes no file,
      so no other window's record is ever at risk.
 
@@ -128,9 +137,18 @@ join. Every start path runs it itself (athena, her design check on #826, correct
 | F-2101 6.4 | an existing, live helper | `prepare` never called; the lease joins |
 | athena on #826 | a rival's record appearing during `prepare` (the fake registry writes it while `prepare` waits) | the claim answers `existing`; the acquire joins the rival; no spawn |
 | athena on #826 | a stale record (the join fails) | `prepare` runs, then `replaceStale`, in that order; `claimed` spawns, `existing` joins |
+| athena on #826 | a record judged stale, then a slow `prepare`, during which a rival replaces the stale record with a live one (the fake registry writes the rival's record and the fake endpoints welcome it) | exactly one spawn, the rival's; the rival's record file intact, the same text; the slow window joins the rival |
 | F-2101 BR-9 | `prepare` refusing `'r'` | outcome `{kind: 'refused', refusal: 'r'}`; no claim, no spawn; the registry folder is unchanged |
 | contracts | cancellation during `prepare` | `cancelled`; no record exists, and nothing was removed (the fake file port saw no `remove`) |
 | athena on #826 | a slow `prepare` that resolves after the start limit, with a second `acquire` for the same key started meanwhile on the fake clock | exactly one spawn, and one helper record; the second acquire joins it; no record file is removed |
+
+**lib-helper (`stale.test.ts`), `replaceStale`'s three outcomes:**
+
+| Cite | Given | Expected |
+|---|---|---|
+| athena on #826 | the file still holds `staleText` | removed, then claimed: `{outcome: 'claimed'}`, and the file holds the new record |
+| athena on #826 | the file holds another record's text | no `remove`; `{outcome: 'existing', record}` with that record; the file unchanged |
+| athena on #826 | the file is gone | no `remove`; `{outcome: 'claimed'}` |
 
 **lib-ssh (`connection-client.test.ts` or the file that tests `acquireConnection`):**
 
