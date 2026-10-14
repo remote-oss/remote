@@ -94,6 +94,17 @@ export interface PageState {
   remoteName: string | null;
 }
 
+/** The window title's part of a folder: its name in the last path part, decoded from the URI's percent-encoding. */
+function folderName(folder: string): string {
+  const encoded = path.basename(folder);
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    // A name with a stray percent sign has no decoding.
+    return encoded;
+  }
+}
+
 /**
  * The title of the page of a window with this state among `titles`: the folder name in brackets, `[]` for a local
  * window with no folder, and `[]` plus the remote name for a remote one. It fails when two titles match, naming both:
@@ -109,8 +120,8 @@ export function pageTitleFor(
       ? state.remoteName === null
         ? title === '[]'
         : title.startsWith('[]') && title !== '[]'
-      : title === `[${path.basename(folder)}]` ||
-        title.startsWith(`[${path.basename(folder)} [`),
+      : title === `[${folderName(folder)}]` ||
+        title.startsWith(`[${folderName(folder)} [`),
   );
   if (matching.length > 1) {
     throw new Error(
@@ -129,22 +140,47 @@ async function pages(): Promise<DebugTarget[]> {
   return targets.filter(target => target.type === 'page');
 }
 
+/**
+ * The state of window `name` for the page choice, or `undefined` when it doesn't arrive within `remaining`
+ * milliseconds: a window that never reports a page of its own fails with the titles, not the agent's wait.
+ */
+async function stateForPage(
+  name: string,
+  remaining: number,
+): Promise<Awaited<ReturnType<typeof windowState>> | undefined> {
+  const state = windowState(name);
+  state.catch(() => undefined);
+  return Promise.race([
+    state,
+    new Promise<undefined>(resolve => {
+      setTimeout(resolve, remaining, undefined);
+    }),
+  ]);
+}
+
 /** The protocol address of window `name`'s page, once exactly one page carries the title its state gives it. */
 export async function pageOf(
   name: string,
   milliseconds = WAIT_MILLISECONDS,
 ): Promise<string> {
   let titles: string[] = [];
+  const started = Date.now();
   return settled(
     () => `one page of window ${name} among ${JSON.stringify(titles)}`,
     async () => {
       const found = await pages();
       titles = found.map(page => page.title);
-      const state = await windowState(name);
-      const title = pageTitleFor(
-        {folders: state.folders, remoteName: state.remoteName},
-        titles,
+      const state = await stateForPage(
+        name,
+        milliseconds - (Date.now() - started),
       );
+      const title =
+        state === undefined
+          ? undefined
+          : pageTitleFor(
+              {folders: state.folders, remoteName: state.remoteName},
+              titles,
+            );
       const chosen =
         title === undefined
           ? undefined

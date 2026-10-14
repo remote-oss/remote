@@ -40,6 +40,29 @@ describe('pageTitleFor', () => {
     );
   });
 
+  it('coverage-25a: a percent-encoded folder name matches its decoded title', () => {
+    strictEqual(
+      pageTitleFor(
+        {
+          folders: ['file:///home/harness/my%20folder'],
+          remoteName: null,
+        },
+        ['[my folder]', '[other]'],
+      ),
+      '[my folder]',
+    );
+  });
+
+  it('coverage-25a: a folder name with a stray percent is kept as it is', () => {
+    strictEqual(
+      pageTitleFor({folders: ['file:///home/harness/100%'], remoteName: null}, [
+        '[100%]',
+        '[other]',
+      ]),
+      '[100%]',
+    );
+  });
+
   it('coverage-25a: no title that fits gives none', () => {
     deepStrictEqual(
       pageTitleFor({folders: [], remoteName: null}, ['[smoke]']),
