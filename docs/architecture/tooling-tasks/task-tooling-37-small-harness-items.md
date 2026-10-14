@@ -22,7 +22,12 @@ connect-26's real-shell rows already prove both causes with the stand-in, withou
   the system `tar`). The archive's launcher script gets `sleep 25` as its first command after the `#!` line. Find the
   launcher from the archive's listing, and name it in the PR. It's answered like `ok`.
 - **Segment `standin-cve`:** the stand-in archive of `tests/acceptance/server/stand-in-server.ts` with behaviour
-  `cveTerminated`, built at the download host's start. Its launcher is at the path the VSCodium profile's install
+  `cveTerminated`, built at the download host's start.
+  - **The import:** `tools/acceptance-downloads.ts` importing `stand-in-server.ts` is the tools' first import from
+    `tests/`, beside the test-only `tools/window-names.test.ts`. As that one does for `window-name.ts`, add
+    `../tests/acceptance/server/stand-in-server.ts` and its own import `../tests/acceptance/server/tar-archive.ts` to
+    `tools/tsconfig.json`'s `include`. Neither imports anything else of the tests. `pnpm typecheck`, `pnpm lint` and
+    `pnpm dead` must pass with the file in both projects. Its launcher is at the path the VSCodium profile's install
   starts, not `STAND_IN_LAUNCHER`. Give the archive builder a `launcher` parameter (default `STAND_IN_LAUNCHER`, so its
   existing callers are unchanged), and read the path from the profile as the install plan does.
 - The README's segment table gains both lines.
@@ -32,9 +37,10 @@ connect-26's real-shell rows already prove both causes with the stand-in, withou
 | Cite | Where | Given | Expected |
 |---|---|---|---|
 | F-2409 AC-30 | `suite-install/cases.json`, case `standin-cve` | template `${HARNESS_DOWNLOADS_HTTP}/standin-cve/${os}-${arch}/${commit}` | `outcome: dialog`, `Could not establish connection to "harness": The VS Code Server terminated due to presence of CVE-2020-1416. Check the Remote-SSH output channel for more details.` |
-| F-2409 AC-26 | a plain launch `slow-start` (suite `slow-start`) | settings `useExecServer: false`, template `…/slow-start/${os}-${arch}/${commit}`; `hostSetup` `pkill -f vscodium-server` and `rm -rf /home/harness/.vscodium-server-insiders`; window `w26` on `harness`; script `failureDialog` held with `after: 'listening'` → `{button: 'Retry'}` | the held line's `failureDialog` text is S135's dialog; the line comes 20 to 23 s after the connect's `Starting VS Code Server` progress line. The row polls `onHost('netstat', '-ltn')` until the server's port listens, then runs `signal('listening')`. `w26` is then connected, and `onHost` shows one server process, the one started first |
+| F-2409 AC-26 | a plain launch `slow-start` (suite `slow-start`) | settings `useExecServer: false`, template `…/slow-start/${os}-${arch}/${commit}`; `hostSetup` as `hostSetupOf`'s server stop (`acceptance-launches.ts:341-359`): `{command: "pkill -f '/home/harness/[.]vscodium-server-insiders/bin/'; true"}`, then `{command: 'rm -rf /home/harness/.vscodium-server-insiders'}`. A bare `pkill -f vscodium-server` matches its own `sh -c`, which holds the pattern, so it kills itself, and it exits 1 when nothing runs, which fails `runHostSetup` every attempt. The brackets keep the pattern from matching itself, and `; true` makes nothing-to-kill a success; window `w26` on `harness`; script `failureDialog` held with `after: 'listening'` → `{button: 'Retry'}` | the held line's `failureDialog` text is S135's dialog; the line comes 20 to 23 s after the connect's `Starting VS Code Server` progress line. The row polls `onHost('netstat', '-ltn')` until the server's port listens, then runs `signal('listening')`. `w26` is then connected, and `onHost` shows one server process, the one started first |
 
-`slow-start` goes in `tsconfig.json`, `knip.jsonc` and the README.
+The `slow-start` suite folder gets a `tsconfig.json` like `explorer/`'s. It's registered in the root `tsconfig.json`'s
+`references`, `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`, `knip.jsonc`'s entries and the README's launch list.
 
 ## 2. Part 2: per-case download tools on the VSCodium run's host (F-2403 AC-16, AC-23)
 
@@ -80,11 +86,18 @@ before, so its outcome is unchanged.
   It has no `IdentityAgent` line, so ssh uses `SSH_AUTH_SOCK`. It's not an `accountAlias`, whose `IdentityAgent none`
   would hide the agent.
 - **A plain launch `late-agent`** (suite `late-agent`), with `environment: {SSH_AUTH_SOCK: '<run>/late-agent.sock',
-  HARNESS_AGENT_SOCKET: '<run>/late-agent.sock'}`. The socket doesn't exist when the editor starts.
+  HARNESS_AGENT_SOCKET: '<run>/late-agent.sock'}`. The socket doesn't exist when the editor starts. Its suite folder is
+  registered as `slow-start`'s is.
+- **`<run>` in a plain launch's environment** (`tools/acceptance-plain.ts`): `runPlainLaunch` (line 246) spreads
+  `launch.environment` as written, and only runner launches and settings get `withRunTokens`, so `<run>` would reach
+  the editor literally. `runPlainLaunch` passes `withRunTokens(launch.environment ?? {}, session.runFolder,
+  process.env.PATH ?? '')` instead. **Tools row** (`tools/acceptance-plain.test.ts`): a plain launch with
+  `environment: {X: '<run>/a'}` starts the editor and the tests with `X` = `<runFolder>/a`. tooling-34 (#717) needs the
+  same for its `HOME`; whichever card lands first adds it, and the other reuses it.
 - **`windows/harness.ts`:** `startAgentAt(socket)` runs `ssh-agent -a <socket> -s` and returns a stop function, which
   kills its `SSH_AGENT_PID`.
 
-**Row** (`late-agent/late-agent.test.ts`): `startAgentAt('<run>/late-agent.sock')`, then `openWindow('late-agent',
+**Row** (`late-agent/late-agent.test.ts`): `startAgentAt(variable('HARNESS_AGENT_SOCKET'))`, then `openWindow('late-agent',
 'la1')`. Expected:
 - `la1` connected;
 - `agentKeys()` holds `fingerprintOf('<run>/id_ed25519')`.

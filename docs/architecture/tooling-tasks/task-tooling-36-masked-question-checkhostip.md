@@ -47,30 +47,53 @@ argument):
 - `Enter passphrase for key '/x': ` arrives unchanged.
 
 **The launch:** a plain launch `masked-question` (suite `masked-question`) whose settings set `remote.SSH.path:
-'<run>/clients/masked/ssh'`, the run token as `acceptance-launches.ts` replaces it. It goes in `tsconfig.json`,
-`knip.jsonc` and the README.
+'<run>/clients/masked/ssh'`. A launch's settings get `withRunTokens` in `runLaunches` (`acceptance.ts`), plain launches
+included, so `<run>` is replaced there. The suite folder gets a `tsconfig.json` like `explorer/`'s, and is registered in
+the root `tsconfig.json`'s `references`, `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`, `knip.jsonc`'s entries and the
+README's launch list.
 
 ## 3. The CheckHostIP name
 
 **The name and address:**
-- **Name:** `harness-ip.test` (RFC 6761 `.test`).
-- **Address:** the harness container's own address on Docker's default bridge, `docker inspect -f
-  '{{.NetworkSettings.IPAddress}}' <container>`, port 22. That's the container's sshd itself, not the published loopback
-  port, so ssh sees a non-loopback address.
+- **Name:** one per run, so overlapping runs on a shared runner don't collide: `harness-ip-<h>.test` (RFC 6761
+  `.test`), where `<h>` is the first 12 hex digits of the sha256 of the run id. The run id may hold `_` and capitals,
+  which a host name shouldn't. The launches get it as `HARNESS_IP_NAME`; this card writes `<name>` for it.
+- **Address:** the harness container's own address on Docker's default bridge, port 22:
+  `docker inspect -f '{{(index .NetworkSettings.Networks "bridge").IPAddress}}' <container>`. Measured on Docker 29.9.0
+  (2026-10-14): the old `{{.NetworkSettings.IPAddress}}` fails there with `map has no entry for key "IPAddress"`, and
+  the `index` form prints the address. This is the container's sshd itself, not the published loopback port, so ssh
+  sees a non-loopback address.
 
-**The line:** after starting the host, the VSCodium run appends `<address> harness-ip.test # remote-oss-acceptance
-<runId>` to the client's `/etc/hosts` with `sudo -n tee -a /etc/hosts`.
-- **Removal:** the run's end removes every line ending with that marker for its run id (`sudo -n sed -i`). The run's
-  cleanup (`acceptance-run.ts`, the one that removes a killed job's containers) removes marker lines of any run id whose
-  containers are gone.
-- **No sudo:** if `sudo -n true` fails, the run doesn't add the line, and sets `HARNESS_HOSTS_LINE=absent`. The rows of
-  §4.2 then fail with `harness-ip.test needs passwordless sudo to add a line to /etc/hosts`. They don't skip. Every other
+**The line:** after starting the host, the VSCodium run appends `<address> <name> # remote-oss-acceptance <runId>` to
+the client's `/etc/hosts` with `sudo -n tee -a /etc/hosts`. An append writes in place, so it works on a bind-mounted
+file.
+- **Removal, in place:** `/etc/hosts` is a bind mount in containerised runners and in this lab (measured 2026-10-14:
+  `findmnt /etc/hosts` shows a tmpfs bind). There `sed -i` fails with `can't move … Resource busy`, since it renames a
+  new file over the old one. So the run rewrites the file's content without replacing the file:
+  `sudo -n sh -c 'grep -v -F "# remote-oss-acceptance <runId>" /etc/hosts > <run>/hosts.kept; cat <run>/hosts.kept > /etc/hosts'`
+  (measured: `cat >` works on the bind mount where `sed -i` doesn't). grep's exit 1 (no other line) still rewrites.
+  The run's end does this for its own run id. The run's cleanup (`acceptance-run.ts`, the one that removes a killed
+  job's containers) does it for every marker line whose run id has no container left.
+- **No sudo:** if `sudo -n true` fails, the run doesn't add the line and sets `HARNESS_HOSTS_LINE=absent`. The rows of
+  §4.2 then fail with `<name> needs passwordless sudo to add a line to /etc/hosts`. They don't skip, and every other
   launch is unaffected.
+  - **Consequence:** the full VSCodium gate needs passwordless sudo on the machine that runs it. The README's
+    requirements list it beside Docker. A machine without it can run every launch but these rows green, and the run's
+    summary names the cause. CI runners have it (proteus checks, §5).
 
-**The rows' host blocks** use `hostKeyAlias` with:
-- `HostName harness-ip.test`, `Port 22`;
+**The rows' host blocks.** coverage-21's `hostKeyAlias(name, lines)` writes `HostName 127.0.0.1` and `Port <P>`
+first. ssh keeps the first value it reads for an option, so a `HostName` or `Port` among the row's own lines would be
+ignored. So both helpers are extended:
+- `hostKeyAlias(name, lines, target = {hostName: '127.0.0.1', port: <P>})`: the block's `HostName` and `Port` come from
+  `target`. The existing callers are unchanged.
+- `wrongKeyLine(hostField?)`: the host field is the given one, or `[127.0.0.1]:<P>` as today, as `hostKeyLine` already
+  takes it.
+
+The blocks of §4.2 then are `hostKeyAlias('ip-<n>', [...], {hostName: <name>, port: 22})`, with these lines:
 - `CheckHostIP yes`;
-- `HashKnownHosts no`, since the client's own `/etc/ssh/ssh_config` may hash and then no row could read the line.
+- `HashKnownHosts no`, since the client's own `/etc/ssh/ssh_config` may hash, and then no row could read the line.
+
+The helpers' tools rows cover both forms of each.
 
 ## 4. Rows
 
@@ -92,13 +115,13 @@ These run in coverage-21's windows suite. `IP` is the container's bridge address
 
 | Cite | Known file | Script | Expected |
 |---|---|---|---|
-| F-2305 AC-39 | `harness-ip.test <host key>` and `IP <wrong key>` | `pick` `continue connecting` → `dismiss` | a `pick` line whose title is ssh's warning text without the question line, whose placeholder is `Are you sure you want to continue connecting?`, and whose items are `Continue`, `Cancel` in that order |
-| F-2305 AC-40 | the same | `pick` → `{label: 'Continue'}` | connected; the known file unchanged |
-| F-2305 AC-41 | the same | `pick` → `{label: 'Cancel'}`; then a second window with `pick` → `dismiss` | each: the AC-6 dialog; the known file unchanged |
-| F-2305 AC-45 | empty | the fingerprint `pick` → `yes` | connected; the known file holds one line whose host field is `harness-ip.test,IP` |
+| F-2305 AC-39 | `hostKeyLine(<name>)` and `wrongKeyLine(IP)` | `pick` `continue` → `dismiss` | a `pick` line whose `question` is ssh's warning text without the question line. A prompt pick's record line carries only its title (`scripted-adapters.ts`, `prompts.pick`), so the placeholder `Are you sure you want to continue connecting?` and the items `Continue`, `Cancel` rest on the unit row `F-2305.AC-39: the differing key lines are a continuation pick` (`prompts-classify.test.ts:183`), as coverage-21 does for AC-8. Name it in the PR |
+| F-2305 AC-40 | the same | `pick` → `yes` (the `Continue` item's answer, S028) | connected; the known file unchanged |
+| F-2305 AC-41 | the same | `pick` → `no` (the `Cancel` item's answer, S015); then a second window with `pick` → `dismiss` | each: the AC-6 dialog; the known file unchanged |
+| F-2305 AC-45 | empty | the fingerprint `pick` → `yes` | connected; the known file holds one line whose host field is `<name>,IP` |
 
-The script surfaces and answers are coverage-21's (the `pick` answers). If the continuation pick's record line keeps its
-placeholder in another field, assert that field and say so in the PR.
+A `pick` entry's answer is `'yes' | 'no' | 'dismiss'` (`scripted-adapters.ts:55`). The adapter gives the item whose
+`answer` it is, so `Continue` is `yes` and `Cancel` is `no` (lib-ssh `classify.ts`, the continuation items).
 
 Catalogue: the eight ACs go from `todo` to `acceptance`.
 
@@ -109,7 +132,7 @@ two suites' summaries and `ssh -V`.
 
 **The PR opens with the `needs-verification` label.** proteus checks on the CI runner:
 - `sudo -n` works;
-- the `/etc/hosts` line is added, and `ssh -o CheckHostIP=yes harness-ip.test` reaches the container;
+- the `/etc/hosts` line is added, and `ssh -o CheckHostIP=yes <name>` reaches the container;
 - the line is gone after the run, also after a cancelled job.
 
 PR title `tests: a masked host-key question and a CheckHostIP name (card tooling-36, #719)`. themis or triton reviews;

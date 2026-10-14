@@ -26,7 +26,12 @@ returns true when the feature is off).
 
 ## 2. Step 1: measure before building (stop and report on #716)
 
-On a scratch branch, with no row written yet:
+**Step 1 ran on 2026-10-14** (records on #716). Stops (a) and (c) didn't hit. Stop (b) did: core's startup prompt
+defaults to `never`, which §3.1a answers. `document.hasFocus()` was true from the start, and `Page.bringToFront` changed
+nothing. A rebuild of this card doesn't repeat step 1, unless `VSCODIUM_RELEASE` moves.
+
+On a scratch branch, step 1 builds §3.1–3.4 (the launches, the flag, the agent's `trusted` and `dialogOf`) with no row
+written yet:
 1. **The runner's flag.** During a runner launch (`local`), read the editor's main process's command line from
    `/proc/<pid>/cmdline`, matching the run's user-data folder as `acceptance-run.ts`'s `pkill` pattern does. Record
    whether `--disable-workspace-trust` is there, and where it sits relative to `--extensionTestsPath`.
@@ -44,16 +49,16 @@ On a scratch branch, with no row written yet:
    - whether it comes before the connect's progress ends.
 
 **Stop and report on #716, and build nothing, if:**
-- (a) the plain launch still comes up `trusted: true` for `t0` with no dialog. Report the editor's argv, the user
-  settings file, and the values of `security.workspace.trust.enabled`, `security.workspace.trust.startupPrompt` and
-  `security.workspace.trust.emptyWindow` as `inWindow`'s `workbench.action.openSettingsJson` shows them. Don't add a
-  setting by guess;
-- (b) no dialog appears for `t0` within 10 s. First send `Page.bringToFront` to its page over the same CDP socket,
-  since core shows the startup prompt only when the window has focus ([oss]
-  `src/vs/workbench/contrib/workspace/browser/workspace.contribution.ts`, `showModalOnStart` behind
-  `hostService.hasFocus`). If the dialog then appears, that call becomes part of `dialogOf`'s wait (§3.4). If it still
-  doesn't, stop;
-- (c) in `trust-terminal`, the connect ends with no dialog at all.
+- (a) the plain launch still comes up `trusted: true` for `t0` with no dialog. Report the editor's argv (from
+  `/proc/<pid>/cmdline`, as in item 1) and the run's user settings file (`<run>/user-data/User/settings.json`). The
+  agent reads no setting, and the `security.workspace.trust.*` values left at their defaults aren't in that file, so
+  don't report them, and don't add a setting by guess;
+- (b) no dialog appears for `t0` within 10 s. (It hit: §3.1a.)
+- (c) in `trust-terminal`, the connect ends with no dialog at all;
+- (d) `openWindow('harness', 't0')` or `pageOf('t0')` times out, for example because core holds the agent's activation
+  or Restricted Mode changes the window's title. Report the page titles `pageOf`'s failure lists.
+
+"Build nothing" means: no commit pushed and no PR. The scratch branch is kept local.
 
 When step 1 passes, post the three records on #456 with the cause, and build §3.
 
@@ -112,8 +117,10 @@ launches. Runner launches can't drop the flag, since test-electron adds it (§1)
 
   It returns `undefined` when none is open. Selectors from [oss] `src/vs/base/browser/ui/dialog/dialog.ts`. Write the
   ones step 1 measured into the PR.
-- **`waitForDialog(name, milliseconds = 60_000)`:** polls `dialogOf` every 200 ms. With step 1 (b)'s finding, it first
-  sends `Page.bringToFront`. It fails naming the window, and listing every page's open dialog message.
+- **`waitForDialog(name, milliseconds = 60_000)`:** polls `dialogOf` every 200 ms. It fails naming the window, and
+  listing every page's open dialog message. It sends no `Page.bringToFront`: step 1 measured that focus isn't the
+  cause. Each call opens its own socket, as `evaluate` does today, sends one request with `id: 1`, and the first reply
+  is its answer. No event is enabled on the socket, so no other message arrives first.
 - **`answerDialog(name, label)`:** clicks the one button whose text is exactly `label`. It fails naming the labels it
   found, and returns once the click is dispatched.
 
@@ -133,7 +140,13 @@ The rows quote the labels step 1 measured, which should be these.
 ### 3.5 Suites, README and tooling
 
 - `tests/acceptance/trust/` and `tests/acceptance/trust-terminal/`: each with a `tsconfig.json` like `explorer/`'s.
-  `tests/acceptance/tsconfig.json` and `knip.jsonc` list them, as the README's "To add a launch" says.
+  Register them where the explorer suites are:
+  - the root `tsconfig.json`'s `references`;
+  - `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`;
+  - `knip.jsonc`'s entries (`trust/*.test.ts`, `trust-terminal/*.test.ts`).
+
+  The README's "To add a launch" names `tests/acceptance/tsconfig.json` instead, which is stale for a plain suite with
+  its own `tsconfig.json`. Correct that sentence in the same PR to name the three places.
 - **README:** a paragraph "Trust" under "Launches":
   - every runner launch runs with workspace trust off, because test-electron adds the flag;
   - the two `trust` launches are plain launches with trust on, and the window agent supports untrusted workspaces;
@@ -152,15 +165,26 @@ The rows quote the labels step 1 measured, which should be these.
 | tooling-33 | `editorArguments` with no launch, with `windows`, and with `explorer` | `--disable-workspace-trust` present, as today |
 | tooling-33 | `launchesOf(...)` | `trust` and `trust-terminal` follow `explorer-no-proposals`, and are the only launches with `workspaceTrust`; `explorer`'s settings are unchanged in value |
 
+**Existing tools rows that change with the two launches** (update each to the new truth; no other row changes):
+- `tools/acceptance-launches.test.ts`:
+  - `D-85: the labels are …` (the label order): `trust` and `trust-terminal` after `explorer-no-proposals`;
+  - `tooling-30: only the three explorer launches install the explorer and open a debugging port …`: the trust
+    launches open a debugging port too;
+  - `D-85: the settings of their own are …` (the settings label list): adds `trust` and `trust-terminal`.
+- `tools/acceptance.test.ts`: `LAUNCH_ORDER` (line 255) gains `trust` and `trust-terminal` after
+  `explorer-no-proposals`. The two `runAcceptance` rows that compare `harness.launched` with it (lines 1483 and 1653)
+  then pass unchanged.
+
 **Smoke rows** (`tests/acceptance/trust/trust.test.ts`, names starting `tooling-33:`):
 
 | Given | Expected |
 |---|---|
 | `openWindow('harness', 's1')` | `isTrusted('s1')` is false; `waitForDialog('s1')` gives the startup prompt of §3.4 |
 | `answerDialog('s1', 'Yes, I trust the authors')` | the dialog is gone, and `isTrusted('s1')` becomes true within 10 s |
-| `openWindow('harness', 's2')`; `answerDialog('s2', "No, I don't trust the authors")` | `isTrusted('s2')` stays false; `dialogOf('s2')` is `undefined` |
+| `openWindow('harness', 's2')`; `waitForDialog('s2')`, then `answerDialog('s2', "No, I don't trust the authors")` | `isTrusted('s2')` stays false; `dialogOf('s2')` is `undefined` |
 | in `trust-terminal` (core's defaults), `openWindow('harness', 's3')` | `isTrusted('s3')` false, and no dialog until the connect asks for trust; then `waitForDialog('s3')` gives the trust request of §3.4 |
-| `answerDialog('s2', 'No such button')` | fails, listing the dialog's labels (when one is open; else naming the window) |
+| `openWindow('harness', 's4')`; `waitForDialog('s4')`, then `answerDialog('s4', 'No such button')` | fails, and the failure lists the open dialog's two labels. Then `answerDialog('s4', "No, I don't trust the authors")` closes it |
+| `answerDialog('s2', 'Yes, I trust the authors')` after s2's dialog was answered | fails, naming window `s2` and saying no dialog is open |
 
 **Criterion rows written in this PR** (`trust/trust.test.ts`):
 
