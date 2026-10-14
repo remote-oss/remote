@@ -348,4 +348,31 @@ it (with `SSH_ASKPASS_REQUIRE=force`), or puts it in a script entry `{surface: '
 and the record keeps `<supplied>`. Nothing prints it. `docker inspect` does show `HOST_PASSWORD` in the container's configuration (the env file becomes the container's environment); that is acceptable only because the password is a per-run fake that opens nothing but the run's own throw-away host (R-26). A `ControlPath` is `<run folder>/cm-%C`, about 75 characters on a
 Linux runner, under the 108 of a socket path.
 
+The VSCodium run also makes further keys in its folder (`tools/acceptance-keys.ts`), and the host takes them:
+
+| File | What |
+|---|---|
+| `id_passphrase` | ed25519, comment `acceptance-passphrase`, protected by the run's passphrase. The passphrase is in `<run folder>/passphrase` (mode 600, the harness variable `HARNESS_PASSPHRASE_FILE`), and `<run folder>/askpass-passphrase` prints it for `SSH_ASKPASS`; `ssh-keygen` gets it the same way, so no command line holds it |
+| `id_passphrase_stranger` | ed25519, comment `acceptance-stranger`, protected by the same passphrase; the host doesn't accept it |
+| `id_second` | ed25519 without a passphrase |
+| `id_loose` | a copy of `id_second` with mode 0644, which ssh refuses to use |
+| `ca`, `id_certified`, `id_certified-cert.pub` | the run's own authority, and a key it signed for the principal `harness-cert` |
+
+The host accepts `id_passphrase` and `id_second` for its key accounts (`AUTHORIZED_KEYS_FURTHER`), and the user
+`harness-cert` accepts only a certificate of the run's authority (`TrustedUserCAKeys`, from `CA_PUBLIC_KEY`). Their
+aliases leave the agent to the environment and set no `BatchMode`, so ssh may ask for a passphrase:
+
+| Alias | User | Keys |
+|---|---|---|
+| `passkey` | `harness` | `id_passphrase` |
+| `passkey-then-second` | `harness` | `id_passphrase`, then `id_second` |
+| `loosekey` | `harness` | `id_loose` |
+| `certonly` | `harness-cert` | `id_certified` and its certificate |
+| `certonly-nocert` | `harness-cert` | `id_second`, without a certificate |
+
+The run starts its own `ssh-agent` on `<run folder>/agent.sock` (or in a short folder under `/tmp` when that path
+would pass a Unix socket's limit) before the editor and ends it with the run. Every
+launch gets `SSH_AUTH_SOCK` and `HARNESS_AGENT_SOCKET` naming it. It starts empty, and it can't ask the user anything
+(no askpass, no display), so a key added with confirmation can't be used.
+
 `server/host-accounts.test.ts` shows each account does what it is for.

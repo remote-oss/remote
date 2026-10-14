@@ -1,7 +1,9 @@
 # The SSH host of the acceptance tests: OpenSSH's server, key login only, and one user whose login shell is POSIX sh
-# unless HOST_SHELL names another of the shells installed here. Three more users serve tests that need another kind of account:
+# unless HOST_SHELL names another of the shells installed here. Five more users serve tests that need another kind of account:
 # harness-pw (password login only), harness-nofwd (TCP forwarding refused), harness-mute (a login shell that
-# answers only a command given with -c) and harness-ro (a server data folder that exists and cannot be written).
+# answers only a command given with -c), harness-ro (a server data folder that exists and cannot be written), and
+# harness-cert, which accepts only a certificate signed by the run's own authority (CA_PUBLIC_KEY, written to
+# /etc/ssh/ca.pub by start-sshd).
 # libstdc++ is what a musl server's node needs to start on Alpine (F-6302). curl and GNU wget are installed so that
 # start-sshd can leave the host with the one download tool a run asks for (HOST_FETCH). iptables lets a test drop the
 # packets of port 22 and bring them back (the container runs with NET_ADMIN).
@@ -35,6 +37,8 @@ COPY mute-shell /usr/local/bin/mute-shell
 RUN echo /usr/local/bin/mute-shell >> /etc/shells \
   && adduser -D -s /usr/local/bin/mute-shell harness-mute \
   && sed -i 's/^harness-mute:!/harness-mute:*/' /etc/shadow \
+  && adduser -D -s /bin/sh harness-cert \
+  && sed -i 's/^harness-cert:!/harness-cert:*/' /etc/shadow \
   && printf '%s\n' \
     'Match User harness-pw' \
     '  PasswordAuthentication yes' \
@@ -42,6 +46,9 @@ RUN echo /usr/local/bin/mute-shell >> /etc/shells \
     '  PubkeyAuthentication no' \
     'Match User harness-nofwd' \
     '  AllowTcpForwarding no' \
+    'Match User harness-cert' \
+    '  AuthorizedKeysFile none' \
+    '  TrustedUserCAKeys /etc/ssh/ca.pub' \
     >> /etc/ssh/sshd_config
 
 COPY start-sshd /usr/local/bin/start-sshd

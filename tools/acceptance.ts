@@ -42,6 +42,12 @@ import {
   runCommand,
 } from './acceptance-run.ts';
 import {
+  agentSocketPath,
+  CERTIFIED_PRINCIPAL,
+  makeRunKeys,
+  startRunAgent,
+} from './acceptance-keys.ts';
+import {
   clearCalls,
   writeClients,
   writeTildeCopy,
@@ -72,6 +78,7 @@ import {
   packageWindowAgent,
   runPlainLaunch,
   startDetached,
+  type Started,
 } from './acceptance-plain.ts';
 import {
   isMainModule,
@@ -161,6 +168,11 @@ export interface HarnessVariables {
   HARNESS_DOWNLOADS_LICENSED?: string;
   HARNESS_DOWNLOADS_LOCAL?: string;
   HARNESS_DOWNLOADS_LOG?: string;
+  /** The run's own ssh-agent, named for every launch's processes, and its socket for the tests; VSCodium run only. */
+  SSH_AUTH_SOCK?: string;
+  HARNESS_AGENT_SOCKET?: string;
+  /** The file with the bare passphrase of the run's passphrase key, mode 600; VSCodium run only. */
+  HARNESS_PASSPHRASE_FILE?: string;
 }
 
 /** Waits the given number of milliseconds. */
@@ -194,6 +206,8 @@ export interface HarnessDependencies {
   ) => Promise<AttemptResult>;
   /** Starts the run's download host in the run's folder; the VSCodium run only. */
   startDownloads: (root: string, runFolder: string) => Promise<RunDownloads>;
+  /** Starts the run's own ssh-agent on `socket`, with no askpass of its own; the VSCodium run only. */
+  startAgent: (socket: string) => Started;
 }
 
 /** How long the run waits for sshd to accept the first connection, in attempts half a second apart. */
@@ -298,7 +312,45 @@ export function harnessSshConfig(port: number, runFolder: string): string {
       `ControlPath ${path.join(runFolder, 'cm-ask-%C')}`,
       'ControlPersist 60',
     ]),
+    ...keyAlias('passkey', 'harness', port, runFolder, ['id_passphrase']),
+    ...keyAlias('passkey-then-second', 'harness', port, runFolder, [
+      'id_passphrase',
+      'id_second',
+    ]),
+    ...keyAlias('loosekey', 'harness', port, runFolder, ['id_loose']),
+    ...keyAlias('certonly', CERTIFIED_PRINCIPAL, port, runFolder, [
+      'id_certified',
+    ]),
+    ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, runFolder, [
+      'id_second',
+    ]),
   ].join('\n');
+}
+
+/**
+ * One alias of the run's further keys: the named key files of the run's folder, offered alone, with the run's agent
+ * left to the environment and no `BatchMode`, so that ssh may ask for a passphrase. `certonly`'s key brings its
+ * `-cert.pub` beside it, which ssh offers by itself.
+ */
+function keyAlias(
+  alias: string,
+  user: string,
+  port: number,
+  runFolder: string,
+  keyFiles: readonly string[],
+): string[] {
+  return [
+    `Host ${alias}`,
+    '  HostName 127.0.0.1',
+    `  Port ${String(port)}`,
+    `  User ${user}`,
+    ...keyFiles.map(file => `  IdentityFile ${path.join(runFolder, file)}`),
+    '  IdentitiesOnly yes',
+    '  StrictHostKeyChecking accept-new',
+    '  ConnectTimeout 10',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts')}`,
+    '',
+  ];
 }
 
 /** The lines of an alias that logs in with the account's password; `BatchMode` would refuse the prompt. */
@@ -454,13 +506,20 @@ async function prepare(
   if (downloads !== undefined) {
     stops.push(() => downloads.stop());
   }
-  const host = startHostContainer(
-    command,
-    root,
-    runId,
-    runFolder,
-    downloads === undefined ? [] : downloadHostArguments(),
-  );
+  const keys =
+    editor === 'vscodium' ? makeRunKeys(command, runFolder) : undefined;
+  const agentSocket = agentSocketPath(runFolder);
+  if (editor === 'vscodium') {
+    const agent = dependencies.startAgent(agentSocket);
+    stops.push(() => {
+      agent.stop();
+      return Promise.resolve();
+    });
+  }
+  const host = startHostContainer(command, root, runId, runFolder, [
+    ...(downloads === undefined ? [] : downloadHostArguments()),
+    ...(keys?.hostArguments ?? []),
+  ]);
   started.push(host.container);
   const port = host.port;
   const configFile = path.join(runFolder, 'ssh_config');
@@ -510,6 +569,13 @@ async function prepare(
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
     ...downloads?.variables,
+    ...(keys === undefined
+      ? {}
+      : {
+          SSH_AUTH_SOCK: agentSocket,
+          HARNESS_AGENT_SOCKET: agentSocket,
+          HARNESS_PASSPHRASE_FILE: keys.passphraseFile,
+        }),
   };
 }
 
@@ -1205,6 +1271,7 @@ if (isMainModule(import.meta.url)) {
         ),
         runTests: runTestCli,
         windowAgentVsix: packageWindowAgent,
+        startAgent: startRunAgent,
         startDownloads: startRunDownloads.bind(
           undefined,
           runCommand,

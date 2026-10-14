@@ -80,7 +80,8 @@
     "packages/*/src/extension.ts": ["exports"],
     "packages/*/src/web-extension.ts": ["exports"],
   },
-  "ignoreBinaries": ["shellcheck"],
+  // System tools the tests run, which no package provides.
+  "ignoreBinaries": ["shellcheck", "ssh-add"],
   "ignoreDependencies": [
     // The editor provides it to the acceptance tests at run time; @types/vscode types it.
     "vscode",
