@@ -23,6 +23,15 @@ on #13 notes the missing remote lines and the missing download and unpack progre
    - The F-2704 startup output (connect-69) and the server's own output (connect-72) use the same `remoteLog`, when
      they come.
 2. **`remoteLog(line)`** logs `[remote] <scrubbed line>` at `info`, unless the line is empty.
+   - **The result block isn't logged line by line** (athena on #853, 1d7619a): `loggedChannel` stops logging at a
+     whole line `remote-oss-server-result-begin` (the begin line itself isn't logged) and resumes after the whole
+     line `remote-oss-server-result-end`, or when the run ends if no end line comes. So no `fact` line reaches the
+     log: the block holds host facts such as `host.display` and `host.sshAuthSock`, which are environment values of
+     the remote (BR-14).
+   - **The result as one summary line:** after a run whose block lib-server parsed, `connect` logs one `info` line
+     from the parsed `ResultBlock`, never from the raw lines:
+     `Server result: <status>, port <port>, os <os>, architecture <arch>, download <ms> ms, install <ms> ms`.
+     Each part appears only when the block has it. No other fact is logged.
    - **Inert:** no code reads what `remoteLog` logs. lib-server's own parse (the result block and the progress lines)
      is unchanged, and is still the only reader.
    - **Scrubbed (BR-14):**
@@ -46,7 +55,9 @@ on #13 notes the missing remote lines and the missing download and unpack progre
 |---|---|---|---|
 | `remote-log.test.ts` | `F-2003 BR-6 item 8: every line of a run is logged as remote output, then handed on unchanged` | a fake channel whose `runScript` emits `a`, `remote-oss-server-progress unpack 40`, `` | the log has `[remote] a` and `[remote] remote-oss-server-progress unpack 40`, and no line for the empty one; the caller's `onLine` received all three, unchanged |
 | `remote-log.test.ts` | `F-2003 BR-14: the token and the run's environment values are scrubbed` | a line holding the token, and a line holding the value of `SECRET_ONE=abcdefgh12` from the request's environment | the token masked; `${SECRET_ONE}` in place of the value; a 7-character value left as it is |
-| `remote-log.test.ts` | `ADR-0010 rule 1: a remote line that looks like ours changes nothing` | a line `remote-oss-server-result-begin` emitted outside a run's block | logged; lib-server's result is what its own block says |
+| `remote-log.test.ts` | `ADR-0010 rule 1: a remote line that looks like ours changes nothing` | a startup file's line `remote-oss-server-result-begin` before the run's own block | lib-server's result is what its own block says; the log only hides lines (from that begin to the next end), and never gains a fact line |
+| `remote-log.test.ts` | `F-2003 BR-14: the result block's facts never reach the log` | a run emitting `a`, the block (`remote-oss-server-result-begin`, `fact host.display :10`, `fact host.sshAuthSock /tmp/ssh-x/agent.1`, `status=Ok`, `remote-oss-server-result-end`), then `b` | the log has `[remote] a` and `[remote] b` only; no line contains `:10`, `/tmp/ssh-x/agent.1`, `fact` or the markers |
+| `connect.test.ts` | `F-2003 BR-6 item 8: the result is logged as one summary line from the parsed block` | a start whose parsed `ResultBlock` has status `Ok`, port 41234, os `linux`, architecture `x64`, download 1200 ms, install 800 ms | exactly one `Server result: Ok, port 41234, os linux, architecture x64, download 1200 ms, install 800 ms` line |
 | `connect.test.ts` | `F-2003 BR-6 item 8: the steps and percents the notification shows are logged` | phase events `installing`, `serverDownloadPercent` 0, 50 and 100 | `Progress: installing`, then the three percent lines, in that order |
 
 **AC-29 (F-2003 6.7, BR-16, republished on #13):** in terminal mode, a fresh connect's install and start output is
