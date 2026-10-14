@@ -733,4 +733,37 @@ describe('containerLifecycleOf', () => {
     lifecycle.stopBackground();
     deepStrictEqual([before, calls], [[], ['started', 'ended']]);
   });
+
+  it('F-0415 AC-38: a run that a second prepare replaced does not end the second one when it settles', async () => {
+    const bridge = fakeBridge();
+    let settleFirst: (result: RunUserCommandsResult) => void = () => undefined;
+    bridge.runResult = new Promise(resolve => {
+      settleFirst = resolve;
+    });
+    const {calls, presenter} = recordingPresenter();
+    const lifecycle = containerLifecycleOf({
+      engine: scriptedEngine(EMPTY_LISTING),
+      cli: bridge,
+      logger: createLogger(undefined, {minimumLevel: () => 'info'}),
+      presenter,
+      clock: () => 0,
+    });
+    const signal = new AbortController().signal;
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      signal,
+    );
+    bridge.runResult = new Promise(() => undefined);
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      signal,
+    );
+    settleFirst({kind: 'cancelled'});
+    await settle();
+    deepStrictEqual(calls, ['started', 'started']);
+  });
 });
