@@ -9,9 +9,9 @@ import {connectTargetOf, payloadOf} from '../connect/connect-commands.ts';
 import type {ConnectInput, ConnectSteps} from '../pipeline/steps.ts';
 import type {StepResult} from './own-host.ts';
 
-/** How a maintenance run ended: the step ran on the host, or the host could not be reached or the step did not run. */
+/** How a maintenance run ended: the step ran on the host, the run was cancelled at the platform pick, or the host could not be reached or the step did not run. */
 export interface MaintenanceRun {
-  result: StepResult;
+  result: StepResult | 'cancelled';
   /** What went wrong, for the log; empty when the step ran. */
   cause: string;
 }
@@ -76,6 +76,12 @@ export async function runMaintenance(
   }
   const terms = await steps.decideTerms(input, cancellation);
   if (terms.kind === 'failed') {
+    if (terms.failure.kind === 'cancelled') {
+      return {
+        result: 'cancelled',
+        cause: 'the platform pick was dismissed',
+      };
+    }
     return failed(`the platform was not decided: ${terms.failure.kind}`);
   }
   const opened = await steps.openConnection(input, terms.value, cancellation);
