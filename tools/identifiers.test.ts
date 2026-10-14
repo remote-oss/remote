@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   checkIdentifiers,
   generateTables,
+  releaseScopeOf,
   runConsumptionCheck,
 } from './identifiers.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -15,6 +16,26 @@ const DECLARED = {
   source: 'remote-oss/remote-x#1 (F-0001)',
   standsDownFor: 'ms-vscode-remote.remote-x',
 };
+
+describe('releaseScopeOf (tooling-45)', () => {
+  it('reads no tag run without --release, every package without a name, and the named package otherwise', () => {
+    deepStrictEqual(
+      [
+        releaseScopeOf(['node', 'identifiers.ts', '--consumed']),
+        releaseScopeOf(['node', 'identifiers.ts', '--consumed', '--release']),
+        releaseScopeOf(['node', 'identifiers.ts', '--release', '--consumed']),
+        releaseScopeOf([
+          'node',
+          'identifiers.ts',
+          '--consumed',
+          '--release',
+          'remote-ssh',
+        ]),
+      ],
+      [undefined, 'repository', 'repository', {package: 'remote-ssh'}],
+    );
+  });
+});
 
 describe('identifiers', () => {
   let workspace: TemporaryWorkspace;
@@ -216,7 +237,7 @@ describe('identifiers', () => {
     /** The consumption check against the fixture, with a stubbed knip that reports no issues. */
     async function runConsumed(): Promise<ConsumedRun> {
       return captured(() =>
-        runConsumptionCheck(false, workspace.root, () =>
+        runConsumptionCheck(undefined, workspace.root, () =>
           Promise.resolve(JSON.stringify({issues: []})),
         ),
       );
