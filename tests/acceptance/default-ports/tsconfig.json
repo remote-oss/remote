@@ -1,0 +1,53 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "mocha"],
+    "tsBuildInfoFile": "${configDir}/.tsc/default-ports.tsbuildinfo"
+  },
+  "include": ["${configDir}"],
+  "references": [
+    {
+      "path": "../windows"
+    },
+    {
+      "path": "../../../tools"
+    },
+    {
+      "path": "../../../packages/lib-forwarding"
+    },
+    {
+      "path": "../../../packages/lib-helper"
+    },
+    {
+      "path": "../../../packages/lib-log"
+    },
+    {
+      "path": "../../../packages/lib-product"
+    },
+    {
+      "path": "../../../packages/lib-server"
+    },
+    {
+      "path": "../../../packages/lib-ssh"
+    },
+    {
+      "path": "../../../packages/lib-forwarding/tsconfig.test.json"
+    },
+    {
+      "path": "../../../packages/lib-helper/tsconfig.test.json"
+    },
+    {
+      "path": "../../../packages/lib-log/tsconfig.test.json"
+    },
+    {
+      "path": "../../../packages/lib-product/tsconfig.test.json"
+    },
+    {
+      "path": "../../../packages/lib-server/tsconfig.test.json"
+    },
+    {
+      "path": "../../../packages/lib-ssh/tsconfig.test.json"
+    }
+  ],
+  "exclude": ["${configDir}/.tsc"]
+}

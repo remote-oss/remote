@@ -106,6 +106,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `windows`: a launch with no runner (`kind: 'plain'`). The editor is started plainly, as a user starts it, with no test run in it, one user-data folder and the run's extensions folder, which holds our VSIX files and the window agent's; a Node mocha run of `windows/*.test.ts` drives and observes it. See "Several windows".
 
+- `default-ports`: a plain launch like `windows` whose settings forward one default port; `default-ports/*.test.ts` opens a window and reads the local end of the port.
+
 - `no-proposals`: the same without the proposed API.
 
 - `terminal-pick`: a plain launch with `remote.SSH.useLocalServer` off and no stored `remote.SSH.remotePlatform`; the test answers the platform pick with Linux and a window on `harness` connects and stores the platform.

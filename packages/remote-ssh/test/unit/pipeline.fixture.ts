@@ -331,6 +331,10 @@ export function steps(
       note('rememberPlatform', undefined);
       return Promise.resolve();
     },
+    applyDefaults: () => {
+      note('applyDefaults', undefined);
+      return Promise.resolve();
+    },
     ...changes,
   };
 }
