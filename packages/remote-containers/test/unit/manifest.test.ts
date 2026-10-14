@@ -35,12 +35,17 @@ function readJson(file: string): Record<string, unknown> {
 
 const MANIFEST = readJson('package.json');
 
+/** The `when` clause of the command's palette entry and menu entry. */
+const REOPEN_WHEN =
+  '!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown';
+
 const ENGLISH = {
   description:
     'Develop inside a container that carries its own toolchain, so each project brings its environment with it.',
   'capabilities.untrustedWorkspaces.description':
     'Opening a folder in a container requires workspace trust.',
   'configuration.title': 'Dev Containers',
+  'commands.Reopenincontainer.title': 'Reopen in Container',
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
 };
@@ -91,6 +96,28 @@ describe('the manifest', () => {
       ],
       l10n: './l10n',
       contributes: {
+        commands: [
+          {
+            command: 'remote-containers.reopenInContainer',
+            title: '%commands.Reopenincontainer.title%',
+            category: 'Dev Containers',
+          },
+        ],
+        menus: {
+          commandPalette: [
+            {
+              command: 'remote-containers.reopenInContainer',
+              when: REOPEN_WHEN,
+            },
+          ],
+          'statusBar/remoteIndicator': [
+            {
+              command: 'remote-containers.reopenInContainer',
+              group: 'remote_30_dev-container_2_actions@8',
+              when: REOPEN_WHEN,
+            },
+          ],
+        },
         configuration: {
           title: '%configuration.title%',
           properties: {
@@ -139,18 +166,63 @@ describe('the manifest', () => {
     ]);
   });
 
-  it('containers-01: the manifest has no browser entry or icon, and contributes the one setting', () => {
+  it('containers-01: the manifest has no browser entry or icon, and contributes the command, its two menus and the one setting', () => {
     deepStrictEqual(
       [
         'browser' in MANIFEST,
         'icon' in MANIFEST,
         Object.keys(MANIFEST.contributes as object),
       ],
-      [false, false, ['configuration']],
+      [false, false, ['commands', 'menus', 'configuration']],
     );
   });
 
-  it('F-1406.5: package.nls.json holds the four keys, and every key package.json uses is one of them', () => {
+  it('F-0401 3.1, F-1406: the command has its id, category and title, and no keybinding', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: unknown[];
+      keybindings?: unknown;
+    };
+    deepStrictEqual(
+      [
+        contributes.commands,
+        readJson('package.nls.json')['commands.Reopenincontainer.title'],
+        contributes.keybindings,
+      ],
+      [
+        [
+          {
+            command: 'remote-containers.reopenInContainer',
+            title: '%commands.Reopenincontainer.title%',
+            category: 'Dev Containers',
+          },
+        ],
+        'Reopen in Container',
+        undefined,
+      ],
+    );
+  });
+
+  it('F-0401 AC-5: the palette and the remote indicator list the command with the local clause of the reference', () => {
+    const menus = (
+      MANIFEST.contributes as {
+        menus: Record<string, Array<{when: string; group?: string}>>;
+      }
+    ).menus;
+    deepStrictEqual(menus, {
+      commandPalette: [
+        {command: 'remote-containers.reopenInContainer', when: REOPEN_WHEN},
+      ],
+      'statusBar/remoteIndicator': [
+        {
+          command: 'remote-containers.reopenInContainer',
+          group: 'remote_30_dev-container_2_actions@8',
+          when: REOPEN_WHEN,
+        },
+      ],
+    });
+  });
+
+  it('F-1406.5: package.nls.json holds the five keys, and every key package.json uses is one of them', () => {
     const used = [...JSON.stringify(MANIFEST).matchAll(/%([^%"]+)%/g)].map(
       match => match[1],
     );
@@ -182,6 +254,7 @@ describe('the manifest', () => {
       },
       contextKeys: [
         {id: 'remote-containers:standingDown', setter: 'extension'},
+        {id: 'hideConnectCommands', setter: 'extension'},
       ],
       infoLineCommands: [],
       runtimeCommands: [],
