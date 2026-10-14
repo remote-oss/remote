@@ -9,7 +9,8 @@ import {
   type ConnectWaitSettings,
   connectWaitMilliseconds,
 } from '../process/connect-wait.ts';
-import {posixQuote, preludeProgram} from '../process/remote-program.ts';
+import {posixQuote} from 'lib-host';
+import {preludeProgram} from '../process/remote-program.ts';
 
 /** The fewest and the most seconds the login shell's startup may take. */
 const LAYER_ONE_SECONDS = {minimum: 1, maximum: 600} as const;
