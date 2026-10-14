@@ -1,4 +1,6 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {
   checkCoverage,
   citedBy,
@@ -6,8 +8,11 @@ import {
   type CoverageReport,
   outputOf,
 } from './check-coverage.ts';
+import {REPOSITORY_ROOT} from './repository.ts';
 import {
   CONTAINERS_RELEASE_ONE_SCOPE,
+  COVERAGE_SCOPES,
+  EXPLORER_SLICE_ONE_SCOPE,
   SLICE_ONE_SCOPE,
 } from './spec-acceptance-criteria.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -521,10 +526,16 @@ describe('check-coverage', () => {
       deepStrictEqual(bothProblems(), []);
     });
 
-    it('containers release 1: by default the check reads both files', () => {
+    it('coverage-25a: a workspace with the slice-1 file only checks it, the other sets skipped', () => {
       tagged('F-2601.AC-1\ttodo\t');
       deepStrictEqual(outputOf(checkCoverage(workspace.root)).lines, [
-        `check-coverage: cannot read ${CONTAINERS_FILE}`,
+        `${COVERAGE_FILE}:`,
+        'acceptance: 0',
+        'unit: 0',
+        'recorded: 0',
+        'core: 0',
+        'deferred: 0',
+        'todo: 1',
       ]);
     });
 
@@ -580,6 +591,80 @@ describe('check-coverage', () => {
         'deferred: 0',
         'todo: 1',
       ]);
+    });
+  });
+
+  describe('the explorer coverage file', () => {
+    const EXPLORER_FILE = EXPLORER_SLICE_ONE_SCOPE.file;
+
+    const EXPLORER_SETS = [SLICE_ONE_SCOPE, EXPLORER_SLICE_ONE_SCOPE];
+
+    /** Writes the explorer file with these lines under the header. */
+    function explorerTagged(...lines: string[]): void {
+      workspace.write(EXPLORER_FILE, `${HEADER}${lines.join('\n')}\n`);
+    }
+
+    function explorerProblems(): string[] {
+      return problemsOf(checkCoverage(workspace.root, EXPLORER_SETS));
+    }
+
+    it("coverage-25a: a deferred line whose reason is not one of the set's fails, naming it", () => {
+      tagged('F-2601.AC-1\ttodo\t');
+      explorerTagged('F-5101.AC-1\tdeferred\tlater');
+      deepStrictEqual(explorerProblems(), [
+        `${EXPLORER_FILE}:00002: F-5101.AC-1 gives the reason "later", which isn't one of the set's`,
+      ]);
+    });
+
+    it("coverage-25a: a deferred line with one of the set's reasons passes", () => {
+      tagged('F-2601.AC-1\ttodo\t');
+      explorerTagged('F-5101.AC-1\tdeferred\tD-55: no tunnel rows');
+      deepStrictEqual(explorerProblems(), []);
+    });
+
+    it('coverage-25a: an acceptance row that cites an explorer criterion the explorer file lacks fails, naming it', () => {
+      acceptanceTest('F-5101 AC-1: x');
+      tagged('F-2601.AC-1\ttodo\t');
+      explorerTagged('F-5101.AC-2\ttodo\t');
+      deepStrictEqual(explorerProblems(), [
+        `tests/acceptance/server/x.test.ts: row "F-5101 AC-1: x" cites F-5101.AC-1, which ${EXPLORER_FILE} doesn't have`,
+      ]);
+    });
+
+    it('coverage-25a: no feature is in two coverage sets', () => {
+      const features = COVERAGE_SCOPES.flatMap(scope => scope.features);
+      strictEqual(new Set(features).size, features.length);
+    });
+
+    it('coverage-25a: the repository check reads all three files, the explorer file last, its total its line count', () => {
+      const report = checkCoverage(REPOSITORY_ROOT);
+      const counts = report.kind === 'checked' ? report.counts : [];
+      const explorer = counts.at(-1);
+      const lines = readFileSync(
+        path.join(REPOSITORY_ROOT, EXPLORER_FILE),
+        'utf8',
+      )
+        .trim()
+        .split('\n')
+        .slice(1).length;
+      deepStrictEqual(
+        {
+          kind: report.kind,
+          files: counts.map(each => each.file),
+          totalIsLineCount:
+            explorer === undefined
+              ? false
+              : Object.values(explorer.counts).reduce(
+                  (total, count) => total + count,
+                  0,
+                ) === lines,
+        },
+        {
+          kind: 'checked',
+          files: COVERAGE_SCOPES.map(scope => scope.file),
+          totalIsLineCount: true,
+        },
+      );
     });
   });
 

@@ -33,6 +33,8 @@ import {
   type LifecyclePresenter,
 } from '../lifecycle/container-lifecycle.ts';
 import {idLabels} from '../lifecycle/labels.ts';
+import {takeRebuildIntent} from '../open/rebuild-intent.ts';
+import type {IntentMemento} from '../state/timed-store.ts';
 import {withContext} from './context-engine.ts';
 import {
   cancelled,
@@ -100,6 +102,8 @@ export interface ContainerConnectorDependencies {
   ): Promise<OpenRelay | {kind: 'failed'; failure: Failed}>;
   /** What shows the lifecycle commands' terminal and progress. */
   lifecyclePresenter: LifecyclePresenter;
+  /** The extension's own store, where a rebuild command left its intent. */
+  intents: IntentMemento;
   clock: () => number;
   logger: Logger;
   revealLog(): void;
@@ -323,9 +327,37 @@ export function containerConnectorOf(
     };
   }
 
+  /** The rebuild the window asked for before its reload, taken once on the first attempt of a connect. */
+  async function takenRebuild(
+    input: ConnectInput,
+  ): Promise<{buildNoCache: boolean} | undefined> {
+    if (input.attempt !== 1 || input.isReconnection) {
+      return undefined;
+    }
+    try {
+      const intent = await takeRebuildIntent(
+        dependencies.intents,
+        input.rawHostString,
+        dependencies.clock(),
+      );
+      if (intent !== undefined) {
+        logger.info(
+          `the window asked for a rebuild (no cache: ${String(intent.buildNoCache)})`,
+        );
+      }
+      return intent;
+    } catch (error) {
+      logger.warn(
+        `the rebuild intent could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
+  }
+
   async function connectFresh(
     folder: DevContainerFolder,
     controller: AbortController,
+    input: ConnectInput,
   ): Promise<Connected | Failed> {
     const cancellation = controller.signal;
     const settings = dependencies.settings();
@@ -364,12 +396,16 @@ export function containerConnectorOf(
       bridge,
       dependencies.lifecyclePresenter,
     );
+    const rebuild = await takenRebuild(input);
     const prepared = await lifecycle.prepare(
       {
         folder: folder.hostPath,
         configFile,
         dockerPath,
         logLevel: 'info',
+        ...(rebuild === undefined
+          ? {}
+          : {rebuild: {buildNoCache: rebuild.buildNoCache}}),
       },
       (step: ContainerStep) => {
         logger.info(step === 'startingContainer' ? 'Starting container' : step);
@@ -409,6 +445,7 @@ export function containerConnectorOf(
     const server = await dependencies.runServer(
       {
         channel,
+        rootChannel: execChannelOf(engine, prepared.containerId, 'root'),
         remoteUser: prepared.remoteUser,
         volumeMounted: prepared.volumeMounted,
         onPhase: phase => {
@@ -501,7 +538,7 @@ export function containerConnectorOf(
         if ('malformed' in decoded || decoded.kind === 'legacy') {
           return malformedAuthority();
         }
-        const result = await connectFresh(decoded, controller);
+        const result = await connectFresh(decoded, controller, input);
         return result;
       } finally {
         logger.info(

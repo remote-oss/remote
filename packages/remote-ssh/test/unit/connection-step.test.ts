@@ -442,6 +442,7 @@ describe('the connection step', () => {
     lease.emit({type: 'connected', socksPort: 41000});
     await pending;
     deepStrictEqual(notices, [
+      {type: 'loginStarted'},
       {
         type: 'prompt',
         promptId: 3,
@@ -454,7 +455,7 @@ describe('the connection step', () => {
   it('connect-14: takes the questions down once the login is done, before the lease is given back', async () => {
     const {lease, notices} = await loggedIn();
     lease.emit({type: 'waitingForOtherWindow'});
-    deepStrictEqual(notices, []);
+    deepStrictEqual(notices, [{type: 'loginStarted'}]);
   });
 
   it('F-2102 5.2 step 3: a login another window holds is shown as the waiting stage', async () => {
@@ -462,7 +463,10 @@ describe('the connection step', () => {
     void connecting();
     await settled();
     lease.emit({type: 'waitingForOtherWindow'});
-    deepStrictEqual(phases, [{kind: 'waitingForOtherWindow'}]);
+    deepStrictEqual(phases, [
+      {kind: 'initializing'},
+      {kind: 'waitingForOtherWindow'},
+    ]);
   });
 
   it('F-2102 5.3 step 4: when the login falls to this window the stage is initializing again', async () => {
@@ -483,12 +487,22 @@ describe('the connection step', () => {
   it('contracts: a notice after the login ended reports no stage', async () => {
     const {lease, phases} = await loggedIn();
     lease.emit({type: 'waitingForOtherWindow'});
-    deepStrictEqual(phases, []);
+    deepStrictEqual(phases, [{kind: 'initializing'}]);
   });
 
-  it('F-2102 5.2 step 3: a window that owns the login from the start reports no stage', async () => {
+  it('F-2304 6.1: a lease on a helper already connected reports no stage', async () => {
+    const ready = fixture();
+    ready.lease.connectReplies = [
+      {type: 'refused', reason: 'alreadyConnected'},
+    ];
+    void ready.connecting();
+    await settled();
+    deepStrictEqual(ready.phases, []);
+  });
+
+  it('F-2304 BR-11: a login this window starts is the initializing stage', async () => {
     const {phases} = await loggedIn();
-    deepStrictEqual(phases, []);
+    deepStrictEqual(phases, [{kind: 'initializing'}]);
   });
 
   it('connect-14: shows the questions from the acquire, once, for this connect', async () => {

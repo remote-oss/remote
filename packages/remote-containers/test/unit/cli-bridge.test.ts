@@ -116,6 +116,25 @@ describe('the CLI bridge (card containers-04)', () => {
     );
   });
 
+  it('F-0412 Q-1: a configuration whose image is dropped writes the override without it and logs why', async () => {
+    const {bridge, written, sink} = setup(ending(UP_LINE), {
+      configText: '{"image": "alpine:3.22", "dockerFile": "Dockerfile"}',
+    });
+    await bridge.up(TARGET, UP_OPTIONS, () => undefined, NEVER);
+    deepStrictEqual(
+      [
+        written.map(text => JSON.parse(text) as unknown),
+        sink.lines.map(line => line.message),
+      ],
+      [
+        [{dockerFile: 'Dockerfile'}],
+        [
+          "the configuration's image is ignored, because it also builds from a Dockerfile (F-0412 Q-1)",
+        ],
+      ],
+    );
+  });
+
   it('C3: the override file is removed after a lifecycle failure and after a cancel', async () => {
     const config = {
       configText: '{"name": "${localEnv:V:dflt}"}',

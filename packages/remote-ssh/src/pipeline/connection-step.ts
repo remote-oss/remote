@@ -108,7 +108,10 @@ export function openConnectionStep(
     const stopStages = connection.onNotice(notice => {
       if (notice.type === 'waitingForOtherWindow') {
         dependencies.onPhase({kind: 'waitingForOtherWindow'});
-      } else if (notice.type === 'loginOwned') {
+      } else if (
+        notice.type === 'loginOwned' ||
+        notice.type === 'loginStarted'
+      ) {
         dependencies.onPhase({kind: 'initializing'});
       }
     });

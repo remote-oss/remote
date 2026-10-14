@@ -37,6 +37,7 @@ import {
 import {
   acceptanceRunId,
   buildDevContainerImage,
+  connectRunNetwork,
   startHostContainer,
   sweepStaleDevContainers,
 } from './acceptance-run.ts';
@@ -151,6 +152,8 @@ export interface HarnessVariables {
   HARNESS_SSH_CONFIG: string;
   /** The container id, for `docker exec` checks on the host. */
   HARNESS_CONTAINER: string;
+  /** The host's address on the run network, which the `routed` alias names; a route cut is scoped to it. */
+  HARNESS_ROUTED_ADDRESS: string;
   /** The run's folder: user data, extensions, keys. */
   HARNESS_RUN_FOLDER: string;
   /** The run's id, which every Docker object of the run carries in its run label. */
@@ -246,7 +249,8 @@ function masterAlias(
 /**
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
- * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); and the aliases of the
+ * and `stranger` (the harness host with an empty known-hosts file, so its key is unknown); `routed` (the harness
+ * account at the host's own address on the run network, which a route cut makes unreachable or silent); and the aliases of the
  * host's other accounts: `password` (login by password only), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `mute` (a login shell that does not answer), `readonly` (a server data folder that exists
@@ -260,6 +264,7 @@ export function harnessSshConfig(
   port: number,
   runFolder: string,
   agentSocket: string,
+  routedAddress: string,
   controlFolder = runFolder,
 ): string {
   return [
@@ -304,6 +309,17 @@ export function harnessSshConfig(
     '  IdentityAgent none',
     '  StrictHostKeyChecking ask',
     `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_stranger')}`,
+    '',
+    'Host routed',
+    `  HostName ${routedAddress}`,
+    '  Port 22',
+    '  User harness',
+    `  IdentityFile ${path.join(runFolder, 'id_ed25519')}`,
+    '  IdentitiesOnly yes',
+    '  IdentityAgent none',
+    '  StrictHostKeyChecking accept-new',
+    '  BatchMode yes',
+    `  UserKnownHostsFile ${path.join(runFolder, 'known_hosts_routed')}`,
     '',
     ...accountAlias('password', 'harness-pw', port, runFolder, PASSWORD_LINES),
     'Host password-ask',
@@ -620,10 +636,7 @@ async function prepare(
   const agentSocket = agentSocketPath(runFolder);
   if (editor === 'vscodium') {
     const agent = dependencies.startAgent(agentSocket);
-    stops.push(() => {
-      agent.stop();
-      return Promise.resolve();
-    });
+    stops.push(() => agent.stop());
   }
   const host = startHostContainer(command, root, runId, runFolder, [
     ...(downloads === undefined ? [] : downloadHostArguments()),
@@ -631,10 +644,17 @@ async function prepare(
   ]);
   started.push(host.container);
   const port = host.port;
+  const routedAddress = connectRunNetwork(command, runId, host.container);
   const configFile = path.join(runFolder, 'ssh_config');
   writeFileSync(
     configFile,
-    harnessSshConfig(port, runFolder, agentSocket, controlFolderOf(runFolder)),
+    harnessSshConfig(
+      port,
+      runFolder,
+      agentSocket,
+      routedAddress,
+      controlFolderOf(runFolder),
+    ),
   );
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
@@ -681,6 +701,7 @@ async function prepare(
     REMOTE_OSS_ACCEPTANCE: '1',
     HARNESS_SSH_CONFIG: configFile,
     HARNESS_CONTAINER: host.container,
+    HARNESS_ROUTED_ADDRESS: routedAddress,
     HARNESS_RUN_FOLDER: runFolder,
     HARNESS_RUN_ID: runId,
     ...(devContainerImage === undefined
