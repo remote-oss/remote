@@ -98,7 +98,7 @@ production code consumes, and a command registered with a placeholder handler wo
 VSIX. So every later card adds its own contribution, in the same PR as the code that consumes it:
 - **C2 (containers-03, #758):** `dev.containers.dockerPath`.
 - **C6 (Reopen in Container and the rest):** its commands, with their titles and `when` clauses copied from F-0401,
-  F-0403 and F-0405, each menu entry gated with `&& !remote-containers.standingDown`.
+  F-0403 and F-0405, each menu entry gated with `&& !remote-containers:standingDown`.
 - **The other cards:** whatever they consume.
 
 Each such card:
@@ -114,20 +114,18 @@ manifest and missing from the handlers is a type error, not a silent stub.
 {
   "source": "remote-oss/remote-containers#107 (F-1406)",
   "standsDownFor": "ms-vscode-remote.remote-containers",
-  "standingDownKey": "remote-containers.standingDown",
+  "standingDownKey": "remote-containers:standingDown",
   "namespaces": {
     "commands": ["remote-containers."],
     "settings": ["dev.containers."],
-    "contextKeys": ["remote-containers."],
+    "contextKeys": ["remote-containers:"],
     "internalCommands": ["remote-oss."]
   },
-  "contextKeys": [{"id": "remote-containers.standingDown", "setter": "extension"}],
+  "contextKeys": [{"id": "remote-containers:standingDown", "setter": "extension"}],
   "infoLineCommands": [],
   "runtimeCommands": [],
   "internal": [{"id": "remote-oss.gate.claim", "role": "called", "kind": "query"}],
-  "invented": [
-    {"id": "remote-containers.standingDown", "kind": "contextKeys", "spec": "F-0101", "date": "2026-10-14"}
-  ],
+  "invented": [],
   "settingPairs": [],
   "ungated": [],
   "locales": ["cs", "de", "es", "fr", "it", "ja", "ko", "pl", "pt-br", "qps-ploc", "ru", "tr", "zh-cn", "zh-tw"]
@@ -135,9 +133,11 @@ manifest and missing from the handlers is a type error, not a silent stub.
 ```
 
 Notes on these entries:
-- **The standing-down key** is `remote-containers.standingDown`, verbatim (athena, D-88, 2026-10-14). It follows the
-  family's pattern (`opensshremotes.standingDown`, `remote-explorer.standingDown`). It's an invented id under R-27, so
-  it's in the `invented` ledger.
+- **The standing-down key** is `remote-containers:standingDown`, with a colon, verbatim from F-1406 §6 (D-14;
+  athena's register entry of 2026-10-14 on remote-oss/remote-containers#122 Q9, superseding her dot ruling D-88). It's
+  a spec id, so it isn't in the `invented` ledger, and the context-key namespace is `remote-containers:`. If
+  `pnpm check-identifiers` rejects a `:` in a context key id or namespace, stop and report on #759: don't change the
+  key.
 - **`remote-oss.gate.claim`** is there because the family's proposed-API setup calls it (explorer-03b, `contracts.md`
   §3.4). If `pnpm check-identifiers` requires its namespace in another form, use the form remote-explorer's
   `identifiers.json` passes with, and say so in the PR.
@@ -148,7 +148,7 @@ After `pnpm identifiers`, the generated table holds:
 - an empty `commands` (and so on for every kind);
 - the one context key;
 - the one internal id;
-- `standDown` `{standsDownFor: 'ms-vscode-remote.remote-containers', contextKey: 'remote-containers.standingDown'}`;
+- `standDown` `{standsDownFor: 'ms-vscode-remote.remote-containers', contextKey: 'remote-containers:standingDown'}`;
 - `enabledApiProposals` (the seven, `as const`).
 
 Paste the generated file's head in the PR. If the generator fails on an empty `commands` table, stop (section 9,
@@ -360,14 +360,14 @@ Every `it` name starts with its cite. An (each) row counts once.
 ### 5.2 `test/unit/activation.test.ts` (fakes of `StandDownHost`, `CommandHost`, the channel port and `SetupPorts`, recording events in order, as remote-ssh's and remote-explorer's activation tests)
 
 The table under test is a fake `{commands: {alpha, beta}, standDown: {standsDownFor: 'ms-vscode-remote.remote-containers',
-contextKey: 'remote-containers.standingDown'}}`. The package's generated `commands` is empty, so the generic activation is
+contextKey: 'remote-containers:standingDown'}}`. The package's generated `commands` is empty, so the generic activation is
 tested on a table with entries.
 
 | Cite | Given | Expected |
 |---|---|---|
-| F-0101.BR-10 | the other extension runs | result `standing`; events exactly `context remote-containers.standingDown=true`, `warning <warning> <button>`; no channel created; `gate` and `handlers` never called; nothing registered |
+| F-0101.BR-10 | the other extension runs | result `standing`; events exactly `context remote-containers:standingDown=true`, `warning <warning> <button>`; no channel created; `gate` and `handlers` never called; nothing registered |
 | F-0101.BR-10 | as above, and the fake warning answers the button | `revealExtension('ms-vscode-remote.remote-containers')` once |
-| F-0101.BR-10 | it doesn't run | events in order: `context remote-containers.standingDown=false`, `channel Dev Containers`, the three banner lines, `probe` (the setup), `handlers`, `register alpha`, `register beta` |
+| F-0101.BR-10 | it doesn't run | events in order: `context remote-containers:standingDown=false`, `channel Dev Containers`, the three banner lines, `probe` (the setup), `handlers`, `register alpha`, `register beta` |
 | F-0101.BR-4 | banner `{displayName: 'Dev Containers', extensionVersion: '0.1.0', editorName: 'VSCodium', editorVersion: '1.139.0', editorCommit: 'abc'}` | the channel's first three lines end with `Dev Containers 0.1.0 in VSCodium 1.139.0 (abc).`, `Initializing configuration support...` and `Internal initialization of dev container support package...`, in that order, each at `info` |
 | F-0101.BR-9 | a setup whose decision is `proceed` with `missing: ['resolvers']` | a log line ending `Missing proposed APIs: resolvers`; `served.missing` is `['resolvers']`; both commands still registered |
 | F-0101.BR-9 | a setup with nothing missing | no `Missing proposed APIs` line |
