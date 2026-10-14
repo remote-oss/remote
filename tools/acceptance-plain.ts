@@ -26,8 +26,9 @@ export function extensionsFolderOf(runFolder: string, launch?: Launch): string {
 }
 
 /**
- * What every run's editor is started with: the run's own folders, the proposed API of the extensions unless a launch
- * turns it off, no trust prompt. A launch's own extensions bring their proposed API.
+ * What every run's editor is started with: the run's own user-data, shared-data and extensions folders, the proposed
+ * API of the extensions unless a launch turns it off, and workspace trust off unless a plain launch turns it on. A
+ * launch's own extensions bring their proposed API.
  */
 export function editorArguments(
   runFolder: string,
@@ -38,13 +39,17 @@ export function editorArguments(
     launch?.kind === 'plain' ? (launch.withExtensions ?? []) : [];
   return [
     `--user-data-dir=${path.join(runFolder, 'user-data')}`,
+    // Core keeps trust decisions and the recent list in a folder of the user's home that every run would share.
+    `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
     `--extensions-dir=${extensionsFolderOf(runFolder, launch)}`,
     ...(proposedApi
       ? [...PROPOSED_API_EXTENSIONS, ...ownExtensions].map(
           extensionId => `--enable-proposed-api=${extensionId}`,
         )
       : []),
-    '--disable-workspace-trust',
+    ...(launch?.kind === 'plain' && launch.workspaceTrust === true
+      ? []
+      : ['--disable-workspace-trust']),
   ];
 }
 

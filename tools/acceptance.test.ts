@@ -267,6 +267,8 @@ const LAUNCH_ORDER = [
   'explorer',
   'explorer-alone',
   'explorer-no-proposals',
+  'trust',
+  'trust-terminal',
   'ports-probe',
   'install-probe',
 ];
@@ -1295,6 +1297,7 @@ describe('acceptance', () => {
           '1.139.1',
           [
             '--user-data-dir=/run/user-data',
+            '--shared-data-dir=/run/shared-data',
             '--extensions-dir=/run/extensions',
             '--enable-proposed-api=remote-oss.remote-ssh',
             '--enable-proposed-api=remote-oss.acceptance-window-agent',

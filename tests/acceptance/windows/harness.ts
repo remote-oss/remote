@@ -44,6 +44,8 @@ export interface AgentEvent {
   remoteName?: string | null;
   remoteAuthority?: string | null;
   folders?: string[];
+  /** Whether the window's workspace is trusted, as `state` reports it. */
+  trusted?: boolean;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
@@ -394,6 +396,19 @@ export async function closeWindow(name: string): Promise<void> {
   );
 }
 
+/** Has window `name` report its state once, and gives that report. */
+async function reportedState(name: string): Promise<AgentEvent | undefined> {
+  const before = countOf(name, 'state');
+  await inWindow(name, 'acceptance.agent.state');
+  await waitUntil(
+    `window ${name} to report its state`,
+    () => countOf(name, 'state') > before,
+  );
+  return windowEvents(name)
+    .filter(each => each.event === 'state')
+    .at(-1);
+}
+
 /**
  * What window `name` reports of itself: the remote it is on, the authority it is on and its folders. A remote
  * window's authority is written by its own extension when it resolves, which may lag the window's agent, so a
@@ -406,15 +421,7 @@ export async function windowState(name: string): Promise<{
 }> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
-    const before = countOf(name, 'state');
-    await inWindow(name, 'acceptance.agent.state');
-    await waitUntil(
-      `window ${name} to report its state`,
-      () => countOf(name, 'state') > before,
-    );
-    const last = windowEvents(name)
-      .filter(each => each.event === 'state')
-      .at(-1);
+    const last = await reportedState(name);
     const state = {
       remoteName: last?.remoteName ?? null,
       remoteAuthority: last?.remoteAuthority ?? null,
@@ -429,6 +436,25 @@ export async function windowState(name: string): Promise<{
     }
     await new Promise(resolve => setTimeout(resolve, 200));
   }
+}
+
+/** Whether window `name`'s workspace is trusted, as it reports now; it does not wait for the window's connect. */
+export async function isTrusted(name: string): Promise<boolean | undefined> {
+  return (await reportedState(name))?.trusted;
+}
+
+/** Polls until window `name` reports the trust `wanted`, for up to 10 s, and gives what the window last reported. */
+export async function trustSettled(
+  name: string,
+  wanted: boolean,
+): Promise<boolean | undefined> {
+  const deadline = Date.now() + 10_000;
+  let trusted = await isTrusted(name);
+  while (trusted !== wanted && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    trusted = await isTrusted(name);
+  }
+  return trusted;
 }
 
 /** The output of `program` run with the run's agent, or its exit status when it fails. */

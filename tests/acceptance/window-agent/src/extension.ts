@@ -174,6 +174,7 @@ export function activate(context: vscode.ExtensionContext): void {
         folders: (vscode.workspace.workspaceFolders ?? []).map(each =>
           each.uri.toString(),
         ),
+        trusted: vscode.workspace.isTrusted,
       });
     }),
     vscode.commands.registerCommand(
