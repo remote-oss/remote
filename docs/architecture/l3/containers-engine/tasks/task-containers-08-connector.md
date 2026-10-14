@@ -249,7 +249,7 @@ CLI path and no host-side download:
      - when `transfer` fails with `localDownload` (or `verification`, should a later policy name one), log one line
        naming the URL tried, the local cache path, the reason (the failure's detail) and `retrying once`, and call
        `transfer` a second time with the same plan;
-     - a second failure is final, and its failure is what the connect returns (row 5 of §3.7);
+     - a second failure is final, and its failure is what the connect returns as `serverFailed` (§3.7 row 9);
      - for a `verification` failure, the attempt's log line also carries S157's text (`Downloading the VS Code Server
        failed. Please try again later.`); S157 is never shown in a dialog;
      - `cancelled`, `copyFailed`, `copyToolMissing`, `channelClosed` and the install's own failures aren't retried.
@@ -519,7 +519,7 @@ has rows of its own (§5.3).
 | F-0503 7.E3 | the probe reports an unsupported machine `armv7l` on Alpine; on glibc | row 7 with S031; with S359 |
 | F-0503 7.E1 | the start reports prerequisites missing, with output text | row 8 with that text |
 | F-0503 7.E2 | `transfer` fails `localDownload` once, then succeeds | two `transfer` calls; the connect proceeds; the log has one line with the URL, the cache path, the reason and `retrying once` |
-| F-0503 7.E2 | `transfer` fails `localDownload` twice | two calls; the connect fails with the second failure (§3.7 row 5); one retry line |
+| F-0503 7.E2 | `transfer` fails `localDownload` twice | two calls; the connect fails as `serverFailed` (§3.7 row 9), with the second failure's detail; one retry line |
 | F-0503 7.E2 | `transfer` fails `verification`, then succeeds | the retry line also carries S157's text |
 | F-0503 7.E2 | `transfer` fails `cancelled`; then `copyFailed`; then `channelClosed` | one `transfer` call each; no retry line |
 
