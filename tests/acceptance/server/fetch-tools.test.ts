@@ -296,7 +296,7 @@ for (const variant of fetchVariantsToRun(process.env)) {
     }
 
     if (variant !== 'none') {
-      describe('against the download host that fails', function () {
+      describe('against the download host that fails', () => {
         let failingHost: RunningHost;
         let downloads: DownloadHost;
         let folder = '';

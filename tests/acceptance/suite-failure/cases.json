@@ -201,7 +201,8 @@
         "from": "progress",
         "milliseconds": 10000,
         "cite": "#670"
-      }
+      },
+      "noDownloadRequests": true
     }
   ]
 }
