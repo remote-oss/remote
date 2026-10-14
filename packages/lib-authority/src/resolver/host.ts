@@ -26,6 +26,7 @@ export type PhaseName =
   | 'installing'
   | 'settingUpTunnel'
   | 'waitingForForwarding'
+  | 'startingServer'
   | 'serverDownloadPercent';
 
 /** A stage the connector reports, with the share downloaded for `serverDownloadPercent`. */

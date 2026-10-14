@@ -1,11 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
+  "include": ["${configDir}/src", "${configDir}/vscode-dts"],
   "references": [
     {
       "path": "../lib-authority"
     },
     {
       "path": "../lib-forwarding"
+    },
+    {
+      "path": "../lib-helper"
     },
     {
       "path": "../lib-host"
@@ -18,6 +22,9 @@
     },
     {
       "path": "../lib-product"
+    },
+    {
+      "path": "../lib-server"
     },
     {
       "path": "../lib-standdown"
