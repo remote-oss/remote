@@ -75,8 +75,12 @@ describe('windows of one editor on the same host (the first window is local)', f
 
   it("D-85: both windows' progress is in one record, by window", () => {
     deepStrictEqual(
-      ['b', 'c'].map(window => recordLines('progress', window).length > 0),
-      [true, true],
+      [
+        recordLines('progress', 'b').length > 0,
+        recordLines('progress', 'c').every(line => line.window === 'c'),
+        recordLines('progress').every(line => ['b', 'c'].includes(line.window)),
+      ],
+      [true, true, true],
     );
   });
 
