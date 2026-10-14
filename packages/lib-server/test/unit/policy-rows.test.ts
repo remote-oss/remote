@@ -82,4 +82,20 @@ describe('the SSH policy of a download mode (card connect-38)', () => {
       [true, true],
     );
   });
+
+  for (const [cell, expected] of [
+    ['downloadPlacement', {kind: 'clientOnly'}],
+    ['cache', 'kept'],
+    ['verification', ['none']],
+    ['environmentSetup', undefined],
+    ['requirementsCheck', 'serverBundled'],
+    ['allowedExtraStartOptions', ['useHostProxy']],
+    ['cleanup', {kind: 'onlyCurrentKeepLeftovers'}],
+    ['installMode', 'singleScript'],
+    ['prefetch', {kind: 'none'}],
+  ] as const) {
+    it(`transport contracts 5.0: the containers policy cell ${cell} is ${JSON.stringify(expected)}`, () => {
+      deepStrictEqual(CONTAINERS_POLICY[cell], expected);
+    });
+  }
 });

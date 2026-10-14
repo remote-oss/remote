@@ -92,6 +92,7 @@ import type {PortChoice} from './pipeline/port-choice.ts';
 import {hostAlias} from './pipeline/host-settings.ts';
 import {
   type MaintenanceRun,
+  maintenanceConnectionKey,
   maintenanceInputOf,
   runMaintenance,
 } from './maintenance/maintenance-run.ts';
@@ -444,13 +445,23 @@ export function connectAssemblyOf(
   let shownTitle = '';
   return {
     connector,
-    maintain: (action, target) =>
-      runMaintenance(
-        stepsOf(ports, () => undefined),
-        maintenanceInputOf(target),
-        action,
-        new AbortController().signal,
-      ),
+    maintain: async (action, target) => {
+      const runKey = machine.helpers.newNonce();
+      try {
+        return await runMaintenance(
+          stepsOf(ports, () => undefined),
+          maintenanceInputOf(target, runKey),
+          action,
+          new AbortController().signal,
+        );
+      } finally {
+        await killConnection(
+          {helper: machine.helpers, freePort: machine.freeSocksPort},
+          machine.folders.registry,
+          maintenanceConnectionKey(target, runKey),
+        );
+      }
+    },
     killLocalServer: hostString =>
       killConnection(
         {helper: machine.helpers, freePort: machine.freeSocksPort},

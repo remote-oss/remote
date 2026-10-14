@@ -19,6 +19,7 @@ import {
   READY_LINE,
   shellQuote,
   STOP_FUNCTIONS,
+  TREE_FUNCTIONS,
   UNPACK_FUNCTIONS,
 } from './posix-script.ts';
 import {RESULT_BEGIN, RESULT_END} from './result-block.ts';
@@ -69,6 +70,8 @@ export interface StartParameters {
   extensions: readonly string[];
   /** The polling interval of the file watcher in milliseconds, when the policy allows it; 0 for none. */
   fileWatcherPollingMilliseconds: number;
+  /** Whether the server starts in host-proxy mode, when the policy allows it. */
+  useHostProxy: boolean;
   /** How many seconds the start waits for the ready line before it fails. */
   readySeconds: number;
   /** Whether the server listens on a socket in the host's temporary folder instead of a TCP port. */
@@ -106,6 +109,11 @@ export interface ScriptParameters {
   archiveFormat: 'tar.gz' | 'zip';
   /** The epoch milliseconds that name the staging folder of a stepwise install. */
   epochMilliseconds: number;
+  /**
+   * V9's server tree the install extracts into and `bin/<commit>` links to; empty for a server installed in the data
+   * folder.
+   */
+  installTree: string;
   proxy: ProxyVariables;
   downloader: {
     /** Whether `curl` and `wget` read their configuration files. */
@@ -156,6 +164,7 @@ function parameterBlock(parameters: ScriptParameters): string[] {
     assignment('ARCHIVE_REMOVE', yesNo(parameters.removeArchive)),
     assignment('ARCHIVE_FORMAT', parameters.archiveFormat),
     assignment('STAGING_SUFFIX', parameters.epochMilliseconds),
+    assignment('INSTALL_TREE', parameters.installTree),
     assignment('PROXY_HTTP', parameters.proxy.http),
     assignment('PROXY_HTTPS', parameters.proxy.https),
     assignment(
@@ -198,6 +207,7 @@ function startOptions(start: StartParameters): string {
     ...(start.fileWatcherPollingMilliseconds > 0
       ? ['--file-watcher-polling', String(start.fileWatcherPollingMilliseconds)]
       : []),
+    ...(start.useHostProxy ? ['--use-host-proxy'] : []),
   ];
   const quoted = [...words, '"$TOKEN_FILE"', ...tail, ...optional].map(word =>
     word.startsWith('"') ? word : shellQuote(word),
@@ -273,8 +283,24 @@ const PROBE_BODY: readonly string[] = [
   'else',
   '  fact server.installed no',
   'fi',
-  'finish Ok',
 ];
+
+/** What the probe adds when the server installs into a tree: whether the tree is complete. */
+const PROBE_TREE_BODY: readonly string[] = [
+  'if [ -x "$INSTALL_TREE/$LAUNCHER" ]; then',
+  '  fact server.treeComplete yes',
+  'else',
+  '  fact server.treeComplete no',
+  'fi',
+];
+
+function probeBody(installTree: string): readonly string[] {
+  return [
+    ...PROBE_BODY,
+    ...(installTree === '' ? [] : PROBE_TREE_BODY),
+    'finish Ok',
+  ];
+}
 
 const LEAVE: readonly string[] = [
   'leave() {',
@@ -307,6 +333,40 @@ const INSTALL_BODY: readonly string[] = [
   'fact server.installDir "$INSTALL_DIR"',
   'fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
   'fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"',
+  'leave Ok',
+];
+
+/**
+ * The install into a tree: the lock is the container's own, in the temporary folder; a complete tree is not
+ * touched, and the link `bin/<commit>` is made whether the tree was installed now or by another container.
+ */
+const INSTALL_TREE_BODY: readonly string[] = [
+  'STARTED_AT=$(now_seconds)',
+  '[ -n "$DATA_ROOT" ] || finish CreateInstallDirFailed',
+  'MKDIR_ERROR=$(mkdir -p "$DATA_DIR/bin" "${INSTALL_TREE%/*}" 2>&1) || write_failed "$DATA_DIR/bin" "$MKDIR_ERROR"',
+  'take_lock_or_finish "$COMMIT"',
+  'if [ -x "$INSTALL_TREE/$LAUNCHER" ]; then',
+  '  fact server.treeInstalled no',
+  'else',
+  '  prepare_environment',
+  '  if [ -n "$ARCHIVE_PATH" ]; then',
+  '    ARCHIVE=$ARCHIVE_PATH',
+  '  else',
+  '    have wget || have curl || leave NoDownloaderAvailable',
+  '    ARCHIVE=${INSTALL_TREE}_$STAGING_SUFFIX.archive.$$',
+  '    fetch_archive "$ARCHIVE_URL" "$ARCHIVE" || leave ServerDownloadFailed',
+  '  fi',
+  '  DOWNLOADED_AT=$(now_seconds)',
+  '  install_tree "$ARCHIVE" || UNPACK_FAILED=yes',
+  '  [ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
+  '  [ -z "${UNPACK_FAILED:-}" ] || leave UnpackFailed',
+  '  fact server.treeInstalled yes',
+  '  fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
+  '  fact timing.install "$(elapsed_milliseconds "$DOWNLOADED_AT")"',
+  'fi',
+  'ensure_install_link',
+  '[ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed',
+  'fact server.installDir "$INSTALL_DIR"',
   'leave Ok',
 ];
 
@@ -437,7 +497,7 @@ const STEPWISE_BODIES: Readonly<Record<StepwiseAction, readonly string[]>> = {
   ],
 };
 
-function startBody(start: StartParameters): string[] {
+function startBody(start: StartParameters, installTree: string): string[] {
   return [
     'if [ "$SOCKET_MODE" = yes ]; then KIND_PREFIX=$BOOT_PREFIX.socket; else KIND_PREFIX=$BOOT_PREFIX; fi',
     'PID_FILE=$KIND_PREFIX.pid',
@@ -474,6 +534,7 @@ function startBody(start: StartParameters): string[] {
     '  fact timing.start "$(elapsed_milliseconds "$STARTED_AT")"',
     '  leave Ok',
     '}',
+    ...(installTree === '' ? [] : ['ensure_install_link']),
     '[ -x "$INSTALL_DIR/$LAUNCHER" ] || finish ServerFailedToStart',
     'take_lock_or_finish "$COMMIT"',
     'RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
@@ -631,15 +692,11 @@ const STOP_CLI_BODY: readonly string[] = [
 
 type BodyStep = Exclude<
   BootstrapRequest['step'],
-  'start' | 'installExtensions'
+  'start' | 'installExtensions' | 'probe' | 'install'
 >;
 
 function bodyOf(step: BodyStep): readonly string[] {
   switch (step) {
-    case 'probe':
-      return PROBE_BODY;
-    case 'install':
-      return INSTALL_BODY;
     case 'installCli':
       return INSTALL_CLI_BODY;
     case 'startCli':
@@ -717,12 +774,27 @@ function stepBody(
 ): readonly string[] {
   switch (request.step) {
     case 'start':
-      return startBody(parameters.start);
+      return startBody(parameters.start, parameters.installTree);
     case 'installExtensions':
       return installExtensionsBody(parameters.start);
+    case 'probe':
+      return probeBody(parameters.installTree);
+    case 'install':
+      return parameters.installTree === '' ? INSTALL_BODY : INSTALL_TREE_BODY;
     default:
       return bodyOf(request.step);
   }
+}
+
+/** The tree functions, for the steps that install into or link to a tree and a script that has one. */
+function treeGroups(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): ReadonlyArray<readonly string[]> {
+  return parameters.installTree !== '' &&
+    (request.step === 'install' || request.step === 'start')
+    ? [TREE_FUNCTIONS]
+    : [];
 }
 
 function posixScript(
@@ -734,6 +806,7 @@ function posixScript(
     ...GUARD,
     ...parameterBlock(parameters),
     ...FUNCTION_GROUPS[request.step].flat(),
+    ...treeGroups(request, parameters).flat(),
     ...body,
     '',
   ].join('\n');

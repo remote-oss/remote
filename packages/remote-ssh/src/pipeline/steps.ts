@@ -40,6 +40,8 @@ export interface ConnectInput {
   target: ConnectTarget;
   /** The host string exactly as the authority wrote it. */
   rawHostString: string;
+  /** The record key of the connection helper the connect acquires; when absent, `rawHostString`. */
+  connectionKey?: string;
   /** The resolver call of the window: 1 for the first, more for each reconnection. */
   attempt: number;
   isReconnection: boolean;

@@ -4,6 +4,7 @@
 
 import {deepStrictEqual, strict} from 'node:assert';
 import {
+  archiveKeyOf,
   cacheFolders,
   clientArchiveFolder,
   isFromSameGallery,
@@ -163,6 +164,43 @@ describe('the V9 cache folders (card server-06)', () => {
         'https://open-vsx.org/vscode/gallery',
       ),
       false,
+    );
+  });
+
+  it('F-0503 AC-38: a built-in-table archive is kept under the version and release', () => {
+    deepStrictEqual(
+      archiveKeyOf('builtInTable', {
+        commit: 'c0ffee',
+        version: '1.106.0',
+        release: '25090',
+      }),
+      '1.106.025090',
+    );
+  });
+
+  it('F-0503 AC-38: an override and a product template keep the archive under the commit', () => {
+    const profile = {commit: 'c0ffee', version: '1.106.0', release: '25090'};
+    deepStrictEqual(
+      [
+        archiveKeyOf('override', profile),
+        archiveKeyOf('productTemplate', profile),
+      ],
+      ['c0ffee', 'c0ffee'],
+    );
+  });
+
+  it('F-0503 AC-38: the archive folder of a built-in-table archive ends in the version and release', () => {
+    deepStrictEqual(
+      clientArchiveFolder(
+        '/c',
+        product('codium', 'stable'),
+        archiveKeyOf('builtInTable', {
+          commit: 'c0ffee',
+          version: '1.106.0',
+          release: '25090',
+        }),
+      ),
+      '/c/codium/stable/1.106.025090',
     );
   });
 });

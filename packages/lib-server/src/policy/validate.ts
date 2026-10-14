@@ -21,6 +21,11 @@ const KNOWN_PLACEMENT_KINDS = new Set<string>([
 
 const KNOWN_PLACEMENT_MODES = new Set<string>(['auto', 'always', 'off']);
 
+const KNOWN_EXTRA_START_OPTIONS = new Set<string>([
+  'fileWatcherPolling',
+  'useHostProxy',
+]);
+
 const KNOWN_VERIFICATIONS = new Set<string>([
   'headerHash',
   'lengthOnly',
@@ -105,7 +110,7 @@ export function validatePolicyRecord(
     problem('cleanup.count', 'must be a positive integer');
   }
   asData.allowedExtraStartOptions.forEach((option, index) => {
-    if (option !== 'fileWatcherPolling') {
+    if (!KNOWN_EXTRA_START_OPTIONS.has(option)) {
       problem(`allowedExtraStartOptions[${String(index)}]`, 'invalid value');
     }
   });

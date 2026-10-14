@@ -588,4 +588,22 @@ describe('maintenance outcomes', () => {
       'noResultBlock',
     );
   });
+
+  for (const [fact, expected] of [
+    [['server.treeComplete=yes'], true],
+    [['server.treeComplete=no'], false],
+    [[], false],
+  ] as const) {
+    it(`F-0503 BR-4: the probe reads ${fact.length === 0 ? 'no tree fact' : fact[0]} as treeComplete ${String(expected)}`, async () => {
+      const outcome = await probe(
+        recording(block('Ok', ...LINUX_FACTS, ...fact)),
+        parametersFor(),
+        NEVER_CANCELLED,
+      );
+      deepStrictEqual(
+        outcome.kind === 'probed' ? outcome.host.treeComplete : outcome.kind,
+        expected,
+      );
+    });
+  }
 });
