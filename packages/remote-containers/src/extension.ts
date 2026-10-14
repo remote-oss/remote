@@ -36,6 +36,7 @@ import {
   settings,
   standDown,
 } from './identifiers.generated.ts';
+import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {licenceModalOf} from './surfaces/licence-modal.ts';
 import {rebuildContainer} from './open/rebuild.ts';
@@ -323,6 +324,11 @@ export async function activate(
           serverDownloadFolder: configuration.get(
             settings.serverDownloadFolder.id,
           ),
+          cacheVolume: () =>
+            cacheVolumeOf(
+              configuration.inspect(settings.cacheVolume.id)?.globalValue,
+              configuration.inspect(settings.cacheVolume.legacyId)?.globalValue,
+            ),
         };
       },
       preflight: served.preflight,

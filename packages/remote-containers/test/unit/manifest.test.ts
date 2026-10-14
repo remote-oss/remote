@@ -61,6 +61,10 @@ const ENGLISH = {
     'Must be a URL (e.g., https://example.com or https://example.com:8080/path).',
   'setting.ServerDownloadFolder.description':
     "Local folder for downloading and caching VS Code server archives. The archives will be stored as `{downloadFolder}/{commit}/vscode-server-{platform}[-{quality}].tar.gz`. Platforms include `linux-x64`, `linux-armhf`, `linux-arm64`, `linux-alpine`, and `alpine-arm64`. Quality is `stable` or `insider`. The `-{quality}` suffix is omitted for `stable`. The default is in the system's temp folder.",
+  'setting.CacheVolume.description':
+    'Controls whether a Docker volume should be used to cache the VS Code server and extensions.',
+  'setting.CacheVolume.deprecated':
+    'Use `#dev.containers.cacheVolume#` instead.',
 };
 
 describe('the manifest', () => {
@@ -176,6 +180,19 @@ describe('the manifest', () => {
               scope: 'application',
               description: '%setting.ServerDownloadFolder.description%',
             },
+            'dev.containers.cacheVolume': {
+              type: 'boolean',
+              default: true,
+              scope: 'application',
+              description: '%setting.CacheVolume.description%',
+            },
+            'remote.containers.cacheVolume': {
+              type: 'boolean',
+              default: true,
+              scope: 'application',
+              description: '%setting.CacheVolume.description%',
+              markdownDeprecationMessage: '%setting.CacheVolume.deprecated%',
+            },
           },
         },
       },
@@ -209,6 +226,39 @@ describe('the manifest', () => {
       'contribViewsRemote',
       'contribRemoteHelp',
     ]);
+  });
+
+  it('F-0419 3.2 and 6.1: both cache-volume settings are contributed, with their English texts', () => {
+    const properties = (
+      MANIFEST.contributes as {
+        configuration: {properties: Record<string, Record<string, unknown>>};
+      }
+    ).configuration.properties;
+    deepStrictEqual(
+      [
+        properties['dev.containers.cacheVolume'],
+        properties['remote.containers.cacheVolume'],
+        ENGLISH['setting.CacheVolume.description'],
+        ENGLISH['setting.CacheVolume.deprecated'],
+      ],
+      [
+        {
+          type: 'boolean',
+          default: true,
+          scope: 'application',
+          description: '%setting.CacheVolume.description%',
+        },
+        {
+          type: 'boolean',
+          default: true,
+          scope: 'application',
+          description: '%setting.CacheVolume.description%',
+          markdownDeprecationMessage: '%setting.CacheVolume.deprecated%',
+        },
+        'Controls whether a Docker volume should be used to cache the VS Code server and extensions.',
+        'Use `#dev.containers.cacheVolume#` instead.',
+      ],
+    );
   });
 
   it('containers-01: the only activation event is the resolve of the dev-container authority', () => {
@@ -393,7 +443,13 @@ describe('the manifest', () => {
           date: '2026-10-14',
         },
       ],
-      settingPairs: [],
+      settingPairs: [
+        {
+          current: 'dev.containers.cacheVolume',
+          legacy: 'remote.containers.cacheVolume',
+          winner: 'current',
+        },
+      ],
       ungated: [],
       locales: LOCALES,
     });

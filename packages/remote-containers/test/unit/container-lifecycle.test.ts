@@ -20,17 +20,24 @@ import {
   type ContainerRequest,
   type ContainerStep,
 } from '../../src/lifecycle/container-lifecycle.ts';
-import {discoveryArguments, idLabels} from '../../src/lifecycle/labels.ts';
+import {
+  discoveryArguments,
+  idLabels,
+  legacyDiscoveryArguments,
+  legacyIdLabels,
+} from '../../src/lifecycle/labels.ts';
 
 const FOLDER = '/w/a';
 const CONFIG = '/w/a/.devcontainer/devcontainer.json';
 const OLD = 'a'.repeat(64);
 const NEW = 'b'.repeat(64);
+const LEGACY = 'c'.repeat(64);
 const REQUEST: ContainerRequest = {
   folder: FOLDER,
   configFile: CONFIG,
   dockerPath: 'docker',
   logLevel: 'info',
+  cacheVolume: true,
 };
 const UP: UpResult = {
   kind: 'up',
@@ -39,6 +46,7 @@ const UP: UpResult = {
   remoteWorkspaceFolder: '/workspaces/a',
 };
 const LISTING = discoveryArguments(FOLDER).join(' ');
+const LEGACY_LISTING = legacyDiscoveryArguments(FOLDER).join(' ');
 
 /** The `inspect` output of the containers, each `[id, status]`, with the volume mounted when `mounted`. */
 function inspected(
@@ -61,6 +69,47 @@ function inspected(
         : [],
     })),
   );
+}
+
+/** The `inspect` output of one legacy-labelled container, with the volume mounted. */
+function legacyInspected(containerId: string, status: string): string {
+  return JSON.stringify([
+    {
+      Id: containerId,
+      Created: '2026-10-14T03:00:28.1Z',
+      State: {Status: status},
+      Config: {
+        Labels: {
+          'vsch.local.folder': FOLDER,
+          'vsch.quality': 'stable',
+        },
+      },
+      Mounts: [{Type: 'volume', Name: 'vscode', Destination: '/vscode'}],
+    },
+  ]);
+}
+
+
+/** The engine's script of a discovery that finds the standard container `OLD` alone, in `status`. */
+function standardListing(status: string): Record<string, EngineRunOutcome[]> {
+  return {
+    [LISTING]: [ran(`${OLD}\n`)],
+    [LEGACY_LISTING]: [ran('')],
+    [`inspect --type container ${OLD}`]: [
+      ran(inspected([[OLD, status]])),
+    ],
+  };
+}
+
+/** The engine's script of a discovery that finds the legacy container alone, running. */
+function legacyListing(): Record<string, EngineRunOutcome[]> {
+  return {
+    [LISTING]: [ran('')],
+    [LEGACY_LISTING]: [ran(`${LEGACY}\n`)],
+    [`inspect --type container ${LEGACY}`]: [
+      ran(legacyInspected(LEGACY, 'running')),
+    ],
+  };
 }
 
 function ran(stdout: string): EngineRunOutcome {
@@ -124,7 +173,7 @@ function fakeBridge(): FakeBridge {
   return bridge;
 }
 
-const EMPTY_LISTING = {[LISTING]: [ran('')]};
+const EMPTY_LISTING = {[LISTING]: [ran('')], [LEGACY_LISTING]: [ran('')]};
 
 async function settle(): Promise<void> {
   await new Promise<void>(resolve => {
@@ -133,6 +182,25 @@ async function settle(): Promise<void> {
 }
 
 /** Runs one `prepare`, giving the steps, the outcome, the log lines and the bridge. */
+/** What a run's single `up` was given for its mounts, and whether the run read a mounted volume. */
+function mountings(
+  result: {bridge: FakeBridge; outcome: ContainerOutcome},
+): [unknown, boolean] {
+  return [
+    result.bridge.ups.length === 1
+      ? result.bridge.ups[0]?.target.mounts
+      : ['no up'],
+    result.outcome.kind === 'ready' && result.outcome.volumeMounted,
+  ];
+}
+
+/** What a run's single `up` was given for its id labels, or none when it never ran. */
+function targetIdLabels(result: {bridge: FakeBridge}): readonly string[] {
+  return result.bridge.ups.length === 1
+    ? result.bridge.ups[0]?.target.idLabels ?? []
+    : [];
+}
+
 async function prepared(
   engine: EngineHost,
   bridge = fakeBridge(),
@@ -221,6 +289,7 @@ describe('containerLifecycleOf', () => {
     const result = await prepared(
       scriptedEngine({
         [LISTING]: [ran(`${NEW}\n`)],
+        [LEGACY_LISTING]: [ran('')],
         [`inspect --type container ${NEW}`]: [
           ran(inspected([[NEW, 'running']], false)),
         ],
@@ -240,12 +309,7 @@ describe('containerLifecycleOf', () => {
     const outcomes = [];
     for (const status of ['paused', 'restarting']) {
       const result = await prepared(
-        scriptedEngine({
-          [LISTING]: [ran(`${OLD}\n`)],
-          [`inspect --type container ${OLD}`]: [
-            ran(inspected([[OLD, status]])),
-          ],
-        }),
+        scriptedEngine(standardListing(status)),
       );
       outcomes.push({
         outcome: result.outcome,
@@ -271,6 +335,7 @@ describe('containerLifecycleOf', () => {
     const result = await prepared(
       scriptedEngine({
         [LISTING]: [{kind: 'failed', detail: 'spawn dk ENOENT'}],
+        [LEGACY_LISTING]: [ran('')],
       }),
     );
     deepStrictEqual(
@@ -296,6 +361,7 @@ describe('containerLifecycleOf', () => {
     const result = await prepared(
       scriptedEngine({
         [LISTING]: [ran(`${OLD}\n`)],
+        [LEGACY_LISTING]: [ran('')],
         [`inspect --type container ${OLD}`]: [exited('daemon is down')],
       }),
     );
@@ -309,6 +375,7 @@ describe('containerLifecycleOf', () => {
     const result = await prepared(
       scriptedEngine({
         [LISTING]: [ran(`${OLD}\n`)],
+        [LEGACY_LISTING]: [ran('')],
         [`inspect --type container ${OLD}`]: [ran('nonsense')],
       }),
     );
@@ -325,6 +392,7 @@ describe('containerLifecycleOf', () => {
     it(`runs discovery again when a container vanished (${text.slice(0, 12)})`, async () => {
       const engine = scriptedEngine({
         [LISTING]: [ran(`${OLD}\n`), ran('')],
+        [LEGACY_LISTING]: [ran('')],
         [`inspect --type container ${OLD}`]: [exited(text)],
         [`inspect --type container ${NEW}`]: [
           ran(inspected([[NEW, 'running']])),
@@ -345,6 +413,7 @@ describe('containerLifecycleOf', () => {
       const result = await prepared(
         scriptedEngine({
           [LISTING]: [ran(`${OLD}\n`)],
+          [LEGACY_LISTING]: [ran('')],
           [`inspect --type container ${OLD}`]: [exited(text)],
         }),
       );
@@ -368,6 +437,7 @@ describe('containerLifecycleOf', () => {
     it(`reports ${name} as a failure to inspect, with no second discovery`, async () => {
       const engine = scriptedEngine({
         [LISTING]: [ran(`${OLD}\n`)],
+        [LEGACY_LISTING]: [ran('')],
         [`inspect --type container ${OLD}`]: [exited(stderr)],
       });
       const result = await prepared(engine);
@@ -384,6 +454,7 @@ describe('containerLifecycleOf', () => {
   it('finds the form on a later line and under a carriage return', async () => {
     const engine = scriptedEngine({
       [LISTING]: [ran(`${OLD}\n`), ran('')],
+      [LEGACY_LISTING]: [ran('')],
       [`inspect --type container ${OLD}`]: [
         exited(`WARNING: slow\r\nError: No such container: ${OLD}\r\n`),
       ],
@@ -404,6 +475,7 @@ describe('containerLifecycleOf', () => {
     return prepared(
       scriptedEngine({
         [LISTING]: [ran(`${OLD}\n`)],
+        [LEGACY_LISTING]: [ran('')],
         [`inspect --type container ${OLD}`]: [ran(inspected([[OLD, status]]))],
         [`inspect --type container ${NEW}`]: [
           ran(inspected([[NEW, 'running']])),
@@ -467,14 +539,7 @@ describe('containerLifecycleOf', () => {
   });
 
   it('F-0409: an ordinary open is unchanged: up keeps the container and a paused one is unusable', async () => {
-    const result = await prepared(
-      scriptedEngine({
-        [LISTING]: [ran(`${OLD}\n`)],
-        [`inspect --type container ${OLD}`]: [
-          ran(inspected([[OLD, 'paused']])),
-        ],
-      }),
-    );
+    const result = await prepared(scriptedEngine(standardListing('paused')));
     deepStrictEqual(
       [result.outcome.kind, result.bridge.ups.length],
       ['unusable', 0],
@@ -520,10 +585,7 @@ describe('containerLifecycleOf', () => {
   it("warns with both short ids when the CLI used another container and goes on with the CLI's", async () => {
     const result = await prepared(
       scriptedEngine({
-        [LISTING]: [ran(`${OLD}\n`)],
-        [`inspect --type container ${OLD}`]: [
-          ran(inspected([[OLD, 'exited']])),
-        ],
+        ...standardListing('exited'),
         [`inspect --type container ${NEW}`]: [
           ran(inspected([[NEW, 'running']])),
         ],
@@ -579,6 +641,7 @@ describe('containerLifecycleOf', () => {
       scriptedEngine(
         {
           [LISTING]: [ran(`${OLD}\n`)],
+          [LEGACY_LISTING]: [ran('')],
           [`inspect --type container ${OLD}`]: [exited('x')],
         },
         {controller: abort, on: `inspect --type container ${OLD}`},
@@ -628,7 +691,7 @@ describe('containerLifecycleOf', () => {
         leaked: result.lines.filter(line => line.includes('s3cr3t-token')),
         environments: engine.environments,
       },
-      {leaked: [], environments: [undefined, undefined]},
+      {leaked: [], environments: [undefined, undefined, undefined]},
     );
   });
 
@@ -662,6 +725,192 @@ describe('containerLifecycleOf', () => {
         [true, false],
         [true, true],
       ],
+    );
+  });
+
+  it('F-0409 AC-1: discovery lists both label sets and inspects them once', async () => {
+    const engine = scriptedEngine({
+      [LISTING]: [ran(`${OLD}\n${NEW}\n`)],
+      [LEGACY_LISTING]: [ran(`${NEW}\n${LEGACY}\n`)],
+      [`inspect --type container ${OLD} ${NEW} ${LEGACY}`]: [
+        ran(
+          inspected([
+            [OLD, 'running'],
+            [NEW, 'running'],
+            [LEGACY, 'running'],
+          ]),
+        ),
+      ],
+    });
+    const result = await prepared(engine);
+    deepStrictEqual(
+      {commands: engine.commands, kind: result.outcome.kind},
+      {
+        commands: [
+          LISTING,
+          LEGACY_LISTING,
+          `inspect --type container ${OLD} ${NEW} ${LEGACY}`,
+          `inspect --type container ${NEW}`,
+        ],
+        kind: 'ready',
+      },
+    );
+  });
+
+  it('F-0409: a failed legacy query is a discovery failure', async () => {
+    const engine = scriptedEngine({
+      [LISTING]: [ran('')],
+      [LEGACY_LISTING]: [{kind: 'failed', detail: 'legacy daemon is down'}],
+    });
+    const result = await prepared(engine);
+    deepStrictEqual(
+      {
+        outcome: result.outcome,
+        ups: result.bridge.ups.length,
+        commands: engine.commands,
+      },
+      {
+        outcome: {
+          kind: 'discoveryFailed',
+          detail: 'legacy daemon is down',
+        },
+        ups: 0,
+        commands: [LISTING, LEGACY_LISTING],
+      },
+    );
+  });
+
+  it('F-0409 AC-1: a legacy container is brought up with the legacy id labels', async () => {
+    const engine = scriptedEngine(legacyListing());
+    const bridge = fakeBridge();
+    bridge.upResult = {...UP, containerId: LEGACY};
+    const result = await prepared(engine, bridge);
+    deepStrictEqual(
+      {
+        outcome: result.outcome,
+        idLabels: targetIdLabels(result),
+      },
+      {
+        outcome: {
+          kind: 'ready',
+          containerId: LEGACY,
+          remoteUser: 'vscode',
+          remoteWorkspaceFolder: '/workspaces/a',
+          volumeMounted: true,
+          created: false,
+        },
+        idLabels: legacyIdLabels(FOLDER),
+      },
+    );
+  });
+
+  it('F-0419 AC-3: cacheVolume false mounts nothing', async () => {
+    const result = await prepared(
+      scriptedEngine(EMPTY_LISTING),
+      fakeBridge(),
+      new AbortController().signal,
+      {...REQUEST, cacheVolume: false},
+    );
+    deepStrictEqual(mountings(result), [[], false]);
+  });
+
+  it('F-0419: cacheVolume true mounts the volume', async () => {
+    const result = await prepared(
+      scriptedEngine({
+        ...EMPTY_LISTING,
+        [`inspect --type container ${NEW}`]: [
+          ran(inspected([[NEW, 'running']])),
+        ],
+      }),
+    );
+    deepStrictEqual(
+      mountings(result),
+      [['type=volume,source=vscode,target=/vscode'], true],
+    );
+  });
+
+
+/** A rebuild `prepare` over the engine, with the default bridge and a fresh signal. */
+async function rebuilt(engine: EngineHost) {
+  return prepared(
+    engine,
+    fakeBridge(),
+    new AbortController().signal,
+    {...REQUEST, rebuild: {buildNoCache: false}},
+  );
+}
+
+  it('F-0405 with F-0409: a rebuild removes the legacy container first, and uses the standard labels', async () => {
+    const engine = scriptedEngine({
+      ...legacyListing(),
+      [`rm --force ${LEGACY}`]: [ran('')],
+      [`inspect --type container ${NEW}`]: [ran(inspected([[NEW, 'running']]))],
+    });
+    const result = await rebuilt(engine);
+    deepStrictEqual(
+      {
+        commands: engine.commands,
+        idLabels: targetIdLabels(result),
+        lines: result.lines,
+      },
+      {
+        commands: [
+          LISTING,
+          LEGACY_LISTING,
+          `inspect --type container ${LEGACY}`,
+          `rm --force ${LEGACY}`,
+          `inspect --type container ${NEW}`,
+        ],
+        idLabels: idLabels(FOLDER, CONFIG),
+        lines: [
+          `info: rebuilding: removed the legacy container ${LEGACY.slice(0, 12)}`,
+          `info: rebuilding: the dev container CLI removes ${LEGACY.slice(0, 12)} first`,
+          'info: the lifecycle commands finished',
+        ],
+      },
+    );
+  });
+
+  it('F-0405 with F-0409: a failed legacy removal stops the rebuild', async () => {
+    const engine = scriptedEngine({
+      ...legacyListing(),
+      [`rm --force ${LEGACY}`]: [exited('device or resource busy')],
+    });
+    const result = await rebuilt(engine);
+    deepStrictEqual(
+      {
+        outcome: result.outcome,
+        ups: result.bridge.ups.length,
+        commands: engine.commands,
+      },
+      {
+        outcome: {
+          kind: 'discoveryFailed',
+          detail: `the legacy container ${LEGACY.slice(
+            0,
+            12,
+          )} couldn't be removed: device or resource busy`,
+        },
+        ups: 0,
+        commands: [
+          LISTING,
+          LEGACY_LISTING,
+          `inspect --type container ${LEGACY}`,
+          `rm --force ${LEGACY}`,
+        ],
+      },
+    );
+  });
+
+  it('F-0405: a rebuild with no legacy container removes nothing itself', async () => {
+    const engine = scriptedEngine(EMPTY_LISTING);
+    const result = await rebuilt(engine);
+    deepStrictEqual(
+      [
+        result.outcome.kind,
+        engine.commands.filter(command => command.startsWith('rm ')),
+      ],
+      ['ready', []],
     );
   });
 });

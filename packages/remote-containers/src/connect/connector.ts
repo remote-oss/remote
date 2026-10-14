@@ -79,6 +79,7 @@ export interface ContainerConnectorDependencies {
     dockerPath: unknown;
     serverDownloadBaseUrl: OverrideValue | undefined;
     serverDownloadFolder: unknown;
+    cacheVolume(): boolean;
   };
   /** What the second check needs besides the engine and the program. */
   preflight: Omit<PreflightDependencies, 'engineFor' | 'dockerPath'>;
@@ -392,6 +393,7 @@ export function containerConnectorOf(
         configFile,
         dockerPath,
         logLevel: 'info',
+        cacheVolume: settings.cacheVolume(),
         ...(rebuild === undefined
           ? {}
           : {rebuild: {buildNoCache: rebuild.buildNoCache}}),

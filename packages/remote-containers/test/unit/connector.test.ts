@@ -285,6 +285,13 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it("F-0419 AC-12: a folder's value is ignored per BR-7, and an unset setting is true", async () => {
+    const scene = sceneOf();
+    scene.cacheVolumeInspect = {globalValue: undefined, workspaceValue: false};
+    await connected(scene);
+    deepStrictEqual(scene.prepared[0]?.cacheVolume, true);
+  });
+
   it('F-0504 BR-2: the name comes from the configuration, read for the container that was prepared', async () => {
     const scene = sceneOf();
     await connected(scene);

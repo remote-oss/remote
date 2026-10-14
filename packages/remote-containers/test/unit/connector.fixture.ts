@@ -28,6 +28,7 @@ import type {
   EngineOptions,
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
+import {cacheVolumeOf} from '../../src/lifecycle/cache-volume.ts';
 import type {
   ContainerLifecycle,
   ContainerOutcome,
@@ -126,6 +127,9 @@ export interface Scene {
   phasesOfServer: Array<'installing' | 'startingServer'>;
   relayOutcome: 'open' | Failed;
   dockerPath: unknown;
+  /** What the settings' `inspect` answers for the two `cacheVolume` settings; nothing, when the scene leaves it absent. */
+  cacheVolumeInspect:
+    {globalValue?: unknown; workspaceValue?: unknown} | undefined;
   /** The exit statuses of the next `kill -0` runs. */
   killStatuses: number[];
   /** What the runs over the channel were given on their input, as text. */
@@ -200,6 +204,7 @@ export function sceneOf(
     phasesOfServer: ['installing', 'startingServer'],
     relayOutcome: 'open',
     dockerPath: 'docker',
+    cacheVolumeInspect: undefined,
     killStatuses: [],
     killScripts: [],
     relayGate: undefined,
@@ -317,6 +322,11 @@ export function sceneOf(
       dockerPath: scene.dockerPath,
       serverDownloadBaseUrl: undefined,
       serverDownloadFolder: undefined,
+      cacheVolume: () =>
+        cacheVolumeOf(
+          scene.cacheVolumeInspect?.globalValue,
+          scene.cacheVolumeInspect?.globalValue,
+        ),
     }),
     preflight: {
       logger: createLogger(sink, {minimumLevel: () => 'debug'}),

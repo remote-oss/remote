@@ -44,7 +44,13 @@
       "date": "2026-10-14"
     }
   ],
-  "settingPairs": [],
+  "settingPairs": [
+    {
+      "current": "dev.containers.cacheVolume",
+      "legacy": "remote.containers.cacheVolume",
+      "winner": "current"
+    }
+  ],
   "ungated": [],
   "locales": [
     "cs",
