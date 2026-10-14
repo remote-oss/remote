@@ -69,7 +69,10 @@ Concurrency: `conformance-${{ inputs.package }}`, `cancel-in-progress: false`: a
 The suites live in private repositories, and the workflow's `GITHUB_TOKEN` reaches this repository only. The suite is
 checked out with `actions/checkout` (`repository: remote-oss/<package>`, `ref: ${{ inputs.suite_ref }}`,
 `sparse-checkout: tests/conformance`) and a token from the repository secret **`CONFORMANCE_SUITES_TOKEN`**: read-only
-`contents` on the `remote-oss/remote-*` suite repositories, nothing else. Creating it is an org-owner action (§6).
+`contents` on **`remote-oss/remote-containers`** only (the suite repository the dirty side publishes to after hecate's
+check), chosen as "Only select repositories", never a pattern or "All repositories". A records repository
+(`remote-oss/remote-*-dirty`) holds unchecked dirty-side material and is never in its scope. Another package's suite
+repository is added by name when its replay job exists. Creating it is an org-owner action (§6).
 
 ### 2.4 The package's identity and rules
 
@@ -110,7 +113,7 @@ Containers cards.
 ## 6. Open rows (stop and report on this card's issue)
 
 1. **The suite token (org owner):** `CONFORMANCE_SUITES_TOKEN` is a repository secret with read access to the private
-   `remote-oss/remote-*` suite repositories. Creating it (a fine-grained token or a GitHub App installation token) is
+   suite repository `remote-oss/remote-containers` only (§2.3), never a `*-dirty` records repository. Creating it (a fine-grained token or a GitHub App installation token) is
    for the organization's owner. Until it exists, the job can't check out the suite.
 2. Microsoft's repository no longer offers `code-1.139.1`: report it; do not take another version (the cases were
    recorded on 1.139.1).
