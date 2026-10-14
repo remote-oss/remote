@@ -146,4 +146,10 @@ describe('planDisplay (the forwarded display of a window)', () => {
       undefined,
     );
   });
+
+  it("ADR-0010: the display: the session's DISPLAY passes unchanged, with no XAUTHORITY and nothing assumed about the cookie", () => {
+    deepStrictEqual(terminalEnvironment(planDisplay(input({}))), {
+      DISPLAY: 'localhost:10.0',
+    });
+  });
 });

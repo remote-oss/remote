@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {spawnSync} from 'node:child_process';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
+import {NOISE_LINES} from 'lib-host/testing/noise';
 import {
   commandsFor,
   type RunEnd,
@@ -248,6 +249,34 @@ describe('the scripts on the shared session (contracts §4 S10)', () => {
     it('ignores what the session writes when no run is on it', () => {
       runs.hear('motd');
       deepStrictEqual(written, []);
+    });
+
+    it('ADR-0010: the run markers: noise around and inside its stream changes nothing', async () => {
+      const noise = [...NOISE_LINES, 'm9:start', 'm9:end 0'];
+      const first = start();
+      const second = start();
+      for (const line of [
+        ...noise,
+        'm1:start',
+        'one',
+        'm1:end 4',
+        ...noise,
+        'm2:start',
+        'two',
+        'm2:end 0',
+        ...noise,
+      ]) {
+        runs.hear(line);
+      }
+      deepStrictEqual(
+        [first.lines, await first.ended, second.lines, await second.ended],
+        [
+          ['one'],
+          {kind: 'ended', status: 4},
+          ['two'],
+          {kind: 'ended', status: 0},
+        ],
+      );
     });
 
     it('does not take the marker of another run for its own', async () => {

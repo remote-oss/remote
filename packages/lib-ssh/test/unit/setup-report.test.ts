@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
+import {withNoise} from 'lib-host/testing/noise';
 import {firstSetupMarker, setupMarkerOf} from '../../src/index.ts';
 
 const RECORDED = readFileSync(
@@ -89,6 +90,18 @@ describe('the setup report of ssh -v (F-2105, F-2308 BR-5)', () => {
     deepStrictEqual(
       setupMarkerOf('Authenticated to dev ([10.0.0.1]:22) using "publickey".'),
       'authenticated',
+    );
+  });
+
+  it('ADR-0010: the setup report: noise around and inside its stream changes nothing', () => {
+    deepStrictEqual(
+      withNoise([
+        'banner: Authenticated to x using "y"',
+        '  debug1: SSH2_MSG_NEWKEYS received',
+      ])
+        .map(line => setupMarkerOf(line))
+        .filter(marker => marker !== undefined),
+      [],
     );
   });
 

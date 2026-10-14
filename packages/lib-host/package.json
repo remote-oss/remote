@@ -14,6 +14,10 @@
     "./testing/channel-contract": {
       "types": "./.tsc/src/testing/channel-contract.d.ts",
       "default": "./src/testing/channel-contract.ts"
+    },
+    "./testing/noise": {
+      "types": "./.tsc/src/testing/noise.d.ts",
+      "default": "./src/testing/noise.ts"
     }
   }
 }
