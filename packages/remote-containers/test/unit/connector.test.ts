@@ -368,6 +368,28 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it('contracts §5.2: the connector passes a root channel of the same container', async () => {
+    const scene = sceneOf();
+    await scene.connector.connect(inputOf(PAYLOAD));
+    const [request] = scene.serverRequests;
+    const before = scene.engineCalls.length;
+    await request?.rootChannel.runScript(
+      {
+        script: 'true',
+        interpreter: 'posixShell',
+        environment: {},
+        input: {kind: 'text', text: ''},
+        cancellation: new AbortController().signal,
+      },
+      () => undefined,
+    );
+    const argv = scene.engineCalls[before]?.argv ?? [];
+    deepStrictEqual(
+      [argv.slice(0, 4), argv.includes(READY.containerId)],
+      [['exec', '-i', '--user', 'root'], true],
+    );
+  });
+
   it('F-0502 BR-3: the relay is opened for the server’s port, with its paths, and a failure of it is the connect’s', async () => {
     const scene = sceneOf();
     scene.relayOutcome = {

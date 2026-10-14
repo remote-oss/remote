@@ -49,6 +49,7 @@ import {
   serverFailed,
   unsupportedPlatform,
 } from './failures.ts';
+import {prepareVolumeFolders} from './volume-folders.ts';
 
 /** How long the server may take to report its port, in seconds. */
 const READY_SECONDS = 15;
@@ -84,6 +85,8 @@ export interface ServerStepDependencies {
 /** What one connect asks of the steps. */
 export interface ServerRequest {
   channel: HostChannel;
+  /** The container's channel as root, for the volume's shared folders (contracts §5.2). */
+  rootChannel: HostChannel;
   remoteUser: string;
   /** Whether the container mounts the `vscode` volume, so that the server installs into its shared tree. */
   volumeMounted: boolean;
@@ -109,6 +112,35 @@ export type ServerResult =
 
 function failedWith(failure: Failed): ServerResult {
   return {kind: 'failed', failure};
+}
+
+/** The log text of a transfer that failed: its kind, then what it carries. */
+export function transferredDetail(failure: TransferFailure): string {
+  switch (failure.kind) {
+    case 'scriptFailed':
+      return failure.writeFailure === undefined
+        ? `scriptFailed (${failure.status})`
+        : `scriptFailed (${failure.status}): cannot write ${failure.writeFailure.path}: ${failure.writeFailure.error}`;
+    case 'serverDownload':
+      return failure.status === undefined
+        ? `serverDownload (${failure.cause})`
+        : `serverDownload (${failure.cause}, HTTP ${String(failure.status)})`;
+    case 'localDownload':
+      return `localDownload (${failure.cause}): ${failure.detail}`;
+    case 'downloadTimeout':
+      return `downloadTimeout (${failure.reason})`;
+    case 'verification':
+      return `verification (${failure.mismatch})`;
+    case 'copy':
+    case 'channelFailed':
+      return `${failure.kind} (${failure.failure.kind}): ${failure.failure.detail}`;
+    case 'retriesExhausted':
+      return failure.lockPath === undefined
+        ? `retriesExhausted (${String(failure.attempts)} attempts)`
+        : `retriesExhausted (${String(failure.attempts)} attempts): lock ${failure.lockPath}`;
+    default:
+      return failure.kind;
+  }
 }
 
 /** The download override's policy of Dev Containers in `policies`; a table without one is a defect. */
@@ -253,15 +285,19 @@ export async function runServerSteps(
     return failedWith(probeFailure(discovered, logger));
   }
   const platform = templatePlatformOf(discovered.host);
+  const platformName = `${platform.operatingSystem}-${platform.architecture}`;
   const installTree =
-    cacheFolders(
-      profile,
-      profile.commit,
-      `${platform.operatingSystem}-${platform.architecture}`,
-      request.volumeMounted,
-    ).serverTree ?? '';
+    cacheFolders(profile, profile.commit, platformName, request.volumeMounted)
+      .serverTree ?? '';
   let host = discovered.host;
   if (installTree !== '') {
+    await prepareVolumeFolders(
+      request.rootChannel,
+      profile,
+      platformName,
+      logger,
+      cancellation,
+    );
     const withTree = await probe(
       channel,
       parametersOf(dependencies, request, installTree, ''),
@@ -388,7 +424,9 @@ export async function runServerSteps(
       transferred = await attempt();
     }
     if (transferred.kind === 'failed') {
-      logger.info(`the server was not installed: ${transferred.failure.kind}`);
+      logger.info(
+        `the server was not installed: ${transferredDetail(transferred.failure)}`,
+      );
       return failedWith(
         transferred.failure.kind === 'cancelled' ? cancelled() : serverFailed(),
       );
