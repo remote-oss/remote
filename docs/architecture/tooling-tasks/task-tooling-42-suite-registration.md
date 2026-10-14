@@ -7,7 +7,7 @@ README's launch paragraphs and the case files' `tsconfig` entries. The data is i
 
 ## 1. Why
 
-Every new acceptance suite is registered by hand in five lists: `knip.jsonc`'s `tests/acceptance` entries,
+Every new acceptance suite is registered by hand in four lists: `knip.jsonc`'s `tests/acceptance` entries,
 `tests/acceptance/tsconfig.json`'s `include`, `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`, and the root
 `tsconfig.json`'s `references` (README "To add a launch"). It also gains a README section. Each of these appends at the
 same spot as the next suite's.
@@ -19,10 +19,14 @@ same spot as the next suite's.
    - `"*/src/extension.ts"`, for `slow-remote` and `window-agent` and any later development extension.
 
    `project` is unchanged. `pnpm dead` must report the same as before; paste both runs.
-2. **`tests/acceptance/tsconfig.json`:** `include` becomes `"${configDir}/suite*"`, `"${configDir}/*/src"` and the
-   case files' pattern after tooling-38 (`"${configDir}/suite*/cases/*.json"`), replacing the per-folder lines.
-   `pnpm typecheck` must check the same files: compare `tsc --build --listFilesOnly` output before and after, and
-   paste the difference, which must be empty.
+2. **`tests/acceptance/tsconfig.json`:** `include` becomes `"${configDir}/suite*/**/*"` and
+   `"${configDir}/*/src/**/*"`, replacing the per-folder lines.
+   - The bare `"${configDir}/suite*"` matches no files (dike measured `error TS18003: No inputs were found`), so the
+     `/**/*` is required.
+   - The `cases.json` lines go: after tooling-38, no suite imports a case file.
+   - **The check:** `tsc -p tests/acceptance/tsconfig.json --listFilesOnly` before and after must list the same files,
+     less the removed `cases.json` files. Paste the difference. `tsc --build --listFilesOnly` isn't usable here; it
+     gives `error TS5094`.
 3. **`eslint.config.ts`:** `TYPESCRIPT_PROJECTS` lists `'./tests/acceptance/tsconfig.json'` and
    `'./tests/acceptance/*/tsconfig.json'`. That replaces `server`, `windows` and each plain suite's line.
 4. **The root `tsconfig.json`'s `references`:** TypeScript has no glob here, so the list stays.
@@ -55,6 +59,8 @@ After tooling-38, and right after a quiet window. Tell hermes when it merges.
 - **A branch that registered a suite by hand:** takes main's lists, since its suite is matched by the globs. A
   plain suite keeps its root reference, in sorted place.
 - **A branch that added a README section:** moves the section to a topic page.
+- **A branch that edited a README section after tooling-38 changed it:** applies its edit to the topic page that
+  section moved to. The section's text is unchanged by the move, so the edit applies as it was.
 
 ## 5. Open rows (stop and report on #802)
 

@@ -20,7 +20,7 @@ agree with it.
 | 10, 7, 6 | `remote-ssh/test/unit/wiring.test.ts`, `remote-ssh/src/extension.ts` (hermes: #604, #609, #612; `adapters` hoisted in #608), `remote-ssh/src/pipeline/wiring.ts` | tooling-40 |
 | 4 × 15 | `remote-ssh/l10n/bundle.l10n*.json` (hermes: #594, #647, #651) | tooling-41 |
 | 12, 6 | `tests/acceptance/README.md`, `knip.jsonc` | tooling-42 |
-| 5, 4, 4 | `remote-ssh/test/unit/strings.test.ts`, `failure-strings.test.ts`, `skeleton.test.ts` (hermes: #647, #750) | tooling-43 |
+| 5, 4, 2 | `remote-ssh/test/unit/strings.test.ts`, `failure-strings.test.ts`, `skeleton.test.ts` (hermes: #647, #750) | tooling-43 |
 | 5, 3 | `tests/acceptance/windows/harness.ts`, `remote-ssh/src/surfaces/scripted-adapters.ts` (hermes: #612, #694) | tooling-44 |
 
 **The shape they share:** every PR appends one entry at the same spot of a shared list, or bumps a count or an exact
@@ -56,10 +56,28 @@ there, edits the exact label lists `LAUNCH_ORDER` (`tools/acceptance.test.ts`) a
      merged key by key.
    - A case suite's entry is `{"order": 40, "cases": "failure"}`, `"client"`, `"ports"` or `"install"`. It expands to
      that suite's cases in their own order, as today.
-2. **Cases one file per case.** Each case suite's cases move from `cases.json` to `cases/<NNN>-<label>.json`, one case
-   per file, read in file-name order. `NNN` is three digits, with gaps of 10 at migration (`010-…`, `020-…`). A
-   case that keeps the previous one's server or files (`keepServer`, `keepFiles`) keeps its neighbour by its number.
-3. `launchesOf(root)` reads every `tests/acceptance/*/launch.json`, expands the case entries, and sorts by `order`.
+2. **Cases one file per case.**
+   - Each case suite's cases move from `cases.json` to `cases/<NNN>-<name>.json`, one case per file, read in file-name
+     order.
+   - `NNN` is three digits, with gaps of 10 at migration (`010-…`, `020-…`).
+   - `<name>` is the case's launch name: `label` for client, ports and install cases, and `label ?? alias` for a
+     failure case.
+   - A case that keeps the previous one's server or files (`keepServer`, `keepFiles`) keeps its neighbour by its number.
+   - `failureCases(root)`, `clientCases(root)` and `hostCases(root, suite)` stay exported with their signatures, and
+     read the folder. `tools/acceptance.ts` (its loops over `failureCases` and `hostCases`, near line 762) is
+     unchanged.
+3. **The window gets its case from the launch, not from a file.**
+   - **Why:** the suites import `./cases.json` today (`failure-window.test.ts:9`, `client.test.ts:16`,
+     `ports.test.ts:6`, `install.test.ts:4`), and `bundleFolder` (`tools/acceptance.ts`) bundles them with esbuild into
+     `dist-*/*.test.cjs`, which run in the editor's window. A bundled module can't list a source folder.
+   - **What the launch passes:** each case launch's `environment` gains `HARNESS_CASE`, the case object as JSON,
+     beside today's `HARNESS_<SUITE>_CASE` name.
+   - **What the suites read:** `tests/acceptance/suite/cases.ts` (new) exports
+     `caseOfLaunch<Case>(): Case`, which parses `process.env.HARNESS_CASE` and throws, naming the variable, when it's
+     missing or isn't JSON. Each of the four suites uses it in place of its `cases.json` import and its `.find(...)`
+     by name.
+   - The suites read no case file, so nothing needs bundling.
+4. `launchesOf(root)` reads every `tests/acceptance/*/launch.json`, expands the case entries, and sorts by `order`.
    The function no longer lists any launch.
 
 **Order numbers at migration:** in today's order, in steps of 10 from 10. The launches on main when the build starts
@@ -75,7 +93,9 @@ launches, keep their places.
 - a `label` outside `LABEL_FORM`;
 - an unknown `base` or `cases` value;
 - a `launch.json` whose folder has no test file;
-- a case file whose name isn't `NNN-<label>.json` with the case's own label;
+- a case file whose name isn't `NNN-<name>.json`, with `<name>` as defined in §1.2;
+- two case files of one suite with the same `NNN`: two branches that both append "last" get no git conflict, so this
+  gate is what catches them, on main's next green run;
 - a `keepServer` or `keepFiles` case that is first in its suite.
 
 These checks already run in every tools row that calls it, and in every run. A new tools row,
@@ -102,9 +122,15 @@ test:unit`, so CI fails on a bad declaration before any run.
 - **New tools rows, over fixtures:** a duplicate `order`; a duplicate label; an unknown `base`; `base` merging
   (settings key by key); a case suite read in file-name order; a `keepServer` first case; a folder without tests. The
   changed tools files are at 100 %.
-- **Suites:** the case suites' test files (`suite-*/…test.ts`) import `cases/*.json` through a small reader in
-  `tests/acceptance/suite/cases.ts`, not `cases.json` (a JSON import can't read a folder). `check-coverage` reads cites
-  from `cases/*.json`, so its `casesCites` reads the folder.
+- **Suites:** the four case suites use `caseOfLaunch` (§1.3). A tools row checks that each case launch's environment
+  holds `HARNESS_CASE` equal to its case.
+- **`check-coverage`** reads cites from `cases/*.json`, so its `casesCites` reads the folder.
+- **Fixtures:** every tools test that writes a `cases.json` into a temporary workspace writes `cases/<NNN>-<name>.json`
+  files instead. That's in `tools/acceptance.test.ts`, `tools/acceptance-launches.test.ts` and
+  `tools/check-coverage.test.ts`: about 20 places, found with `grep -n "cases.json" tools/*.test.ts`.
+  - A helper in `tools/temporary-workspace.ts`, `writeCases(workspace, suite, cases)`, writes them in order with gaps
+    of 10, so each fixture is one call.
+  - The fixtures for the new gates use it too.
 
 ## 4. The migration, in one PR
 
@@ -113,15 +139,32 @@ test:unit`, so CI fails on a bad declaration before any run.
 3. Prove the order unchanged: before the change, print `launchesOf(REPOSITORY_ROOT).map(l => l.label)` on main; after
    it, print the same. The two lists are equal. Paste both in the PR.
 4. Run the full VSCodium run once, green, and paste its summary.
-5. Update the README's "Launches" and "To add a launch" paragraphs: a launch is a `launch.json` entry in its suite
-   folder, and the order is its `order`. tooling-42 then splits the README.
+5. Run `pnpm format`, which covers the new `launch.json` and `cases/*.json` files (`.prettierignore` skips only `*.md`,
+   `docs/` and `dist-*/`).
+6. Update the README:
+   - the "Launches" and "To add a launch" paragraphs: a launch is a `launch.json` entry in its suite folder, and the
+     order is its `order`;
+   - every sentence that says "entry of `suite-*/cases.json`" (today lines 84, 98, 233 and 247) names
+     `suite-*/cases/`;
+   - the paragraph naming `HOST_CASE_SUITES` (line 249) says the host-case suites are the `launch.json` entries with
+     `"cases": "ports"` or `"install"`.
+
+   tooling-42 then splits the README.
 
 ## 5. Land when
 
 `tools/acceptance*` and the suites are in nearly every harness branch. Land it right after a quiet window, and tell
-hermes the moment it merges, so in-flight builders merge main at once. A branch that added a row to `launchesOf` or a
-case to `cases.json` resolves by writing its launch or case as a declaration file, taking main's version of the old
-files.
+hermes the moment it merges, so in-flight builders merge main at once. An in-flight branch resolves by taking main's
+version of the old files, then:
+- **A new launch:** it becomes a `launch.json` entry. Its `order` is the gap between its neighbours, or the
+  largest `order` plus 10 when it's last. A duplicate with another branch's choice fails `launchesOf` on main's next
+  run, and the second branch to merge renumbers.
+- **A new case:** it becomes a `cases/<NNN>-<name>.json` file, with the same numbering rule.
+- **Rows added to `LAUNCH_ORDER` or to `acceptance-launches.test.ts`'s label lists:** they're dropped. The lists are
+  derived now. A row that tested the new launch's own configuration stays, and finds the launch by label.
+- **A field added to `FailureCase`, `ClientCase` or `HostCase`** (as `clientListeners` was): the field stays on the
+  type, and its value moves into the case files.
+- **A suite that imports `./cases.json`:** it uses `caseOfLaunch` instead.
 
 ## 6. Gates and review
 

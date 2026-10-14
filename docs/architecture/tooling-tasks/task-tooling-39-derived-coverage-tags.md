@@ -54,15 +54,20 @@ The rule "a `unit` or `acceptance` tag needs a citing row" goes: it's true by co
    - `unit`, `acceptance` and `todo` → `open`;
    - `recorded`, `core` and `deferred` unchanged;
    - **except** a `todo` line that a row cites today. A criterion can be cited and still `todo` on purpose, for
-     example F-2101 AC-17 before its republication, or rows that prove one half. Those become `held` with the reason
-     `held at migration (tooling-39): cited before it was tagged`. List them all in the PR body for athena, who
-     clears each to `open` or rewrites its reason in a follow-up.
+     example rows that prove one half, or one mode. It can also be tag lag, which dike's count suggests for most.
+     - **How many:** on main at 3b766429 there are 85, of which 77 are cited by unit rows and 8 by acceptance rows.
+     - **How they're found:** the migration lists them with a one-off script: every `todo` line of the old file that
+       `citedBy` finds in `rowsOf(root)`. The script isn't committed; its output goes in the PR.
+     - **What they become:** `held`, with the reason `held at migration (tooling-39): cited before it was tagged`.
+       The list in the PR body goes to athena, who clears each to `open` or rewrites its reason in a follow-up.
 2. **Show what moved.** Run `pnpm coverage-table` after the change and compare it with the file on main, `held`
    counted as `todo`. Paste the before and after counts in the PR.
    - The only difference allowed is a criterion tagged `unit` on main that an acceptance row also cites. Its effective
      tag becomes `acceptance`, which is what the rows say. List each one in the PR.
    - Any other difference is a stop (§8).
-3. `tools/seed-coverage.ts` writes `open` instead of `todo`.
+3. `tools/seed-coverage.ts` writes `open` instead of `todo`, and `tools/seed-coverage.test.ts`'s rows expect
+   `\topen\t` in place of `\ttodo\t` (its row `#142: gives every criterion the tag todo and no reason` is renamed
+   `… the tag open …`).
 
 ## 4. Rows (`tools/check-coverage.test.ts`, the changed files at 100 %)
 
@@ -76,12 +81,20 @@ The rule "a `unit` or `acceptance` tag needs a citing row" goes: it's true by co
 | a `recorded` criterion a row cites | a problem naming it |
 | `core` without a reason; `open` with one | a problem each |
 | the old tag `unit` in the file | "unknown tag: unit" |
+| `recorded` with a reason | a problem, as today: only `held`, `core` and `deferred` take one |
 | `--table` | every criterion, its effective tag, and the first citing row for a derived one |
 
 ## 5. Who does what after it
 
-- **Coverage cards and their builders:** a card's "Catalogue" section says which criteria its rows prove. The builder
-  no longer edits the file for them. A card that leaves a cited criterion unproven writes it `held`, with a reason.
+- **What a citation means now** (athena): a row that cites a criterion **claims to prove it**, together with the
+  other rows that cite it. A row that proves only a part (a half, a mode, one route) must leave the criterion `held`,
+  with a reason, **in the same PR**. Before this card, a partial row could cite and the line stay `todo` silently;
+  after it, a missing `held` makes the criterion count as covered. `coverage.md` states this rule first.
+- **Coverage cards and their builders:** a card's "Catalogue" section says which criteria its rows prove, and which it
+  leaves `held`. The builder no longer edits the file for the proven ones.
+- **A branch that finishes a `held` criterion** changes its line to `open` in the same PR. The gate can't tell a
+  finished `held` from an unfinished one, so the card's "Catalogue" section names it and athena's tag check verifies
+  it.
 - **athena's tag check:** it reviews the rows' citations and every changed `held`, `core`, `deferred` or `recorded`
   line. `pnpm coverage-table` shows the effect.
 - **AGENTS-level docs:** `docs/architecture/catalogue/` gains a short `coverage.md`: the tags, the derivation, and how
@@ -91,16 +104,21 @@ The rule "a `unit` or `acceptance` tag needs a citing row" goes: it's true by co
 
 Every coverage branch in flight edits this file. Land it right after a quiet window, and tell hermes the moment it
 merges.
-- **How an in-flight branch resolves:** take main's version of the file, then mark `held` any criterion its rows cite
-  but don't fully prove. Most branches then have no change to the file at all.
+- **How an in-flight branch resolves:**
+  - take main's version of the file;
+  - mark `held` any criterion its rows cite but don't fully prove;
+  - set to `open` any criterion of the migration's `held` list that its rows now finish.
+
+  Most branches then have no change to the file at all.
 - **Card fix-ups:** hermes asks each open coverage card's builder to drop the "Catalogue: set to unit/acceptance"
   edits, which become no-ops.
 
 ## 7. Gates and review
 
-All gates; `check-coverage` green with counts equal to before. PR title `tools, docs: unit and acceptance tags are
-derived from the rows that cite a criterion (card tooling-39, #799)`. Request athena only. She also gives the design
-check of §1 and §5, since it changes how her tag check works.
+All gates; `check-coverage` green, with counts equal to before except the moves §3.2 lists. On main at 3b766429
+that's one, F-2301 AC-1, `unit` → `acceptance`: acceptance 81 → 82, unit 114 → 113. PR title `tools, docs: unit and acceptance tags are
+derived from the rows that cite a criterion (card tooling-39, #799)`. Request athena only. athena also gives the
+design check of §1 and §5, since it changes how athena's tag check works.
 
 ## 8. Open rows (stop and report on #799)
 

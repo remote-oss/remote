@@ -1,8 +1,8 @@
 # Task card tooling-40: remote-ssh's activation and wiring tests split by feature
 
 Issue: #800. Release 0.2 (gate throughput). From athena's brief and hermes's addition (the `activate` collision). Size:
-M (about 1.5 agent-days). Builder: unassigned (task:claude). Track C: tooling-44 (#804) lands after this one, because
-both touch `extension.ts`. The data is in tooling-38 §0:
+M (about 1.5 agent-days). Builder: unassigned (task:claude). Track C. tooling-44 (#804) doesn't depend on it:
+tooling-44 keeps `extension.ts`'s imports as they are, so the two can run in parallel. The data is in tooling-38 §0:
 - `remote-ssh/test/unit/wiring.test.ts` changed on both sides of 10 merges, and conflicted at merge time 3 times;
 - `src/extension.ts` 7 (hermes: #604, #609, #612, and the semantic collision where `adapters` was hoisted, #608);
 - `src/pipeline/wiring.ts` 6, which stays as it is (tooling-38 §0, observations).
@@ -13,9 +13,12 @@ Behaviour doesn't change, and no row's name changes.
 
 The file holds 13 `describe` blocks, one per part of the composition, over shared helpers. Different cards touch
 different blocks, but the blocks share one file, so their edits meet.
-- **Shared helpers:** `serverSettings`, `portsOf`, `BRIDGE_PORT`, `ALIAS`, `inputFor`, `stepsOf`, `CONNECTED`,
-  `lookupWith`, `tunnelWith` and `channelRunOf` move unchanged into `test/unit/wiring.fixture.ts`, which exports them.
-  The pattern is `pipeline.fixture.ts`.
+- **Shared helpers:** `serverSettings`, `portsOf`, `WiringSeen`, `BRIDGE_PORT`, `ALIAS`, `inputFor`, `stepsOf`,
+  `CONNECTED`, `lookupWith`, `tunnelWith` and `channelRunOf` move unchanged into `test/unit/wiring.fixture.ts`, after
+  the pattern of `pipeline.fixture.ts`.
+  - It exports only what a test file imports.
+  - `serverSettings` and `lookupWith`, used only inside other helpers, stay unexported, or `pnpm dead` flags them.
+  - The builder lists the fixture's exports in the PR.
 - **The blocks** move unchanged, each into a file named for it:
 
   | `describe` | File |
@@ -40,35 +43,64 @@ different blocks, but the blocks share one file, so their edits meet.
 ## 2. `src/extension.ts`: activate composes feature modules over one activation context
 
 **Today:** `activate` builds the shared values (`manifest`, `host`, `adapters`, `extension`, `configPlaces`, `help`)
-inline. It then runs the setup and wires each feature in place: the connect registration, the companion endpoints,
-and the configuration-file handler passed into the setup. A card that needs a shared value earlier, or adds a feature,
+inline. It then runs the setup and wires each feature in place: the connect registration, the companion endpoints, and
+the configuration-file handler passed into the setup. A card that needs a shared value earlier, or adds a feature,
 edits the middle of the function. That's where #604, #608 and #612 collided.
 
 **After:**
-1. **`src/activation/context.ts`:** `ActivationContext`, a plain object type with the values every feature reads:
-   `manifest`, `host`, `adapters`, `extension`, `configPlaces`, `help`, `translate` and `vscodeContext` (the
-   `ExtensionContext`). `activationContextOf(context): Promise<ActivationContext>` builds it once, at the top of
-   `activate`. It is the function today's first lines become.
-2. **One module per feature** in `src/activation/`, each exporting one function that takes the `ActivationContext`
-   and, where needed, the setup's result (`ServedActivation`), and returns a `vscode.Disposable` or nothing:
+1. **`src/activation/types.ts`:** the types `Manifest` and `ServedActivation`, moved from `extension.ts`. Feature modules
+   take them from here, so nothing imports `extension.ts`, which would be a cycle under
+   `layout/no-intra-package-cycles`; that rule counts `import type`.
+2. **`src/activation/editor-facts.ts`:** the helpers several features share, moved unchanged:
+   - `ACCEPTANCE_FILES`, `acceptanceWindowName`, `editorProfile`, `dataFolderNameOfEditor`;
+   - `configuredHosts`, `translate`, `surfaceAdapters`, and the constants they read.
 
-   | Module | Moves from `extension.ts` |
-   |---|---|
-   | `connect-feature.ts` | `registerConnectOf`, `editorProfile`, `dataFolderNameOfEditor`, `acceptanceWindowName`, `recordAuthority`, `acceptanceResolverEditorOf` |
-   | `companion-feature.ts` | the `createProtocol` and `serveSliceEndpoints` block, and `configuredHosts` |
-   | `config-file-feature.ts` | the `openConfigFileHandler(...)` construction passed to the setup |
+   No single feature owns them: `acceptanceWindowName` and `ACCEPTANCE_FILES` serve `surfaceAdapters`, the connect
+   registration and `activate`; `editorProfile` and `dataFolderNameOfEditor` serve the setup gate and the connect
+   registration; `configuredHosts` serves the connect registration and the companion endpoints.
+3. **`src/activation/context.ts`:** `ActivationContext`, the values every feature reads: `manifest`, `host`, `adapters`,
+   `extension`, `configPlaces`, `help` and `vscodeContext` (the `ExtensionContext`).
+   - `activationContextOf(context): Promise<ActivationContext>` builds it once, at the top of `activate`. It's today's
+     first lines.
+   - **It stays inside the composition root** (athena): only `src/extension.ts` and `src/activation/*` import it.
+   - An ESLint `no-restricted-imports` entry for `packages/remote-ssh/src/**` enforces that, excluding those files. A
+     lint fixture row, or the rule's own test if the config has one, shows an import from `src/connect/` failing.
+4. **One module per feature** in `src/activation/`, each exporting one async function:
 
-3. **`activate` becomes a short, linear list:** build the context; run the setup with the config-file handler; return
-   if not serving; push the result's disposal; then one call per feature, each pushing its disposable.
-4. **A new feature card** adds a module and one call line, at the end of the list. A value several features need joins
-   `ActivationContext`, so no card reorders `activate`.
-5. **Coverage:** each module imports `vscode`, so it joins `extension.ts` in `coverage.json`'s exclusions with the
-   same reason, `loads the editor`. Its logic stays in the covered modules it calls, as today.
+   | Module | Signature | Moves from `extension.ts` |
+   |---|---|---|
+   | `config-file-feature.ts` | `configFileHandlerOf(context): CommandHandler` | the `openConfigFileHandler(...)` construction passed to the setup |
+   | `connect-feature.ts` | `connectFeature(context, served): Promise<{registration: ConnectRegistration; disposable: vscode.Disposable}>` | `registerConnectOf`, `recordAuthority`, `acceptanceResolverEditorOf` |
+   | `companion-feature.ts` | `companionFeature(context, served, connect: {activeConnection(): …}): vscode.Disposable` | the `createProtocol` and `serveSliceEndpoints` block |
+
+   **A feature that needs another's result takes it as an explicit parameter.** The companion feature takes the
+   connect's `activeConnection`, as `extension.ts:304` passes it today. So the order of the calls in `activate` is
+   visible in their data.
+5. **A feature module only wires** (athena): it calls covered modules with the narrow values they take, such as
+   `context.host` or `served.logger`, never with the whole context. Any branch or computation belongs in a covered
+   module, not here.
+6. **`activate` becomes a short, linear list:**
+   1. build the context;
+   2. run the setup with `configFileHandlerOf(context)`, and return if not serving;
+   3. push the result's disposal;
+   4. `const connect = await connectFeature(context, served)`, and push its disposable;
+   5. push `companionFeature(context, served, connect.registration)`.
+
+   **A new feature card** adds a module and one call line, at the end of the list. A value several features need joins
+   `ActivationContext` or `editor-facts.ts`, so no card reorders `activate`.
+7. **Coverage:** every file under `src/activation/` imports `vscode` or only declares types, so all six are coverage
+   exclusions: `context.ts`, `editor-facts.ts`, `types.ts` and the three feature modules, with reasons `loads the
+   editor` or `types only; no executable code`.
+   - `tools/coverage.ts` requires each excluded path, with its reason, in `coverage.json` and in the package README's
+     "Coverage exclusions" row.
+   - The README's "Allowed imports" row adds `src/activation/` beside `src/extension.ts`, for `lib-companion`.
+   - The rule of point 5 is what keeps untested logic out of these files, and athena's design check reviews each one
+     for it.
 
 **What this doesn't remove:** two cards that each add a feature in the same window still both append one call line at
 the end of `activate`. That's a one-line conflict, which `git` often resolves, instead of interleaved edits in the
-middle of a 120-line function. A generated registry isn't worth it here: the order of the calls matters (the connect
-registration before the companion endpoints, which read its active connection).
+middle of a 120-line function. A generated registry isn't worth it here: the order of the calls matters, as point 4
+shows (athena accepted the ordered list).
 
 ## 3. Gates and review
 
@@ -78,10 +110,18 @@ feature modules, and the wiring rows split by step (card tooling-40, #800)`. Req
 
 ## 4. Land when
 
-Most remote-ssh product branches touch `extension.ts` or `wiring.test.ts`. Land it right after a quiet window, and tell
-hermes the moment it merges. An in-flight branch resolves like this:
-- a block it added to `wiring.test.ts` moves to the step's new file;
-- an edit to `activate` moves into the feature module it belongs to, or a new one.
+Most remote-ssh product branches touch `extension.ts` or `wiring.test.ts`.
+- **The live collision:** open PR **#753** (connect-39, approved) adds to `extension.ts` (+8), `pipeline/wiring.ts`
+  (+52) and `wiring.test.ts` (+161). Land this card after #753 merges, or have #753's builder merge it right after,
+  with the rules below.
+- **When:** right after a quiet window, telling hermes the moment it merges.
+
+An in-flight branch resolves like this:
+- `wiring.test.ts` is deleted on main, so git reports modify/delete. The branch takes the deletion, then moves its new
+  or changed `describe` blocks into the step's new file, and its edits to the file's shared helpers into
+  `wiring.fixture.ts`.
+- An edit to `activate` moves into the feature module it belongs to, or a new one. An edit to `registerConnectOf`
+  goes to `connect-feature.ts`, and one to `surfaceAdapters` or another shared helper goes to `editor-facts.ts`.
 
 ## 5. Open rows (stop and report on #800)
 
