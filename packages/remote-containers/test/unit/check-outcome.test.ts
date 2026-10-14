@@ -68,12 +68,6 @@ describe('the classification of the first check', () => {
       [exited(1, 'permission denied; not found')],
       'permission',
     ],
-    [
-      'F-0201 AC-47, not found on stderr',
-      SPAWN,
-      [exited(1, 'context not found')],
-      'notFound',
-    ],
     ['notfound on stderr', SPAWN, [exited(1, 'notfound')], 'notFound'],
     [
       'not found on stdout only',
@@ -96,18 +90,6 @@ describe('the classification of the first check', () => {
       'engineError',
     ],
     [
-      'F-0201 AC-47, a missing context',
-      SPAWN,
-      [
-        GOOD,
-        exited(
-          1,
-          'Failed to initialize: unable to resolve docker endpoint: context "nosuch": context not found: x',
-        ),
-      ],
-      'notFound',
-    ],
-    [
       'a server below the minimum',
       SPAWN,
       [GOOD, exited(0, '', '{"Server":{"ApiVersion":"1.30"}}')],
@@ -125,6 +107,26 @@ describe('the classification of the first check', () => {
       deepStrictEqual(firstCheckOutcomeOf(executable, queries), expected);
     });
   }
+
+  it('F-0201 AC-47: not found on stderr is notFound', () => {
+    deepStrictEqual(
+      firstCheckOutcomeOf(SPAWN, [exited(1, 'context not found')]),
+      'notFound',
+    );
+  });
+
+  it('F-0201 AC-47: a missing context is notFound', () => {
+    deepStrictEqual(
+      firstCheckOutcomeOf(SPAWN, [
+        GOOD,
+        exited(
+          1,
+          'Failed to initialize: unable to resolve docker endpoint: context "nosuch": context not found: x',
+        ),
+      ]),
+      'notFound',
+    );
+  });
 });
 
 describe('the classification of the second check', () => {
