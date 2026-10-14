@@ -1,4 +1,9 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
+import {spawn} from 'node:child_process';
+import {existsSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {FakeClientProcess} from './fake-client-process.ts';
 import {
   nodeProcessSpawner,
@@ -322,41 +327,38 @@ describe('Node.js process spawner', () => {
     );
   });
 
-  /** A child whose grandchild keeps its standard streams, as a ControlMaster keeps its mux client's; it prints the pid. */
-  function heldStreamsScript(ending: string): string {
+  /**
+   * The holder of a child's standard streams, as a ControlMaster holds its mux client's. It writes to its notes file, once
+   * each, `stdin` when its input ends and `stdout` or `stderr` when a write to that stream fails: what it sees when the
+   * spawner has destroyed its own end of each stream. It writes a dot to both outputs every 50 ms from 300 ms on.
+   */
+  const HOLDER = [
+    'const fs = require("node:fs");',
+    'const notes = process.argv[1];',
+    'const seen = new Set();',
+    'const note = name => { if (!seen.has(name)) { seen.add(name); fs.appendFileSync(notes, name + "\\n"); } };',
+    'process.stdin.on("end", () => note("stdin"));',
+    'process.stdin.on("error", () => note("stdin"));',
+    'process.stdin.resume();',
+    'process.stdout.on("error", () => note("stdout"));',
+    'process.stderr.on("error", () => note("stderr"));',
+    'setTimeout(() => setInterval(() => { process.stdout.write("."); process.stderr.write("."); }, 50), 300);',
+    'setTimeout(() => undefined, 30000);',
+  ].join(' ');
+
+  /** A child that starts a holder of its streams, prints the holder's pid and then runs `ending`. */
+  function heldStreamsScript(notes: string, ending: string): string {
     return [
       'const {spawn} = require("node:child_process");',
-      'const holder = spawn(process.execPath, ["-e", "setTimeout(() => undefined, 30000)"], {stdio: "inherit", detached: true});',
+      `const holder = spawn(process.execPath, ["-e", ${JSON.stringify(HOLDER)}, ${JSON.stringify(notes)}], {stdio: "inherit", detached: true});`,
       'holder.unref();',
       'process.stdout.write(holder.pid + "\\n");',
       ending,
     ].join(' ');
   }
 
-  /** Starts a held-streams child and gives its session, once it has printed the holder's pid, and the pid. */
-  async function heldStreams(ending: string) {
-    const session = sessionOf(
-      await spawnSession(
-        nodeProcessSpawner,
-        {
-          program: process.execPath,
-          arguments: ['-e', heldStreamsScript(ending)],
-          environment: {},
-        },
-        {},
-        {},
-      ),
-    );
-    const holder = await new Promise<number>(resolve => {
-      session.onOutput(chunk => {
-        resolve(Number(chunk.trim()));
-      });
-    });
-    holders.push(holder);
-    return {session, printedAt: Date.now()};
-  }
-
   const holders: number[] = [];
+  const notesFolders: string[] = [];
 
   afterEach(() => {
     for (const holder of holders.splice(0)) {
@@ -366,21 +368,131 @@ describe('Node.js process spawner', () => {
         // The holder has already ended.
       }
     }
+    for (const folder of notesFolders.splice(0)) {
+      rmSync(folder, {recursive: true, force: true});
+    }
   });
 
-  it('connect-51: kill() ends a session whose stdio another process holds', async () => {
-    const {session} = await heldStreams('setTimeout(() => undefined, 30000);');
+  /** Starts a held-streams child on the spawner itself, and gives its handle once the holder's pid is printed. */
+  async function heldStreams(ending: string) {
+    const folder = mkdtempSync(path.join(tmpdir(), 'held-'));
+    notesFolders.push(folder);
+    const notes = path.join(folder, 'notes');
+    const handle = await nodeProcessSpawner({
+      program: process.execPath,
+      programArguments: ['-e', heldStreamsScript(notes, ending)],
+      environment: {},
+    });
+    const exits: Array<number | undefined> = [];
+    const exited = new Promise<number | undefined>(resolve => {
+      handle.onExit(status => {
+        exits.push(status);
+        resolve(status);
+      });
+    });
+    const holder = await new Promise<number>(resolve => {
+      handle.onOutput(chunk => {
+        resolve(Number(chunk.trim()));
+      });
+    });
+    holders.push(holder);
+    return {handle, exits, exited, notes, printedAt: Date.now()};
+  }
+
+  /** The streams the holder has seen released so far, in order of name. */
+  function notedStreams(notes: string): string[] {
+    return existsSync(notes)
+      ? readFileSync(notes, 'utf8').split('\n').filter(Boolean).sort()
+      : [];
+  }
+
+  /** The streams the holder saw released, in order of name, waiting up to 1 500 ms for all three. */
+  async function releasedStreams(notes: string): Promise<string[]> {
+    for (
+      let waited = 0;
+      waited < 1500 && notedStreams(notes).length < 3;
+      waited += 50
+    ) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    return notedStreams(notes);
+  }
+
+  it('connect-51: kill() ends a session whose stdio another process holds, well before the drain, and releases its three streams', async () => {
+    const {handle, exited, notes} = await heldStreams(
+      'setTimeout(() => undefined, 30000);',
+    );
     const killedAt = Date.now();
-    session.kill();
-    const status = await session.exit();
-    deepStrictEqual([status, Date.now() - killedAt < 2000], [undefined, true]);
+    handle.kill();
+    const status = await exited;
+    const elapsed = Date.now() - killedAt;
+    deepStrictEqual(
+      [status, elapsed < 250, await releasedStreams(notes)],
+      [undefined, true, ['stderr', 'stdin', 'stdout']],
+    );
   });
 
-  it('connect-51: a process that exits while another holds its stdio is seen to exit', async () => {
-    const {session, printedAt} = await heldStreams('process.exit(4);');
-    const status = await session.exit();
+  it('connect-51: a process that exits while another holds its stdio is seen to exit after the drain, which releases its three streams', async () => {
+    const {exited, notes, printedAt} = await heldStreams('process.exit(4);');
+    const status = await exited;
     const elapsed = Date.now() - printedAt;
-    deepStrictEqual([status, elapsed >= 500, elapsed < 2000], [4, true, true]);
+    deepStrictEqual(
+      [status, elapsed >= 500, elapsed < 2000, await releasedStreams(notes)],
+      [4, true, true, ['stderr', 'stdin', 'stdout']],
+    );
+  });
+
+  it('connect-51: the exit is reported once, though the streams close after the drain', async () => {
+    const {exits, exited} = await heldStreams('process.exit(4);');
+    await exited;
+    await new Promise(resolve => setTimeout(resolve, 600));
+    deepStrictEqual(exits, [4]);
+  });
+
+  it("connect-51: a plain process's exit is reported when its streams close, well before the drain", async () => {
+    const handle = await nodeProcessSpawner({
+      program: process.execPath,
+      programArguments: ['-e', 'process.exit(3);'],
+      environment: {},
+    });
+    const startedAt = Date.now();
+    const status = await new Promise<number | undefined>(resolve => {
+      handle.onExit(resolve);
+    });
+    deepStrictEqual([status, Date.now() - startedAt < 400], [3, true]);
+  });
+
+  it("connect-51: once a plain process's exit is reported, nothing of the spawner keeps the caller running", async () => {
+    const spawner = pathToFileURL(
+      path.join(
+        import.meta.dirname,
+        '..',
+        '..',
+        'src',
+        'process',
+        'node-spawner.ts',
+      ),
+    ).href;
+    const caller = spawn(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        [
+          `import {nodeProcessSpawner} from ${JSON.stringify(spawner)};`,
+          'const handle = await nodeProcessSpawner({program: process.execPath, programArguments: ["-e", ""], environment: {}});',
+          'handle.onExit(() => process.stdout.write("reported\\n"));',
+        ].join(' '),
+      ],
+      {stdio: ['ignore', 'pipe', 'inherit']},
+    );
+    const reportedAt = await new Promise<number>(resolve => {
+      caller.stdout.once('data', () => {
+        resolve(Date.now());
+      });
+    });
+    await new Promise(resolve => caller.once('exit', resolve));
+    strictEqual(Date.now() - reportedAt < 250, true);
   });
 
   it("connect-51: a process's last output still arrives before its exit is reported", async () => {
