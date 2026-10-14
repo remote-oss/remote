@@ -305,7 +305,10 @@ function answeredOf(
 export function scriptedAdapters(
   scriptFile: string,
   recordFile: string,
-  real: Pick<EditorAdapters, 'terminals' | 'downloadProgress'>,
+  real: Pick<
+    EditorAdapters,
+    'terminals' | 'linkTerminals' | 'downloadProgress'
+  >,
   files: AdapterFiles,
   windowName: string,
   signalsFolder: string | undefined,
@@ -472,6 +475,7 @@ export function scriptedAdapters(
       translate: template => template,
     },
     terminals: real.terminals,
+    linkTerminals: real.linkTerminals,
     downloadProgress: real.downloadProgress,
     hostPick: {
       pick: (initial: PickerModel, modelOf) =>

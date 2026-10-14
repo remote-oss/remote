@@ -3,7 +3,11 @@ import {FakeClock} from 'lib-helper/testing/fake-clock';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
 import {RecordingChannel} from 'lib-host/testing/recording-channel';
-import {type LocalDownloadMode, openCliControl} from 'lib-server';
+import {
+  type LocalDownloadMode,
+  openCliControl,
+  type ProbedHost,
+} from 'lib-server';
 import {
   fakeCli,
   type CliScript,
@@ -93,6 +97,8 @@ interface WiringSeen {
   presented: string[];
   /** What the S045 notifications did, in order. */
   progress: string[];
+  /** The link terminals opened, by name, with the work each runs when it opens. */
+  linkTerminals: Array<{name: string; work: () => Promise<void>}>;
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -109,6 +115,8 @@ function portsOf(
     cliTemplate?: string;
     useExecServer?: boolean;
     localDownloadMode?: LocalDownloadMode;
+    agentForwarding?: boolean;
+    x11Forwarding?: boolean;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
@@ -122,6 +130,7 @@ function portsOf(
     cliLocal: changes.cliLocal ?? new FakeLocalPort(),
     presented: [],
     progress: [],
+    linkTerminals: [],
   };
   const logger = createLogger(seen.sink, {
     minimumLevel: (): Level => 'info',
@@ -142,6 +151,8 @@ function portsOf(
       }),
       useExecServer: () => changes.useExecServer ?? false,
       localDownloadMode: () => changes.localDownloadMode ?? 'auto',
+      agentForwarding: () => changes.agentForwarding ?? true,
+      x11Forwarding: () => changes.x11Forwarding ?? true,
     },
     terms: {
       settings: () => ({
@@ -268,10 +279,26 @@ function portsOf(
           'S045',
         ),
     },
+    forwarding: {
+      draw: () => 7,
+      windowLink: {path: undefined},
+      linkTerminals: {
+        open: (name, work) => {
+          seen.linkTerminals.push({name, work});
+        },
+      },
+    },
     logger,
   };
   return {ports, seen};
 }
+
+/** A host whose session forwards an agent and a display. */
+const FORWARDING_HOST: ProbedHost = {
+  ...HOST,
+  sshAuthSock: '/tmp/ssh-x/agent.1',
+  display: 'localhost:10.0',
+};
 
 /** The port the CLI path's bridge listens on, unless a row says otherwise. */
 const BRIDGE_PORT = 52000;
@@ -865,12 +892,28 @@ function lookupWith(...forwards: string[]): Answer {
 }
 
 /** The opened tunnel of a connect whose lookup prints `forwards`, with what the fakes saw. */
-async function tunnelWith(
+function tunnelWith(
   ...forwards: string[]
 ): Promise<{opened: unknown; seen: WiringSeen}> {
-  const {ports, seen} = portsOf({lookup: lookupWith(...forwards)});
+  return tunnelOver(portsOf({lookup: lookupWith(...forwards)}), HOST);
+}
+
+/** The opened tunnel of a connect over `wired` whose probe found `host`, planned before the tunnel as the pipeline does. */
+async function tunnelOver(
+  wired: {ports: WiringPorts; seen: WiringSeen},
+  host: ProbedHost,
+  between: () => void = () => undefined,
+): Promise<{opened: unknown; seen: WiringSeen}> {
+  const {ports, seen} = wired;
   const steps = stepsOf(ports);
   await steps.locateClient(inputFor('dev'));
+  await steps.planForwarding(
+    inputFor('dev'),
+    leaseOn(channelAnswering([])),
+    host,
+    new AbortController().signal,
+  );
+  between();
   const outcome = await steps.openTunnel(
     inputFor('dev'),
     leaseOf(emptyRecording()),
@@ -935,11 +978,95 @@ describe("the composition's channel and window environment", () => {
     );
   });
 
-  it('F-2507: the window gets no environment variables of its own', async () => {
+  it('F-2311.AC-11, F-2312.AC-11: a session that forwards nothing gives the window no variables', async () => {
     const {opened} = await tunnelWith();
     deepStrictEqual(
       (opened as {extensionHostEnv: unknown}).extensionHostEnv,
       {},
+    );
+  });
+
+  it("F-2311.AC-2, F-2312.AC-7: the window's extension host gets the link as SSH_AUTH_SOCK and the display, nothing else", async () => {
+    const {opened} = await tunnelOver(portsOf(), FORWARDING_HOST);
+    deepStrictEqual((opened as {extensionHostEnv: unknown}).extensionHostEnv, {
+      SSH_AUTH_SOCK: '/tmp/vscode-ssh-auth-sock-7',
+      DISPLAY: 'localhost:10.0',
+    });
+  });
+
+  it('F-2311.AC-10, F-2312.AC-11: the settings false give the window neither variable', async () => {
+    const {opened} = await tunnelOver(
+      portsOf({agentForwarding: false, x11Forwarding: false}),
+      FORWARDING_HOST,
+    );
+    deepStrictEqual(
+      (opened as {extensionHostEnv: unknown}).extensionHostEnv,
+      {},
+    );
+  });
+
+  it('F-2311 7.E6, F-2312 7.E5: a setting changed after the plans has no effect on this connect', async () => {
+    const changes = {agentForwarding: true};
+    const wired = portsOf();
+    const ports: WiringPorts = {
+      ...wired.ports,
+      settings: {
+        ...wired.ports.settings,
+        agentForwarding: () => changes.agentForwarding,
+      },
+    };
+    const {opened} = await tunnelOver(
+      {...wired, ports},
+      FORWARDING_HOST,
+      () => {
+        changes.agentForwarding = false;
+      },
+    );
+    deepStrictEqual(
+      (opened as {extensionHostEnv: Record<string, string>}).extensionHostEnv
+        .SSH_AUTH_SOCK,
+      '/tmp/vscode-ssh-auth-sock-7',
+    );
+  });
+
+  it('connect-39: a tunnel asked for before the forwarding plans is a defect, and throws', async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    await rejects(
+      steps.openTunnel(
+        inputFor('dev'),
+        leaseOf(emptyRecording()),
+        STARTED.server,
+        () => undefined,
+        new AbortController().signal,
+      ),
+      /before the forwarding plans/,
+    );
+  });
+
+  it("F-2311 5.0 steps 5-6: the link step opens the agent link terminal, which runs ln over the lease's channel", async () => {
+    const {ports, seen} = portsOf();
+    const channel = channelAnswering([]);
+    stepsOf(ports).linkAgent(inputFor('dev'), leaseOn(channel), {
+      kind: 'link',
+      linkPath: '/tmp/vscode-ssh-auth-sock-7',
+      target: '/tmp/ssh-x/agent.1',
+    });
+    await seen.linkTerminals[0]?.work();
+    deepStrictEqual(
+      [
+        seen.linkTerminals.map(terminal => terminal.name),
+        channel.calls.map(call =>
+          call.operation === 'runScript' ? call.request.script : '',
+        ),
+      ],
+      [
+        ['Remote - SSH agent link'],
+        [
+          "cd /tmp && ln -sfn -- '/tmp/ssh-x/agent.1' '/tmp/vscode-ssh-auth-sock-7'",
+        ],
+      ],
     );
   });
 

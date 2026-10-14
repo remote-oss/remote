@@ -76,6 +76,10 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
   `vscode-remote://ssh-remote+harness/home/harness`, with the tests of `suite-remote/` bundled into `dist-remote/`;
 - `reconnect`: the same window in a second launch, with `suite-reconnect/`. It compares the host's server with the
   one the `remote` launch kept in the run's folder, so it shows that a new connection reuses the server;
+- `agent`, `agent-off` and `x11`: `runner-remote/` with `suite-forwarding/`, in windows on
+  `vscode-remote://ssh-remote+agentfwd/home/harness` (`ForwardAgent` with the run's agent socket; `agent-off` with
+  `remote.SSH.enableAgentForwarding` false) and `vscode-remote://ssh-remote+x11fwd/home/harness` (`ForwardX11`). They
+  find the server the `remote` launch's session started, and `HARNESS_FORWARDING_CASE` names the case;
 - `failure-<alias>`: one launch per entry of `suite-failure/cases.json`, in a window on
   `vscode-remote://ssh-remote+<alias>/home/harness`, with `suite-failure/`. Its alias fails to connect (the harness
   `ssh_config` has `refused`, `nowhere` and `stranger`), and its window answers from the entry's own script, which the

@@ -15,6 +15,8 @@ import {
 } from 'lib-server/testing/fake-cli';
 import type {CliBridgeLoss} from '../../src/cli/cli-bridge.ts';
 import type {DownloadProgressPort} from '../../src/cli/server-download-progress.ts';
+import type {AgentLinkPlan} from '../../src/environment/agent-link.ts';
+import type {ForwardingPlans} from '../../src/environment/forwarding.ts';
 import type {ConnectionNotice, SharedRecord} from 'lib-ssh';
 import type {ConnectOptions, PhaseEvent} from '../../src/pipeline/connect.ts';
 import type {PromptEditor} from '../../src/surfaces/prompt-surface.ts';
@@ -118,7 +120,25 @@ export interface Recording {
   presented: Failed[];
   /** How many secrets the steps made: the n-th is `secret-<n>`. */
   secrets: number;
+  /** The agent link plans the connect started a link for, in order. */
+  links: AgentLinkPlan[];
 }
+
+/** The plans of a connect whose session forwards an agent and a display. */
+export const LINKED: ForwardingPlans = {
+  agentLink: {
+    kind: 'link',
+    linkPath: '/tmp/vscode-ssh-auth-sock-42',
+    target: '/tmp/ssh-x/agent.1',
+  },
+  display: {kind: 'display', value: 'localhost:10.0'},
+};
+
+/** The plans of a connect whose settings turn both forwardings off. */
+export const NO_FORWARDING: ForwardingPlans = {
+  agentLink: {kind: 'none', reason: 'settingOff'},
+  display: {kind: 'none', reason: 'settingOff'},
+};
 
 /** The error a CLI that requires its token gives to another token. */
 const BAD_TOKEN = 'CodeError(AuthChallengeBadToken)';
@@ -191,6 +211,7 @@ export function leaseOf(recording: Recording): ConnectionLease {
   return {
     channel: {} as unknown as HostChannel,
     socksPort: 1080,
+    storedRecord: undefined,
     storeSharedRecord: record => {
       recording.records.push(record);
       return Promise.resolve(true);
@@ -230,6 +251,10 @@ export function steps(
     openConnection: () =>
       Promise.resolve(note('openConnection', {kind: 'done', value: lease})),
     probe: () => Promise.resolve(note('probe', {kind: 'probed', host: HOST})),
+    planForwarding: () => Promise.resolve(NO_FORWARDING),
+    linkAgent: (input, lease, plan) => {
+      recording.links.push(plan);
+    },
     plan: () => note('plan', {plan: DOWNLOAD}),
     gate: () =>
       Promise.resolve(
@@ -314,6 +339,7 @@ export function emptyRecording(): Recording {
     phases: [],
     presented: [],
     secrets: 0,
+    links: [],
   };
 }
 

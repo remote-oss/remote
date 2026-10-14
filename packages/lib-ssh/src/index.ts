@@ -131,6 +131,8 @@ export {
   type ScriptFailureReason,
   readConnectionRequest,
   type SharedRecord,
+  type StoredAgentLink,
+  type StoredDisplay,
 } from './connection-server/messages.ts';
 export {
   LoginOwnership,

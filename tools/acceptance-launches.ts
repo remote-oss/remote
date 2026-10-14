@@ -387,10 +387,30 @@ export function hostSetupOf(
 }
 
 /**
+ * A launch of suite-forwarding: a window on `alias`, an alias of the harness account that forwards the agent or X11,
+ * whose connect finds the server an earlier launch's session started, with the case named for the suite.
+ */
+function forwardingLaunch(
+  label: string,
+  alias: string,
+  settings?: Readonly<Record<string, unknown>>,
+): Launch {
+  return {
+    label,
+    runner: 'runner-remote',
+    suite: 'suite-forwarding',
+    folderUri: `vscode-remote://ssh-remote+${alias}/home/harness`,
+    environment: {HARNESS_FORWARDING_CASE: label},
+    ...(settings === undefined ? {} : {settings}),
+  };
+}
+
+/**
  * The launches of the VSCodium run: `local` runs suite-local in a plain window; `remote` runs suite-remote in a
  * window on `ssh-remote+harness`, where the runner is an extension of the workspace kind; `reconnect` runs
- * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); each
- * failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
+ * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); `agent`,
+ * `agent-off` and `x11` run suite-forwarding on the aliases that forward the agent (the second with
+ * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `socket` runs suite-socket with
  * `remote.SSH.remoteServerListenOnSocket` on; `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
@@ -416,6 +436,11 @@ export function launchesOf(root: string): Launch[] {
       suite: 'suite-reconnect',
       folderUri: REMOTE_FOLDER_URI,
     },
+    forwardingLaunch('agent', 'agentfwd'),
+    forwardingLaunch('agent-off', 'agentfwd', {
+      'remote.SSH.enableAgentForwarding': false,
+    }),
+    forwardingLaunch('x11', 'x11fwd'),
     ...failureCases(root).map((failure): Launch => ({
       label: failureLabel(failure.label ?? failure.alias),
       runner: 'runner-remote',

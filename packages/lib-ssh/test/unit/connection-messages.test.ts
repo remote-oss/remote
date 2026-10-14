@@ -116,6 +116,63 @@ describe('connection requests (contracts §4 S9)', () => {
     );
   });
 
+  it('reads the plans of the agent link and the display a record carries', () => {
+    const plans = [
+      {
+        agentLink: {kind: 'none', reason: 'settingOff'},
+        display: {kind: 'none', reason: 'settingOff'},
+      },
+      {
+        agentLink: {kind: 'none', reason: 'noForwardedSocket'},
+        display: {kind: 'none', reason: 'noSessionDisplay'},
+      },
+      {
+        agentLink: {
+          kind: 'link',
+          linkPath: '/tmp/vscode-ssh-auth-sock-12',
+          target: '/tmp/ssh-x/agent.7',
+        },
+        display: {kind: 'display', value: 'localhost:10.0'},
+      },
+    ];
+    deepStrictEqual(
+      plans.map(fields =>
+        readConnectionRequest({
+          type: 'setSharedRecord',
+          record: {...RECORD, ...fields},
+        }),
+      ),
+      plans.map(fields => ({
+        type: 'setSharedRecord',
+        record: {...RECORD, ...fields},
+      })),
+    );
+  });
+
+  it('reads a malformed plan of a record as absent and keeps the record', () => {
+    const malformed = [
+      {agentLink: 'link', display: null},
+      {agentLink: {kind: 'none', reason: 'other'}, display: {kind: 'none'}},
+      {
+        agentLink: {kind: 'link', linkPath: 5, target: '/tmp/a'},
+        display: {kind: 'display', value: 10},
+      },
+      {
+        agentLink: {kind: 'link', linkPath: '/tmp/l'},
+        display: {kind: 'other', value: ':0'},
+      },
+    ];
+    deepStrictEqual(
+      malformed.map(fields =>
+        readConnectionRequest({
+          type: 'setSharedRecord',
+          record: {...RECORD, ...fields},
+        }),
+      ),
+      malformed.map(() => ({type: 'setSharedRecord', record: RECORD})),
+    );
+  });
+
   it('reads a script to run on the session', () => {
     const bodies = [
       {runId: 1, script: 'echo x', environment: {}, inputBase64: null},

@@ -222,9 +222,14 @@ const READY_INTERVAL = 500;
  * host's other accounts: `password` (login by password only), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `mute` (a login shell that does not answer), `readonly` (a server data folder that exists
- * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster).
+ * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`
+ * and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11.
  */
-export function harnessSshConfig(port: number, runFolder: string): string {
+export function harnessSshConfig(
+  port: number,
+  runFolder: string,
+  agentSocket: string,
+): string {
   return [
     'Host harness',
     '  HostName 127.0.0.1',
@@ -323,6 +328,15 @@ export function harnessSshConfig(port: number, runFolder: string): string {
     ]),
     ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, runFolder, [
       'id_second',
+    ]),
+    ...accountAlias('agentfwd', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      `ForwardAgent ${agentSocket}`,
+    ]),
+    ...accountAlias('x11fwd', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+      'ForwardX11Trusted yes',
     ]),
   ].join('\n');
 }
@@ -523,7 +537,7 @@ async function prepare(
   started.push(host.container);
   const port = host.port;
   const configFile = path.join(runFolder, 'ssh_config');
-  writeFileSync(configFile, harnessSshConfig(port, runFolder));
+  writeFileSync(configFile, harnessSshConfig(port, runFolder, agentSocket));
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
   await dependencies.bundleSuite(root);

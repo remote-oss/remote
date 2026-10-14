@@ -224,6 +224,7 @@ export function openTerminalConnectionStep(
           value: {
             channel,
             socksPort: socksPort ?? 0,
+            storedRecord: undefined,
             storeSharedRecord: () => Promise.resolve(false),
             onNotice: listener => {
               noticeListeners.push(listener);

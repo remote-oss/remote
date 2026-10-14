@@ -21,6 +21,10 @@ import type {
   SessionRunner,
 } from 'lib-ssh';
 import {openCliBridge} from '../cli/cli-bridge.ts';
+import {
+  type ForwardingPlans,
+  forwardingEnvironment,
+} from '../environment/forwarding.ts';
 import type {ServerDownloadProgress} from '../cli/server-download-progress.ts';
 import {
   connectionLimitsFor,
@@ -48,6 +52,11 @@ import {
   type LocateStepDependencies,
   locateClientStep,
 } from './locate-step.ts';
+import {
+  type ForwardingDependencies,
+  linkAgent,
+  planForwarding,
+} from './forwarding-step.ts';
 import {preconnectStep} from './preconnect-step.ts';
 import {
   createServerSteps,
@@ -76,6 +85,10 @@ interface WiringSettings {
   useExecServer: () => boolean;
   /** Where the connect may download the server archive, from `remote.SSH.localServerDownload`. */
   localDownloadMode: () => LocalDownloadMode;
+  /** `remote.SSH.enableAgentForwarding`, on unless it is false. */
+  agentForwarding: () => boolean;
+  /** `remote.SSH.enableX11Forwarding`, on unless it is false. */
+  x11Forwarding: () => boolean;
 }
 
 /** What the channel of one connect is made from: the host as written, the runs' shared part, and the terms. */
@@ -141,6 +154,11 @@ export interface WiringPorts {
     'environment' | 'connectWait' | 'tunnelInvocation'
   >;
   cliPath: CliWiring;
+  /** The window's forwarding, apart from the settings and the log: its draw, its earlier link and its terminals. */
+  forwarding: Omit<
+    ForwardingDependencies,
+    'agentForwarding' | 'x11Forwarding' | 'logger'
+  >;
   logger: Logger;
 }
 
@@ -158,10 +176,11 @@ function lookedUp(state: ConnectState): NonNullable<ConnectState['effective']> {
 }
 
 /**
- * The window's environment: no variables of its own, and the host's `LocalForward` entries as tunnels; an entry
- * left out is logged with its position and why.
+ * The window's environment: the variables of its forwarding plans, and the host's `LocalForward` entries as tunnels;
+ * an entry left out is logged with its position and why.
  */
 function windowEnvironment(
+  plans: ForwardingPlans | undefined,
   localForwards: readonly string[],
   logger: Logger,
 ): {
@@ -174,7 +193,13 @@ function windowEnvironment(
       `LocalForward entry ${String(entry.index)} is not shown as a tunnel: ${entry.reason}`,
     );
   }
-  return {extensionHostEnv: {}, environmentTunnels: tunnels};
+  if (plans === undefined) {
+    throw new Error('the tunnel was asked for before the forwarding plans');
+  }
+  return {
+    extensionHostEnv: forwardingEnvironment(plans),
+    environmentTunnels: tunnels,
+  };
 }
 
 /**
@@ -205,7 +230,14 @@ export function stepsOf(
     server?: ReturnType<typeof createServerSteps>;
     connection?: ConnectionRequestSettings;
     opening?: {input: ConnectInput; terms: ConnectionTerms};
+    forwarding?: ForwardingPlans;
   } = {};
+  const forwarding: ForwardingDependencies = {
+    ...ports.forwarding,
+    agentForwarding: ports.settings.agentForwarding,
+    x11Forwarding: ports.settings.x11Forwarding,
+    logger: ports.logger,
+  };
 
   /** The connection's settings, read once for this connect, so all of its runs use the same. */
   function connectionSettings(): ConnectionRequestSettings {
@@ -327,7 +359,11 @@ export function stepsOf(
       });
     },
     environment: () =>
-      windowEnvironment(lookedUp(state).localForwards, ports.logger),
+      windowEnvironment(
+        held.forwarding,
+        lookedUp(state).localForwards,
+        ports.logger,
+      ),
   });
   return {
     validate: input => serverSteps(input).validate(input),
@@ -349,6 +385,18 @@ export function stepsOf(
       )(input, connectTerms, cancellation);
     },
     probe: (input, ...rest) => serverSteps(input).probe(input, ...rest),
+    planForwarding: async (input, lease, host, cancellation) => {
+      held.forwarding = await planForwarding(
+        forwarding,
+        lease,
+        host,
+        cancellation,
+      );
+      return held.forwarding;
+    },
+    linkAgent: (input, lease, plan) => {
+      linkAgent(forwarding, lease.channel, plan);
+    },
     plan: (input, ...rest) => serverSteps(input).plan(input, ...rest),
     gate: (input, ...rest) => serverSteps(input).gate(input, ...rest),
     transfer: (input, ...rest) => serverSteps(input).transfer(input, ...rest),
