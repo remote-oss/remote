@@ -72,8 +72,20 @@ file.
   new file over the old one. So the run rewrites the file's content without replacing the file:
   `sudo -n sh -c 'grep -v -F "# remote-oss-acceptance <runId>" /etc/hosts > <run>/hosts.kept; cat <run>/hosts.kept > /etc/hosts'`
   (measured: `cat >` works on the bind mount where `sed -i` doesn't). grep's exit 1 (no other line) still rewrites.
-  The run's end does this for its own run id. The run's cleanup (`acceptance-run.ts`, the one that removes a killed
-  job's containers) does it for every marker line whose run id has no container left.
+  - **The run's own line:** the run removes it in a `finally` around the launches, and in the run's `SIGINT` and
+    `SIGTERM` handlers, the same ones that stop its containers.
+  - **Stale lines, at the start of every run:** before it adds its own line, the run sweeps every marker line whose
+    run id has no harness container left (`docker ps --filter label=<the run label>`, as `acceptance-run.ts`'s cleanup
+    of a killed job's containers does).
+  - **Why the sweep is needed:** on CI runners, `/etc/hosts` is the runner container's own podman `userdata/hosts`.
+    It lives as long as the runner, across jobs (proteus, 2026-10-14). So a job killed mid-run (cancelled, OOM,
+    timeout) would leave its line for every later job on that runner.
+  - **Why it keys on containers, not just on another run id:** a run that's still going on the same runner keeps its
+    line.
+  - **Rows** (tools, with a recording command runner):
+    - a hosts file holding a marker line of a run id with no container, and one of a run id that has one: the
+      start-of-run sweep removes the first and keeps the second;
+    - a launch that throws: the run's own line is removed.
 - **No sudo:** if `sudo -n true` fails, the run doesn't add the line and sets `HARNESS_HOSTS_LINE=absent`. The rows of
   §4.2 then fail with `<name> needs passwordless sudo to add a line to /etc/hosts`. They don't skip, and every other
   launch is unaffected.
