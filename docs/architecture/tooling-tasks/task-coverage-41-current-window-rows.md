@@ -2,7 +2,7 @@
 
 Issue: #729. Release 0.2, gating (D-86 puts F-2302, `remote-oss/remote-ssh#35`, into 0.2). #722 seeds F-2302 and lists
 these criteria under "Needs an acceptance row": AC-4, 5, 7, 8, 9, 10, 17–23, 25, 27, 28, 29, 31, 32 and 33. This card
-writes rows for all 20 and tags 19 of them: AC-32's listing half needs #722's defect 1 fixed first. AC-26 (a
+writes rows for all 20 and tags them all. AC-26 (a
 trust-enabled launch) isn't here.
 Builder: task:claude. Size: M (about 2 agent-days). **Depends on:** #722 merged; coverage-14's helpers (#568 §1) and
 coverage-39's `serverProcesses()` and `logins()` (#727), added here if neither has merged.
@@ -53,8 +53,16 @@ Names start with `F-2302 AC-<n>:`.
 ## 3. The catalogue
 
 In `coverage-slice1.tsv`, F-2302 AC-4, 5, 7, 8, 9, 10, 17, 18, 19, 20, 21, 22, 23, 25, 27, 28, 29, 31 and 33 go to
-`acceptance`. AC-32 stays `todo` until #722's defect 1 is fixed: its fix card adds the listing half. List as core
-halves: the title and indicator (AC-5, 7), and the failure dialog's look (AC-22, 23).
+`acceptance`. AC-32 goes to `unit` (athena, 2026-10-14). Its keybinding half is ours, and the existing row in
+`packages/remote-ssh/test/unit/connect-commands.test.ts`,
+`connect-21: a host argument of the current-window command opens here`, proves it. Rename that row to
+`F-2302 AC-32: a host argument of the current-window command opens here, so the window reloads to that host`, and change
+nothing else in it. Row 18 above cites AC-32 too.
+
+List these as core halves:
+- the title and indicator (AC-5, 7);
+- the failure dialog's look (AC-22, 23);
+- AC-32's hiding of the entry while a window connects (F-2302 6.10). There is no fix card.
 
 ## 4. Gates and review
 

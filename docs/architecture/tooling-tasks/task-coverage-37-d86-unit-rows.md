@@ -39,8 +39,10 @@ entry.
 | `F-2412 AC-1: Uninstall VS Code Server from Host... is in the palette of every window` | `placesOf('opensshremotes.cleanDevBox')` is `[]`, and `resolved(title)` is `Uninstall VS Code Server from Host...` |
 | `F-2605 AC-18: the clear command is in the palette of local and remote windows` | `placesOf('opensshremotes.clearAllSessionHints')` is `[]`; its `category` is `Remote-SSH`, `resolved(title)` is `Clear previous session metadata (used for enhanced error reporting)` |
 
-F-2302 AC-1 is not here: the palette entry it needs is defect 1 of #722 (a connecting window must not list the
-command), and its row comes with that fix.
+| `F-2302 AC-1: Connect Current Window to Host... is in the palette unconditionally and has no keybinding` | as the `F-2301 AC-1` row of `skeleton.test.ts`, for `opensshremotes.openEmptyWindowInCurrentWindow`: `category` `Remote-SSH`, `resolved(title)` `Connect Current Window to Host...`, no `commandPalette` entry for it and no keybinding |
+
+F-2302 AC-1 is ours with no `when` clause (athena, 2026-10-14). Hiding the entry while a window is connecting is
+core's (F-2302 6.10).
 
 ### 2.2 Parse rows (`add-host.test.ts`)
 
@@ -79,8 +81,8 @@ passed to `single(step)`. Every existing caller passes `'kill'`. Then add:
 
 ## 3. The catalogue
 
-After the rows pass, in `coverage-slice1.tsv`, set to `unit`: F-2204 AC-1, 11, 15, 19 and 37; F-2302 AC-2, 3 and 34;
-F-2303 AC-3 and 19; F-2411 AC-1; F-2412 AC-1 and 27; F-2605 AC-18. `pnpm check-coverage` passes and shows 14 more `unit`
+After the rows pass, in `coverage-slice1.tsv`, set to `unit`: F-2204 AC-1, 11, 15, 19 and 37; F-2302 AC-1, 2, 3 and 34;
+F-2303 AC-3 and 19; F-2411 AC-1; F-2412 AC-1 and 27; F-2605 AC-18. `pnpm check-coverage` passes and shows 15 more `unit`
 lines.
 
 ## 4. Gates and review
