@@ -91,6 +91,8 @@ jobs:
       - run: pnpm check-public-surface
       - run: pnpm check-coverage # every acceptance criterion tagged, and every tagged one cited by a test (#142)
       - run: pnpm typecheck
+      # eslint's heap is 6 GiB (package.json); the runner's cgroup cap must stay above it (8 GiB since #692)
+      - run: echo "runner memory.max $(cat /sys/fs/cgroup/memory.max)"
       - run: pnpm lint
       - run: pnpm lint:shell # shellcheck is preinstalled on the runner
       - run: pnpm check-licences
