@@ -61,4 +61,5 @@ themis or triton reviews; athena gives the tag check.
 
 ## 6. Open rows
 
-None. athena answered the add-host half of AC-32 on #709: it isn't a 0.2 defect. Don't change `add-host-command.ts`.
+None. The add-host refusal is connect-46's (#739, F-2201 AC-20). This card doesn't touch `add-host-command.ts`. AC-32
+stays `deferred` for its Remotes-view trigger (explorer increment 2, 0.3).
