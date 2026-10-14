@@ -12,6 +12,10 @@ const HANDSHAKE_LINE = 'debug1: SSH2_MSG_NEWKEYS received';
 /** The start of the line `ssh` prints, without the debug prefix, when login succeeded. */
 const AUTHENTICATED_START = 'Authenticated to ';
 
+/** The line a mux client prints once the master has accepted its session request: its session runs as a login's would. */
+const MUX_SESSION_START =
+  'debug1: mux_client_request_session: master session id: ';
+
 /** The text between the host and the method in that line. */
 const AUTHENTICATED_METHOD = ' using "';
 
@@ -19,6 +23,9 @@ const AUTHENTICATED_METHOD = ' using "';
 export function setupMarkerOf(line: string): SetupMarker | undefined {
   if (line.replace(/\r$/, '') === HANDSHAKE_LINE) {
     return 'handshake';
+  }
+  if (line.replace(/\r$/, '').startsWith(MUX_SESSION_START)) {
+    return 'authenticated';
   }
   return line.startsWith(AUTHENTICATED_START) &&
     line.includes(AUTHENTICATED_METHOD)
