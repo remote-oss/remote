@@ -70,6 +70,8 @@ export interface PlainLaunch extends LaunchCommon {
   debuggingPort?: boolean;
   /** Extensions, by id, that the editor starts disabled. */
   disabledExtensions?: readonly string[];
+  /** Whether the editor starts with workspace trust on, so a folder opens untrusted until the user trusts it. */
+  workspaceTrust?: boolean;
 }
 
 /** One launch of the VSCodium run, in the order the run makes them. */
@@ -96,14 +98,22 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['remote-oss.remote-explorer', 'remote-explorer'],
 ]);
 
-/** What the explorer's launches share: the explorer, its proposed API and the debugging port. */
-const EXPLORER_LAUNCH = {
+/** What a launch the renderer helpers read needs: the debugging port, and window titles they can find a window by. */
+const RENDERER_LAUNCH = {
   kind: 'plain',
-  withExtensions: ['remote-oss.remote-explorer'],
   debuggingPort: true,
   // The renderer helpers find a window by its title: its folder name in brackets, `[]` for a window with none.
   settings: {'window.title': '[${rootName}]'},
 } as const;
+
+/** What the explorer's launches share: the explorer and its proposed API, read by the renderer helpers. */
+const EXPLORER_LAUNCH = {
+  ...RENDERER_LAUNCH,
+  withExtensions: ['remote-oss.remote-explorer'],
+} as const;
+
+/** What the trust launches share: workspace trust on, read by the renderer helpers. */
+const TRUST_LAUNCH = {...RENDERER_LAUNCH, workspaceTrust: true} as const;
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
@@ -398,7 +408,9 @@ export function hostSetupOf(
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
  * same without enabling the proposed API; `explorer`, `explorer-alone` and `explorer-no-proposals` do the same with
  * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
- * proposed API; and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
+ * proposed API; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
+ * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
+ * and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
  * with its host setup and its own script.
  */
 export function launchesOf(root: string): Launch[] {
@@ -497,6 +509,26 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-no-proposals',
       suite: 'explorer-no-proposals',
       proposedApi: false,
+    },
+    {
+      ...TRUST_LAUNCH,
+      label: 'trust',
+      suite: 'trust',
+      settings: {
+        ...TRUST_LAUNCH.settings,
+        // Core's default is never; the rows answer core's startup prompt, so this launch turns it on.
+        'security.workspace.trust.startupPrompt': 'once',
+      },
+    },
+    {
+      ...TRUST_LAUNCH,
+      label: 'trust-terminal',
+      suite: 'trust-terminal',
+      settings: {
+        ...TRUST_LAUNCH.settings,
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
     },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({

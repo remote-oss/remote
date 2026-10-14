@@ -1,0 +1,86 @@
+{
+  "entries": [
+    {
+      "package": "remote-ssh",
+      "kind": "settings",
+      "key": "enableAgentForwarding",
+      "card": "#676",
+      "slice": "0.2 slice 2"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "settings",
+      "key": "enableX11Forwarding",
+      "card": "#676",
+      "slice": "0.2 slice 2"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "settings",
+      "key": "defaultForwardedPorts",
+      "card": "#677",
+      "slice": "0.2 slice 2"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "settings",
+      "key": "enhancedSessionLogs",
+      "card": "#674",
+      "slice": "deferred",
+      "decision": "D-86"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "settings",
+      "key": "suppressWindowsSshWarning",
+      "card": "#674",
+      "slice": "deferred",
+      "decision": "D-60"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "module",
+      "key": "src/environment/agent-link.ts",
+      "card": "#676",
+      "slice": "0.2 slice 2"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "module",
+      "key": "src/environment/display.ts",
+      "card": "#676",
+      "slice": "0.2 slice 2"
+    },
+    {
+      "package": "remote-explorer",
+      "kind": "internalCommands",
+      "key": "setActiveFolders",
+      "card": "#745",
+      "slice": "0.3 explorer increment 2",
+      "decision": "explorer brief 2026-10-13: increment 2"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "internalCommands",
+      "key": "getSshFoldersHistory",
+      "card": "#745",
+      "slice": "0.3 explorer increment 2",
+      "decision": "explorer brief 2026-10-13: increment 2"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "internalCommands",
+      "key": "deleteSshFolderFromHistory",
+      "card": "#745",
+      "slice": "0.3 explorer increment 2",
+      "decision": "explorer brief 2026-10-13: increment 2"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "module",
+      "key": "src/maintenance/host-picker.ts",
+      "card": "#744",
+      "slice": "0.2"
+    }
+  ]
+}

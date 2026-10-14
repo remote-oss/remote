@@ -561,6 +561,7 @@ async function prepare(
       checked(command, editorCommand, [
         `--extensions-dir=${folder}`,
         `--user-data-dir=${path.join(runFolder, 'user-data')}`,
+        `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
         ...files.flatMap(file => ['--install-extension', file]),
       ]);
     }

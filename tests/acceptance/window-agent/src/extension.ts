@@ -185,6 +185,7 @@ export function activate(context: vscode.ExtensionContext): void {
         visibleOutputChannel: visibleOutputChannelOf(
           vscode.window.visibleTextEditors.map(editor => editor.document.uri),
         ),
+        trusted: vscode.workspace.isTrusted,
       });
     }),
     vscode.commands.registerCommand(

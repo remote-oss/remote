@@ -11,11 +11,38 @@ environment:
 VS Code runs with a clean environment in its own process group; `stop` ends the group. Whether the window is up is
 judged by the caller through the lab driver (`lab state`), never here.
 """
-import json, os, shutil, signal, subprocess, sys, time
+import json, os, re, shutil, signal, subprocess, sys, time
 
-slot = int(os.environ.get("LAB_SLOT") or sys.exit("lab-code: LAB_SLOT is not set"))
-L = os.path.join(os.environ.get("ENCODE_SLOTS_DIR") or os.path.expanduser("~/conformance-work/slots"), str(slot))
-PID = os.path.join(L, "launcher.pid")
+IDENTITY = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "encode", "identity.yaml")
+EXTENSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9-]*")
+
+
+def reimplementation_id(path=None):
+    """The package's own extension id: identity.yaml's reimplementation.extension_id (ENCODE_IDENTITY, else this
+    runner's own), or None. Never the reference's: its proposals come from the editor's product.json."""
+    try:
+        import yaml
+        ident = yaml.safe_load(open(path or os.environ.get("ENCODE_IDENTITY") or IDENTITY, encoding="utf-8")) or {}
+    except (OSError, ImportError, ValueError):
+        return None
+    xid = str(((ident.get("reimplementation") or {}) if isinstance(ident, dict) else {}).get("extension_id") or "")
+    return xid if EXTENSION_ID.fullmatch(xid) else None
+
+
+def editor_args(code, slot_dir, slot, folders, extension_id):
+    """The editor's command line. athena (0.2 gate, remote#737): the build under test gets its proposed API with
+    --enable-proposed-api=<its id>, as the reference gets its own from product.json; without it a stable editor strips
+    them (remote-ssh: resolvers, tunnels), and every case that needs one fails on replay."""
+    return [code, "--user-data-dir", f"{slot_dir}/user-data", "--extensions-dir", f"{slot_dir}/extensions",
+            f"--remote-debugging-port={9222 + slot}", "--remote-allow-origins=*", "--password-store=basic",
+            *([f"--enable-proposed-api={extension_id}"] if extension_id else []),
+            "--new-window", *[os.path.abspath(f) for f in folders]]
+
+
+if __name__ == "__main__":
+    slot = int(os.environ.get("LAB_SLOT") or sys.exit("lab-code: LAB_SLOT is not set"))
+    L = os.path.join(os.environ.get("ENCODE_SLOTS_DIR") or os.path.expanduser("~/conformance-work/slots"), str(slot))
+    PID = os.path.join(L, "launcher.pid")
 
 
 def running():
@@ -101,9 +128,7 @@ def start(folders):
         if v in os.environ:
             env[v] = os.environ[v]
     code = os.environ.get("ENCODE_VSCODE") or "/usr/share/code/code"
-    cmd = launcher + [code, "--user-data-dir", f"{L}/user-data", "--extensions-dir", f"{L}/extensions",
-                      f"--remote-debugging-port={9222 + slot}", "--remote-allow-origins=*", "--password-store=basic",
-                      "--new-window", *[os.path.abspath(f) for f in folders]]
+    cmd = launcher + editor_args(code, L, slot, folders, reimplementation_id())
     log = open(os.path.join(L, "launcher.log"), "a")
     p = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, cwd=vhome)
     open(PID, "w").write(str(p.pid))
@@ -113,14 +138,15 @@ def start(folders):
     print(f"VS Code started for slot {slot} (pid {p.pid})")
 
 
-cmd, args = (sys.argv[1] if len(sys.argv) > 1 else "start"), sys.argv[2:]
-if cmd == "stop":
-    stop()
-elif cmd == "restart":
-    stop(); time.sleep(2); start(args)
-elif cmd == "start":
-    start(args)
-elif cmd == "status":
-    print(json.dumps({"slot": slot, "running": running()}))
-else:
-    sys.exit(__doc__)
+if __name__ == "__main__":
+    cmd, args = (sys.argv[1] if len(sys.argv) > 1 else "start"), sys.argv[2:]
+    if cmd == "stop":
+        stop()
+    elif cmd == "restart":
+        stop(); time.sleep(2); start(args)
+    elif cmd == "start":
+        start(args)
+    elif cmd == "status":
+        print(json.dumps({"slot": slot, "running": running()}))
+    else:
+        sys.exit(__doc__)
