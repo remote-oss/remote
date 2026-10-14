@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import type * as vscode from 'vscode';
 import {SSH_COMPANION_ID} from 'lib-companion';
 import {commands} from '../../src/identifiers.generated.ts';
 import {
@@ -9,6 +10,7 @@ import {
 const REFERENCE_ID = 'ms-vscode.remote-explorer';
 const PULL = 'remote-internal.getActiveSshRemote';
 const HOSTS = 'remote-internal.getConfiguredHostnames';
+const OPEN = 'remote-internal.openRemoteSshTarget';
 const VERSION = {major: 1, minor: 0};
 
 interface EditorOptions {
@@ -25,6 +27,10 @@ interface Fixture {
   editor: WindowEditor;
   events: string[];
   registered: Registered[];
+  /** The tree data providers the editor was given, in order. */
+  providers: Array<vscode.TreeDataProvider<unknown>>;
+  /** The arguments of the open requests the bus saw. */
+  opened: unknown[];
 }
 
 class FakeEmitter {
@@ -41,6 +47,8 @@ class FakeEmitter {
 function fixtureOf(options: EditorOptions): Fixture {
   const events: string[] = [];
   const registered: Registered[] = [];
+  const providers: Fixture['providers'] = [];
+  const opened: unknown[] = [];
   const editor = {
     extensions: {
       getExtension: (extensionId: string) =>
@@ -64,7 +72,14 @@ function fixtureOf(options: EditorOptions): Fixture {
         }
         if (command === HOSTS) {
           events.push('ask hosts');
-          return Promise.resolve({interfaceVersion: VERSION, hostnames: []});
+          return Promise.resolve({
+            interfaceVersion: VERSION,
+            hostnames: ['harness'],
+          });
+        }
+        if (command === OPEN) {
+          opened.push(commandArguments[0]);
+          return Promise.resolve({interfaceVersion: VERSION});
         }
         events.push(`${command} ${commandArguments.join(' ')}`);
         return Promise.resolve();
@@ -92,8 +107,12 @@ function fixtureOf(options: EditorOptions): Fixture {
         return Promise.resolve(undefined);
       },
       showInformationMessage: () => Promise.resolve(undefined),
-      createTreeView: () => {
+      createTreeView: (
+        viewId: string,
+        options: vscode.TreeViewOptions<unknown>,
+      ) => {
         events.push('tree view');
+        providers.push(options.treeDataProvider);
         return {
           dispose: () => {
             events.push('tree view disposed');
@@ -108,7 +127,13 @@ function fixtureOf(options: EditorOptions): Fixture {
     l10n: {t: (template: string) => template},
     EventEmitter: FakeEmitter,
   };
-  return {editor: editor as unknown as WindowEditor, events, registered};
+  return {
+    editor: editor as unknown as WindowEditor,
+    events,
+    registered,
+    providers,
+    opened,
+  };
 }
 
 interface Context {
@@ -132,10 +157,16 @@ async function activated(
   return {...fixture, context};
 }
 
+function commandOf(
+  fixture: Fixture,
+  commandId: string,
+): Registered['callback'] | undefined {
+  return fixture.registered.find(entry => entry.commandId === commandId)
+    ?.callback;
+}
+
 function refreshOf(fixture: Fixture): Registered['callback'] | undefined {
-  return fixture.registered.find(
-    entry => entry.commandId === commands.refresh.id,
-  )?.callback;
+  return commandOf(fixture, commands.refresh.id);
 }
 
 const COMMAND_IDS = Object.values(commands).map(entry => entry.id);
@@ -232,5 +263,29 @@ describe('the activation of a window (card explorer-03c)', () => {
       ],
       [undefined, []],
     );
+  });
+
+  it('F-5103.BR-1: the connect command of the current window, given the host node of the tree, asks the companion to open the host', async () => {
+    const scenario = await activated({});
+    await Promise.resolve();
+    const provider = scenario.providers[0];
+    const [group] = [...((await provider?.getChildren(undefined)) ?? [])];
+    const [host] = [...((await provider?.getChildren(group)) ?? [])];
+    await commandOf(
+      scenario,
+      commands.connectToRemoteInCurrentWindow.id,
+    )?.(host);
+    deepStrictEqual(scenario.opened, [
+      {interfaceVersion: VERSION, hostKey: 'harness', window: 'current'},
+    ]);
+  });
+
+  it('F-5002.19.7: the connect command of a new window with no argument resolves undefined and opens nothing', async () => {
+    const scenario = await activated({});
+    const outcome = await commandOf(
+      scenario,
+      commands.connectToRemoteInNewWindow.id,
+    )?.();
+    deepStrictEqual([outcome, scenario.opened], [undefined, []]);
   });
 });
