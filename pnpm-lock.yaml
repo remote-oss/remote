@@ -280,6 +280,12 @@ importers:
       lib-authority:
         specifier: workspace:*
         version: link:../lib-authority
+      lib-forwarding:
+        specifier: workspace:*
+        version: link:../lib-forwarding
+      lib-host:
+        specifier: workspace:*
+        version: link:../lib-host
       lib-identifiers:
         specifier: workspace:*
         version: link:../lib-identifiers
@@ -377,6 +383,9 @@ importers:
       lib-helper:
         specifier: workspace:*
         version: link:../../packages/lib-helper
+      lib-host:
+        specifier: workspace:*
+        version: link:../../packages/lib-host
       lib-log:
         specifier: workspace:*
         version: link:../../packages/lib-log

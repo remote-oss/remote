@@ -4,7 +4,7 @@ import {
   TUNNEL_SUCCESS_LINE,
 } from '../../src/arguments/invocation.ts';
 import {expandHome} from '../../src/config/files.ts';
-import {posixQuote} from '../../src/process/remote-program.ts';
+import {posixQuote} from 'lib-host';
 import {buildInvocation, buildOptionsQuery} from '../../src/index.ts';
 import type {
   ClientPlatform,

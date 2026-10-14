@@ -4,12 +4,13 @@
  *
  * The check reads each package's generated identifier table (never the manifest), decides references with the
  * TypeScript checker, finds modules only tests import with a production-mode knip run, and reports against
- * tools/unconsumed-allowlist.json. `node tools/identifiers.ts --consumed` runs it; `--consumed --release` is the
- * release run, where every allowlist entry without a recorded decision must be wired already.
+ * tools/unconsumed-allowlist.json. `node tools/identifiers.ts --consumed` runs it; `--consumed --release <package>`
+ * is the tag run of that package, where every allowlist entry of the package and of the workspace libraries its
+ * dependencies reach, without a recorded decision, must be wired already. `--release` alone holds every package to it.
  */
 
 import {spawn} from 'node:child_process';
-import {existsSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import typescript from 'typescript';
@@ -147,10 +148,13 @@ interface PackageConsumption {
   readonly commandProblems: readonly string[];
 }
 
+/** Which allowlist entries a tag run holds to be wired: every package's, or one package's and its libraries'. */
+export type ReleaseScope = 'repository' | {readonly package: string};
+
 /** The options of the check: the tag run and the knip runner the tests stub. */
 export interface ConsumptionOptions {
-  /** The tag run: every allowlist entry without a decision must be wired. */
-  readonly release?: boolean;
+  /** The tag run: the entries in its scope without a decision must be wired. Undefined is no tag run. */
+  readonly release?: ReleaseScope | undefined;
   /** The production-mode knip run; undefined starts the real one. */
   readonly runKnip?: ((root: string) => Promise<string>) | undefined;
 }
@@ -1500,6 +1504,51 @@ interface SortableLine {
 }
 
 /**
+ * The package folders a tag of `start` releases: `start` and every workspace library its `dependencies` reach,
+ * transitively. A dependency is followed by its package name to the folder that declares it. Null when `start` names
+ * no package folder.
+ */
+function releasedFolders(
+  root: string,
+  start: string,
+): ReadonlySet<string> | null {
+  const folders = packageFolders(root);
+  if (!folders.includes(start)) {
+    return null;
+  }
+  const manifests = folders.map(folder => {
+    const manifest = JSON.parse(
+      readFileSync(path.join(root, 'packages', folder, 'package.json'), 'utf8'),
+    ) as {name: string; dependencies?: Record<string, string>};
+    return {
+      folder,
+      name: manifest.name,
+      dependencies: Object.entries(manifest.dependencies ?? {})
+        .filter(([, specifier]) => specifier.startsWith('workspace:'))
+        .map(([name]) => name),
+    };
+  });
+  const folderOf = new Map(manifests.map(each => [each.name, each.folder]));
+  const found = new Set([start]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const each of manifests) {
+      if (found.has(each.folder)) {
+        for (const name of each.dependencies) {
+          const next = folderOf.get(name);
+          if (next !== undefined && !found.has(next)) {
+            found.add(next);
+            grew = true;
+          }
+        }
+      }
+    }
+  }
+  return found;
+}
+
+/**
  * The report of §3.4 over the repository: the unconsumed entries and modules, the registerCommands problem lines,
  * the stale and the nameless allowlist entries, the release lines, and the notes. The allowlist must be parsed; the
  * knip run is the production mode, unless a stub is passed.
@@ -1509,7 +1558,19 @@ export async function checkConsumption(
   allowlist: readonly AllowlistEntry[],
   options: ConsumptionOptions = {},
 ): Promise<ConsumptionReport> {
-  const release = options.release === true;
+  const scope = options.release;
+  let released: ReadonlySet<string> | undefined;
+  if (scope !== undefined && scope !== 'repository') {
+    const folders = releasedFolders(root, scope.package);
+    if (folders === null) {
+      return {
+        problems: [],
+        notes: [],
+        fatal: `release: no package folder packages/${scope.package}`,
+      };
+    }
+    released = folders;
+  }
   const runKnip =
     options.runKnip ??
     ((packageRoot: string) => runProductionKnip(packageRoot));
@@ -1610,7 +1671,11 @@ export async function checkConsumption(
   const releaseLines: SortableLine[] = [];
   for (const entry of allowlist) {
     const sortKey = {package: entry.package, kind: entry.kind, key: entry.key};
-    if (release && entry.decision === undefined) {
+    if (
+      scope !== undefined &&
+      entry.decision === undefined &&
+      (released === undefined || released.has(entry.package))
+    ) {
       releaseLines.push({
         ...sortKey,
         line: `allowlist: ${entry.package} ${entry.kind} ${entry.key} must be wired before a release (card ${entry.card}, ${entry.slice})`,

@@ -89,6 +89,8 @@ describe('the manifest', () => {
       l10n: './l10n',
       dependencies: {
         'lib-authority': 'workspace:*',
+        'lib-forwarding': 'workspace:*',
+        'lib-host': 'workspace:*',
         'lib-identifiers': 'workspace:*',
         'lib-log': 'workspace:*',
         'lib-product': 'workspace:*',

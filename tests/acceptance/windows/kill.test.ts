@@ -3,11 +3,11 @@ import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
-  aliases,
   appendScript,
   closeWindow,
   connected,
   connectedWithin,
+  hostAliases,
   hostAnswer,
   hostPassword,
   inWindow,
@@ -292,7 +292,14 @@ describe('Kill VS Code Server (card coverage-39)', function () {
         await serverProcesses(),
       ],
       [
-        [['local', 'hostPick', HOST_QUESTION, [...aliases(), ...FIXED_ROWS]]],
+        [
+          [
+            'local',
+            'hostPick',
+            HOST_QUESTION,
+            [...hostAliases(), ...FIXED_ROWS],
+          ],
+        ],
         servers,
       ],
     );
@@ -314,9 +321,9 @@ describe('Kill VS Code Server (card coverage-39)', function () {
       deepStrictEqual(
         [
           linesSince(mark, 'local').at(-1)?.items,
-          aliases().includes('kill-new'),
+          hostAliases().includes('kill-new'),
         ],
-        [[...aliases(), ...FIXED_ROWS], true],
+        [[...hostAliases(), ...FIXED_ROWS], true],
       );
     } finally {
       writeFileSync(file, original);
