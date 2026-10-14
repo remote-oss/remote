@@ -247,6 +247,18 @@ describe('platformPickPortOf (card remote-ssh-17 table)', () => {
     );
   });
 
+  it('F-2206 AC-2: the item the pick names as active is the one focused', () => {
+    const fake = fakeEditor(() => undefined);
+    void platformPickPortOf(fake.editor, same).pick(
+      {...platformPickOf('box'), active: 'windows'},
+      NEVER,
+    );
+    deepStrictEqual(
+      fake.picks[0]?.activeItems.map(item => item.label),
+      ['Windows'],
+    );
+  });
+
   it('F-2206: the chosen platform is the answer', async () => {
     const fake = fakeEditor(() => undefined);
     const {result, pick} = shown(fake);
@@ -289,6 +301,7 @@ describe('platformPickPortOf (card remote-ssh-17 table)', () => {
     const result = platformPickPortOf(fake.editor, same).pick(
       {
         placeholder: {id: 'platformPickPlaceholder', values: ['box']},
+        active: 'linux',
         items: [
           {label: 'Same', platform: 'linux'},
           {label: 'Same', platform: 'windows'},

@@ -289,7 +289,7 @@ describe('outcomeOfPick (card remote-ssh-02)', () => {
     });
   });
 
-  it('F-2301.BR-7: a typed item with option text is never refused here', () => {
+  it('F-2411 6.3, F-2301.BR-7: a typed item with option text is never refused here', () => {
     deepStrictEqual(outcomeOfPick(item('typed', '-oProxyCommand=x')), {
       connect: {host: '-oProxyCommand=x'},
     });
@@ -301,15 +301,21 @@ describe('outcomeOfPick (card remote-ssh-02)', () => {
     });
   });
 
-  it('F-2301.BR-7: a typed item with a space is never refused here', () => {
+  it('F-2411 6.3, F-2301.BR-7: a typed item with a space is never refused here', () => {
     deepStrictEqual(outcomeOfPick(item('typed', 'a b.invalid')), {
       connect: {host: 'a b.invalid'},
     });
   });
 
-  it('F-2301.AC-29: a picked typed text of spaces is the host of spaces', () => {
+  it('F-2411 6.3, F-2301.AC-29: a picked typed text of spaces is the host of spaces', () => {
     deepStrictEqual(outcomeOfPick(item('typed', '   ')), {
       connect: {host: '   '},
+    });
+  });
+
+  it('F-2411 6.3: the leading and trailing spaces of a typed text stay in its target', () => {
+    deepStrictEqual(outcomeOfPick(item('typed', ' lab@x.invalid ')), {
+      connect: {host: 'x.invalid ', user: ' lab'},
     });
   });
 

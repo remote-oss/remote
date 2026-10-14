@@ -7,16 +7,18 @@
 import type {RemotePlatform} from '../pipeline/platform.ts';
 import type {StringRef} from './picker-model.ts';
 
-/** The pick as the editor shows it: a placeholder and the labels in order, the first focused. */
+/** The pick as the editor shows it: a placeholder and the labels in order, the `active` one focused. */
 export interface PlatformPick {
   placeholder: StringRef;
+  /** The platform whose item is focused when the pick opens. */
+  active: RemotePlatform;
   items: ReadonlyArray<{label: string; platform: RemotePlatform}>;
 }
 
 /** What the picker needs of the editor. */
 export interface PlatformPickPort {
   /**
-   * Shows the pick, single selection, no title, the first item focused, closing when the user looks away or
+   * Shows the pick, single selection, no title, the `active` item focused, closing when the user looks away or
    * `cancellation` ends. Gives the chosen platform, or nothing when it closed without one.
    */
   pick(
@@ -29,6 +31,7 @@ export interface PlatformPickPort {
 export function platformPickOf(hostName: string): PlatformPick {
   return {
     placeholder: {id: 'platformPickPlaceholder', values: [hostName]},
+    active: 'linux',
     items: [
       {label: 'Linux', platform: 'linux'},
       {label: 'Windows', platform: 'windows'},
