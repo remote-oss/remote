@@ -58,7 +58,7 @@ F-2101.AC-27	todo
 F-2101.AC-28	todo	
 F-2101.AC-29	todo	
 F-2101.AC-30	todo	
-F-2102.AC-1	todo	
+F-2102.AC-1	unit	
 F-2102.AC-2	todo	
 F-2102.AC-3	todo	
 F-2102.AC-4	todo	
@@ -89,7 +89,7 @@ F-2102.AC-28	todo
 F-2102.AC-29	todo	
 F-2102.AC-30	todo	
 F-2102.AC-31	todo	
-F-2102.AC-32	todo	
+F-2102.AC-32	unit	
 F-2102.AC-33	todo	
 F-2102.AC-34	todo	
 F-2102.AC-35	todo	
@@ -120,14 +120,14 @@ F-2201.AC-19	todo
 F-2201.AC-20	todo	
 F-2201.AC-21	todo	
 F-2201.AC-22	todo	
-F-2201.AC-23	todo	
+F-2201.AC-23	deferred	build order slice 1: the Remotes view is remote-explorer's
 F-2201.AC-24	unit	
 F-2201.AC-25	unit	
 F-2201.AC-26	todo	
 F-2201.AC-27	todo	
 F-2201.AC-28	todo	
 F-2201.AC-29	todo	
-F-2201.AC-30	todo	
+F-2201.AC-30	unit	
 F-2201.AC-31	todo	
 F-2201.AC-32	todo	
 F-2201.AC-33	todo	
@@ -166,12 +166,12 @@ F-2202.AC-21	todo
 F-2202.AC-22	todo	
 F-2202.AC-23	todo	
 F-2202.AC-24	todo	
-F-2202.AC-25	todo	
-F-2202.AC-26	todo	
-F-2202.AC-27	todo	
-F-2202.AC-28	todo	
-F-2202.AC-29	todo	
-F-2202.AC-30	todo	
+F-2202.AC-25	unit	
+F-2202.AC-26	unit	
+F-2202.AC-27	unit	
+F-2202.AC-28	unit	
+F-2202.AC-29	unit	
+F-2202.AC-30	unit	
 F-2202.AC-31	todo	
 F-2202.AC-32	todo	
 F-2202.AC-33	todo	
@@ -205,7 +205,7 @@ F-2206.AC-26	todo
 F-2206.AC-27	todo	
 F-2206.AC-28	todo	
 F-2206.AC-29	todo	
-F-2206.AC-30	todo	
+F-2206.AC-30	unit	
 F-2206.AC-31	todo	
 F-2206.AC-32	todo	
 F-2206.AC-33	todo	
@@ -214,7 +214,7 @@ F-2206.AC-35	todo
 F-2206.AC-36	todo	
 F-2206.AC-37	todo	
 F-2206.AC-38	todo	
-F-2301.AC-1	todo	
+F-2301.AC-1	unit	
 F-2301.AC-2	todo	
 F-2301.AC-3	todo	
 F-2301.AC-4	todo	
@@ -413,14 +413,16 @@ F-2401.AC-16	todo
 F-2401.AC-17	todo	
 F-2401.AC-18	todo	
 F-2401.AC-19	deferred	build order slice 1: Linux hosts only
+F-2401.AC-20	todo	
+F-2401.AC-21	todo	
 F-2403.AC-1	acceptance	
 F-2403.AC-2	acceptance	
-F-2403.AC-3	todo	
-F-2403.AC-4	todo	
+F-2403.AC-3	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-2403.AC-4	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-2403.AC-5	acceptance	
 F-2403.AC-6	acceptance	
 F-2403.AC-7	acceptance	
-F-2403.AC-8	todo	
+F-2403.AC-8	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-2403.AC-9	acceptance	
 F-2403.AC-10	acceptance	
 F-2403.AC-11	acceptance	
@@ -431,14 +433,14 @@ F-2403.AC-15	acceptance
 F-2403.AC-16	todo	
 F-2403.AC-17	acceptance	
 F-2403.AC-18	todo	
-F-2403.AC-19	todo	
+F-2403.AC-19	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-2403.AC-21	acceptance	
 F-2403.AC-22	acceptance	
 F-2403.AC-23	todo	
 F-2403.AC-24	todo	
-F-2403.AC-25	todo	
+F-2403.AC-25	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-2403.AC-26	acceptance	
-F-2403.AC-27	todo	
+F-2403.AC-27	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-2409.AC-1	todo	
 F-2409.AC-2	acceptance	
 F-2409.AC-3	acceptance	
@@ -492,7 +494,7 @@ F-2501.AC-20	todo
 F-2501.AC-21	todo	
 F-2501.AC-22	todo	
 F-2501.AC-23	core	core: the Cannot reconnect dialog and the indicator
-F-2501.AC-24	todo	
+F-2501.AC-24	deferred	contracts §3.2 (connect-34): no tunnel factory; forwarded ports use core's default tunnel
 F-2501.AC-25	todo	
 F-2501.AC-26	todo	
 F-2501.AC-27	todo	
@@ -564,14 +566,14 @@ F-2601.AC-22	todo
 F-2601.AC-23	todo	
 F-2601.AC-24	todo	
 F-2601.AC-25	acceptance	
-F-2601.AC-26	todo	
+F-2601.AC-26	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2601.AC-27	core	core: core's workspace-trust modal over the pick
 F-2601.AC-28	todo	
 F-2601.AC-29	todo	
 F-2601.AC-30	acceptance	
 F-2601.AC-31	acceptance	
 F-2601.AC-32	core	core: the dialog's Enter on its focused button
-F-2601.AC-33	todo	
+F-2601.AC-33	deferred	F-3907: the Copilot entry (F-2606) is not built
 F-2601.AC-34	todo	
 F-2601.AC-35	todo	
 F-2601.AC-36	todo	
@@ -594,10 +596,10 @@ F-3902.AC-15	todo
 F-3902.AC-16	todo	
 F-3902.AC-17	todo	
 F-3902.AC-18	acceptance	
-F-3902.AC-19	todo	
-F-3902.AC-20	todo	
-F-3902.AC-21	todo	
-F-3902.AC-22	todo	
-F-3902.AC-23	todo	
+F-3902.AC-19	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-3902.AC-20	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-3902.AC-21	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-3902.AC-22	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
+F-3902.AC-23	deferred	CLI path dormant in 0.2: no shipped product names a CLI source
 F-3902.AC-24	todo	
 F-3902.AC-25	todo	
