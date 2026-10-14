@@ -15,6 +15,7 @@ export {
 export {type RegistryFilePort, recordPath} from './registry/file-port.ts';
 export {nodeFilePort} from './registry/node-file-port.ts';
 export {claim} from './registry/claim.ts';
+export {removeOwnRecord} from './registry/own-record.ts';
 export {isStale, replaceStale} from './registry/stale.ts';
 export {type Lease, type LeaseEvent, LeaseTable} from './runtime/leases.ts';
 export {

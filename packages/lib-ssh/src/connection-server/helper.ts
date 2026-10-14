@@ -7,6 +7,7 @@ import {
   type EndpointPort,
   type HelperParameters,
   type RegistryFilePort,
+  removeOwnRecord,
   type Scheduler,
   serve,
   type ServeEnd,
@@ -59,7 +60,7 @@ export interface ConnectionHelperEnvironment {
   logLine: (line: string) => void;
 }
 
-/** Serves until the policy or a stop ends the helper; the record is removed whichever way it ends. */
+/** Serves until the policy or a stop ends the helper; its own record is removed whichever way it ends. */
 export async function runConnectionHelper(
   environment: ConnectionHelperEnvironment,
 ): Promise<ServeEnd> {
@@ -124,6 +125,8 @@ export async function runConnectionHelper(
       return await serve({
         endpoint: parameters.endpoint,
         nonce: parameters.nonce,
+        recordFile: options.recordFile,
+        files: environment.files,
         payload: parameters.payload,
         policy: parameters.policy,
         handler,
@@ -138,6 +141,10 @@ export async function runConnectionHelper(
       await askpassServer.close();
     }
   } finally {
-    await environment.files.remove(options.recordFile);
+    await removeOwnRecord(
+      environment.files,
+      options.recordFile,
+      parameters.nonce,
+    );
   }
 }
