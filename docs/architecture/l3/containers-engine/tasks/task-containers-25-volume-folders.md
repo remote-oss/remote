@@ -4,7 +4,8 @@ Issue: #924. Milestone 0.4, gating containers release 1. Size: M. Builder: `task
 
 Sources:
 - F-0419 (remote-oss/remote-containers#92): 5.0 step 6, 7.E4, 7.E5;
-- containers contracts §5.2, "The volume's shared folders" (amended at fdc6461), and components boundary 6;
+- containers contracts §5.2, "The volume's shared folders" (amended at fdc6461 and corrected at 19e69f4), and
+  components boundary 6;
 - transport contracts, `cacheFolders` (the volume layout per product, ruled 2026-10-12, #279);
 - containers-08 (C10, `packages/remote-containers/src/connect/server-steps.ts`, `connector.ts`) and C11
   (`packages/remote-containers/src/exec/exec-channel.ts`).
@@ -40,20 +41,16 @@ export function sharedFoldersOf(profile: ProductProfile, platform: string): read
   1. `/vscode/${volumeServerFolder(profile.applicationName)}`;
   2. that `+ '/bin'`;
   3. that `+ '/' + platform`;
-  4. `cacheFolders(profile, profile.commit, platform, true).extensionsCache`.
-- The names come from lib-product and lib-server, never literals here. For `codium`, they're `/vscode/codium-server`,
-  `…/bin`, `…/bin/linux-x64` and `/vscode/extensionsCache-codium`.
+- The names come from lib-product, never literals here. For `codium`, they're `/vscode/codium-server`, `…/bin` and
+  `…/bin/linux-x64`.
 - Folder 3 is `cacheFolders(…).serverTree` without its last segment. A row checks that they agree.
-
-**Open question for athena (#924, not a blocker).** F-0419 5.0 step 6 and POST-3 put the shared extension cache
-under the server folder (`/vscode/vscode-server/extensionsCache`). lib-server's `cacheFolders` puts it at
-`/vscode/extensionsCache[-<app>]` (transport contracts). This card follows `cacheFolders`, so a ruling that moves it
-changes nothing here.
+- **The extensions cache folder isn't one of them** (athena, 19e69f4). `cacheFolders`' `extensionsCache` joins this step
+  with the increment-2 card that uses it.
 
 ### 2.2 The root script (`packages/remote-containers/src/connect/volume-folders.ts`, new)
 
 ```ts
-/** The fixed script that makes each missing shared folder 0777 as root; its folders come in SHARED_FOLDER_1 to 4. */
+/** The fixed script that makes each missing shared folder 0777 as root; its folders come in SHARED_FOLDER_1 to 3. */
 export const VOLUME_FOLDERS_SCRIPT: string;
 
 /** Runs the script over `rootChannel`; it logs what happened and never fails the connect (contracts §5.2). */
@@ -74,7 +71,7 @@ status=Ok
 created=
 failedPath=
 failedError=
-for folder in "$SHARED_FOLDER_1" "$SHARED_FOLDER_2" "$SHARED_FOLDER_3" "$SHARED_FOLDER_4"; do
+for folder in "$SHARED_FOLDER_1" "$SHARED_FOLDER_2" "$SHARED_FOLDER_3"; do
   [ -e "$folder" ] && continue
   if output=$(mkdir -- "$folder" 2>&1); then
     if output=$(chmod 0777 -- "$folder" 2>&1); then
@@ -100,9 +97,10 @@ printf '%s\n' '<RESULT_END>'
 - **Never touch an existing folder.** It doesn't change the owner or mode of anything that exists, folder or not
   (F-0419 7.E4, 7.E5).
 - **A lost race.** A `mkdir` that fails because another container just made the folder leaves that folder as found.
-- **The first failure is kept, and the rest still run.** The extension cache doesn't depend on the server folder.
+- **The first failure is kept, and the rest still run.** They fail too, so the log names the first folder that
+  couldn't be made.
 - **The script's text is the same on every run.** The folders reach it only through the channel's `environment`
-  (`SHARED_FOLDER_1` to `SHARED_FOLDER_4`). C11 passes environment values in the `docker` process's own environment,
+  (`SHARED_FOLDER_1` to `SHARED_FOLDER_3`). C11 passes environment values in the `docker` process's own environment,
   so `docker exec`'s argv holds the variable names and nothing else of the step.
 
 **`prepareVolumeFolders`.** It runs the script with `interpreter: 'posixShell'`, `input: {kind: 'text', text: ''}`
@@ -115,7 +113,7 @@ line, at `info`:
 | block `Ok`, nothing created | `the volume's shared folders all exist` |
 | block `CreateInstallDirFailed` | `the volume's shared folder <writeFailedPath> could not be made: <writeFailedError>` |
 | the channel failed | `the volume's shared folders were not prepared: <failure.kind>: <failure.detail>` |
-| no result block (for example, `docker exec --user root` refused) | `the volume's shared folders were not prepared: the root step gave no result (exit <status>)` |
+| no result block (for example, when `docker exec --user root` is refused) | `the volume's shared folders were not prepared: the root step gave no result (exit <status>)` |
 
 In every case it returns. The connect goes on, and the remote user's install succeeds or fails on its own terms
 (contracts §5.2). A cancellation leaves the second probe to end the connect as `cancelled`, as it does now.
@@ -175,36 +173,36 @@ The user's case would now log `the server was not installed: scriptFailed (Creat
 
 ### 4.1 The script, run in a real shell (`volume-folders.test.ts`)
 
-The rows run `VOLUME_FOLDERS_SCRIPT` with `/bin/sh` in a temporary folder `T`, with the four variables set to
-`T/s`, `T/s/bin`, `T/s/bin/p` and `T/c`. They run as the test's own user, and 0777 is checked with `stat` after the
+The rows run `VOLUME_FOLDERS_SCRIPT` with `/bin/sh` in a temporary folder `T`, with the three variables set to
+`T/s`, `T/s/bin` and `T/s/bin/p`. They run as the test's own user, and 0777 is checked with `stat` after the
 script has run, so the umask can't hide a missing `chmod`.
 
 | Name | Given | Expected |
 |---|---|---|
-| `F-0419 5.0 step 6: a fresh volume gets the four folders, each 0777` | nothing exists | the four exist, each mode 0777; the block is `Ok` with `server.created` listing the four in order |
-| `F-0419 7.E4: an existing folder keeps its mode` | `T/s` exists, mode 0700 | `T/s` is still 0700; `bin` and `bin/p` are made 0777 inside it; `T/c` is made 0777 |
-| `F-0419 7.E5: an existing tree is left as found` | all four exist, 0755, with a stray file in `T/s/bin/p` | the modes and the listing don't change; the block is `Ok` with `server.created` empty |
-| `contracts §5.2: an existing file in a folder's place is left alone` | `T/c` is a file | `T/c` is still that file, unchanged; the block is `Ok` and lists the other three |
-| `contracts §5.2: a folder that can't be made is reported and the rest still run` | `T/s` is a folder the script can't write into (mode 0500) | `CreateInstallDirFailed` with `writeFailedPath` `T/s/bin` and the `mkdir` error on one line; `T/c` is still made |
+| `F-0419 5.0 step 6: a fresh volume gets the three folders, each 0777` | nothing exists | the three exist, each mode 0777; the block is `Ok` with `server.created` listing the three in order |
+| `F-0419 7.E4: an existing folder keeps its mode` | `T/s` exists, mode 0700 | `T/s` is still 0700; `bin` and `bin/p` are made 0777 inside it |
+| `F-0419 7.E5: an existing tree is left as found` | all three exist, 0755, with a stray file in `T/s/bin/p` | the modes and the listing don't change; the block is `Ok` with `server.created` empty |
+| `contracts §5.2: an existing file in a folder's place is left alone` | `T/s/bin/p` is a file | it's still that file, unchanged; the block is `Ok` and lists the other two |
+| `contracts §5.2: a folder that can't be made is reported, and the first failure is the one kept` | `T/s` is a folder the script can't write into (mode 0500) | `CreateInstallDirFailed` with `writeFailedPath` `T/s/bin` and the `mkdir` error on one line; `T/s/bin/p` isn't made |
 
 ### 4.2 `prepareVolumeFolders` over a recording channel (`volume-folders.test.ts`)
 
 | Name | Expected |
 |---|---|
-| `contracts §5.2: the script is the fixed text and the folders come in the environment` | one `runScript`: `script === VOLUME_FOLDERS_SCRIPT`, `environment` `SHARED_FOLDER_1`..`4` = the folders, `posixShell`, empty text input |
+| `contracts §5.2: the script is the fixed text and the folders come in the environment` | one `runScript`: `script === VOLUME_FOLDERS_SCRIPT`, `environment` `SHARED_FOLDER_1`..`3` = the folders, `posixShell`, empty text input |
 | one row per line of §2.2's table, named `contracts §5.2: <outcome> logs <the line's start>` | the exact log line, and the call returns |
 
 ### 4.3 C11's argv (`exec-channel.test.ts`)
 
 | Name | Expected |
 |---|---|
-| `contracts §5.2: the root step's argv is the channel prelude only` | `execChannelOf(engine, 'cid', 'root').runScript` with the root step's request spawns argv that has `--user root` and `-e SHARED_FOLDER_1` … `-e SHARED_FOLDER_4` (names only), and no argument contains `/vscode` |
+| `contracts §5.2: the root step's argv is the channel prelude only` | `execChannelOf(engine, 'cid', 'root').runScript` with the root step's request spawns argv that has `--user root` and `-e SHARED_FOLDER_1` … `-e SHARED_FOLDER_3` (names only), and no argument contains `/vscode` |
 
 ### 4.4 `server-steps.test.ts` and `connector.test.ts`
 
 | Name | Expected |
 |---|---|
-| `contracts §5.2: with the volume, the root step runs after the first probe and before the second` | the root channel's one script is `VOLUME_FOLDERS_SCRIPT`, with the fixture's folders (`/vscode/fixture-server`, `…/bin`, `…/bin/linux-x64`, `/vscode/extensionsCache-fixture`); the user channel's scripts are probe, probe, …, as now; the call order across both channels is probe, root step, probe |
+| `contracts §5.2: with the volume, the root step runs after the first probe and before the second` | the root channel's one script is `VOLUME_FOLDERS_SCRIPT`, with the fixture's folders (`/vscode/fixture-server`, `…/bin`, `…/bin/linux-x64`); the user channel's scripts are probe, probe, …, as now; the call order across both channels is probe, root step, probe |
 | `contracts §5.2: without the volume, the root channel is never used` | no script on the root channel |
 | `contracts §5.2: a root step that fails doesn't fail the connect` | the root channel answers with a failure, and the connect still starts the server |
 | `contracts §5.2: a platform that isn't a folder name skips the root step` | `sharedFoldersOf(profile, 'linux-x64;rm')`, `'Linux-x64'` and `''` are `undefined`; with a probe that reports such a platform, the root channel isn't used and the log has the "not a folder name" line |
@@ -217,13 +215,13 @@ script has run, so the umask can't hide a missing `chmod`.
 
 **A precondition before the rows.** No running container of another run (`remote-oss.acceptance.run` label ≠
 `HARNESS_RUN_ID`) mounts the `vscode` volume. If one does, the launch fails, naming those containers, and doesn't skip.
-Then a helper container (`docker run --rm -v vscode:/vscode <the run's image> rm -rf <the four folders>`) clears the
-product's shared folders. The folder names come from the same lib-product and lib-server functions.
+Then a helper container (`docker run --rm -v vscode:/vscode <the run's image> rm -rf /vscode/<serverFolder>`) clears the
+product's server folder. The folder names come from the same lib-product and lib-server functions.
 
 | # | Steps | Assertions |
 |---|---|---|
-| V1 | `devContainerFolder('volume-user', {name: 'Volume User', remoteUser: 'node'})`, then Reopen and wait until connected | connected, with `remoteName` `dev-container`; a root listing (`docker exec --user root <id> stat -c '%U %a' <folder>`) shows the four folders `root 777`, and the commit folder `node 755`; the log has `the volume's shared folders were created: <the four>` (F-0419 5.0 step 6, the user's trial) |
-| V2 | Close V1's window. Clear the folders again, then make `/vscode/<serverFolder>` and the extension cache folder `root 0700` with the helper container. Reopen `devContainerFolder('volume-closed', {name: 'Volume Closed', remoteUser: 'node'})` | the S034 dialog (F-0419 7.E4); afterwards the two 0700 folders are still `root 700`, `bin` and `bin/<platform>` are `root 777`, and there's no commit folder; the log has `scriptFailed (CreateInstallDirFailed): cannot write` and the path under `/vscode/<serverFolder>`. Then answer the dialog's close and clear the folders, so later launches install afresh |
+| V1 | `devContainerFolder('volume-user', {name: 'Volume User', remoteUser: 'node'})`, then Reopen and wait until connected | connected, with `remoteName` `dev-container`; a root listing (`docker exec --user root <id> stat -c '%U %a' <folder>`) shows the three folders `root 777`, and the commit folder `node 755`; the log has `the volume's shared folders were created: <the three>` (F-0419 5.0 step 6, the user's trial) |
+| V2 | Close V1's window. Clear the server folder again, then make `/vscode/<serverFolder>` `root 0700` with the helper container. Reopen `devContainerFolder('volume-closed', {name: 'Volume Closed', remoteUser: 'node'})` | the S034 dialog (F-0419 7.E4); afterwards `/vscode/<serverFolder>` is still `root 700`, `bin` and `bin/<platform>` are `root 777`, and there's no commit folder; the log has `scriptFailed (CreateInstallDirFailed): cannot write` and the path under `/vscode/<serverFolder>`. Then close the dialog and clear the server folder, so later launches install afresh |
 
 **On main without this card,** V1 fails with the user's S034. That's how the defect is reproduced.
 
