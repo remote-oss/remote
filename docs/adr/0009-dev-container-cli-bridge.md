@@ -22,7 +22,11 @@ The specs differ from the CLI's own behaviour in six known places (dossier §4):
 1. an empty `${localEnv:VAR:default}` gives the default (F-0304 BR-5a);
 2. `${containerEnv}` in `initializeCommand` is empty;
 3. `localEnv` is the editor's resolved environment;
-4. the window-title `name` needs a second pass without a container;
+4. the window-title `name` needs a second pass, `read-configuration` with the container once it exists. The
+   dossier's "even without a container" has no release-1 surface (amended 2026-10-14 on #764). The title and the
+   indicator show the name only once connected (F-0504 5.0 step 5). The picker's label is the raw, unsubstituted
+   `name` (F-0301 BR-3). A surface that needs the substituted name before the container exists brings that pass
+   back, under its own card;
 5. the workspace mount needs `--mount-workspace-git-root=false` (F-0301 §6.5, F-0302 BR-14);
 6. attach configurations can't go through `up --config` (not in release 1).
 

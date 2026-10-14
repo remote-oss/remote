@@ -72,7 +72,7 @@ its content:
 | Port | Operations | Real adapter |
 |---|---|---|
 | `EngineHost` (C2) | `run(argv, {stdin?, environment?, cancellation}) → {status, stdout, stderr}`; `spawn(argv, …) → a live process` | `child_process.spawn` with `shell: false` (F-0201) |
-| `CliHost` (C3) | `run(arguments, onJsonLine, cancellation) → {result: <the JSON result line>, status}` | spawns `process.execPath` with `ELECTRON_RUN_AS_NODE=1` on the bundled CLI's entry script (ADR-0009) |
+| `CliHost` (C3) | `run(arguments, onJsonLine, cancellation) → {kind: 'ran', result: <the first stdout line, or undefined>, status: <the exit status, or null after an abort>}`, or `{kind: 'spawnFailed', message}` when the process can't start (amended 2026-10-14 on #764) | spawns `process.execPath` with `ELECTRON_RUN_AS_NODE=1` on the bundled CLI's entry script (ADR-0009) |
 | `TrustPort` (C5) | `isTrusted()`, `request(message) → granted or not` | `vscode.workspace` (proposal `workspaceTrust`) |
 | `ConfigFiles` (C4) | `exists`, `read`, `list` over workspace URIs | `vscode.workspace.fs` |
 | notices and dialogs | as remote-ssh's surfaces: an adapter per surface, scripted in the harness | `vscode.window` |
