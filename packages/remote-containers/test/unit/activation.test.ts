@@ -49,6 +49,8 @@ interface Options {
   gateThrows?: boolean;
   registerThrows?: boolean;
   warningAnswer?: string;
+  /** Whether the user dismissed the setup notice before. */
+  dismissed?: boolean;
 }
 
 function surroundings(options: Options): {
@@ -113,7 +115,7 @@ function surroundings(options: Options): {
         throw new Error('no editor');
       }
       logFailure('a failure of the setup');
-      return recordingSetupPorts(
+      const ports = recordingSetupPorts(
         {
           extensionId: 'remote-oss.remote-containers',
           missing: options.missing ?? [],
@@ -121,6 +123,10 @@ function surroundings(options: Options): {
         },
         seen.events,
       );
+      return {
+        ...ports,
+        flags: {...ports.flags, dismissed: () => options.dismissed === true},
+      };
     },
     handlers: () => {
       seen.events.push('handlers');
@@ -239,6 +245,41 @@ describe('the activation', () => {
       await result.served.setupAgain();
     }
     deepStrictEqual(seen.events, ['probe']);
+  });
+
+  it('F-0101.BR-9: at activation a dismissed notice stays silent', async () => {
+    const {inputs, seen} = surroundings({
+      otherRuns: false,
+      missing: ['resolvers'],
+      dismissed: true,
+    });
+    const result = await activateContainers(inputs);
+    if (result.kind === 'serving') {
+      await result.setup;
+    }
+    deepStrictEqual(
+      seen.events.filter(event => event === 'claim' || event === 'notice'),
+      [],
+    );
+  });
+
+  it('F-0101.BR-9: setupAgain, after a use that needed a proposal failed, tells the user though the notice was dismissed', async () => {
+    const {inputs, seen} = surroundings({
+      otherRuns: false,
+      missing: ['resolvers'],
+      dismissed: true,
+    });
+    const result = await activateContainers(inputs);
+    seen.events.length = 0;
+    if (result.kind === 'serving') {
+      await (
+        await result.served.setupAgain()
+      ).interaction;
+    }
+    deepStrictEqual(
+      seen.events.filter(event => event === 'claim' || event === 'notice'),
+      ['claim', 'notice'],
+    );
   });
 
   it('F-0101.BR-9: the activation tells the user about a missing proposal once', async () => {
