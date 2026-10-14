@@ -764,10 +764,10 @@ F-2605.AC-15	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-16	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-17	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-18	todo	
-F-2605.AC-19	todo	
+F-2605.AC-19	deferred	F-3907: remote.SSH.experimental.chat (F-2606) is not built
 F-2605.AC-20	todo	
 F-2605.AC-21	todo	
-F-2605.AC-22	todo	
+F-2605.AC-22	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-23	todo	
 F-2605.AC-24	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-2605.AC-25	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
