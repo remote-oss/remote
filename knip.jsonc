@@ -34,6 +34,7 @@
         "suite-reconnect/*.test.ts",
         "suite-failure/*.test.ts",
         "suite-ports/*.test.ts",
+        "suite-platform/*.test.ts",
         "suite-install/*.test.ts",
         "suite-terminal/*.test.ts",
         "suite-socket/*.test.ts",

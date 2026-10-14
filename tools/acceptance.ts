@@ -421,15 +421,25 @@ export function packagedExtensions(
 /**
  * The editor's user settings of the run: the extensions under test read the harness's ssh_config, and `extra` is a
  * launch's own settings. With `label`, the same bytes go to `<run folder>/<label>-settings.json`, so a row compares
- * the file the editor read with the one its launch got.
+ * the file the editor read with the one its launch got. A `tail` is text put after the last member with no comma
+ * before it: a syntax error, after members the editor still reads.
  */
 export function writeUserSettings(
   runFolder: string,
   configFile: string,
   extra: Readonly<Record<string, unknown>> = {},
   label?: string,
+  tail?: string,
 ): void {
-  const bytes = `${JSON.stringify({'remote.SSH.configFile': configFile, ...extra}, null, 2)}\n`;
+  const written = JSON.stringify(
+    {'remote.SSH.configFile': configFile, ...extra},
+    null,
+    2,
+  );
+  const bytes =
+    tail === undefined
+      ? `${written}\n`
+      : `${written.slice(0, -2)}\n  ${tail}\n}\n`;
   const folder = path.join(runFolder, 'user-data', 'User');
   mkdirSync(folder, {recursive: true});
   writeFileSync(path.join(folder, 'settings.json'), bytes);
@@ -684,6 +694,7 @@ export async function runLaunches(
               process.env.PATH ?? '',
             ),
             launch.label,
+            launch.settingsTail,
           );
           await beforeAttempt(launch);
         }
