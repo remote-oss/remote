@@ -49,7 +49,7 @@ Sources:
   "remote_30_dev-container_2_actions@8", "when": "!hideConnectCommands && workspaceFolderCount == 0 && !remoteName &&
   !virtualWorkspace && !remote-containers:standingDown"}`. That's the spec's clause plus the stand-down guard every
   command of ours carries.
-- **Gate row 10's expected set** (#917, #918) gains the id. Update its expectation in the same PR.
+- **Gate row 10** reads the registered set from `package.json` (#947), so the new command needs no hand-edit there.
 
 ### 2.2 The command (`src/open/open-folder.ts`, new)
 
@@ -205,10 +205,14 @@ input`) to `path`, dispatches `input`, and presses Enter (F-0403 5.0 step 3: Ent
 ## 5. Catalogue
 
 - `acceptance`: F-0403 AC-12, AC-13, AC-14, AC-17, AC-20; F-0106 AC-41, AC-42.
-- `acceptance`, the release-1 half: F-0403 AC-1. The six other window kinds stay `todo` with their cards.
-- `todo`, with the reason "Flow A, later (brief)": F-0403 AC-4 to AC-11 and AC-23. The rest are `todo`, each with its
-  later feature: AC-18, AC-19, AC-22, AC-24 to AC-27 (other window kinds and OS legs). AC-2, AC-3, AC-15, AC-16 and
-  AC-28 are core's dialog and prompts: `core`, with the reason "core's folder dialog / save prompt".
+- `acceptance`, the release-1 half: F-0403 AC-1. The six other window kinds' halves come with their cards.
+- `deferred`, with the reason "containers release 1: later (F-0403 Flow A, the wizard)": F-0403 AC-4 to AC-11 and
+  AC-23.
+- `deferred`, each with its reason in the form the catalogue already uses ("containers release 1: later (<feature>)"):
+  AC-18, AC-19 and AC-22 (other window kinds: attach, SSH, WSL), and AC-24 to AC-27 (Windows, WSL and macOS).
+- `core`, with the reason "core's folder dialog / save prompt": AC-2, AC-3, AC-15, AC-16 and AC-28.
+
+check-coverage allows a reason only on `core` and `deferred` rows, so no `todo` row here has one (dike on #937).
 
 ## 6. Gates, review and open rows
 
