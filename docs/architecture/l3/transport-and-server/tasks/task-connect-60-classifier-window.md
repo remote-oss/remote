@@ -37,15 +37,29 @@ timeout, a failed server start, a lost session) in both modes.
 
 ## 2. The fix
 
-### 2.1 The window: only lines before `Authenticated to`
+### 2.1 The window: only lines before `Authenticated to`, read from connect-66's one collection
 
-- **lib-ssh** gains a pure `sessionStartIndex(lines): number | undefined`: the index of the first line that
-  `setupMarkerOf` reports as `authenticated`. Use connect-55's mux line too, once #814 is on main, and say so in the PR.
-- **`classify`** classifies only the lines before that index. The lines after it go to the log (`logLinesOf`) and are
-  never matched.
-- **Shared mode (`handler.ts`):** keep collecting all lines for the log, but call `classify` with the cut window.
-- **Terminal mode (`terminal-connection-step.ts`):** `failureOf(end, lines)` classifies the cut window.
-- **When no `Authenticated to` line was seen,** for example a failure before login, the whole window counts, as today.
+**One ssh-stderr pipeline (athena, F-2003 scope ruling, register 2bb86d6).** connect-66 (#845) collects ssh's error lines
+once per connect, as `SshLines` (`lib-ssh/src/connection-server/ssh-lines.ts`). Its `beforeAuthentication()` gives the
+lines before the first `Authenticated to ` line, and the window logs `all()` live as `[ssh] …`. This card's classifier
+reads that same collection; it keeps no line buffer of its own.
+
+- **The window:** `SshLines.beforeAuthentication()`, the lines before the first line `setupMarkerOf` reports as
+  `authenticated`. Use connect-55's mux line too, once #814 is on main, and say so in the PR. When no such line was
+  seen, for example a failure before login, every line counts, as today.
+- **`classify`** is called with that window and nothing else. The lines after it reach the log through connect-66, and
+  are never matched.
+- **Shared mode (`handler.ts`):** call `classify` with `sshLines.beforeAuthentication()`. **Remove** the handler's own
+  `errorLines` array (`handler.ts:302`): `SshLines` replaces it.
+- **Terminal mode (`terminal-connection-step.ts`):** `failureOf(end, …)` classifies `sshLines.beforeAuthentication()`.
+  **Remove** the step's own `lines` array kept for `failureOf` (`:246`): the terminal step's `SshLines` replaces it.
+- **The post-session rules of §2.2** read `SshLines.all()`, under §2.2's conditions.
+
+**Whichever lands second:**
+- **If this card lands first:** it introduces the window over its own collection, a `beforeAuthentication`-style cut
+  of the existing arrays. connect-66 then moves the window onto `SshLines.beforeAuthentication()`, removes the arrays,
+  and keeps this card's rows.
+- **If connect-66 lands first:** this card builds on `SshLines` directly, as written above.
 
 ### 2.2 Post-session messages ssh writes itself
 
@@ -107,6 +121,7 @@ line in the PR. Where a measured line differs from the table, the measurement wi
 | `classify.test.ts` | `ADR-0010: a rule's text mid-line is not ssh's message` | `motd: Permission denied (publickey) is a test`, `see ssh: connect to host x port 22: Connection refused` (a prefix inside a line), before authentication | `unknown` |
 | `classify.test.ts` | (each rule) `F-2603: <rule> in ssh's own form` | the measured full line | today's kind and reason |
 | `classify.test.ts` | `ADR-0010 rule 3: forwarding prohibited after authentication counts only with ssh's 255` | the anchored `channel 2: open failed: administratively prohibited: open failed` after authentication, with status 255, then with status 1 | `forwardingDisabled`; then `unknown` |
+| `ssh-lines.test.ts` (connect-66's file, or this card's if it lands first) | `connect-60's window: beforeAuthentication stops at connect-55's mux line too` | lines, then `debug1: mux_client_request_session: master session id: 2`, then `Permission denied (fridge)` | `beforeAuthentication()` holds only the lines before the mux line |
 | `handler.test.ts` (shared) | `ADR-0010: the helper classifies only the lines before authentication` | a fake session that writes `Authenticated to …`, then `curl: (28) Connection timed out…` to stderr, then ends during the layer-1 wait | `loginFailed` with kind `timeout` (the wait's own), not S137's text, and the curl line in the log |
 | `terminal-connection-step.test.ts` | `ADR-0010: a terminal that ends after authentication is not classified from the shell's output` | the terminal prints `Authenticated to …`, then `…: Permission denied (fridge)`, then ends | not `authentication` |
 
