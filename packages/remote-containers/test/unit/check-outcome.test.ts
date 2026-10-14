@@ -69,7 +69,7 @@ describe('the classification of the first check', () => {
       'permission',
     ],
     [
-      'not found on stderr',
+      'F-0201 AC-47, not found on stderr',
       SPAWN,
       [exited(1, 'context not found')],
       'notFound',
@@ -96,7 +96,7 @@ describe('the classification of the first check', () => {
       'engineError',
     ],
     [
-      'a missing context',
+      'F-0201 AC-47, a missing context',
       SPAWN,
       [
         GOOD,
