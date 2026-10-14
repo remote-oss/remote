@@ -31,6 +31,11 @@ import {
   type ContainerOutcome,
   type ContainerStep,
 } from '../lifecycle/container-lifecycle.ts';
+import {
+  configurationEntries,
+  effectiveExtensions,
+  settingEntries,
+} from '../extensions/extension-list.ts';
 import {idLabels} from '../lifecycle/labels.ts';
 import {withContext} from './context-engine.ts';
 import {
@@ -77,6 +82,10 @@ export interface ContainerConnectorDependencies {
     dockerPath: unknown;
     serverDownloadBaseUrl: OverrideValue | undefined;
     serverDownloadFolder: unknown;
+    /** The user's value of `dev.containers.defaultExtensions`, `undefined` when unset. */
+    defaultExtensions: unknown;
+    /** The user's value of the deprecated `remote.containers.defaultExtensions`, `undefined` when unset. */
+    deprecatedDefaultExtensions: unknown;
   };
   /** What the second check needs besides the engine and the program. */
   preflight: Omit<PreflightDependencies, 'engineFor' | 'dockerPath'>;
@@ -316,6 +325,26 @@ export function containerConnectorOf(
     };
   }
 
+  /** The extensions a new container's server installs, logged; the ones of the configuration, then the setting's. */
+  function newContainerExtensions(
+    mergedConfiguration: Record<string, unknown> | undefined,
+    settings: ReturnType<ContainerConnectorDependencies['settings']>,
+  ): string[] {
+    const list = effectiveExtensions([
+      ...configurationEntries(mergedConfiguration),
+      ...settingEntries(
+        settings.defaultExtensions,
+        settings.deprecatedDefaultExtensions,
+      ),
+    ]);
+    logger.info(
+      list.length === 0
+        ? 'no extensions to install'
+        : `extensions to install in the new container: ${list.join(', ')}`,
+    );
+    return list;
+  }
+
   async function connectFresh(
     folder: DevContainerFolder,
     controller: AbortController,
@@ -381,6 +410,14 @@ export function containerConnectorOf(
       logCliEvent,
       cancellation,
     );
+    const defaultExtensions = prepared.created
+      ? newContainerExtensions(
+          configuration.kind === 'configuration'
+            ? configuration.mergedConfiguration
+            : undefined,
+          settings,
+        )
+      : [];
     let name: string | undefined;
     if (configuration.kind === 'configuration') {
       const written = configuration.configuration.name;
@@ -400,6 +437,7 @@ export function containerConnectorOf(
         channel,
         remoteUser: prepared.remoteUser,
         volumeMounted: prepared.volumeMounted,
+        defaultExtensions,
         onPhase: phase => {
           phases.tell({name: phase});
         },

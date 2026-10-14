@@ -94,6 +94,22 @@
           "type": "string",
           "scope": "application",
           "description": "%setting.ServerDownloadFolder.description%"
+        },
+        "dev.containers.defaultExtensions": {
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "items": {
+            "type": "string",
+            "pattern": "([a-z0-9A-Z][a-z0-9-A-Z]*)\\.([a-z0-9A-Z][a-z0-9-A-Z]*)",
+            "errorMessage": "%setting.Defaultextensions.itemError%"
+          },
+          "description": "%setting.Defaultextensions.description%"
+        },
+        "remote.containers.defaultExtensions": {
+          "scope": "application",
+          "deprecationMessage": "%setting.Remotecontainersdefaultextensions.deprecation%",
+          "markdownDeprecationMessage": "%setting.Remotecontainersdefaultextensions.markdownDeprecation%"
         }
       }
     }

@@ -4,7 +4,11 @@
   "standingDownKey": "remote-containers:standingDown",
   "namespaces": {
     "commands": ["remote-containers."],
-    "settings": ["dev.containers.", "remote.serverDownload"],
+    "settings": [
+      "dev.containers.",
+      "remote.containers.",
+      "remote.serverDownload"
+    ],
     "contextKeys": ["remote-containers:"],
     "internalCommands": ["remote-oss."]
   },
@@ -40,7 +44,13 @@
       "date": "2026-10-14"
     }
   ],
-  "settingPairs": [],
+  "settingPairs": [
+    {
+      "current": "dev.containers.defaultExtensions",
+      "legacy": "remote.containers.defaultExtensions",
+      "winner": "current"
+    }
+  ],
   "ungated": [],
   "locales": [
     "cs",
