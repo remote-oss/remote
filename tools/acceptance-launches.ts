@@ -611,7 +611,14 @@ export function launchesOf(root: string): Launch[] {
         'remote.SSH.remotePlatform': {harness: 'linux'},
       },
     },
-    {...CONTAINERS_LAUNCH, label: 'containers', suite: 'containers'},
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers',
+      suite: 'containers',
+      // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
+      standIns: ['ms-vscode-remote.remote-containers'],
+      disabledExtensions: ['ms-vscode-remote.remote-containers'],
+    },
     {
       ...CONTAINERS_LAUNCH,
       label: 'containers-standdown',
