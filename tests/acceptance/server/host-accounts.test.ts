@@ -201,15 +201,17 @@ describe('D-85: the host takes more accounts than harness', function () {
     deepStrictEqual([outcome.stdout, outcome.endedByBound], ['', true]);
   });
 
-  it('D-85: master starts a control socket that a second ssh reuses', async () => {
-    try {
-      await sshRun(['master', 'true'], {password: true});
-      const check = await sshRun(['-O', 'check', 'master']);
-      strictEqual(check.status, 0);
-    } finally {
-      await sshRun(['-O', 'exit', 'master']);
-    }
-  });
+  for (const alias of ['master', 'master-yes', 'master-autoask']) {
+    it(`D-85: ${alias} starts a control socket that a second ssh reuses`, async () => {
+      try {
+        await sshRun([alias, 'true'], {password: true});
+        const check = await sshRun(['-O', 'check', alias]);
+        strictEqual(check.status, 0);
+      } finally {
+        await sshRun(['-O', 'exit', alias]);
+      }
+    });
+  }
 
   it('D-85: the run keeps its password out of the ssh_config and the host variables it writes', () => {
     const password = readFileSync(
