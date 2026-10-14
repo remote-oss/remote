@@ -61,8 +61,11 @@ export function uninstallOwnHostPlan(
   };
 }
 
-/** The outcome of the kill or uninstall step. */
-export type StepResult = 'stepRan' | 'connectionFailed';
+/**
+ * The outcome of the kill or uninstall step. `stepFailed`: the connection opened, but the probe or the step did not
+ * work on the host.
+ */
+export type StepResult = 'stepRan' | 'stepFailed' | 'connectionFailed';
 
 /** The notice a kill outcome shows. */
 export function killResult(result: StepResult): CommandNotice {
@@ -71,5 +74,5 @@ export function killResult(result: StepResult): CommandNotice {
 
 /** The notice an uninstall outcome shows. */
 export function uninstallResult(result: StepResult): 'silent' | 'commandError' {
-  return result === 'stepRan' ? 'silent' : 'commandError';
+  return result === 'connectionFailed' ? 'commandError' : 'silent';
 }

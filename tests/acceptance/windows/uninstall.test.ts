@@ -593,6 +593,31 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       );
     });
 
+    it('F-2412 AC-32: Windows answered for a Linux host shows nothing and changes nothing', async () => {
+      await closeAllButLocal();
+      await makeDataFolder();
+      await perWindowMode(true);
+      await openConnected('u1', INSTALL_MILLISECONDS);
+      // The pick is asked only for a host with no `remotePlatform` entry; the window above needed one.
+      await setting('remote.SSH.remotePlatform', undefined);
+      const servers = await serverProcesses();
+      const mark = await uninstallWith('local', [
+        pickHost('harness'),
+        platform('windows'),
+      ]);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      deepStrictEqual(
+        [
+          servers.length > 0,
+          surfacesSince(mark, 'local'),
+          await serverProcesses(),
+          await existsOnHost(DATA_FOLDER),
+        ],
+        [true, ['hostPick', 'platformPick'], servers, true],
+      );
+      await closeAllButLocal();
+    });
+
     it('F-2412 AC-33: macOS uninstalls as Linux does', async () => {
       await uninstallWith('local', [pickHost('harness'), platform('macOS')]);
       await removedWithin(DATA_FOLDER);

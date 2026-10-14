@@ -44,6 +44,7 @@ const RECOVER: ReadonlyArray<readonly [FailedKind, boolean]> = [
   ['serverInstall', true],
   ['serverStart', true],
   ['invalidSetting', false],
+  ['configFileUnparsable', false],
   ['preconnectFailed', false],
   ['lockTimeout', false],
   ['retriesExhausted', false],
@@ -68,6 +69,37 @@ describe('which kinds may recover during a reconnection', () => {
 });
 
 describe('the failure the window gets', () => {
+  it('F-2201 AC-22: an unparsable file is a silent, non-retryable failure that our presenter never shows', () => {
+    deepStrictEqual(
+      failedWith(
+        {
+          kind: 'configFileUnparsable',
+          reason: {text: '/h/.ssh/config: unterminated quote after Host'},
+        },
+        RECONNECTION,
+      ),
+      {
+        kind: 'configFileUnparsable',
+        reason: {text: '/h/.ssh/config: unterminated quote after Host'},
+        retryable: false,
+        silent: true,
+        userAlreadyNotified: false,
+        hints: [],
+        diagnostics: [],
+      },
+    );
+  });
+
+  it('F-2201 AC-22: only the parse failure is silent', () => {
+    deepStrictEqual(
+      failedWith(
+        {kind: 'invalidSetting', reason: {text: 'the setting: the problem'}},
+        RECONNECTION,
+      ).silent,
+      false,
+    );
+  });
+
   it('an initial connect is never retryable, whatever the kind', () => {
     deepStrictEqual(
       failedWith(

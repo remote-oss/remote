@@ -18,6 +18,11 @@ const FAILED: MaintenanceRun = {
   cause: 'the connection failed: x',
 };
 
+const STEP_FAILED: MaintenanceRun = {
+  result: 'stepFailed',
+  cause: 'the probe failed: channelFailed',
+};
+
 interface Setup {
   /** What the ports did, in order: the local server ended, a notice, the switch to a local window. */
   order: string[];
@@ -146,6 +151,15 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
     deepStrictEqual(scenario.notices, [
       ['Failed to kill VS Code Server on dev.', ['Open Logs']],
     ]);
+  });
+
+  it('F-2411.AC-14: a kill whose step failed on the host shows the kill-failed notice', async () => {
+    const scenario = setup({outcome: STEP_FAILED});
+    await scenario.kill();
+    deepStrictEqual(
+      [scenario.notices, scenario.ended],
+      [[['Failed to kill VS Code Server on dev.', ['Open Logs']]], []],
+    );
   });
 
   it('F-2411.7.E1: a failed kill is logged at warn with its cause', async () => {
@@ -383,6 +397,19 @@ describe('Uninstall VS Code Server from Host... (F-2412)', () => {
     deepStrictEqual(
       [scenario.notices, scenario.sink.lines.map(line => line.message)],
       [[], ['the uninstall failed: the connection failed: x']],
+    );
+  });
+
+  it('F-2412 AC-32: an uninstall whose step failed on the host shows nothing and ends nothing', async () => {
+    const scenario = setup({outcome: STEP_FAILED});
+    await scenario.uninstall();
+    deepStrictEqual(
+      [
+        scenario.notices,
+        scenario.ended,
+        scenario.sink.lines.map(line => line.message),
+      ],
+      [[], [], ['the uninstall failed: the probe failed: channelFailed']],
     );
   });
 });

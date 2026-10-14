@@ -89,6 +89,9 @@ function surfacesWith(
     settings: {
       inspectSetting: () => ({globalValue: changes.writtenPlatforms}),
     },
+    configuredHosts: () => ({
+      hosts: [{name: 'dev', file: '/h/.ssh/config'}],
+    }),
     translate: template => template,
     help: {
       getHelp: {
@@ -154,6 +157,13 @@ async function afterDialog(
 }
 
 describe("the connect's surfaces over the editor", () => {
+  it('F-2201 AC-22: the surfaces hand the connect the same reading the host pick uses', () => {
+    const {surfaces} = surfacesWith();
+    deepStrictEqual(surfaces.configuredHosts(), {
+      hosts: [{name: 'dev', file: '/h/.ssh/config'}],
+    });
+  });
+
   it('F-2409 7.E1: a refused bind host is an error notice with no buttons that names the value', () => {
     const {surfaces, calls} = surfacesWith();
     surfaces.rejectBindHost('devbox', 'not a host!');

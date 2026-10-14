@@ -63,8 +63,9 @@ its content:
   is current. Field order and spelling are F-0501's.
 - **The rebuild intent** (C6 → C7) isn't part of the authority, which must stay stable (F-1102 §16). The reloaded
   window has another workspace identity, so its workspace state can't carry it. C6 stores it in the extension's
-  `globalState` under a key of ours (R-27), keyed by the payload, with the time, before the reload. C7 reads it once at
-  the start of the resolve and clears it. An intent older than 5 minutes is cleared unused, so a rebuild never fires on
+  `globalState` under a key of ours (R-27), keyed by the payload, with the time, before the reload. C10 takes it once at
+  the start of the resolve's first attempt, clears it, and hands it to C7 in the container request, so C7 holds no
+  editor state (amended 2026-10-14, containers-14 #891). An intent older than 5 minutes is cleared unused, so a rebuild never fires on
   a later, ordinary open.
 - **The codec functions:** `devContainerPayloadOf(target) → string` and `devContainerTargetOf(payload) → target |
   malformed` are pure, with rows for every field and a malformed hex, JSON and shape.

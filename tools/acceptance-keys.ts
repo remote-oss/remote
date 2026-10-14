@@ -12,7 +12,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
-import {type CommandRunner, checked, newPassword} from './acceptance-run.ts';
+import {type CommandRunner, checked} from './command-runner.ts';
+import {newPassword} from './acceptance-run.ts';
 import {type Started, startDetached} from './acceptance-plain.ts';
 
 /** The principal the run's certificate is signed for: the host's certificate-only account. */
@@ -31,6 +32,8 @@ export interface RunKeys {
   passphraseAskpass: string;
   /** A key protected by the same passphrase that the host does not accept. */
   strangerKey: string;
+  /** A key without a passphrase that the host does not accept. */
+  unauthorisedKey: string;
   /** A second key without a passphrase. */
   secondKey: string;
   /** A copy of the second key with mode 0644, which ssh refuses to use. */
@@ -106,6 +109,8 @@ export function makeRunKeys(
   );
   const strangerKey = path.join(runFolder, 'id_passphrase_stranger');
   protectedKey(command, passphraseAskpass, strangerKey, 'acceptance-stranger');
+  const unauthorisedKey = path.join(runFolder, 'id_unauthorised');
+  plainKey(command, unauthorisedKey, 'acceptance-unauthorised');
   const secondKey = path.join(runFolder, 'id_second');
   plainKey(command, secondKey, 'acceptance-second');
   const looseKey = path.join(runFolder, 'id_loose');
@@ -131,6 +136,7 @@ export function makeRunKeys(
     passphraseFile,
     passphraseAskpass,
     strangerKey,
+    unauthorisedKey,
     secondKey,
     looseKey,
     certifiedKey,
@@ -174,6 +180,24 @@ export function startRunAgent(socket: string): Started {
 
 /** The longest socket path the run uses: below the 104 bytes of the smallest `sun_path` among the platforms. */
 export const SOCKET_PATH_LIMIT = 100;
+
+/** The longest name an alias's control socket has: `cm-autoask-` and the 40 characters of `%C`, and the 17 that `ssh` adds while it binds. */
+const LONGEST_CONTROL_SOCKET = 'cm-autoask-'.length + 40 + 17;
+
+/**
+ * The folder of the ControlMaster sockets of the run's aliases: the run's folder, or, when the longest socket name in
+ * it would pass the limit of a Unix socket path, a short folder `shortFolder` makes (by default a new one under
+ * `/tmp`). A runner's temporary folder and run id make a run folder too deep for it.
+ */
+export function controlFolderOf(
+  runFolder: string,
+  shortFolder: () => string = () => mkdtempSync('/tmp/control-'),
+): string {
+  return Buffer.byteLength(runFolder) + 1 + LONGEST_CONTROL_SOCKET <=
+    SOCKET_PATH_LIMIT
+    ? runFolder
+    : shortFolder();
+}
 
 /**
  * Where the run's agent listens: `agent.sock` in the run's folder, or, when that path is too long for a Unix socket,

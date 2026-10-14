@@ -31,7 +31,7 @@ import {
   makeCertificate,
   startDownloadHost,
 } from '../../../tools/acceptance-downloads.ts';
-import {runCommand} from '../../../tools/acceptance-run.ts';
+import {runCommand} from '../../../tools/command-runner.ts';
 import {fetchVariantsToRun} from '../../../tools/host-variants.ts';
 
 const CANCELLATION = new AbortController().signal;

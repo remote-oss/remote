@@ -85,86 +85,31 @@
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/cli/cli-arguments.ts",
-      "card": "#776",
+      "key": "src/lifecycle/container-lifecycle.ts",
+      "card": "#769",
       "slice": "containers release 1"
     },
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/cli/cli-bridge.ts",
-      "card": "#776",
+      "key": "src/lifecycle/labels.ts",
+      "card": "#769",
       "slice": "containers release 1"
     },
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/cli/cli-host.ts",
-      "card": "#776",
+      "key": "src/lifecycle/inspect-lines.ts",
+      "card": "#769",
       "slice": "containers release 1"
     },
     {
       "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/cli-lines.ts",
-      "card": "#776",
-      "slice": "containers release 1"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/cli-paths.ts",
-      "card": "#776",
-      "slice": "containers release 1"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/cli-secrets.ts",
-      "card": "#776",
-      "slice": "containers release 1"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/node-cli-host.ts",
-      "card": "#776",
-      "slice": "containers release 1"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/node-cli-ports.ts",
-      "card": "#776",
-      "slice": "containers release 1"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/override-files.ts",
-      "card": "#776",
-      "slice": "containers release 1"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/override-pre-pass.ts",
-      "card": "#776",
-      "slice": "containers release 1"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/line-splitter.ts",
-      "card": "#776",
-      "slice": "containers release 1"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/cli-raw-lines.ts",
-      "card": "#776",
-      "slice": "containers release 1"
+      "kind": "contextKeys",
+      "key": "hideConnectCommands",
+      "card": "#766",
+      "slice": "containers release 1",
+      "decision": "F-0504 BR-8 (2026-09-26): defined, never set"
     }
   ]
 }
