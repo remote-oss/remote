@@ -4,7 +4,7 @@
  * session stalls, and a new connection gets no answer. The container runs with NET_ADMIN and its image has `iptables`.
  */
 
-import {checked, type CommandRunner} from './acceptance-run.ts';
+import {checked, type CommandRunner} from './command-runner.ts';
 
 /** The two rules that drop the packets of the host's port 22: those arriving and those leaving. */
 const DROP_RULES: ReadonlyArray<{chain: string; match: readonly string[]}> = [
