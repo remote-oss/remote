@@ -46,6 +46,16 @@ export type ContainerOutcome =
   | {kind: 'discoveryFailed'; detail: string}
   | CliFailure;
 
+/** What C7 shows of a run's lifecycle commands; C10 hands it in, and `extension.ts` implements it over the editor. */
+export interface LifecyclePresenter {
+  /** One event of channel `postCreate`, in order; the first `raw` or `start` opens the terminal. */
+  output(event: Extract<CliEvent, {kind: 'log'}>, runStart: number): void;
+  /** `run-user-commands` has started: the progress entry shows. */
+  backgroundStarted(): void;
+  /** The run has ended: the progress entry hides, and an open terminal writes its last line and closes on the next key. */
+  ended(): void;
+}
+
 /** Finds or creates the container of a folder. */
 export interface ContainerLifecycle {
   prepare(
@@ -170,14 +180,45 @@ async function discoverWithRetry(
     : second;
 }
 
+/** The channel of the CLI's events about the lifecycle commands. */
+const POST_CREATE_CHANNEL = 'postCreate';
+
+/** The hook that runs on the host before the container exists; its failure has no terminal to end. */
+const INITIALIZE_COMMAND = 'initializeCommand';
+
 /** The lifecycle over an engine and the CLI. */
 export function containerLifecycleOf(dependencies: {
   engine: EngineHost;
   cli: CliBridge;
   logger: Logger;
+  presenter: LifecyclePresenter;
+  /** The time in epoch milliseconds, from which the terminal counts the run. */
+  clock: () => number;
 }): ContainerLifecycle {
-  const {engine, cli: bridge, logger} = dependencies;
+  const {engine, cli: bridge, logger, presenter, clock} = dependencies;
   let background: AbortController | undefined;
+  let stage: 'idle' | 'running' | 'ended' = 'idle';
+  let runStart = 0;
+
+  /** Tells the presenter once that the run has ended. */
+  function end(): void {
+    if (stage !== 'ended') {
+      stage = 'ended';
+      presenter.ended();
+    }
+  }
+
+  /** The event for the log, and for the presenter when it belongs to the lifecycle commands. */
+  function relayed(
+    onCliEvent: (event: CliEvent) => void,
+  ): (event: CliEvent) => void {
+    return event => {
+      onCliEvent(event);
+      if (event.kind === 'log' && event.channel === POST_CREATE_CHANNEL) {
+        presenter.output(event, runStart);
+      }
+    };
+  }
 
   async function volumeMounted(
     containerId: string,
@@ -205,9 +246,14 @@ export function containerLifecycleOf(dependencies: {
     background?.abort();
     const own = new AbortController();
     background = own;
+    stage = 'running';
+    presenter.backgroundStarted();
     void bridge
       .runUserCommands(target, containerId, onCliEvent, own.signal)
       .then(result => {
+        if (background === own) {
+          end();
+        }
         if (result.kind === 'done') {
           logger.info('the lifecycle commands finished');
         } else {
@@ -225,6 +271,9 @@ export function containerLifecycleOf(dependencies: {
     cancellation: AbortSignal,
   ): Promise<ContainerOutcome> {
     const {folder, configFile} = request;
+    const relayEvent = relayed(onCliEvent);
+    stage = 'idle';
+    runStart = clock();
     onStep('findingContainer');
     const discovery = await discoverWithRetry(engine, folder, cancellation);
     if (discovery.kind === 'cancelled') {
@@ -250,10 +299,16 @@ export function containerLifecycleOf(dependencies: {
     const upResult = await bridge.up(
       target,
       {removeExistingContainer: false, buildNoCache: false},
-      onCliEvent,
+      relayEvent,
       cancellation,
     );
     if (upResult.kind !== 'up') {
+      if (
+        upResult.kind === 'lifecycleFailed' &&
+        upResult.hook !== INITIALIZE_COMMAND
+      ) {
+        end();
+      }
       return upResult;
     }
     if (
@@ -265,7 +320,7 @@ export function containerLifecycleOf(dependencies: {
       );
     }
     const mounted = await volumeMounted(upResult.containerId, cancellation);
-    startBackground(target, upResult.containerId, onCliEvent);
+    startBackground(target, upResult.containerId, relayEvent);
     onStep('containerReady');
     return {
       kind: 'ready',
@@ -283,6 +338,9 @@ export function containerLifecycleOf(dependencies: {
     prepare,
     stopBackground: () => {
       background?.abort();
+      if (stage === 'running') {
+        end();
+      }
     },
   };
 }

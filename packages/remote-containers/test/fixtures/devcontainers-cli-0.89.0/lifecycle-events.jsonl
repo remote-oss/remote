@@ -1,0 +1,35 @@
+{"type":"raw","level":3,"timestamp":1792012694109,"text":"\u001b[1mRunning the initializeCommand from devcontainer.json...\u001b[0m\r\n\r\n","channel":"postCreate"}
+{"type":"start","level":3,"timestamp":1792012694109,"text":"Run: /bin/sh -c echo init-host","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012694110,"text":"init-host\n","channel":"postCreate"}
+{"type":"stop","level":3,"timestamp":1792012694110,"text":"Run: /bin/sh -c echo init-host","startTimestamp":1792012694109,"channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012694110,"text":"\r\n","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012694504,"text":"\u001b[1mRunning the onCreateCommand from devcontainer.json...\u001b[0m\r\n\r\n","channel":"postCreate"}
+{"type":"progress","name":"Running onCreateCommand...","status":"running","stepDetail":"echo on-create","channel":"postCreate"}
+{"type":"start","level":2,"timestamp":1792012694534,"text":"Run in container: /bin/sh -c echo on-create","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012694564,"text":"on-create\n","channel":"postCreate"}
+{"type":"stop","level":2,"timestamp":1792012694566,"text":"Run in container: /bin/sh -c echo on-create","startTimestamp":1792012694534,"channel":"postCreate"}
+{"type":"progress","name":"Running onCreateCommand...","status":"succeeded","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012694567,"text":"\u001b[1mRunning the updateContentCommand from devcontainer.json...\u001b[0m\r\n\r\n","channel":"postCreate"}
+{"type":"progress","name":"Running updateContentCommand...","status":"running","stepDetail":"echo update-content","channel":"postCreate"}
+{"type":"start","level":2,"timestamp":1792012694567,"text":"Run in container: /bin/sh -c echo update-content","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012694598,"text":"update-content\n","channel":"postCreate"}
+{"type":"stop","level":2,"timestamp":1792012694600,"text":"Run in container: /bin/sh -c echo update-content","startTimestamp":1792012694567,"channel":"postCreate"}
+{"type":"progress","name":"Running updateContentCommand...","status":"succeeded","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012698908,"text":"\u001b[1mRunning the postCreateCommand from devcontainer.json...\u001b[0m\r\n\r\n","channel":"postCreate"}
+{"type":"progress","name":"Running postCreateCommand...","status":"running","stepDetail":"echo post-create; echo second line","channel":"postCreate"}
+{"type":"start","level":2,"timestamp":1792012698938,"text":"Run in container: /bin/sh -c echo post-create; echo second line","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012698970,"text":"post-create\nsecond line\n","channel":"postCreate"}
+{"type":"stop","level":2,"timestamp":1792012698972,"text":"Run in container: /bin/sh -c echo post-create; echo second line","startTimestamp":1792012698938,"channel":"postCreate"}
+{"type":"progress","name":"Running postCreateCommand...","status":"succeeded","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012698973,"text":"\u001b[1mRunning the postStartCommand from devcontainer.json...\u001b[0m\r\n\r\n","channel":"postCreate"}
+{"type":"progress","name":"Running postStartCommand...","status":"running","stepDetail":"echo post-start","channel":"postCreate"}
+{"type":"start","level":2,"timestamp":1792012698973,"text":"Run in container: /bin/sh -c echo post-start","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012699002,"text":"post-start\n","channel":"postCreate"}
+{"type":"stop","level":2,"timestamp":1792012699003,"text":"Run in container: /bin/sh -c echo post-start","startTimestamp":1792012698973,"channel":"postCreate"}
+{"type":"progress","name":"Running postStartCommand...","status":"succeeded","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012699003,"text":"\u001b[1mRunning the postAttachCommand from devcontainer.json...\u001b[0m\r\n\r\n","channel":"postCreate"}
+{"type":"progress","name":"Running postAttachCommand...","status":"running","stepDetail":"echo post-attach","channel":"postCreate"}
+{"type":"start","level":2,"timestamp":1792012699003,"text":"Run in container: /bin/sh -c echo post-attach","channel":"postCreate"}
+{"type":"raw","level":3,"timestamp":1792012699035,"text":"post-attach\n","channel":"postCreate"}
+{"type":"stop","level":2,"timestamp":1792012699036,"text":"Run in container: /bin/sh -c echo post-attach","startTimestamp":1792012699003,"channel":"postCreate"}
+{"type":"progress","name":"Running postAttachCommand...","status":"succeeded","channel":"postCreate"}

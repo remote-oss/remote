@@ -308,6 +308,11 @@ export function sceneOf(
       return bridge;
     },
     lifecycleFor: () => lifecycle,
+    lifecyclePresenter: {
+      output: () => undefined,
+      backgroundStarted: () => undefined,
+      ended: () => undefined,
+    },
     settings: () => ({
       dockerPath: scene.dockerPath,
       serverDownloadBaseUrl: undefined,

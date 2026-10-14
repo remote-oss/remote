@@ -516,12 +516,12 @@ F-0415.AC-32	deferred	containers release 1: later (personalization and relays)
 F-0415.AC-33	todo	
 F-0415.AC-34	todo	
 F-0415.AC-35	todo	
-F-0415.AC-36	todo	
-F-0415.AC-37	todo	
-F-0415.AC-38	todo	
+F-0415.AC-36	deferred	containers release 1: no interrupt API in the pinned CLI's run-user-commands; a fake CLI line is refused
+F-0415.AC-37	unit	
+F-0415.AC-38	unit	
 F-0415.AC-39	deferred	containers release 1: increment 2 (shutdown)
 F-0415.AC-40	todo	
-F-0415.AC-41	todo	
+F-0415.AC-41	unit	
 F-0416.AC-1	todo	
 F-0416.AC-2	todo	
 F-0416.AC-3	todo	

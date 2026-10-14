@@ -35,5 +35,8 @@
   "Cancel": "Cancel",
   "{0} needs you to accept the license terms of the {1} server before installing it.": "{0} needs you to accept the license terms of the {1} server before installing it.",
   "Read the terms at {0}.": "Read the terms at {0}.",
-  "Accept and Continue": "Accept and Continue"
+  "Accept and Continue": "Accept and Continue",
+  "Configuring...": "Configuring...",
+  "Configuring Dev Container (show log)": "Configuring Dev Container (show log)",
+  "Done. Press any key to close the terminal.": "Done. Press any key to close the terminal."
 }
