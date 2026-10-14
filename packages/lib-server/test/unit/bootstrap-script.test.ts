@@ -208,6 +208,11 @@ describe('the POSIX bootstrap script', () => {
       ['arm64', 'arm64'],
       ['armv7l', 'armhf'],
       ['armv8l', 'armhf'],
+      ['x86_64', 'x64'],
+      ['ppc64le', 'ppc64le'],
+      ['riscv64', 'riscv64'],
+      ['loongarch64', 'loong64'],
+      ['s390x', 's390x'],
     ] as const;
     for (const [machine, expected] of ARCHITECTURES) {
       it(`F-2401.BR-2: ${machine} is the architecture ${expected}`, () => {
@@ -235,13 +240,17 @@ describe('the POSIX bootstrap script', () => {
       });
     }
 
-    for (const machine of ['i686', 'riscv64', 'ppc64le']) {
-      it(`F-2401.AC-10: ${machine} is UnsupportedArch`, () => {
+    for (const machine of ['i686', 'armv6l', 'aarch64_be', 'ppc64']) {
+      it(`#670 R1: ${machine} is UnsupportedArch and is reported as written`, () => {
         deepStrictEqual(
-          statusOf(host, single('probe'), parametersFor(), {
-            environment: {STUB_UNAME_M: machine},
-          }),
-          'UnsupportedArch',
+          statusAndFacts(
+            host,
+            single('probe'),
+            parametersFor(),
+            ['host.arch'],
+            {environment: {STUB_UNAME_M: machine}},
+          ),
+          {status: 'UnsupportedArch', 'host.arch': machine},
         );
       });
     }
@@ -384,6 +393,87 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(
         statusOf(host, single('install'), parametersFor()),
         'NoDownloaderAvailable',
+      );
+    });
+
+    const DOWNLOAD_ERRORS: Array<[string, Stub, string, string | undefined]> = [
+      ['GNU wget', 'wget', '  HTTP/1.0 404 File not found', '404'],
+      [
+        'GNU wget after a redirect',
+        'wget',
+        '  HTTP/1.1 302 Found\n  HTTP/1.1 404 Not Found',
+        '404',
+      ],
+      [
+        'BusyBox wget',
+        'wget',
+        'wget: server returned error: HTTP/1.0 404 File not found',
+        '404',
+      ],
+      [
+        'curl',
+        'curl',
+        'curl: (22) The requested URL returned error: 404',
+        '404',
+      ],
+      [
+        'GNU wget on a 503',
+        'wget',
+        '  HTTP/1.1 503 Service Unavailable',
+        undefined,
+      ],
+      [
+        'GNU wget on a 404 after a redirect that ended in a 503',
+        'wget',
+        '  HTTP/1.1 404 Not Found\n  HTTP/1.1 503 Service Unavailable',
+        undefined,
+      ],
+      [
+        'curl on a 503',
+        'curl',
+        'curl: (22) The requested URL returned error: 503',
+        undefined,
+      ],
+      [
+        'curl on a refused connection',
+        'curl',
+        'curl: (7) Failed to connect',
+        undefined,
+      ],
+    ];
+    for (const [name, stub, text, status] of DOWNLOAD_ERRORS) {
+      it(`#670 R3: ${name} gives the download status ${status ?? 'nothing'}`, () => {
+        useHost([stub]);
+        deepStrictEqual(
+          statusAndFacts(
+            host,
+            single('install'),
+            parametersFor(),
+            ['server.downloadStatus'],
+            {environment: {STUB_FETCH_ERROR: text}},
+          ),
+          {status: 'ServerDownloadFailed', 'server.downloadStatus': status},
+        );
+      });
+    }
+
+    it('R-26: the headers a failed fetch printed, a redirect location with a query included, are in no fact', () => {
+      useHost(['wget']);
+      const block = blockOf(host, single('install'), parametersFor(), {
+        environment: {
+          STUB_FETCH_ERROR:
+            '  HTTP/1.1 302 Found\n  Location: https://cdn.example/a.tgz?token=SECRET123\n  HTTP/1.1 404 Not Found',
+        },
+      });
+      deepStrictEqual(
+        block === 'none'
+          ? block
+          : JSON.stringify([
+              block.hostFacts,
+              block.serverFacts,
+              block.cliFacts,
+            ]).includes('SECRET123'),
+        false,
       );
     });
 

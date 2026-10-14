@@ -37,7 +37,8 @@ export const INPUT: ConnectInput = {
   windowWorkspace: undefined,
 };
 
-const HOST: ProbedHost = {
+/** The host every connect of the fixture probes. */
+export const HOST: ProbedHost = {
   operatingSystem: 'linux',
   architecture: 'x64',
   libc: 'glibc',
@@ -53,7 +54,8 @@ const HOST: ProbedHost = {
   installFolder: '/home/dev/.server/bin/abc',
 };
 
-const DOWNLOAD: Plan = {
+/** The plan of a server that is not on the host: a download. */
+export const DOWNLOAD: Plan = {
   kind: 'download',
   where: 'host',
   clientFallback: true,

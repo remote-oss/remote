@@ -8,10 +8,24 @@ import type {ScriptParameters} from '../scripts/bootstrap.ts';
 import type {ResultBlock} from '../scripts/result-block.ts';
 import {runStep} from './run-step.ts';
 
+/** The architecture tokens of the server builds of Code - OSS, by the host's machine name. */
+const ARCHITECTURES = [
+  'x64',
+  'arm64',
+  'armhf',
+  'ppc64le',
+  'riscv64',
+  'loong64',
+  's390x',
+] as const;
+
+/** The architecture token of a host. */
+export type HostArchitecture = (typeof ARCHITECTURES)[number];
+
 /** What the probe found on a host that can run a server. */
 export interface ProbedHost {
   operatingSystem: 'linux' | 'darwin';
-  architecture: 'x64' | 'arm64' | 'armhf';
+  architecture: HostArchitecture;
   libc: 'glibc' | 'musl' | 'unknown';
   release: string;
   home: string;
@@ -49,8 +63,6 @@ const REQUIRED_TOOLS = ['tar'];
 const TOOL_NAMES = ['wget', 'curl', 'tar', 'unzip', 'flock', 'gzip'];
 
 const OPERATING_SYSTEMS = ['linux', 'darwin'] as const;
-
-const ARCHITECTURES = ['x64', 'arm64', 'armhf'] as const;
 
 /** The host a block describes, or the field that no host of this library can have. */
 function hostOf(

@@ -47,6 +47,7 @@ export {
   type StepwiseAction,
 } from './scripts/bootstrap.ts';
 export {
+  type HostArchitecture,
   type ProbedHost,
   type ProbeFailure,
   type ProbeOutcome,

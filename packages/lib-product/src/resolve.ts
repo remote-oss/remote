@@ -24,13 +24,7 @@ export interface OverrideValue {
 export type ResolutionStep = 'override' | 'productTemplate' | 'builtInTable';
 
 /** Why a template gave no URL. */
-export type TemplateProblem =
-  | Exclude<Expansion, {kind: 'url'}>
-  | {
-      readonly kind: 'unsupportedPlatform';
-      readonly operatingSystem: string;
-      readonly architecture: string;
-    };
+export type TemplateProblem = Exclude<Expansion, {kind: 'url'}>;
 
 /** A source that was tried and skipped, for the caller's log. */
 export interface SkippedSource {
@@ -61,14 +55,15 @@ export type ArchiveResolution =
       readonly problem: TemplateProblem;
     };
 
-/** The platform names of the base-URL form, by the host's `<os>-<arch>`. */
-const BASE_URL_PLATFORMS = new Map([
-  ['linux-x64', 'linux-x64'],
-  ['linux-arm64', 'linux-arm64'],
-  ['linux-armhf', 'linux-armhf'],
-  ['alpine-x64', 'linux-alpine'],
-  ['alpine-arm64', 'alpine-arm64'],
-]);
+/** The platform name of the base-URL form: the update service's name for the host's operating system and architecture. */
+function baseUrlPlatform(
+  operatingSystem: string,
+  architecture: string,
+): string {
+  return operatingSystem === 'alpine' && architecture === 'x64'
+    ? 'linux-alpine'
+    : `${operatingSystem}-${architecture}`;
+}
 
 function resolvedAt(
   profile: ProductProfile,
@@ -90,16 +85,7 @@ function expandBaseUrl(
   base: string,
   values: PlaceholderValues,
 ): Expansion | TemplateProblem {
-  const platform = BASE_URL_PLATFORMS.get(
-    `${values.operatingSystem}-${values.architecture}`,
-  );
-  if (platform === undefined) {
-    return {
-      kind: 'unsupportedPlatform',
-      operatingSystem: values.operatingSystem,
-      architecture: values.architecture,
-    };
-  }
+  const platform = baseUrlPlatform(values.operatingSystem, values.architecture);
   const archivePath = `/commit:${values.commit}/server-${platform}/${values.quality}`;
   return expand(`${base.replace(/\/+$/, '')}${archivePath}`, values, []);
 }

@@ -99,6 +99,8 @@ export type TransferFailure =
   | {
       kind: 'serverDownload';
       cause: 'downloadFailed' | 'noDownloader' | 'tooLarge' | 'redirectHost';
+      /** The HTTP status the host's downloader ended on, when it reported one the connect uses: 404. */
+      status?: number;
     }
   | {
       kind: 'localDownload';
@@ -167,8 +169,14 @@ function outcomeOf(
         kind: 'transferred',
         installFolder: block.serverFacts.installDir ?? plan.installFolder,
       };
-    case 'ServerDownloadFailed':
-      return failed({kind: 'serverDownload', cause: 'downloadFailed'});
+    case 'ServerDownloadFailed': {
+      const status = Number(block.serverFacts.downloadStatus);
+      return failed({
+        kind: 'serverDownload',
+        cause: 'downloadFailed',
+        ...(Number.isInteger(status) ? {status} : {}),
+      });
+    }
     case 'NoDownloaderAvailable':
       return failed({kind: 'serverDownload', cause: 'noDownloader'});
     case 'UnpackFailed':
