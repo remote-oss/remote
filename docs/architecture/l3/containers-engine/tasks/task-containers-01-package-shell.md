@@ -125,7 +125,9 @@ manifest and missing from the handlers is a type error, not a silent stub.
   "infoLineCommands": [],
   "runtimeCommands": [],
   "internal": [{"id": "remote-oss.gate.claim", "role": "called", "kind": "query"}],
-  "invented": [],
+  "invented": [
+    {"id": "remote-containers:standingDown", "kind": "contextKeys", "spec": "F-1406", "date": "2026-10-14"}
+  ],
   "settingPairs": [],
   "ungated": [],
   "locales": ["cs", "de", "es", "fr", "it", "ja", "ko", "pl", "pt-br", "qps-ploc", "ru", "tr", "zh-cn", "zh-tw"]
@@ -134,10 +136,11 @@ manifest and missing from the handlers is a type error, not a silent stub.
 
 Notes on these entries:
 - **The standing-down key** is `remote-containers:standingDown`, with a colon, verbatim from F-1406 §6 (D-14;
-  athena's register entry of 2026-10-14 on remote-oss/remote-containers#122 Q9, superseding her dot ruling D-88). It's
-  a spec id, so it isn't in the `invented` ledger, and the context-key namespace is `remote-containers:`. If
-  `pnpm check-identifiers` rejects a `:` in a context key id or namespace, stop and report on #759: don't change the
-  key.
+  athena's register entry of 2026-10-14 on remote-oss/remote-containers#122 Q9, superseding her dot ruling D-88). The
+  context-key namespace is `remote-containers:`. It's in the `invented` ledger under F-1406: F-1406 §6 is the R-27 list
+  of invented ids and names this key, as remote-explorer's key is listed under F-5001 (athena on #762, after dike
+  found that `check-identifiers` requires the entry; `tools/identifier-rules.ts`). If `pnpm check-identifiers` rejects
+  a `:` in a context key id or namespace, stop and report on #759: don't change the key.
 - **`remote-oss.gate.claim`** is there because the family's proposed-API setup calls it (explorer-03b, `contracts.md`
   §3.4). If `pnpm check-identifiers` requires its namespace in another form, use the form remote-explorer's
   `identifiers.json` passes with, and say so in the PR.
