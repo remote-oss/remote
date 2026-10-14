@@ -244,6 +244,18 @@ busy) and wait until `netstat -ltn` shows it. The harness writes the ports scrip
 launch: dismiss the connect's dialog and its pick of actions. A connected case leaves it unused, which is no
 failure.
 
+### Platform cases
+
+The platform cases of `suite-platform/cases.json` prove F-2206 end to end: one launch per case, `platform-<label>`, after
+the ports cases, with `HARNESS_PLATFORM_CASE` naming the case, a window on the case's authority (`harness` by
+default; `harness@harness` for a typed user and host, `mute` for the host whose login shell does not answer the probe),
+the case's settings over the run's base (`remote.SSH.useLocalServer` off for terminal mode; the stored
+`remote.SSH.remotePlatform` and `remote.SSH.windowsRemotes` of the case), and its own script and record. A case's
+`after` says what the settings file holds of `remote.SSH.remotePlatform` once the connect has ended: `absent`,
+`unchanged`, the entries written (keys in that order) or `bytes` (the file as the launch wrote it). The case with a
+`settingsTail` gets a syntax error after its last member, with no comma before it, so the editor reads the members
+before it.
+
 ### Install cases
 
 The install cases of `suite-install/cases.json` prove F-2403, F-3902 and F-2405's download modes end to end the same

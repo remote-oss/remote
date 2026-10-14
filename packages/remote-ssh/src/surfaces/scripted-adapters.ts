@@ -100,8 +100,10 @@ export interface RecordLine {
   time: number;
   /** The labels the failure dialog or the notice was shown with, in order; only the lines of those surfaces have it. */
   buttons?: string[];
-  /** The labels of the rows the pick was shown with, in order; only the lines of a `mitigationPick`, a `hostPick` or a `filePick` surface have it. */
+  /** The labels of the rows the pick was shown with, in order; only the lines of a `mitigationPick`, a `platformPick`, a `hostPick` or a `filePick` surface have it. */
   items?: string[];
+  /** The label of the row that was focused when the pick opened; only the lines of a `platformPick` have it. */
+  active?: string | undefined;
   /** The detail text the licence modal was shown with; only the lines of a `licenceModal` surface have it. */
   detail?: string;
 }
@@ -364,7 +366,7 @@ export function scriptedAdapters(
       entry: Extract<ScriptEntry, {surface: Kind}>,
     ) => Given<Value> | undefined,
     cancellation: AbortSignal | undefined,
-    shown: Pick<RecordLine, 'buttons' | 'items' | 'detail'> = {},
+    shown: Pick<RecordLine, 'buttons' | 'items' | 'detail' | 'active'> = {},
   ): Promise<Value | undefined> {
     const entries = entriesOf(scriptFile, files, windowName);
     const entry = entries[answeredOf(files, recordFile, windowName)];
@@ -581,6 +583,11 @@ export function scriptedAdapters(
             recorded: entry.answer,
           }),
           cancellation,
+          {
+            items: pick.items.map(item => item.label),
+            active: pick.items.find(item => item.platform === pick.active)
+              ?.label,
+          },
         ),
     },
     mitigationPick: {
