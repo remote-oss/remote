@@ -748,14 +748,19 @@ async function sshStatus(parameters: readonly string[]): Promise<number> {
   }
 }
 
-/** Whether the ControlMaster of `alias` runs and answers `-O check`. */
+/**
+ * Whether the ControlMaster of `alias` runs and answers `-O check`. The control command is given `ControlMaster=no`:
+ * OpenSSH's mux client ignores `-O` for the `yes` and `ask` modes and logs in afresh.
+ */
 export async function masterCheck(alias: string): Promise<boolean> {
-  return (await sshStatus(['-O', 'check', alias])) === 0;
+  return (
+    (await sshStatus(['-o', 'ControlMaster=no', '-O', 'check', alias])) === 0
+  );
 }
 
 /** Ends the ControlMaster of `alias`, if one runs. */
 export async function masterExit(alias: string): Promise<void> {
-  await sshStatus(['-O', 'exit', alias]);
+  await sshStatus(['-o', 'ControlMaster=no', '-O', 'exit', alias]);
 }
 
 /** Whether a login to `alias` with no question succeeds, which it does only through a master that runs. */

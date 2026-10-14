@@ -201,14 +201,20 @@ describe('D-85: the host takes more accounts than harness', function () {
     deepStrictEqual([outcome.stdout, outcome.endedByBound], ['', true]);
   });
 
-  for (const alias of ['master', 'master-autoask']) {
+  for (const alias of ['master', 'master-yes', 'master-autoask']) {
     it(`D-85: ${alias} starts a control socket that a second ssh reuses`, async () => {
       try {
         await sshRun([alias, 'true'], {password: true});
-        const check = await sshRun(['-O', 'check', alias]);
+        const check = await sshRun([
+          '-o',
+          'ControlMaster=no',
+          '-O',
+          'check',
+          alias,
+        ]);
         strictEqual(check.status, 0);
       } finally {
-        await sshRun(['-O', 'exit', alias]);
+        await sshRun(['-o', 'ControlMaster=no', '-O', 'exit', alias]);
       }
     });
   }
