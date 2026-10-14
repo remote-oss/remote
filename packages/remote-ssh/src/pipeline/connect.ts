@@ -160,6 +160,13 @@ function contextOf(
   };
 }
 
+/** The checks that come first, in the order of their failures. */
+const CHECKS = [
+  'checkStartSettings',
+  'validate',
+  'checkInstallFolder',
+] as const;
+
 /** One connect: runs the steps in order and returns the connection, or the failure. */
 export async function connect(
   input: ConnectInput,
@@ -236,9 +243,11 @@ async function runSteps(
   }
 
   options.onPhase({kind: 'initializing'});
-  const invalid = steps.validate(input);
-  if (invalid.kind === 'failed') {
-    return failure(invalid.failure);
+  for (const check of CHECKS) {
+    const invalid = steps[check](input);
+    if (invalid.kind === 'failed') {
+      return failure(invalid.failure);
+    }
   }
   if (input.attempt === 1) {
     const script = await runBounded(

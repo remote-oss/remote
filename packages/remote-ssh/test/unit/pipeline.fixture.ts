@@ -222,7 +222,11 @@ export function steps(
     return value;
   }
   return {
+    checkStartSettings: () =>
+      note('checkStartSettings', {kind: 'done', value: undefined}),
     validate: () => note('validate', {kind: 'done', value: undefined}),
+    checkInstallFolder: () =>
+      note('checkInstallFolder', {kind: 'done', value: undefined}),
     preconnect: () =>
       Promise.resolve(note('preconnect', {kind: 'done', value: undefined})),
     locateClient: () =>
