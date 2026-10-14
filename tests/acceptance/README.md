@@ -116,6 +116,8 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
+- `containers`, `containers-standdown` and `containers-no-proposals`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, and `containers-no-proposals` starts without the proposed API.
+
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
 they start in a window whose connect failed. `HARNESS_EDITOR` (`vscode` or `vscodium`)
@@ -224,6 +226,19 @@ themselves, so they leave the flag out (`workspaceTrust`). The window agent decl
 workspaces, so it runs in Restricted Mode too and reports `trusted` in its state (`isTrusted`). Rows read and answer
 core's trust dialogs with `dialogOf`, `waitForDialog` and `answerDialog` of `windows/renderer.ts`. Each row opens a
 folder of its own, so no trust decision carries over from another row.
+
+**Dev containers.** The containers launches install Dev Containers into `<run>/extensions-<label>`, draw core's
+dialogs in the window (`window.dialogStyle: 'custom'`) where `windows/renderer.ts` reads them, and download the server
+from the run's download host (`remote.serverDownloadBaseUrl`). Before them the run removes the dev containers and
+images another run left more than two hours ago (by the label `remote-oss.acceptance.devcontainer` and the run label),
+then builds the run's dev container image from `tests/acceptance/devcontainer-image` (`HARNESS_DEVCONTAINER_IMAGE`).
+Every dev container a row creates carries the run's labels (`HARNESS_RUN_ID`), so the run's clean-up removes it and its
+image. The run never removes the `vscode` volume: every dev container on the engine shares it, a developer's own
+included. `containers-standdown`'s stand-in is a manifest only, with no code and no contribution, written into that
+launch's extensions folder before it starts and removed with the run's folder; it's never packaged or committed.
+`notifications` of `windows/renderer.ts` reads the toasts on screen and `notificationCentre` the notification centre,
+which it opens: core doesn't always raise a notice that comes beside its own failed-resolve error as a toast, so a
+row that must find such a notice reads the centre.
 
 To add a launch: add a row to `launchesOf` and put its tests in the suite folder it names. A runner suite's folder goes
 in `tests/acceptance/tsconfig.json`'s `include`. A plain suite has a `tsconfig.json` of its own, which goes in the root

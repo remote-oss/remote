@@ -125,6 +125,9 @@
       "path": "tests/acceptance/server"
     },
     {
+      "path": "tests/acceptance/containers-cli"
+    },
+    {
       "path": "tests/acceptance/windows"
     },
     {
@@ -150,6 +153,15 @@
     },
     {
       "path": "tests/acceptance/trust-terminal"
+    },
+    {
+      "path": "tests/acceptance/containers"
+    },
+    {
+      "path": "tests/acceptance/containers-standdown"
+    },
+    {
+      "path": "tests/acceptance/containers-no-proposals"
     }
   ]
 }

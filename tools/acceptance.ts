@@ -36,8 +36,10 @@ import {
 } from './acceptance-downloads.ts';
 import {
   acceptanceRunId,
+  buildDevContainerImage,
   checked,
   startHostContainer,
+  sweepStaleDevContainers,
   type CommandRunner,
   runCommand,
 } from './acceptance-run.ts';
@@ -63,6 +65,7 @@ import {
   type Launch,
   type RunnerLaunch,
   launchesOf,
+  needsDevContainerImage,
   HOST_CASE_SUITES,
   hostCaseLabel,
   hostCases,
@@ -79,6 +82,7 @@ import {
   runPlainLaunch,
   startDetached,
   type Started,
+  writeStandIns,
 } from './acceptance-plain.ts';
 import {
   isMainModule,
@@ -146,6 +150,10 @@ export interface HarnessVariables {
   HARNESS_CONTAINER: string;
   /** The run's folder: user data, extensions, keys. */
   HARNESS_RUN_FOLDER: string;
+  /** The run's id, which every Docker object of the run carries in its run label. */
+  HARNESS_RUN_ID: string;
+  /** The run's dev container image tag, when a launch of the run installs Dev Containers; VSCodium run only. */
+  HARNESS_DEVCONTAINER_IMAGE?: string;
   /** The file with the bare password of the host's user `harness-pw`, mode 600: a test puts it in a script entry. */
   HARNESS_PASSWORD_FILE: string;
   /** The VSIX files to install, separated by the path delimiter; empty when none is packaged yet. */
@@ -616,11 +624,24 @@ async function prepare(
       ]);
     }
   }
+  const launches = editor === 'vscodium' ? launchesOf(root) : [];
+  for (const launch of launches) {
+    if (launch.kind === 'plain' && launch.standIns !== undefined) {
+      writeStandIns(runFolder, launch, standInEngines(root, launch));
+    }
+  }
+  const devContainerImage = launches.some(needsDevContainerImage)
+    ? devContainerImageFor(command, root, runId)
+    : undefined;
   return {
     REMOTE_OSS_ACCEPTANCE: '1',
     HARNESS_SSH_CONFIG: configFile,
     HARNESS_CONTAINER: host.container,
     HARNESS_RUN_FOLDER: runFolder,
+    HARNESS_RUN_ID: runId,
+    ...(devContainerImage === undefined
+      ? {}
+      : {HARNESS_DEVCONTAINER_IMAGE: devContainerImage}),
     HARNESS_PASSWORD_FILE: host.passwordFile,
     REMOTE_OSS_ACCEPTANCE_SCRIPT: path.join(runFolder, 'script.json'),
     REMOTE_OSS_ACCEPTANCE_RECORD: path.join(runFolder, 'record.jsonl'),
@@ -638,6 +659,32 @@ async function prepare(
           HARNESS_PASSPHRASE_FILE: keys.passphraseFile,
         }),
   };
+}
+
+/**
+ * The run's dev container image: other runs' stale dev containers and images swept first, then the image built with the
+ * run's labels.
+ */
+function devContainerImageFor(
+  command: CommandRunner,
+  root: string,
+  runId: string,
+): string {
+  sweepStaleDevContainers(command, runId, Date.now() / 1000);
+  return buildDevContainerImage(command, root, runId);
+}
+
+/** The `engines.vscode` of a launch's stand-ins: the one of the first extension the launch installs of its own. */
+export function standInEngines(root: string, launch: Launch): string {
+  const own = launch.kind === 'plain' ? launch.withExtensions?.[0] : undefined;
+  const folder = own === undefined ? undefined : LAUNCH_EXTENSIONS.get(own);
+  if (folder === undefined) {
+    return '';
+  }
+  const manifest = JSON.parse(
+    readFileSync(path.join(root, 'packages', folder, 'package.json'), 'utf8'),
+  ) as {engines?: {vscode?: string}};
+  return manifest.engines?.vscode ?? '';
 }
 
 /** Copies the host extensions of the launches into the host's home folder of the user harness. */
