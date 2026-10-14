@@ -78,6 +78,11 @@ line names the harness that started it. No pid file is needed.
      `pgidOf` reads `command('ps', ['-o', 'pgid=', '-p', String(editorPid)]).stdout.trim()`. Skip a line whose `ps`
      gives no number, because the process has already gone.
    - End each group once, even when several of its processes matched.
+   - **Zygotes go through the group, never by argument** (proteus, #876, on the pinned VSCodium 1.140.06829-insider,
+     x64). Of the editor's 10 processes, the three `--type=zygote` processes carry no `--user-data-dir`. The main,
+     GPU, renderer and utility processes do. All 10 are in the main process's group, and a SIGTERM to that group ends
+     them within about 4 s. So the sweep matches any process that carries the folder and ends its whole group, and
+     never looks for zygotes on their own.
 2. **`isHarness`** (the real one, beside `runCommand`): `true` when `/proc/<pid>/cmdline` exists and contains
    `acceptance`, and `false` when it's missing or doesn't. A reused pid that runs something else counts as gone. On a
    system with no `/proc` (macOS), it returns `true`, so nothing is swept, and the 2 h rule still applies.
@@ -114,7 +119,7 @@ Request athena only; hermes assigns the peer.
 
 ## 5. Open rows (stop and report on #875)
 
-1. An editor's processes don't all carry `--user-data-dir` (for example a GPU process), so a group outlives the sweep:
-   report which, from `pgrep -af` after a SIGKILL.
+1. After a SIGKILL of the harness, an editor process that carries no `--user-data-dir` (a zygote) is left outside
+   every swept group: report it with `ps -o pid,pgid,args` from the room proof.
 2. `process.exit` inside a signal handler cuts off output the PR's room proof needs: report it, and don't add an
    async path.
