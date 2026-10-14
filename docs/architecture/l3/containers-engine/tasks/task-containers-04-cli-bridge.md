@@ -4,12 +4,14 @@ Issue: #763. Remote - Containers release 1, slice 1 (milestone 0.4). Builder: ir
 Size: L (about 3 agent-days).
 
 **Binding documents:**
-- ADR-0009, which this card follows to the letter, and ADR-0005;
+- ADR-0009 as amended on main (5854e87d, decision 2: each deviation takes the first mechanism that reaches it), which
+  this card follows to the letter, and ADR-0005;
 - `brief-release-1.md` ruling 6;
 - `components.md` C3 and boundaries 3 and 4;
-- `contracts.md` §4 (`CliHost`) and §6;
+- `contracts.md` §4 (`CliHost`) and §6, as amended on main (5854e87d: R-26 and the CLI's own `docker run`);
 - the dossier's §3 and §4 (the six deviations);
-- D-88 (athena, register 2026-10-14: the CLI's licences and how its files ship).
+- athena, register 2026-10-14: the CLI's licences and how its files ship (the licence ruling). D-88 is the user's
+  decision to build containers now, nothing more.
 
 **Specs** (`remote-oss/remote-containers`):
 - F-0408 (#27);
@@ -35,9 +37,9 @@ Everything below was measured on this lab machine on 2026-10-14 with `@devcontai
 
 C3 drives the pinned dev container CLI as a spawned program and gives C7 and C10 typed results.
 - **What it never does:** show UI, decide reuse, start or create (that's C7's, boundary 4), or re-implement anything the CLI does (boundary 3).
-- **What it is made of:** three pure modules (the argument builder, the override pre-pass and the line parser) and two adapters (`CliHost` and the override file store).
+- **What it is made of:** four pure modules (the argument builder, the override pre-pass, the line parser and the secret scrubber) and two adapters (`CliHost` and the override file store).
 
-## 2. The CLI, pinned and shipped unchanged (ADR-0009 decisions 1 and 4; D-88)
+## 2. The CLI, pinned and shipped unchanged (ADR-0009 decisions 1 and 4; the licence ruling)
 
 **The pin.** `packages/remote-containers/package.json` gains `"@devcontainers/cli": "0.89.0"` under `dependencies`, an exact version. Update `pnpm-lock.yaml` with `pnpm install`.
 
@@ -48,7 +50,7 @@ C3 drives the pinned dev container CLI as a spawned program and gives C7 and C10
 - `engines.node` `>=20.0.0`;
 - **zero `dependencies`**, because the program is pre-bundled into `dist/spec-node/devContainersSpecCLI.js` (1.7 MB).
 
-**Shipping it (D-88).** These five files are copied **byte for byte** into `packages/remote-containers/dist/devcontainers-cli/`, keeping their relative paths:
+**Shipping it (the licence ruling).** These five files are copied **byte for byte** into `packages/remote-containers/dist/devcontainers-cli/`, keeping their relative paths:
 - `devcontainer.js`;
 - `dist/spec-node/devContainersSpecCLI.js`;
 - `scripts/updateUID.Dockerfile`, which the CLI reads for F-0416's `-uid` image;
@@ -56,18 +58,41 @@ C3 drives the pinned dev container CLI as a spawned program and gives C7 and C10
 - `ThirdPartyNotices.txt`.
 
 Our esbuild never bundles or touches them.
-- **`tools/build.ts`:** a package can declare `copiedFiles` in a small map in the tool, keyed by package folder. remote-containers' entry is `{from: '@devcontainers/cli', files: [the five], to: 'dist/devcontainers-cli'}`. The build resolves the package folder with `createRequire(...).resolve('@devcontainers/cli/package.json')` and uses `copyFileSync` for each file. A missing source file fails the build, naming it.
+- **`tools/build.ts`:** a package can declare `copiedFiles` in a small map in the tool, keyed by package folder. remote-containers' entry is `{from: '@devcontainers/cli', files: [the five], to: 'dist/devcontainers-cli'}`.
+  - The build resolves the CLI's folder with `createRequire(path.join(<the package folder>, 'package.json')).resolve('@devcontainers/cli/package.json')`, anchored at **remote-containers' own** `package.json`. Under pnpm's isolated layout, the dependency is only in `packages/remote-containers/node_modules`, so an anchor at the tool or the repository root wouldn't find it.
+  - It uses `copyFileSync` for each file. A missing source file fails the build, naming it.
+  - A package without a `copiedFiles` entry copies nothing.
 - **`packages/remote-containers/.vscodeignore`:** add `!dist/devcontainers-cli/**` and `!dist/cli-preload.js` beside containers-01's entries. If containers-01 made no `.vscodeignore`, create it like remote-ssh's.
 - **The VSIX:** `tools/package-extensions.ts` already rejects `node_modules` paths. The copied folder isn't one.
-- **The surface lint** already exempts `LICENSE.txt` and `ThirdPartyNotices.txt` (D-88).
+- **The surface lint** already exempts `LICENSE.txt` and `ThirdPartyNotices.txt` (the licence ruling).
 
 **The licence check, done for this card** (verify it again in the PR):
 - the package is MIT, with no runtime dependency, so `pnpm check-licences` sees one MIT package;
 - its `ThirdPartyNotices.txt` lists 85 bundled components: 62 MIT, 15 ISC, 4 BSD-2-Clause, 2 BSD-3-Clause, 1 0BSD and 1 Python-2.0 (argparse).
-- Every one is in `tools/licences.ts`'s `ALLOWED_LICENCES`. Nothing is blocked (D-88).
+- Every one is in `tools/licences.ts`'s `ALLOWED_LICENCES`. Nothing is blocked (the licence ruling).
 - In the PR, list the count per licence from `grep -E '^[@a-zA-Z0-9._/-]+ [0-9][^ ]* - ' ThirdPartyNotices.txt`.
 
 **The entry to spawn:** `dist/devcontainers-cli/devcontainer.js`, which only does `require('./dist/spec-node/devContainersSpecCLI')`.
+
+**The paths, in one place.** `src/cli/cli-paths.ts` exports `cliPathsOf(extensionPath): {entry: string; preload: string}`
+(`<extensionPath>/dist/devcontainers-cli/devcontainer.js` and `<extensionPath>/dist/cli-preload.js`). C7 and C10 build
+the bridge through it, so no file outside `src/cli/` names the CLI's folder (the §5 row).
+
+**Registration of the dependency:**
+- **knip:** nothing imports `@devcontainers/cli`; `tools/build.ts` copies its files. Add it to `knip.jsonc`'s
+  `ignoreDependencies`, with the comment `tools/build.ts copies its files into the VSIX; nothing imports it.`, so
+  `pnpm dead` passes.
+- **`jsonc-parser`:** imported by `override-pre-pass.ts` and bundled by esbuild; an ordinary dependency.
+
+**Updates to containers-01's files** (#759, card PR #762; hestia is building it, so these land in this PR on top of
+hers):
+- **The F-0101 AC-4 manifest row** compares `dependencies` with the five `lib-*`. It gains `@devcontainers/cli`
+  (`0.89.0`) and `jsonc-parser` (`3.3.1`). Change only that row's expected value.
+- **`coverage.json`** gains `"src/programs/cli-preload.ts": "runs as a preload in the CLI's own process; the preload row
+  covers it"`, as remote-ssh excludes its programs.
+- **The README's "For maintainers" table:** allowed imports gain `jsonc-parser`, and `node:` modules are allowed in
+  `src/extension.ts`, `src/cli/node-cli-host.ts`, `src/cli/override-files.ts` and `src/programs/` (containers-02's
+  `src/engine/node-engine-host.ts` adds itself the same way).
 
 ## 3. The modules
 
@@ -122,7 +147,7 @@ Each value is its own array element (`shell: false`), so a path with spaces or q
 
 `overrideText(configText: string, editorEnvironment: Readonly<Record<string, string | undefined>>): string | undefined`
 
-**What it does.** It parses the raw JSONC text of the chosen configuration and rewrites string values in place, keeping comments and layout. It returns the new text, or `undefined` when nothing changed.
+**What it does.** It parses the raw JSONC text of the chosen configuration and rewrites string values in place, keeping comments and layout. It returns the new text, or `undefined` when nothing changed. Only deviation 1 needs it (ADR-0009 decision 2 as amended).
 - When nothing changed, no override file is written and no `--override-config` is passed.
 - When something changed, C3 writes the text as the override file (§3.5) and passes `--config <the real file>` with `--override-config <that file>`. `[devcontainers-cli] src/spec-node/configContainer.ts` reads the content from the override file and keeps `configFilePath` the real file, so relative paths, such as a Dockerfile's, still resolve from the real folder.
 
@@ -132,19 +157,22 @@ Each value is its own array element (`shell: false`), so a path with spaces or q
 - **Deviation 1 (F-0304 BR-5a, AC-66):**
   - In every string value, each `${localEnv:VAR:default}` or `${env:VAR:default}` whose `VAR` is set to `''` in `editorEnvironment` is replaced by the literal `default` text.
   - An unset `VAR`, a non-empty one, and a reference without a default are left for the CLI.
-  - The `default` text is everything after the second `:` up to the closing `}`, as the CLI parses it.
-- **Deviation 2 (F-0304 BR-1, AC-27):** inside `initializeCommand` only (a string, each string of an array, or each string value of an object), each `${containerEnv:…}` reference is replaced by `''`.
-  - Elsewhere, `${containerEnv:…}` is left for the CLI, which resolves it in the container.
+  - The `default` text is the **next `:`-separated piece only**, as the CLI parses it: it splits the reference on `:`
+    and takes the piece after the variable name (`[devcontainers-cli]`: `typeof o=="string"?o:t.length>1?t[1]:""`). So
+    `${localEnv:V:a:b}` with `V` empty gives `a`, which is what the CLI gives when `V` is unset.
+- **Deviation 2 needs no rewrite.** The CLI already resolves `${containerEnv:…}` inside `initializeCommand` to `''`,
+  because no container exists when that hook runs. Measured on 2026-10-14: `"initializeCommand": "echo
+  \"[${containerEnv:PATH}]\" > /tmp/c3-init-probe"` wrote `[]`. The real-CLI row of §6.5 keeps it true.
 
 **The other deviations go through other mechanisms** (ADR-0009 Consequences: a row each):
 
 | Deviation | Mechanism | Where |
 |---|---|---|
 | 1. an empty `localEnv` gives the default | pre-pass | this module |
-| 2. `${containerEnv}` in `initializeCommand` is empty | pre-pass | this module |
-| 3. `localEnv` is the editor's resolved environment | the spawn environment (the CLI's own input surface, with flags) | §3.4: the CLI runs with the extension host's `process.env`, minus `ELECTRON_RUN_AS_NODE` (§3.4) |
+| 2. `${containerEnv}` in `initializeCommand` is empty | none needed: the CLI's own behaviour, measured | §6.5's real-CLI row |
+| 3. `localEnv` is the editor's resolved environment | the CLI's own inputs: the spawn environment (mechanism 1) | §3.4: the CLI runs with the extension host's `process.env`, minus `ELECTRON_RUN_AS_NODE` |
 | 4. the title's `name` needs a second pass | post-processing | `readConfiguration({containerId})`, §4.3, after the container exists. The caller of F-0504's title is C10 |
-| 5. the workspace mount | flags | `--mount-workspace-git-root` (§3.1, rule 5) |
+| 5. the workspace mount | the CLI's own inputs: flags (mechanism 1) | `--mount-workspace-git-root` (§3.1, rule 5) |
 | 6. attach configurations | not in release 1 | — |
 
 ### 3.3 `cli-lines.ts` (pure): the parser of the CLI's output
@@ -164,7 +192,8 @@ export interface ConfigurationResult {
   mergedConfiguration: Record<string, unknown> | undefined;
 }
 export type CliFailure =
-  | {kind: 'lifecycleFailed'; hook: string; message: string; containerId: string | undefined}
+  | {kind: 'lifecycleFailed'; hook: string; part: string | undefined; message: string; containerId: string | undefined}
+  | {kind: 'configurationFailed'; message: string}     // read-configuration ended without a result line
   | {kind: 'buildFailed'; message: string}
   | {kind: 'pullFailed'; message: string}
   | {kind: 'setupFailed'; message: string; description: string; containerId: string | undefined}
@@ -177,14 +206,34 @@ export type CliFailure =
 **Reading a result** (ADR-0009 decision 3):
 - `outcome: 'success'` → the success type. A missing or non-string `containerId`, `remoteUser` or `remoteWorkspaceFolder` (for `up`) is `malformedResult` naming the field.
 - Unknown fields are ignored: 0.89.0 adds `ociAuthDiagnostics`.
-- `outcome: 'error'` is classified in this order:
-  1. `description` matching `^(\S+) from devcontainer\.json failed\.$` → `lifecycleFailed` with that hook name (recorded: `onCreateCommand from devcontainer.json failed.`);
-  2. `message` starting `Command failed: docker buildx build` or `Command failed: docker build ` → `buildFailed`;
-  3. `message` starting `Command failed: docker pull ` → `pullFailed`;
-  4. anything else → `setupFailed`.
+- `outcome: 'error'` (from `up` or `run-user-commands`) is classified in this order. The texts are the CLI's
+  (`[devcontainers-cli]`: `` `${B?`${B} of ${r}`:r} from ${i} failed.` `` for the hooks, `` `The ${g} in the
+  devcontainer.json failed.` `` for `initializeCommand`):
+  1. `description` matching `^(?:(\S+) of )?(\S+) from (.+) failed\.$` → `lifecycleFailed`, with `hook` the second
+     group and `part` the first (an object-form hook's key) or `undefined`. Recorded: `onCreateCommand from
+     devcontainer.json failed.`; the object form gives `build of postCreateCommand from devcontainer.json failed.`;
+  2. `description` matching `^The (\S+) in the devcontainer\.json failed\.$` → `lifecycleFailed` with that hook
+     (`initializeCommand`) and `part` `undefined`;
+  3. `message` starting `Command failed: docker buildx build` or `Command failed: docker build ` → `buildFailed`;
+  4. `message` starting `Command failed: docker pull ` → `pullFailed`;
+  5. anything else → `setupFailed`.
 
   C8 turns these into F-0410's dialogs. C3 shows nothing.
-- `run-user-commands`' success line is `{"outcome":"success","result":"done"}` → `{kind: 'done'}`.
+- `run-user-commands`' success line is `{"outcome":"success","result":"done"}` → `{kind: 'done'}`. A success whose
+  `result` is anything else is `malformedResult` naming `result` (release 1 never passes the flags that give another
+  value). Its errors follow the classification above.
+- **`read-configuration` has no `outcome` field** (`[devcontainers-cli]`: it writes `{configuration, workspace,
+  featuresConfiguration, mergedConfiguration, ociAuthDiagnostics}` and exits 0).
+  - A line whose `configuration` is an object and whose `workspace.workspaceFolder` is a string → `configuration`.
+    C3 always passes `--workspace-folder`, so `workspace` is always there; a missing `configuration` or
+    `workspace.workspaceFolder` is `malformedResult` naming it. `workspaceMount` and `mergedConfiguration` are optional.
+  - **On error it writes no stdout line and exits 1.** Its error goes to stderr as a `text` event (measured: level 2,
+    `Error: Dev container config (<path>) not found.` followed by the stack). So an exit with no stdout line is
+    `configurationFailed`, with `message` the first line of the last `text` event's text, scrubbed (§3.7); `''` if
+    there was none. That's why `readConfiguration` streams its events too (§3.6).
+- **The CLI's own JSONC reading is lenient** (measured: a truncated file `{"image": "alpine:3.22", ` was read). So
+  the pre-pass's "doesn't parse, `undefined`" leaves the reading to the CLI, which either reads it or fails in its own
+  words (`configurationFailed` or `setupFailed`).
 
 **stderr:** one JSON event per line (`--log-format json`). Recorded types and their fields:
 - `text`: `level`, `timestamp`, `text`;
@@ -201,16 +250,22 @@ It never throws. The `text` is kept unchanged, ANSI codes included, because the 
 
 ### 3.4 `node-cli-host.ts` (adapter): the `CliHost` of contracts §4
 
-`nodeCliHost(paths: {node: string; preload: string; entry: string}, editorEnvironment): CliHost`, where:
+`nodeCliHost(paths: {node: string; preload: string; entry: string}, editorEnvironment): CliHost`, where `run` resolves
+`{kind: 'ran'; result: string | undefined; status: number | null}` (the first stdout line, if any) or `{kind:
+'spawnFailed'; message}` when the process can't start (the `error` event before `spawn`). Here:
 - `node` is `process.execPath`;
 - `entry` is `<extension>/dist/devcontainers-cli/devcontainer.js`;
 - `preload` is `<extension>/dist/cli-preload.js` (below).
 
 **`run(cliArguments, onJsonLine, cancellation)`:**
-1. Spawns `node` with `['--require', preload, entry, ...cliArguments]`. The options are `shell: false`, `stdio: ['ignore', 'pipe', 'pipe']`, and `env` `{...editorEnvironment, ELECTRON_RUN_AS_NODE: '1'}`.
+1. Spawns `node` with `['--require', preload, entry, ...cliArguments]`. The options are `shell: false`, `detached: true`, `stdio: ['ignore', 'pipe', 'pipe']`, and `env` `{...editorEnvironment, ELECTRON_RUN_AS_NODE: '1'}`. `detached` makes the CLI a process-group leader, so its `docker` children are in its group.
 2. Calls `onJsonLine({stream, line})` for every line of either stream, in order.
 3. Resolves `{result: <the first stdout line>, status}` when the process exits.
-4. An abort kills the process tree (`SIGTERM`, then `SIGKILL` after 5 s) and resolves with `status: null`.
+4. **An abort ends the process group:** `process.kill(-pid, 'SIGTERM')`, then `process.kill(-pid, 'SIGKILL')` after 5 s
+   if the CLI hasn't exited, and `run` resolves with `status: null`. The CLI installs no signal handlers, so a signal
+   to its pid alone would leave its `docker` children running (dike on #764); the group reaches them. A build or pull
+   the Docker **daemon** is already doing isn't a process of ours, and goes on until the daemon ends it. A `kill`
+   that throws `ESRCH` (the group is gone) is ignored.
 
 **The preload** (`packages/remote-containers/src/programs/cli-preload.ts`, built by `tools/build.ts`'s existing `src/programs` rule into `dist/cli-preload.js`): its one statement is `delete process.env.ELECTRON_RUN_AS_NODE`.
 - **Why it's needed:** Electron reads the variable once, at start. Without the preload, the CLI's children would inherit it: `initializeCommand` on the host, and the value of `${localEnv:ELECTRON_RUN_AS_NODE}`. An Electron program those start, such as `code`, would then run as plain Node. helper-04 (#734) fixes the same leak for the ssh helper.
@@ -233,19 +288,46 @@ This file and `cli-preload.ts` are the only spawn sites of C3 (contracts §6 row
 export interface CliBridge {
   up(target: CliTarget, options: UpOptions, onEvent: (event: CliEvent) => void, cancellation: AbortSignal): Promise<UpResult>;
   runUserCommands(target: CliTarget, containerId: string, onEvent: (event: CliEvent) => void, cancellation: AbortSignal): Promise<RunUserCommandsResult>;
-  readConfiguration(target: CliTarget, containerId: string | undefined, cancellation: AbortSignal): Promise<ConfigurationResult | CliFailure>;
+  readConfiguration(target: CliTarget, containerId: string | undefined, onEvent: (event: CliEvent) => void, cancellation: AbortSignal): Promise<ConfigurationResult | CliFailure>;
 }
 export function cliBridgeOf(host: CliHost, files: {readText(path: string): Promise<string>}, overrides: OverrideStore, editorEnvironment: Readonly<Record<string, string | undefined>>, logger: Logger): CliBridge;   // Logger from lib-log
 ```
 
 `CliEvent` is `parseLogLine`'s output. Each call does the following:
-1. Reads the config text and runs the pre-pass (§3.2).
+1. Reads the config text, works out the secrets to scrub from it (§3.7), and runs the pre-pass (§3.2).
 2. Writes the override file if the pre-pass changed anything.
 3. Builds the arguments (§3.1) and runs them through `host.run`.
-4. Parses stdout's first line (§3.3) and streams stderr through `onEvent`.
+4. Streams stderr through `onEvent`, each event's `text` scrubbed (§3.7). Parses stdout's first line (§3.3), and
+   scrubs every `message` and `description` of the result.
 5. Removes the override file.
 
-A host `spawnFailed` or an abort maps to `spawnFailed` or `cancelled`. A process that ends without a stdout line is `noResult`.
+A host `spawnFailed` or an abort maps to `spawnFailed` or `cancelled`. A process that ends without a stdout line is
+`noResult` for `up` and `run-user-commands`, and `configurationFailed` for `read-configuration` (§3.3).
+
+### 3.7 `cli-secrets.ts` (pure): what C3 passes on is scrubbed (contracts §6 as amended; athena, register 2026-10-14)
+
+**The documented deviation.** The CLI passes the configuration's `containerEnv` to its own `docker run` as `-e
+NAME=value`, and logs each spawn as `Run: <command> <arguments>` and a failure as `Command failed: <command>
+<arguments>`. That process and its argv are the CLI's, and the values are the user's own configuration: contracts §6
+records it as a deviation for the release notes. **What C3 passes on is ours, and C3 scrubs it.**
+
+```ts
+export interface Secret { value: string; reference: string; }
+export function referencedSecrets(configText: string, editorEnvironment: Readonly<Record<string, string | undefined>>): readonly Secret[];
+export function scrubbed(text: string, secrets: readonly Secret[]): string;
+```
+
+- `referencedSecrets` finds every `${localEnv:VAR…}` and `${env:VAR…}` in the raw configuration text. For each `VAR`
+  whose value in `editorEnvironment` has **8 characters or more**, it gives `{value, reference: '${localEnv:VAR}'}` (or
+  `'${env:VAR}'`, as written), once per value, longest first.
+- `scrubbed` replaces every occurrence of each value with its reference text.
+- It runs on every event `text`, every result `message` and `description`, and `configurationFailed`'s message,
+  before they leave C3: before `onEvent`, a failure, or C8's dialog, and so before lib-log's own redaction.
+
+**What isn't C3's.**
+
+A value the user writes literally into `containerEnv`, rather than referencing from the editor's environment,
+isn't known to C3 as a secret and isn't scrubbed. That's the user's configuration, as the deviation above.
 
 ## 4. The rules C7 builds on
 
@@ -268,12 +350,18 @@ In every recorded run, the process exited within 10 ms of its result line. `CliH
 
 ## 5. Contract rows (contracts §6, ADR-0009 Check)
 
-- **R-26:** a fixture environment holds `GITHUB_TOKEN=s3cr3t-token`, and the config has `"containerEnv": {"T": "${localEnv:GITHUB_TOKEN}"}`. The rows check:
-  - the argv `nodeCliHost` spawns, through a recording spawner, holds neither `s3cr3t-token` nor the `GITHUB_TOKEN` name;
-  - no `onEvent` text C3 produces itself holds it either. The CLI's own log lines are passed through as they are, and C10's log sink is where secrets are scrubbed, as for remote-ssh.
+- **R-26** (contracts §6 as amended): a fixture environment holds `GITHUB_TOKEN=s3cr3t-token`, and the config has
+  `"containerEnv": {"T": "${localEnv:GITHUB_TOKEN}"}`. The rows (`cli-secrets.test.ts` and `cli-bridge.test.ts`):
+  - the argv `nodeCliHost` spawns, through a recording spawner, holds neither `s3cr3t-token` nor the `GITHUB_TOKEN`
+    name;
+  - a `Run: docker run … -e T=s3cr3t-token …` event reaches `onEvent` as `… -e T=${localEnv:GITHUB_TOKEN} …`;
+  - a `Command failed: docker run … -e T=s3cr3t-token …` result message reaches the `setupFailed` failure scrubbed the
+    same way;
+  - a referenced variable whose value is `short1` (6 characters) is left untouched;
+  - an unreferenced variable `OTHER_TOKEN=another-long-value` that appears in a line is left untouched.
 - **No shell:** the spawner options have `shell: false`. A `workspaceFolder` of `/work/a b/"q"` reaches argv as one element, unchanged.
 - **The pin:** a manifest row asserts `dependencies['@devcontainers/cli'] === '0.89.0'`, with no range characters (`^`, `~`, `>`, `<`, `*`, `x`, space).
-- **The only importer:** no file under `packages/remote-containers/src` except `src/cli/` mentions `@devcontainers/cli` or `devcontainers-cli`. It's a unit row that reads the sources, as `docs.test.ts` finds its package.
+- **The only importer:** no file under `packages/remote-containers/src` except `src/cli/` mentions `@devcontainers/cli` or `devcontainers-cli`. C7 and C10 reach the paths through `cliPathsOf` (§2). It's a unit row that reads the sources, as `docs.test.ts` finds its package.
 
 ## 6. Rows
 
@@ -299,15 +387,12 @@ All under `packages/remote-containers/test/unit/` unless named otherwise. Name e
 - With `V` unset: unchanged, so `undefined`.
 - With `V: 'x'`: `undefined`.
 - Without a default (`${localEnv:V}`, `V: ''`): `undefined`.
-- A default with a `:` inside (`${localEnv:V:a:b}`) gives `a:b`.
-
-**Deviation 2:**
-- `initializeCommand` as a string, an array and an object, each with `${containerEnv:P}`: replaced by `''`, cited `F-0304 AC-27`.
-- `${containerEnv:P}` in `remoteEnv`: left.
+- A default with a `:` inside (`${localEnv:V:a:b}`, `V: ''`) gives `a`, the next piece only, as the CLI does.
+- `${containerEnv:P}` anywhere: left (deviation 2 is the CLI's own behaviour, §3.2).
 
 **Keeping the file:**
 - Comments and trailing commas survive: the output text still has the line comment.
-- A text that doesn't parse gives `undefined`. The CLI then reports the parse error itself, so C3 adds no message.
+- A text that doesn't parse gives `undefined`. The CLI then reads it itself (its reader is lenient) or fails in its own words, so C3 adds no message.
 
 ### 6.3 Parser (`cli-lines.test.ts`)
 
@@ -316,12 +401,16 @@ Over the appendix's recorded lines, stored as `test/fixtures/devcontainers-cli-0
 **Results:**
 - `up` success → `up` with the three fields; `ociAuthDiagnostics` is ignored.
 - A missing `remoteUser` → `malformedResult` naming the field.
-- The recorded `onCreateCommand` failure → `lifecycleFailed` with hook `onCreateCommand` and the container id.
+- The recorded `onCreateCommand` failure → `lifecycleFailed` with hook `onCreateCommand`, `part` `undefined`, and the container id.
+- `build of postCreateCommand from devcontainer.json failed.` → `lifecycleFailed`, hook `postCreateCommand`, part `build`.
+- `The initializeCommand in the devcontainer.json failed.` → `lifecycleFailed`, hook `initializeCommand`.
 - The recorded Dockerfile build failure → `buildFailed`.
 - The recorded pull failure → `pullFailed`.
 - A made-up error line with another message → `setupFailed`.
-- `run-user-commands` success → `done`.
-- `read-configuration` → `configuration` with `workspaceFolder` `/workspaces/ws1`.
+- `run-user-commands` success → `done`; a success with `result` `skipNonBlocking` → `malformedResult` naming `result`.
+- `read-configuration`'s line (no `outcome`) → `configuration` with `workspaceFolder` `/workspaces/ws1` and no `consistency` in `workspaceMount`.
+- A `read-configuration` line without `workspace` → `malformedResult` naming `workspace.workspaceFolder`.
+- `read-configuration` ending with status 1, no stdout, and the recorded `Error: Dev container config (…) not found.` text event → `configurationFailed` with that first line.
 
 **Log lines:**
 - Each recorded `type` → its event.
@@ -336,7 +425,9 @@ Over the appendix's recorded lines, stored as `test/fixtures/devcontainers-cli-0
 - `env.ELECTRON_RUN_AS_NODE === '1'`;
 - `shell: false`;
 - the stdout and stderr lines arrive in order;
-- an abort sends `SIGTERM`, then `SIGKILL` after 5 s (fake timers).
+- the options have `detached: true`;
+- an abort sends `SIGTERM` to the group (`-pid`), then `SIGKILL` to the group after 5 s (fake timers); an `ESRCH` is ignored;
+- a spawn `error` before `spawn` → `{kind: 'spawnFailed', message}`.
 
 **`override-files.test.ts`, on a temp folder:**
 - the folder is at mode 0700 and the file at 0600;
@@ -350,16 +441,33 @@ Over the appendix's recorded lines, stored as `test/fixtures/devcontainers-cli-0
 - exit with no stdout line → `noResult`;
 - the 30 s guard ends the process and returns the result (fake timers).
 
-**The preload**, a real child process: `node --require dist/cli-preload.js -e 'console.log(process.env.ELECTRON_RUN_AS_NODE ?? "absent")'` with the variable set prints `absent`.
+**The preload** (`cli-preload.test.ts`). `test:unit` doesn't build, so the row bundles `src/programs/cli-preload.ts`
+in memory with esbuild, as `remote-ssh/test/unit/programs.test.ts` does, writes the bundle to a temp folder, and runs a
+real child process: `node --require <that file> -e 'console.log(process.env.ELECTRON_RUN_AS_NODE ?? "absent")'` with
+the variable set prints `absent`.
 
-**The VSIX** (`tools/package-extensions.test.ts`, or the package's manifest tests; needs #759):
-- the built `packages/remote-containers/dist/devcontainers-cli/` holds the five files;
-- `ThirdPartyNotices.txt` and `LICENSE.txt` are in `vsce ls`'s list (D-88's build row);
-- `devContainersSpecCLI.js` has the same sha256 as the installed package's file (unchanged, D-88).
+**`tools/build.test.ts`** (the tool's new branch):
+- a `copiedFiles` entry over a temp package folder holding a fake dependency copies its files byte for byte to `to`;
+- a missing source file fails, naming it;
+- a package without an entry copies nothing.
+
+**The VSIX** needs a built `dist/`, so these rows are in §6.5's suite, whose script builds and packages first (needs #759):
+- the built `packages/remote-containers/dist/devcontainers-cli/` holds the five files, and `devContainersSpecCLI.js`
+  has the same sha256 as the installed package's file (unchanged);
+- the VSIX (`dist/remote-containers-<version>.vsix`, listed with `unzip -Z1`) holds the five files under
+  `extension/dist/devcontainers-cli/`, `LICENSE.txt` and `ThirdPartyNotices.txt` included (the licence ruling's build row).
 
 ### 6.5 The real-CLI row (local Docker)
 
-**Where it lives:** `tests/acceptance/containers-cli/cli-bridge.test.ts`, run by a new script `test:acceptance:containers-cli`: `pnpm build && mocha --no-config --extension ts --spec 'tests/acceptance/containers-cli/*.test.ts'`, as `test:acceptance:server` is.
+**Where it lives:** `tests/acceptance/containers-cli/cli-bridge.test.ts`, run by a new script `test:acceptance:containers-cli`: `pnpm build && node tools/package-extensions.ts remote-containers && mocha --no-config --extension ts --spec 'tests/acceptance/containers-cli/*.test.ts'`, as `test:acceptance:server` is.
+
+**Registration**, as `tests/acceptance/server/` is registered:
+- `tests/acceptance/containers-cli/tsconfig.json`, like `server/`'s, referencing `packages/remote-containers` (and
+  its `tsconfig.test.json`) and `lib-log`;
+- the root `tsconfig.json`'s `references`, `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`, and `knip.jsonc`'s acceptance
+  entries (`containers-cli/*.test.ts`);
+- the suite imports the bridge by relative path (`../../../packages/remote-containers/src/cli/…`), as
+  `suite-remote/remote-window.test.ts` imports remote-ssh's source, since remote-containers has no exports.
 - **Skipping without Docker:** a `before` hook that runs `docker version` skips the suite (`this.skip()`) when it fails, so a machine without Docker passes it.
 
 **The steps.** It runs the real bridge (`nodeCliHost` with the built `dist/` files) on a temporary folder with:
@@ -372,7 +480,9 @@ with `C3_EMPTY=''` in the editor environment, and the id label `remote-oss.c3-ro
 1. `up` → `kind: 'up'`, `remoteUser` `root`, and `remoteWorkspaceFolder` `/workspaces/<folder name>`;
 2. `readConfiguration(target, containerId)` → `configuration.name` `c3-dflt` (deviation 1, end to end);
 3. `runUserCommands` → `done`, and `docker exec <id> cat /tmp/c3-created` prints `created`;
-4. a second `up` gives the same `containerId`.
+4. a second `up` gives the same `containerId`;
+5. deviation 2: with `"initializeCommand": "echo \"[${containerEnv:PATH}]\" > <temp file>"` added, the temp file
+   holds `[]` after `up` (the CLI's own behaviour, §3.2).
 
 **Cleanup:** in `after`, `docker rm -f` every container with the run's id label. Image tags stay.
 
@@ -383,14 +493,16 @@ with `C3_EMPTY=''` in the editor environment, and the id label `remote-oss.c3-ro
 **The PR:**
 - Title: `remote-containers: C3, the dev container CLI bridge (card containers-04, #763)`.
 - It opens with the `needs-verification` label: proteus checks that the VSIX holds the five CLI files unchanged and that the CLI runs from an installed VSIX.
-- themis or triton reviews; athena gives the design check, including the `jsonc-parser` dependency.
+- Request review from athena only; hermes assigns the peer. athena gives the design check, including the `jsonc-parser` dependency.
 
 ## 8. Open rows (stop and report on #763)
 
 1. The installed `@devcontainers/cli` isn't byte-identical to the 0.89.0 tarball: compare the sha256 of `devContainersSpecCLI.js` with the npm registry's tarball. Don't continue on a different build.
 2. A recorded result line in your run differs from the appendix in a field C3 reads. Report it, and don't adapt the parser by guess.
 3. `jsonc-parser`'s `modify` can't keep a comment adjacent to a rewritten value. Report the text.
-4. `--require` with `ELECTRON_RUN_AS_NODE=1` doesn't run the preload in the editor's Electron. Measure it in the containers harness launch once it exists, or in a plain launch. If it fails, report it and don't drop the preload.
+4. A `kill(-pid)` reaches no `docker` child because the CLI's children start their own groups. Report the `ps`
+   output, and don't change the spawn by guess.
+5. `--require` with `ELECTRON_RUN_AS_NODE=1` doesn't run the preload in the editor's Electron. Measure it in the containers harness launch once it exists, or in a plain launch. If it fails, report it and don't drop the preload.
 
 ## Appendix: recorded 0.89.0 lines (lab machine, 2026-10-14)
 
@@ -415,6 +527,11 @@ The paths were shortened by hand; the fixtures replace the real scratch paths wi
 {"outcome":"error","message":"Command failed: /bin/sh -c exit 4","description":"onCreateCommand from devcontainer.json failed.","containerId":"fcf59aa9b58801c6a6eeb0b70b92c6f887a54a64b0117f6666e059afa4616a15"}
 ```
 
+**`read-configuration` with a missing `--config`** (status 1, no stdout line), stderr's last event, abbreviated:
+```
+{"type":"text","level":2,"timestamp":1791949124426,"text":"Error: Dev container config (/work/ws7/nope.json) not found.\n    at F9 (…)"}
+```
+
 The build failure's `description` is the generic one; the build's own error is in the raw lines:
 ```
 {"type":"raw","level":3,"timestamp":1791946381354,"text":"ERROR: failed to build: failed to solve: process \"/bin/sh -c exit 3\" did not complete successfully: exit code: 3\n"}
@@ -431,7 +548,7 @@ The build failure's `description` is the generic one; the build's own error is i
 (node:1456880) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
 ```
 
-**`read-configuration --include-merged-configuration`** (stdout, abbreviated):
+**`read-configuration --include-merged-configuration`** (stdout, abbreviated). There's no `consistency` on Linux (`[devcontainers-cli]`: `e.platform!=="linux"?`,consistency=…`:""`); the earlier appendix had added one by mistake:
 ```
-{"configuration":{"name":"c3-probe","image":"alpine:3.22",…,"configFilePath":{"$mid":1,"fsPath":"/work/ws1/.devcontainer/devcontainer.json","path":"/work/ws1/.devcontainer/devcontainer.json","scheme":"vscode-fileHost"}},"workspace":{"workspaceFolder":"/workspaces/ws1","workspaceMount":"type=bind,source=/work/ws1,target=/workspaces/ws1,consistency=cached"},"mergedConfiguration":{…}}
+{"configuration":{"name":"c3-probe","image":"alpine:3.22",…,"configFilePath":{"$mid":1,"fsPath":"/work/ws1/.devcontainer/devcontainer.json","path":"/work/ws1/.devcontainer/devcontainer.json","scheme":"vscode-fileHost"}},"workspace":{"workspaceFolder":"/workspaces/ws1","workspaceMount":"type=bind,source=/work/ws1,target=/workspaces/ws1"},"mergedConfiguration":{…}}
 ```
