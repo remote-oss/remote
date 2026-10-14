@@ -28,6 +28,7 @@ import {
   TerminalSessionRunner,
   type TerminalLogin,
 } from 'lib-ssh';
+import {CONNECT_WAIT_TIMEOUT} from './failure.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -153,7 +154,7 @@ export function openTerminalConnectionStep(
       }
 
       const wait = new ConnectWait(waitSettings, dependencies.scheduler, () => {
-        fail({kind: 'timeout'});
+        fail(CONNECT_WAIT_TIMEOUT);
       });
       const reader = new PromptReader(
         dependencies.scheduler,
@@ -163,7 +164,7 @@ export function openTerminalConnectionStep(
             asking.questions?.onQuestion(text);
           },
           onUnreachable: () => {
-            fail({kind: 'timeout'});
+            fail(CONNECT_WAIT_TIMEOUT);
           },
         },
       );
@@ -201,7 +202,9 @@ export function openTerminalConnectionStep(
           return;
         }
         dependencies.logger.info(bootstrapLogLine(event));
-        fail(event.kind === 'timeout' ? {kind: 'timeout'} : {kind: 'unknown'});
+        fail(
+          event.kind === 'timeout' ? CONNECT_WAIT_TIMEOUT : {kind: 'unknown'},
+        );
       }
 
       function handOver(runner: TerminalSessionRunner): void {

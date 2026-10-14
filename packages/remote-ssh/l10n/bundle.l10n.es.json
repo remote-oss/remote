@@ -28,6 +28,7 @@
   "The value of {1} is not a usable server download URL template: {3}.": "The value of {1} is not a usable server download URL template: {3}.",
   "Open Setting": "Open Setting",
   "Got bad result from install script": "Got bad result from install script",
+  "Connecting with SSH timed out": "Connecting with SSH timed out",
   "Edit custom SSH configuration file": "Edit custom SSH configuration file",
   "Help": "Help",
   "Select SSH configuration file to update": "Select SSH configuration file to update",
