@@ -3,6 +3,7 @@ import {
   commandsOf,
   extensionPresent,
   inWindow,
+  reloadWindow,
   waitFor,
   windowEvents,
 } from '../windows/harness.ts';
@@ -42,6 +43,26 @@ describe('Dev Containers stands down beside the other extension (card containers
     let shown: string[] = [];
     await waitFor(
       `the coexistence warning in window ${WINDOW}`,
+      async () => {
+        shown = await notifications(WINDOW);
+        return shown.includes(STAND_DOWN_WARNING);
+      },
+      30_000,
+    );
+    deepStrictEqual(
+      [
+        shown.filter(text => text === STAND_DOWN_WARNING).length,
+        await commandsOf(WINDOW, 'remote-containers.'),
+      ],
+      [1, []],
+    );
+  });
+  it('F-0101 AC-18 (reappearance): dismissed, the warning shows again at the next activation, once, and the commands stay unregistered', async () => {
+    await inWindow(WINDOW, 'notifications.clearAll');
+    await reloadWindow(WINDOW);
+    let shown: string[] = [];
+    await waitFor(
+      `the coexistence warning again in window ${WINDOW}`,
       async () => {
         shown = await notifications(WINDOW);
         return shown.includes(STAND_DOWN_WARNING);

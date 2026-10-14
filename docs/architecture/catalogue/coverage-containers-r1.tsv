@@ -16,7 +16,7 @@ F-0101.AC-14	deferred	containers release 1: the full contribution set comes with
 F-0101.AC-15	todo	
 F-0101.AC-17	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0101.AC-17b	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
-F-0101.AC-18	todo	
+F-0101.AC-18	acceptance	
 F-0101.AC-19	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0101.AC-20	deferred	containers release 1: increment 2 (the reopen notification, F-0402)
 F-0101.AC-21	todo	
@@ -70,7 +70,7 @@ F-0106.AC-42	deferred	containers release 1: later (trust for attach, pod and vol
 F-0106.AC-43	deferred	containers release 1: later (attach)
 F-0106.AC-44	deferred	containers release 1: increment 2 (authoring)
 F-0201.AC-1	todo	
-F-0201.AC-2	todo	
+F-0201.AC-2	acceptance	
 F-0201.AC-3	unit	
 F-0201.AC-4	deferred	containers release 1: increment 2 (Podman)
 F-0201.AC-5	deferred	containers release 1: later (Compose)
@@ -196,7 +196,7 @@ F-0301.AC-75	todo
 F-0301.AC-76	unit	
 F-0401.AC-1	todo	
 F-0401.AC-2	todo	
-F-0401.AC-3	todo	
+F-0401.AC-3	acceptance	
 F-0401.AC-4	todo	
 F-0401.AC-5	unit	
 F-0401.AC-6	todo	
@@ -208,7 +208,7 @@ F-0401.AC-11	todo
 F-0401.AC-12	todo	
 F-0401.AC-13	todo	
 F-0401.AC-14	deferred	containers release 1: later (the recovery container)
-F-0401.AC-15	todo	
+F-0401.AC-15	acceptance	
 F-0401.AC-16	deferred	containers release 1: later (remote engines)
 F-0401.AC-17	todo	
 F-0401.AC-18	todo	
@@ -740,7 +740,7 @@ F-0503.AC-51	todo
 F-0503.AC-52	unit	
 F-0503.AC-53	todo	
 F-0503.AC-54	todo	
-F-0504.AC-1	todo	
+F-0504.AC-1	acceptance	
 F-0504.AC-2	todo	
 F-0504.AC-3	todo	
 F-0504.AC-4	deferred	containers release 1: the full contribution set comes with later increments
