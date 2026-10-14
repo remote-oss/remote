@@ -72,7 +72,7 @@ jobs:
   checks:
     if: (github.event_name != 'pull_request' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')) || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
-    timeout-minutes: 10
+    timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6 # the version comes from packageManager in package.json
