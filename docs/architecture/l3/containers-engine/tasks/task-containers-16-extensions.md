@@ -115,10 +115,11 @@ In `package.json` `contributes.configuration`, with the titles and texts reused 
     "Expected format '${publisher}.${name}'. Example: 'vscode.csharp'."}`. The pattern is unanchored, as 3.2
     observes, so `-id` and `id@prerelease` get no warning;
   - `description`: `Configures the list of extensions to always install while creating a container.`
-- **`remote.containers.defaultExtensions`:**
-  - the same `type`, `items` and `scope`;
-  - `deprecationMessage`: `Use #dev.containers.defaultExtensions# instead.`, written as a `markdownDeprecationMessage`
-    when the description uses backticks (F-0102's atom).
+- **`remote.containers.defaultExtensions`** has F-0102 3.2's shape for a legacy key, and nothing else (no `type`,
+  `default`, `items` or description):
+  - `scope: "application"`;
+  - `deprecationMessage`: `Use 'dev.containers.defaultExtensions' instead.`;
+  - `markdownDeprecationMessage`: ``Use `#dev.containers.defaultExtensions#` instead.``
 
 Both go through `package.nls*.json` like the package's other texts. The manifest test checks them.
 
@@ -188,8 +189,9 @@ The old key isn't contributed (3.2: the reference doesn't declare it either). Re
 
 ### 4.4 The manifest test
 
-The two settings with their `type`, `default`, `scope`, `items.pattern`, `errorMessage`, `description` and the
-deprecation text, read from `package.json` and the English nls file.
+`dev.containers.defaultExtensions` with its `type`, `default`, `scope`, `items.pattern`, `errorMessage` and
+`description`, and `remote.containers.defaultExtensions` with exactly `scope`, `deprecationMessage` and
+`markdownDeprecationMessage`, read from `package.json` and the English nls file.
 
 ### 4.5 Gate row 12 (`tests/acceptance/containers/gate.test.ts`, containers-09's launch)
 

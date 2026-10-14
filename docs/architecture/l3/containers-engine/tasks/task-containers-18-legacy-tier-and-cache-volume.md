@@ -133,9 +133,12 @@ export function cacheVolumeOf(primaryGlobal: unknown, deprecatedGlobal: unknown)
 - **`dev.containers.cacheVolume`:** `type: "boolean"`, `default: true`, `scope: "application"`, description
   `Controls whether a Docker volume should be used to cache the VS Code server and extensions.` (F-0419 3.2,
   verbatim).
-- **`remote.containers.cacheVolume`:** the same `type`, `default` and `scope`, with `markdownDeprecationMessage`
-  `` Use `#dev.containers.cacheVolume#` instead. `` (F-0102's alias).
-- Add the two English texts to `package.nls.json`, and the same keys to every `package.nls.<locale>.json`, as the
+- **`remote.containers.cacheVolume`** has F-0102 3.2's shape for a legacy key, and nothing else (no `type`,
+  `default` or description):
+  - `scope: "application"`;
+  - `deprecationMessage`: `Use 'dev.containers.cacheVolume' instead.`;
+  - `markdownDeprecationMessage`: ``Use `#dev.containers.cacheVolume#` instead.``
+- Add the English texts to `package.nls.json`, and the same keys to every `package.nls.<locale>.json`, as the
   package's other settings do.
 
 ## 4. Rows
@@ -185,8 +188,9 @@ The existing rows pass `cacheVolume: true` in their requests, so their expected 
 
 ### 4.4 The manifest test
 
-Both settings, with their `type`, `default`, `scope`, the description and the deprecation text, read from
-`package.json` and the English nls file.
+`dev.containers.cacheVolume` with its `type`, `default`, `scope` and description, and `remote.containers.cacheVolume`
+with exactly `scope`, `deprecationMessage` and `markdownDeprecationMessage`, read from `package.json` and the English
+nls file.
 
 ### 4.5 Acceptance (`tests/acceptance/containers/gate.test.ts`, containers-09's launch)
 
