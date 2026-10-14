@@ -37,6 +37,17 @@ describe('what a finished docker exec means (card containers-02)', () => {
     });
   });
 
+  it('ADR-0010: a script’s stderr with the daemon’s words mid-line and a line saying not running keeps the script’s own status', () => {
+    deepStrictEqual(
+      exitOutcome(
+        3,
+        'cat: Error response from daemon: No such container\nis not running\n',
+        'script',
+      ),
+      {kind: 'exited', status: 3},
+    );
+  });
+
   it('contracts §5: status 125 is a closed channel with the last stderr line', () => {
     deepStrictEqual(
       exitOutcome(125, 'first\nlast one\n', 'script'),
