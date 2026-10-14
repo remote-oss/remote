@@ -257,11 +257,63 @@ export function plainTestsOf(
 
 /** A started program that can be stopped, with everything it started. */
 export interface Started {
-  stop(): void;
+  /** Ends the program and its group; resolves once none of the group is left, so the next program never meets it. */
+  stop(): Promise<void>;
+}
+
+/** How long a stopped group has to end after SIGTERM, and how often it is looked at meanwhile, in milliseconds. */
+export interface StopTiming {
+  graceMilliseconds: number;
+  pollMilliseconds: number;
+}
+
+/**
+ * The editor's own shutdown takes seconds on a loaded machine; one still shutting down holds the user-data folder's
+ * main socket, and the next editor on that folder would wait on it forever.
+ */
+const STOP_TIMING: StopTiming = {
+  graceMilliseconds: 10_000,
+  pollMilliseconds: 100,
+};
+
+/** Whether any process of the group `groupId` is left. */
+function groupAlive(groupId: number): boolean {
+  try {
+    process.kill(-groupId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Sends `signal` to the group `groupId`, if any of it is left. */
+function signalGroup(groupId: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-groupId, signal);
+  } catch {
+    // The group is already gone.
+  }
+}
+
+/** Ends the group `groupId`: SIGTERM, then SIGKILL once the grace has passed, and resolves when none of it is left. */
+async function endGroup(groupId: number, timing: StopTiming): Promise<void> {
+  signalGroup(groupId, 'SIGTERM');
+  const deadline = Date.now() + timing.graceMilliseconds;
+  let killed = false;
+  while (groupAlive(groupId)) {
+    if (!killed && Date.now() >= deadline) {
+      signalGroup(groupId, 'SIGKILL');
+      killed = true;
+    }
+    await new Promise(resolve => setTimeout(resolve, timing.pollMilliseconds));
+  }
 }
 
 /** Starts a program detached, in a group of its own, so that stopping it stops the processes it started too. */
-export function startDetached(program: Program): Started {
+export function startDetached(
+  program: Program,
+  timing: StopTiming = STOP_TIMING,
+): Started {
   const child = spawn(program.file, program.programArguments, {
     env: program.environment,
     detached: true,
@@ -271,14 +323,9 @@ export function startDetached(program: Program): Started {
   child.on('error', () => undefined);
   child.unref();
   return {
-    stop: () => {
-      if (child.pid === undefined) {
-        return;
-      }
-      try {
-        process.kill(-child.pid, 'SIGTERM');
-      } catch {
-        // The group is already gone.
+    stop: async () => {
+      if (child.pid !== undefined) {
+        await endGroup(child.pid, timing);
       }
     },
   };
@@ -334,6 +381,6 @@ export async function runPlainLaunch(
   try {
     return await steps.runTests(plainTestsOf(root, launch, environment));
   } finally {
-    editor.stop();
+    await editor.stop();
   }
 }

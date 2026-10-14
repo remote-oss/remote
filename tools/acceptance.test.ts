@@ -166,6 +166,7 @@ class FakeHarness implements HarnessDependencies {
     return {
       stop: () => {
         this.calls.push('agent stopped');
+        return Promise.resolve();
       },
     };
   };

@@ -1,5 +1,5 @@
 import {deepStrictEqual, doesNotThrow, strictEqual, throws} from 'node:assert';
-import {existsSync, statSync} from 'node:fs';
+import {existsSync, readFileSync, statSync} from 'node:fs';
 import path from 'node:path';
 import {
   debuggingPortFile,
@@ -329,6 +329,7 @@ describe('runPlainLaunch', () => {
         return {
           stop: () => {
             happened.push('stop');
+            return Promise.resolve();
           },
         };
       },
@@ -477,7 +478,7 @@ describe('startDetached', () => {
     const file = path.join(workspace.root, 'ticks');
     const started = startDetached(writer(file));
     await pause(400);
-    started.stop();
+    await started.stop();
     strictEqual(existsSync(file), true);
   });
 
@@ -485,8 +486,7 @@ describe('startDetached', () => {
     const file = path.join(workspace.root, 'ticks');
     const started = startDetached(writer(file));
     await pause(400);
-    started.stop();
-    await pause(200);
+    await started.stop();
     const before = statSync(file).size;
     await pause(300);
     strictEqual(statSync(file).size, before);
@@ -499,18 +499,76 @@ describe('startDetached', () => {
       environment: {},
     });
     doesNotThrow(() => {
-      started.stop();
+      void started.stop();
     });
   });
 
   it('D-85: stopping a program twice is harmless', async () => {
     const started = startDetached(writer(path.join(workspace.root, 'ticks')));
     await pause(200);
-    started.stop();
-    await pause(200);
-    doesNotThrow(() => {
-      started.stop();
+    await started.stop();
+    await started.stop();
+  });
+
+  /** A program that ignores SIGTERM, starts a child of its own, and writes the child's pid to `file`. */
+  function stubborn(file: string): Program {
+    return {
+      file: process.execPath,
+      programArguments: [
+        '-e',
+        [
+          "process.on('SIGTERM', () => undefined);",
+          "const child = require('node:child_process').spawn(process.execPath, ['-e', \"process.on('SIGTERM', () => undefined); setInterval(() => undefined, 1000)\"], {stdio: 'ignore'});",
+          `require('node:fs').writeFileSync(${JSON.stringify(file)}, String(child.pid));`,
+          'setInterval(() => undefined, 1000);',
+        ].join(' '),
+      ],
+      environment: {},
+    };
+  }
+
+  /** Whether the process `processId` is alive. */
+  function alive(processId: number): boolean {
+    try {
+      process.kill(processId, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it('tooling-51: stop resolves only once the whole group has ended, its children included', async () => {
+    const file = path.join(workspace.root, 'child');
+    const started = startDetached(writer(path.join(workspace.root, 'ticks')));
+    const parent = startDetached(stubborn(file), {
+      graceMilliseconds: 300,
+      pollMilliseconds: 20,
     });
+    while (!existsSync(file)) {
+      await pause(20);
+    }
+    const child = Number(readFileSync(file, 'utf8'));
+    await Promise.all([started.stop(), parent.stop()]);
+    strictEqual(alive(child), false);
+  });
+
+  it('tooling-51: a group that ignores SIGTERM is killed once the grace has passed, and not before', async () => {
+    const file = path.join(workspace.root, 'child');
+    const started = startDetached(stubborn(file), {
+      graceMilliseconds: 400,
+      pollMilliseconds: 20,
+    });
+    while (!existsSync(file)) {
+      await pause(20);
+    }
+    const child = Number(readFileSync(file, 'utf8'));
+    const began = Date.now();
+    await started.stop();
+    const took = Date.now() - began;
+    deepStrictEqual(
+      [alive(child), took >= 400, took < 3000],
+      [false, true, true],
+    );
   });
 });
 

@@ -620,10 +620,7 @@ async function prepare(
   const agentSocket = agentSocketPath(runFolder);
   if (editor === 'vscodium') {
     const agent = dependencies.startAgent(agentSocket);
-    stops.push(() => {
-      agent.stop();
-      return Promise.resolve();
-    });
+    stops.push(() => agent.stop());
   }
   const host = startHostContainer(command, root, runId, runFolder, [
     ...(downloads === undefined ? [] : downloadHostArguments()),
