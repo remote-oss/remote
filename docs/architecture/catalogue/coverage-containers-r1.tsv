@@ -454,17 +454,17 @@ F-0412.AC-16	todo
 F-0412.AC-17	todo	
 F-0412.AC-18	todo	
 F-0412.AC-19	todo	
-F-0412.AC-20	todo	
+F-0412.AC-20	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
 F-0412.AC-21	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0412.AC-22	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0412.AC-23	todo	
-F-0412.AC-24	todo	
-F-0412.AC-25	todo	
-F-0412.AC-26	todo	
-F-0412.AC-27	todo	
-F-0412.AC-28	todo	
-F-0412.AC-29	todo	
-F-0412.AC-30	todo	
+F-0412.AC-23	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
+F-0412.AC-24	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
+F-0412.AC-25	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
+F-0412.AC-26	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
+F-0412.AC-27	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
+F-0412.AC-28	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
+F-0412.AC-29	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
+F-0412.AC-30	deferred	containers release 1: S343 needs apt's text matched in the build output, which ADR-0010 doesn't allow
 F-0412.AC-31	todo	
 F-0412.AC-32	todo	
 F-0412.AC-33	todo	
@@ -478,7 +478,7 @@ F-0412.AC-40	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0412.AC-41	todo	
 F-0412.AC-42	todo	
 F-0412.AC-43	todo	
-F-0412.AC-44	todo	
+F-0412.AC-44	deferred	containers release 1: core's JSON validation; release 1 contributes no schema (brief ruling 8)
 F-0415.AC-1	todo	
 F-0415.AC-2	todo	
 F-0415.AC-3	todo	
