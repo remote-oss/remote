@@ -55,6 +55,7 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'windows',
+        'config-files',
         'default-ports',
         'no-proposals',
         'explorer',
@@ -67,7 +68,22 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('connect-39: the forwarding launches open their aliases with the case named, and agent-off turns agent forwarding off', () => {
+  it('coverage-20: the config-files launch runs with its own HOME, the recorder first on the PATH and no agent socket', () => {
+    deepStrictEqual(
+      launches.find(launch => launch.label === 'config-files')?.environment,
+      {
+        HOME: '<run>/home',
+        PATH: '<run>/ssh-bin:<path>',
+        SSH_AUTH_SOCK: '',
+        XDG_CACHE_HOME: '<run>/xdg/cache',
+        XDG_CONFIG_HOME: '<run>/xdg/config',
+        XDG_DATA_HOME: '<run>/xdg/data',
+        XDG_STATE_HOME: '<run>/xdg/state',
+      },
+    );
+  });
+
+  it('connect-39: the forwarding launches) open their aliases with the case named, and agent-off turns agent forwarding off', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.suite === 'suite-forwarding')

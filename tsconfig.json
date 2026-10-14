@@ -128,6 +128,9 @@
       "path": "tests/acceptance/windows"
     },
     {
+      "path": "tests/acceptance/config-files"
+    },
+    {
       "path": "tests/acceptance/no-proposals"
     },
     {

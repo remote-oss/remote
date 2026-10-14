@@ -560,6 +560,32 @@ export async function sshChildren(helperId: number): Promise<number[]> {
   }
 }
 
+/**
+ * The argv of each `ssh` process whose parent is one of the run's connection helpers, as lists of strings, read from
+ * `/proc/<pid>/cmdline`. Call it while a connect runs and repeat it, since each process is as brief as its connect:
+ * a caller that notes the distinct lists it sees over the connect sees what `ssh` was started with. The argv holds
+ * no secret, by the register rule.
+ */
+export async function sshArguments(): Promise<string[][]> {
+  const commands: string[][] = [];
+  for (const helperId of await connectionHelpers()) {
+    for (const processId of await sshChildren(helperId)) {
+      let bytes: string;
+      try {
+        bytes = readFileSync(`/proc/${String(processId)}/cmdline`, 'utf8');
+      } catch {
+        // The process ended between the listing and the read.
+        continue;
+      }
+      const argv = bytes.split('\0').filter(part => part !== '');
+      if (argv[0] === 'ssh') {
+        commands.push(argv);
+      }
+    }
+  }
+  return commands;
+}
+
 /** Polls `check` every 100 ms until it holds; it fails naming `description` after `milliseconds`. */
 export async function waitFor(
   description: string,

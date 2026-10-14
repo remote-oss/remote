@@ -428,6 +428,20 @@ describe('runPlainLaunch', () => {
     );
     strictEqual(programs[0]?.environment.HARNESS_RUN_FOLDER, '/other');
   });
+
+  it('coverage-20: a launch’s environment resolves the run’s tokens for its editor and its tests', async () => {
+    const {steps, programs} = recordingSteps('pass');
+    await runPlainLaunch(
+      '/repo',
+      PLAIN_RUN,
+      {...LAUNCH, environment: {HOME: '<run>/home'}},
+      steps,
+    );
+    deepStrictEqual(
+      programs.map(program => program.environment.HOME),
+      ['/run/home', '/run/home'],
+    );
+  });
 });
 
 describe('startDetached', () => {
