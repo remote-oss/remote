@@ -83,6 +83,7 @@ export interface CliTarget {
   idLabels: readonly string[];  // 'name=value', from C7 (F-0409 BR-2)
   overrideConfigFile?: string;  // set by the pre-pass when it changed something (§3.2)
   mountWorkspaceGitRoot: boolean;
+  mounts: readonly string[];     // '--mount' values, from C7 (the vscode volume, containers-06)
   logLevel: 'info' | 'debug' | 'trace';
 }
 export interface UpOptions { removeExistingContainer: boolean; buildNoCache: boolean; }
@@ -101,6 +102,8 @@ export function readConfigurationArguments(target: CliTarget, containerId?: stri
    - The builder supports both, with a row for each.
 6. `--log-level <logLevel>` and `--log-format json`.
 7. For `up` only:
+   - one `--mount <value>` per entry of `mounts`, in order (containers-06: release 1 passes
+     `type=volume,source=vscode,target=/vscode`); `run-user-commands` and `read-configuration` take none;
    - `--skip-non-blocking-commands` (§4.2);
    - `--remove-existing-container` when `removeExistingContainer` is set;
    - `--build-no-cache` when `buildNoCache` is set.
@@ -282,6 +285,8 @@ All under `packages/remote-containers/test/unit/` unless named otherwise. Name e
 - The same with `removeExistingContainer` and `buildNoCache`: the two flags appear after `--skip-non-blocking-commands`.
 - `mountWorkspaceGitRoot: false` adds `--mount-workspace-git-root=false`; `true` adds nothing.
 - `overrideConfigFile` set adds `--override-config <file>` right after `--config`.
+- `mounts` with two values gives two `--mount` pairs in `up`'s list, in order, and none in the other two builders;
+  an empty `mounts` gives none.
 - `runUserCommandsArguments` ends with `--container-id <id>`, and has no `--skip-non-blocking-commands`.
 - `readConfigurationArguments` with and without a container id: `--include-merged-configuration` in both.
 - No builder ever emits `--remote-env` or `--secrets-file`: the result of every builder row is scanned.
