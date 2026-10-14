@@ -51,7 +51,7 @@ Names start with `F-2411 AC-<n>:`. Script entries are appended before each row, 
 | 14 | write a wrong key for the `password-ask` host into `<run>/known_hosts_password_ask` (a fresh ed25519 key's public line under the host's name and port); Kill on Host, `hostPick` → `{label: 'password-ask'}` | `Failed to kill VS Code Server on password-ask.` with no `pick` or `maskedInput` line. Then delete the file | AC-16 |
 | 15 | `onHost('rm', '-rf', '/home/harness-nofwd/.vscodium-server-insiders')`, so the `noforward` account has no server (an earlier row may have connected it); Kill on Host, `hostPick` → `{label: 'noforward'}` | `Killed VS Code Server on noforward.`; `onHost('test', '-e', '/home/harness-nofwd/.vscodium-server-insiders')` fails | AC-18 |
 | 16 | `userSettings({'remote.SSH.path': '<run>/no-such-ssh'})`; Kill on Host on `harness` | `Killed VS Code Server on harness.` and no other line. Then reset the setting | AC-30 |
-| 17 | Kill on Host on `nowhere` (not awaited), then at once Kill on Host on `harness` | the `harness` notice comes before the `nowhere` notice | AC-31 |
+| 17 | Kill on Host on `blackhole` (not awaited) in `local`, then at once Kill on Host on `harness` in a second local window: an agent runs its commands one at a time. `blackhole` is the run's alias of `192.0.2.1` (TEST-NET-1, never routed), as coverage-19 §1 defines it; `nowhere` fails at once at name resolution, so it never waits | the `harness` notice comes before the `blackhole` notice | AC-31 |
 | 18 | open `x1`; record `logins()`; Kill on Host on `harness` from `local`; then with `userSettings({'remote.SSH.useLocalServer': false})`, open `x2` on `harness` and Kill on Host on `harness` from `x2` | each kill adds exactly one `Accepted` line, and within 5 s of each notice no `sshd: harness` session of the kill remains (`onHost('pgrep', '-u', 'harness', '-f', 'sshd: harness')` counts only the windows' sessions). Reset the setting | AC-33 |
 | 19 | copy the settings file's bytes before rows 4, 8 and 10 | after each, the settings file is byte for byte the same | AC-23 |
 | 20 | `userSettings({'remote.SSH.useExecServer': false})`; open `x1` (the server is installed under `bin/`); Kill on Host on `harness` | `onHost('test', '-e', '/home/harness/.vscodium-server-insiders/bin')` fails; opening `x1` again records an install `progress` line. Reset the setting | AC-7 |
@@ -62,7 +62,7 @@ Names start with `F-2411 AC-<n>:`. Script entries are appended before each row, 
 | 25 **KC** | the same with `userSettings({'remote.SSH.useLocalServer': false})` | a `notice` `Killed VS Code Server on harness.`; `serverProcesses()` empty within 10 s; `x1` remote until core's reconnect state | AC-20 |
 | 26 **KC** | in each mode, Kill on Host from `x1` picking `harness` | the outcome of row 24, then of row 25 | AC-21 |
 | 27 **KC** | in `local`, and in `x3` opened on `refused` (failed), run Kill Current with `inWindow` (as a keybinding does) | no `notice`; the settings file unchanged; both windows still answer `acceptance.agent.state` | AC-22 |
-| 28 **KC** | open `x1` and `x2` on `harness` (default mode); Kill Current in `x1` | `x2` has no record line and stays connected | AC-26 |
+| 28 **KC** | open `x1` and `x2` on `harness` (default mode); Kill Current in `x1` | `x2` has no `failureDialog` line and is still connected. Core's reconnection progress in `x2` is allowed: "silent" doesn't forbid it (athena, 2026-10-14) | AC-26 |
 | 29 **KC** | open `x1`; type into an untitled editor without saving (agent command, as coverage-38 row 13); Kill Current; core's save prompt is answered with Cancel, then (again) Don't Save | Cancel: `x1` stays remote and the text is kept, and a `notice` `Killed …` line was written; Don't Save: `x1` is local. The server keeps running in both. If the agent can't answer core's save prompt, stop and report (§5) | AC-29 |
 | 30 **KC** | socket mode as row 22; open `x1`; Kill Current in `x1` | `Killed …`; `x1` stays remote until core's reconnect state | AC-32 (Kill Current) |
 
@@ -74,7 +74,8 @@ Each deletes the file at its end. coverage-21 (#598) recreates what it needs.
 In `coverage-slice1.tsv`, F-2411 AC-2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 23, 25, 28, 30, 31, 32 and 33
 go to `acceptance`. The KC rows add AC-19, 20, 21, 22, 26 and 29. AC-24 (a fish login shell) stays `todo`: the VSCodium
 run's host has no fish account. List it in the PR under "harness capability missing". List as core halves: the
-notice's source, the reload dialog (AC-10, 25), and the window title and indicator (AC-9).
+notice's source; core's "Cannot reconnect" modal (AC-10, 25; athena, 2026-10-14: row 5 proves our half, the failed
+re-resolve and the reload reconnecting); and the window title and indicator (AC-9).
 
 ## 4. Gates and review
 

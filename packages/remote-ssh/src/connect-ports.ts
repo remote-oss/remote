@@ -96,7 +96,7 @@ import {
   maintenanceInputOf,
   runMaintenance,
 } from './maintenance/maintenance-run.ts';
-import type {ConnectInput} from './pipeline/steps.ts';
+import type {ConnectInput, StepFailure} from './pipeline/steps.ts';
 import {stepsOf, type WiringPorts} from './pipeline/wiring.ts';
 import {phaseTitleOf, startTitleOf} from './surfaces/progress-titles.ts';
 import {type FailureStringId, textOfId} from './surfaces/failure-strings.ts';
@@ -302,7 +302,7 @@ export function wiringPortsOf(
       logger,
     },
     acquire: (request, limits) =>
-      acquireConnection(
+      acquireConnection<StepFailure>(
         {helper: machine.helpers, freePort: machine.freeSocksPort},
         request,
         limits,
