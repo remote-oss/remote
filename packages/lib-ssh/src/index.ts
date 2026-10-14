@@ -108,7 +108,6 @@ export {LineSplitter} from './process/line-splitter.ts';
 export {type LocalFiles, nodeLocalFiles} from './process/node-files.ts';
 export {
   planScript,
-  posixQuote,
   preludeProgram,
   type ScriptPlan,
 } from './process/remote-program.ts';
