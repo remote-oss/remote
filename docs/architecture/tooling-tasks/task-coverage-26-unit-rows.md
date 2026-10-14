@@ -189,6 +189,15 @@ index 4bf10dc..606661a 100644
      deepStrictEqual(askpassEnvironment({...REQUEST, external: false}), {
        SSH_ASKPASS: '/run/rh-askpass/rh-askpass-0123456789abcdef',
        SSH_ASKPASS_REQUIRE: 'force',
+@@ -17,7 +17,7 @@ describe('askpass environment', () => {
+     });
+   });
+ 
+-  it("adds nothing when the user's own askpass applies, neither SSH_ASKPASS_REQUIRE nor DISPLAY", () => {
++  it("F-2101 AC-17: adds nothing when the user's own askpass applies, neither SSH_ASKPASS_REQUIRE nor DISPLAY", () => {
+     deepStrictEqual(askpassEnvironment({...REQUEST, external: true}), {});
+   });
+ });
 diff --git a/packages/lib-ssh/test/unit/session.test.ts b/packages/lib-ssh/test/unit/session.test.ts
 index 3658e02..1bae26d 100644
 --- a/packages/lib-ssh/test/unit/session.test.ts
@@ -659,7 +668,7 @@ In `docs/architecture/catalogue/coverage-slice1.tsv`, in the same PR. Change onl
 lines; they are all `todo` today.
 
 - **To `unit`, with an empty reason:**
-  - F-2101 AC-2, 18, 27, 30;
+  - F-2101 AC-2, 17, 18, 27, 30;
   - F-2102 AC-2, 3, 23;
   - F-2202 AC-1, 19;
   - F-2305 AC-2, 7;
@@ -670,9 +679,9 @@ lines; they are all `todo` today.
   - F-2202 AC-21 and AC-32, with the reason `build order slice 1: the Remotes view is remote-explorer's`;
   - F-2401 AC-16 and AC-17, with the reason `D-86: only clearAllSessionHints of F-2605 is in 0.2`.
 
-F-2101 AC-17 stays `todo` (athena, 2026-10-14). Its clause "SSH_ASKPASS_REQUIRE is not set" contradicts the
-recorded adaptation (F-2309 BR-3) until the spec scopes it to the external askpass. The AC-17 rows are still built, and
-the tag follows when the spec is republished. `node tools/check-coverage.ts` then prints `unit` 20 higher and
+F-2101 AC-17 is `unit` (athena, 2026-10-14). remote-ssh#19 scopes it: the check runs without SSH_ASKPASS_REQUIRE
+(the `locate-step.test.ts` row), an external askpass gets none (the `askpass-environment.test.ts` row, re-cited in the
+patch above), and our own endpoint follows F-2309 BR-3. `node tools/check-coverage.ts` then prints `unit` 21 higher and
 `deferred` 4 higher than main does before the change.
 
 ## 5. Not in this card
