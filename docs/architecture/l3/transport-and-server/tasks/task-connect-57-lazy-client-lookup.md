@@ -26,8 +26,9 @@ connect, in both modes. The shared connection step then builds the acquire reque
 
 ## 2. The design (athena: lazy, never a "is a helper running?" pre-check)
 
-A separate check before the acquire races with the helper's end. So the decision is the acquire's own claim: the
-lookup runs inside the acquire, only on the path that claims the key and starts a helper.
+A separate "is a helper running?" check before the acquire would race with the helper's end, and could skip a lookup
+the start then needs. So the lookup runs inside the acquire, on every path that will claim the key, and never on a
+join. Every start path runs it itself (athena, her design check on #826, correcting #714's "after the claim").
 
 ### 2.1 lib-helper (`client/acquire.ts`)
 
@@ -38,16 +39,35 @@ lookup runs inside the acquire, only on the path that claims the key and starts 
 - **The record:** the claim writes the record with an **empty payload, `{}`**, and nothing rewrites it. A per-user
   registry holds no secret beyond the nonce (`types.ts`; athena on #816). The prepared payload may hold effective ssh
   options such as `ProxyCommand`, `SetEnv` or `RemoteCommand`, so it never goes into the registry file.
-- **The prepared payload's path:** `start(environment, request, record)` calls `request.prepare()` after the claim and
-  before the spawn, once. Its `options` and `payload` reach the helper only through the spawn's parameters:
+- **When `prepare` runs: before the claim,** on the paths that will claim, never on a join (athena on #826). A joiner
+  trusts a record only until `record.startedAt + startLimitMilliseconds` (`join`, 10 s in remote-ssh's bounds). The
+  lookup has no bound (F-2101 BR-11: `Match exec`, a slow wrapper, 7.E3's silent client). So a lookup between the
+  claim and the spawn would let a second window call the live claim stale, start a second helper, and have the first
+  starter's cancel path remove the second's record file. `acquire` therefore:
+  1. **Reads the record first,** through the registry's read: `files.read(recordPath(…))` and `parseRecord`, as
+     `stop` does.
+     - **None:** `prepare`, then `claim` with a record stamped `startedAt: environment.clock()` *after* `prepare`.
+       - `claimed`: spawn with the prepared values.
+       - `existing` (a rival won the race): drop the prepared values and join.
+     - **A record:** join. On success there's no lookup (F-2101 AC-14).
+  2. **A stale record** (the join failed): `prepare`, then `replaceStale`.
+     - `claimed`: spawn.
+     - `existing`: join.
+  3. **A refusal or a cancellation in `prepare`** happens before any claim. It touches no record and removes no file,
+     so no other window's record is ever at risk.
+
+  The one race left is two windows that both find no record, both look up, and one claims while the other joins. That
+  wastes a lookup, never skips a needed one, and never makes a second helper.
+- **The prepared payload's path:** its `options` and `payload` reach the helper only through the spawn's parameters:
   `spawnSpecification`'s `HelperParameters`, carried in `REMOTE_OSS_HELPER_PARAMETERS` (`client/spawn.ts`), never in
   argv. The helper serves the payload in its welcome (`runtime/serve.ts`), as it does today.
 - **Joiners** read the payload from the welcome, `lease.payload` (`client/lease.ts`), exactly as `socksPort` is read
   today. `HelperRecord.payload` is no longer read by any client.
-- `{kind: 'refused', refusal}` → remove the record, as the `spawnFailed` path does, so the key is free at once, and
-  return the new `AcquireOutcome` member `{kind: 'refused'; refusal: Refusal}`.
-- A cancellation that lands during `prepare` → remove the record, then `{kind: 'failed', failure: 'cancelled'}`.
-- The `existing` and `replaceStale` → `existing` paths never call `prepare`.
+- `{kind: 'refused', refusal}` → return the new `AcquireOutcome` member `{kind: 'refused'; refusal: Refusal}`, with no
+  claim made and nothing removed.
+- A cancellation during `prepare` → `{kind: 'failed', failure: 'cancelled'}`, with no claim made and nothing removed.
+- The join of an existing record never calls `prepare`. The `spawnFailed` path keeps its own removal of the record it
+  claimed.
 - **Other callers of `acquire`:** on main, lib-ssh's `acquireConnection` is the only one (grep `acquire(` in
   `packages/*/src`). If another has appeared, it passes `prepare: async () => ({kind:
   'ready', options, payload})` with today's values, so its behaviour is unchanged.
@@ -99,16 +119,18 @@ lookup runs inside the acquire, only on the path that claims the key and starts 
 
 ## 3. Rows
 
-**lib-helper (`acquire.test.ts`):**
+**lib-helper (`client.test.ts`):**
 
 | Cite | Given | Expected |
 |---|---|---|
-| F-2101 BR-9 | a free key | `prepare` called once, before the spawn; the spawn's parameters carry the prepared options and payload |
+| F-2101 BR-9 | a free key | `prepare` called once, before the record exists; the claimed record's `startedAt` is stamped after `prepare` returns; the spawn's parameters carry the prepared options and payload |
 | lib-helper `types.ts` (no secret in the registry) | a start, then a join | the record file's `payload` is `{}`; the starter's and the joiner's `lease.payload` both hold the prepared values (from the welcome) |
 | F-2101 6.4 | an existing, live helper | `prepare` never called; the lease joins |
-| F-2101 6.4 | a stale record replaced by a live one (`replaceStale` → `existing`) | `prepare` never called |
-| F-2101 BR-9 | `prepare` refusing `'r'` | outcome `{kind: 'refused', refusal: 'r'}`; no spawn; the record file is gone |
-| contracts | cancellation during `prepare` | `cancelled`; the record file is gone; no spawn |
+| athena on #826 | a rival's record appearing during `prepare` (the fake registry writes it while `prepare` waits) | the claim answers `existing`; the acquire joins the rival; no spawn |
+| athena on #826 | a stale record (the join fails) | `prepare` runs, then `replaceStale`, in that order; `claimed` spawns, `existing` joins |
+| F-2101 BR-9 | `prepare` refusing `'r'` | outcome `{kind: 'refused', refusal: 'r'}`; no claim, no spawn; the registry folder is unchanged |
+| contracts | cancellation during `prepare` | `cancelled`; no record exists, and nothing was removed (the fake file port saw no `remove`) |
+| athena on #826 | a slow `prepare` that resolves after the start limit, with a second `acquire` for the same key started meanwhile on the fake clock | exactly one spawn, and one helper record; the second acquire joins it; no record file is removed |
 
 **lib-ssh (`connection-client.test.ts` or the file that tests `acquireConnection`):**
 
