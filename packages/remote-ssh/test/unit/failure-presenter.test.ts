@@ -132,6 +132,12 @@ describe('the failure presenter', () => {
       'Could not establish connection to "box": Network is unreachable.',
     );
   });
+  it('F-2101 AC-21: a missing ssh shows its text in the dialog', async () => {
+    deepStrictEqual(
+      await textFor({reason: {id: 'S009'}}),
+      'Could not establish connection to "box": An SSH installation couldn\'t be found.',
+    );
+  });
 
   it('F-2601 S031: a reason with values resolves through the table, no second full stop', async () => {
     deepStrictEqual(

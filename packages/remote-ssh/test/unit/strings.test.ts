@@ -19,6 +19,7 @@ const SETUP_TEXTS = [
 ];
 
 const FAILURE_TEXTS = [
+  "An SSH installation couldn't be found",
   "Can't assign requested address",
   'Cancel',
   'Close Remote',

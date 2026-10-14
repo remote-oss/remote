@@ -37,6 +37,7 @@
   "Can't assign requested address": "Can't assign requested address",
   "Could not resolve hostname": "Could not resolve hostname",
   "Hostname contains invalid characters": "Hostname contains invalid characters",
+  "An SSH installation couldn't be found": "An SSH installation couldn't be found",
   "Network is unreachable": "Network is unreachable",
   "No route to host": "No route to host",
   "Port forwarding is disabled": "Port forwarding is disabled",

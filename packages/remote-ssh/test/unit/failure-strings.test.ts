@@ -15,6 +15,7 @@ function marked(template: string): string {
 describe('the texts of the failure dialog and the progress', () => {
   it('F-2304, F-2601: the table holds the ids of the card and of the classifier reasons', () => {
     deepStrictEqual(Object.keys(FAILURE_TEMPLATES), [
+      'S009',
       'S014',
       'S015',
       'S022',
