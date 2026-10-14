@@ -42,6 +42,10 @@ All under `packages/remote-containers/`, unless named otherwise.
 | `src/connector/register-connector.ts` | `options.presenter` is C8's; the window's target comes from the resolver handle (§3.4) |
 | `l10n/bundle.l10n*.json` | every new template, in every locale, as containers-03 did for `ENGINE_TEMPLATES` |
 | `docs/remote-containers/README.md` (new, at the repository root's `docs/`) | the page "Open Documentation" opens (§3.6) |
+| `packages/remote-containers/README.md` | a "Requirements" section, which "Learn More" opens (§3.6) |
+| `src/state/timed-store.ts` (new, shared with containers-14's rebuild intent) | pure: a keyed map in `globalState` whose entries expire after 5 minutes (§3.9) |
+| `src/open/pending-edit.ts` (new) | the pending edit of §3.9 over `timed-store.ts` |
+| `package.json`, `src/extension.ts` | `onStartupFinished`, and the pending edit opened at activation (§3.9) |
 | `tests/acceptance/windows/renderer.ts` | `quickPickOf(name)` and `answerQuickPick(name, label)` (§4.3) |
 | `tests/acceptance/containers/recovery.test.ts` (new) | the acceptance rows of §4.3 |
 
@@ -108,7 +112,7 @@ export interface FailureDialog {
   /** In the order they're passed to the editor; the last is the close affordance. */
   buttons: readonly FailureButton[];
 }
-export type FailureButton = {label: string; action: 'retry' | 'editLocally' | 'moreActions'};
+export type FailureButton = {label: string; action: 'retry' | 'editLocally' | 'moreActions' | 'learnMore'};
 export function failureDialogOf(failed: Failed, target: DevContainerTarget | undefined, translate: Translate): FailureDialog
 ```
 
@@ -121,11 +125,16 @@ export function failureDialogOf(failed: Failed, target: DevContainerTarget | und
 | `malformedAuthority`, which has no reason | `''` | S034 |
 | every other kind | `''` (F-0410 5.0 step 2: "no separate message headline") | the reason's text through `failureText`: S018, S019, S034, S339, S104, S144, S031 or S359 |
 
-**Buttons**, in this order, the last one `isCloseAffordance: true`:
+**Buttons**, in this order, the last one `isCloseAffordance: true`. For every kind but `requirementsNotMet`:
 1. `Retry` (S297), `retry`;
 2. `Edit {0} Locally` (S158), `editLocally`. `{0}` is the POSIX base name of `target.configFile.path`. It's left out
    when `target` is `undefined`: `malformedAuthority` has no folder to go back to.
 3. `More Actions...` (S227), `moreActions`.
+
+**For `requirementsNotMet`** (F-0503 7.E1's set; athena on #892, ruling 2): `Learn More` (S218), `learnMore`, then
+`Edit {0} Locally` (S158, left out without a `target`), then `More Actions...` (S227). On screen F-0503 wants "Edit
+devcontainer.json Locally | More Actions... | Learn More", with Learn More primary and the default for Enter. There's
+no Retry: the container doesn't change by retrying.
 
 On screen, F-0410 5.0 step 2 wants "Edit devcontainer.json Locally | More Actions... | Retry", with Retry primary and
 the default for Enter. The custom dialog's rendering of this order is measured in §4.3 row R1 (open row 3).
@@ -162,6 +171,7 @@ its own (F-0410 5.0 step 2, AC-2).
 | `Retry`, or Enter on it | resolves `'reload'`: lib-authority reloads the window and the connect runs again |
 | `Edit devcontainer.json Locally` | calls `openLocally(target.hostPath)` and resolves `'handled'` |
 | `More Actions...`, or Escape (`undefined`, the close affordance) | resolves `'handled'`, then `later(() => showQuickPick())` |
+| `Learn More` (`requirementsNotMet` only) | calls `openExternal(CONTAINERS_REQUIREMENTS)`, resolves `'handled'`, then `later(() => showQuickPick())`, as F-0503 7.E1 does |
 
 - **`noServerSource`** keeps containers-08 §3.11's dialog: `Open Setting` runs `openSetting('remote.serverDownloadBaseUrl')`,
   and `Cancel` and Escape do nothing. Each resolves `'handled'`. Move that code here unchanged.
@@ -173,7 +183,9 @@ its own (F-0410 5.0 step 2, AC-2).
   `currentConnection()?.decodedTarget`. It's `undefined` when there's none, or when it's malformed.
 - **`openLocally(folder)`** is `executeCommand('vscode.openFolder', Uri.file(folder), {forceReuseWindow: true})`. The
   window becomes a plain local window on the folder, and Reopen in Container is available again (AC-4's first half).
-  Opening the configuration file in that window is open row 1.
+  Before it, the presenter stores the pending edit of §3.9, `storePendingEdit(target.hostPath, target.configFile.fsPath
+  ?? target.configFile.path)`, so the new window opens the configuration file. A rejected store is logged at warn,
+  and the reopen still happens.
 
 ### 3.5 The quick pick (F-0202's STR:S272 surface; F-0410 5.0 step 4)
 
@@ -204,6 +216,21 @@ F-0202 AC-10 names the reference's own help page. Our product's help lives in ou
 export const CONTAINERS_DOCUMENTATION =
   'https://github.com/remote-oss/remote/blob/main/docs/remote-containers/README.md#when-the-dev-container-cant-be-set-up';
 ```
+
+**"Learn More"** for `requirementsNotMet` (athena on #892, ruling 2) opens our own page, never the reference's (R-31,
+ADR-0008):
+
+```ts
+/** The page "Learn More" opens when the container doesn't meet the server's requirements (F-0503 7.E1). */
+export const CONTAINERS_REQUIREMENTS =
+  'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md#requirements';
+```
+
+`packages/remote-containers/README.md` gains a section `## Requirements` with what F-0503 states, and nothing more:
+- the server runs on a glibc container with glibc 2.28 or later, `libstdc++` and `ldconfig` (F-0503 5.0 step 6 and
+  7.E1);
+- Alpine (musl) containers are supported on x86_64 and arm64 (F-0503 6.1);
+- the server checks this on every connect, and the dialog's detail is its own output.
 
 `docs/remote-containers/README.md` is new, with one section under that heading. It covers what the dialog's detail
 means (S018, S019, S034, S339, S104, S144), what each button and quick-pick item does, and where the log is
@@ -245,7 +272,45 @@ The exact English templates, from the specs' string tables:
 | S420 (AC-21) | no subcommand outside `up` fails a connect in release 1 (containers-08 F-0504 BR-2 only logs) | `deferred`, "containers release 1: no CLI subcommand outside `up` fails a connect" |
 | "Rebuild Container" in the quick pick (AC-6, AC-11b's item, AC-12b's Rebuild) | not in release 1 (the recovery path; containers-14 §1) | `deferred`, reason `containers release 1: the More Actions... rebuild item is the recovery path, later` |
 | AC-10, the disconnected-state menu | already deferred under brief ruling 8 | unchanged |
-| AC-4's and AC-8's configuration tab and log group | open row 1 | `todo` |
+| AC-4's and AC-8's log group | lib-log has no file sink | `todo` |
+
+### 3.9 The pending edit and `onStartupFinished` (athena on #892, ruling 1)
+
+athena amended brief ruling 8: the manifest gains the activation event `onStartupFinished` (F-0101's primary event,
+D-14), and only that one, not the two `workspaceContains` fallbacks. It's what makes Edit Locally's configuration
+tab buildable. In a window without the proposals it brings F-0101 BR-9's setup notice, once until dismissed, which is
+the designed onboarding.
+
+**`src/state/timed-store.ts`**, pure, over the `IntentMemento` port of containers-14 (`get`, `update`):
+
+```ts
+export const TIMED_ENTRY_MILLISECONDS = 5 * 60 * 1000;
+export async function storeTimedEntry<T>(memento: IntentMemento, key: string, id: string, value: T, now: number): Promise<void>;
+export async function takeTimedEntry<T>(memento: IntentMemento, key: string, id: string, now: number, isValue: (value: unknown) => value is T): Promise<T | undefined>;
+```
+
+- The stored shape is `{[id]: {at: number, value: T}}`.
+- The rules are containers-14 §3.1's, with its rows:
+  - stale or negative ages are dropped;
+  - malformed entries are dropped;
+  - `take` writes only when the cleaned map differs from what `get` returned.
+- containers-14's `rebuild-intent.ts` is then a thin layer over this module. **Whichever of the two cards is built
+  first writes `timed-store.ts`; the other reuses it.** The rows of containers-14 §5.1 move to `timed-store.test.ts`.
+
+**`src/open/pending-edit.ts`:**
+- `PENDING_EDITS_KEY = 'remote-oss.remote-containers.pendingEdits'` (R-27, never synced). Entries are keyed by the
+  local folder's `fsPath`, and the value is `{configFile: string}`, the configuration's local path.
+- `storePendingEdit` and `takePendingEdit` go over `timed-store.ts`.
+
+**At activation** (`extension.ts`, after the stand-down guard and the family gate, whatever the gate found):
+- when `vscode.env.remoteName` is `undefined` and the window has exactly one `file` folder, take the entry for that
+  folder's `fsPath`;
+- when there is one, open it with `executeCommand('vscode.open', Uri.file(configFile))`. A file that's gone shows
+  core's missing-file placeholder (F-0410 7.E5).
+- It runs once per activation, and a failure is logged at warn.
+
+**What stays `todo`:** AC-4 and AC-8's session-log half (the log in the second editor group). lib-log has no file
+sink.
 
 ## 4. Rows
 
@@ -324,7 +389,7 @@ them.
 | R2, F-0410 AC-11 | an `alpine:3.22` image with `mounts: ["source=<run>/missing,target=/x,type=bind"]` | detail S018; no container with the folder's labels afterwards |
 | R3, F-0410 AC-12 | an `alpine:3.22` image with `appPort: [<port>]`, and a labelled helper container publishing `<port>` first | detail S019; one container with the folder's labels, status `Created` |
 | R4, F-0410 AC-5, F-0202 AC-9 | R1's dialog, `answerDialog('More Actions...')` | `quickPickOf`: placeholder S272, items `Reload Window`, `Edit devcontainer.json Locally`, `Open Recent...`, `Open Documentation`. Record the window title and the remote indicator in the PR (open row 4) |
-| R5, F-0410 AC-4 (first half) | R1's dialog, `Edit devcontainer.json Locally` | within 10 s the window's agent reports no remote and the folder open |
+| R5, F-0410 AC-4 (the reopen and the tab) | R1's dialog, `Edit devcontainer.json Locally` | within 10 s the window's agent reports no remote and the folder open, and its active editor is the folder's `.devcontainer/devcontainer.json` (the agent's `state.activeEditor`; add the field if it's missing) |
 | R6, F-0410 AC-3 | R1's dialog, `Retry` | after the reload, the same dialog: no message and detail S034 |
 | R7, F-0201 7.E14 (AC-50's dialog; AC-50's own commands come with containers-14) | a window connected to an image folder (containers-09 part 2, row 1's folder); `dev.containers.dockerPath` set to `<run>/no-such-docker` in the user settings; `Developer: Reload Window` | the three-button dialog, detail S339. Reset the setting in an `afterEach` |
 | R8, F-0410 AC-2 | R1's dialog, left alone 35 s | `dialogOf` unchanged, and the agent still reports `Opening Remote...` as its state |
@@ -343,7 +408,7 @@ F-0201 AC-50 stays `todo`, because its commands are containers-14's. R7 is that 
 only, because the custom dialog's Escape can't be sent reliably over CDP. If R4 can send it, mark AC-16
 `acceptance`.
 
-**Deferred** with §3.8's reasons. AC-4 and AC-8 stay `todo`, with open row 1.
+**Deferred** with §3.8's reasons. AC-4 and AC-8 become `acceptance` for the configuration tab once R5 shows it; their log-group half stays `todo`.
 
 ## 6. Gates and review
 
@@ -355,17 +420,9 @@ only, because the custom dialog's Escape can't be sent reliably over CDP. If R4 
 
 ## 7. Open rows (stop and report on #881)
 
-1. **Edit Locally's configuration tab** (F-0410 AC-4 and AC-8, the tab and the log group; 5.0 step 3).
-   - **Why it's open:** the window that must open `devcontainer.json` is a new, local extension host. Our extension
-     activates there only on `onStartupFinished` (F-0101's ACT atom). containers-01 deferred that event to increment 2
-     under brief ruling 8, and the session log file of the second group has no sink in lib-log.
-   - **What to build:** the reopen only (§3.4). Leave both halves `todo` with this row.
-   - **If athena moves `onStartupFinished` into release 1:** the follow-up stores `{configFile, at}` under
-     `remote-oss.remote-containers.pendingEdits` in `globalState` (R-27), keyed by the folder's `fsPath`. At activation
-     in a local window, an entry younger than 5 minutes (contracts §3's intent rule) is read once, deleted, and opened
-     with `vscode.open`, which shows core's missing-file placeholder for a deleted file (7.E5). That's a separate card.
-2. **F-0503 7.E1's "Learn More"** (S218, primary) for `requirementsNotMet` opens a help address of the reference's.
-   Until athena names one of ours, `requirementsNotMet` uses §3.3's three buttons. Report the deviation in the PR.
+1. **The pending edit isn't opened** in R5, because the new window's activation comes before the store reaches
+   `globalState`: report the timing. Don't add a retry loop.
+2. **The `requirementsNotMet` dialog** doesn't render F-0503's order with Learn More primary: report what it renders.
 3. **Button order and Enter.** If the custom dialog doesn't render `Edit devcontainer.json Locally | More Actions... |
    Retry`, with `Retry` primary and the default for Enter, report what it renders. Don't reorder by platform.
 4. **The disconnected title and indicator** after More Actions (F-0410 AC-5: `<folder> [Dev Container]`,
