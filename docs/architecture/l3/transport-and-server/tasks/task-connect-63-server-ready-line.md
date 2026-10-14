@@ -26,8 +26,11 @@ matches aren't as narrow as the line's form allows.
    `sed -n 's/^Extension host agent listening on \(\/[^ ]*\)$/\1/p'`. Choose the form by `$SOCKET_MODE`. Allow one
    trailing `\r` if the measurement shows one. Keep `tail -n 1`: the server writes a new line on each start.
 3. **`start_failed`:** `grep -q '^<measured whole line or its fixed prefix>'`, anchored at the start.
-4. **`started`:** port mode accepts only `no:[1-9][0-9]*` with nothing after. Reject any other character, with
-   `case $1 in *[!0-9]*|'') start_failed ;; esac` before the existing `case`.
+4. **`started`:** the digit check applies **only in port mode's arm** (themis on #837, measured). A socket path has
+   non-digits, so a check before the mode `case` would fail every socket-mode start. In the existing
+   `case $SOCKET_MODE:$1 in` add, before the port arm, `no:|no:0*|no:*[!0-9]*) start_failed ;;`, and keep the port arm
+   `no:*)` for the rest. A port is then `[1-9][0-9]*`: no empty value, no `0` or leading zeros, no non-digit. The
+   socket arm (`yes:*`) is unchanged.
 5. `READY_LINE` stays exported from `posix-script.ts`, as the shared text of both forms.
 
 ## 3. Rows (`lib-server/test/unit/bootstrap-script.test.ts`, the `fakeHost` style)
@@ -38,6 +41,8 @@ matches aren't as narrow as the line's form allows.
 | `ADR-0010: the ready port is digits only` | `Extension host agent listening on 5abc` | not started on `5abc` (fails on main) |
 | `ADR-0010: a failure phrase mid-line is not the failure` | a log with `note: Could not find free port in range earlier` | no `server.failure noFreePort` (fails on main) |
 | `F-2409: the measured ready line, port and socket` | the measured lines | the port, the socket path |
+| `F-2409: socket mode starts with its socket path` | socket mode, the measured socket ready line with a `/tmp/…sock` path | `started` with that path, not `start_failed` |
+| `F-2409: port 0 and a leading zero are not a port` | port mode, the ready line with `0`, then `041000` | `start_failed` both times; `41000` gives `started` |
 | `ADR-0010: noise around the ready line` | N1–N5 (connect-59 §3) before and after the real line | the real port |
 
 **Defect rule:** the first three rows must fail on main and pass with the fix. Paste both runs.
