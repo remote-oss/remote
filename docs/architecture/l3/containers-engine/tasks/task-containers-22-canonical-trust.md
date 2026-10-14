@@ -6,7 +6,7 @@ Issue: #921. Milestone 0.4, gating containers release 1 (athena's ruling, window
 **Amended 2026-10-14 (athena on #921, comment after 6177675346).** Core asks for canonical URIs once, at workbench
 start, in parallel with the resolve ([oss] `workspaceTrust.ts` `initializeWorkspaceTrust`), so a mapping that waits for
 a held connection answers too late. The mapping is now async. For a window with no connection held, it answers from a
-`readConfiguration` of the payload, memoized per payload and shared with the connect (§2.2 item 2).
+`readConfiguration` of the payload without a container, memoized per payload (§2.2 item 2).
 
 Sources:
 - F-0106 (remote-oss/remote-containers#46): 6.11's folder dev-container row, 6.12, AC-39, AC-41 and AC-42;
