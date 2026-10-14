@@ -211,8 +211,22 @@ describe('connection helper', () => {
         ...REQUEST,
         effective: {...REQUEST.effective, connectTimeout: '20'},
       }),
-      sessionStart(20).remoteProgram,
+      sessionStart(22).remoteProgram,
     );
+  });
+
+  it("F-2105 BR-3: the shared session's login shell is bounded at the connect wait", async () => {
+    const ended = start({
+      ...REQUEST,
+      effective: {...REQUEST.effective, connectTimeout: '10'},
+    });
+    const connection = await join();
+    connection.send({type: 'request', requestId: 1, body: {type: 'connect'}});
+    await settled();
+    const firstLine = spawner.started[0]?.inputText().split('\n')[0];
+    connection.send({type: 'stop'});
+    await ended;
+    strictEqual(firstLine, 'LAYER1_SECONDS=12');
   });
 
   it("#443: a host's own timeout of 0 takes the unbounded wait", async () => {
@@ -225,13 +239,13 @@ describe('connection helper', () => {
     );
   });
 
-  it('#443: a setting of 7.5 and no host value rounds up to 8', async () => {
+  it('#443: a setting of 7.5 and no host value rounds up to 10', async () => {
     deepStrictEqual(
       await lastArgumentFor({
         ...REQUEST,
         settings: {...REQUEST.settings, connectTimeout: 7.5},
       }),
-      sessionStart(8).remoteProgram,
+      sessionStart(10).remoteProgram,
     );
   });
 

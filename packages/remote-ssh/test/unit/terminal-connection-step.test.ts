@@ -492,6 +492,19 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(await result, {kind: 'failed', failure: {kind: 'timeout'}});
   });
 
+  it("F-2105 BR-3: the terminal session's login shell is bounded at the connect wait", async () => {
+    const made = fixture({timeoutSeconds: 10, fromHost: true});
+    const {terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    await settled();
+    deepStrictEqual(
+      terminal.sent
+        .find(text => text.startsWith('LAYER1_SECONDS='))
+        ?.split('\n')[0],
+      'LAYER1_SECONDS=12',
+    );
+  });
+
   it('contracts: the questions are taken down at the handover', async () => {
     const made = fixture();
     const {result, terminal} = await started(made);

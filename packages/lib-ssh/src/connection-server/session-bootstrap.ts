@@ -5,7 +5,10 @@
  * reads the commands from the rest of the input, whatever the login shell is.
  */
 
-import type {ConnectWaitSettings} from '../process/connect-wait.ts';
+import {
+  type ConnectWaitSettings,
+  connectWaitMilliseconds,
+} from '../process/connect-wait.ts';
 import {preludeProgram} from '../process/remote-program.ts';
 
 /** The fewest and the most seconds the login shell's startup may take. */
@@ -82,17 +85,14 @@ export function sessionStart(layerOneSeconds: number): {
 }
 
 /**
- * The session start for a connect wait: the login shell may take as long as the connect timeout, in whole seconds,
+ * The session start for a connect wait: the login shell may take as long as the connect wait itself, in whole seconds,
  * rounded up, at least 1 and at most the ceiling; a host's own 0 takes the ceiling the wait names.
  */
 export function sessionStartFor(settings: ConnectWaitSettings): {
   remoteProgram: string;
   prelude: string;
 } {
-  const seconds =
-    settings.connectTimeoutSeconds === 0 && settings.fromHost
-      ? settings.unboundedWaitSeconds
-      : settings.connectTimeoutSeconds;
+  const seconds = connectWaitMilliseconds(settings) / 1000;
   return sessionStart(
     Math.min(
       LAYER_ONE_SECONDS.maximum,
