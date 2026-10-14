@@ -290,20 +290,39 @@ function stepsOf(ports: WiringPorts): ReturnType<typeof stepsWith> {
 }
 
 describe("the composition of a connect's steps", () => {
-  it("connect-14: validate reads the server settings of this connect's host alias", () => {
+  it("connect-14: checkInstallFolder reads the server settings of this connect's host alias", () => {
     const {ports} = portsOf({server: {serverInstallPath: {[ALIAS]: '/$bad'}}});
-    deepStrictEqual(stepsOf(ports).validate(inputFor('alex@dev:22')), {
-      kind: 'failed',
-      failure: {
-        kind: 'invalidSetting',
-        reason: {id: 'installPathProvided', values: ['/$bad']},
+    deepStrictEqual(
+      stepsOf(ports).checkInstallFolder(inputFor('alex@dev:22')),
+      {
+        kind: 'failed',
+        failure: {
+          kind: 'invalidSetting',
+          reason: {id: 'installPathProvided', values: ['/$bad']},
+        },
       },
+    );
+  });
+
+  it("F-2409 BR-2: checkStartSettings reads the server settings of this connect's host alias", () => {
+    const {ports} = portsOf({
+      server: {serverPickPortsFromRange: {[ALIAS]: '5000-4000'}},
     });
+    deepStrictEqual(
+      stepsOf(ports).checkStartSettings(inputFor('alex@dev:22')),
+      {
+        kind: 'failed',
+        failure: {
+          kind: 'invalidSetting',
+          reason: {id: 'reversedPortRange', values: []},
+        },
+      },
+    );
   });
 
   it("connect-14: another host's entry does not apply", () => {
     const {ports} = portsOf({server: {serverInstallPath: {other: '/$bad'}}});
-    deepStrictEqual(stepsOf(ports).validate(inputFor('dev')), {
+    deepStrictEqual(stepsOf(ports).checkInstallFolder(inputFor('dev')), {
       kind: 'done',
       value: undefined,
     });

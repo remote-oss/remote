@@ -20,6 +20,7 @@ export interface MaintenanceRun {
 export type MaintenanceSteps = Pick<
   ConnectSteps,
   | 'validate'
+  | 'checkInstallFolder'
   | 'locateClient'
   | 'decideTerms'
   | 'openConnection'
@@ -39,6 +40,12 @@ export function maintenanceInputOf(target: SshTarget): ConnectInput {
   };
 }
 
+/** The checks a Kill takes before it connects. */
+const KILL_CHECKS = ['validate', 'checkInstallFolder'] as const;
+
+/** The checks an Uninstall takes before it connects. */
+const UNINSTALL_CHECKS = ['validate'] as const;
+
 const STEP_RAN: MaintenanceRun = {result: 'stepRan', cause: ''};
 
 function failed(cause: string): MaintenanceRun {
@@ -55,9 +62,13 @@ export async function runMaintenance(
   action: 'kill' | 'uninstall',
   cancellation: AbortSignal,
 ): Promise<MaintenanceRun> {
-  const checked = steps.validate(input);
-  if (checked.kind === 'failed') {
-    return failed(`the target is not valid: ${checked.failure.kind}`);
+  // Uninstall never reads the install folder setting; Kill acts on the folder it names.
+  const checks = action === 'kill' ? KILL_CHECKS : UNINSTALL_CHECKS;
+  for (const check of checks) {
+    const checked = steps[check](input);
+    if (checked.kind === 'failed') {
+      return failed(`the target is not valid: ${checked.failure.kind}`);
+    }
   }
   const located = await steps.locateClient(input);
   if (located.kind === 'failed') {
