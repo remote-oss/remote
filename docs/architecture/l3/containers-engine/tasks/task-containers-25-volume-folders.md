@@ -40,7 +40,7 @@ export function sharedFoldersOf(profile: ProductProfile, platform: string): read
 - Otherwise, in this order:
   1. `/vscode/${volumeServerFolder(profile.applicationName)}`;
   2. that `+ '/bin'`;
-  3. that `+ '/' + platform`;
+  3. that `+ '/' + platform`.
 - The names come from lib-product, never literals here. For `codium`, they're `/vscode/codium-server`, `…/bin` and
   `…/bin/linux-x64`.
 - Folder 3 is `cacheFolders(…).serverTree` without its last segment. A row checks that they agree.
