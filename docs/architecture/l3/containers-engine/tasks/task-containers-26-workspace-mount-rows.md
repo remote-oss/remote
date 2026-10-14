@@ -8,7 +8,7 @@ changes. If a row fails on product behaviour, stop and report it on #954 (§5). 
 expected values.
 
 **Builds after:**
-- the harness PR on branch `tools/page-by-name` (`reopenStarted`, the read-only connect probe in
+- the harness PR #956 (`reopenStarted`, the read-only connect probe in
   `reopenInContainer`, `pageOf` by name, and `tests/acceptance/containers/folder-windows.ts`);
 - part B only: containers-11 (#947, F-0410's dialog).
 
