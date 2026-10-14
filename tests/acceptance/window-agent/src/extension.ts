@@ -177,6 +177,23 @@ export function activate(context: vscode.ExtensionContext): void {
       });
     }),
     vscode.commands.registerCommand(
+      'acceptance.agent.setting',
+      (settingId: string) => {
+        report(agentFolder, name, {
+          event: 'setting',
+          settingId,
+          value: vscode.workspace.getConfiguration().get(settingId) ?? null,
+        });
+      },
+    ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.updateSetting',
+      (settingId: string, value: unknown) =>
+        vscode.workspace
+          .getConfiguration()
+          .update(settingId, value, vscode.ConfigurationTarget.Global),
+    ),
+    vscode.commands.registerCommand(
       'acceptance.agent.forwardPort',
       async (remotePort: number) => {
         // openTunnel is a proposed API the agent's manifest enables; the types of the proposal are not part of this project.
