@@ -37,12 +37,10 @@ import {
 import {
   acceptanceRunId,
   buildDevContainerImage,
-  checked,
   startHostContainer,
   sweepStaleDevContainers,
-  type CommandRunner,
-  runCommand,
 } from './acceptance-run.ts';
+import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {
   agentSocketPath,
   controlFolderOf,
@@ -93,8 +91,9 @@ import {
 } from './repository.ts';
 
 /** The port mapping and the real runner, re-exported for the tests. */
-export {mappedPort, runCommand} from './acceptance-run.ts';
-export type {CommandResult} from './acceptance-run.ts';
+export {mappedPort} from './acceptance-run.ts';
+export {runCommand} from './command-runner.ts';
+export type {CommandResult} from './command-runner.ts';
 
 /** The editor version the tests run on: the floor of ADR-0007. */
 const EDITOR_VERSION = '1.139.1';

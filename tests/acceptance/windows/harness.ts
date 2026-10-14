@@ -19,7 +19,7 @@ import {
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {cutNetwork, restoreNetwork} from '../../../tools/acceptance-network.ts';
-import {runCommand} from '../../../tools/acceptance-run.ts';
+import {runCommand} from '../../../tools/command-runner.ts';
 import {processIdsOf} from '../../../tools/process-ids.ts';
 import {
   appendScriptTo,

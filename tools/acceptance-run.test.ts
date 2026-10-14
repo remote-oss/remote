@@ -21,10 +21,7 @@ import path from 'node:path';
 import {
   acceptanceRunId,
   buildDevContainerImage,
-  checked,
   cleanRun,
-  type CommandResult,
-  type CommandRunner,
   hostImageOf,
   type HostContainer,
   newPassword,
@@ -32,6 +29,11 @@ import {
   startHostContainer,
   sweepStaleDevContainers,
 } from './acceptance-run.ts';
+import {
+  checked,
+  type CommandResult,
+  type CommandRunner,
+} from './command-runner.ts';
 
 const RUN_ID = '77-2';
 

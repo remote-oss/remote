@@ -12,7 +12,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
-import {type CommandRunner, checked, newPassword} from './acceptance-run.ts';
+import {type CommandRunner, checked} from './command-runner.ts';
+import {newPassword} from './acceptance-run.ts';
 import {type Started, startDetached} from './acceptance-plain.ts';
 
 /** The principal the run's certificate is signed for: the host's certificate-only account. */
