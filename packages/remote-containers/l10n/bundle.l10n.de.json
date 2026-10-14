@@ -18,5 +18,22 @@
   "Docker version 17.12.0 or later required.": "Docker version 17.12.0 or later required.",
   "Show Log": "Show Log",
   "Make sure the Docker daemon is running.": "Make sure the Docker daemon is running.",
-  "Current user does not have permission to run 'docker'.": "Current user does not have permission to run 'docker'."
+  "Current user does not have permission to run 'docker'.": "Current user does not have permission to run 'docker'.",
+  "[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)": "[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)",
+  "Installing server": "Installing server",
+  "Starting server": "Starting server",
+  "Dev Container: {0}{1}": "Dev Container: {0}{1}",
+  "Dev Container{0}": "Dev Container{0}",
+  "{0} has no built-in VS Code Server download location for {1}. Set remote.serverDownloadBaseUrl to a URL template for this editor's own server builds.": "{0} has no built-in VS Code Server download location for {1}. Set remote.serverDownloadBaseUrl to a URL template for this editor's own server builds.",
+  "An error occurred setting up the container.": "An error occurred setting up the container.",
+  "Alpine Linux is not supported on the hardware architecture '{0}' of the container.": "Alpine Linux is not supported on the hardware architecture '{0}' of the container.",
+  "Current user does not have permission to run 'docker'. Try adding the user to the 'docker' group.": "Current user does not have permission to run 'docker'. Try adding the user to the 'docker' group.",
+  "Docker returned an error. Make sure the Docker daemon is running and select an option how to proceed.": "Docker returned an error. Make sure the Docker daemon is running and select an option how to proceed.",
+  "The 'docker' command was not found. Make sure Docker is installed.": "The 'docker' command was not found. Make sure Docker is installed.",
+  "The container does not meet all the requirements of the VS Code Server.": "The container does not meet all the requirements of the VS Code Server.",
+  "The hardware architecture '{0}' of the container is not supported.": "The hardware architecture '{0}' of the container is not supported.",
+  "Cancel": "Cancel",
+  "{0} needs you to accept the license terms of the {1} server before installing it.": "{0} needs you to accept the license terms of the {1} server before installing it.",
+  "Read the terms at {0}.": "Read the terms at {0}.",
+  "Accept and Continue": "Accept and Continue"
 }

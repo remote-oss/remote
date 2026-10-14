@@ -22,7 +22,7 @@ import {
 import {createServer as createHttpsServer} from 'node:https';
 import type {AddressInfo, Socket} from 'node:net';
 import path from 'node:path';
-import {type CommandRunner, checked} from './acceptance-run.ts';
+import {type CommandRunner, checked} from './command-runner.ts';
 
 /** The VSCodium server for Alpine the download host serves: the release the client is pinned to, by architecture. */
 export const SERVER_ARCHIVE = {

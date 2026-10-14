@@ -1,0 +1,83 @@
+{
+ "PROGRAMS": [
+  "docker-compose",
+  "docker",
+  "podman",
+  "kubectl"
+ ],
+ "PROGRAM_PLACEHOLDERS": [
+  "docker",
+  "dockerPath",
+  "docker-compose",
+  "compose",
+  "podman",
+  "kubectl",
+  "value",
+  "the configured docker path"
+ ],
+ "SUBS": {
+  "docker": "compose volume container image network context buildx system run start stop restart rm rmi ps inspect exec version info pause unpause kill create pull push build tag logs cp events login save load commit port top stats attach wait update rename export import history search plugin manifest builder",
+  "kubectl": "get describe exec logs apply delete config cp port-forward version api-resources auth create run explain top rollout scale patch label",
+  "docker-compose": "up down ps config version build start stop rm exec run logs pull"
+ },
+ "PROGRAM_OPTIONS": "-v|--version|-H|--host|--context|-c|-f|--file",
+ "CONSTRUCTION_FLAGS": {
+  "re": "(?<![\\w-])--(?:security-opt|docker-path|docker-compose-path)(?:[ \\t]+(?:<[^>\\n]+>|[\\w.=:/-]+(?<![.,;:])))?|(?<![\\w-])--format[ \\t]+\\{\\{[^}\\n]*\\}\\}",
+  "flags": 32
+ },
+ "FRAGMENT_FLAGS": "-{1,2}(security-opt|docker-path|docker-compose-path|format|force|short|size|mount)\\b|-v$",
+ "LABEL": {
+  "docker": "docker",
+  "dockerPath": "docker",
+  "value": "docker",
+  "the configured docker path": "docker",
+  "compose": "docker-compose",
+  "docker-compose": "docker-compose",
+  "podman": "podman",
+  "kubectl": "kubectl"
+ },
+ "DEFAULT_PROGRAM": "docker",
+ "RULES": [
+  {
+   "rule": "command-failed",
+   "placeholder": "Command failed: <docker command>",
+   "applies": "captured and prose"
+  },
+  {
+   "rule": "command-line",
+   "placeholder": "<docker command> | <podman command> | <kubectl command> | <docker-compose command>",
+   "applies": "captured: any docker/podman/compose/kubectl invocation with a subcommand; prose: one with options"
+  },
+  {
+   "rule": "command-fragment",
+   "placeholder": "`<docker command>` | `<command flags>`",
+   "applies": "prose: backticked fragments with options"
+  },
+  {
+   "rule": "construction-flags",
+   "placeholder": "<command flags>",
+   "applies": "prose: --security-opt, --docker-path, --format {{...}}"
+  }
+ ],
+ "GENERATED_NAME": {
+  "re": "^[a-z]+_[a-z]+$",
+  "flags": 32
+ },
+ "NORM_PATTERN_RULES": [
+  [
+   "host-temp-root",
+   "${TMP}/vsch-<user>",
+   "(?:\\$\\{SLOT_DIR\\}/tmp|/tmp)/vsch-[A-Za-z0-9._-]+",
+   "the extension's host temp root: the window's private TMPDIR, or /tmp"
+  ]
+ ],
+ "REFERENCE_ID": {
+  "re": "ms-vscode-remote",
+  "flags": 32
+ },
+ "REFERENCE_PUBLISHER": {
+  "re": "\\bMicrosoft\\b",
+  "flags": 32
+ },
+ "WINDOW_ENV": []
+}

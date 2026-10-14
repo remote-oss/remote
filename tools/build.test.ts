@@ -1,7 +1,9 @@
 import {deepStrictEqual, match, rejects} from 'node:assert';
+import {spawnSync} from 'node:child_process';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {buildPackages, COPIED_FILES} from './build.ts';
+import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
 describe('build', () => {
@@ -194,5 +196,31 @@ describe('build', () => {
         into: 'dist/devcontainers-cli',
       });
     });
+  });
+});
+
+describe('the extension bundle of Dev Containers', function () {
+  this.timeout(60000);
+
+  it('containers-07: the bundle loads in a process that has only a stand-in for vscode', async () => {
+    await buildPackages(REPOSITORY_ROOT, ['remote-containers']);
+    const loaded = spawnSync(
+      process.execPath,
+      [
+        '-e',
+        `const Module = require('node:module');
+const load = Module._load;
+Module._load = function (request, ...rest) {
+  return request === 'vscode' ? {} : load.call(this, request, ...rest);
+};
+require(process.argv[1]);`,
+        path.join(
+          REPOSITORY_ROOT,
+          'packages/remote-containers/dist/extension.js',
+        ),
+      ],
+      {encoding: 'utf8'},
+    );
+    deepStrictEqual([loaded.status, loaded.stderr], [0, '']);
   });
 });

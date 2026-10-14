@@ -1,0 +1,217 @@
+import {deepStrictEqual} from 'node:assert';
+import {
+  type ConnectPhase,
+  type Connected,
+  encodeAuthority,
+  type ProgressRequest,
+  type ResourceLabelFormatter,
+} from 'lib-authority';
+import {recordingResolverEditor} from 'lib-authority/testing/recording-resolver-editor';
+import type {CommandHost} from 'lib-identifiers';
+import type {ContainerConnector} from '../../src/connect/connector.ts';
+import {registerContainerResolver} from '../../src/connect/register-connector.ts';
+
+const AUTHORITY = encodeAuthority({
+  family: 'dev-container',
+  target: {payload: '7b7d'},
+  rawHostString: '7b7d',
+});
+
+const CONNECTED: Connected = {
+  address: {host: '127.0.0.1', port: 4321},
+  connectionToken: 'token',
+  extensionHostEnv: {},
+  environmentTunnels: [],
+  trusted: false,
+};
+
+/** The registration over fakes. */
+async function registered(
+  options: {
+    resolversGranted?: boolean;
+    identity?: {name: string | undefined; context: string | undefined};
+  } = {},
+) {
+  const events: string[] = [];
+  const requests: ProgressRequest[] = [];
+  const formatters: ResourceLabelFormatter[] = [];
+  const disposed: string[] = [];
+  const commands = new Map<string, () => unknown>();
+  const recording = recordingResolverEditor(events);
+  const listeners: Array<(phase: ConnectPhase) => void> = [];
+  const connector: ContainerConnector = {
+    connect: () => {
+      for (const listener of listeners) {
+        listener({name: 'installing'});
+      }
+      return Promise.resolve(CONNECTED);
+    },
+    cancel: () => undefined,
+    revealDetails: () => undefined,
+    heldIdentity: () => options.identity,
+    onPhase: listener => {
+      listeners.push(listener);
+      return () => undefined;
+    },
+    onTransportLost: () => () => undefined,
+    onTransportClosed: () => () => undefined,
+  };
+  const host: CommandHost = {
+    registerCommand: (commandId, callback) => {
+      commands.set(commandId, callback);
+      return {
+        dispose: () => {
+          disposed.push(commandId);
+        },
+      };
+    },
+    showOutOfContext: () => undefined,
+  };
+  let revealed = 0;
+  const result = await registerContainerResolver(
+    {
+      resolverEditor: {
+        ...recording.editor,
+        progress: {
+          withProgress: (request, task) => {
+            requests.push(request);
+            return recording.editor.progress.withProgress(request, task);
+          },
+        },
+      },
+      labels: {
+        registerResourceLabelFormatter: formatter => {
+          formatters.push(formatter);
+          return {
+            dispose: () => {
+              disposed.push('label');
+            },
+          };
+        },
+      },
+      commands: host,
+      presenter: {
+        showError: () => Promise.resolve(undefined),
+        openSetting: () => Promise.resolve(),
+      },
+      translate: template => template,
+    },
+    connector,
+    {
+      resolversGranted: options.resolversGranted ?? true,
+      revealLog: () => {
+        revealed += 1;
+      },
+    },
+  );
+  return {
+    result,
+    events,
+    requests,
+    formatters,
+    disposed,
+    commands,
+    recording,
+    revealed: () => revealed,
+  };
+}
+
+describe('the registration of the container connector (card containers-08)', () => {
+  it('contracts §3.2: the resolver of dev-container is registered when the editor grants the proposal', async () => {
+    const seen = await registered();
+    deepStrictEqual(
+      [seen.result.registration, seen.events],
+      ['registered', ['register dev-container']],
+    );
+  });
+
+  it('brief ruling 9: without the resolvers grant the registration reports the missing proposal, and the log command is still there', async () => {
+    const seen = await registered({resolversGranted: false});
+    deepStrictEqual(
+      [seen.result.registration, seen.events, [...seen.commands.keys()]],
+      ['proposalMissing', [], ['remote-containers.revealLogTerminal']],
+    );
+  });
+
+  it('F-0408 BR-12: the progress starts with the S087 link and offers no Cancel', async () => {
+    const seen = await registered();
+    await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 1});
+    deepStrictEqual(
+      seen.requests.map(request => [request.title, request.cancellable]),
+      [
+        [
+          '[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)',
+          false,
+        ],
+      ],
+    );
+  });
+
+  it('F-0503 AC-2 (our half): a stage the connector reports is the title after the link, and the progress shows the details link', async () => {
+    const seen = await registered();
+    await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 1});
+    deepStrictEqual(
+      seen.events.filter(event => event.startsWith('phase')),
+      [
+        'phase [Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal): Installing server',
+      ],
+    );
+  });
+
+  it('F-0504 AC-1: after the first resolve settles connected the label is registered once, with the window’s suffix', async () => {
+    const seen = await registered({
+      identity: {name: 'Proj', context: undefined},
+    });
+    await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 1});
+    deepStrictEqual(
+      seen.formatters.map(formatter => [
+        formatter.authority,
+        formatter.formatting.workspaceSuffix,
+      ]),
+      [['dev-container+7b7d', 'Dev Container: Proj']],
+    );
+  });
+
+  it('F-0504 AC-3: a connection with no name gets the plain suffix', async () => {
+    const seen = await registered();
+    await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 1});
+    deepStrictEqual(
+      seen.formatters.map(formatter => formatter.formatting.workspaceSuffix),
+      ['Dev Container'],
+    );
+  });
+
+  it('F-0408 BR-6: the log command reveals the log', async () => {
+    const seen = await registered();
+    seen.commands.get('remote-containers.revealLogTerminal')?.();
+    deepStrictEqual(seen.revealed(), 1);
+  });
+
+  it('contracts §3.2: disposing removes the label and the command, and a label that comes after is not registered', async () => {
+    const seen = await registered({
+      identity: {name: 'Proj', context: undefined},
+    });
+    await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 1});
+    seen.result.dispose();
+    deepStrictEqual(seen.disposed, [
+      'label',
+      'remote-containers.revealLogTerminal',
+    ]);
+  });
+
+  it('contracts §3.2: disposing before the first resolve registers no label later', async () => {
+    const seen = await registered();
+    seen.result.dispose();
+    await seen.recording
+      .registered()
+      ?.resolve(AUTHORITY, {resolveAttempt: 1})
+      .catch(() => undefined);
+    deepStrictEqual(seen.formatters, []);
+  });
+
+  it('contracts §3.2: disposing a registration that never registered still removes the log command', async () => {
+    const seen = await registered({resolversGranted: false});
+    seen.result.dispose();
+    deepStrictEqual(seen.disposed, ['remote-containers.revealLogTerminal']);
+  });
+});
