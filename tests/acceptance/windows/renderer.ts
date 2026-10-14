@@ -141,6 +141,23 @@ async function pages(): Promise<DebugTarget[]> {
 }
 
 /**
+ * The one title among `titles` that window `name`'s folder name gives, `[<name>]` or `[<name> [...`, `[]` for `local`;
+ * none when no title or more than one fits. It needs nothing from the window's agent, so it finds the page of a window
+ * whose agent is busy, for example with a command that waits on a modal dialog.
+ */
+export function pageTitleByName(
+  name: string,
+  titles: readonly string[],
+): string | undefined {
+  const matching = titles.filter(title =>
+    name === 'local'
+      ? title === '[]'
+      : title === `[${name}]` || title.startsWith(`[${name} [`),
+  );
+  return matching.length === 1 ? matching[0] : undefined;
+}
+
+/**
  * The state of window `name` for the page choice, or `undefined` when it doesn't arrive within `remaining`
  * milliseconds: a window that never reports a page of its own fails with the titles, not the agent's wait.
  */
@@ -158,7 +175,10 @@ async function stateForPage(
   ]);
 }
 
-/** The protocol address of window `name`'s page, once exactly one page carries the title its state gives it. */
+/**
+ * The protocol address of window `name`'s page: the one page its name gives a title to, or else the one page that
+ * carries the title its state gives it (a folder-less window, or a folder name the title decodes).
+ */
 export async function pageOf(
   name: string,
   milliseconds = WAIT_MILLISECONDS,
@@ -170,6 +190,10 @@ export async function pageOf(
     async () => {
       const found = await pages();
       titles = found.map(page => page.title);
+      const named = pageTitleByName(name, titles);
+      if (named !== undefined) {
+        return found.find(page => page.title === named)?.webSocketDebuggerUrl;
+      }
       const state = await stateForPage(
         name,
         milliseconds - (Date.now() - started),
