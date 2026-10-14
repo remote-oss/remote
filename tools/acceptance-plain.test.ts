@@ -419,6 +419,24 @@ describe('runPlainLaunch', () => {
     );
   });
 
+  it('coverage-25a: each explorer launch points its editor and its tests at its own agent folder', async () => {
+    for (const launch of launchesOf(REPOSITORY_ROOT).filter(each =>
+      each.label.startsWith('explorer'),
+    )) {
+      const {steps, programs} = recordingSteps('pass');
+      await runPlainLaunch('/repo', PLAIN_RUN, launch, steps);
+      deepStrictEqual(
+        programs.map(
+          program => program.environment.REMOTE_OSS_ACCEPTANCE_WINDOWS,
+        ),
+        [
+          path.join('/run', launch.label, 'agent', 'pids'),
+          path.join('/run', launch.label, 'agent', 'pids'),
+        ],
+      );
+    }
+  });
+
   it('D-85: a launch’s own environment wins over the run’s', async () => {
     const {steps, programs} = recordingSteps('pass');
     await runPlainLaunch(

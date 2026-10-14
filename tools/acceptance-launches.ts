@@ -118,6 +118,8 @@ const RENDERER_LAUNCH = {
 const EXPLORER_LAUNCH = {
   ...RENDERER_LAUNCH,
   withExtensions: ['remote-oss.remote-explorer'],
+  // The remote name after the folder, as core's own label gives it, so a claimed window's page is found by its state.
+  settings: {'window.title': '[${rootName}]${remoteName}'},
 } as const;
 
 /** What the trust launches share: workspace trust on, read by the renderer helpers. */
