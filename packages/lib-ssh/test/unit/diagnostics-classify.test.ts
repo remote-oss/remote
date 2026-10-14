@@ -1092,4 +1092,47 @@ describe('endWithFullStop (the closing full stop of a reason text)', () => {
       ['brokenPipe', 'unknown', 'channelClosed', 'unknown'],
     );
   });
+
+  for (const [form, line] of [
+    ['host key rejected', 'motd: Host key verification failed.'],
+    [
+      'configuration file unreadable',
+      "motd: Can't open user config file x: Permission denied",
+    ],
+    ['network', 'motd: ssh: connect to host h port 22: Connection timed out'],
+    ['host name', 'motd: hostname contains invalid characters'],
+  ] as const) {
+    it(`ADR-0010: the ${form} form counts only at the start of a line`, () => {
+      deepStrictEqual(
+        classifyRun([line], 255, 'connection', 'shared'),
+        classifyRun([], 255, 'connection', 'shared'),
+      );
+    });
+  }
+
+  for (const [form, line] of [
+    ['forwarding prohibited', `motd: ${PROHIBITED_LINE}`],
+    ['broken pipe', 'motd: client_loop: send disconnect: Broken pipe: x'],
+    ['connection closed', 'motd: Connection closed.'],
+  ] as const) {
+    it(`ADR-0010: the ${form} form after authentication counts only at the start of a line`, () => {
+      deepStrictEqual(
+        classifyRun([AUTHENTICATED_LINE, line], 255, 'connection', 'shared')
+          .kind,
+        'unknown',
+      );
+    });
+  }
+
+  it('ADR-0010: an scp line about the network is read like the ssh line', () => {
+    deepStrictEqual(
+      classifyRun(
+        ['scp: ssh: connect to host h port 22: Connection timed out'],
+        255,
+        'connection',
+        'shared',
+      ).kind,
+      'timeout',
+    );
+  });
 });
