@@ -30,6 +30,8 @@ yet (§6). Whichever card merges second keeps both changes.
 | `packages/remote-containers/src/exec/exec-dialer.ts` | `execDialer(engine, containerId, user, nodePath, relayScriptPath): Dialer` |
 | `packages/remote-containers/test/unit/…` | the rows of §8, one file per source file |
 | `tests/acceptance/server/exec-channel.test.ts` | the real-Docker rows of §8.3 |
+| `packages/lib-host/src/shell-words.ts` | `preludeCommand(byteCount)` and `posixQuote(value)`, moved from lib-ssh (§3); exported from lib-host's index |
+| `packages/lib-ssh/src/process/remote-program.ts` | imports both from lib-host; `preludeProgram` keeps its output byte for byte |
 
 **`package.json` dependencies:** `lib-host` and `lib-forwarding` (`workspace:*`).
 
