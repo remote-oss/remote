@@ -623,6 +623,24 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-16: the control sockets of the master aliases are in the control folder when it is not the run folder', () => {
+    deepStrictEqual(
+      ['master', 'master-ask', 'master-yes', 'master-autoask'].map(alias =>
+        harnessSshConfig(49153, '/run', '/run/agent.sock', '/tmp/control-x')
+          .split('\n\n')
+          .find(block => block.startsWith(`Host ${alias}\n`))
+          ?.split('\n')
+          .find(line => line.includes('ControlPath')),
+      ),
+      [
+        '  ControlPath /tmp/control-x/cm-%C',
+        '  ControlPath /tmp/control-x/cm-ask-%C',
+        '  ControlPath /tmp/control-x/cm-yes-%C',
+        '  ControlPath /tmp/control-x/cm-autoask-%C',
+      ],
+    );
+  });
+
   it('D-85: Host master is the password account behind a ControlMaster that starts on demand', () => {
     strictEqual(
       accountBlock('master'),
