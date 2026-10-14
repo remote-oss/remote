@@ -20,6 +20,10 @@ import {
   type Template,
 } from './new-file.ts';
 
+/** The page about SSH configuration files that the picker's Help row opens. */
+export const CONFIG_FILE_HELP_ADDRESS =
+  'https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/ssh-config.md';
+
 /** What the command needs of the editor. */
 export interface ConfigFileEditor {
   /**
