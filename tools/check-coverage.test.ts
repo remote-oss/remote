@@ -6,9 +6,22 @@ import {
   type CoverageReport,
   outputOf,
 } from './check-coverage.ts';
+import {
+  CONTAINERS_RELEASE_ONE_SCOPE,
+  SLICE_ONE_SCOPE,
+} from './spec-acceptance-criteria.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
 const HEADER = 'ac\ttag\treason\n';
+
+/** The first slice's file alone, as most rows check it. */
+const SLICE_ONLY = [SLICE_ONE_SCOPE];
+
+/** Both coverage files. */
+const BOTH = [SLICE_ONE_SCOPE, CONTAINERS_RELEASE_ONE_SCOPE];
+
+/** Where the containers file lies. */
+const CONTAINERS_FILE = CONTAINERS_RELEASE_ONE_SCOPE.file;
 
 /** The problems of a report, or the way it failed. */
 function problemsOf(report: CoverageReport): string[] {
@@ -38,7 +51,7 @@ describe('check-coverage', () => {
   }
 
   function problems(): string[] {
-    return problemsOf(checkCoverage(workspace.root));
+    return problemsOf(checkCoverage(workspace.root, SLICE_ONLY));
   }
 
   beforeEach(() => {
@@ -61,19 +74,26 @@ describe('check-coverage', () => {
         'F-2601.AC-2\ttodo\t',
         'F-2601.AC-3\tcore\twhy',
       );
-      deepStrictEqual(outputOf(checkCoverage(workspace.root)).lines.slice(-6), [
-        'acceptance: 0',
-        'unit: 0',
-        'recorded: 0',
-        'core: 1',
-        'deferred: 0',
-        'todo: 2',
-      ]);
+      deepStrictEqual(
+        outputOf(checkCoverage(workspace.root, SLICE_ONLY)).lines.slice(-7),
+        [
+          `${COVERAGE_FILE}:`,
+          'acceptance: 0',
+          'unit: 0',
+          'recorded: 0',
+          'core: 1',
+          'deferred: 0',
+          'todo: 2',
+        ],
+      );
     });
 
     it('#142 1: a passing check exits 0', () => {
       tagged('F-2601.AC-1\ttodo\t');
-      strictEqual(outputOf(checkCoverage(workspace.root)).exitCode, 0);
+      strictEqual(
+        outputOf(checkCoverage(workspace.root, SLICE_ONLY)).exitCode,
+        0,
+      );
     });
 
     it('#142 1: a line with a tag that is not one of the six fails', () => {
@@ -159,24 +179,31 @@ describe('check-coverage', () => {
     });
 
     it('#142: a missing file is unreadable', () => {
-      strictEqual(outputOf(checkCoverage(workspace.root)).exitCode, 2);
+      strictEqual(
+        outputOf(checkCoverage(workspace.root, SLICE_ONLY)).exitCode,
+        2,
+      );
     });
 
     it('#142: a missing file names itself', () => {
-      deepStrictEqual(outputOf(checkCoverage(workspace.root)).lines, [
-        `check-coverage: cannot read ${COVERAGE_FILE}`,
-      ]);
+      deepStrictEqual(
+        outputOf(checkCoverage(workspace.root, SLICE_ONLY)).lines,
+        [`check-coverage: cannot read ${COVERAGE_FILE}`],
+      );
     });
 
     it('#142: problems make the exit code 1', () => {
       tagged('F-2601.AC-1\tdone\t');
-      strictEqual(outputOf(checkCoverage(workspace.root)).exitCode, 1);
+      strictEqual(
+        outputOf(checkCoverage(workspace.root, SLICE_ONLY)).exitCode,
+        1,
+      );
     });
 
     it('#142: two problems are both printed, sorted', () => {
       tagged('F-2601.AC-2\tdone\t', 'F-2601.AC-1\tcore\t');
       deepStrictEqual(
-        outputOf(checkCoverage(workspace.root)).lines.slice(0, 2),
+        outputOf(checkCoverage(workspace.root, SLICE_ONLY)).lines.slice(0, 2),
         [
           `${COVERAGE_FILE}:00002: unknown tag: done`,
           `${COVERAGE_FILE}:00003: F-2601.AC-1 needs a reason`,
@@ -260,7 +287,7 @@ describe('check-coverage', () => {
       acceptanceTest('F-2601 AC-99: x');
       tagged('F-2601.AC-1\ttodo\t');
       deepStrictEqual(problems(), [
-        `tests/acceptance/server/x.test.ts: row "F-2601 AC-99: x" cites F-2601.AC-99, which the slice's file doesn't have`,
+        `tests/acceptance/server/x.test.ts: row "F-2601 AC-99: x" cites F-2601.AC-99, which ${COVERAGE_FILE} doesn't have`,
       ]);
     });
 
@@ -440,6 +467,122 @@ describe('check-coverage', () => {
     });
   });
 
+  describe('a criterion with a letter', () => {
+    it('containers release 1: AC-3, AC-3b, AC-4 is in order', () => {
+      tagged(
+        'F-2601.AC-3\ttodo\t',
+        'F-2601.AC-3b\ttodo\t',
+        'F-2601.AC-4\ttodo\t',
+      );
+      deepStrictEqual(problems(), []);
+    });
+
+    it('containers release 1: AC-3b before AC-3 fails as out of order', () => {
+      tagged('F-2601.AC-3b\ttodo\t', 'F-2601.AC-3\ttodo\t');
+      deepStrictEqual(problems(), [
+        `${COVERAGE_FILE}:00003: F-2601.AC-3 is out of order`,
+      ]);
+    });
+
+    it('containers release 1: AC-3c before AC-3b fails as out of order', () => {
+      tagged('F-2601.AC-3c\ttodo\t', 'F-2601.AC-3b\ttodo\t');
+      deepStrictEqual(problems(), [
+        `${COVERAGE_FILE}:00003: F-2601.AC-3b is out of order`,
+      ]);
+    });
+
+    it('containers release 1: an upper-case letter is out of form', () => {
+      tagged('F-2601.AC-3B\ttodo\t');
+      deepStrictEqual(problems(), [
+        `${COVERAGE_FILE}:00002: AC id out of form: F-2601.AC-3B`,
+      ]);
+    });
+
+    it('containers release 1: a row that cites AC-3b satisfies its acceptance line', () => {
+      acceptanceTest('F-2601 AC-3b: x');
+      tagged('F-2601.AC-3b\tacceptance\t');
+      deepStrictEqual(problems(), []);
+    });
+  });
+
+  describe('two coverage files', () => {
+    /** Writes the containers file with these lines under the header. */
+    function containersTagged(...lines: string[]): void {
+      workspace.write(CONTAINERS_FILE, `${HEADER}${lines.join('\n')}\n`);
+    }
+
+    function bothProblems(): string[] {
+      return problemsOf(checkCoverage(workspace.root, BOTH));
+    }
+
+    it('containers release 1: both files with todo lines pass', () => {
+      tagged('F-2601.AC-1\ttodo\t');
+      containersTagged('F-0101.AC-1\ttodo\t');
+      deepStrictEqual(bothProblems(), []);
+    });
+
+    it('containers release 1: by default the check reads both files', () => {
+      tagged('F-2601.AC-1\ttodo\t');
+      deepStrictEqual(outputOf(checkCoverage(workspace.root)).lines, [
+        `check-coverage: cannot read ${CONTAINERS_FILE}`,
+      ]);
+    });
+
+    it('containers release 1: a problem of the second file names it', () => {
+      tagged('F-2601.AC-1\ttodo\t');
+      containersTagged('F-0101.AC-1\tdone\t');
+      deepStrictEqual(bothProblems(), [
+        `${CONTAINERS_FILE}:00002: unknown tag: done`,
+      ]);
+    });
+
+    it('containers release 1: a row that cites a containers criterion the containers file lacks fails, naming it', () => {
+      unitTest('F-0101 AC-99: x');
+      tagged('F-2601.AC-1\ttodo\t');
+      containersTagged('F-0101.AC-1\ttodo\t');
+      deepStrictEqual(bothProblems(), [
+        `packages/remote-x/test/unit/x.test.ts: row "F-0101 AC-99: x" cites F-0101.AC-99, which ${CONTAINERS_FILE} doesn't have`,
+      ]);
+    });
+
+    it('containers release 1: an acceptance row that names a containers feature without an AC fails', () => {
+      acceptanceTest('F-0101: x');
+      tagged('F-2601.AC-1\ttodo\t');
+      containersTagged('F-0101.AC-1\ttodo\t');
+      deepStrictEqual(bothProblems(), [
+        'tests/acceptance/server/x.test.ts: row "F-0101: x" names F-0101 without an AC',
+      ]);
+    });
+
+    it('containers release 1: a containers line tagged unit is satisfied by a unit row', () => {
+      unitTest('F-0101 AC-17b: x');
+      tagged('F-2601.AC-1\ttodo\t');
+      containersTagged('F-0101.AC-17b\tunit\t');
+      deepStrictEqual(bothProblems(), []);
+    });
+
+    it('containers release 1: the counts are printed per file', () => {
+      tagged('F-2601.AC-1\ttodo\t');
+      containersTagged('F-0101.AC-1\tcore\twhy', 'F-0101.AC-2\ttodo\t');
+      deepStrictEqual(outputOf(checkCoverage(workspace.root, BOTH)).lines, [
+        `${COVERAGE_FILE}:`,
+        'acceptance: 0',
+        'unit: 0',
+        'recorded: 0',
+        'core: 0',
+        'deferred: 0',
+        'todo: 1',
+        `${CONTAINERS_FILE}:`,
+        'acceptance: 0',
+        'unit: 0',
+        'recorded: 0',
+        'core: 1',
+        'deferred: 0',
+        'todo: 1',
+      ]);
+    });
+  });
+
   describe('citedBy', () => {
     it('#142 2: F-2601 AC-12: cites AC-12', () => {
       deepStrictEqual(citedBy('F-2601 AC-12: x'), ['F-2601.AC-12']);
@@ -501,6 +644,17 @@ describe('check-coverage', () => {
 
     it('daedalus on #546: a label with no AC before it cites nothing', () => {
       deepStrictEqual(citedBy('F-2206 (solaris): x'), []);
+    });
+
+    it('containers release 1: F-0101 AC-17b: cites AC-17b', () => {
+      deepStrictEqual(citedBy('F-0101 AC-17b: x'), ['F-0101.AC-17b']);
+    });
+
+    it('containers release 1: F-0101 AC-3, AC-3b: cites both', () => {
+      deepStrictEqual(citedBy('F-0101 AC-3, AC-3b: x'), [
+        'F-0101.AC-3',
+        'F-0101.AC-3b',
+      ]);
     });
 
     it('daedalus on #546: an upper-case or spaced label is not a label', () => {

@@ -80,6 +80,7 @@ export async function installCli(
       clientFallback: plan.clientFallback,
       address: placement.address,
       installFolder: plan.cliPath,
+      installTree: '',
       dataFolder: plan.dataFolder,
       launcher: base.launcher,
       lockPlace: plan.lockPlace,

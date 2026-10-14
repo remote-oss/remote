@@ -5,7 +5,9 @@
  *     node tools/identifiers.ts                    write packages/<x>/src/identifiers.generated.ts
  *     node tools/identifiers.ts --check             check the sources of every package
  *     node tools/identifiers.ts --consumed          check what production source consumes
- *     node tools/identifiers.ts --consumed --release   the tag run: the allowlist must be wired
+ *     node tools/identifiers.ts --consumed --release <package>   the tag run of <package>: its allowlist entries
+ *                                                    and its workspace libraries' must be wired
+ *     node tools/identifiers.ts --consumed --release   the same over every package (manual use)
  *
  * An extension package with a src/ folder must have identifiers.json and gets a table; one whose kinds are all
  * empty gets none. Libraries have neither. The check applies the rules of tools/identifier-rules.ts to every package
@@ -34,6 +36,7 @@ import {
   checkConsumption,
   parseAllowlist,
   type AllowlistEntry,
+  type ReleaseScope,
 } from './identifier-consumption.ts';
 
 /** The check's result over the repository. */
@@ -122,11 +125,28 @@ export function checkIdentifiers(root: string): IdentifierReport {
 const ALLOWLIST_FILE = 'tools/unconsumed-allowlist.json';
 
 /**
+ * The tag run's scope from the command line: none without `--release`; the package named by the argument after it;
+ * every package when no package follows.
+ */
+export function releaseScopeOf(
+  argv: readonly string[],
+): ReleaseScope | undefined {
+  const flagIndex = argv.indexOf('--release');
+  if (flagIndex < 0) {
+    return undefined;
+  }
+  const named = argv[flagIndex + 1];
+  return named === undefined || named.startsWith('--')
+    ? 'repository'
+    : {package: named};
+}
+
+/**
  * The --consumed mode: reads the allowlist of `root`, runs the check, prints the report, and sets the exit code: 2
  * when the allowlist can't be read or a program can't be built, 1 with problem lines, 0 otherwise.
  */
 export async function runConsumptionCheck(
-  release: boolean,
+  release: ReleaseScope | undefined,
   root: string = REPOSITORY_ROOT,
   runKnip?: (packageRoot: string) => Promise<string>,
 ): Promise<void> {
@@ -165,7 +185,7 @@ export async function runConsumptionCheck(
 if (isMainModule(import.meta.url)) {
   try {
     if (process.argv.includes('--consumed')) {
-      await runConsumptionCheck(process.argv.includes('--release'));
+      await runConsumptionCheck(releaseScopeOf(process.argv));
     } else if (process.argv.includes('--check')) {
       const report = checkIdentifiers(REPOSITORY_ROOT);
       for (const note of report.notes) {

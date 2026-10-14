@@ -17,6 +17,7 @@ export interface HostFacts {
 /** A server the probe already found on the host: the VS Code layout or the CLI layout. */
 export type ExistingLayout =
   | {kind: 'bin'; commit: string; path: string}
+  | {kind: 'tree'; commit: string; path: string}
   | {kind: 'cliServers'; commit: string; path: string};
 
 /** Everything the planner decides from: the caller has already looked up the setting and the source. */
@@ -35,6 +36,8 @@ export interface PlanInput {
   cliPresentOnHost?: boolean;
   /** The CLI's file name on the host, `<applicationName>-<commit>`; required with `cliMode`. */
   cliName?: string;
+  /** V9's server tree, when the server installs into one; its complete state is the `tree` layout. */
+  installTree?: string;
   source:
     | {kind: 'resolved'; address: string}
     | {kind: 'noSource'}
@@ -57,6 +60,8 @@ export type Plan =
       clientFallback: boolean;
       address: string;
       installFolder: string;
+      /** The tree the script extracts into and links to; empty for an install in the data folder. */
+      installTree: string;
       dataFolder: string;
       launcher: string;
       lockPlace: string;
@@ -95,8 +100,8 @@ export interface PlanNote {
 
 /**
  * Decide where the server comes from and where it lives, before any channel is used. The install
- * path is checked first, then reuse of an existing layout with the same commit (a bin layout before
- * a cliServers one), and only then the source; the download runs where the placement says. The
+ * path is checked first, then reuse of an existing layout with the same commit (a bin layout, then a
+ * complete tree that this host has no link to yet, then a cliServers one), and only then the source; the download runs where the placement says. The
  * data folder is the install path (or the home folder) joined with the data folder name by `/` on
  * every platform, so a Windows drive folder keeps its backslashes and the join stays a `/`.
  */
@@ -170,6 +175,7 @@ export function plan(input: PlanInput): {plan: Plan} | {failure: PlanFailure} {
       clientFallback: placement.clientFallback,
       address: input.source.address,
       installFolder: `${dataFolder}/bin/${input.commit}`,
+      installTree: input.installTree ?? '',
       dataFolder,
       launcher: input.launcher,
       lockPlace,
@@ -235,8 +241,8 @@ function placementOf(placement: DownloadPlacement): {
 }
 
 /**
- * The layout reused before the source is read: a bin layout with the same commit, else a
- * cliServers one, else none.
+ * The layout reused before the source is read: a bin layout with the same commit, else a complete
+ * tree, else a cliServers one, else none.
  */
 function reuseBeforeSource(
   layouts: readonly ExistingLayout[],
@@ -250,6 +256,10 @@ function reuseBeforeSource(
     layouts.find(
       (value): value is Extract<ExistingLayout, {kind: 'bin'}> =>
         value.kind === 'bin' && value.commit === commit,
+    ) ??
+    layouts.find(
+      (value): value is Extract<ExistingLayout, {kind: 'tree'}> =>
+        value.kind === 'tree' && value.commit === commit,
     ) ??
     layouts.find(
       (value): value is Extract<ExistingLayout, {kind: 'cliServers'}> =>

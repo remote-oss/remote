@@ -61,6 +61,7 @@ export function parametersFor(
     removeArchive: false,
     archiveFormat: 'tar.gz',
     epochMilliseconds: 1700000000000,
+    installTree: '',
     proxy: {http: '', https: ''},
     downloader: {useConfigurationFiles: false, timeoutSeconds: 30},
     lock: {
@@ -77,6 +78,7 @@ export function parametersFor(
       graceSeconds: 0,
       extensions: [],
       fileWatcherPollingMilliseconds: 0,
+      useHostProxy: false,
       readySeconds: 10,
       socketMode: false,
     },

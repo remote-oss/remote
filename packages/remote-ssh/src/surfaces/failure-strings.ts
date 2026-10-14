@@ -67,6 +67,7 @@ export type FailureStringId =
   | 'S167'
   | 'installPathProvided'
   | 'reversedPortRange'
+  | 'sshTimedOut'
   | 'templateNotHttp'
   | 'templateUnknownPlaceholder'
   | 'trustRefused';
@@ -132,6 +133,7 @@ export const FAILURE_TEMPLATES: Readonly<Record<FailureStringId, string>> = {
   installPathProvided: 'Provided: "{0}"',
   // The fixed text of this dialog reason; its misspelling is kept on purpose.
   reversedPortRange: 'Invaid port range set',
+  sshTimedOut: 'Connecting with SSH timed out',
   templateNotHttp: 'it does not give an http or https address',
   templateUnknownPlaceholder: 'the placeholder {0} is not known',
   trustRefused: 'Got bad result from install script',

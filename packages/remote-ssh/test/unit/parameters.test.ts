@@ -183,6 +183,7 @@ describe('the script parameters', () => {
           graceSeconds: 0,
           extensions: [],
           fileWatcherPollingMilliseconds: 0,
+          useHostProxy: false,
           readySeconds: 20,
           socketMode: false,
         },

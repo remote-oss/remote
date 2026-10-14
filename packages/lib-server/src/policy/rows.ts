@@ -39,15 +39,18 @@ export function sshPolicyFor(mode: LocalDownloadMode): ServerPolicyRecord {
   });
 }
 
-/** The containers policy: the client downloads and copies the archive into the container. */
+/**
+ * The containers policy: the client downloads and keeps the archive and copies it into the container; one window never
+ * removes another commit's server from the shared volume.
+ */
 export const CONTAINERS_POLICY: ServerPolicyRecord = frozen({
   downloadPlacement: {kind: 'clientOnly'},
   cache: 'kept',
   verification: ['none'],
   environmentSetup: undefined,
   requirementsCheck: 'serverBundled',
-  allowedExtraStartOptions: [],
-  cleanup: {kind: 'keepNewest', count: 5},
+  allowedExtraStartOptions: ['useHostProxy'],
+  cleanup: {kind: 'onlyCurrentKeepLeftovers'},
   installMode: 'singleScript',
   prefetch: {kind: 'none'},
 });

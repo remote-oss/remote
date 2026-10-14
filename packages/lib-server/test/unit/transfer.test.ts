@@ -90,6 +90,7 @@ function plan(overrides: Partial<DownloadPlan> = {}): DownloadPlan {
     clientFallback: false,
     address: ADDRESS,
     installFolder: INSTALL_FOLDER,
+    installTree: '',
     dataFolder: '/home/user/.server-data',
     launcher: 'bin/launcher',
     lockPlace: INSTALL_FOLDER,

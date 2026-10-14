@@ -4,10 +4,15 @@ import {
   byCriterion,
   issueNumbersOf,
   type Program,
+  scopeNamed,
   seedFor,
   seedOf,
 } from './seed-coverage.ts';
-import {SLICE_ONE_FEATURES} from './spec-acceptance-criteria.ts';
+import {
+  CONTAINERS_RELEASE_ONE_SCOPE,
+  SLICE_ONE_FEATURES,
+  SLICE_ONE_SCOPE,
+} from './spec-acceptance-criteria.ts';
 
 describe('seed-coverage', () => {
   it('#142: gives every criterion the tag todo and no reason', () => {
@@ -59,12 +64,17 @@ describe('seed-coverage', () => {
     });
   }
 
-  it('#142: asks gh for the body of the issue in the Remote - SSH repository', () => {
-    const asked: string[][] = [];
-    bodyOf(7, (name, programArguments) => {
+  /** A program that answers nothing and records each command line it is given in `asked`. */
+  function recording(asked: string[][]): Program {
+    return (name, programArguments) => {
       asked.push([name, ...programArguments]);
       return {status: 0, stdout: '', stderr: ''};
-    });
+    };
+  }
+
+  it('#142: asks gh for the body of the issue in the Remote - SSH repository', () => {
+    const asked: string[][] = [];
+    bodyOf(7, recording(asked));
     deepStrictEqual(asked, [
       [
         'gh',
@@ -117,6 +127,89 @@ describe('seed-coverage', () => {
   it('#142: a feature the catalogue lacks throws', () => {
     throws(() => seedFor('id\tissue\trepo\n', issuesAnswering({})), {
       message: 'F-2001 is not in the catalogue',
+    });
+  });
+
+  it('containers release 1: orders AC-3, AC-3b, AC-4 by number, then letter', () => {
+    deepStrictEqual(
+      ['F-0101.AC-4', 'F-0101.AC-3b', 'F-0101.AC-3'].sort(byCriterion),
+      ['F-0101.AC-3', 'F-0101.AC-3b', 'F-0101.AC-4'],
+    );
+  });
+
+  it('containers release 1: a letter after the same number sorts after the bare number, both ways round', () => {
+    deepStrictEqual(
+      [
+        byCriterion('F-0101.AC-3b', 'F-0101.AC-3') > 0,
+        byCriterion('F-0101.AC-3', 'F-0101.AC-3b') < 0,
+      ],
+      [true, true],
+    );
+  });
+
+  it('containers release 1: the same id twice is equal', () => {
+    deepStrictEqual(byCriterion('F-0101.AC-3b', 'F-0101.AC-3b'), 0);
+  });
+
+  it('containers release 1: reads the issue numbers of another repository', () => {
+    deepStrictEqual(
+      issueNumbersOf(
+        'id\tissue\trepo\nF-2001\t11\tremote-ssh\nF-0101\t19\tremote-containers\n',
+        'remote-containers',
+      ),
+      new Map([['F-0101', 19]]),
+    );
+  });
+
+  it('containers release 1: asks gh in the repository given', () => {
+    const asked: string[][] = [];
+    bodyOf(7, recording(asked), 'remote-containers');
+    deepStrictEqual(asked[0]?.[5], 'remote-oss/remote-containers');
+  });
+
+  it('containers release 1: seeds the containers file from the containers repository', () => {
+    const asked: string[] = [];
+    const catalogue = [
+      'id\tissue\trepo',
+      ...CONTAINERS_RELEASE_ONE_SCOPE.features.map(
+        (feature, index) =>
+          `${feature}\t${String(index + 200)}\tremote-containers`,
+      ),
+    ].join('\n');
+    const seeded = seedFor(
+      catalogue,
+      (...given) => {
+        asked.push(given[1][4] ?? '');
+        return {
+          status: 0,
+          stdout:
+            given[1][2] === '200'
+              ? '- **F-0101.AC-3b** b\n- **F-0101.AC-3** a'
+              : '',
+          stderr: '',
+        };
+      },
+      CONTAINERS_RELEASE_ONE_SCOPE,
+    );
+    deepStrictEqual(
+      [seeded, [...new Set(asked)]],
+      [
+        'ac\ttag\treason\nF-0101.AC-3\ttodo\t\nF-0101.AC-3b\ttodo\t\n',
+        ['remote-oss/remote-containers'],
+      ],
+    );
+  });
+
+  it('containers release 1: no name picks the first slice, containers-r1 the containers file', () => {
+    deepStrictEqual(
+      [scopeNamed(undefined), scopeNamed('containers-r1')],
+      [SLICE_ONE_SCOPE, CONTAINERS_RELEASE_ONE_SCOPE],
+    );
+  });
+
+  it('containers release 1: an unknown name throws', () => {
+    throws(() => scopeNamed('nothing'), {
+      message: 'no coverage file coverage-nothing.tsv',
     });
   });
 });
