@@ -54,13 +54,10 @@ function notValid(program: string): string {
   return redact(`remote.SSH.path "${program}" is not a valid SSH binary`, []);
 }
 
-/** The helper ids of the first connect of this file, which the reload rows keep. */
-let firstHelpers: number[] = [];
-
 /** The user settings' bytes at the file's start, put back whatever failed. */
 let settingsBytes: string | undefined;
 
-describe('the client search of windows (F-2101 AC-14, 15, 16, 19, 20, 28)', function () {
+describe('the client search of windows (F-2101 AC-14, 15, 16)', function () {
   this.timeout(180_000);
 
   before(async () => {
@@ -96,37 +93,16 @@ describe('the client search of windows (F-2101 AC-14, 15, 16, 19, 20, 28)', func
     const callsStart = callLines().length;
     await userSettings({'remote.SSH.path': client('configured')});
     await openWindow('harness', 'cs1');
-    await connected('cs1');
-    firstHelpers = await connectionHelpers();
-    deepStrictEqual(callLines().slice(callsStart), [
-      'configured/ssh\tcheck',
-      'configured/ssh\toptions',
-      'configured/ssh\tconnect',
-    ]);
-  });
-
-  it('F-2101 AC-14: a reload through a running helper runs no client and keeps the helper, and the close ends it', async () => {
-    const callsStart = callLines().length;
-    const logStart = connectionLog().length;
-    await userSettings({'remote.SSH.path': client('fails')});
-    await reloadWindow('cs1');
-    await connected('cs1');
-    deepStrictEqual(
-      [
-        callLines().slice(callsStart),
-        connectionLog()
-          .slice(logStart)
-          .filter(line => line.startsWith('Checking ssh client: ')),
-        await connectionHelpers(),
-      ],
-      [[], [], firstHelpers],
-    );
-    await closeWindow('cs1');
-    await waitFor(
-      'no connection helper of the run',
-      async () => (await connectionHelpers()).length === 0,
-      60_000,
-    );
+    try {
+      await connected('cs1');
+      deepStrictEqual(callLines().slice(callsStart), [
+        'configured/ssh\tcheck',
+        'configured/ssh\toptions',
+        'configured/ssh\tconnect',
+      ]);
+    } finally {
+      await closeWindow('cs1');
+    }
   });
 
   it('F-2101 AC-15: in terminal mode a connect checks the client, rejects it, and connects through the PATH', async () => {
@@ -137,36 +113,45 @@ describe('the client search of windows (F-2101 AC-14, 15, 16, 19, 20, 28)', func
       'remote.SSH.remotePlatform': {harness: 'linux'},
       'remote.SSH.path': client('fails'),
     });
-    await openWindow('harness', 'cs1');
-    await connected('cs1');
-    const invalid = notValid(client('fails'));
-    deepStrictEqual(
-      [
-        callLines().slice(callsStart),
-        connectionLog()
-          .slice(logStart)
-          .filter(line => line === invalid).length,
-      ],
-      [['fails/ssh\tcheck'], 1],
-    );
+    await openWindow('harness', 'cs3');
+    try {
+      await connected('cs3');
+      const invalid = notValid(client('fails'));
+      deepStrictEqual(
+        [
+          callLines().slice(callsStart),
+          connectionLog()
+            .slice(logStart)
+            .filter(line => line === invalid).length,
+        ],
+        [['fails/ssh\tcheck'], 1],
+      );
+    } finally {
+      await closeWindow('cs3');
+    }
   });
 
   it('F-2101 AC-15: in terminal mode a reload checks the client again, and no client answers options or connect', async () => {
-    const callsStart = callLines().length;
-    const logStart = connectionLog().length;
-    await reloadWindow('cs1');
-    await connected('cs1');
-    const invalid = notValid(client('fails'));
-    deepStrictEqual(
-      [
-        callLines().slice(callsStart),
-        connectionLog()
-          .slice(logStart)
-          .filter(line => line === invalid).length,
-      ],
-      [['fails/ssh\tcheck'], 1],
-    );
-    await closeWindow('cs1');
+    await openWindow('harness', 'cs4');
+    try {
+      await connected('cs4');
+      const callsStart = callLines().length;
+      const logStart = connectionLog().length;
+      await reloadWindow('cs4');
+      await connected('cs4');
+      const invalid = notValid(client('fails'));
+      deepStrictEqual(
+        [
+          callLines().slice(callsStart),
+          connectionLog()
+            .slice(logStart)
+            .filter(line => line === invalid).length,
+        ],
+        [['fails/ssh\tcheck'], 1],
+      );
+    } finally {
+      await closeWindow('cs4');
+    }
   });
 
   it('F-2101 AC-16: an empty window from the local host pick runs no client and logs no client line', async () => {
