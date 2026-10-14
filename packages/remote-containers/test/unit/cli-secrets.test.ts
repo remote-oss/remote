@@ -83,4 +83,49 @@ describe('the secrets the CLI echoes (card containers-04)', () => {
   it('R-26: a text with no secrets is returned as it is', () => {
     deepStrictEqual(scrubbed('plain', []), 'plain');
   });
+
+  const PEM_VALUE = '-----BEGIN KEY-----\nAAAAbbbbCCCCdddd\n-----END KEY-----';
+
+  it('R-26: each line of a multi-line value of 8 characters or more is a secret under the same reference, after the whole value', () => {
+    deepStrictEqual(
+      referencedSecrets('{"a": "${localEnv:PEM_VALUE}"}', {PEM_VALUE}).map(
+        secret => [secret.value, secret.reference],
+      ),
+      [
+        [
+          `-----BEGIN KEY-----\\nAAAAbbbbCCCCdddd\\n-----END KEY-----`,
+          '${localEnv:PEM_VALUE}',
+        ],
+        [PEM_VALUE, '${localEnv:PEM_VALUE}'],
+        ['-----BEGIN KEY-----', '${localEnv:PEM_VALUE}'],
+        ['-----END KEY-----', '${localEnv:PEM_VALUE}'],
+        ['AAAAbbbbCCCCdddd', '${localEnv:PEM_VALUE}'],
+      ],
+    );
+  });
+
+  it('R-26: a Run text holding only the first line of a multi-line value is scrubbed, and a line shorter than 8 characters is not an entry', () => {
+    const secrets = referencedSecrets('{"a": "${localEnv:PEM_VALUE}"}', {
+      PEM_VALUE: '-----BEGIN KEY-----\nshort\n-----END KEY-----',
+    });
+    deepStrictEqual(
+      [
+        scrubbed('Run: docker run -e K=-----BEGIN KEY-----', secrets),
+        secrets.some(secret => secret.value === 'short'),
+      ],
+      ['Run: docker run -e K=${localEnv:PEM_VALUE}', false],
+    );
+  });
+
+  it('R-26: the JSON-escaped form of a value is a secret too', () => {
+    deepStrictEqual(
+      scrubbed(
+        'label={"k":"pa\\"ss\\\\word12"}',
+        referencedSecrets('{"a": "${localEnv:ODD_VALUE}"}', {
+          ODD_VALUE: 'pa"ss\\word12',
+        }),
+      ),
+      'label={"k":"${localEnv:ODD_VALUE}"}',
+    );
+  });
 });

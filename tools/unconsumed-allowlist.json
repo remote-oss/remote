@@ -179,6 +179,13 @@
       "key": "src/line-splitter.ts",
       "card": "#776",
       "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/cli-raw-lines.ts",
+      "card": "#776",
+      "slice": "containers release 1"
     }
   ]
 }

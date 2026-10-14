@@ -83,31 +83,53 @@ function textOf(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-/** The event a line of stderr is. */
-export function parseLogLine(line: string): CliEvent {
+/** A line of stderr as its event, with what the bridge needs to buffer output: whether it is raw, and its channel. */
+export interface StderrLine {
+  event: CliEvent;
+  /** Whether the line is a `raw` event: output of a lifecycle command, chunk by chunk. */
+  isRaw: boolean;
+  channel: string | undefined;
+}
+
+/** The event a line of stderr is, and the facts of the line that tell how output is held. */
+export function readStderrLine(line: string): StderrLine {
   let parsed: unknown;
   try {
     parsed = JSON.parse(line);
   } catch {
-    return plain(line);
+    return {event: plain(line), isRaw: false, channel: undefined};
   }
   if (!isFields(parsed)) {
-    return plain(line);
+    return {event: plain(line), isRaw: false, channel: undefined};
   }
+  const channel = textOf(parsed.channel);
   if (parsed.type === 'progress') {
     return {
-      kind: 'progress',
-      name: textOf(parsed.name) ?? '',
-      status: textOf(parsed.status) ?? '',
-      detail: textOf(parsed.stepDetail),
+      event: {
+        kind: 'progress',
+        name: textOf(parsed.name) ?? '',
+        status: textOf(parsed.status) ?? '',
+        detail: textOf(parsed.stepDetail),
+      },
+      isRaw: false,
+      channel,
     };
   }
   return {
-    kind: 'log',
-    level: typeof parsed.level === 'number' ? parsed.level : PLAIN_LINE_LEVEL,
-    text: textOf(parsed.text) ?? line,
-    channel: textOf(parsed.channel),
+    event: {
+      kind: 'log',
+      level: typeof parsed.level === 'number' ? parsed.level : PLAIN_LINE_LEVEL,
+      text: textOf(parsed.text) ?? line,
+      channel,
+    },
+    isRaw: parsed.type === 'raw',
+    channel,
   };
+}
+
+/** The event a line of stderr is. */
+export function parseLogLine(line: string): CliEvent {
+  return readStderrLine(line).event;
 }
 
 function plain(line: string): CliEvent {

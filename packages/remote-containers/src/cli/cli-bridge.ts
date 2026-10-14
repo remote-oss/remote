@@ -17,13 +17,14 @@ import {
   type CliEvent,
   type CliFailure,
   type ConfigurationResult,
-  parseLogLine,
+  readStderrLine,
   readConfigurationResult,
   readRunUserCommandsResult,
   readUpResult,
   type RunUserCommandsResult,
   type UpResult,
 } from './cli-lines.ts';
+import {rawHoldOf} from './cli-raw-lines.ts';
 import {referencedSecrets, scrubbed, type Secret} from './cli-secrets.ts';
 import {overrideText} from './override-pre-pass.ts';
 import type {OverrideStore} from './override-files.ts';
@@ -132,6 +133,14 @@ export function cliBridgeOf(
       }
       cancellation.addEventListener('abort', forward, {once: true});
       let lastError: string | undefined;
+      const rawHold = rawHoldOf();
+      function deliver(unscrubbed: CliEvent): void {
+        const event = scrubbedEvent(unscrubbed, secrets);
+        if (event.kind === 'log') {
+          lastError = firstLine(event.text);
+        }
+        onEvent(event);
+      }
       let guard: NodeJS.Timeout | undefined;
       try {
         const finished = await host.run(
@@ -146,14 +155,17 @@ export function cliBridgeOf(
               }, GUARD_MILLISECONDS);
               return;
             }
-            const event = scrubbedEvent(parseLogLine(line), secrets);
-            if (event.kind === 'log') {
-              lastError = firstLine(event.text);
+            const read = readStderrLine(line);
+            if (read.isRaw && read.event.kind === 'log') {
+              rawHold.push(read.event).forEach(deliver);
+              return;
             }
-            onEvent(event);
+            rawHold.release(read.channel).forEach(deliver);
+            deliver(read.event);
           },
           own.signal,
         );
+        rawHold.releaseAll().forEach(deliver);
         if (finished.kind === 'spawnFailed') {
           return {kind: 'spawnFailed', message: finished.message};
         }
