@@ -244,12 +244,11 @@ jobs:
   acceptance-vscodium:
     name: acceptance (vscodium)
     if: inputs.vscodium || (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'))
-    # GitHub keeps one pending job per group: a newer one replaces a pending one, which then reports cancelled. R-112
-    # amendment (athena, 2026-10-14: #917's dispatch waited 1h12m and was then replaced by a main push in the shared
-    # group): pushes to main have their own group, where a newer main run replacing a pending one is fine; dispatches
-    # (and tags) keep acceptance-vscodium, which hermes's watcher serialises. At most two VSCodium jobs run at once.
+    # GitHub keeps one pending job per group, and a newer one replaces it. Pushes to main have their own group, where
+    # only the latest main matters; each release tag has a group of its own, so nothing displaces it; dispatches keep
+    # theirs, fed one at a time, so a main push never displaces them.
     concurrency:
-      group: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'acceptance-vscodium-main' || 'acceptance-vscodium' }}
+      group: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' && 'acceptance-vscodium-main' || format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}
       cancel-in-progress: false
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 30
