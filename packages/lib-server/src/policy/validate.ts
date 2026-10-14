@@ -8,6 +8,7 @@ const FIELD_NAMES: string[] = [
   'environmentSetup',
   'requirementsCheck',
   'allowedExtraStartOptions',
+  'extensionEntries',
   'cleanup',
   'installMode',
   'prefetch',
@@ -24,6 +25,11 @@ const KNOWN_PLACEMENT_MODES = new Set<string>(['auto', 'always', 'off']);
 const KNOWN_EXTRA_START_OPTIONS = new Set<string>([
   'fileWatcherPolling',
   'useHostProxy',
+]);
+
+const KNOWN_EXTENSION_ENTRIES = new Set<string>([
+  'identifiersOnly',
+  'asWritten',
 ]);
 
 const KNOWN_VERIFICATIONS = new Set<string>([
@@ -57,6 +63,7 @@ export function validatePolicyRecord(
     downloadPlacement: {kind: string; mode: string};
     verification: readonly string[];
     allowedExtraStartOptions: readonly string[];
+    extensionEntries: string;
     cleanup: {kind: string; count: number};
     prefetch: {
       kind: string;
@@ -114,6 +121,9 @@ export function validatePolicyRecord(
       problem(`allowedExtraStartOptions[${String(index)}]`, 'invalid value');
     }
   });
+  if (!KNOWN_EXTENSION_ENTRIES.has(asData.extensionEntries)) {
+    problem('extensionEntries', 'invalid value');
+  }
   const prefetch = asData.prefetch;
   if (prefetch.kind === 'onProductUpdate') {
     if (!positiveInteger(prefetch.feedCheckIntervalMilliseconds)) {

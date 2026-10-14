@@ -165,6 +165,20 @@ describe('policy record (card server-01 table)', () => {
     );
   });
 
+  it('extensionEntries: "other" -> problem path extensionEntries', () => {
+    deepStrictEqual(
+      validatePolicyRecord(recordWith({extensionEntries: 'other'})),
+      {
+        problems: [{path: 'extensionEntries', problem: 'invalid value'}],
+      },
+    );
+  });
+
+  it('extensionEntries: asWritten -> {record}', () => {
+    const candidate = recordWith({extensionEntries: 'asWritten'});
+    deepStrictEqual(validatePolicyRecord(candidate), {record: candidate});
+  });
+
   it('prefetch onProductUpdate feedCheckIntervalMilliseconds 0 -> problem path prefetch.feedCheckIntervalMilliseconds', () => {
     deepStrictEqual(
       validatePolicyRecord(
