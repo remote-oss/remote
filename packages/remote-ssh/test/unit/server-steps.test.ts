@@ -619,7 +619,7 @@ describe('the server steps: gate', () => {
     );
   });
 
-  it('asks about a reused server of a product that lists licence lines, and clears it on accept', async () => {
+  it('F-3902 AC-10, AC-11: asks about a reused server of a product that lists licence lines, and clears it on accept', async () => {
     const asked: string[] = [];
     const steps = createServerSteps(
       dependencies({
@@ -712,7 +712,7 @@ describe('the server steps: transfer and start', () => {
     });
   });
 
-  it('starts the server with the licence flag only when the gate cleared it', async () => {
+  it('F-3902 AC-13: starts the server with the licence flag only when the gate cleared it', async () => {
     const steps = createServerSteps(dependencies());
     const withFlag = channelAnswering(STARTED);
     const without = channelAnswering(STARTED);
