@@ -30,6 +30,8 @@ export interface ContainerRequest {
   configFile: string;
   dockerPath: string;
   logLevel: 'info' | 'debug' | 'trace';
+  /** Set when the window asked for a rebuild: the existing container is replaced, whatever its state. */
+  rebuild?: {buildNoCache: boolean};
 }
 
 /** How the preparation ended. */
@@ -234,7 +236,7 @@ export function containerLifecycleOf(dependencies: {
       return discovery;
     }
     const decision = decide(folder, configFile, discovery.containers);
-    if (decision.kind === 'unusable') {
+    if (decision.kind === 'unusable' && request.rebuild === undefined) {
       return decision;
     }
     onStep('startingContainer');
@@ -247,9 +249,17 @@ export function containerLifecycleOf(dependencies: {
       mounts: [VOLUME_MOUNT],
       logLevel: request.logLevel,
     };
+    if (request.rebuild !== undefined) {
+      logger.info(
+        `rebuilding: the dev container CLI removes ${discovery.containers.map(container => container.id.slice(0, IDENTIFIER_LENGTH)).join(', ') || 'no container'} first`,
+      );
+    }
     const upResult = await bridge.up(
       target,
-      {removeExistingContainer: false, buildNoCache: false},
+      {
+        removeExistingContainer: request.rebuild !== undefined,
+        buildNoCache: request.rebuild?.buildNoCache ?? false,
+      },
       onCliEvent,
       cancellation,
     );
@@ -257,6 +267,7 @@ export function containerLifecycleOf(dependencies: {
       return upResult;
     }
     if (
+      request.rebuild === undefined &&
       decision.kind === 'use' &&
       decision.containerId !== upResult.containerId
     ) {

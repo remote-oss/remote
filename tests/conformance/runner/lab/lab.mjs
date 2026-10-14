@@ -24,6 +24,8 @@
 //   lab menu "<item>"              click an item of the open context menu
 //   lab focus "<view or part>"     run "View: Focus on <x> View" style commands via palette text (e.g. "Remote Explorer")
 //   lab notifications              list all notifications in the notification center (opens and closes it)
+//   lab notifications-seen         every notification text shown since the window opened, even briefly (texts only)
+//   lab notification-log-keep      stay attached and keep that log in every page from its first moment (the provisioner's)
 //   lab editor                     print the active editor tab title and the first 60 lines of its text
 //   lab terminal                   print the visible text of the active terminal
 //   lab shot <name>                save a screenshot to $LAB_SHOTS_DIR/<name>.png
@@ -302,6 +304,28 @@ async function snapshotState(page) {
 
 /* The same screen as snapshotState, as one structured object (LAB_JSON=1); kept separate so the text output stays
    byte-identical. */
+/* athena on kit #241 (A): a log of every notification text the window shows, kept in the page itself, so a stage shorter
+   than one poll (F-2403 "Downloading/Installing VS Code Server" on a fast host) is still seen. Each appearance (a new toast,
+   or a toast whose text changes) is one entry {seq, text}; `epoch` names the log, which a reload starts afresh. Installed
+   by the resident `notification-log-keep` (an init script, so a reloaded or new page has it from its first moment), and by
+   the first lab call as the fallback. Texts only; read by `notifications-seen` for the wait condition notification_seen,
+   never part of an observation. */
+const installNotificationLog = () => {
+  if (globalThis.__labNotificationLog) return;
+  const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
+  const log = { epoch: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), seen: [] };
+  const last = new WeakMap();
+  const scan = () => {
+    for (const m of document.querySelectorAll(".notifications-toasts .notification-list-item-message")) {
+      const t = norm(m.textContent);
+      if (t && last.get(m) !== t) { last.set(m, t); log.seen.push({ seq: log.seen.length, text: t }); }
+    }
+  };
+  globalThis.__labNotificationLog = log;
+  scan();
+  new MutationObserver(scan).observe(document, { childList: true, subtree: true, characterData: true });
+};
+
 async function snapshotData(page) {
   if (!page.url().includes("workbench")) {
     return await page.evaluate(() => {
@@ -315,6 +339,7 @@ async function snapshotData(page) {
       return { auxiliary: true, title: document.title, fields, text };
     });
   }
+  await page.evaluate(installNotificationLog).catch(() => {});
   return await page.evaluate(() => {
     const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
     const vis = (el) => !!el && el.offsetParent !== null && getComputedStyle(el).visibility !== "hidden" && getComputedStyle(el).display !== "none";
@@ -1488,7 +1513,14 @@ async function main() {
   }
   if (sub === "urls") {  // links VS Code tried to open in a browser (captured by the lab's xdg-open shim)
     const f = LAB + "/opened-urls.log";
-    console.log(fs.existsSync(f) ? fs.readFileSync(f, "utf8").trimEnd() || "(none)" : "(none)");
+    const text = fs.existsSync(f) ? fs.readFileSync(f, "utf8").trimEnd() : "";
+    /* LAB_JSON (kit #227 item 2): {ok, urls: [...]}, in the order they were opened, each without the shim's timestamp
+       (the first two words of its line), so two runs compare; the text output is unchanged */
+    if (JSON_MODE) {
+      console.log(JSON.stringify({ok: true, urls: text ? text.split("\n").map((l) => l.split(" ").slice(2).join(" ")) : []}));
+      return;
+    }
+    console.log(text || "(none)");
     return;
   }
   if (!sub || sub === "help") { console.log(fs.readFileSync(new URL(import.meta.url)).toString().split("\n").filter((l) => l.startsWith("//")).join("\n")); return; }
@@ -1533,6 +1565,23 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  if (sub === "notification-log-keep") {
+    /* athena on kit #241 (A): stays attached for the window's life (CDP init scripts end with the session that set them),
+       so every page, a reload or a new window included, has the notification log from its first moment. The provisioner
+       starts it with the window and stops it with the window; it also ends when the window closes. Holds no page data. */
+    const until = Date.now() + 120000;
+    let browser;
+    for (;;) {
+      try { browser = await chromium.connectOverCDP("http://127.0.0.1:" + PORT, { timeout: 15000 }); break; }
+      catch (e) { if (Date.now() > until) { console.log(JSON.stringify({ ok: false, error: "no window to keep a log for: " + e.message })); process.exitCode = 1; return; } }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    for (const c of browser.contexts()) await c.addInitScript(installNotificationLog);
+    for (const p of browser.contexts().flatMap((c) => c.pages())) await p.evaluate(installNotificationLog).catch(() => {});
+    console.log(JSON.stringify({ ok: true, keeping: true }));
+    await new Promise((r) => browser.on("disconnected", r));
+    return;
+  }
   const { browser, page, pages, all } = await connect();
   await armPublishBarrier(all);
   if (JSON_MODE) RESULT = { command: sub, args, ok: true };
@@ -1541,12 +1590,20 @@ async function main() {
       case "windows":
         if (JSON_MODE) {
           const ws = [];
-          for (const [i, p] of all.entries()) ws.push({ index: i, title: await p.title(), current: p === page, auxiliary: !p.url().includes("workbench") });
+          /* opened (kit #227 item 8): the editor's own window id (globalThis.vscodeWindowId, the main process's BrowserWindow
+             id, given in the order windows open), so two same-title windows are told apart however the list orders them */
+          for (const [i, p] of all.entries()) ws.push({ index: i, title: await p.title(), current: p === page, auxiliary: !p.url().includes("workbench"),
+            opened: await p.evaluate(() => globalThis.vscodeWindowId ?? null).catch(() => null) });
           RESULT = { windows: ws };
           break;
         }
         for (const [i, p] of all.entries()) console.log("#" + i + " " + (await p.title()) + (p === page ? "   [current]" : "") + (p.url().includes("workbench") ? "" : "   [auxiliary window]"));
         console.log("(select one with LAB_WINDOW=#<n> or LAB_WINDOW=<title substring>)");
+        break;
+      case "notifications-seen":
+        await page.evaluate(installNotificationLog);
+        RESULT = await page.evaluate(() => { const l = globalThis.__labNotificationLog; return { epoch: l.epoch, seen: [...l.seen] }; });
+        if (!JSON_MODE) for (const e of RESULT.seen) console.log(e.seq + " " + e.text);
         break;
       case "state":
         if (JSON_MODE) { RESULT = await snapshotData(page); break; }
@@ -1645,7 +1702,9 @@ async function main() {
         const want = args.join(" ");
         await openPalette(page, want);
         const rows = await qiRows(page);
-        const hit = rows.find((r) => r.label === want || r.aria.startsWith(want));
+        // LAB_CMD_EXACT=1: the title alone, no aria-prefix fallback (the encode step `window: {close}` runs the editor
+        // core's "Close Window" this way, never an extension's command; extension commands show their category first)
+        const hit = rows.find((r) => r.label === want || (!process.env.LAB_CMD_EXACT && r.aria.startsWith(want)));
         if (!hit) { fail("COMMAND NOT FOUND (exact title). Visible items:\n" + rows.map((r) => "  - " + r.label).join("\n")); await page.keyboard.press("Escape"); break; }
         await clickRow(page, hit.label);
         say("ran: " + want);
@@ -1673,9 +1732,12 @@ async function main() {
         break;
       }
       case "type": {
+        // `lab type --stdin`: the text from stdin, never the command line (a case's secret, athena on kit #209: a value in
+        // argv is readable from /proc/<pid>/cmdline while the process runs); a trailing newline is not part of it
+        const text = args[0] === "--stdin" ? fs.readFileSync(0, "utf8").replace(/\n$/, "") : args.join(" ");
         const input = page.locator(".quick-input-widget .quick-input-box input");
-        if (await input.isVisible()) await input.fill(args.join(" "));
-        else { const d = page.locator(".monaco-dialog-box input:not([type=checkbox])"); if (await d.count()) await d.first().fill(args.join(" ")); else { fail("NOTHING TO TYPE INTO: no quick input or dialog input is open (use `lab typeraw` to type into the focused editor or terminal)"); } }
+        if (await input.isVisible()) await input.fill(text);
+        else { const d = page.locator(".monaco-dialog-box input:not([type=checkbox])"); if (await d.count()) await d.first().fill(text); else { fail("NOTHING TO TYPE INTO: no quick input or dialog input is open (use `lab typeraw` to type into the focused editor or terminal)"); } }
         await printState(page, 1200);
         break;
       }
@@ -1693,6 +1755,13 @@ async function main() {
         break;
       case "button": {
         const want = args.join(" ");
+        if (want === "--dialog-close") {   // kit #227 item 1: the modal dialog's own close X (aria "Close Dialog")
+          const x = page.locator(".monaco-dialog-box .dialog-toolbar-row .action-label.codicon-dialog-close").first();
+          if (!(await x.count()) || !(await x.isVisible())) { fail("no dialog with a close X is shown"); break; }
+          await x.click();
+          say("closed the dialog by its X");
+          break;
+        }
         const sel = [".monaco-dialog-box .dialog-buttons .monaco-button", ".notifications-toasts .notification-list-item-buttons-container .monaco-button", ".notifications-center .notification-list-item-buttons-container .monaco-button", ".quick-input-widget .monaco-button", ".quick-input-widget .action-label"];
         let done = false;
         for (const s of sel) {
@@ -1954,7 +2023,7 @@ async function publishRefused(pages) {
 }
 const PUBLISH_MSG = "REFUSED (R-56): the lab never publishes, signs in or sends data online; the Issue Reporter and every such flow are open, read and close only (AGENTS.md)";
 /* verbs whose LAB_JSON output is one JSON object (the rest print text as always) */
-const JSON_VERBS = new Set(["state", "windows", "view", "items", "notifications", "editor", "cmd", "palette", "pick", "check", "type", "typeraw", "key", "viewaction", "button", "link", "remote", "rowmenu", "rowaction", "menu", "focus", "hover", "wait",
+const JSON_VERBS = new Set(["state", "windows", "view", "items", "notifications", "notifications-seen", "editor", "cmd", "palette", "pick", "check", "type", "typeraw", "key", "viewaction", "button", "link", "remote", "rowmenu", "rowaction", "menu", "focus", "hover", "wait",
   "panel", "open", "goto", "suggest", "hovertext", "markers", "tokens", "folds", "outline", "breadcrumbs"]);
 main().then(r63Enforce).then(hostSleepNote).catch((e) => {
   hostSleepNote();

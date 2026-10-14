@@ -47,6 +47,14 @@
       "card": "#766",
       "slice": "containers release 1",
       "decision": "F-0504 BR-8 (2026-09-26): defined, never set"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "contextKeys",
+      "key": "hideRebuildCommands",
+      "card": "#884",
+      "slice": "containers release 1",
+      "decision": "F-0405 3.2 (2026-09-27): defined, never set"
     }
   ]
 }

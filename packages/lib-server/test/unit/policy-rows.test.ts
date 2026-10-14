@@ -88,7 +88,7 @@ describe('the SSH policy of a download mode (card connect-38)', () => {
     ['cache', 'kept'],
     ['verification', ['none']],
     ['environmentSetup', undefined],
-    ['requirementsCheck', 'serverBundled'],
+    ['requirementsCheck', 'bundledHelper'],
     ['allowedExtraStartOptions', ['useHostProxy']],
     ['cleanup', {kind: 'onlyCurrentKeepLeftovers'}],
     ['installMode', 'singleScript'],

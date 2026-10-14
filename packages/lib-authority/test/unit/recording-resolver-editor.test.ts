@@ -113,4 +113,45 @@ describe('the recording resolver host editor', () => {
       ['window-1', undefined],
     );
   });
+
+  it('contracts §3.2: records a timer, runs a live one once when fired, and not a cancelled one', () => {
+    const events: string[] = [];
+    const fake = recordingResolverEditor(events);
+    const calls: string[] = [];
+    fake.editor.startTimer(1500, () => {
+      calls.push('live');
+    });
+    const cancel = fake.editor.startTimer(200, () => {
+      calls.push('cancelled');
+    });
+    cancel();
+    fake.fireTimers();
+    fake.fireTimers();
+    deepStrictEqual([events, calls], [['timer 1500', 'timer 200'], ['live']]);
+  });
+
+  it('contracts §3.2: knows whether a progress is still running', async () => {
+    const fake = recordingResolverEditor([]);
+    const states: boolean[] = [fake.progressSettled()];
+    const finishes: Array<() => void> = [];
+    const running = fake.editor.progress.withProgress(
+      {
+        title: 'Setting up',
+        cancellable: false,
+        onCancel: () => undefined,
+        onDetails: () => undefined,
+      },
+      () =>
+        new Promise<void>(resolve => {
+          finishes.push(resolve);
+        }),
+    );
+    states.push(fake.progressSettled());
+    finishes.forEach(finish => {
+      finish();
+    });
+    await running;
+    states.push(fake.progressSettled());
+    deepStrictEqual(states, [true, false, true]);
+  });
 });

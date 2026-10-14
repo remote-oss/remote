@@ -309,12 +309,14 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30: an explorer launch titles each window with its folder name in brackets', () => {
+  it('coverage-25a: an explorer launch titles each window with its folder name in brackets, the remote name after', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('explorer'))
         .map(launch => launch.settings),
-      Array.from({length: 3}, () => ({'window.title': '[${rootName}]'})),
+      Array.from({length: 3}, () => ({
+        'window.title': '[${rootName}]${remoteName}',
+      })),
     );
   });
 

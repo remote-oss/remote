@@ -18,7 +18,9 @@ For each run: provision (private Docker + HOME, fresh slot profile, fixture, sta
 Exit status: 0 when every case was recorded (or the replay passed), 1 otherwise.
 """
 import argparse
+import contextlib
 import datetime
+import fcntl
 import json
 import os
 import re
@@ -38,13 +40,67 @@ CMD_WAIT = 30  # seconds a cmd step waits for its command to appear in the Comma
 SINGLE = {"cmd", "palette", "pick", "check", "type", "key", "button", "link", "menu", "focus", "view"}
 
 
+SECRET_PH = re.compile(r"\$\{(SSH_PASSWORD|SSH_PASSPHRASE|SSH_OTP|SSH_PASSWORD_NEW|SSH_ANSWER_(?:[1-9]|1[0-6]))\}")
+
 class StepFailure(Exception):
     def __init__(self, index, step, error):
         super().__init__(error)
         self.index, self.step, self.error = index, step, error
 
 
+# The per-case target's secrets the run has typed (athena on #209): every text the run writes passes write_text, which
+# redacts them to their placeholders and refuses to write a password or passphrase that is still there.
+SECRETS = {}   # value -> placeholder name; filled by type_secret, emptied after each run
+
+
+class SecretLeak(RuntimeError):
+    pass
+
+
+def redact_secrets(text):
+    """Every typed secret value to its placeholder: a password or passphrase anywhere; a one-time code as a whole token
+    only (six digits collide with ports and process ids)."""
+    for value, name in sorted(SECRETS.items(), key=lambda kv: -len(kv[0])):
+        if name == "SSH_OTP":
+            text = re.sub(r"(?<!\d)" + re.escape(value) + r"(?!\d)", "${SSH_OTP}", text)
+        else:
+            text = text.replace(value, "${" + name + "}")
+    return text
+
+
+def write_text(path, text):
+    """The one place the run writes a file: redacted, then scanned; a password or passphrase still present means the file
+    is not written and the run fails (fail closed)."""
+    text = redact_secrets(redact.redact_captured(text))
+    leaked = [n for v, n in SECRETS.items() if n != "SSH_OTP" and v in text]
+    if leaked:
+        raise SecretLeak(f"refusing to write {os.path.basename(path)}: {', '.join(sorted(set(leaked)))} still in it")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def write_json(path, obj):
+    """Writes obj through write_text and returns it as written (redacted), so what a caller keeps is clean too."""
+    text = json.dumps(redact.redact_obj(obj), indent=1, ensure_ascii=False)
+    write_text(path, text)
+    return json.loads(redact_secrets(redact.redact_captured(text)))
+
+
+def type_secret(run, sess, name):
+    """A `type` step whose whole value is ${SSH_PASSWORD}, ${SSH_PASSPHRASE} or ${SSH_OTP}: the value comes from the run's
+    private map (the code computed now, with time to spare), is registered for redaction first, then typed."""
+    if name not in run.secrets:
+        return {"ok": False, "error": f"${{{name}}}: this run's target has no such secret"}
+    if run.remote:   # a per-case target runs on this machine only; a secret never takes a remote host's path
+        return {"ok": False, "error": f"${{{name}}}: typed only on this machine's lab"}
+    value = provision.otp_now(run.ssh_run, run.ssh_variant.split("+")[0]) if name == "SSH_OTP" else run.secrets[name]
+    SECRETS[value] = name
+    return sess.act("type", "--stdin", stdin=value)   # never in a command line (athena on #210)
+
+
 def lab_args(verb, arg):
+    if verb == "button" and arg == {"dialog_close": True}:   # athena on #227 item 1
+        return ["button", "--dialog-close"]
     if verb in SINGLE:
         return [verb, str(arg)]
     if verb == "remote":
@@ -62,7 +118,48 @@ def lab_args(verb, arg):
     raise ValueError(verb)
 
 
+def pick_by_open_order(windows, nth):
+    """The one window of `windows` at `nth` (first, last or the k-th, from 1) in the order they opened, by the lab's
+    `opened` id; [] when there is none, or when a window has no id (its order is unknown). The pick records its rank, not
+    the id, so two runs compare."""
+    if not windows or any(w.get("opened") is None for w in windows):
+        return []
+    ranked = sorted(windows, key=lambda w: w["opened"])
+    k = 0 if nth == "first" else len(ranked) - 1 if nth == "last" else int(nth) - 1
+    if not 0 <= k < len(ranked):
+        return []
+    return [dict(ranked[k], opened_rank=k + 1)]
+
+
+RECORDING_LOCK = "recording.lock"   # under the room's pipeline/ (athena on kit #247)
+
+
+def recording_lock_path():
+    return os.path.join(caselib.ROOT, "pipeline", RECORDING_LOCK)
+
+
+@contextlib.contextmanager
+def recording_lock():
+    """athena on kit #247: every case run holds the room's recording lock shared (flock LOCK_SH), so the kit follower,
+    which takes it exclusive for a whole kit move (its suites, the move and any rollback), never moves the room under a
+    run and no run starts during a move. A run waits while a move holds it."""
+    path = recording_lock_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_SH)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counterparts=False):
+    """One run of a case, under the room's recording lock (shared)."""
+    with recording_lock():
+        return _run_once(case, profile, slot, host, run_id, log=log, out_dir=out_dir, counterparts=counterparts)
+
+
+def _run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counterparts=False):
     """One provisioned run of a case. Returns the transcript, also written to <recordings>/<case-id>/ (or out_dir)."""
     t0 = time.time()
     run = provision.Run(case, profile, slot, host, run_id, log=log, counterparts=counterparts)
@@ -74,10 +171,15 @@ def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counter
         run.provision()
         known = [c["name"] for c in (case.get("fixture") or {}).get("containers") or []] + run.known_names
         sess = driver.Session(slot, host, run.ph, docker=run.docker, known_names=known, log=log, run_target=run.run_target())
+        sess.user_settings = lambda keys: run.read_user_settings(keys)
+        sess.mark_urls()   # opened_urls counts from here: this case's URLs only
         run.start_window()
         run.ready(sess)
+        uses_seen = "notification_seen" in json.dumps(case["steps"])
         for i, step in enumerate(case["steps"]):
             (verb, arg), = step.items()
+            if uses_seen:
+                sess.begin_step(i)
             s0 = time.time()
             rec = {"i": i, "step": step}
             missing = caselib.unbound(caselib.subst(arg, run.ph))
@@ -125,16 +227,21 @@ def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counter
                     res = run.restart(sess)
                 except provision.ProvisionError as e:
                     res = {"ok": False, "error": str(e)}
+            elif verb == "window" and isinstance(arg, dict) and "close" in arg:
+                res = close_window(sess, caselib.subst(str(arg["close"]), run.ph), float(arg["timeout"]))
             elif verb == "window":
-                # `window: <title or #n>` looks once; `window: {title, timeout, count?}` waits (bounded) until a window
+                # `window: <title or #n>` (#n: the lab's window index, from 0) looks once; `window: {title, timeout, count?}` waits (bounded) until a window
                 # matches and, with count, until that many (non-auxiliary) windows exist
                 spec = arg if isinstance(arg, dict) else {"title": arg}
-                want = caselib.subst(str(spec["title"]), run.ph)
+                want = caselib.subst(str(spec.get("title", "")), run.ph)
+                nth = spec.get("nth")   # athena on #227 items 6 and 8: by the order windows opened (`opened`)
                 deadline, polls = time.time() + float(spec.get("timeout") or 0), 0
                 while True:
                     polls += 1
                     ws = sess.lab("windows", timeout=60)
                     hit = [w for w in ws.get("windows", []) if (want.startswith("#") and f"#{w['index']}" == want) or want in w["title"]]
+                    if nth is not None:
+                        hit = pick_by_open_order([w for w in hit if not w.get("auxiliary")], nth)
                     count_ok = spec.get("count") is None or \
                         len([w for w in ws.get("windows", []) if not w.get("auxiliary")]) == int(spec["count"])
                     if (hit and count_ok) or time.time() >= deadline:
@@ -144,9 +251,12 @@ def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counter
                 if isinstance(arg, dict):
                     res["polls"] = polls
                 if res["ok"]:
-                    sess.window = want
+                    sess.window = f"#{hit[0]['index']}" if nth is not None else want
+                    if nth is not None:
+                        res["picked"] = {"nth": nth, "opened_rank": hit[0]["opened_rank"]}
                 else:
-                    res["error"] = f"no window matches {want!r}" + ("" if count_ok else f" with {spec['count']} window(s) open")
+                    res["error"] = f"no window matches {want!r}" + (f" at nth {nth!r}" if nth is not None else "") + \
+                        ("" if count_ok else f" with {spec['count']} window(s) open")
             elif verb == "cmd":
                 # the palette lists a contributed command only once the window has registered its extensions, which
                 # can lag the window showing its folder: wait (bounded) for the command to appear, never longer
@@ -158,6 +268,8 @@ def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counter
                         break
                     time.sleep(2)
                 res["attempts"] = attempts
+            elif verb == "type" and isinstance(arg, str) and SECRET_PH.fullmatch(arg):
+                res = type_secret(run, sess, SECRET_PH.fullmatch(arg).group(1))
             else:
                 res = sess.act(*lab_args(verb, caselib.subst(arg, run.ph)))
             rec.update(seconds=round(time.time() - s0, 1), ok=bool(res.get("ok")), error=res.get("error"), output=res)
@@ -172,6 +284,8 @@ def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counter
         tr["failure"] = {"step": None, "error": f"{type(e).__name__}: {e}"[:800], "trace": traceback.format_exc()[-2000:],
                          "observation": sess.full_observation() if sess else None}
     finally:
+        if sess and hasattr(sess, "stop_keeper"):   # athena on kit #241 (A): the keeper ends with the window
+            sess.stop_keeper()
         try:
             meta = run.versions()
         except Exception:
@@ -189,8 +303,10 @@ def run_once(case, profile, slot, host, run_id, log=print, out_dir=None, counter
     tr["seconds"] = round(time.time() - t0, 1)
     path = f"{out_dir or caselib.RECORDINGS + '/' + case['id']}/{run_id}.json"
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(redact.redact_obj(tr), f, indent=1, ensure_ascii=False)   # R-34, also caught in the driver
+    try:   # R-34 and #209's secrets, at the one sink; the caller gets the transcript as written (a replay's result, a
+        tr = write_json(path, tr)   # confirm's observations are built from it after the secrets are forgotten)
+    finally:
+        SECRETS.clear()
     tr["_path"] = os.path.relpath(path, caselib.ROOT)
     return tr
 
@@ -205,6 +321,11 @@ def platform_refusal(case, profile, host, allow_platform_change=False, purpose="
     asked (allow_platform_change); on the recording side, an architecture-sensitive case only on its platforms
     (archlib, tests/arch.yaml) and only on a host that provides what it needs (hosts.yaml)."""
     plat = caselib.host_platform(host)
+    if not caselib.host_remote(host) and plat != caselib.local_platform():
+        # 2026-10-14: the recording host became x86_64 while hosts.yaml still said linux/arm64 for this machine; every
+        # check below and recorded.confirmed would name the wrong platform (an arm64-only case would pass on x86_64)
+        return (f"hosts.yaml gives {host} the platform {plat}, but this machine is {caselib.local_platform()}: "
+                f"correct the host's platform in hosts.yaml before recording or confirming here")
     if caselib.PROFILE_ARCH.get(plat) not in (profile.get("arch") or []):
         return f"profile {case['profile']} lists arch {profile.get('arch')}, not {caselib.PROFILE_ARCH.get(plat, plat)} ({host})"
     rec = case.get("recorded") or {}
@@ -282,25 +403,83 @@ def record_case(path, runs, host, slot, log=print, allow_platform_change=False):
     return status
 
 
+def close_window(sess, want, timeout):
+    """`window: {close: <title or #n>, timeout}` (athena's ruling; #n is the `index` that `lab windows` reports, counted
+    from 0, so the first window is #0, dirty-side on F-2502-AC22): closes one window of the run's own slot through the
+    editor core's Close Window command run in that window (an exact palette title: an extension's command shows its
+    category), waits (bounded) until it is gone, and fails otherwise. The last non-auxiliary window is never closed (it
+    would end the editor). Afterwards no window is selected; R-63's after-verb check runs on every lab call as before."""
+    def windows():
+        return [w for w in sess.lab("windows", timeout=60).get("windows", []) if not w.get("auxiliary")]
+    def matches(w):
+        return (want.startswith("#") and f"#{w['index']}" == want) or (not want.startswith("#") and want in w["title"])
+    before = windows()
+    hit = [w for w in before if matches(w)]
+    if len(hit) != 1:
+        return {"ok": False, "error": f"window: close needs exactly one window matching {want!r}, found {len(hit)}",
+                "windows": before}
+    if len(before) < 2:
+        return {"ok": False, "error": "window: close refuses the last window (it would end the editor)", "windows": before}
+    title = hit[0]["title"]
+    sess.window, sess.exact = f"#{hit[0]['index']}", True
+    try:
+        ran = sess.lab("cmd", "Close Window", timeout=60)
+    finally:
+        sess.window, sess.exact = None, False
+    err = f"{ran.get('error') or ''} {ran.get('errorDetail') or ''}"
+    # Close Window ends the page it ran in, so `lab` can lose that page before it answers ("Target page, context or
+    # browser has been closed"): the command ran, and the wait below decides (dirty-side, F-2502-AC22-1/-2, 2026-10-12).
+    # Any other failure fails at once, not after the bound (triton on #205).
+    page_gone = not ran.get("ok") and any(n in err for n in driver.NAVIGATION_ERRORS)
+    if not ran.get("ok") and not page_gone:
+        return {"ok": False, "error": f"Close Window did not run in {title!r}: {ran.get('error')}", "windows": before}
+    titles = lambda ws: [w["title"] for w in ws]
+    deadline, polls = time.time() + timeout, 0
+    while True:
+        polls += 1
+        now = windows()
+        # by count, not presence: another window may carry the same title (triton on #205: close '#1' of two 'same')
+        gone = len(now) == len(before) - 1 and titles(now).count(title) == titles(before).count(title) - 1
+        if gone or time.time() >= deadline:
+            break
+        time.sleep(1)
+    res = {"ok": gone, "closed": title, "polls": polls, "windows": now, "command": {k: ran.get(k) for k in ("ok", "error")}}
+    if page_gone:
+        res["lostPage"] = True
+    if not gone:
+        res["error"] = f"window {title!r} still open after {timeout:g}s"
+    return res
+
+
 def norm_version_refusal(case):
     """Why a case cannot be compared by this normalizer, or None (athena, 2026-10-12: the monorepo runner at v8 compared
     cases recorded under v9-v12 and failed them silently on rule differences that look like the product's). A case
     recorded under a NEWER normalization version than this code's is not-comparable: named, counted, never a pass or a
-    fail. An equal or older version (or none, before versions were recorded) compares as before."""
+    fail. An equal or older version (or none, before versions were recorded) compares as before, except an expect that
+    holds a placeholder a later version renamed (normalize.RENAMING_VERSIONS, athena on kit #236): not-comparable,
+    "re-record"."""
     rec = case.get("recorded") or {}
     norm = rec.get("normalization") if isinstance(rec, dict) else None
-    if norm is None:
-        return None
+    if norm is None:   # recorded before versions were: older than any renaming version
+        return _renamed(case, 0)
     if not isinstance(norm, dict):   # themis on #193: a non-mapping raised a TypeError; named instead
         return f"recorded normalization {type(norm).__name__} is not a mapping: not comparable"
     if "version" not in norm:
-        return None
+        return _renamed(case, 0)
     v = norm["version"]
     if not isinstance(v, int) or isinstance(v, bool) or v < 1:   # athena on #193: a hand-edited "9" fails closed
         return f"recorded normalization version {v!r} is not a whole number: not comparable"
     if v > normalize.NORM_VERSION:
         return (f"recorded under normalization v{v}, newer than this runner's v{normalize.NORM_VERSION}: sync the runner "
                 "before comparing")
+    return _renamed(case, v)
+
+
+def _renamed(case, v):
+    """athena on kit #236: an expect holding a placeholder a later version renamed is not-comparable ("re-record")."""
+    for at, why in normalize.renamed_tokens(case, v):
+        return (f"recorded under normalization {f'v{v}' if v else 'without a version'}, before v{at} renamed "
+                f"{normalize.RENAMING_VERSIONS[at]}: {why}; re-record")
     return None
 
 
@@ -346,8 +525,7 @@ def replay_case(path, host, slot, result_path, log=print):
                 res.update(result="pass" if not mism else "fail", mismatches=mism)
     res["seconds"] = round(time.time() - t0, 1)
     os.makedirs(os.path.dirname(result_path), exist_ok=True)
-    with open(result_path, "w", encoding="utf-8") as f:
-        json.dump(redact.redact_obj(res), f, indent=1, ensure_ascii=False)
+    write_json(result_path, res)
     log(f"{res['case']}: {res['result']}" + (f" ({res.get('reason')})" if res.get("reason") else ""))
     return res["result"]
 
@@ -422,7 +600,7 @@ def main():
         sys.exit(f"record.py: slot {slot} is not a recording slot of this process on {a.host} ({allowed})")
     if a.runs < 2 and not a.replay:
         print("record.py: note: fewer than two runs never produce `expect` (a case needs two agreeing runs)")
-    log = lambda m: print(redact.redact_captured(str(m)), flush=True)  # noqa: E731  (R-34: batch logs too)
+    log = lambda m: print(redact_secrets(redact.redact_captured(str(m))), flush=True)  # noqa: E731  (R-34, #209: logs too)
     if a.replay:
         if len(a.cases) != 1 or not a.result:
             sys.exit("record.py --replay takes one case and --result <file>")

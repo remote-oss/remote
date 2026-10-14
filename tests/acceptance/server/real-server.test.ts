@@ -229,7 +229,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
         readySeconds: 120,
         socketMode: false,
       },
-      [],
+      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
       {
         lockLoop: lockLoop(),
         logger: createLogger(undefined, {minimumLevel: () => 'info'}),

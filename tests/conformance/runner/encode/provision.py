@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 
 import caselib
@@ -124,10 +125,31 @@ def target_substituted(body, ph):
     return TARGET_PH.sub(value, body)
 
 
+SECRET_NAMES = ("SSH_PASSWORD", "SSH_PASSPHRASE", "SSH_OTP", "SSH_PASSWORD_NEW") + tuple(f"SSH_ANSWER_{n}" for n in range(1, 17))
+OTP = object()   # marks ${SSH_OTP}: its value is computed when the type step runs
+
+
+def otp_now(run_id, target, clock=time.time, sleep=time.sleep, code_of=None):
+    """The target's current one-time code, with at least 5 s left in its 30 s window (athena on #209): closer to the
+    edge, wait for the next window (at most 30 s) and give that one's code."""
+    left = 30 - clock() % 30
+    if left < 5:
+        sleep(left + 0.1)
+    if code_of is None:
+        code_of = lambda: subprocess.run([caselib.kitlib.kitbin("sshtarget"), "otp", run_id, target], capture_output=True,
+                                         text=True, timeout=30).stdout.strip()
+    code = code_of()
+    if not re.fullmatch(r"\d{6}", code or ""):
+        raise ProvisionError("sshtarget otp gave no 6-digit code")
+    return code
+
+
 def uses_fingerprints(case):
-    """Whether a case needs its target's fingerprints bound: it names ${SSH_TARGET_FINGERPRINT[_NEW]} or rekeys."""
+    """Whether a case needs its target's fingerprints bound: it names ${SSH_TARGET_FINGERPRINT[_NEW]} or rekeys (cut and
+    heal keep the keys)."""
     text = json.dumps(case)
-    return "${SSH_TARGET_FINGERPRINT" in text or any(isinstance(s, dict) and "target" in s for s in case.get("steps") or [])
+    return "${SSH_TARGET_FINGERPRINT" in text or any(isinstance(s, dict) and s.get("target") == "rekey"
+                                                       for s in case.get("steps") or [])
 
 
 def names_target(body):
@@ -167,6 +189,9 @@ class Run:
         self.ssh_variant = caselib.ssh_variant(profile)
         self.late_settings = {}   # settings naming the per-case target, written once it exists (step 8)
         self.late_scripts = []    # state scripts naming it, run once it exists (step 8)
+        # the per-case target's secrets (athena on #209): never in run.ph (which the transcript stores), an environment, a
+        # child process or a log; typed only by a `type` step, and redacted at the one place the run writes text
+        self.secrets = {}
         self.late_files = {}      # fixture.files whose content names it, written once it exists (step 8)
         # fixture.window_start (athena on F-2409): local = the window starts on the case folder here, and the case's steps
         # open the SSH window; the run's R-63 rule is then its own target on its case folder only (LAB_RUN_TARGET)
@@ -312,12 +337,7 @@ class Run:
         # may carry one, and folder pickers over the profile then list it (remote-oss/remote#72 triage). Never provision it.
         self.sh(["find", f"{self.slot_dir}/user-data", "-name", "state.vscdb.backup", "-delete"], check=True)
         settings_path = f"{self.slot_dir}/user-data/User/settings.json"
-        # a setting that names the per-case target (${SSH_HOST}, ${SSH_TARGET_ADDR}, in its key or value) waits for the
-        # target, step 8 (dirty-side, F-2409 2026-10-12: written here it kept the literal placeholder and matched no host)
-        now, self.late_settings = split_target_settings(
-            dict(self.editor_env.get("settings") or {}, **(fx.get("settings") or {})), bool(self.ssh_variant))
-        extra = caselib.subst(now, self.ph)
-        self.write_settings(settings_path, extra)
+        extra = self.provision_settings(settings_path, fx)
         ids = []
         # An SSH window needs the Remote - SSH extensions: a profile that names nothing besides the extension under test
         # gets the companions too
@@ -441,25 +461,77 @@ class Run:
 
     def target_action(self, action):
         """One declarative step on the per-case target. `target: rekey`: new host keys, ${SSH_TARGET_FINGERPRINT_NEW}
-        bound to them; the old ones keep ${SSH_TARGET_FINGERPRINT}. Returns a transcript record."""
-        if action != "rekey":
+        bound to them; the old ones keep ${SSH_TARGET_FINGERPRINT}. `target: cut` / `target: heal` (athena on #218): drop
+        / restore its network, back on the same addresses; two steps, with the case's own wait between them (a cut
+        shorter than the client's dead-connection detection may leave the old connection alive). Returns a transcript
+        record."""
+        # `target: free` (athena on #227 item 14): removes a `filled` target's filler, the cause of a full HOME
+        if action not in ("cut", "heal", "rekey", "free"):
             return {"ok": False, "error": f"unknown target action {action!r}"}
         if not self.ssh_run:
-            return {"ok": False, "error": "target: rekey needs a per-case SSH target"}
-        p = self.sshtarget("rekey", self.ssh_run, self.ssh_variant.split("+")[0], timeout=120)
+            return {"ok": False, "error": f"target: {action} needs a per-case SSH target"}
+        p = self.sshtarget(action, self.ssh_run, self.ssh_variant.split("+")[0], timeout=120)
         if p.returncode != 0:
-            return {"ok": False, "error": "sshtarget rekey: " + (p.stderr or p.stdout).strip()[-300:]}
+            return {"ok": False, "error": f"sshtarget {action}: " + (p.stderr or p.stdout).strip()[-300:]}
+        if action != "rekey":
+            return {"ok": True, "action": action}
         try:
             keys = self.bind_fingerprints("SSH_TARGET_FINGERPRINT_NEW")
         except ProvisionError as e:
             return {"ok": False, "error": str(e)}
         return {"ok": True, "action": "rekey", "key_types": [k for k, _, _ in keys]}
 
-    def write_settings(self, path, values):
-        """Merge values into the slot's settings.json. A snapshot's remote.SSH.configFile (a path on the machine that
-        captured it) never reaches a run: the window uses the SSH config of its own HOME unless the profile or the case
-        sets the key (to a ${HOME} path)."""
-        merge = ("import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.pop('remote.SSH.configFile', None); "
+    def write_keybindings(self, path, bindings):
+        """Append the case's {key, command, when?} entries to the slot's keybindings.json (a snapshot's own list stays
+        first). A file that is not a plain JSON list (comments, say) is refused rather than rewritten."""
+        merge = ("import json,os,sys; p=sys.argv[1]; d=json.load(open(p)) if os.path.exists(p) else []; "
+                 "assert isinstance(d, list), 'not a list'; d += json.loads(sys.stdin.read()); "
+                 "json.dump(d, open(p,'w'), indent=2)")
+        p = self.sh(["python3", "-c", merge, path], input=json.dumps(bindings))
+        if p.returncode != 0:
+            raise ProvisionError("keybindings.json: the profile's file is not a plain JSON list: "
+                                 + (p.stderr or p.stdout).strip()[-200:])
+
+    def read_user_settings(self, keys):
+        """athena on kit #227 (item 3): the named keys of the slot profile's settings.json, as {key: value}, with a key
+        the file lacks as absent ({"absent": [...]}); never the rest of the file."""
+        p = self.sh(["cat", f"{self.slot_dir}/user-data/User/settings.json"])
+        if p.returncode != 0:
+            return {"error": "settings.json: " + (p.stderr or "missing").strip()[-200:]}
+        try:
+            data = json.loads(p.stdout or "{}")
+        except ValueError:
+            return {"error": "settings.json is not plain JSON"}
+        out = {"values": {k: data[k] for k in keys if k in data}}
+        if any(k not in data for k in keys):
+            out["absent"] = [k for k in keys if k not in data]
+        return out
+
+    def provision_settings(self, settings_path, fx):
+        """Step 4's user settings and keybindings, over the profile snapshot just unpacked into the slot; returns the
+        settings written now (the target-keyed rest waits in self.late_settings)."""
+        # a setting that names the per-case target (${SSH_HOST}, ${SSH_TARGET_ADDR}, in its key or value) waits for the
+        # target, step 8 (dirty-side, F-2409 2026-10-12: written here it kept the literal placeholder and matched no host)
+        now, self.late_settings = split_target_settings(
+            dict(self.editor_env.get("settings") or {}, **(fx.get("settings") or {})), bool(self.ssh_variant))
+        extra = caselib.subst(now, self.ph)
+        self.write_settings(settings_path, extra, snapshot=True)
+        if fx.get("default_title"):   # athena on #227 item 6: the editor's default title, whatever the snapshot set
+            res = self.merge_settings({"window.title": None})
+            if not res["ok"]:
+                raise ProvisionError(f"fixture.default_title: removing window.title failed: {res['error']}")
+        if fx.get("keybindings"):   # athena on kit #218: the case's bindings, after the snapshot's own
+            self.write_keybindings(f"{self.slot_dir}/user-data/User/keybindings.json",
+                                   caselib.subst(fx["keybindings"], self.ph))
+        return extra
+
+    def write_settings(self, path, values, snapshot=False):
+        """Merge values into the slot's settings.json. With snapshot=True (step 4, over the editor fixture's snapshot) a
+        snapshot's remote.SSH.configFile (a path on the machine that captured it) is dropped first: the window uses the
+        SSH config of its own HOME unless the profile or the case sets the key (to a ${HOME} path). A later write keeps
+        it (dirty-side, F-2409: the step-8 write of target-keyed settings dropped the case's own configFile)."""
+        drop = "d.pop('remote.SSH.configFile', None); " if snapshot else ""
+        merge = ("import json,sys; p=sys.argv[1]; d=json.load(open(p)); " + drop +
                  "d.update(json.loads(sys.stdin.read())); json.dump(d, open(p,'w'), indent=2)")
         self.sh(["python3", "-c", merge, path], input=json.dumps(values), check=True)
 
@@ -548,9 +620,15 @@ class Run:
     def ready(self, session, timeout=120, label="ready"):
         """The window answers and shows its folder (or any title for an empty window), then the screen is quiet. An
         SSH window first connects: its title names the host ([SSH: <host>]), with a longer bound."""
-        cond = [{"title": os.path.basename(self.ws)}] if (self.case.get("fixture") or {}).get("workspace", "folder") != "empty-window" else []
+        fx = self.case.get("fixture") or {}
+        if hasattr(session, "start_keeper"):   # athena on kit #241 (A): the notification log from the window's start
+            session.start_keeper()
+        cond = [{"title": os.path.basename(self.ws)}] if fx.get("workspace", "folder") != "empty-window" else []
         if self.ssh_host and not self.local_start:
-            cond.append({"title": f"[SSH: {self.ssh_host}]"})
+            # athena on kit #232 (B): under the editor's default title a window that fails to connect never shows
+            # [SSH: <alias>], so only that condition goes; the case's first step waits for its end state (schema)
+            if not fx.get("default_title"):
+                cond.append({"title": f"[SSH: {self.ssh_host}]"})
             timeout = max(timeout, 300)
         r = session.wait(cond + [{"quiet": 3}], timeout)
         self.step(label, ok=r["ok"], polls=r.get("polls"))

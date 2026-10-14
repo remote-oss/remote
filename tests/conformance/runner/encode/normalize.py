@@ -11,7 +11,7 @@ import yaml
 
 import redact
 
-NORM_VERSION = 13  # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines (<docker command> ...);
+NORM_VERSION = 17  # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines (<docker command> ...);
 #                  5: environment noise dropped from notification observations (ENV_NOISE)
 #                  6: the extension's host temp root (per window since the R-42 temp-root amendment)
 #                  7: VS Code core's keychain-write warning is environment noise (kit parity, 2026-10-02)
@@ -23,7 +23,126 @@ NORM_VERSION = 13  # 2: ${FIXTURES_WS}; 3: ${bind.<name>}; 4: R-34 command lines
 #                 12: ${SSH_HOST_UPPER}, the SSH host alias in upper case (athena on F-2409 BR-3/AC-4), before ssh-host
 #                 13: ${SSH_TARGET_FINGERPRINT} and ${SSH_TARGET_FINGERPRINT_NEW}, the per-case target's own host key
 #                     fingerprints, bound per run (athena on #198: a pattern would let a wrong fingerprint pass)
+#                 14: ${SSH_HOST}, ${SSH_HOST_UPPER} and ${SSH_TARGET_ADDR} also before a sentence's full stop ("... on
+#                     <alias>."): a '.' ends the token unless a name character follows it (dirty-side, F-2601 AC-23/29)
+#                 15: the remote indicator's label cut by core ("SSH: " + the alias's first 35 characters + "…", F-2502
+#                     BR-9) is "SSH: ${SSH_HOST}", the uncut form; any other cut stays literal (athena on #229)
+#                 16: a notification's determinate progress is `determinate: true`, not its run-dependent `percent`
+#                     (athena on kit #241: F-2403 AC3-1/AC4-2 recorded 1 and 4 where runs read 1, 6 and 18)
+#                 17: Docker Compose's own container label com.docker.compose.version is <COMPOSE_VERSION>, not the
+#                     engine fixture's Compose plugin version (dirty-side, 2026-10-14: 5.5.1 in the arm64 captures, 5.6.0
+#                     in the pinned x86_64 one; the reference extension never sets it)
+# athena on kit #236: the versions whose rules RENAME a placeholder an older expect already holds, so "an older version
+# compares as before" cannot hold for such an expect. Versions that only add a placeholder for text an older expect held
+# literally are not listed. An expect recorded before a version here, holding that version's old-form token, is
+# not-comparable for a runner at or past it: "re-record", never a pass or a fail (record.norm_version_refusal).
+RENAMING_VERSIONS = {13: "the per-case target's fingerprint: ${bind.<name>} -> ${SSH_TARGET_FINGERPRINT}",
+                     16: "a notification's progress: percent -> determinate: true",
+                     17: "Compose's version label: its value -> <COMPOSE_VERSION>"}
+# v17: Docker Compose stamps every container it creates with its own version under this label; the value is the engine
+# fixture's, never the extension's. As a mapping key (a container's labels) or as text (`name=value`, or JSON in a
+# captured string), the value becomes the marker; the label's presence still counts.
+COMPOSE_LABEL = "com.docker.compose.version"
+COMPOSE_PLACEHOLDER = "<COMPOSE_VERSION>"
+COMPOSE_IN_TEXT = re.compile(r'(?:(?<=com\.docker\.compose\.version=)|(?<=com\.docker\.compose\.version":")'
+                             r'|(?<=com\.docker\.compose\.version": "))(?!<COMPOSE_VERSION>)[0-9A-Za-z.+_-]+')
+BIND_TOKEN = re.compile(r"\$\{bind\.([a-z0-9_]+)\}")
+# a bind that holds a host key fingerprint, from its own definition: its name, observation path or match regex
+FINGERPRINT_HINT = re.compile(r"(?i)fingerprint|host_?key|sha256|md5|(?:^|[^a-z])fp(?:$|[^a-z])")
+
+
+def bind_definitions(case):
+    """{name: (path, match)} of the case's observe-step binds."""
+    out = {}
+    for st in case.get("steps") or []:
+        arg = st.get("observe") if isinstance(st, dict) else None
+        for name, spec in ((arg or {}).get("bind") or {}).items() if isinstance(arg, dict) else ():
+            path, rx = (spec, None) if isinstance(spec, str) else ((spec or {}).get("path"), (spec or {}).get("match"))
+            out[name] = (str(path or ""), str(rx or ""))
+    return out
+
+
+def renamed_tokens(case, version):
+    """For an expect recorded under `version`: [(renaming version, why)] for each rename past it whose old-form token
+    the expect holds. v13: a ${bind.<name>} in the expect whose bind is a fingerprint by its definition, or has no
+    definition in the case (undecidable: this case alone, athena on #236)."""
+    out = []
+    if 13 in RENAMING_VERSIONS and version < 13 <= NORM_VERSION:
+        import json as _json
+        used = sorted(set(BIND_TOKEN.findall(_json.dumps(case.get("expect")))))
+        defs = bind_definitions(case)
+        fps = [b for b in used if b in defs and any(FINGERPRINT_HINT.search(x) for x in (b, *defs[b]))]
+        undecided = [b for b in used if b not in defs]
+        if fps:
+            out.append((13, f"${{bind.{fps[0]}}} holds the target fingerprint"))
+        elif undecided:
+            out.append((13, f"${{bind.{undecided[0]}}} has no bind definition in the case (undecidable)"))
+    if 16 in RENAMING_VERSIONS and version < 16 <= NORM_VERSION:
+        where = _notification_percent(case.get("expect"))
+        if where:
+            out.append((16, f"{where} holds a percent"))
+    if 17 in RENAMING_VERSIONS and version < 17 <= NORM_VERSION:
+        where = compose_version_at(case.get("expect"))
+        if where:
+            out.append((17, f"{where} holds Compose's version"))
+    return out
+
+
+def compose_version_at(obj, path="", key=None):
+    """The first path in an expect where Compose's version label holds a value, not the v17 marker, or None."""
+    if isinstance(obj, str):
+        return (path or "/") if (key == COMPOSE_LABEL and obj != COMPOSE_PLACEHOLDER) or COMPOSE_IN_TEXT.search(obj) else None
+    items = obj.items() if isinstance(obj, dict) else enumerate(obj) if isinstance(obj, list) else ()
+    for k, v in items:
+        hit = compose_version_at(v, f"{path}/{k}", k if isinstance(obj, dict) else key)
+        if hit:
+            return hit
+    return None
+
+
+def compose_marker(obj, key=None):
+    """`obj` with v17 applied alone: Compose's version label's value is the marker (renormalize's allowed rewrite)."""
+    if isinstance(obj, str):
+        return COMPOSE_PLACEHOLDER if key == COMPOSE_LABEL else COMPOSE_IN_TEXT.sub(COMPOSE_PLACEHOLDER, obj)
+    if isinstance(obj, list):
+        return [compose_marker(v, key) for v in obj]
+    if isinstance(obj, dict):
+        return {k: compose_marker(v, k) for k, v in obj.items()}
+    return obj
+
+
+def _notification_percent(obj, path="", key=None):
+    """The first path in an expect where a notification item holds `percent` (v16 renamed it), or None."""
+    if isinstance(obj, dict):
+        if key in NOTIFICATION_KEYS and "percent" in obj:
+            return path or "/"
+        for k, v in obj.items():
+            hit = _notification_percent(v, f"{path}/{k}", k)
+            if hit:
+                return hit
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            hit = _notification_percent(v, f"{path}/{i}", key)
+            if hit:
+                return hit
+    return None
+
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
+# Where a host alias or an address ends (version 14): no name character next, and a '.' only as punctuation, not as the
+# start of a longer dotted name ("sshlab-x." ends a sentence; "sshlab-x.example" is another host).
+NAME_END = r"(?![\w-]|\.[\w-])"
+ADDR_END = r"(?!\w|\.\w)"
+ELLIPSIS = "\u2026"
+# athena on #229: core cuts the remote indicator's host label to its first LABEL_MAX characters plus "…" (F-2502 BR-9 and
+# AC-19; [oss] remoteIndicator.ts REMOTE_STATUS_LABEL_MAX_LENGTH), so "SSH: <alias>" keeps 35 characters of the alias.
+LABEL_MAX = 40
+SSH_LABEL = "SSH: "
+
+
+def cut_label(label):
+    """The host label as core shows it: unchanged up to LABEL_MAX characters, else its first LABEL_MAX plus "…"."""
+    return label if len(label) <= LABEL_MAX else label[:LABEL_MAX] + ELLIPSIS
 
 # (name, placeholder, regex, description); applied to every string value, in this order, after the path rules
 PATTERN_RULES = [
@@ -136,6 +255,8 @@ def rules_used(ctx):
              for n, _, why in ENV_NOISE]
     noise += [{"rule": n, "placeholder": "(dropped)", "applies": "notifications, notification_center with no source and "
                "exactly the buttons " + " + ".join(want) + ": " + why} for n, want, why in ENV_NOISE_BUTTONS]
+    pats += [{"rule": "compose-version", "placeholder": COMPOSE_PLACEHOLDER,
+              "what": f"Docker Compose's own {COMPOSE_LABEL} label (the engine fixture's Compose, not the extension)"}]
     return {"version": NORM_VERSION, "rules": noise + redact.RULES[:2] + paths + binds + ident + pats}
 
 
@@ -168,6 +289,8 @@ def _fingerprints(ctx):
 
 
 def norm_str(s, ctx, key=None):
+    if key == COMPOSE_LABEL:   # v17: a container's labels mapping
+        return COMPOSE_PLACEHOLDER
     s = redact.redact_captured(s)   # R-34: command lines first, so replays compare redacted to redacted
     for name, value in _fingerprints(ctx):   # first: exact values, before any pattern can cut into one
         s = re.sub(r"(?<![A-Za-z0-9+/:=])" + re.escape(value) + r"(?![A-Za-z0-9+/:=])", "${" + name + "}", s)
@@ -185,11 +308,15 @@ def norm_str(s, ctx, key=None):
             value = value.replace(eid, "${EXT_ID}")
         s = re.sub(r"(?<![A-Za-z0-9])" + re.escape(value) + r"(?![A-Za-z0-9])", "${" + name + "}", s)
     if _upper_host(ctx):   # its upper-case form first, so the two never collide (an alias with no letters has none)
-        s = re.sub(r"(?<![\w.-])" + re.escape(_upper_host(ctx)) + r"(?![\w.-])", "${SSH_HOST_UPPER}", s)
+        s = re.sub(r"(?<![\w.-])" + re.escape(_upper_host(ctx)) + NAME_END, "${SSH_HOST_UPPER}", s)
     if ctx.get("SSH_HOST"):   # the SSH window's host alias (title "[SSH: <host>]", the remote indicator)
-        s = re.sub(r"(?<![\w.-])" + re.escape(str(ctx["SSH_HOST"])) + r"(?![\w.-])", "${SSH_HOST}", s)
+        s = re.sub(r"(?<![\w.-])" + re.escape(str(ctx["SSH_HOST"])) + NAME_END, "${SSH_HOST}", s)
+        # version 15: core's exact cut of the indicator's label maps to the uncut placeholder; any other cut stays literal
+        label = SSH_LABEL + str(ctx["SSH_HOST"])
+        if len(label) > LABEL_MAX:
+            s = s.replace(cut_label(label), SSH_LABEL + "${SSH_HOST}")
     if ctx.get("SSH_TARGET_ADDR"):   # a per-run target's address (an IPv4 address; never part of a longer one)
-        s = re.sub(r"(?<![\w.])" + re.escape(str(ctx["SSH_TARGET_ADDR"])) + r"(?![\w.])", "${SSH_TARGET_ADDR}", s)
+        s = re.sub(r"(?<![\w.])" + re.escape(str(ctx["SSH_TARGET_ADDR"])) + ADDR_END, "${SSH_TARGET_ADDR}", s)
     if key == "source":
         for side in ("reference", "reimplementation"):
             dn = (ident.get(side) or {}).get("display_name")
@@ -201,7 +328,7 @@ def norm_str(s, ctx, key=None):
                 s = s[: len(s) - len(app)] + "${APP_NAME}"
     for _, placeholder, rx in _COMPILED:
         s = rx.sub(placeholder, s)
-    return s
+    return COMPOSE_IN_TEXT.sub(COMPOSE_PLACEHOLDER, s)   # v17: the label as text
 
 
 def normalize(obj, ctx, key=None):
@@ -216,6 +343,8 @@ def normalize(obj, ctx, key=None):
             obj = [v for v in obj if not (isinstance(v, dict) and v.get("label") == "state.vscdb.backup")]
         return [normalize(v, ctx, key) for v in obj]
     if isinstance(obj, dict):
+        if key in NOTIFICATION_KEYS and "percent" in obj:   # v16 (athena on kit #241): presence, not the run's value
+            obj = dict({k: v for k, v in obj.items() if k != "percent"}, determinate=True)
         return {norm_str(k, ctx) if isinstance(k, str) else k: normalize(v, ctx, k) for k, v in obj.items()}
     return obj
 
