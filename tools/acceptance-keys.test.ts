@@ -14,7 +14,7 @@ import {
   type RunKeys,
   startRunAgent,
 } from './acceptance-keys.ts';
-import {type CommandRunner, runCommand} from './acceptance-run.ts';
+import {type CommandRunner, runCommand} from './command-runner.ts';
 
 /** Runs a program with extra variables and gives its status and both outputs. */
 function runProgram(

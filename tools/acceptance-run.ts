@@ -9,10 +9,10 @@
  * pruned.
  */
 
-import {spawnSync} from 'node:child_process';
 import {randomInt} from 'node:crypto';
 import {readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
+import {checked, type CommandRunner, runCommand} from './command-runner.ts';
 import {isMainModule, messageOf} from './repository.ts';
 
 /** The label every Docker object of an acceptance run carries; its value is the run's id. */
@@ -29,47 +29,6 @@ export const DEVCONTAINER_LABEL = 'remote-oss.acceptance.devcontainer';
 
 /** The image name of the dev containers' base image; the run's tag keeps each run's build its own. */
 export const DEVCONTAINER_IMAGE = 'remote-oss-acceptance-devcontainer';
-
-/** The result of one command: its exit status and its standard output and error. */
-export interface CommandResult {
-  status: number;
-  stdout: string;
-  stderr: string;
-}
-
-/** Runs a program and waits for it. */
-export type CommandRunner = (
-  program: string,
-  programArguments: readonly string[],
-) => CommandResult;
-
-/** Runs a program and collects its exit status and output. */
-export function runCommand(
-  program: string,
-  programArguments: readonly string[],
-): CommandResult {
-  const result = spawnSync(program, programArguments, {encoding: 'utf8'});
-  return {
-    status: result.status ?? 1,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
-}
-
-/** Runs a program and waits for it to succeed; it throws with the command and its standard error otherwise. */
-export function checked(
-  command: CommandRunner,
-  program: string,
-  programArguments: readonly string[],
-): string {
-  const result = command(program, programArguments);
-  if (result.status !== 0) {
-    throw new Error(
-      `${program} ${programArguments.join(' ')} failed (${String(result.status)}): ${result.stderr.trim()}`,
-    );
-  }
-  return result.stdout;
-}
 
 /**
  * The run's id: `GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT-GITHUB_JOB` in CI, else `local-<process id>`. The job's id is
