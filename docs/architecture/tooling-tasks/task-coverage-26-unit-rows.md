@@ -659,7 +659,7 @@ In `docs/architecture/catalogue/coverage-slice1.tsv`, in the same PR. Change onl
 lines; they are all `todo` today.
 
 - **To `unit`, with an empty reason:**
-  - F-2101 AC-2, 17, 18, 27, 30;
+  - F-2101 AC-2, 18, 27, 30;
   - F-2102 AC-2, 3, 23;
   - F-2202 AC-1, 19;
   - F-2305 AC-2, 7;
@@ -670,32 +670,20 @@ lines; they are all `todo` today.
   - F-2202 AC-21 and AC-32, with the reason `build order slice 1: the Remotes view is remote-explorer's`;
   - F-2401 AC-16 and AC-17, with the reason `D-86: only clearAllSessionHints of F-2605 is in 0.2`.
 
-`node tools/check-coverage.ts` then prints `unit: 65`, `deferred: 9`, `todo: 416` on main b0334ea. If main has moved,
-the unit and deferred counts each go up by 21 and 4 from what main prints.
+F-2101 AC-17 stays `todo` (athena, 2026-10-14). Its clause "SSH_ASKPASS_REQUIRE is not set" contradicts the
+recorded adaptation (F-2309 BR-3) until the spec scopes it to the external askpass. The AC-17 rows are still built, and
+the tag follows when the spec is republished. `node tools/check-coverage.ts` then prints `unit` 20 higher and
+`deferred` 4 higher than main does before the change.
 
-## 5. Not in this card (for the PR body; the lead files them)
+## 5. Not in this card
 
-1. **Defect, F-2101 AC-21 (7.E4, provisional until Q1):** the locate step fails with `reason: {id: 'S009'}`
-   (`pipeline/locate-step.ts`), but S009 is in no string table: `FAILURE_TEMPLATES` (`surfaces/failure-strings.ts`)
-   has no S009, and `reasonText` gives `undefined` for an unknown id. So the dialog says only
-   `Could not establish connection to "<alias>".`, never "An SSH installation couldn't be found". The fix adds S009 to
-   the table and the l10n bundles, as connect-38 did for S071.
-2. **Question, F-2501 AC-4 (BR-5):** the spec asks for a managed resolved authority, whose connection id equals the
-   attempt number. Ours answers `ResolvedAuthority(<loopback>, <port>, <token>)` (lib-authority
-   `resolver/vscode-resolver.ts`), and `brief-cli-path.md` rejects `ManagedResolvedAuthority`. This needs athena's
-   ruling: an adaptation, or a change.
-3. **Product gap, F-2501 AC-34 (BR-13, 6.8):** no resolver answers `resolveExecServer`, so a chained authority
-   `ssh-remote+<j>@ssh-remote+<k>` can't resolve. This needs a build card or a deferral ruling.
-4. **Ruled adaptation, F-2101 AC-17:** the clause "SSH_ASKPASS_REQUIRE is not set" holds for the check and the terminal
-   mode. In shared mode, our askpass sets `SSH_ASKPASS_REQUIRE=force` (contracts S3, narrowed 2026-10-08, recorded as
-   an adaptation). The rows prove the rest of the AC. athena's tag check confirms.
-5. **Note, F-2101 AC-18:** the rows prove that an empty SSH_AUTH_SOCK reaches ssh unchanged. That a key file then
-   works is ssh's own behaviour, and no new acceptance row is added for it.
-6. **Note:** `ELECTRON_RUN_AS_NODE=1` reaches the shared connection's `ssh`, and so its ProxyCommand and askpass. The
-   cause: lib-helper's `spawnSpecification` adds it to the helper, and `inheritedEnvironment` strips only the
-   parameters variable. No AC of this card fails on it.
-7. **Note, F-2305 AC-7:** the recorded split lists it as recorded-covered. The row is kept, as hermes's scope change
-   names it among the criteria that stay.
+The lead has handled these:
+- the S009 defect is connect-45 (#733);
+- the `ELECTRON_RUN_AS_NODE` note is helper-04 (#734);
+- athena deferred F-2501 AC-4 and AC-34 in the catalogue sweep (#706).
+
+F-2101 AC-18: the rows prove that an empty SSH_AUTH_SOCK reaches ssh unchanged. That a key file then works is ssh's own
+behaviour, and no acceptance row is added for it.
 
 ## 6. Gates and review
 
