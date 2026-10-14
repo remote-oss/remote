@@ -25,6 +25,9 @@ spellings in the windows suite. Builder: iris or hestia (hermes assigns). Size: 
 - `hexOf(target)`: `Buffer.from(JSON.stringify(target)).toString('hex')`, the lower-case hex F-2501 BR-1 defines;
 - `sshdLog(since)`: the lines of `docker logs --since <since> <container>`;
 - `acceptedKeyLogins(since)`: the count of `Accepted publickey for harness` lines among them;
+- `hostConnections()`: the client's established TCP connections whose peer is the host container's published address
+  (`127.0.0.1:<the run's ssh port>`), as `{program}`, from `ss -tnpH state established` (the process name inside
+  `users:(("<name>",…))`). Measure the `ss` output form on the run machine first, and write it into the PR;
 - `cutHostNetwork()` and `restoreHostNetwork()`: `cutNetwork` and `restoreNetwork` of `tools/acceptance-network.ts`,
   with `runCommand` and `variable('HARNESS_CONTAINER')` (D-85's cut, which the run's host container allows: it runs
   with `NET_ADMIN`). A row that cuts restores in a `finally`. coverage-12 §2a adds the same pair; whichever card lands
@@ -48,6 +51,7 @@ folder name before it opens. "One connection" means two things:
 
 | Cite | Windows (folder ← payload) | Assertions |
 |---|---|---|
+| F-2501 AC-4 | with no window on the host and `connectionHelpers()` empty, note `since`; `a1` ← `harness`, connected | `acceptedKeyLogins(since)` is exactly 1, the extension's one session. `hostConnections()` is not empty, and every entry's `program` is `ssh` (core opened no connection to the host's address) |
 | F-2501 AC-5 | `a1` ← `hexOf({hostName: '127.0.0.1', user: 'harness'})` | connected |
 | F-2501 AC-6 | `a1` ← `hexOf({hostName: '127.0.0.1', user: 'harness', port: P})`, then `a2` ← `hexOf({…, port: String(P)})` | both connected; one connection |
 | F-2501 AC-7 | `a1` ← `harness`, then `a2` ← `hexOf({hostName: 'harness'})`, then `a3` ← `hexOf({hostName: 'harness', foo: 'bar'})` | all connected; one connection |
@@ -70,7 +74,7 @@ folder name before it opens. "One connection" means two things:
 
 ## 3. The catalogue
 
-F-2501 AC-2, 5, 6, 7, 8, 9, 10, 11, 13, 14, 16, 17, 18, 19, 20, 25, 32 and 33 go to `acceptance`. The attempt number is
+F-2501 AC-2, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 16, 17, 18, 19, 20, 25, 32 and 33 go to `acceptance`. The attempt number is
 core's input to our resolver, a core half (athena on #591). AC-20's Retry variant joins with tooling-20's Retry. AC-1
 is `unit`, through the manifest's `onResolveRemoteAuthority:ssh-remote` row: every connected row is its wiring, and the
 activation order is core's. Core halves, listed in #142:
