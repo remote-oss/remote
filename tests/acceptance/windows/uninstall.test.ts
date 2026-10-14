@@ -4,11 +4,13 @@ import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   agentClear,
+  closeWindow,
   connectionLog,
   connectedWithin,
   hostAliases,
   hostAnswer,
   inWindow,
+  nextEmptyWindow,
   onHost,
   onHostAs,
   recordLines,
@@ -323,6 +325,30 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     );
     await reloadWindow('u1');
     await connectedWithin('u1', INSTALL_MILLISECONDS);
+  });
+
+  it('F-2412 AC-17: the own alias turns the window local with no notification and the host unchanged', async () => {
+    await closeAllButLocal();
+    await openConnected('u1', INSTALL_MILLISECONDS);
+    let mark = 0;
+    const name = await nextEmptyWindow(async () => {
+      mark = await uninstallWith('u1', [pickHost('harness')]);
+    });
+    const left = windowEvents('u1')
+      .filter(each => each.event === 'deactivated')
+      .at(-1)?.time;
+    const state = await windowState(name);
+    deepStrictEqual(
+      [
+        state.remoteName,
+        state.folders,
+        (left ?? Infinity) - pickTime(mark, 'u1') <= 1000,
+        surfacesSince(mark, 'u1'),
+        await existsOnHost(DATA_FOLDER),
+      ],
+      [null, [], true, ['hostPick'], true],
+    );
+    await closeWindow(name);
   });
 
   it('F-2412 AC-21: Configure SSH Hosts and Add New SSH Host end the uninstall and remove nothing', async () => {

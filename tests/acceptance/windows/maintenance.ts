@@ -1,7 +1,6 @@
 /**
  * @fileoverview What the server maintenance rows share: the scripted answers of the host pick, the host's server
- * processes counted from a baseline, the record read from a mark, and the user settings changed as the Settings editor
- * changes them.
+ * processes, the record read from a mark, and the user settings changed as the Settings editor changes them.
  */
 
 import {mkdirSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
@@ -68,11 +67,8 @@ export function password(): AppendedEntry {
   };
 }
 
-/** The server processes the host ran when the windows were last all closed, which the rows don't count. */
-let leftBefore: number[] = [];
-
 /** The process ids, on the host, of the user harness's processes that run from the server's data folder. */
-async function hostServerProcesses(): Promise<number[]> {
+export async function serverProcesses(): Promise<number[]> {
   try {
     return (await onHost('pgrep', '-u', 'harness', '-f', `${DATA_FOLDER}/`))
       .split('\n')
@@ -81,13 +77,6 @@ async function hostServerProcesses(): Promise<number[]> {
   } catch {
     return [];
   }
-}
-
-/** The server processes on the host, but those the run's earlier files left. */
-export async function serverProcesses(): Promise<number[]> {
-  return (await hostServerProcesses()).filter(
-    server => !leftBefore.includes(server),
-  );
 }
 
 /**
@@ -214,10 +203,7 @@ export async function openLocalWindow(
   await waitFor(`${name} to activate its agent`, () => isOpen(name), 60_000);
 }
 
-/**
- * Closes every window of the launch but `local` that is open, waits until no connection helper runs, and from then on
- * counts no server process that runs on the host now.
- */
+/** Closes every window of the launch but `local` that is open, and waits until no connection helper runs. */
 export async function closeAllButLocal(): Promise<void> {
   for (const name of windowNames()) {
     if (name !== 'local' && isOpen(name)) {
@@ -225,7 +211,6 @@ export async function closeAllButLocal(): Promise<void> {
     }
   }
   await noHelperWithin(60_000);
-  leftBefore = await hostServerProcesses();
 }
 
 /** The per-window mode: no local server, and the host's platform named so that no pick is asked. */

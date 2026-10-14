@@ -7,6 +7,8 @@ import {
   closeWindow,
   connected,
   connectedWithin,
+  connectionHelpers,
+  emptyWindows,
   hostAliases,
   hostAnswer,
   inWindow,
@@ -17,6 +19,7 @@ import {
   openWindow,
   recordLines,
   reloadWindow,
+  sshdLog,
   variable,
   waitFor,
   windowEvents,
@@ -47,6 +50,13 @@ import {
 
 /** The extension's log channel. */
 const LOG_CHANNEL = 'Remote - SSH';
+
+/** A key login of the user harness in the host's sshd log; its group is the client port. */
+const KEY_LOGIN = /Accepted publickey for harness from \S+ port (\d+)/;
+
+/** The end of a login of the user harness, whether the client disconnected or closed the connection; its group is the client port. */
+const LOGIN_END =
+  /(?:Disconnected from|Connection (?:closed|reset) by) user harness \S+ port (\d+)/;
 
 /** The answer to the notice of a kill: its Open Logs button. */
 const OPEN_LOGS: AppendedEntry = {
@@ -105,6 +115,74 @@ async function shownChannel(name: string): Promise<string | null | undefined> {
     5000,
   ).catch(() => undefined);
   return shown;
+}
+
+/** Waits until core's reconnection resolves window `window` again after `mark`, as its setup progress shows. */
+function coreResolvesAgain(
+  window: string,
+  mark: number,
+  milliseconds: number,
+): Promise<void> {
+  return waitFor(
+    `${window} to be resolved again by core’s reconnection`,
+    () =>
+      linesSince(mark, window).some(
+        line =>
+          line.surface === 'progress' &&
+          line.question === 'Setting up SSH Host harness',
+      ),
+    milliseconds,
+  );
+}
+
+/** The client ports of the host's sshd log lines that `pattern` matches, since `since` and up to `until` if given. */
+async function loginPorts(
+  pattern: RegExp,
+  since: string,
+  until?: string,
+): Promise<string[]> {
+  return (await sshdLog(since, until)).flatMap(line => {
+    const port = pattern.exec(line)?.[1];
+    return port === undefined ? [] : [port];
+  });
+}
+
+/**
+ * Runs Kill on Host on `harness` in window `window`. Gives the client ports of the key logins the host accepted from
+ * its start until its notice, once each of them has ended, and whether the connection helpers are back to those
+ * before it.
+ */
+async function killLogins(
+  window: string,
+): Promise<{logins: string[]; helpersBack: boolean}> {
+  const helpers = JSON.stringify(await connectionHelpers());
+  const since = new Date().toISOString();
+  const mark = await killWith(window, [pickHost('harness')]);
+  const notice = linesSince(mark, window).find(
+    line => line.surface === 'notice',
+  );
+  const logins = await loginPorts(
+    KEY_LOGIN,
+    since,
+    new Date(notice?.time ?? Date.now()).toISOString(),
+  );
+  await waitFor(
+    `the kill's logins ${logins.join(', ')} to end`,
+    async () => {
+      const ended = await loginPorts(LOGIN_END, since);
+      return logins.every(port => ended.includes(port));
+    },
+    5000,
+  );
+  const helpersBack = await waitFor(
+    'the kill’s connection helper to end',
+    async () => JSON.stringify(await connectionHelpers()) === helpers,
+    5000,
+  ).then(
+    () => true,
+    () => false,
+  );
+  return {logins, helpersBack};
 }
 
 describe('Kill VS Code Server (card coverage-39)', function () {
@@ -200,17 +278,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
   });
 
   it('F-2411 AC-10: the window on the killed host stays where it is, core reconnects it, and a reload connects it', async () => {
-    const mark = firstKill;
-    await waitFor(
-      'x1 to be resolved again by core’s reconnection',
-      () =>
-        linesSince(mark, 'x1').some(
-          line =>
-            line.surface === 'progress' &&
-            line.question === 'Setting up SSH Host harness',
-        ),
-      30_000,
-    );
+    await coreResolvesAgain('x1', firstKill, 30_000);
     const state = await windowState('x1');
     await reloadWindow('x1');
     deepStrictEqual(
@@ -443,6 +511,30 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     deepStrictEqual(notices, [killed('harness'), killFailed('blackhole')]);
   });
 
+  it('F-2411 AC-33: each Kill on Host is one new login, ended right after, also from a window on the host with useLocalServer false', async () => {
+    await closeAllButLocal();
+    await openConnected('x1');
+    const fromLocal = await killLogins('local');
+    await closeAllButLocal();
+    await perWindowMode(true);
+    try {
+      await openConnected('x2');
+      const fromOwnWindow = await killLogins('x2');
+      deepStrictEqual(
+        [
+          fromLocal.logins.length,
+          fromLocal.helpersBack,
+          fromOwnWindow.logins.length,
+          fromOwnWindow.helpersBack,
+        ],
+        [1, true, 1, true],
+      );
+    } finally {
+      await closeAllButLocal();
+      await perWindowMode(false);
+    }
+  });
+
   it('F-2411 AC-23: no kill writes the settings file', () => {
     deepStrictEqual(
       settingsAround.map(([before, after]) => before === after),
@@ -557,6 +649,26 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     }
   });
 
+  it('F-2411 AC-25: a typed user@alias in a window on the alias kills on the host, and the window stays an SSH window that core reconnects', async () => {
+    await closeAllButLocal();
+    await openConnected('x1');
+    const servers = await serverProcesses();
+    const empty = emptyWindows();
+    const mark = await killWith('x1', [typeHost('harness@harness')]);
+    await serversGoneWithin(servers, 10_000);
+    const state = await windowState('x1');
+    await coreResolvesAgain('x1', mark, 40_000);
+    deepStrictEqual(
+      [
+        servers.length > 0,
+        noticesSince(mark, 'x1'),
+        state.remoteName,
+        emptyWindows(),
+      ],
+      [true, [[killed('harness'), ['Open Logs']]], 'ssh-remote', empty],
+    );
+  });
+
   it('F-2411 AC-22: Kill Current outside a connected window does nothing visible', async () => {
     appendScript([
       {
@@ -604,5 +716,48 @@ describe('Kill VS Code Server (card coverage-39)', function () {
       [],
     );
     await closeAllButLocal();
+  });
+
+  it('F-2411 AC-32: in socket mode Kill on Host stops every server process on the host within 10 s', async () => {
+    await closeAllButLocal();
+    await setting('remote.SSH.remoteServerListenOnSocket', true);
+    try {
+      await openConnected('x1');
+      await closeWindow('x1');
+      const servers = await serverProcesses();
+      const mark = await killWith('local', [pickHost('harness')]);
+      await serversGoneWithin(servers, 10_000);
+      deepStrictEqual(
+        [
+          servers.length > 0,
+          noticesSince(mark, 'local'),
+          await serverProcesses(),
+        ],
+        [true, [[killed('harness'), ['Open Logs']]], []],
+      );
+    } finally {
+      await setting('remote.SSH.remoteServerListenOnSocket', undefined);
+    }
+  });
+
+  it('F-2411 AC-32: in socket mode Kill Current stops the server and the window stays an SSH window until core reconnects it', async () => {
+    await closeAllButLocal();
+    await setting('remote.SSH.remoteServerListenOnSocket', true);
+    try {
+      await openConnected('x1');
+      const servers = await serverProcesses();
+      const mark = recordLines().length;
+      await killCurrent('x1');
+      await serversGoneWithin(servers, 10_000);
+      const state = await windowState('x1');
+      await coreResolvesAgain('x1', mark, 40_000);
+      deepStrictEqual(
+        [servers.length > 0, noticesSince(mark, 'x1'), state.remoteName],
+        [true, [[killed('harness'), ['Open Logs']]], 'ssh-remote'],
+      );
+    } finally {
+      await closeAllButLocal();
+      await setting('remote.SSH.remoteServerListenOnSocket', undefined);
+    }
   });
 });

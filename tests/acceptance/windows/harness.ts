@@ -252,11 +252,20 @@ export function hostPort(): number {
   return Number(match[1]);
 }
 
-/** The lines of the host container's log since `since` (an RFC 3339 time), from both of its streams. */
-export async function sshdLog(since: string): Promise<string[]> {
+/** The lines of the host container's log since `since` (an RFC 3339 time), and up to `until` if given, from both of its streams. */
+export async function sshdLog(
+  since: string,
+  until?: string,
+): Promise<string[]> {
   const {stdout, stderr} = await execFileAsync(
     'docker',
-    ['logs', '--since', since, variable('HARNESS_CONTAINER')],
+    [
+      'logs',
+      '--since',
+      since,
+      ...(until === undefined ? [] : ['--until', until]),
+      variable('HARNESS_CONTAINER'),
+    ],
     {encoding: 'utf8'},
   );
   return `${stdout}\n${stderr}`.split('\n').filter(line => line !== '');
