@@ -17,16 +17,15 @@ A run takes a list of launch labels. The list comes from the files the PR change
 
 | Changed path | Launches |
 |---|---|
-| `packages/remote-containers/**` | the launches whose `withExtensions` hold `remote-oss.remote-containers` |
-| `packages/remote-explorer/**` | the launches whose `withExtensions` hold `remote-oss.remote-explorer` |
-| `packages/remote-ssh/**`, `packages/remote-ssh-edit/**` | every launch (every window runs Remote - SSH) |
-| `tests/acceptance/<suite>/**` (a suite folder) | the launches whose `suite` is that folder |
-| `packages/lib-*/**`, `tools/build.ts`, `tools/acceptance*.ts`, `tests/acceptance/windows/**`, `tests/acceptance/runner*/**`, `package.json`, `pnpm-lock.yaml`, `.github/workflows/ci.yml` | every launch |
-| anything else (`docs/**`, other packages' tests, cards) | no launch: the run is skipped and reported green with "no launch reachable" |
+| `docs/**`, `*.md` anywhere, `packages/*/test/unit/**`, `tools/**/*.test.ts` | no launch: the run is skipped and reported green with "no launch reachable" |
+| `packages/remote-containers/**` (not its unit tests) | the launches whose `withExtensions` hold `remote-oss.remote-containers` |
+| `packages/remote-explorer/**` (not its unit tests) | the launches whose `withExtensions` hold `remote-oss.remote-explorer` |
+| `tests/acceptance/<folder>/**`, where `<folder>` is the `suite` of at least one launch in `launchesOf` | the launches whose `suite` is that folder |
+| anything else: `packages/remote-ssh/**`, `packages/remote-ssh-edit/**`, `packages/lib-*/**`, every other `tools/**` (`build.ts`, `acceptance*.ts`, `package-extensions.ts`, `command-runner.ts`, `process-ids.ts`, `script-file.ts`, `host-variants.ts`, `repository.ts`, ...), every other path under `tests/acceptance/` (`host/`, the host image; `suite/`, the shared `settle.ts`; `window-agent/` and `slow-remote/`, extensions the launches install; `devcontainer-image/`, `windows/`, `runner*/`, `vscode-test.mjs`, `package.json`, `tsconfig.json`), root configuration, the lockfile and `.github/**` | every launch |
 
-A path that matches no row of the table but lies under `packages/` or `tests/acceptance/` selects every launch:
-the rule fails toward running more, never less. The main backstop (a push to main, #912) and a release tag always run
-every launch.
+The no-launch row is a closed list and everything not on it runs more (dike on #915): a path the table does not name
+falls to the last row. A change touching several rows gets the union. The main backstop (a push to main, #912) and a
+release tag always run every launch.
 
 ## 3. The change
 
@@ -42,8 +41,10 @@ every launch.
 ## 4. Rows
 
 - each row of the table, on a fixture `launchesOf`, gives exactly its launches;
+- `tools/command-runner.ts` (a tool outside build and acceptance) gives every launch; so do `tests/acceptance/host/x`
+  and `tests/acceptance/window-agent/x` (folders no launch has as its `suite`);
 - a change touching two packages gives the union;
-- an unmatched path under `packages/` gives every launch; a docs-only change gives none;
+- an unmatched path anywhere gives every launch; a docs-only change, or a unit-test-only change, gives none;
 - `--launches` with an unknown label fails and names the known ones; with a known list, `acceptance.ts` makes only
   those (a stubbed launch runner records the order);
 - a new launch added to `launchesOf` with `withExtensions: ['remote-oss.remote-containers']` is selected by a
