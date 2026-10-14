@@ -51,6 +51,8 @@ export interface AgentEvent {
   folders?: string[];
   /** Whether the window's workspace is trusted, as `state` reports it. */
   trusted?: boolean;
+  /** Whether the window's Remote - SSH extension is active, as `state` reports it. */
+  remoteSshActive?: boolean;
   /** The setting a `setting` event reports, and its value. */
   settingId?: string;
   value?: unknown;
@@ -491,6 +493,7 @@ export async function windowState(name: string): Promise<{
   remoteName: string | null;
   remoteAuthority: string | null;
   folders: string[];
+  remoteSshActive: boolean;
 }> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
@@ -499,6 +502,7 @@ export async function windowState(name: string): Promise<{
       remoteName: last?.remoteName ?? null,
       remoteAuthority: last?.remoteAuthority ?? null,
       folders: last?.folders ?? [],
+      remoteSshActive: last?.remoteSshActive ?? false,
     };
     if (
       state.remoteName === null ||
