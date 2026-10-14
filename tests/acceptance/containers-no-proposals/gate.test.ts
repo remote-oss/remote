@@ -18,27 +18,40 @@ import {
 /** The window the rows open: a `dev-container` authority whose payload is the hex of `{}`, which only activates the package. */
 const WINDOW = 'gate-setup';
 
-/** The commands Dev Containers contributes: they stay registered without the proposed API (brief ruling 9). */
-const CONTRIBUTED = (
-  (
-    JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          '..',
-          '..',
-          '..',
-          'packages',
-          'remote-containers',
-          'package.json',
-        ),
-        'utf8',
+/** The package's own file `name`, parsed. */
+function packageFile(name: string): unknown {
+  return JSON.parse(
+    readFileSync(
+      path.join(
+        import.meta.dirname,
+        '..',
+        '..',
+        '..',
+        'packages',
+        'remote-containers',
+        name,
       ),
-    ) as {contributes?: {commands?: Array<{command: string}>}}
-  ).contributes?.commands ?? []
-)
-  .map(entry => entry.command)
-  .sort();
+      'utf8',
+    ),
+  );
+}
+
+/**
+ * The commands Dev Containers registers: the ones it contributes, which stay registered without the proposed API
+ * (brief ruling 9), and the runtime commands it registers without contributing.
+ */
+const REGISTERED = [
+  ...(
+    (
+      packageFile('package.json') as {
+        contributes?: {commands?: Array<{command: string}>};
+      }
+    ).contributes?.commands ?? []
+  ).map(entry => entry.command),
+  ...(
+    packageFile('identifiers.json') as {runtimeCommands: Array<{id: string}>}
+  ).runtimeCommands.map(entry => entry.id),
+].sort();
 
 /**
  * The start of Dev Containers' setup notice, with the proposed API not enabled. Core raises the notice beside its own
@@ -87,7 +100,6 @@ describe('Dev Containers without its proposed API (card containers-09, gate row 
       },
       15_000,
     );
-    const registered = await commandsOf(WINDOW, 'remote-containers.');
     deepStrictEqual(
       {
         setup: shown.filter(
@@ -100,12 +112,9 @@ describe('Dev Containers without its proposed API (card containers-09, gate row 
             text.startsWith('Dev Containers') &&
             (text.includes('Error') || text.includes('failed')),
         ),
-        // Every contributed command stays registered; internal ones, such as the log link's, may be registered too.
-        unregistered: CONTRIBUTED.filter(
-          command => !registered.includes(command),
-        ),
+        commands: await commandsOf(WINDOW, 'remote-containers.'),
       },
-      {setup: 1, failures: [], unregistered: []},
+      {setup: 1, failures: [], commands: REGISTERED},
     );
   });
   it('F-0101 AC-15: the primary button opens argv.json, and saving and closing it unchanged offers the restart', async () => {
