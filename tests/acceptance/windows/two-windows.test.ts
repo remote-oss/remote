@@ -31,7 +31,11 @@ function pause(milliseconds: number): Promise<void> {
 describe('windows of one editor on the same host (the first window is local)', function () {
   this.timeout(180000);
 
+  /** How many lines the record held when this file began, so that its rows read only their own windows' lines. */
+  let recordStart = 0;
+
   before(() => {
+    recordStart = recordLines().length;
     // The windows that open after this write read these entries: the picks they ask are answered from the script.
     scriptEntries([
       {
@@ -75,7 +79,13 @@ describe('windows of one editor on the same host (the first window is local)', f
 
   it("D-85: both windows' progress is in one record, by window", () => {
     deepStrictEqual(
-      ['b', 'c'].map(window => recordLines('progress', window).length > 0),
+      [
+        recordLines('progress', 'b').length > 0,
+        recordLines()
+          .slice(recordStart)
+          .filter(line => line.surface === 'progress')
+          .every(line => ['b', 'c'].includes(line.window)),
+      ],
       [true, true],
     );
   });

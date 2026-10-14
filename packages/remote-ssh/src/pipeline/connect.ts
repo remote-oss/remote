@@ -34,7 +34,8 @@ import type {
 
 /** What the window is told while the connect runs, in the order the steps happen. */
 export type PhaseEvent =
-  | {kind: 'initializing'}
+  | {kind: 'initializing'; quiet?: true}
+  | {kind: 'promptShown'}
   | {kind: 'waitingForOtherWindow'}
   | {kind: 'downloading'}
   | {kind: 'downloadingLocally'}
@@ -255,7 +256,7 @@ async function runSteps(
     return cancellation.aborted ? failure({kind: 'cancelled'}) : undefined;
   }
 
-  options.onPhase({kind: 'initializing'});
+  options.onPhase({kind: 'initializing', quiet: true});
   for (const check of CHECKS) {
     const invalid = steps[check](input);
     if (invalid.kind === 'failed') {
