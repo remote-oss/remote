@@ -664,7 +664,7 @@ describe('the reading of each library failure (no library text is shown)', () =>
         ofStart({kind: 'invalidPortRange'}, EXEC_SERVER),
         ofStart({kind: 'serverStart'}, EXEC_SERVER),
         ofStart({kind: 'unreadableServerFacts'}, EXEC_SERVER),
-        ofStart({kind: 'prerequisitesMissing'}, EXEC_SERVER),
+        ofStart({kind: 'prerequisitesMissing', detail: ''}, EXEC_SERVER),
         ofStart({kind: 'scriptFailed', status: 'LockBusy'}, EXEC_SERVER),
         ofStart({kind: 'noResultBlock'}, EXEC_SERVER),
         ofStart(

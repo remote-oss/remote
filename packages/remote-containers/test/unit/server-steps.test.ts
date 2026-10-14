@@ -591,6 +591,44 @@ describe('the server steps of a connect (card containers-08)', () => {
     deepStrictEqual(failureKind(result), 'requirementsNotMet');
   });
 
+  it("F-0503 7.E1: the requirements failure carries the check's output as its text, unread", async () => {
+    const {result} = await runSteps(
+      channelOf({
+        start: blockOf(
+          'LinuxPrereqs',
+          'server.prerequisites.1=Warning: Missing GLIBC >= 2.28!',
+          'server.prerequisites.2=Error: Missing required dependencies.',
+        ),
+        startStatus: 0,
+      }),
+    );
+    deepStrictEqual(result.kind === 'failed' && result.failure.reason, {
+      text: 'Warning: Missing GLIBC >= 2.28!\nError: Missing required dependencies.',
+    });
+  });
+
+  it('F-0503 5.0 step 6: a server with no requirements helper is logged at warn', async () => {
+    const {seen} = await runSteps(
+      channelOf({
+        start: blockOf(
+          'Ok',
+          'server.port=4321',
+          'server.pid=77',
+          'server.token=abcdefghijklmnopqrstuvwxyz012345',
+          'server.prerequisitesHelper=missing',
+        ),
+      }),
+    );
+    deepStrictEqual(
+      seen.sink.lines
+        .filter(line => line.level === 'warn')
+        .map(line => line.message),
+      [
+        "the server has no requirements helper; the container's requirements weren't checked",
+      ],
+    );
+  });
+
   it('F-0503 7.E4: a start that fails otherwise is serverFailed', async () => {
     const {result} = await runSteps(
       channelOf({start: blockOf('ServerFailedToStart')}),

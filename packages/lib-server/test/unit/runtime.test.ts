@@ -24,6 +24,7 @@ import {
   runScript,
   single,
 } from './fake-host.ts';
+import {prerequisiteDetail} from '../../src/lifecycle/runtime.ts';
 import {shellChannel} from './shell-channel.ts';
 
 const NEVER_CANCELLED = new AbortController().signal;
@@ -98,12 +99,13 @@ async function start(
   options: Partial<RuntimeOptions> = {},
   allowed: ReadonlyArray<'fileWatcherPolling' | 'useHostProxy'> = [],
   loop?: HostLockLoop,
+  requirementsCheck: 'serverBundled' | 'bundledHelper' = 'serverBundled',
 ): Promise<StartOutcome> {
   return startOrReuse(
     channel,
     parametersFor(),
     {...OPTIONS, ...options},
-    allowed,
+    {allowedExtraStartOptions: allowed, requirementsCheck},
     dependencies(loop),
     NEVER_CANCELLED,
   );
@@ -518,7 +520,46 @@ describe('startOrReuse (V7), answers mapped', () => {
     const outcome = await start(recording(lines('LinuxPrereqs')));
     deepStrictEqual(
       outcome.kind === 'failed' ? outcome.failure : outcome.kind,
-      {kind: 'prerequisitesMissing'},
+      {kind: 'prerequisitesMissing', detail: ''},
+    );
+  });
+
+  it('F-0503 7.E1: LinuxPrereqs carries the lines of the helper as its detail', async () => {
+    const outcome = await start(
+      recording(
+        lines(
+          'LinuxPrereqs',
+          'server.prerequisites.1=Warning: Missing GLIBC >= 2.28!',
+          'server.prerequisites.2=Error: Missing required dependencies.',
+        ),
+      ),
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {
+        kind: 'prerequisitesMissing',
+        detail:
+          'Warning: Missing GLIBC >= 2.28!\nError: Missing required dependencies.',
+      },
+    );
+  });
+
+  it('F-0503 7.E1: a gap in the numbered lines ends the detail', async () => {
+    const outcome = await start(
+      recording(
+        lines(
+          'LinuxPrereqs',
+          'server.prerequisites.1=A',
+          'server.prerequisites.3=C',
+        ),
+      ),
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {
+        kind: 'prerequisitesMissing',
+        detail: 'A',
+      },
     );
   });
 
@@ -702,7 +743,7 @@ describe('startOrReuse (V7), what is asked of the host', () => {
       recording(STARTED),
       parametersFor(),
       {...OPTIONS, defaultExtensions},
-      [],
+      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
       {
         lockLoop: runOnce,
         logger: createLogger(sink, {minimumLevel: () => 'info'}),
@@ -733,7 +774,7 @@ describe('startOrReuse (V7), what is asked of the host', () => {
       recording(STARTED),
       parametersFor(),
       OPTIONS,
-      [],
+      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
       {
         lockLoop: remembering,
         logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
@@ -838,7 +879,7 @@ describe('startOrReuse (V7) over a real shell', () => {
       shellChannel(host),
       parametersFor(),
       OPTIONS,
-      [],
+      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
       dependencies(),
       NEVER_CANCELLED,
     );
@@ -853,7 +894,7 @@ describe('startOrReuse (V7) over a real shell', () => {
       shellChannel(host),
       parametersFor(),
       {...OPTIONS, socketMode: true},
-      [],
+      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
       dependencies(),
       NEVER_CANCELLED,
     );
@@ -870,7 +911,7 @@ describe('startOrReuse (V7) over a real shell', () => {
         shellChannel(host),
         parametersFor(),
         OPTIONS,
-        [],
+        {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
         dependencies(),
         NEVER_CANCELLED,
       );
@@ -896,5 +937,65 @@ describe('startOrReuse (V7) over a real shell', () => {
     const channel = recording(STARTED);
     await start(channel);
     deepStrictEqual(scriptOf(channel).includes('--use-host-proxy'), false);
+  });
+
+  it('contracts 5.0: the requirements helper runs before a launch only under the bundledHelper policy', async () => {
+    const bundled = recording(STARTED);
+    const own = recording(STARTED);
+    await start(bundled, {}, [], undefined, 'bundledHelper');
+    await start(own);
+    deepStrictEqual(
+      [bundled, own].map(channel =>
+        scriptOf(channel).includes("REQUIREMENTS_HELPER='yes'"),
+      ),
+      [true, false],
+    );
+  });
+
+  it('F-0503: a server with no requirements helper is started and the notice says so', async () => {
+    const outcome = await start(
+      recording([
+        ...STARTED.slice(0, -1),
+        'server.prerequisitesHelper=missing',
+        STARTED.at(-1) ?? '',
+      ]),
+      {},
+      [],
+      undefined,
+      'bundledHelper',
+    );
+    deepStrictEqual(
+      outcome.kind === 'started' ? outcome.notices : outcome.kind,
+      [{kind: 'requirementsHelperMissing'}],
+    );
+  });
+});
+
+describe('prerequisiteDetail (F-0503 7.E1)', () => {
+  it('is empty for no lines, the line for one, and the lines joined for several', () => {
+    deepStrictEqual(
+      [
+        prerequisiteDetail({}),
+        prerequisiteDetail({'prerequisites.1': 'A'}),
+        prerequisiteDetail({'prerequisites.1': 'A', 'prerequisites.2': 'B'}),
+      ],
+      ['', 'A', 'A\nB'],
+    );
+  });
+
+  it('stops at the first missing number and at the twentieth line', () => {
+    const facts = Object.fromEntries(
+      Array.from(Array(25).keys(), index => [
+        `prerequisites.${String(index + 1)}`,
+        String(index + 1),
+      ]),
+    );
+    deepStrictEqual(
+      [
+        prerequisiteDetail({'prerequisites.1': 'A', 'prerequisites.3': 'C'}),
+        prerequisiteDetail(facts).split('\n').length,
+      ],
+      ['A', 20],
+    );
   });
 });
