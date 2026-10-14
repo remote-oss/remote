@@ -352,6 +352,9 @@ importers:
 
   tests/acceptance:
     dependencies:
+      lib-authority:
+        specifier: workspace:*
+        version: link:../../packages/lib-authority
       lib-forwarding:
         specifier: workspace:*
         version: link:../../packages/lib-forwarding
