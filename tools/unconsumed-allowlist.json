@@ -52,10 +52,31 @@
       "slice": "0.2 slice 2"
     },
     {
+      "package": "remote-explorer",
+      "kind": "internalCommands",
+      "key": "setActiveFolders",
+      "card": "#745",
+      "slice": "0.3 explorer increment 2"
+    },
+    {
       "package": "remote-ssh",
-      "kind": "commands",
-      "key": "cleanCurrentRemoteServer",
-      "card": "#681",
+      "kind": "internalCommands",
+      "key": "getSshFoldersHistory",
+      "card": "#745",
+      "slice": "0.3 explorer increment 2"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "internalCommands",
+      "key": "deleteSshFolderFromHistory",
+      "card": "#745",
+      "slice": "0.3 explorer increment 2"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "module",
+      "key": "src/maintenance/host-picker.ts",
+      "card": "#744",
       "slice": "0.2"
     }
   ]

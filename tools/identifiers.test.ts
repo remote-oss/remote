@@ -185,12 +185,15 @@ describe('identifiers', () => {
       };
     }
 
-    /** The lines the runner prints, captured by swapping console's methods. */
-    async function captured(check: () => Promise<void>): Promise<{
+    /** The captured run: the exit code and the lines printed to each stream. */
+    interface ConsumedRun {
       code: string | number | null | undefined;
       stdout: string[];
       stderr: string[];
-    }> {
+    }
+
+    /** The lines the runner prints, captured by swapping console's methods. */
+    async function captured(check: () => Promise<void>): Promise<ConsumedRun> {
       const stdout: string[] = [];
       const stderr: string[] = [];
       const restoreLog = swapConsoleMethod('log', line =>
@@ -210,13 +213,31 @@ describe('identifiers', () => {
       }
     }
 
-    it('exits 2 when the allowlist is missing', async () => {
-      writeConsumptionWorkspace();
-      const result = await captured(() =>
+    /** The consumption check against the fixture, with a stubbed knip that reports no issues. */
+    async function runConsumed(): Promise<ConsumedRun> {
+      return captured(() =>
         runConsumptionCheck(false, workspace.root, () =>
           Promise.resolve(JSON.stringify({issues: []})),
         ),
       );
+    }
+
+    /** The exit-2 assertion for a package whose program cannot be built. */
+    function assertProgramBuildFailure(result: ConsumedRun): void {
+      deepStrictEqual(
+        [
+          result.code,
+          result.stderr.some(line =>
+            line.includes('packages/remote-x: the program cannot be built'),
+          ),
+        ],
+        [2, true],
+      );
+    }
+
+    it('exits 2 when the allowlist is missing', async () => {
+      writeConsumptionWorkspace();
+      const result = await runConsumed();
       deepStrictEqual(
         [
           result.code,
@@ -236,40 +257,14 @@ describe('identifiers', () => {
         include: ['no-files-here'],
       });
       workspace.write('tools/unconsumed-allowlist.json', {entries: []});
-      const result = await captured(() =>
-        runConsumptionCheck(false, workspace.root, () =>
-          Promise.resolve(JSON.stringify({issues: []})),
-        ),
-      );
-      deepStrictEqual(
-        [
-          result.code,
-          result.stderr.some(line =>
-            line.includes('packages/remote-x: the program cannot be built'),
-          ),
-        ],
-        [2, true],
-      );
+      assertProgramBuildFailure(await runConsumed());
     });
 
     it('exits 2 when a package tsconfig is not valid JSON', async () => {
       writeConsumptionWorkspace();
       workspace.write('packages/remote-x/tsconfig.json', 'hello');
       workspace.write('tools/unconsumed-allowlist.json', {entries: []});
-      const result = await captured(() =>
-        runConsumptionCheck(false, workspace.root, () =>
-          Promise.resolve(JSON.stringify({issues: []})),
-        ),
-      );
-      deepStrictEqual(
-        [
-          result.code,
-          result.stderr.some(line =>
-            line.includes('packages/remote-x: the program cannot be built'),
-          ),
-        ],
-        [2, true],
-      );
+      assertProgramBuildFailure(await runConsumed());
     });
 
     it('exits 2 when a package tsconfig is not a file', async () => {
@@ -283,30 +278,13 @@ describe('identifiers', () => {
       rmSync(tsconfig);
       mkdirSync(tsconfig);
       workspace.write('tools/unconsumed-allowlist.json', {entries: []});
-      const result = await captured(() =>
-        runConsumptionCheck(false, workspace.root, () =>
-          Promise.resolve(JSON.stringify({issues: []})),
-        ),
-      );
-      deepStrictEqual(
-        [
-          result.code,
-          result.stderr.some(line =>
-            line.includes('packages/remote-x: the program cannot be built'),
-          ),
-        ],
-        [2, true],
-      );
+      assertProgramBuildFailure(await runConsumed());
     });
 
     it('prints the problem lines and exits 1', async () => {
       writeConsumptionWorkspace();
       workspace.write('tools/unconsumed-allowlist.json', {entries: []});
-      const result = await captured(() =>
-        runConsumptionCheck(false, workspace.root, () =>
-          Promise.resolve(JSON.stringify({issues: []})),
-        ),
-      );
+      const result = await runConsumed();
       deepStrictEqual(
         [result.code, result.stdout, result.stderr],
         [
@@ -326,11 +304,7 @@ describe('identifiers', () => {
         'packages/remote-x/src/b.ts',
         "import {settings} from './identifiers.generated.ts';\n\nvoid settings.path;\n",
       );
-      const result = await captured(() =>
-        runConsumptionCheck(false, workspace.root, () =>
-          Promise.resolve(JSON.stringify({issues: []})),
-        ),
-      );
+      const result = await runConsumed();
       deepStrictEqual(
         [result.code, result.stdout, result.stderr],
         [0, ['identifiers: consumed: ok'], []],

@@ -127,7 +127,7 @@ interface TableInfo {
   readonly type: typescript.Type;
   readonly entries: ReadonlyMap<string, TableEntry>;
   /** For the `standDown` table only: the id of its `contextKey`, which lib-standdown sets. */
-  readonly contextKey?: string;
+  readonly contextKey?: string | undefined;
 }
 
 /** The result of the §3.2 analysis over one package's production sources. */
@@ -333,7 +333,10 @@ function tablesOf(
         if (isCheckedEntry(declaration.name.text, entry)) {
           entries.set(entry.key, {key: entry.key, id: entry.id});
         }
-        if (declaration.name.text === 'standDown' && entry.key === 'contextKey') {
+        if (
+          declaration.name.text === 'standDown' &&
+          entry.key === 'contextKey'
+        ) {
           standDownContextKey = entry.id;
         }
       }
@@ -473,6 +476,103 @@ function relativeToPackage(root: string, folder: string, file: string): string {
 }
 
 /**
+ * The one-level pass-through for a member access whose object isn't the table's own type: `x.K` counts when `x`
+ * is reached from a production function's parameter and the generated table is passed there at a production call
+ * site. The object's type is the parameter's, structurally narrowed, so the table's own type isn't seen; the
+ * call site is.
+ */
+function passThroughTableKey(
+  state: WalkState,
+  x: typescript.Expression,
+  table: TableInfo,
+): boolean {
+  const targetType = state.checker.getTypeAtLocation(x);
+  const passState: PassThroughState = {
+    checker: state.checker,
+    productionFiles: state.productionFiles,
+  };
+  const declaring = declaringFunctionOf(passState, x, targetType);
+  if (declaring === undefined) {
+    return false;
+  }
+  const sites = declaringCallSites(passState, declaring.node);
+  for (const site of sites) {
+    const argument = site.arguments[declaring.argumentIndex];
+    if (argument === undefined) {
+      continue;
+    }
+    const reached = argumentOfPropertyPath(argument, declaring.propertyPath);
+    if (reached === undefined) {
+      continue;
+    }
+    if (
+      isSameType(
+        state.checker,
+        state.checker.getTypeAtLocation(reached),
+        table.type,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a views key's access is consumed one level down: it is a direct argument to a production function whose
+ * body forwards that parameter to a view registration, which the argument-depth rule counts at the registration.
+ */
+function viewsKeyPassedToRegistration(
+  state: WalkState,
+  node: typescript.Expression,
+): boolean {
+  const parent = node.parent;
+  if (!typescript.isCallExpression(parent)) {
+    return false;
+  }
+  const position = parent.arguments.indexOf(node);
+  if (position === -1) {
+    return false;
+  }
+  const declaration = state.checker
+    .getResolvedSignature(parent)
+    ?.getDeclaration();
+  if (declaration === undefined || !typescript.isFunctionLike(declaration)) {
+    return false;
+  }
+  if (!state.productionFiles.includes(declaration.getSourceFile())) {
+    return false;
+  }
+  const parameter = declaration.parameters[position];
+  if (parameter === undefined || !typescript.isIdentifier(parameter.name)) {
+    return false;
+  }
+  return forwardsParameterToViewRegistration(declaration, parameter.name.text);
+}
+
+/** Whether the function's body forwards `parameter` to a view-registration call. */
+function forwardsParameterToViewRegistration(
+  declaration: typescript.SignatureDeclaration,
+  parameter: string,
+): boolean {
+  let forwarded = false;
+  (function visit(node: typescript.Node): void {
+    if (typescript.isCallExpression(node)) {
+      const name = callName(node.expression);
+      const passed = node.arguments.some(
+        argument =>
+          typescript.isIdentifier(argument) && argument.text === parameter,
+      );
+      if (name !== undefined && VIEW_REGISTRATIONS.has(name) && passed) {
+        forwarded = true;
+      }
+    }
+    typescript.forEachChild(node, visit);
+  })(declaration);
+  return forwarded;
+}
+
+/**
  * The key an access on a table names, and which access it is: a member access `x.K` or an element access `x['K']`
  * where the type of `x` is the table's.
  */
@@ -505,10 +605,17 @@ function referenceKeyOf(
     ) {
       continue;
     }
-    if (!isSameType(state.checker, objectType, table.type)) {
+    if (
+      !isSameType(state.checker, objectType, table.type) &&
+      !passThroughTableKey(state, node.expression, table)
+    ) {
       continue;
     }
-    if (table.name === 'views' && state.viewArgumentDepth === 0) {
+    if (
+      table.name === 'views' &&
+      state.viewArgumentDepth === 0 &&
+      !viewsKeyPassedToRegistration(state, node)
+    ) {
       continue;
     }
     const entry = table.entries.get(key);
@@ -527,6 +634,20 @@ function isPropertyName(node: typescript.Node): boolean {
       typescript.isPropertySignature(parent)) &&
     parent.name === node
   );
+}
+
+/**
+ * Whether the access rules count a table at all: it is not the commands table (R2's own rule), it carries
+ * entries, and a view is reached only inside a view-registration argument.
+ */
+function isCountedTable(state: WalkState, table: TableInfo): boolean {
+  if (table.name === 'commands' || table.entries.size === 0) {
+    return false;
+  }
+  if (table.name === 'views' && state.viewArgumentDepth === 0) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -550,10 +671,7 @@ function contextuallyTypedReference(
     return;
   }
   for (const table of state.tables) {
-    if (table.name === 'commands' || table.entries.size === 0) {
-      continue;
-    }
-    if (table.name === 'views' && state.viewArgumentDepth === 0) {
+    if (!isCountedTable(state, table)) {
       continue;
     }
     if (!members.every(member => table.keys.has(member))) {
@@ -580,10 +698,7 @@ function objectReference(
   }
   const contextKeys = context.getProperties().map(property => property.name);
   for (const table of state.tables) {
-    if (table.name === 'commands' || table.entries.size === 0) {
-      continue;
-    }
-    if (table.name === 'views' && state.viewArgumentDepth === 0) {
+    if (!isCountedTable(state, table)) {
       continue;
     }
     if (!sameSet(table.keys, contextKeys)) {

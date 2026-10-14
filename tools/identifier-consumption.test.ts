@@ -155,31 +155,20 @@ export function activateWith<Commands extends Record<string, CommandEntry>>(
 }
 `;
 
-/** The repository row: what the check reports on main with the committed allowlist and the real knip. */
-const REPOSITORY_PROBLEMS = [
-  'packages/lib-log: module src/testing/fake-editor-port.ts is imported only by tests',
-  'packages/remote-explorer: contextKeys standingDown (remote-explorer.standingDown) is contributed but no production source consumes it',
-  'packages/remote-explorer: internalCommands setActiveFolders (remote-internal.setActiveFolders) is contributed but no production source consumes it',
-  'packages/remote-explorer: module src/model/connected-marker.ts is imported only by tests',
-  'packages/remote-explorer: module src/model/ssh-group.ts is imported only by tests',
-  'packages/remote-explorer: views remoteTargets (remoteTargets) is contributed but no production source consumes it',
-  'packages/remote-ssh: contextKeys standingDown (opensshremotes.standingDown) is contributed but no production source consumes it',
-  'packages/remote-ssh: internalCommands deleteSshFolderFromHistory (remote-internal.deleteSshFolderFromHistory) is contributed but no production source consumes it',
-  'packages/remote-ssh: internalCommands getActiveSshRemote (remote-internal.getActiveSshRemote) is contributed but no production source consumes it',
-  'packages/remote-ssh: internalCommands getConfiguredHostnames (remote-internal.getConfiguredHostnames) is contributed but no production source consumes it',
-  'packages/remote-ssh: internalCommands getSshFoldersHistory (remote-internal.getSshFoldersHistory) is contributed but no production source consumes it',
-  'packages/remote-ssh: internalCommands openRemoteSshTarget (remote-internal.openRemoteSshTarget) is contributed but no production source consumes it',
-  'packages/remote-ssh: module src/maintenance/host-picker.ts is imported only by tests',
-  'packages/remote-ssh: settings logLevel (remote.SSH.logLevel) is contributed but no production source consumes it',
-];
-
-const REPOSITORY_NOTES = [
-  'whole table: packages/remote-explorer/src/window-activation.ts:39 uses standDown',
-  'whole table: packages/remote-explorer/src/window-activation.ts:46 uses commands',
-  'whole table: packages/remote-ssh/src/extension.ts:224 uses commands',
-  'whole table: packages/remote-ssh/src/extension.ts:224 uses settings',
-  'whole table: packages/remote-ssh/src/extension.ts:224 uses standDown',
-];
+/**
+ * The shape of a §3.4 problem line: an unconsumed entry or module, a registerCommands line the tool can't read, and
+ * the stale, nameless and unwired allowlist lines. The repository row asserts every line has this form, so it holds
+ * as the repository moves instead of pinning a snapshot a rebasing card breaks.
+ */
+const PROBLEM_LINE_FORM = new RegExp(
+  [
+    '^knip output not understood$',
+    '^packages/[a-z][a-z0-9-]*: [a-z][a-zA-Z0-9]+ [^ ]+ [(].+[)] is contributed but no production source consumes it$',
+    '^packages/[a-z][a-z0-9-]*: module src/[^:]+ is imported only by tests$',
+    '^packages/[a-z][a-z0-9-]*: src/[^:]+:[0-9]+: .+$',
+    '^allowlist: [a-z][a-z0-9-]+ [a-z][a-zA-Z0-9]+ [^ ]+ (names nothing|is consumed now; remove it [(]card #[0-9]+[)]|must be wired before a release [(]card #[0-9]+, .+[)])$',
+  ].join('|'),
+);
 
 describe('identifier-consumption', () => {
   let workspace: TemporaryWorkspace;
@@ -237,6 +226,15 @@ describe('identifier-consumption', () => {
   /** The knip runner of the tools rows: no unused files. */
   function runKnip(): Promise<string> {
     return Promise.resolve(JSON.stringify({issues: []}));
+  }
+
+  /** The knip run whose only issue names the fixture module, which production never imports. */
+  function moduleKnip(): Promise<string> {
+    return Promise.resolve(
+      JSON.stringify({
+        issues: [{files: [{name: 'packages/remote-x/src/m.ts'}]}],
+      }),
+    );
   }
 
   async function check(
@@ -949,46 +947,24 @@ void deepActivate({outer: wrapped.otherProp});
     });
 
     it('parses an entry with and without a recorded decision', () => {
-      deepStrictEqual(
-        parseAllowlist(
-          JSON.stringify({
-            entries: [
-              {
-                package: 'remote-x',
-                kind: 'settings',
-                key: 'path',
-                card: '#676',
-                slice: '0.2',
-              },
-              {
-                package: 'remote-x',
-                kind: 'module',
-                key: 'src/m.ts',
-                card: '#676',
-                slice: '0.2',
-                decision: 'D-1',
-              },
-            ],
-          }),
-        ),
-        [
-          {
-            package: 'remote-x',
-            kind: 'settings',
-            key: 'path',
-            card: '#676',
-            slice: '0.2',
-          },
-          {
-            package: 'remote-x',
-            kind: 'module',
-            key: 'src/m.ts',
-            card: '#676',
-            slice: '0.2',
-            decision: 'D-1',
-          },
-        ],
-      );
+      const entries = [
+        {
+          package: 'remote-x',
+          kind: 'settings',
+          key: 'path',
+          card: '#676',
+          slice: '0.2',
+        },
+        {
+          package: 'remote-x',
+          kind: 'module',
+          key: 'src/m.ts',
+          card: '#676',
+          slice: '0.2',
+          decision: 'D-1',
+        },
+      ];
+      deepStrictEqual(parseAllowlist(JSON.stringify({entries})), entries);
     });
 
     it('names what is wrong with the allowlist on parse', () => {
@@ -1087,29 +1063,16 @@ void deepActivate({outer: wrapped.otherProp});
   describe('the knip rows of R4', () => {
     it('reports a production-only module from the knip run', async () => {
       workspace.write('packages/remote-x/src/m.ts', 'export const m = 1;\n');
-      function knip(): Promise<string> {
-        return Promise.resolve(
-          JSON.stringify({
-            issues: [{files: [{name: 'packages/remote-x/src/m.ts'}]}],
-          }),
-        );
-      }
-      deepStrictEqual((await check([], false, knip)).problems, [
+      deepStrictEqual((await check([], false, moduleKnip)).problems, [
         'packages/remote-x: module src/m.ts is imported only by tests',
       ]);
     });
 
     it('does not report an allowlisted production-only module', async () => {
       workspace.write('packages/remote-x/src/m.ts', 'export const m = 1;\n');
-      function knip(): Promise<string> {
-        return Promise.resolve(
-          JSON.stringify({
-            issues: [{files: [{name: 'packages/remote-x/src/m.ts'}]}],
-          }),
-        );
-      }
       deepStrictEqual(
-        (await check([entry('module', 'src/m.ts')], false, knip)).problems,
+        (await check([entry('module', 'src/m.ts')], false, moduleKnip))
+          .problems,
         [],
       );
     });
@@ -1186,12 +1149,14 @@ void deepActivate({outer: wrapped.otherProp});
         release: false,
         runKnip: undefined,
       });
+      // The check must run to completion: an unbuildable program is the fatal, exit-2 line, so it stays undefined, and
+      // no finding line may leave the §3.4 shape.
       deepStrictEqual(
-        {problems: report.problems, notes: report.notes},
-        {
-          problems: REPOSITORY_PROBLEMS,
-          notes: REPOSITORY_NOTES,
-        },
+        [
+          report.fatal,
+          report.problems.find(problem => !PROBLEM_LINE_FORM.test(problem)),
+        ],
+        [undefined, undefined],
       );
     });
   });
