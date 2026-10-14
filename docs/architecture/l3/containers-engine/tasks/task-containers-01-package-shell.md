@@ -136,7 +136,7 @@ manifest and missing from the handlers is a type error, not a silent stub.
 
 Notes on these entries:
 - **The standing-down key** is `remote-containers:standingDown`, with a colon, verbatim from F-1406 §6 (D-14;
-  athena's register entry of 2026-10-14 on remote-oss/remote-containers#122 Q9, superseding her dot ruling D-88). The
+  athena's register entry of 2026-10-14 on remote-oss/remote-containers#122 Q9, superseding her earlier dot ruling of 2026-10-14). The
   context-key namespace is `remote-containers:`. It's in the `invented` ledger under F-1406: F-1406 §6 is the R-27 list
   of invented ids and names this key, as remote-explorer's key is listed under F-5001 (athena on #762, after dike
   found that `check-identifiers` requires the entry; `tools/identifier-rules.ts`). If `pnpm check-identifiers` rejects
