@@ -11,6 +11,7 @@ import {
   appendScript,
   closeWindow,
   connectedWithin,
+  connectionLog,
   hostPassword,
   inWindow,
   isOpen,
@@ -132,7 +133,14 @@ export async function runWith(
 ): Promise<number> {
   appendScript(answers.map(answer => ({...answer, window})));
   const mark = recordLines().length;
-  await inWindow(window, command);
+  try {
+    await inWindow(window, command);
+  } catch (caught) {
+    throw new Error(
+      `${String(caught)}; the log:\n${connectionLog().slice(-30).join('\n')}`,
+      {cause: caught},
+    );
+  }
   return mark;
 }
 
@@ -178,8 +186,19 @@ export async function openConnected(
   name: string,
   milliseconds = 60_000,
 ): Promise<void> {
+  const mark = recordLines().length;
   await openWindow('harness', name);
-  await connectedWithin(name, milliseconds);
+  try {
+    await connectedWithin(name, milliseconds);
+  } catch (caught) {
+    const lines = linesSince(mark, name).map(
+      line => `${line.surface}: ${line.question}`,
+    );
+    throw new Error(
+      `${String(caught)}; ${name}'s record:\n${lines.join('\n')}\nthe log:\n${connectionLog().slice(-40).join('\n')}`,
+      {cause: caught},
+    );
+  }
 }
 
 /** Opens a local folder window `name` on a folder `folders/<name>` of the run, made first, and waits for its agent. */
