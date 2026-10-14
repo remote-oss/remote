@@ -8,6 +8,7 @@ import {
   connectedWithin,
   connectionHelpers,
   goneWithin,
+  hostAliases,
   hostAnswer,
   inWindow,
   isOpen,
@@ -44,15 +45,6 @@ const PER_WINDOW = {
   'remote.SSH.useLocalServer': false,
   'remote.SSH.remotePlatform': {harness: 'linux'},
 };
-
-/** The `Host` names of the run's ssh_config with no `*`, `?` or `!`, in file order. */
-function aliases(): string[] {
-  return readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8')
-    .split('\n')
-    .filter(line => /^\s*Host\s/i.test(line))
-    .flatMap(line => line.trim().split(/\s+/).slice(1))
-    .filter(word => !/[*?!]/.test(word));
-}
 
 describe('the local connection server on a key host (card coverage-14)', function () {
   this.timeout(300000);
@@ -111,7 +103,11 @@ describe('the local connection server on a key host (card coverage-14)', functio
       ],
       [
         HOST_QUESTION,
-        [...aliases(), '$(plus) Add New SSH Host...', 'Configure SSH Hosts...'],
+        [
+          ...hostAliases(),
+          '$(plus) Add New SSH Host...',
+          'Configure SSH Hosts...',
+        ],
         helper,
         [],
       ],

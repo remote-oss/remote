@@ -122,6 +122,9 @@ function fakeProcess(
     handle.killed = true;
     exit(undefined);
   }
+  if (options.cancellation.aborted) {
+    kill();
+  }
   options.cancellation.addEventListener('abort', kill);
   return {handle, process: {stdin, stdout, stderr, exited, kill}};
 }
