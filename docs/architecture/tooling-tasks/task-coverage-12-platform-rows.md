@@ -136,6 +136,15 @@ A row that cuts restores in a `finally`. coverage-19 adds the same pair; whichev
 **Script entries** are appended before the step and name their window. A Kill or Uninstall runs in `local`, with
 `window: 'local'`.
 
+**The platform notice.** connect-25 has merged (#594), so a connect that writes an entry shows the notice
+`You selected "<platform>" as the remote platform - …`. Every row whose connect writes an entry (a `platformPick`
+answered `linux` or `macOS`, or a rewrite) appends `notice` `You selected` → `dismiss` for that window right after its
+`platformPick` entry, so the notice doesn't take a later entry's place. AC-35's row asserts it.
+
+**`appendScript` needs the pick surfaces.** `AppendedEntry` (`tools/script-file.ts`) has no `hostPick` and no
+`{label}` answer today. Widen it as coverage-30 §1 says. Whichever of coverage-12, coverage-30 and coverage-31 lands
+first adds it, and the others reuse it.
+
 | Cite | Setup and steps | Assertions |
 |---|---|---|
 | F-2206 AC-4 | terminal. `pf1`: `platformPick` `"harness"` → `linux` with `after: 'pf-4'`. Open `pf1` on `harness`; wait for its held line; wait 120 s; signal `pf-4` | over the 120 s, no `withdrawn` line of `pf1`, and no `failureDialog`, `notice`, `pick` or `maskedInput` line of `pf1`. After the signal, `pf1` is connected |
@@ -143,16 +152,16 @@ A row that cuts restores in a `finally`. coverage-19 adds the same pair; whichev
 | F-2206 AC-9 | terminal. `pf1`: `platformPick` → `dismiss`; `failureDialog` → `{button: 'Retry'}`; `platformPick` → `dismiss`; (fail) | two `platformPick` lines of `pf1`, the second after the Retry; both `failureDialog` lines are E1, with `buttons` `["Close Remote", "Retry", "More Actions..."]`; nothing stored |
 | F-2206 AC-10 | terminal. `pf1`: `platformPick` → `windows`; `failureDialog` → `{button: 'Retry'}`; `platformPick` → `dismiss`; (fail) | the first dialog is E2; a second `platformPick` line after the Retry; the second dialog is E1; nothing stored |
 | F-2206 AC-11 | default, `{"harness": "windows"}`. `pf1`: `failureDialog` → `{button: 'Retry'}`; (fail) | both dialogs are E2; no `platformPick` line of `pf1`; no log line since the step starts with `Host platform:` (build it with `hostPlatformLine`, as §2's AC-11 row does) |
-| F-2206 AC-26 (Escape) | terminal. Open `pf1` on `harness` with `platformPick` → `linux`; connected; then remove the entry. Note `onHost('pgrep', '-f', '/home/harness/[.]vscodium-server-insiders/bin/')`. In `local`, run `opensshremotes.cleanRemoteServer`: `hostPick` → `{label: 'harness'}`, `platformPick` → `dismiss` | a `platformPick` line of `local`; no `notice` or `failureDialog` line of `local`; the same server processes run; `pf1` is still connected; nothing stored |
+| F-2206 AC-26 (Escape) | terminal. Open `pf1` on `harness` with `platformPick` → `linux`; connected; then remove the entry. Note `onHost('pgrep', '-f', '/home/harness/[.]vscodium-server-insiders/bin/')`. In `local`, run `opensshremotes.cleanRemoteServer`: `hostPick` → `{label: 'harness'}`, `platformPick` → `dismiss` | a `platformPick` line of `local`; no `failureDialog` line of `local`; the same server processes run (nothing ran on the host); `pf1` is still connected; nothing stored. Don't assert on a `notice` line: S076 after Escape is consistent with F-2411 7.E5 (athena). Script `notice` → `dismiss` for `local` after the `platformPick` entry, so it's answered if it comes |
 | F-2206 AC-26 (Linux) | close `pf1`. The same command: `hostPick` → `{label: 'harness'}`, `platformPick` → `linux`, `notice` → `dismiss` | a `notice` line `Killed VS Code Server on harness.`; nothing stored |
 | F-2206 AC-26 (default) | default. The same command: `hostPick` → `{label: 'harness'}`, `notice` → `dismiss` | no `platformPick` line of `local` since the step; a `notice` line `Killed VS Code Server on harness.` |
-| F-2206 AC-26 (Kill Current) | only once connect-43 (#681) has merged. Terminal. `pf1` connected, then the entry removed. In `pf1`, run `opensshremotes.cleanCurrentRemoteServer` with `platformPick` → `dismiss`; then again with `platformPick` → `linux` | after `dismiss`: `pf1` connected, no `failureDialog` or `notice` line of `pf1`, nothing stored. After `linux`: the command's own result (connect-43's card), nothing stored |
+| F-2206 AC-26 (Kill Current) | only once connect-43 (#681) has merged. Terminal. `pf1` connected, then the entry removed. In `pf1`, run `opensshremotes.cleanCurrentRemoteServer` with `platformPick` → `dismiss`; then again with `platformPick` → `linux` | after `dismiss`: `pf1` connected, no `failureDialog` line of `pf1`, nothing stored (no assertion on a `notice` line, as in the Escape row above; script `notice` → `dismiss` for `pf1` after the `platformPick` entry). After `linux`: the command's own result (connect-43's card), nothing stored |
 | F-2206 AC-27 | terminal. Open `pf1` with `platformPick` → `linux`; connected; remove the entry. `pf1`: `platformPick` → `linux` with `after: 'pf-27'`. `cutHostNetwork()`; wait up to 180 s for a new held `platformPick` line of `pf1`; `restoreHostNetwork()`; signal `pf-27` | the held `platformPick` line came after the cut: core's reconnection asked again. `pf1` is connected within 60 s of the signal; no `failureDialog` line of `pf1` |
 | F-2206 AC-29 | default. Open `pf1` on `harness`; connected; note `connectionHelpers()`. `userSettings({'remote.SSH.remotePlatform': {harness: 'windows'}})`. Open `pf2` on `harness` | `pf2` connected, through the same helper process (the existing server is reused) |
 | F-2206 AC-29 (Kill) | (fail) for `pf1` and for `pf2`, whose reconnections may fail now. In `pf2`, run `opensshremotes.cleanLocalServer` with `hostPick` → `{label: 'harness'}`. Then open `pf3` on `harness` with (fail) | `pf3`'s dialog is E2, and `pf3` has no `platformPick` line: the entry took effect. Close every `pf*` window |
 | F-2206 AC-34 | terminal. Open `pf1` with `platformPick` → `linux`; connected; remove the entry. For `nextEmptyName()`: `platformPick` → `dismiss`, then (fail). `nextEmptyWindow(() => inWindow('pf1', 'opensshremotes.openEmptyWindowOnCurrentHost'))` | the new window has a `platformPick` line, and its `failureDialog` line is E1 |
 | F-2206 AC-35 | terminal. `pf1`: `platformPick` → `linux`. Open `pf1` on `harness`; wait for `pf1`'s `progressEnd` line (coverage-29), which comes when the resolve has returned; `cutHostNetwork()` at once | within 10 s: the settings hold `{"harness": "linux"}`, and a `notice` line of `pf1` is the AC-6 notice (`You selected "linux" as the remote platform - …`). Then restore, and close `pf1` |
-| F-2206 AC-33 | terminal. Note `onHost('ls', '/home/harness/.vscodium-server-insiders/bin')`. In `local`, run `opensshremotes.cleanDevBox`: `hostPick` → `{label: 'harness'}`, `platformPick` → `dismiss` | no `failureDialog` or `notice` line of `local`; the listing unchanged; nothing stored |
+| F-2206 AC-33 (Escape; **waits on its fix**, §6) | terminal. Note `onHost('ls', '/home/harness/.vscodium-server-insiders/bin')`. In `local`, run `opensshremotes.cleanDevBox`: `hostPick` → `{label: 'harness'}`, `platformPick` → `dismiss` | the command resolves; no `failureDialog` or `notice` line of `local`; the listing unchanged; nothing stored |
 | F-2206 AC-33 (Linux) | the same command with `platformPick` → `linux` | the command resolves; the listing has no server folder (or the folder is gone); nothing stored |
 
 **Order:** the rows run in the table's order. The AC-26 and AC-33 rows end or remove the harness account's server.
@@ -177,12 +186,13 @@ what it waits for:
 
 | AC | The half no row here proves | Waits for |
 |---|---|---|
-| AC-6, 7, 13, 14, 24 | the "You selected …" notice | the notice itself: it isn't built yet (connect-25, #554), whose card adds the notice entries to these cases |
-| AC-36 | no error notice when the write fails | connect-25, as above |
+| AC-6, 7, 13, 14, 24, 25, 36 | the "You selected …" notice | connect-25's §4 rows (#554, still open). connect-25's product half has merged (#594). Its §4 adds the notice entries and rows to this card's cases once they exist, and tags these ACs. Not this card |
 
 **§2a's ACs:**
-- F-2206 AC-4, 8, 9, 10, 11, 27, 28, 29, 31, 33, 34 and 35 go to `acceptance`. Each needs all its rows here: AC-8, 9,
+- F-2206 AC-4, 8, 9, 10, 11, 27, 28, 29, 31, 34 and 35 go to `acceptance`. Each needs all its rows here: AC-8, 9,
   10 and 11 need §1's case and §2a's row, and AC-28 its two cases.
+- **AC-33** stays `todo` until its Escape row can pass (§6, open row 1: the dismissed platform pick of Uninstall
+  throws).
 - **AC-26** goes to `acceptance` only with its Kill Current row. Until connect-43 (#681) has merged, it stays `todo`
   with that wait.
 - **AC-30** goes to `unit`, reason `skeleton.test.ts's F-2206 AC-30 row: the manifest's texts; the Settings UI and its
@@ -207,3 +217,12 @@ If a case behaves otherwise, don't change the table: report it on the issue as a
 PR title `tests: the platform rows of F-2206 (card coverage-12, #142)`. themis or triton reviews; proteus runs the 25
 launches, which may go in the dispatch that coverage-11 asked for. Because proteus verifies it, the build PR opens with
 the `needs-verification` label, and proteus removes the label when the run passes.
+
+## 6. Open rows
+
+1. **F-2206 AC-33's Escape row waits on a product fix.** F-2206 AC-33 says that after Escape at the platform pick,
+   Uninstall "ends without dialog, notification or change on the host". On main, a dismissed pick fails
+   `decideTerms`, so the run ends `connectionFailed` (`maintenance/maintenance-run.ts`), and `cleanDevBox` throws
+   (`maintenance/maintenance-commands.ts`). Core then shows its "Command … resulted in an error" dialog. The lead cards
+   the fix. Write the Escape row once that fix has merged. Until then, leave it out and keep AC-33 `todo`. The AC-33
+   (Linux) row doesn't wait.

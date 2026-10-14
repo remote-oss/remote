@@ -26,6 +26,10 @@ to `windows/harness.ts` as coverage-14 §1 says, and tell iris on #568.
   either stream.
 - **A vanishing client deletes itself:** in the check branch, after its banner and before its `exit`, it runs
   `rm -f "$0"`. Every later call finds no program.
+- **A retried launch gets it back:** the harness retries a launch once when the editor hangs (`runWithRetry`,
+  `tools/acceptance.ts`). So `tools/acceptance.ts` writes `clients/vanishing/ssh` again inside the `client-vanishing`
+  launch's attempt, before the editor starts, not only once per run. Tools row: an attempt after one that deleted the
+  file finds it again.
 
 **Tools rows** (`acceptance-clients.test.ts`):
 - the `silent` script has no `printf` in its check branch, and run with `-V` it prints nothing and exits 0;
@@ -37,13 +41,15 @@ to `windows/harness.ts` as coverage-14 §1 says, and tell iris on #568.
 **`ClientCase` changes** (`tools/acceptance-launches.ts`, and the suite's own interface):
 - `used` becomes `string | null`, where `null` means no program was used for the lookup or the connection;
 - `dialog?: string` is the failure dialog's text, for a case that fails;
-- `script?: ScriptEntry[]` holds the case's answers.
+- `script?: unknown[]` holds the case's answers, as `FailureCase.script` does in `tools/acceptance-launches.ts`. The
+  suite's own interface types it as `ScriptEntry[]` (`tests/acceptance/suite-local/script.ts`).
 
 `tools/acceptance.ts` writes each client case's script file (`launchFiles(runFolder, <label>).script`) with
 `{entries: <script or []>}`, as it does for the failure cases.
 
 **`recordAfterDialog`** moves from `suite-failure/failure-window.test.ts` into `suite-local/script.ts`, exported, and
-both suites import it (no copy: `pnpm dupes` would fail).
+both suites import it: one definition, not a copy. (`pnpm dupes` scans `packages` and `tools` only, so it wouldn't
+catch a copy under `tests/`.)
 
 **The three cases**, after the existing ones. `<dialog script>` is `failureDialog` `"harness"` → `dismiss`, then
 `mitigationPick` `Pick an action to help resolve the problem.` → `dismiss`.
@@ -91,7 +97,7 @@ both suites import it (no copy: `pnpm dupes` would fail).
 | F-2101 AC-14 | `userSettings({'remote.SSH.path': C('fails')})` (a client whose check fails). Reload `cs1` | `cs1` is connected; there are no new calls; no new log line is a `checkingLine(…)`; the helper is the same process. Close `cs1`, and wait until no helper runs |
 | F-2101 AC-15 | `userSettings({'remote.SSH.useLocalServer': false, 'remote.SSH.remotePlatform': {harness: 'linux'}, 'remote.SSH.path': C('fails')})`. Open `cs1` on `harness` | connected; the new calls are exactly one `fails/ssh\tcheck`; the new log lines hold `notValidLine(C('fails'))` once |
 | F-2101 AC-15 | reload `cs1` | connected; since the reload, again exactly one `fails/ssh\tcheck` and one `notValidLine(C('fails'))`. The PATH client was used: the window is connected and no fake logged an `options` or `connect` call. Close `cs1` |
-| F-2101 AC-16 | the settings back to the kept bytes, then `userSettings({'remote.SSH.path': C('configured')})`. In `local`, run `opensshremotes.openEmptyWindow`, with a script entry `hostPick` → `dismiss` for `local` | a `hostPick` line of `local`; no new calls; no new log line is a `checkingLine(…)` or a `usingLine(…)` |
+| F-2101 AC-16 | the settings back to the kept bytes, then `userSettings({'remote.SSH.path': C('configured')})`. In `local`, run `opensshremotes.openEmptyWindow`, with a script entry `hostPick` → `dismiss` for `local`, appended with `appendScript` (its `hostPick` surface: coverage-30 §1, whichever card lands first adds it) | a `hostPick` line of `local`; no new calls; no new log line is a `checkingLine(…)` or a `usingLine(…)` |
 
 If `variable('HARNESS_RUN_FOLDER')` throws in the windows launch, pass the variable to the plain launches in
 `tools/acceptance.ts` with a tools row, and say so in the PR.

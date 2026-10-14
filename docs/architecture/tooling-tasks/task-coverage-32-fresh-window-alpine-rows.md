@@ -6,13 +6,14 @@ Issue: #715. Why: the 0.2 gate's acceptance rows, for two ACs that fit no other 
 - **F-2401 AC-2** (`#46`): an Alpine host with libstdc++ and libgcc connects with no prerequisite message. The harness
   host is that host (`tests/acceptance/host/Dockerfile`: alpine:3.22 with `libstdc++`, which pulls in `libgcc`).
 
-F-2202 AC-23 needs harness work first (§5). Builder: selene. Size: S, about half an agent-day.
+F-2202 AC-23 is `deferred` (§5). Builder: selene. Size: S, about half an agent-day.
 
 ## 1. F-2202 AC-24 (`tests/acceptance/windows/fresh-window.test.ts`, window `fr1`)
 
 **The agent's state** gains `remoteSshActive`: `vscode.extensions.getExtension('remote-oss.remote-ssh')?.isActive ??
 false`. coverage-19 (#590) adds the same field. If it has merged, use it; if not, add it here with that definition,
-and tell hestia on #590.
+and tell hestia on #590. The harness carries it too: `AgentEvent` (`windows/harness.ts`) gains
+`remoteSshActive?: boolean`, and `windowState()`'s answer includes it. coverage-23 (#602) is a third user.
 
 **Before the row**, keep:
 - the bytes of `<run>/ssh_config` (`variable('HARNESS_SSH_CONFIG')`) and of `<run>/user-data/User/settings.json`;
@@ -65,13 +66,8 @@ The repository's gates pass, and `pnpm test:acceptance:vscodium` passes with the
 
 ## 5. Open rows (stop and report on #715)
 
-1. **F-2202 AC-23** stays `todo`, and goes on #142's harness list. It needs three things the run doesn't have:
-   - a launch with a fresh profile: its own user-data folder, where no earlier launch has written settings or global
-     state;
-   - a reader of the extension's global state: the `ItemTable` row of `remote-oss.remote-ssh` in the profile's
-     `globalStorage/state.vscdb`, read after the editor has flushed it;
-   - the Remotes view, which is remote-explorer's in 0.2. Whether that half is `deferred` (as F-2202 AC-20 and AC-33
-     are) is a tag question for athena, in the next design batch.
+1. **F-2202 AC-23** isn't in this card. athena ruled it `deferred`, "the Remotes view is remote-explorer's" (the
+   F-2202 AC-20 precedent; the catalogue sweep #706 tags it), so no fresh-profile launch is built for it.
 2. `remoteSshActive` is already true in `fr1` before step 3: something else activated the extension. Report the
    window's extension-host log.
 

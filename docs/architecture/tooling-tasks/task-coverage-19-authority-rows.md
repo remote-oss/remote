@@ -33,12 +33,15 @@ spellings in the windows suite. Builder: iris or hestia (hermes assigns). Size: 
   with `NET_ADMIN`). A row that cuts restores in a `finally`. coverage-12 §2a adds the same pair; whichever card lands
   second reuses them.
 
-**The resolver's log line** (`packages/remote-ssh/src/diagnostics/log-content.ts`): export
-`resolvingLine(authority: string, attempt: number, reconnection: boolean)`, the line `resolveLogLines` writes today
-(`Resolving ssh-remote+<authority>, attempt <n>`, then `, reconnection` for a reconnection). `resolveLogLines` uses it.
-Its unit rows give both forms. The AC-12 row builds its expected lines with it.
+**No resolver log line.** The rows don't use "Resolving ssh-remote+…": that's F-2003's log, which 0.2 doesn't write
+(`resolveLogLines` in `log-content.ts` has no runtime caller; athena, 2026-10-14). A resolve is observed by its
+progress instead: every resolve runs inside the resolver's `withProgress` (`lib-authority/src/resolver/host.ts`,
+`connect`), so each attempt leaves one `progress` line of its window whose question is the start title. Measure the
+start title for `harness` first (`Setting up SSH Host harness` is expected), and write it into the PR.
 
 **The agent's state** gains `remoteSshActive`: `vscode.extensions.getExtension('remote-oss.remote-ssh')?.isActive ?? false`.
+The harness carries it too: `AgentEvent` (`windows/harness.ts`) gains `remoteSshActive?: boolean`, and `windowState()`'s
+answer includes it.
 coverage-32 (#715) uses the same field. Whichever card lands second reuses it.
 
 ## 2. The rows (`tests/acceptance/windows/authority.test.ts`)
@@ -69,8 +72,8 @@ folder name before it opens. "One connection" means two things:
 | F-2501 AC-32 | `a1` ← `a@b@127.0.0.1` | `sshdLog` holds `Invalid user a@b`; the dialog names `127.0.0.1` |
 | F-2501 AC-33 | `a1` ← `Harness` | dialog `Could not establish connection to "Harness": Could not resolve hostname.` |
 | F-2501 AC-2 | in `local`, `acceptance.agent.openWindow` on `file://<run>/local-folder` (made first) | that window's state has `remoteName` null and `remoteSshActive` false. Close it |
-| F-2501 AC-31 | in `local`, open `file://<run>/a-internal` (made first); its window is `a-internal`. Read its state; then `inWindow('a-internal', 'remote-internal.getActiveSshRemote')`; read its state again | before: `remoteSshActive` false. After: the command resolved, `remoteSshActive` true, `remoteName` still null. No `progress` line of `a-internal`, and no log line since the command starts with `Resolving ssh-remote+` (`resolvingLine`'s fixed start): the resolver wasn't called. Close it |
-| F-2501 AC-12 | `a1` ← `harness`, connected. Note `a1`'s `activated` events and the log's length. `cutHostNetwork()`; wait up to 180 s until the new log lines hold `resolvingLine('harness', 2, true)` and `resolvingLine('harness', 3, true)`; `restoreHostNetwork()` | no `failureDialog` line of `a1` since the cut; within 120 s of the restore `a1` is connected; `a1` has no new `activated` event (no reload). Compare log lines through `redact(line, [])`, as `client.test.ts`'s `logged` does |
+| F-2501 AC-31 | in `local`, open `file://<run>/a-internal` (made first); its window is `a-internal`. Read its state; then `inWindow('a-internal', 'remote-internal.getActiveSshRemote')`; read its state again | before: `remoteSshActive` false. After: the command resolved, `remoteSshActive` true, `remoteName` still null. No `progress` line of `a-internal`, and `acceptedKeyLogins(since)` (since before the command) is 0: the resolver wasn't called and no connection was made. Close it |
+| F-2501 AC-12 | `a1` ← `harness`, connected. Note `a1`'s `activated` events and its record's length. `cutHostNetwork()`; wait up to 180 s until `a1` has at least two new `progress` lines whose question is the start title (two attempts after the first: core called the resolver again, twice); `restoreHostNetwork()` | no `failureDialog` line of `a1` since the cut; within 120 s of the restore `a1` is connected, and `acceptedKeyLogins(<the restore's time>)` is at least 1 (the reconnection logged in again); `a1` has no new `activated` event (no reload) |
 
 ## 3. The catalogue
 
@@ -84,7 +87,7 @@ activation order is core's. Core halves, listed in #142:
 - AC-25's stored folder entries.
 
 AC-12 and AC-31 go to `acceptance` too. Core halves: AC-12's reconnection loop and its attempt numbers, which are
-core's input to our resolver; AC-31's "for example by opening the Remotes view", since the Remotes view is
+core's input to our resolver (the row counts the attempts, not their numbers); AC-31's "for example by opening the Remotes view", since the Remotes view is
 remote-explorer's in 0.2.
 
 These stay `todo`, each listed with what it waits for:

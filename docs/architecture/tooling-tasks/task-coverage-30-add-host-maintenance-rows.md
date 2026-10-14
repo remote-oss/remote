@@ -28,14 +28,10 @@ the host for the files after this one.
 
 **Terms:**
 - `P` is the `Port` of the `Host harness` block of `<run>/ssh_config`;
-- "the AC-19 error" is one of two outcomes, and the row passes on either:
-  - the command failed (`inWindow` rejects, naming the command), and its message holds the reader's text for the
-    file's problem;
-  - a `notice` line of `local` whose question holds `An error occurred while parsing the local SSH configuration file`
-    (STR:S010).
-
-  Take the reader's text from lib-ssh's public reader, run in the test over the same file text, so it isn't copied.
-  Record in the PR which of the two outcomes the build shows (F-2201 Q1);
+- "the AC-19 error" is: the command failed (`inWindow` rejects, naming the command), and its message holds the
+  reader's text for the file's problem. Take the reader's text from lib-ssh's public reader, run in the test over the
+  same file text, so it isn't copied. (F-2201 Q1's other outcome, the S010 notice, has no template on main, so it
+  can't occur.)
 - "no host pick" means no `hostPick` line of `local` since the step began.
 - a log line is compared as the log writes it: through `redact(line, [])` from lib-log, as `client.test.ts`'s
   `logged` does, since the run folder's name can hold a run of characters the log redacts (coverage-11, #696).
@@ -47,6 +43,16 @@ the host for the files after this one.
 **Every answer is a script entry** for the window that asks (`window: 'local'` or `'mt1'`), appended before the step
 (`appendScript`). A notice is answered `dismiss` unless the row says otherwise.
 
+**`appendScript` gains the pick surfaces** (`tools/script-file.ts`). `AppendedEntry` has no `hostPick` or `filePick`
+today, and no `{label}` or `{typed}` answer. Widen it to the surfaces and answers of `ScriptEntry`
+(`tests/acceptance/suite-local/script.ts`):
+- `hostPick` with `{label: string} | {typed: string} | 'dismiss'`;
+- `filePick` with `{label: string} | 'dismiss'`.
+
+Add a tools row per surface in `tools/script-file.test.ts`: the appended entry is in the script, unchanged. coverage-12
+§2a and coverage-31 need the same. Whichever of the three cards lands first adds it, and the others reuse it. Don't
+use `scriptEntries` for these rows: it rewrites the script, which breaks the record-counted cursor.
+
 ## 2. The rows
 
 Each row's name starts with its cite.
@@ -55,8 +61,8 @@ Each row's name starts with its cite.
 |---|---|---|
 | F-2201 AC-15 | In `local`, run `opensshremotes.addNewSshHost`. Script: `textInput` `Enter SSH Connection Command` → `{text: 'ssh harness@added-one'}`; `filePick` → `{label: <run>/ssh_config}` (the configured file's row is its path as written); `notice` `Host added!` → `{button: 'Open Config'}` | `<run>/ssh_config` is exactly `Host added-one\n  HostName added-one\n  User harness\n\n` followed by the bytes it had before. The `notice` line's question is `Host added!`, and its `buttons` are `["Open Config", "Connect"]` |
 | F-2201 AC-16, AC-39 | the same step, after the notice | `windowState('local').activeTab` is `{uri: <file URI of <run>/ssh_config>, preview: true}`. Then close the editor (`workbench.action.closeActiveEditor` in `local`) and write `<run>/ssh_config` back |
-| F-2201 AC-19 | Write `<run>/broken_config`: `Host "unterminated` then `  HostName 127.0.0.1`. `userSettings({'remote.SSH.configFile': <run>/broken_config})`. In `local`, run each of `opensshremotes.openEmptyWindow`, `opensshremotes.openEmptyWindowInCurrentWindow`, `opensshremotes.cleanRemoteServer`, `opensshremotes.cleanDevBox` and `opensshremotes.cleanLocalServer`, with a `hostPick` → `dismiss` entry ready for each | for each command: no host pick, and the AC-19 error |
-| F-2201 AC-20 | the same setting. In `local`, run `opensshremotes.addNewSshHost`. Script: `textInput` → `{text: 'ssh harness@added-two'}`; `filePick` → `{label: <run>/broken_config}` | a `filePick` line of `local`; the AC-19 error; `<run>/broken_config` unchanged byte for byte; no `notice` line `Host added!`. Then put `remote.SSH.configFile` back |
+| F-2201 AC-19 | Write `<run>/broken_config`: `Host "unterminated` then `  HostName 127.0.0.1`. `userSettings({'remote.SSH.configFile': <run>/broken_config})`. In `local`, run each of `opensshremotes.openEmptyWindow`, `opensshremotes.openEmptyWindowInCurrentWindow`, `opensshremotes.cleanRemoteServer`, `opensshremotes.cleanDevBox` and `opensshremotes.cleanLocalServer`. Script nothing: the parse error comes before any pick (`connect-commands.ts`, `pickedTarget`), so an entry would stay unused and answer `local`'s later questions | for each command: no host pick, and the AC-19 error |
+| F-2201 AC-20 (**waits on connect-46**) | the same setting. In `local`, run `opensshremotes.addNewSshHost`. Script: `textInput` → `{text: 'ssh harness@added-two'}`; `filePick` → `{label: <run>/broken_config}` | a `filePick` line of `local`; the AC-19 error; `<run>/broken_config` unchanged byte for byte; no `notice` line `Host added!`. Then put `remote.SSH.configFile` back |
 | F-2201 AC-33 | In `local`, run `opensshremotes.cleanRemoteServer`. Script: `hostPick` → `{label: 'harness'}`; `notice` `Killed VS Code Server on harness.` → `dismiss` | the `notice` line's question is `Killed VS Code Server on harness.` and its `buttons` are `["Open Logs"]`. `connectionLog()` since the step holds `configFileLine(<run>/ssh_config)` (the builder from `log-content.ts`). `harness` is a host only the run's file defines |
 | F-2201 AC-33 (Uninstall) | In `local`, run `opensshremotes.cleanDevBox`. Script: `hostPick` → `{label: 'harness'}` | the command resolves. `connectionLog()` since the step holds `configFileLine(<run>/ssh_config)`. `onHost('ls', '/home/harness/.vscodium-server-insiders/bin')` lists no server folder (or the folder is gone) |
 | F-2102 AC-18 | Open `mt1` on `harness`, wait until it's connected, and note `connectionHelpers()`. In `mt1`, run `opensshremotes.cleanLocalServer`. Script for `mt1`: `hostPick` → `{label: '$(plus) Add New SSH Host...'}` (the label as coverage-14 row 2's `items` show it); `textInput` → `dismiss` | a `textInput` line of `mt1` whose question is `Enter SSH Connection Command`; the helpers are the same processes as before; `mt1` is still connected. Close `mt1` |
@@ -66,16 +72,20 @@ Each row's name starts with its cite.
 **Order:** the rows run in the table's order. The two AC-33 rows and the F-2305 rows end the harness account's server.
 `mt1` (F-2102 AC-18) opens on a fresh server, which is why the file's last step reconnects once.
 
+**F-2201 AC-20 waits on connect-46.** On main, Add New SSH Host never parses the picked file: it writes its block
+and shows "Host added!" (`add-host-command.ts`), the opposite of the row. athena ruled it a gating product gap, and
+connect-46 is its fix card. Write the AC-20 row only once connect-46 has merged. If it hasn't when this PR is ready,
+leave the row out, keep AC-20 `todo`, and say so on #713. connect-46's build PR then adds it.
+
 **Measure first** and write what you saw into the PR:
 - the reader's text for `Host "unterminated`;
-- which AC-19 outcome the build gives;
 - the label of the configured file's row in the `filePick` line's `items`;
 - that the client's question is the pick, not the masked input (the run's OpenSSH, as coverage-21 §1 notes).
 
 ## 3. The catalogue
 
 In `docs/architecture/catalogue/coverage-slice1.tsv`, these go from `todo` to `acceptance`:
-- F-2201 AC-15, 16, 19, 20, 33 and 39;
+- F-2201 AC-15, 16, 19, 33 and 39, and AC-20 only with its row (connect-46);
 - F-2305 AC-32 and 36.
 
 **F-2102 AC-18** goes to `acceptance` too: its Configure half is coverage-14's row 12. If coverage-14 hasn't merged,
@@ -84,7 +94,7 @@ leave AC-18 `todo` and say on #568 that its Add New half is here.
 **Core halves** (list them in #142):
 - the notice's primary button (AC-15);
 - the preview editor's look (AC-39);
-- core's "Command '<title>' resulted in an error" frame (AC-19, when that's the outcome).
+- core's "Command '<title>' resulted in an error" frame (AC-19).
 
 **Halves that rest on unit rows** (name them in the PR):
 - the `info` level of AC-32's notice: `maintenance-commands.test.ts`'s rows on `showInformation`;

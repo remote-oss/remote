@@ -49,8 +49,11 @@ ends"). AC-8 is about that end.
 
 **Measure first:**
 - AC-5: the download phase's exact question, in the record of a run.
-- AC-20: that core starts a second resolve on its own within 60 s of the first one ending. Record the gap in the PR.
-  If no second attempt comes, stop (§6).
+- AC-20: what the first resolve returns, and that core starts a second resolve on its own within 60 s of it. In
+  F-2304 6.9's setup the first resolve returns (the connect succeeds), and core reconnects when the forward is refused,
+  so the dismissed pick happens in a reconnection, which is retryable (athena, 2026-10-14). Record the gap in the PR.
+  If no second attempt comes, or a `failureDialog` line of `pg1` appears (after the first resolve or after the
+  dismissed pick), stop (§6).
 
 ## 3. The catalogue
 
@@ -76,7 +79,8 @@ reviews; athena gives the tag check.
 
 1. **F-2304 AC-23 and AC-32** stay `todo`: terminal mode in an untrusted folder, with core's trust dialog left open,
    needs a trust-enabled launch (#456, harness item H1). List them in #142 with that wait.
-2. **No second resolve** in AC-20's setup within 60 s: report what the record and the log show after the first
-   resolve.
+2. **No second resolve, or a failure dialog,** in AC-20's setup: report what the record and the log show after the
+   first resolve. A dialog there is a product gap (the dismissed pick in a reconnection must be retried, not shown):
+   report it on #712 as one, and don't change the row.
 3. **The download stage** of the first remote launch has `details: true`, or a percentage: report the line. Don't
    change the row.
