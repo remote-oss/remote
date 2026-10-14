@@ -90,24 +90,25 @@ asking the resolver for the canonical URI of each workspace folder and file. lib
    - `hostPath: string`: `folder.hostPath`;
    - `remoteWorkspaceFolder: string`: C7's `ready.remoteWorkspaceFolder`, the CLI's result line (ADR-0009). It's
      not re-derived from the git-root mount or `workspaceMount` (athena's ruling).
-2. **The configuration read, memoized per payload** (athena's ruling, ea31011):
-   - `connector.ts` gains a private `Map<string, Promise<ConfigurationRead>>` keyed by the payload. Its entry is the
-     promise of one `bridge.readConfiguration(cliTargetOf(folder, configFile, dockerPath), undefined, …)` for the
-     payload's folder, `configFile`, settings and Docker context. `ConfigurationRead` is the read's result, or
-     `undefined` after a failure.
-   - **Whichever comes first starts it**, the canonical request or the connect, and the other one awaits the same
-     promise. The connect's own `readConfiguration` (connector.ts, after `prepare`, for the `name`) is replaced by this
-     read, so there's no second CLI run. It no longer passes the container id. Only `name` and `workspaceFolder` are
-     used, and both come from `devcontainer.json`.
+2. **The canonical read, memoized per payload** (athena's ruling, ea31011, and on #934):
+   - `connector.ts` gains a private `Map<string, Promise<string | undefined>>` keyed by the payload: the
+     `workspaceFolder` of one `bridge.readConfiguration(cliTargetOf(folder, configFile, dockerPath), undefined, () =>
+     undefined, <a signal never aborted>)` for the payload's folder, `configFile`, settings and Docker context. No
+     container id, and the CLI's events aren't logged, so the read's one warn below is its only log line.
+   - **Whichever comes first starts it,** a canonical request or the connect's start (`void readOf(…)` at the top of
+     `connectFresh`). Nothing in the connect waits for it.
+   - **The connect's own read is unchanged:** after `prepare`, `read-configuration` with the container id, for `name`.
+     ADR-0009's deviation 4: `name` may hold `${containerEnv:…}`, which only the container resolves. So a connect runs
+     two reads, and `remoteWorkspaceFolder` keeps coming from `up`'s result line.
    - **The bridge and the target** come from one function shared by `connectFresh` and the memo (the same `cliFor`
-     environment with `DOCKER_CONTEXT`, the same `dockerPath`), so both reads would be identical.
-   - **A failed read** (any `CliFailure`) gives `undefined` and one warn: `the configuration of <hostPath> could not be
-     read: <kind>`. It's the read's one warn, shared by the canonical request and the connect, and it replaces the
-     connect's old `the configuration's name could not be read` line. **The cap:** the canonical request waits at most 30 s
-     (`CANONICAL_READ_MILLISECONDS = 30_000`, through `dependencies.setTimer`) and then answers `undefined`. The read
-     itself goes on for the connect.
-   - A failed read is dropped from the memo once settled, so a reconnect reads again. A successful one is kept for
-     the window's life (a window has one payload).
+     environment with `DOCKER_CONTEXT`, the same `dockerPath`). The connect passes its own tools, so it creates no
+     second engine or bridge.
+   - **A failed read** (any `CliFailure`) gives `undefined` and one warn, `the configuration of <hostPath> could not be
+     read: <kind>`. The connect's `the configuration's name could not be read` line stays as it is.
+   - **The cap:** the canonical request waits at most 30 s (`CANONICAL_READ_MILLISECONDS = 30_000`, through
+     `dependencies.preflight.setTimer`), then answers `undefined`. A read that settles first stops the timer.
+   - A failed read is dropped from the memo once settled, so a reconnect reads again. A successful one is kept for the
+     window's life (a window has one payload).
    - **Nothing in the read runs repository code** (read-configuration doesn't run `initializeCommand` or build), so
      it's safe before trust.
 3. **`ContainerConnector`** gains:
@@ -182,8 +183,9 @@ asking the resolver for the canonical URI of each workspace folder and file. lib
 | `contracts §3.2: a configured workspaceFolder is the CLI's` | the CLI's result gives `/srv/app` | `/srv/app/x` maps to `/home/u/proj/x` |
 | `contracts §3.2: register-connector passes the mapping and the log` | the recording editor's `canonicalPath` reaches `canonicalPathOf`, and a rejection from it is warned |
 | `contracts §3.2 (T0): with no connection held, the answer comes from the read alone` | no connect yet; the fake CLI's read gives `workspaceFolder` `/workspaces/proj` | `('dev-container+abc', '/workspaces/proj/a')` gives `/home/u/proj/a`; one `readConfiguration`; no `prepare` |
-| `contracts §3.2: the canonical request and the connect share one read` | the canonical request first, then `connect` | one `readConfiguration` in all; the connect's `name` comes from it |
-| `contracts §3.2: the connect first, then the canonical request` | `connect` starts, and the canonical request comes while `prepare` is pending | one `readConfiguration`; the answer comes before `prepare` settles |
+| `contracts §3.2: the canonical request and the connect's start share one read without a container, and the name keeps its own read with the container (ADR-0009 deviation 4)` | the canonical request first, then `connect` | the reads' container ids are `[undefined, <the container>]`; the name comes from the second |
+| `contracts §3.2: the connect first, then the canonical request` | `connect` starts, and the canonical request comes while `prepare` is pending | the answer comes before `prepare` settles; after the connect, two reads in all |
+| `contracts §3.2: a read that settles first stops the timer` | the read answers at once | `setTimer` got 30000, and no timer is pending afterwards |
 | `contracts §3.2: a failed read answers nothing and warns, and the next request reads again` | the read fails `cliFailed` once, then succeeds | first `undefined` with the warn line; the second request reads again and maps |
 | `contracts §3.2: the canonical request gives up after 30 s` | the read never settles; fire the timer | `undefined`; `setTimer` got 30000 |
 | `contracts §3.2: a held connection wins over the read` | held `remoteWorkspaceFolder` `/srv/app`, read `workspaceFolder` `/workspaces/proj` | `/srv/app/x` maps; `/workspaces/proj/x` doesn't |
