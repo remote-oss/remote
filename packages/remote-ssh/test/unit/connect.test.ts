@@ -44,6 +44,7 @@ describe('the connect pipeline, when it works', () => {
     const {recording, options} = setup();
     await connect(INPUT, steps(recording), options);
     deepStrictEqual(recording.calls, [
+      'checkConfigFile',
       'checkStartSettings',
       'validate',
       'checkInstallFolder',
@@ -257,7 +258,7 @@ describe('the connect pipeline, when a step fails', () => {
           hints: [],
           diagnostics: [],
         },
-        ['checkStartSettings'],
+        ['checkConfigFile', 'checkStartSettings'],
       ],
     );
   });
@@ -289,7 +290,7 @@ describe('the connect pipeline, when a step fails', () => {
           hints: [],
           diagnostics: [],
         },
-        [],
+        ['checkConfigFile'],
       ],
     );
   });
@@ -306,7 +307,81 @@ describe('the connect pipeline, when a step fails', () => {
       }),
       options,
     );
-    deepStrictEqual(recording.calls, ['checkStartSettings', 'validate']);
+    deepStrictEqual(recording.calls, [
+      'checkConfigFile',
+      'checkStartSettings',
+      'validate',
+    ]);
+  });
+
+  it('F-2201 AC-22: an unparsable file in effect fails the connect before the client check, naming the problem', async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        checkConfigFile: () => ({
+          kind: 'failed',
+          failure: {
+            kind: 'configFileUnparsable',
+            reason: {text: '/h/.ssh/config: unterminated quote after Host'},
+          },
+        }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [result, recording.calls],
+      [
+        {
+          kind: 'configFileUnparsable',
+          reason: {text: '/h/.ssh/config: unterminated quote after Host'},
+          retryable: false,
+          silent: true,
+          userAlreadyNotified: false,
+          hints: [],
+          diagnostics: [],
+        },
+        [],
+      ],
+    );
+  });
+
+  it('F-2201 BR-8: the configuration check runs first', async () => {
+    const {recording, options} = setup();
+    function failedCheck(): StepResult<undefined> {
+      return {kind: 'failed', failure: {kind: 'invalidSetting'}};
+    }
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        checkConfigFile: () => ({
+          kind: 'failed',
+          failure: {
+            kind: 'invalidSetting',
+            reason: {text: 'the file: its problem'},
+          },
+        }),
+        checkStartSettings: failedCheck,
+        validate: failedCheck,
+        checkInstallFolder: failedCheck,
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [result, recording.calls],
+      [
+        {
+          kind: 'invalidSetting',
+          reason: {text: 'the file: its problem'},
+          retryable: false,
+          silent: false,
+          userAlreadyNotified: false,
+          hints: [],
+          diagnostics: [],
+        },
+        [],
+      ],
+    );
   });
 
   it('a pre-connection script that failed tells the window the user was already told', async () => {

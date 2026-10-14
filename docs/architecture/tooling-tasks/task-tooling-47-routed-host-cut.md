@@ -108,17 +108,9 @@ function routeRule(address: string, cut: RouteCut): {chain: string; match: reado
 3. **`tests/acceptance/server/host-fixture.ts`, `startHost`:** the same call after `startHostContainer`. Pass the
    address to `harnessSshConfig`. `RunningHost` gains `/** The host's address on the run network, which the `routed`
    alias names. */ routedAddress: string;`.
-4. **`tests/acceptance/windows/harness.ts`:** add
-
-   ```ts
-   /** Cuts the route to the host's own address (the `routed` alias); the published port keeps working. */
-   export function cutRoute(cut: RouteCut): void
-   /** Brings the route back; harmless when nothing was cut. */
-   export function restoreRoute(): void
-   ```
-
-   They're over `tools/acceptance-network.ts` with `runCommand`, `variable('HARNESS_CONTAINER')` and
-   `variable('HARNESS_ROUTED_ADDRESS')`. A test that cuts restores in a `finally` or an `afterEach`.
+4. **Moved (athena on #895):** the windows harness's `cutRoute(cut)` and `restoreRoute()` wrappers go with their
+   first caller, coverage-42's AC-17 row (#730, its §1.1), or the F-2501 AC-18 / F-2601 AC-4 card if that lands first.
+   This card adds no export to `tests/acceptance/windows/harness.ts` (ADR-0003: no export without a caller).
 5. **`tests/acceptance/README.md`:** a new section, "Cutting the route to the host", after "Cutting the host's network".
    It describes the run network, the `routed` alias and the two cuts, with proteus's measured lines. It also says when
    to use which: the network cut for a session that stalls, a route cut for a connect that fails.

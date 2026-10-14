@@ -24,6 +24,7 @@ import type {
   ConnectionAcquireRequest,
   ConnectionLimits,
   ConnectionMode,
+  HostListResult,
   PreparedConnection,
   SharedConnection,
 } from 'lib-ssh';
@@ -124,6 +125,7 @@ function portsOf(
     connection?: SharedConnection;
     /** Whether the acquire joins a running helper, which never prepares. */
     joins?: boolean;
+    configuredHosts?: () => HostListResult;
     mode?: ConnectionMode;
     cliLocal?: FakeLocalPort;
     bridgePort?: number | 'none' | 'busy';
@@ -159,6 +161,7 @@ function portsOf(
         return Promise.resolve({});
       },
     },
+    configuredHosts: changes.configuredHosts ?? (() => ({hosts: []})),
     settings: {
       preconnect: () => changes.preconnect,
       server: () => serverSettings(changes.server),
@@ -359,6 +362,39 @@ describe("the composition of a connect's steps", () => {
           reason: {id: 'installPathProvided', values: ['/$bad']},
         },
       },
+    );
+  });
+
+  it('F-2201 AC-22: the check reads the files in effect through the host list', () => {
+    const answers: HostListResult[] = [
+      {
+        parseError: {
+          file: '/h/.ssh/config',
+          reason: 'unterminated quote after Host',
+        },
+      },
+      {hosts: []},
+    ];
+    const {ports} = portsOf({
+      configuredHosts: () => answers.shift() ?? {hosts: []},
+    });
+    deepStrictEqual(
+      [
+        stepsOf(ports).checkConfigFile(inputFor('dev')),
+        stepsOf(ports).checkConfigFile(inputFor('dev')),
+      ],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'configFileUnparsable',
+            reason: {text: '/h/.ssh/config: unterminated quote after Host'},
+            logDetail:
+              'the SSH configuration file cannot be parsed: /h/.ssh/config: unterminated quote after Host',
+          },
+        },
+        {kind: 'done', value: undefined},
+      ],
     );
   });
 

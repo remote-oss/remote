@@ -143,9 +143,12 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
     if (outcome.result === 'cancelled') {
       return;
     }
-    if (outcome.result === 'connectionFailed') {
+    if (outcome.result !== 'stepRan') {
       ports.logger.warn(`the uninstall failed: ${outcome.cause}`);
-      throw new Error(UNINSTALL_FAILED);
+      if (outcome.result === 'connectionFailed') {
+        throw new Error(UNINSTALL_FAILED);
+      }
+      return;
     }
     await ports.killLocalServer(payloadOf(target));
   }

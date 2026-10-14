@@ -9,7 +9,10 @@ import {connectTargetOf, payloadOf} from '../connect/connect-commands.ts';
 import type {ConnectInput, ConnectSteps} from '../pipeline/steps.ts';
 import type {StepResult} from './own-host.ts';
 
-/** How a maintenance run ended: the step ran on the host, the run was cancelled at the platform pick, or the host could not be reached or the step did not run. */
+/**
+ * How a maintenance run ended: the step ran on the host, the run was cancelled at the platform pick, the host could not
+ * be reached, or the connection opened and the probe or the step did not work on the host.
+ */
 export interface MaintenanceRun {
   result: StepResult | 'cancelled';
   /** What went wrong, for the log; empty when the step ran. */
@@ -70,6 +73,10 @@ function failed(cause: string): MaintenanceRun {
   return {result: 'connectionFailed', cause};
 }
 
+function stepFailed(cause: string): MaintenanceRun {
+  return {result: 'stepFailed', cause};
+}
+
 /**
  * Runs `action` on the host of `input`. The lease is given back whatever the outcome, so the login the run took is
  * ended right after.
@@ -110,12 +117,12 @@ export async function runMaintenance(
   try {
     const probed = await steps.probe(input, lease, cancellation);
     if (probed.kind === 'failed') {
-      return failed(`the probe failed: ${probed.failure.kind}`);
+      return stepFailed(`the probe failed: ${probed.failure.kind}`);
     }
     const outcome = await steps.maintain(input, lease, action, cancellation);
     return outcome.kind === 'done'
       ? STEP_RAN
-      : failed(`the ${action} did not run: ${outcome.kind}`);
+      : stepFailed(`the ${action} did not run: ${outcome.kind}`);
   } finally {
     lease.release();
   }

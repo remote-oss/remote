@@ -114,17 +114,25 @@ describe('uninstallOwnHostPlan (the plan of the uninstall)', () => {
 });
 
 describe('the notices of the outcomes', () => {
-  it('F-2411.BR-5: the kill shows killed, or killFailed when the connection failed', () => {
+  it('F-2411.BR-5: the kill shows killed, or killFailed when the connection or the step failed', () => {
     deepStrictEqual(
-      [killResult('stepRan'), killResult('connectionFailed')],
-      ['killed', 'killFailed'],
+      [
+        killResult('stepRan'),
+        killResult('stepFailed'),
+        killResult('connectionFailed'),
+      ],
+      ['killed', 'killFailed', 'killFailed'],
     );
   });
 
-  it('F-2412.BR-5: the uninstall is silent, or shows the command error', () => {
+  it('F-2412.BR-5: the uninstall is silent, or shows the command error when the connection failed', () => {
     deepStrictEqual(
-      [uninstallResult('stepRan'), uninstallResult('connectionFailed')],
-      ['silent', 'commandError'],
+      [
+        uninstallResult('stepRan'),
+        uninstallResult('stepFailed'),
+        uninstallResult('connectionFailed'),
+      ],
+      ['silent', 'silent', 'commandError'],
     );
   });
 });
