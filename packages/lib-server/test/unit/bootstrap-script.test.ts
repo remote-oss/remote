@@ -17,6 +17,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {NOISE_LINES} from 'lib-host/testing/noise';
 import {
   type BootstrapRequest,
   scriptFor,
@@ -200,6 +201,21 @@ describe('the POSIX bootstrap script', () => {
           'host.arch',
         ]),
         {status: 'Ok', 'host.os': 'linux', 'host.arch': 'x64'},
+      );
+    });
+
+    it('ADR-0010: the probe: noise around and inside its stream changes nothing', () => {
+      const noise = NOISE_LINES.map(line => `printf '%s\\n' '${line}'`);
+      function loud(script: string): string {
+        return [...noise, ...noise.map(line => `${line} >&2`), script].join(
+          '\n',
+        );
+      }
+      deepStrictEqual(
+        blockOf(host, single('probe'), parametersFor(), {
+          rewriteScript: loud,
+        }),
+        blockOf(host, single('probe'), parametersFor()),
       );
     });
 

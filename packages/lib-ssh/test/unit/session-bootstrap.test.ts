@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {withNoise} from 'lib-host/testing/noise';
 import {
   bootstrapEventOf,
   bootstrapLogLine,
@@ -325,6 +326,18 @@ describe('the reader of the bootstrap lines (card ssh-38, #443)', () => {
         bootstrapEventOf(''),
       ],
       [undefined, undefined, undefined, undefined],
+    );
+  });
+
+  it('ADR-0010: the bootstrap lines: noise around and inside its stream changes nothing', () => {
+    deepStrictEqual(
+      [
+        ...withNoise(['xLAYER1-READY', 'LAYER1-READY now']).map(line =>
+          bootstrapEventOf(line),
+        ),
+        bootstrapEventOf('LAYER1-READY\r'),
+      ],
+      [...withNoise(['', '']).map(() => undefined), {kind: 'ready'}],
     );
   });
 

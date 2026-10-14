@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {withNoise} from 'lib-host/testing/noise';
 import type {ChannelFailure} from 'lib-host';
 import {
   RecordingChannel,
@@ -258,6 +259,25 @@ describe('the forwarding plans of a connect', () => {
     deepStrictEqual(plans.agentLink, {
       kind: 'link',
       linkPath: '/tmp/vscode-ssh-auth-sock-43',
+      target: AGENT_SOCKET,
+    });
+  });
+
+  it('ADR-0010: the agent-link listing: noise around and inside its stream changes nothing', async () => {
+    const {dependencies} = forwardingOf({draws: [1, 2]});
+    const plans = await plansOf(
+      dependencies,
+      channelWith(
+        withNoise([
+          'see /tmp/vscode-ssh-auth-sock-1 elsewhere',
+          ' /tmp/vscode-ssh-auth-sock-1',
+        ]),
+      ),
+      hostWith(AGENT_SOCKET, ''),
+    );
+    deepStrictEqual(plans.agentLink, {
+      kind: 'link',
+      linkPath: '/tmp/vscode-ssh-auth-sock-1',
       target: AGENT_SOCKET,
     });
   });
