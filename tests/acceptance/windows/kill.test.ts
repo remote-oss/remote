@@ -1,5 +1,5 @@
 import {deepStrictEqual, ok} from 'node:assert';
-import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {readFileSync, rmSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
@@ -9,58 +9,43 @@ import {
   connectedWithin,
   hostAliases,
   hostAnswer,
-  hostPassword,
   inWindow,
-  isOpen,
   newKeyPair,
   nextEmptyWindow,
-  noHelperWithin,
   onHost,
   onHostAs,
   openWindow,
   recordLines,
-  type RecordLine,
   reloadWindow,
-  settingIn,
   variable,
   waitFor,
   windowEvents,
-  windowNames,
   windowState,
 } from './harness.ts';
-
-/** The question of the host pick. */
-const HOST_QUESTION = 'Select configured SSH host or enter user@host';
-
-/** The two fixed rows the host pick ends with. */
-const FIXED_ROWS = ['$(plus) Add New SSH Host...', 'Configure SSH Hosts...'];
-
-/** The data folder of the host's server in the VSCodium run. */
-const DATA_FOLDER = '/home/harness/.vscodium-server-insiders';
-
-/** How long an open that installs the server may take: the run downloads the server archive. */
-const INSTALL_MILLISECONDS = 180_000;
+import {
+  closeAllButLocal,
+  DATA_FOLDER,
+  FIXED_ROWS,
+  harnessPort,
+  HOST_QUESTION,
+  INSTALL_MILLISECONDS,
+  linesSince,
+  openConnected,
+  openLocalWindow,
+  password,
+  passwordAskHosts,
+  perWindowMode,
+  pickHost,
+  runWith,
+  serverProcesses,
+  serversGoneWithin,
+  setting,
+  settingsText,
+  typeHost,
+} from './maintenance.ts';
 
 /** The extension's log channel. */
 const LOG_CHANNEL = 'Remote - SSH';
-
-/** The answer that takes host `label` in the host pick. */
-function pickHost(label: string): AppendedEntry {
-  return {
-    surface: 'hostPick',
-    match: 'Select configured SSH host',
-    answer: {label},
-  };
-}
-
-/** The answer that types `text` into the host pick. */
-function typeHost(text: string): AppendedEntry {
-  return {
-    surface: 'hostPick',
-    match: 'Select configured SSH host',
-    answer: {typed: text},
-  };
-}
 
 /** The answer to the notice of a kill: its Open Logs button. */
 const OPEN_LOGS: AppendedEntry = {
@@ -68,15 +53,6 @@ const OPEN_LOGS: AppendedEntry = {
   match: 'VS Code Server on',
   answer: {button: 'Open Logs'},
 };
-
-/** The answer that types the password account's password. */
-function password(): AppendedEntry {
-  return {
-    surface: 'maskedInput',
-    match: 'Enter password',
-    answer: {text: hostPassword()},
-  };
-}
 
 /** The notice of a kill that ran. */
 function killed(host: string): string {
@@ -86,53 +62,6 @@ function killed(host: string): string {
 /** The notice of a kill that could not run. */
 function killFailed(host: string): string {
   return `Failed to kill VS Code Server on ${host}.`;
-}
-
-/** The server processes the host ran when the windows were last all closed, which the rows don't count. */
-let leftBefore: number[] = [];
-
-/** The process ids, on the host, of the user harness's processes that run from the server's data folder. */
-async function hostServerProcesses(): Promise<number[]> {
-  try {
-    return (await onHost('pgrep', '-u', 'harness', '-f', `${DATA_FOLDER}/`))
-      .split('\n')
-      .filter(line => line !== '')
-      .map(Number);
-  } catch {
-    return [];
-  }
-}
-
-/** The server processes on the host, but those the run's earlier files left. */
-async function serverProcesses(): Promise<number[]> {
-  return (await hostServerProcesses()).filter(
-    server => !leftBefore.includes(server),
-  );
-}
-
-/**
- * Waits until none of the server processes `servers` runs on the host any more, for up to `milliseconds`; on a
- * timeout it fails naming the processes that still run, with their command lines.
- */
-async function serversGoneWithin(
-  servers: readonly number[],
-  milliseconds: number,
-): Promise<void> {
-  try {
-    await waitFor(
-      `the server processes ${servers.join(', ')} to end`,
-      async () => {
-        const running = await serverProcesses();
-        return servers.every(server => !running.includes(server));
-      },
-      milliseconds,
-    );
-  } catch (caught) {
-    const table = await onHost('ps', '-o', 'pid,ppid,args');
-    throw new Error(`${String(caught)}; the host's processes:\n${table}`, {
-      cause: caught,
-    });
-  }
 }
 
 /** Has window `name` run Kill VS Code Server on Host..., whose questions are already in the script. */
@@ -145,13 +74,6 @@ function killCurrent(name: string): Promise<void> {
   return inWindow(name, 'opensshremotes.cleanCurrentRemoteServer');
 }
 
-/** The record lines written since `mark`, of window `window`. */
-function linesSince(mark: number, window: string): RecordLine[] {
-  return recordLines()
-    .slice(mark)
-    .filter(line => line.window === window);
-}
-
 /** The notices window `window` showed since `mark`, as their text and buttons. */
 function noticesSince(mark: number, window: string): Array<[string, string[]]> {
   return linesSince(mark, window)
@@ -160,51 +82,11 @@ function noticesSince(mark: number, window: string): Array<[string, string[]]> {
 }
 
 /** Runs a kill on host in window `window` with `answers` scripted for it, and gives the mark it started from. */
-async function killWith(
+function killWith(
   window: string,
   answers: readonly AppendedEntry[],
 ): Promise<number> {
-  appendScript(answers.map(answer => ({...answer, window})));
-  const mark = recordLines().length;
-  await killOnHost(window);
-  return mark;
-}
-
-/** Changes a user setting from the local window, as the Settings editor does, and waits until `window` reads it. */
-async function setting(
-  settingId: string,
-  value: unknown,
-  window = 'local',
-): Promise<void> {
-  await inWindow('local', 'acceptance.agent.updateSetting', settingId, value);
-  await waitFor(
-    `${window} to read ${settingId}`,
-    async () =>
-      JSON.stringify((await settingIn(window, settingId)) ?? null) ===
-      JSON.stringify(value ?? null),
-    10_000,
-  );
-}
-
-/** The bytes of the run's user settings file, as text. */
-function settingsText(): string {
-  return readFileSync(
-    path.join(variable('HARNESS_RUN_FOLDER'), 'user-data/User/settings.json'),
-    'utf8',
-  );
-}
-
-/** The port the run's `harness` block names. */
-function harnessPort(): string {
-  const config = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
-  return (
-    /Port (\d+)/.exec(config.slice(config.indexOf('Host harness\n')))?.[1] ?? ''
-  );
-}
-
-/** The known_hosts file of the `password-ask` alias. */
-function passwordAskHosts(): string {
-  return path.join(variable('HARNESS_RUN_FOLDER'), 'known_hosts_password_ask');
+  return runWith(window, 'opensshremotes.cleanRemoteServer', answers);
 }
 
 /** The output channel window `name` shows once the log channel is up, or after 5 s whatever it shows. */
@@ -222,47 +104,6 @@ async function shownChannel(name: string): Promise<string | null | undefined> {
     5000,
   ).catch(() => undefined);
   return shown;
-}
-
-/** Opens window `name` on `harness` and waits until it is connected. */
-async function openConnected(name: string): Promise<void> {
-  await openWindow('harness', name);
-  await connectedWithin(name, 60_000);
-}
-
-/** Opens a local folder window `name` on a folder of the run, made first, and waits for its agent. */
-async function openLocalWindow(name: string): Promise<void> {
-  const folder = path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    'kill-folders',
-    name,
-  );
-  mkdirSync(folder, {recursive: true});
-  await inWindow('local', 'acceptance.agent.openWindow', `file://${folder}`);
-  await waitFor(`${name} to activate its agent`, () => isOpen(name), 60_000);
-}
-
-/**
- * Closes every window of the launch but `local` that is open, waits until no connection helper runs, and from then on
- * counts no server process that runs on the host now.
- */
-async function closeAllButLocal(): Promise<void> {
-  for (const name of windowNames()) {
-    if (name !== 'local' && isOpen(name)) {
-      await closeWindow(name);
-    }
-  }
-  await noHelperWithin(60_000);
-  leftBefore = await hostServerProcesses();
-}
-
-/** The per-window mode: no local server, and the host's platform named so that no pick is asked. */
-async function perWindowMode(enabled: boolean): Promise<void> {
-  await setting(
-    'remote.SSH.remotePlatform',
-    enabled ? {harness: 'linux'} : undefined,
-  );
-  await setting('remote.SSH.useLocalServer', enabled ? false : undefined);
 }
 
 describe('Kill VS Code Server (card coverage-39)', function () {
@@ -584,7 +425,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
   });
 
   it('F-2411 AC-31: a kill that waits on one host does not hold back a kill of another', async () => {
-    await openLocalWindow('kl2');
+    await openLocalWindow('kl2', 'kill-folders');
     appendScript([
       {...pickHost('blackhole'), window: 'local'},
       {...pickHost('harness'), window: 'kl2'},
