@@ -173,6 +173,7 @@ export function channelAnswering(output: readonly string[]): RecordingChannel {
 export function leaseOn(channel: RecordingChannel): ConnectionLease {
   return {
     channel,
+    waits: undefined,
     socksPort: 1080,
     storedRecord: undefined,
     storeSharedRecord: () => Promise.resolve(true),

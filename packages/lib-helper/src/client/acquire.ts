@@ -13,7 +13,12 @@ import {claim} from '../registry/claim.ts';
 import {recordPath, type RegistryFilePort} from '../registry/file-port.ts';
 import {removeOwnRecord} from '../registry/own-record.ts';
 import {isStale, replaceStale} from '../registry/stale.ts';
-import {type EndPolicy, type HelperRecord, parseRecord} from '../types.ts';
+import {
+  type EndPolicy,
+  type HelperRecord,
+  parseRecord,
+  serializeRecord,
+} from '../types.ts';
 import {HelperLease, type Timer} from './lease.ts';
 import {type Spawner, spawnSpecification} from './spawn.ts';
 
@@ -40,17 +45,29 @@ export interface ClientEnvironment {
   retryMilliseconds: number;
 }
 
+/** What a starter decides once it has the key: the start values of the helper, or why it will not start one. */
+export type PreparedStart<Refusal> =
+  | {
+      kind: 'ready';
+      options: Record<string, string | number | boolean>;
+      payload: Record<string, string | number | boolean>;
+    }
+  | {kind: 'refused'; refusal: Refusal};
+
 /** One helper to acquire. */
-export interface AcquireRequest {
+export interface AcquireRequest<Refusal = never> {
   /** The registry folder: per profile or per user, as the consumer needs. */
   folder: string;
   namespace: string;
   helperKey: string;
   /** The bundled helper script and its own start values. */
   script: string;
-  options: Record<string, string | number | boolean>;
   policy: EndPolicy;
-  payload: Record<string, string | number | boolean>;
+  /**
+   * Called once, and only by the window that claims the key, after the claim and before the helper starts: it makes the
+   * helper's start values and payload. A window that joins a running helper never calls it.
+   */
+  prepare: () => Promise<PreparedStart<Refusal>>;
   cancellation: AbortSignal;
 }
 
@@ -59,8 +76,9 @@ export type AcquireFailure =
   'spawnFailed' | 'endpointUnreachable' | 'cancelled';
 
 /** A lease, or why there is none. */
-export type AcquireOutcome =
+export type AcquireOutcome<Refusal = never> =
   | {kind: 'acquired'; lease: HelperLease}
+  | ([Refusal] extends [never] ? never : {kind: 'refused'; refusal: Refusal})
   | {kind: 'failed'; failure: AcquireFailure};
 
 function waitFor(timer: Timer, milliseconds: number): Promise<void> {
@@ -125,7 +143,7 @@ async function hello(
  */
 async function join(
   environment: ClientEnvironment,
-  request: AcquireRequest,
+  request: {cancellation: AbortSignal},
   record: HelperRecord,
 ): Promise<HelperLease | 'cancelled' | undefined> {
   const deadline = record.startedAt + environment.startLimitMilliseconds;
@@ -141,12 +159,23 @@ async function join(
   }
 }
 
-/** Starts the helper of a claimed record and waits until it welcomes, within the start limit. */
-async function start(
+/** Whether a signal has aborted; read again after each wait, since it can change while one waits. */
+function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
+/** Starts the helper of a claimed record with the prepared values, and waits until it welcomes, within the start limit. */
+async function start<Refusal>(
   environment: ClientEnvironment,
-  request: AcquireRequest,
+  request: AcquireRequest<Refusal>,
   record: HelperRecord,
-): Promise<AcquireOutcome> {
+  prepared: Extract<PreparedStart<Refusal>, {kind: 'ready'}>,
+): Promise<AcquireOutcome<Refusal>> {
+  const recordFile = recordPath(
+    request.folder,
+    request.namespace,
+    request.helperKey,
+  );
   try {
     await environment.spawn(
       spawnSpecification(
@@ -155,27 +184,21 @@ async function start(
         {
           endpoint: record.endpoint,
           nonce: record.nonce,
-          recordFile: recordPath(
-            request.folder,
-            request.namespace,
-            request.helperKey,
-          ),
+          recordFile,
           policy: request.policy,
-          payload: request.payload,
-          options: request.options,
+          payload: prepared.payload,
+          options: prepared.options,
         },
         environment.parentEnvironment,
       ),
     );
   } catch {
     // The record names a helper that never ran; removing it frees the key at once.
-    await environment.files.remove(
-      recordPath(request.folder, request.namespace, request.helperKey),
-    );
+    await environment.files.remove(recordFile);
     return {kind: 'failed', failure: 'spawnFailed'};
   }
   const deadline = environment.clock() + environment.startLimitMilliseconds;
-  while (!request.cancellation.aborted) {
+  while (!isAborted(request.cancellation)) {
     const lease = await hello(environment, record, true);
     if (lease !== undefined) {
       return {kind: 'acquired', lease};
@@ -188,16 +211,51 @@ async function start(
   return {kind: 'failed', failure: 'cancelled'};
 }
 
-/**
- * Acquires a lease on the helper for the request's key: claims the key and starts the helper, or joins the helper
- * that holds it, waiting for one that is still starting. A record whose helper stays silent past its starter's window
- * is replaced once; a helper that cannot be reached after that is `endpointUnreachable`.
- */
-export async function acquire(
+/** The lease of a join, or the end of the acquire when the join was cancelled; none when the record is stale. */
+async function joined<Refusal>(
   environment: ClientEnvironment,
-  request: AcquireRequest,
-): Promise<AcquireOutcome> {
-  if (request.cancellation.aborted) {
+  request: AcquireRequest<Refusal>,
+  record: HelperRecord,
+): Promise<AcquireOutcome<Refusal> | undefined> {
+  const lease = await join(environment, request, record);
+  if (lease === 'cancelled') {
+    return {kind: 'failed', failure: 'cancelled'};
+  }
+  return lease === undefined ? undefined : {kind: 'acquired', lease};
+}
+
+/**
+ * Acquires a lease on the helper for the request's key: joins the helper that holds it, waiting for one that is still
+ * starting, or else claims the key and starts the helper. A join never prepares anything. A window that will claim
+ * prepares first, before the claim, so that the record's `startedAt`, which the join window of every other window
+ * counts from, is stamped after the lookup the preparation may do and covers the spawn and the hello alone. A record
+ * whose helper stays silent past its starter's window is replaced once; a helper that cannot be reached after that
+ * is `endpointUnreachable`. The record carries no payload: the lease's payload is the one the helper welcomes with,
+ * which the starter made in its preparation.
+ */
+export async function acquire<Refusal = never>(
+  environment: ClientEnvironment,
+  request: AcquireRequest<Refusal>,
+): Promise<AcquireOutcome<Refusal>> {
+  if (isAborted(request.cancellation)) {
+    return {kind: 'failed', failure: 'cancelled'};
+  }
+  const text = await environment.files.read(
+    recordPath(request.folder, request.namespace, request.helperKey),
+  );
+  const present = text === undefined ? undefined : parseRecord(text);
+  if (present !== undefined) {
+    const lease = await joined(environment, request, present);
+    if (lease !== undefined) {
+      return lease;
+    }
+  }
+  const prepared = await request.prepare();
+  if (prepared.kind === 'refused') {
+    // `refused` is a member of the outcome whenever the request has a refusal to give.
+    return prepared as AcquireOutcome<Refusal>;
+  }
+  if (isAborted(request.cancellation)) {
     return {kind: 'failed', failure: 'cancelled'};
   }
   const nonce = environment.newNonce();
@@ -214,25 +272,32 @@ export async function acquire(
     nonce,
     startedByProcessId: environment.processId,
     startedAt: environment.clock(),
-    payload: request.payload,
+    payload: {},
   };
-  const claimed = await claim(
-    environment.files,
-    request.folder,
-    request.namespace,
-    request.helperKey,
-    record,
-  );
-  if (claimed.outcome === 'claimed') {
-    return start(environment, request, record);
-  }
-  if (claimed.outcome === 'existing') {
-    const joined = await join(environment, request, claimed.record);
-    if (joined === 'cancelled') {
-      return {kind: 'failed', failure: 'cancelled'};
+  let staleText = text ?? '';
+  if (text === undefined) {
+    const claimed = await claim(
+      environment.files,
+      request.folder,
+      request.namespace,
+      request.helperKey,
+      record,
+    );
+    if (claimed.outcome === 'claimed') {
+      return start(environment, request, record, prepared);
     }
-    if (joined !== undefined) {
-      return {kind: 'acquired', lease: joined};
+    if (claimed.outcome === 'existing') {
+      const lease = await joined(environment, request, claimed.record);
+      if (lease !== undefined) {
+        return lease;
+      }
+      staleText = serializeRecord(claimed.record);
+    } else {
+      // A corrupt file that a rival left: what is there now is what gets replaced.
+      staleText =
+        (await environment.files.read(
+          recordPath(request.folder, request.namespace, request.helperKey),
+        )) ?? '';
     }
   }
   const replaced = await replaceStale(
@@ -241,20 +306,16 @@ export async function acquire(
     request.namespace,
     request.helperKey,
     record,
+    staleText,
   );
   if (replaced.outcome === 'claimed') {
-    return start(environment, request, record);
+    return start(environment, request, record, prepared);
   }
   const lease =
     replaced.outcome === 'existing'
-      ? await join(environment, request, replaced.record)
+      ? await joined(environment, request, replaced.record)
       : undefined;
-  if (lease === 'cancelled') {
-    return {kind: 'failed', failure: 'cancelled'};
-  }
-  return lease === undefined
-    ? {kind: 'failed', failure: 'endpointUnreachable'}
-    : {kind: 'acquired', lease};
+  return lease ?? {kind: 'failed', failure: 'endpointUnreachable'};
 }
 
 /** Sends hello and stop; whether the connection closes, as it does once the helper has ended, within the limit. */

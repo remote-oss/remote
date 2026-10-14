@@ -18,6 +18,19 @@ export function authenticate(
   session?.output('LAYER1-READY\n');
 }
 
+/** What the client lookup found for the host `harness`, as the helper's welcome carries it. */
+export const RUN_FACTS = {
+  sshProgram: 'ssh',
+  scpProgram: 'scp',
+  effective: {
+    hostName: 'harness',
+    user: 'dev',
+    port: '22',
+    localForwards: [],
+    clearAllForwardings: false,
+  },
+};
+
 /** The `ssh` run of a connection to the host `harness`. */
 export const SSH_REQUEST: SshRequest = {
   purpose: 'connection',

@@ -137,6 +137,14 @@ async function execute(
   }
 }
 
+/** The name of the output channel an editor of the window shows, or none: an output channel's document is `output:`. */
+function visibleOutputChannelOf(
+  documents: readonly vscode.Uri[],
+): string | null {
+  const shown = documents.find(each => each.scheme === 'output');
+  return shown === undefined ? null : shown.path.replace(/^.*-#\d+-/, '');
+}
+
 /** Starts the agent: reports the window's activation, registers its own commands and polls for the test's commands. */
 export function activate(context: vscode.ExtensionContext): void {
   const agentFolder = agentFolderOf();
@@ -173,6 +181,9 @@ export function activate(context: vscode.ExtensionContext): void {
         remoteAuthority: authorityOf(agentFolder, process.pid),
         folders: (vscode.workspace.workspaceFolders ?? []).map(each =>
           each.uri.toString(),
+        ),
+        visibleOutputChannel: visibleOutputChannelOf(
+          vscode.window.visibleTextEditors.map(editor => editor.document.uri),
         ),
         trusted: vscode.workspace.isTrusted,
         remoteSshActive:

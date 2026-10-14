@@ -6,6 +6,7 @@ import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
   type ConnectionAcquireRequest,
   type ConnectionNotice,
+  type RunFacts,
   SharedConnection,
 } from 'lib-ssh';
 import {
@@ -13,7 +14,11 @@ import {
   openConnectionStep,
 } from '../../src/pipeline/connection-step.ts';
 import type {PhaseEvent} from '../../src/pipeline/connect.ts';
-import type {ConnectInput, ConnectionTerms} from '../../src/pipeline/steps.ts';
+import type {
+  ConnectInput,
+  ConnectionTerms,
+  StepFailure,
+} from '../../src/pipeline/steps.ts';
 
 const INPUT: ConnectInput = {
   target: {kind: 'plain', text: 'harness'},
@@ -31,10 +36,27 @@ const TERMS: ConnectionTerms = {
 
 const LIMITS = {requestMilliseconds: 5000, loginMilliseconds: 60000};
 
+const RUN_FACTS = {
+  sshProgram: 'ssh',
+  scpProgram: 'scp',
+  effective: {
+    hostName: 'harness',
+    user: 'dev',
+    port: '22',
+    localForwards: [],
+    clearAllForwardings: false,
+  },
+};
+
+const WAITS = {probeMilliseconds: 7000, tunnelMilliseconds: 8000};
+
 /** A lease that answers requests from a script and lets a test send the helper's events. */
 class FakeLease {
   readonly leaseId = 1;
-  readonly payload = {socksPort: 41000};
+  readonly payload = {
+    socksPort: 41000,
+    runFacts: JSON.stringify(RUN_FACTS),
+  };
   released = 0;
   readonly asked: PlainData[] = [];
   /** What the helper answers to the first requests to connect, in order; it accepts after these. */
@@ -80,7 +102,8 @@ const CHANNEL = {identity: () => 'harness'} as unknown as HostChannel;
 
 interface Fixture {
   lease: FakeLease;
-  requests: ConnectionAcquireRequest[];
+  requests: Array<ConnectionAcquireRequest<StepFailure>>;
+  adopted: RunFacts[];
   notices: ConnectionNotice[];
   logins: {attached: number; disposed: number; inputs: ConnectInput[]};
   login: LoginLease | undefined;
@@ -103,7 +126,8 @@ function fixture(
   channelFailureMessage?: string,
 ): Fixture {
   const lease = new FakeLease();
-  const requests: ConnectionAcquireRequest[] = [];
+  const requests: Array<ConnectionAcquireRequest<StepFailure>> = [];
+  const adopted: RunFacts[] = [];
   const notices: ConnectionNotice[] = [];
   const logins: Fixture['logins'] = {attached: 0, disposed: 0, inputs: []};
   const held: {login?: LoginLease} = {};
@@ -123,28 +147,39 @@ function fixture(
               kind: 'acquired',
               connection: new SharedConnection(
                 lease as unknown as HelperLease,
-                LIMITS,
+                () => LIMITS,
                 () => () => undefined,
               ),
             }
           : {kind: 'failed', failure: acquired},
       );
     },
+    adoptRunFacts: runFacts => {
+      adopted.push(runFacts);
+    },
+    waits: () => WAITS,
     requestFor: (input, terms) => {
       termsAsked.push(terms);
       return {
         folder: '/registry',
         script: '/ext/helper.js',
-        options: {
-          request: JSON.stringify({remoteCommand: terms.remoteCommandInEffect}),
-          unboundedWaitSeconds: 120,
-          runtimeFolder: '/run',
-          runtime: '/editor',
-          askpassProgram: '/ext/askpass.js',
-          displayHost: 'harness',
-          externalAskpass: false,
-          askpassFirstMessageMilliseconds: 5000,
-        },
+        prepare: () =>
+          Promise.resolve({
+            kind: 'ready' as const,
+            runFacts: RUN_FACTS,
+            options: {
+              request: JSON.stringify({
+                remoteCommand: terms.remoteCommandInEffect,
+              }),
+              unboundedWaitSeconds: 120,
+              runtimeFolder: '/run',
+              runtime: '/editor',
+              askpassProgram: '/ext/askpass.js',
+              displayHost: 'harness',
+              externalAskpass: false,
+              askpassFirstMessageMilliseconds: 5000,
+            },
+          }),
         policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
       };
     },
@@ -178,6 +213,7 @@ function fixture(
   return {
     lease,
     requests,
+    adopted,
     notices,
     logins,
     logged: () => sink.lines.map(line => line.message),
@@ -241,8 +277,9 @@ describe('the connection step', () => {
     const {requests, connecting, termsAsked} = fixture();
     void connecting();
     await settled();
+    const prepared = await requests[0]?.prepare();
     deepStrictEqual(
-      [termsAsked, requests[0]?.options.request],
+      [termsAsked, prepared?.kind === 'ready' && prepared.options.request],
       [[TERMS], '{"remoteCommand":true}'],
     );
   });
