@@ -145,6 +145,13 @@ describe('a maintenance run (F-2411, F-2412)', () => {
     strictEqual(outcome.result, 'connectionFailed');
   });
 
+  it('F-2412 BR-5: a login that failed is still a failed connection', async () => {
+    const outcome = await perform('uninstall', {
+      openConnection: () => Promise.resolve(FAILED),
+    });
+    strictEqual(outcome.result, 'connectionFailed');
+  });
+
   it('F-2411.7.E2: a login that failed has no lease to give back and runs no step', async () => {
     await perform('kill', {openConnection: () => Promise.resolve(FAILED)});
     deepStrictEqual(
@@ -153,25 +160,22 @@ describe('a maintenance run (F-2411, F-2412)', () => {
     );
   });
 
-  it('F-2411.7.E2: a probe that failed is a failed connection, with the lease given back', async () => {
+  it('F-2412 BR-5: a probe that failed after the login is a failed step, with the lease given back', async () => {
     const outcome = await perform('kill', {
       probe: () =>
         Promise.resolve({kind: 'failed', failure: {kind: 'noResultBlock'}}),
     });
     deepStrictEqual(
       [outcome.result, recording.releases, recording.calls.includes('kill')],
-      ['connectionFailed', 1, false],
+      ['stepFailed', 1, false],
     );
   });
 
-  it('F-2411.7.E2: a step that did not finish is a failed connection, with the lease given back', async () => {
+  it('F-2412 BR-5: a step that did not finish is a failed step, with the lease given back', async () => {
     const outcome = await perform('kill', {
       maintain: () => Promise.resolve({kind: 'noResultBlock'}),
     });
-    deepStrictEqual(
-      [outcome.result, recording.releases],
-      ['connectionFailed', 1],
-    );
+    deepStrictEqual([outcome.result, recording.releases], ['stepFailed', 1]);
   });
 
   it('F-2411.7.E2: a step that did not finish says why, for the log', async () => {
