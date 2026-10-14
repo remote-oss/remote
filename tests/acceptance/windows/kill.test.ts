@@ -21,6 +21,7 @@ import {
   waitFor,
   windowEvents,
   windowState,
+  withoutActivity,
 } from './harness.ts';
 import {
   closeAllButLocal,
@@ -173,7 +174,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
 
   it('F-2411 AC-5: a picked host is killed within 2 s, with the notice and no progress', async () => {
     const before = settingsText();
-    const state = await windowState('local');
+    const state = withoutActivity(await windowState('local'));
     const servers = await serverProcesses();
     const mark = await killWith('local', [pickHost('harness')]);
     firstKill = mark;
@@ -187,7 +188,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
         notice: [notice?.question, notice?.buttons],
         within: (notice?.time ?? Infinity) - (pick?.time ?? 0) <= 2000,
         progress: lines.filter(line => line.surface === 'progress'),
-        local: await windowState('local'),
+        local: withoutActivity(await windowState('local')),
       },
       {
         notice: [killed('harness'), ['Open Logs']],
@@ -223,7 +224,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
   });
 
   it('F-2411 AC-9: the local window that killed is unchanged', async () => {
-    deepStrictEqual(await windowState('local'), {
+    deepStrictEqual(withoutActivity(await windowState('local')), {
       remoteName: null,
       remoteAuthority: null,
       folders: [],

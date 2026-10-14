@@ -602,6 +602,38 @@ describe('acceptance', () => {
     );
   });
 
+  it('coverage-19: Host badkey logs in to the harness host with a key the host does not accept', () => {
+    strictEqual(
+      accountBlock('badkey'),
+      [
+        'Host badkey',
+        '  HostName 127.0.0.1',
+        '  Port 49153',
+        '  User harness',
+        '  IdentityFile /run/id_unauthorised',
+        '  IdentitiesOnly yes',
+        '  BatchMode yes',
+        '  StrictHostKeyChecking accept-new',
+        '  UserKnownHostsFile /run/known_hosts',
+      ].join('\n'),
+    );
+  });
+
+  it('coverage-19: Host 127.0.0.2 reaches the loopback with a refused key and has no user and no port', () => {
+    strictEqual(
+      accountBlock('127.0.0.2'),
+      [
+        'Host 127.0.0.2',
+        '  HostName 127.0.0.1',
+        '  BatchMode yes',
+        '  IdentitiesOnly yes',
+        '  IdentityFile /run/id_unauthorised',
+        '  StrictHostKeyChecking accept-new',
+        '  UserKnownHostsFile /run/known_hosts',
+      ].join('\n'),
+    );
+  });
+
   it('D-85: Host mute logs in to harness-mute with the run key', () => {
     strictEqual(
       accountBlock('mute'),
