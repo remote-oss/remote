@@ -248,6 +248,7 @@ The exact English templates, from the specs' string tables:
 | S104 | `Current user does not have permission to run 'docker'. Try adding the user to the 'docker' group.` | F-0201 §3.4 |
 | S144 | `Docker returned an error. Make sure the Docker daemon is running and select an option how to proceed.` | F-0202 §3.4 |
 | S158 | `Edit {0} Locally` | F-0410 §3.4 |
+| S218 | `Learn More` | F-0108, as F-0503 7.E1 shows it (F-0503's string table lists it there) |
 | S227 | `More Actions...` | F-0410 §3.4 |
 | S256 | `Open Documentation` | F-0105, as F-0410 5.0 step 4 shows it |
 | S260 | `Open Recent...` | F-0403, as F-0410 5.0 step 4 shows it |
@@ -298,8 +299,11 @@ export async function takeTimedEntry<T>(memento: IntentMemento, key: string, id:
   first writes `timed-store.ts`; the other reuses it.** The rows of containers-14 §5.1 move to `timed-store.test.ts`.
 
 **`src/open/pending-edit.ts`:**
-- `PENDING_EDITS_KEY = 'remote-oss.remote-containers.pendingEdits'` (R-27, never synced). Entries are keyed by the
-  local folder's `fsPath`, and the value is `{configFile: string}`, the configuration's local path.
+- `PENDING_EDITS_KEY = 'remote-oss.remote-containers.pendingEdits'` (R-27, never synced). The value is
+  `{configFile: string}`, the configuration's local path.
+- **Both ends use the same key.** The presenter stores under the payload's `target.hostPath`, and the new window
+  takes with its one folder's `Uri.fsPath`. On Linux and macOS, release 1's platforms, these are the same string for
+  the same folder. `pending-edit.test.ts` has the row that proves it.
 - `storePendingEdit` and `takePendingEdit` go over `timed-store.ts`.
 
 **At activation** (`extension.ts`, after the stand-down guard and the family gate, whatever the gate found):
@@ -346,6 +350,8 @@ either S034. The existing row-5 rows stay.
 | `F-0202 AC-8, F-0201 7.E14, 7.E16: the second check's reasons use the same dialog` | `engineCheckFailed` with S144, S339, S104 | the same buttons, those details |
 | `F-0503 7.E1: the requirements failure has S346 as its message and the check's text as detail` | `requirementsNotMet`, `{text: 'Error: Missing GLIBC'}` | `message` S346, `detail` the text |
 | `F-0410: a malformed authority has no Edit button and S034 as detail` | `malformedAuthority`, target `undefined` | `[Retry, More Actions...]` |
+| `F-0503 7.E1: the requirements failure's buttons are Learn More, Edit and More Actions, with no Retry` | `requirementsNotMet`, a target | `[Learn More, 'Edit devcontainer.json Locally', More Actions...]`, with the actions `learnMore`, `editLocally`, `moreActions` |
+| `F-0503 7.E1: without a target there's no Edit` | `requirementsNotMet`, target `undefined` | `[Learn More, More Actions...]` |
 | `F-0410 S158: {0} is the configuration's base name` | `configFile.path` `/w/.devcontainer.json` | `Edit .devcontainer.json Locally` |
 | `R-26: no diagnostics reach the dialog` | `diagnostics: ['token=SECRET']` | no text holds `SECRET` |
 | `F-0202 AC-9: the quick pick` | a target | placeholder S272; `[Reload Window, Edit devcontainer.json Locally, Open Recent..., Open Documentation]` |
@@ -355,6 +361,12 @@ either S034. The existing row-5 rows stay.
 
 - `F-0410 AC-3, AC-7b: Retry resolves reload`;
 - `F-0410 AC-4: Edit Locally opens the folder locally and resolves handled`. `openLocally` gets `target.hostPath`.
+- `F-0410 AC-4: Edit Locally stores the pending edit before it opens the folder`. The recorded order is
+  `storePendingEdit(hostPath, configFile)`, then `openLocally(hostPath)`.
+- `F-0410 AC-4: a pending edit that can't be stored is logged, and the folder still opens`. The store rejects: one
+  warn line, and `openLocally` is still called.
+- `F-0503 7.E1: Learn More opens the requirements page, resolves handled, then shows the pick`. `openExternal` gets
+  `CONTAINERS_REQUIREMENTS`, the promise resolves `'handled'`, and the quick pick comes after (`later`).
 - `F-0410 AC-5: More Actions resolves handled, then shows the quick pick once the call has returned`. The order of the
   recorded calls proves `later`.
 - `F-0410 6.3: Escape is More Actions`: `showError` resolves `undefined`.
@@ -370,6 +382,29 @@ either S034. The existing row-5 rows stay.
 
 Changed files are covered at 100 % (ADR-0003). `slice-presenter.test.ts` goes with its module; move its
 `noServerSource` rows here.
+
+### 4.2a The store, the pending edit and the activation
+
+**`timed-store.test.ts`:**
+- The rows are containers-14 §5.1's expiry, cleaning and writing rows, listed there once. Whichever card is built
+  first writes them, and the second card adds none.
+
+**`pending-edit.test.ts`:**
+- `F-0410 AC-4: a stored edit is taken once for the same folder`: store with `hostPath` `/w/proj`, then take with the
+  `fsPath` of `Uri.file('/w/proj')`, then take again. The result is `{configFile}`, then `undefined`. On Linux and
+  macOS (release 1's platforms), the payload's `hostPath` and that folder's `fsPath` are the same string, which is
+  what makes the two ends meet.
+- `F-0410 AC-4: another folder's edit isn't taken`: store `/w/a`, then take `/w/b`, which gives `undefined`.
+- `contracts: a value of another shape is dropped`: `{configFile: 3}` gives `undefined`.
+
+**`extension.test.ts` (the activation; ports faked as containers-01's rows):**
+- `F-0410 AC-4: a local window with one file folder opens its pending edit with vscode.open`;
+- `F-0410: a window with a remoteName takes nothing`;
+- `F-0410: a window with two folders takes nothing`, and so does a window with a non-`file` folder;
+- `F-0410: a failed open is logged at warn, and the activation goes on` (the commands are still registered).
+
+**The manifest test:** `activationEvents` is exactly `onResolveRemoteAuthority:dev-container` and
+`onStartupFinished`, in that order.
 
 ### 4.3 Acceptance (`tests/acceptance/containers/recovery.test.ts`, the containers launch)
 
