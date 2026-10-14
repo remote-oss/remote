@@ -129,7 +129,7 @@ F-2201.AC-28	todo
 F-2201.AC-29	todo	
 F-2201.AC-30	unit	
 F-2201.AC-31	todo	
-F-2201.AC-32	todo	
+F-2201.AC-32	deferred	the New Remote half needs the Remotes view (explorer increment 2, 0.3)
 F-2201.AC-33	todo	
 F-2201.AC-34	todo	
 F-2201.AC-35	todo	
@@ -164,7 +164,7 @@ F-2202.AC-19	todo
 F-2202.AC-20	deferred	build order slice 1: the Remotes view is remote-explorer's
 F-2202.AC-21	todo	
 F-2202.AC-22	todo	
-F-2202.AC-23	todo	
+F-2202.AC-23	deferred	build order slice 1: the Remotes view is remote-explorer's
 F-2202.AC-24	todo	
 F-2202.AC-25	unit	
 F-2202.AC-26	unit	
@@ -474,7 +474,7 @@ F-2409.AC-30	todo
 F-2501.AC-1	todo	
 F-2501.AC-2	todo	
 F-2501.AC-3	core	core: the remote indicator's text and the window title
-F-2501.AC-4	todo	
+F-2501.AC-4	deferred	contracts §3.2: a host:port authority, not a managed one; restatement asked
 F-2501.AC-5	todo	
 F-2501.AC-6	todo	
 F-2501.AC-7	todo	
@@ -504,7 +504,7 @@ F-2501.AC-30	core	core: the stored folder URI
 F-2501.AC-31	todo	
 F-2501.AC-32	todo	
 F-2501.AC-33	todo	
-F-2501.AC-34	todo	
+F-2501.AC-34	deferred	chained ssh-remote authorities (F-2501 6.8) are not built in 0.2
 F-2501.AC-35	todo	
 F-2502.AC-1	unit	
 F-2502.AC-2	core	core: the window title and the Explorer header
