@@ -114,11 +114,11 @@ F-2201.AC-13	todo
 F-2201.AC-14	unit	
 F-2201.AC-15	todo	
 F-2201.AC-16	todo	
-F-2201.AC-17	todo	
+F-2201.AC-17	acceptance	
 F-2201.AC-18	todo	
 F-2201.AC-19	todo	
 F-2201.AC-20	unit	
-F-2201.AC-21	todo	
+F-2201.AC-21	acceptance	
 F-2201.AC-22	todo	
 F-2201.AC-23	deferred	build order slice 1: the Remotes view is remote-explorer's
 F-2201.AC-24	unit	
@@ -163,7 +163,7 @@ F-2202.AC-18	unit
 F-2202.AC-19	unit	
 F-2202.AC-20	deferred	build order slice 1: the Remotes view is remote-explorer's
 F-2202.AC-21	deferred	build order slice 1: the Remotes view is remote-explorer's
-F-2202.AC-22	todo	
+F-2202.AC-22	acceptance	
 F-2202.AC-23	deferred	build order slice 1: the Remotes view is remote-explorer's
 F-2202.AC-24	todo	
 F-2202.AC-25	unit	
@@ -172,9 +172,9 @@ F-2202.AC-27	unit
 F-2202.AC-28	unit	
 F-2202.AC-29	unit	
 F-2202.AC-30	unit	
-F-2202.AC-31	todo	
+F-2202.AC-31	acceptance	
 F-2202.AC-32	deferred	build order slice 1: the Remotes view is remote-explorer's
-F-2202.AC-33	todo	
+F-2202.AC-33	deferred	build order slice 1: the Remotes view is remote-explorer's
 F-2202.AC-34	unit	
 F-2204.AC-1	unit	
 F-2204.AC-2	todo	
