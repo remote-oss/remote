@@ -74,7 +74,7 @@ export function maintenanceHandlers(ports: MaintenancePorts): {
     target: SshTarget,
   ): {target: SshTarget; terminalMode: boolean} | undefined {
     const held = ports.heldHost();
-    return held !== undefined && isOwnHost(target.host, held.target.host)
+    return held !== undefined && isOwnHost(target, held.target)
       ? held
       : undefined;
   }
