@@ -12,6 +12,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -38,6 +39,7 @@ export interface AgentEvent {
     | 'done'
     | 'failed'
     | 'state'
+    | 'setting'
     | 'forwarded';
   time: number;
   id?: string;
@@ -45,6 +47,9 @@ export interface AgentEvent {
   remoteName?: string | null;
   remoteAuthority?: string | null;
   folders?: string[];
+  /** The setting a `setting` event reports, and its value. */
+  settingId?: string;
+  value?: unknown;
   /** Where a forwarded port is reachable on this machine, as the editor gave it. */
   localAddress?: string | {host: string; port: number};
   remotePort?: number;
@@ -557,6 +562,21 @@ function userSettingsFile(): string {
   );
 }
 
+/** The bytes of the run's user settings file, or nothing when it has none. */
+export function readUserSettings(): string | undefined {
+  const file = userSettingsFile();
+  return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+}
+
+/** Puts the run's user settings file back to the bytes `readUserSettings` gave, or removes it when it had none. */
+export function restoreUserSettings(bytes: string | undefined): void {
+  if (bytes === undefined) {
+    rmSync(userSettingsFile(), {force: true});
+  } else {
+    writeFileSync(userSettingsFile(), bytes);
+  }
+}
+
 /** Rewrites the run's user settings with `change` applied to them, which the editor picks up; then waits 1 s. */
 export async function userSettings(
   change: Readonly<Record<string, unknown>>,
@@ -567,4 +587,20 @@ export async function userSettings(
     : {};
   writeFileSync(file, JSON.stringify({...current, ...change}, null, 2));
   await new Promise(resolve => setTimeout(resolve, 1000));
+}
+
+/** The value window `name` reads for the setting `settingId`, or null when it reads none. */
+export async function settingIn(
+  name: string,
+  settingId: string,
+): Promise<unknown> {
+  const before = countOf(name, 'setting');
+  await inWindow(name, 'acceptance.agent.setting', settingId);
+  await waitUntil(
+    `window ${name} to report ${settingId}`,
+    () => countOf(name, 'setting') > before,
+  );
+  return windowEvents(name)
+    .filter(each => each.event === 'setting' && each.settingId === settingId)
+    .at(-1)?.value;
 }

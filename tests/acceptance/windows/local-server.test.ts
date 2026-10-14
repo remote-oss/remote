@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
+import {sshRemoteCodec} from 'lib-authority';
 import {
   appendScript,
   closeWindow,
@@ -10,7 +11,10 @@ import {
   openWindow,
   recordLines,
   reloadWindow,
+  settingIn,
   sshChildren,
+  readUserSettings,
+  restoreUserSettings,
   userSettings,
   variable,
   waitFor,
@@ -21,10 +25,12 @@ import {
 /** The question of the host pick. */
 const HOST_QUESTION = 'Select configured SSH host or enter user@host';
 
-/** The authority Connect to Host gives for the typed `harness@127.0.0.1`: the codec writes the host and user as hex of JSON. */
-const TYPED_AUTHORITY = Buffer.from(
-  JSON.stringify({hostName: '127.0.0.1', user: 'harness'}),
-).toString('hex');
+/** The authority Connect to Host gives for the typed `harness@127.0.0.1`. */
+const TYPED_AUTHORITY = sshRemoteCodec.encode({
+  kind: 'host',
+  hostName: '127.0.0.1',
+  user: 'harness',
+});
 
 /** The user settings of per-window mode: no local server, and the host's platform named so that no pick is asked. */
 const PER_WINDOW = {
@@ -147,8 +153,10 @@ describe('the local connection server on a key host (card coverage-14)', functio
   /** The helper the steps follow, and the mark of the record at a step's start. */
   let helper: number[] = [];
   let mark = 0;
+  let savedSettings: string | undefined;
 
   before(async () => {
+    savedSettings = readUserSettings();
     for (const name of ['f1', 'b', 'c']) {
       if (isOpen(name)) {
         await closeWindow(name);
@@ -381,8 +389,41 @@ describe('the local connection server on a key host (card coverage-14)', functio
     );
   });
 
+  it('F-2102 AC-22: turning the local server off while a helper runs and then running Kill ends it and reconnects per window', async () => {
+    await closeWindow('k1');
+    await closeWindow('k2');
+    await userSettings({
+      ...PER_WINDOW,
+      'remote.SSH.useLocalServer': true,
+    });
+    await openWindow('harness', 'k1');
+    await connectedWithin('k1', 60_000);
+    const started = await connectionHelpers();
+    await inWindow(
+      'k1',
+      'acceptance.agent.updateSetting',
+      'remote.SSH.useLocalServer',
+      false,
+    );
+    await waitFor(
+      'k1 to read the local server as off',
+      async () =>
+        (await settingIn('k1', 'remote.SSH.useLocalServer')) === false,
+      10_000,
+    );
+    await kill('k1');
+    await goneWithin(started, 2000);
+    await connectedWithin('k1', 10_000);
+    deepStrictEqual(await connectionHelpers(), []);
+  });
+
   after(async () => {
-    await closeWindow('k1').catch(() => undefined);
-    await userSettings({'remote.SSH.useLocalServer': true});
+    for (const name of ['k1', 'k2', 'k3']) {
+      if (isOpen(name)) {
+        await closeWindow(name);
+      }
+    }
+    restoreUserSettings(savedSettings);
+    await new Promise(resolve => setTimeout(resolve, 1000));
   });
 });

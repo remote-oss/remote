@@ -10,6 +10,9 @@
       "path": "../../../tools"
     },
     {
+      "path": "../../../packages/lib-authority"
+    },
+    {
       "path": "../../../packages/lib-forwarding"
     },
     {
@@ -26,6 +29,9 @@
     },
     {
       "path": "../../../packages/lib-ssh"
+    },
+    {
+      "path": "../../../packages/lib-authority/tsconfig.test.json"
     },
     {
       "path": "../../../packages/lib-forwarding/tsconfig.test.json"

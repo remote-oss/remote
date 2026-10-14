@@ -468,4 +468,50 @@ describe('parseAddHostCommand (the Host block of a typed command)', () => {
       block: {alias: 'dev', lines: [{keyword: 'HostName', value: 'dev'}]},
     });
   });
+
+  it('F-2204 AC-11: every way of giving port 2222 writes Port 2222', () => {
+    deepStrictEqual(
+      [
+        parse('ssh -p 2222 h'),
+        parse('ssh -p2222 h'),
+        parse('ssh -o Port=2222 h'),
+        parse('user@h:2222'),
+        parse('ssh://user@h:2222'),
+      ],
+      [
+        block('h', [['Port', '2222']]),
+        block('h', [['Port', '2222']]),
+        block('h', [['Port', '2222']]),
+        block('h', [
+          ['User', 'user'],
+          ['Port', '2222'],
+        ]),
+        block('h', [
+          ['User', 'user'],
+          ['Port', '2222'],
+        ]),
+      ],
+    );
+  });
+
+  it('F-2204 AC-15: -o options keep their spelling and order, and -o HostName is dropped', () => {
+    deepStrictEqual(
+      [
+        parse('ssh -o Foo=bar -o "ProxyCommand=nc %h %p" h'),
+        parse('ssh -o HostName=10.1.2.3 alias43'),
+        parse('ssh -o port=2201 -o hostname=h44 alias44'),
+      ],
+      [
+        block('h', [
+          ['Foo', 'bar'],
+          ['ProxyCommand', 'nc %h %p'],
+        ]),
+        block('alias43'),
+        block('alias44', [
+          ['port', '2201'],
+          ['hostname', 'h44'],
+        ]),
+      ],
+    );
+  });
 });
