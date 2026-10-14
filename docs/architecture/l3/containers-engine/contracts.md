@@ -100,8 +100,19 @@ its content:
 
 ## 6. Rows every card keeps
 
-- **R-26:** no token, password or secret in any argv (`docker`, `docker exec`, the CLI) or log line. A unit row per
-  spawn site checks the argv against the secrets of its fixture.
+- **R-26:** no token, password or secret in any argv **we** build (`docker`, `docker exec`, the CLI's) or in any log
+  line or message of ours. A unit row per spawn site checks the argv against the secrets of its fixture.
+  - **The CLI's own `docker run`** (athena, 2026-10-14, dike on #764): the dev container CLI passes the configuration's
+    `containerEnv` to `docker run` as `-e NAME=value`. That process is the CLI's, the values are the user's own
+    configuration, and changing it would mean forking the CLI (ADR-0009). It's a **documented deviation**: those values
+    are briefly in that process's argv on the user's machine, and they're in the container's configuration anyway
+    (`docker inspect`). The reference, which bundles the same CLI, does the same. It goes in the release notes.
+  - **What C3 passes on is ours, and is scrubbed:** before any CLI log event, error message or description reaches our
+    log, a failure or a dialog, C3 replaces each occurrence of the value of every editor environment variable that the
+    chosen configuration references as `${localEnv:VAR}` or `${env:VAR}` (values of 8 characters or more) with that
+    reference text. lib-log's standard redaction then applies, as to every line. It's a pure function with rows: a token
+    in a `Run:` line and in `Command failed:` is replaced, a short value isn't, and an unreferenced variable isn't
+    touched.
 - **No shell:** every engine and CLI spawn has `shell: false`, and a row proves a value with spaces and quotes reaches
   the program unchanged (F-0201).
 - **Pure parts first:** the payload codec, the label matching (F-0409's tiers), the CLI argument builder and the

@@ -33,11 +33,14 @@ The specs differ from the CLI's own behaviour in six known places (dossier §4):
    package's entry script, `shell: false`, through the `CliHost` port (containers contracts §4). No other code imports
    it.
 2. **How we bend it, in this order, and only this way:**
-   1. **flags** the CLI already has (`--mount-workspace-git-root=false`, `--id-label`, `--docker-path`,
-      `--remote-env`, …);
-   2. **a pre-pass** that writes an `--override-config` file, for a value the specs resolve differently (deviations 1
-      to 4);
+   1. **the CLI's own inputs:** the flags it already has (`--mount-workspace-git-root=false`, `--id-label`,
+      `--docker-path`, …) and the environment it's spawned with;
+   2. **a pre-pass** that writes an `--override-config` file, for a value the specs resolve differently;
    3. **post-processing** of the JSON result and log lines.
+
+   Each deviation goes through the first mechanism that reaches it, and C3's card records which (amended 2026-10-14
+   on #764: deviation 3 is the spawn environment, deviation 4 is post-processing, and only deviation 1 needs the
+   pre-pass).
 
    A deviation none of these reaches is an upstream change to `devcontainers/cli` (MIT) and waits for its release.
    **We never fork, patch or vendor-modify the CLI.** A fork would need its own ADR.
