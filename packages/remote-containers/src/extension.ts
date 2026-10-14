@@ -275,6 +275,7 @@ export async function activate(
       },
       preflight: served.preflight,
       editorEnvironment: process.env,
+      intents: context.globalState,
       runServer: (request, serverSettings) =>
         runServerSteps(
           {
