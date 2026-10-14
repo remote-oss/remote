@@ -909,6 +909,7 @@ describe('the resolver host: leaving the remote (F-2412 AC-17)', () => {
 
   it('F-2412 AC-17: stay() puts the resolver back', async () => {
     const context = await setup();
+    context.connector.phases = [{name: 'installing'}];
     handleOf(context.registration).leave();
     handleOf(context.registration).stay();
     await resolve(context);
