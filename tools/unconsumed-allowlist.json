@@ -102,6 +102,83 @@
       "key": "src/exec/tar-stream.ts",
       "card": "#776",
       "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/cli-arguments.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/cli-bridge.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/cli-host.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/cli-lines.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/cli-paths.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/cli-secrets.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/node-cli-host.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/node-cli-ports.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/override-files.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/override-pre-pass.ts",
+      "card": "#776",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/line-splitter.ts",
+      "card": "#776",
+      "slice": "containers release 1"
     }
   ]
 }

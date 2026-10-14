@@ -125,6 +125,9 @@
       "path": "tests/acceptance/server"
     },
     {
+      "path": "tests/acceptance/containers-cli"
+    },
+    {
       "path": "tests/acceptance/windows"
     },
     {

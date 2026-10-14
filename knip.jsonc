@@ -52,6 +52,7 @@
         "trust-terminal/*.test.ts",
         "window-agent/src/extension.ts",
         "server/*.test.ts",
+        "containers-cli/*.test.ts",
       ],
       "project": ["**/*.ts", "vscode-test.mjs"],
       "includeEntryExports": false,
@@ -95,5 +96,7 @@
     "c8",
     // tools/package-extensions.ts starts it the same way.
     "@vscode/vsce",
+    // tools/build.ts copies its files into the VSIX; nothing imports it.
+    "@devcontainers/cli",
   ],
 }
