@@ -101,9 +101,18 @@ describe('replaceStale (card helper-01 table)', () => {
   it('replaceStale when the file exists -> the port saw remove then createExclusive', async () => {
     const port = new MemoryFilePort();
     port.files.set(PATH, serializeRecord(RECORD));
-    await replaceStale(port, '/r', 'ssh.connection', 'user@host:22', FRESH);
+    await replaceStale(
+      port,
+      '/r',
+      'ssh.connection',
+      'user@host:22',
+      FRESH,
+      serializeRecord(RECORD),
+    );
     deepStrictEqual(
-      port.calls.map(call => call.operation),
+      port.calls
+        .map(call => call.operation)
+        .filter(operation => operation !== 'read'),
       ['remove', 'createExclusive'],
     );
   });
@@ -117,6 +126,7 @@ describe('replaceStale (card helper-01 table)', () => {
       'ssh.connection',
       'user@host:22',
       FRESH,
+      serializeRecord(RECORD),
     );
     deepStrictEqual(result, {outcome: 'claimed'});
   });
@@ -130,6 +140,7 @@ describe('replaceStale (card helper-01 table)', () => {
       'ssh.connection',
       'user@host:22',
       FRESH,
+      serializeRecord(RECORD),
     );
     deepStrictEqual(result, {outcome: 'existing', record: FRESH});
   });
@@ -143,6 +154,7 @@ describe('replaceStale (card helper-01 table)', () => {
       'ssh.connection',
       'user@host:22',
       FRESH,
+      serializeRecord(RECORD),
     );
     const removes = inner.calls.filter(
       call => call.operation === 'remove',
@@ -158,6 +170,7 @@ describe('replaceStale (card helper-01 table)', () => {
       'ssh.connection',
       'user@host:22',
       RECORD,
+      serializeRecord(RECORD),
     );
     deepStrictEqual(result, {outcome: 'claimed'});
   });
@@ -171,18 +184,52 @@ describe('replaceStale (card helper-01 table)', () => {
       'ssh.connection',
       'user@host:22',
       FRESH,
+      serializeRecord(RECORD),
     );
     deepStrictEqual(result, {outcome: 'corrupt'});
   });
 
-  it('replaceStale when the file is absent -> remove still called once (idempotent)', async () => {
+  it('F-2101 6.4: replaceStale when the file is gone -> claims directly, with no remove', async () => {
     const port = new MemoryFilePort();
-    await replaceStale(port, '/r', 'ssh.connection', 'user@host:22', RECORD);
+    await replaceStale(
+      port,
+      '/r',
+      'ssh.connection',
+      'user@host:22',
+      RECORD,
+      serializeRecord(RECORD),
+    );
     const removes = port.calls.filter(
       call => call.operation === 'remove',
     ).length;
-    strictEqual(removes, 1);
+    strictEqual(removes, 0);
   });
+
+  for (const [name, meanwhile, expected] of [
+    [
+      'replaced the record',
+      serializeRecord(FRESH),
+      {outcome: 'existing', record: FRESH},
+    ],
+    ['left an unreadable text', 'not json', {outcome: 'corrupt'}],
+  ] as const) {
+    it(`F-2101 6.4: replaceStale when another window ${name} meanwhile -> ${expected.outcome}, and nothing is removed`, async () => {
+      const port = new MemoryFilePort();
+      port.files.set(PATH, meanwhile);
+      const result = await replaceStale(
+        port,
+        '/r',
+        'ssh.connection',
+        'user@host:22',
+        RECORD,
+        serializeRecord(RECORD),
+      );
+      deepStrictEqual(
+        [result, port.calls.filter(call => call.operation === 'remove').length],
+        [expected, 0],
+      );
+    });
+  }
 });
 
 describe('MemoryFilePort (card helper-01 table)', () => {

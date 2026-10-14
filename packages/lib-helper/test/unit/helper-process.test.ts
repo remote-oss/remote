@@ -34,7 +34,7 @@ const SCRIPT = path.join(
 
 function leaseOf(outcome: AcquireOutcome): HelperLease {
   if (outcome.kind !== 'acquired') {
-    throw new Error(`no lease: ${outcome.failure}`);
+    throw new Error(`no lease: ${JSON.stringify(outcome)}`);
   }
   return outcome.lease;
 }
@@ -61,9 +61,13 @@ describe('a helper process', function () {
       namespace: 'test.echo',
       helperKey: 'one',
       script: SCRIPT,
-      options: {},
       policy: {kind: 'graceAfterLastLease', milliseconds: 300} as const,
-      payload: {kind: 'echo'},
+      prepare: () =>
+        Promise.resolve({
+          kind: 'ready' as const,
+          options: {},
+          payload: {kind: 'echo'},
+        }),
       cancellation: new AbortController().signal,
     };
     const first = leaseOf(await acquire(environment, request));
