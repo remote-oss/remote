@@ -281,11 +281,27 @@ describe('connection handler (contracts §4 S9)', () => {
 
     it('keeps the kind the text gives when the wait ran out on a known failure', async () => {
       spawner.started[0]?.error(
-        'ssh: connect to host h port 22: Could not resolve hostname h: Name or service not known\n',
+        'ssh: Could not resolve hostname h: Name or service not known\n',
       );
       clock.advance(12000);
       await settled();
       strictEqual((events[0] as {kind: string}).kind, 'unreachable');
+    });
+
+    it('ADR-0010: classifies only the lines before authentication, so remote text after it changes nothing', async () => {
+      spawner.started[0]?.error(
+        'Authenticated to h ([10.0.0.1]:22) using "publickey".\n',
+      );
+      spawner.started[0]?.error(
+        'curl: (28) Connection timed out after 5001 milliseconds\n',
+      );
+      spawner.started[0]?.exit(255);
+      await settled();
+      deepStrictEqual(events[0], {
+        type: 'loginFailed',
+        kind: 'unknown',
+        hints: [],
+      });
     });
 
     it('reads the last line of ssh when it ended without a line end', async () => {
