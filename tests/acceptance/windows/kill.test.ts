@@ -88,7 +88,7 @@ function killFailed(host: string): string {
   return `Failed to kill VS Code Server on ${host}.`;
 }
 
-/** The server processes the run's earlier files left on the host, which this file's rows don't count. */
+/** The server processes the host ran when the windows were last all closed, which the rows don't count. */
 let leftBefore: number[] = [];
 
 /** The process ids, on the host, of the user harness's processes that run from the server's data folder. */
@@ -242,7 +242,10 @@ async function openLocalWindow(name: string): Promise<void> {
   await waitFor(`${name} to activate its agent`, () => isOpen(name), 60_000);
 }
 
-/** Closes every window of the launch but `local` that is open, and waits until no connection helper runs. */
+/**
+ * Closes every window of the launch but `local` that is open, waits until no connection helper runs, and from then on
+ * counts no server process that runs on the host now.
+ */
 async function closeAllButLocal(): Promise<void> {
   for (const name of windowNames()) {
     if (name !== 'local' && isOpen(name)) {
@@ -250,6 +253,7 @@ async function closeAllButLocal(): Promise<void> {
     }
   }
   await noHelperWithin(60_000);
+  leftBefore = await hostServerProcesses();
 }
 
 /** The per-window mode: no local server, and the host's platform named so that no pick is asked. */
@@ -270,10 +274,7 @@ describe('Kill VS Code Server (card coverage-39)', function () {
   /** The settings file before the rows that must not change it, and after them. */
   const settingsAround: Array<[string, string]> = [];
 
-  before(async () => {
-    await closeAllButLocal();
-    leftBefore = await hostServerProcesses();
-  });
+  before(closeAllButLocal);
 
   it('setup: a window on the host connects and its server runs', async () => {
     await openConnected('x1');
