@@ -16,6 +16,24 @@ and coverage-39's setup (§1). `newWindowFrom(w)` is
 `nextEmptyWindow(() => inWindow(w, 'opensshremotes.openEmptyWindowOnCurrentHost'))`: it returns the one new window's
 name, and fails if none or several open.
 
+### 1.1 The route-cut wrappers (moved here from tooling-47 §2.3 item 4; athena on #895)
+
+Row 9 is the first row that cuts a window's route, so the two wrappers are added here, beside their caller, and not
+in tooling-47 (ADR-0003: no export without a caller in the same PR). In `tests/acceptance/windows/harness.ts`:
+
+```ts
+/** Cuts the route to the host's own address (the `routed` alias); the published port keeps working. */
+export function cutRoute(cut: RouteCut): void
+/** Brings the route back; harmless when nothing was cut. */
+export function restoreRoute(): void
+```
+
+- They wrap `cutRoute` and `restoreRoute` of `tools/acceptance-network.ts`, with tooling-47's `runCommand` (from
+  `tools/command-run.ts`, where #895 puts it), `variable('HARNESS_CONTAINER')` and
+  `variable('HARNESS_ROUTED_ADDRESS')`.
+- `RouteCut` is imported as a type from `tools/acceptance-network.ts`.
+- If the F-2501 AC-18 / F-2601 AC-4 card lands first, it adds them, and this card only calls them.
+
 ## 2. The F-2303 rows
 
 Names start with `F-2303 AC-<n>:`.
@@ -30,7 +48,7 @@ Names start with `F-2303 AC-<n>:`.
 | 6 | `userSettings({'remote.SSH.useLocalServer': false})`; `a3` on `password` again (reopen); `newWindowFrom('a3')` with the new window's `maskedInput` → the password | the new window's `progress` line `Setting up SSH Host password` (measure the exact title) and its `maskedInput` line `Enter password for harness-pw@<HostName>`; it connects; `acceptedPasswords()` grew by one | AC-14 |
 | 7 | the same, the new window's `maskedInput` → `dismiss` | only the new window has a `failureDialog` line, `Could not establish connection to "password": Connecting was canceled.`; `a3` is still connected | AC-15 |
 | 8 | in row 7's failed window, `failureDialog` → `{button: 'Retry'}`, then `maskedInput` → the password | it connects | AC-16 |
-| 9 | open `a1` on `harness` (per-window mode); cut the host's network (README, "Cutting the host's network") and `newWindowFrom('a1')`, its `failureDialog` → `{button: 'Retry'}` after the network is back | the new window's first `failureDialog` line holds `No route to host` (measure the reason the cut gives; if it's another F-2601 reason, report it, §5); after Retry it connects. Reset `useLocalServer` | AC-17 |
+| 9 | `userSettings` adds `remote.SSH.remotePlatform: {routed: 'linux'}` beside the per-window setup's `harness` entry (otherwise the platform pick is asked and nothing answers it; themis on #897); open `a1` on `routed` (per-window mode; tooling-47's alias); `cutRoute('unreachable')`, then `newWindowFrom('a1')`; `restoreRoute()`, then its `failureDialog` → `{button: 'Retry'}`. `restoreRoute()` again in an `afterEach` | the new window's first `failureDialog` line is `Could not establish connection to "routed": No route to host.`; after Retry it connects. Reset `useLocalServer` and the `routed` platform entry | AC-17 |
 | 10 | run `openEmptyWindowOnCurrentHost` with `inWindow` in: `local`; a window on `refused` (failed, dialog dismissed); a window still connecting to `nowhere`; and `a1` while the network is cut (reconnecting) | no new window in any case (`emptyWindows()` unchanged); the settings file unchanged; every window still answers `acceptance.agent.state` | AC-18 |
 | 11 | copy the settings file and the global-state keys (agent `state`, as coverage-41 row 14) before row 1 | after row 1: the settings file is the same; the only changed global-state entry is the new window's session record (name its key in the PR) | AC-20 |
 | 12 | a multi-root workspace window on `harness` (a `.code-workspace` on the host with two folders) with an untitled editor holding typed text (agent command, as coverage-38 row 13); `newWindowFrom` it | the new window has no folder, no workspace and no dirty editor; the first still shows its workspace and the dirty untitled editor | AC-21 |
