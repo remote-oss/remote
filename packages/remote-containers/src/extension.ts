@@ -37,6 +37,7 @@ import {
 } from './identifiers.generated.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {licenceModalOf} from './surfaces/licence-modal.ts';
+import {rebuildContainer} from './open/rebuild.ts';
 import {reopenInContainer} from './open/reopen.ts';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
@@ -158,6 +159,22 @@ export async function activate(
       function firstFolder(): string | undefined {
         return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       }
+      function rebuildHandler(buildNoCache: boolean): () => Promise<void> {
+        return rebuildContainer(
+          {
+            window: {
+              remoteName: () => vscode.env.remoteName,
+              remoteAuthority: () => vscode.env.remoteAuthority,
+              reload: () =>
+                vscode.commands.executeCommand('workbench.action.reloadWindow'),
+            },
+            intents: context.globalState,
+            now: Date.now,
+            logger: served.logger,
+          },
+          {buildNoCache},
+        );
+      }
       return {
         reopenInContainer: {
           execute: reopenInContainer({
@@ -213,6 +230,8 @@ export async function activate(
             logger: served.logger,
           }),
         },
+        rebuildContainer: {execute: rebuildHandler(false)},
+        rebuildContainerNoCache: {execute: rebuildHandler(true)},
       };
     },
   });

@@ -64,7 +64,7 @@ async function reopened(
 }
 
 describe('Rebuild Container', () => {
-  it('F-0405 AC-4, BR-2: it stores the intent for the payload and reloads, with nothing shown', async () => {
+  it('F-0405 AC-4: it stores the intent for the payload and reloads, with nothing shown', async () => {
     const state = setup();
     const lines = await reopened(state);
     deepStrictEqual(
@@ -106,7 +106,7 @@ describe('Rebuild Container', () => {
     );
   });
 
-  it('F-0405 AC-29, BR-20: in a local window it does nothing', async () => {
+  it('F-0405 AC-29: in a local window it does nothing (BR-20)', async () => {
     const state = setup();
     state.remoteName = undefined;
     state.authority = undefined;

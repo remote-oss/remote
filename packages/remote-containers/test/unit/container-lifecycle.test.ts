@@ -399,21 +399,24 @@ describe('containerLifecycleOf', () => {
     );
   });
 
-  it('F-0405 BR-3: a rebuild runs up with removeExistingContainer, always creates, and logs what it removes', async () => {
-    const result = await prepared(
+  /** A rebuild of a folder whose one container, `OLD`, has the state `status`; the CLI gives `NEW`. */
+  function rebuiltFrom(status: string, buildNoCache = false) {
+    return prepared(
       scriptedEngine({
         [LISTING]: [ran(`${OLD}\n`)],
-        [`inspect --type container ${OLD}`]: [
-          ran(inspected([[OLD, 'running']])),
-        ],
+        [`inspect --type container ${OLD}`]: [ran(inspected([[OLD, status]]))],
         [`inspect --type container ${NEW}`]: [
           ran(inspected([[NEW, 'running']])),
         ],
       }),
       fakeBridge(),
       new AbortController().signal,
-      {...REQUEST, rebuild: {buildNoCache: false}},
+      {...REQUEST, rebuild: {buildNoCache}},
     );
+  }
+
+  it('F-0405 BR-3: a rebuild runs up with removeExistingContainer, always creates, and logs what it removes', async () => {
+    const result = await rebuiltFrom('running');
     deepStrictEqual(
       [
         result.bridge.ups.map(each => each.options),
@@ -448,20 +451,7 @@ describe('containerLifecycleOf', () => {
   });
 
   it('F-0405 6.9: a rebuild replaces a paused container instead of failing', async () => {
-    const result = await prepared(
-      scriptedEngine({
-        [LISTING]: [ran(`${OLD}\n`)],
-        [`inspect --type container ${OLD}`]: [
-          ran(inspected([[OLD, 'paused']])),
-        ],
-        [`inspect --type container ${NEW}`]: [
-          ran(inspected([[NEW, 'running']])),
-        ],
-      }),
-      fakeBridge(),
-      new AbortController().signal,
-      {...REQUEST, rebuild: {buildNoCache: false}},
-    );
+    const result = await rebuiltFrom('paused');
     deepStrictEqual(
       [result.outcome.kind, result.bridge.ups.length],
       ['ready', 1],
@@ -469,20 +459,7 @@ describe('containerLifecycleOf', () => {
   });
 
   it('F-0405 BR-3: a rebuild whose container gets another id writes no warning about it', async () => {
-    const result = await prepared(
-      scriptedEngine({
-        [LISTING]: [ran(`${OLD}\n`)],
-        [`inspect --type container ${OLD}`]: [
-          ran(inspected([[OLD, 'exited']])),
-        ],
-        [`inspect --type container ${NEW}`]: [
-          ran(inspected([[NEW, 'running']])),
-        ],
-      }),
-      fakeBridge(),
-      new AbortController().signal,
-      {...REQUEST, rebuild: {buildNoCache: false}},
-    );
+    const result = await rebuiltFrom('exited');
     deepStrictEqual(
       result.lines.filter(line => line.includes('was chosen')),
       [],
