@@ -1,14 +1,14 @@
 /**
- * @fileoverview The Reopen in Container command for a local window with one folder that holds one configuration: it
- * checks the engine, asks the dev container CLI for the folder the container will show, and reloads the same window on
- * a dev-container authority. It never creates or starts a container; the resolve does.
+ * @fileoverview The Reopen in Container command for a local window with one folder: it checks the engine, has a
+ * configuration chosen and read, and reloads the same window on a dev-container authority at the folder the container
+ * will show. It never creates or starts a container; the resolve does.
  */
 
 import {encodeAuthority, openRemote} from 'lib-authority';
 import {devContainerPayloadOf} from '../authority/payload.ts';
 import type {CliFailure} from '../cli/cli-lines.ts';
+import {chooseConfiguration} from '../config/choose-configuration.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
-import {configCandidates} from './config-candidates.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
 
 /** What a CLI failure says in the log: its kind and, when it has one, its message. */
@@ -52,39 +52,31 @@ export function reopenInContainer(ports: ReopenPorts): () => Promise<void> {
     if ((await ports.engine.firstCheck(folder)) === 'stopped') {
       return;
     }
-    const candidates = await configCandidates(folder, ports.files);
-    const [candidate] = candidates;
-    if (candidate === undefined || candidates.length !== 1) {
-      logger.info(
-        candidates.length === 0
-          ? `Reopen in Container found no dev container configuration in ${folder}`
-          : `Reopen in Container found ${String(candidates.length)} dev container configurations in ${folder}: ${candidates.join(', ')}`,
-      );
-      return;
-    }
     // With the folder as base, the setting always names a program.
     const executable = executableOf(
       ports.settings.dockerPath(),
       folder,
     ) as Extract<Executable, {kind: 'spawn'}>;
-    const read = await ports.bridge.readConfiguration(
+    const choice = await chooseConfiguration(
       {
-        workspaceFolder: folder,
-        configFile: candidate,
+        folder,
         dockerPath: executable.file,
-        idLabels: [],
-        mountWorkspaceGitRoot: true,
-        mounts: [],
-        logLevel: 'info',
+        cancellation: new AbortController().signal,
       },
-      undefined,
-      () => undefined,
-      new AbortController().signal,
+      // eslint-disable-next-line id-length -- the choice's dependency is named cli
+      {...ports.config, cli: ports.bridge, logger},
     );
-    if (read.kind !== 'configuration') {
+    if (choice.kind === 'noConfiguration') {
+      logger.info(`Reopen in Container found no configuration in ${folder}`);
+      return;
+    }
+    if (choice.kind === 'readFailed') {
       logger.warn(
-        `Reopen in Container could not read the configuration: ${failureText(read)}`,
+        `Reopen in Container could not read the configuration: ${failureText(choice.failure)}`,
       );
+      return;
+    }
+    if (choice.kind !== 'chosen') {
       return;
     }
     const context = await ports.engine.currentContext(executable.file);
@@ -93,7 +85,7 @@ export function reopenInContainer(ports: ReopenPorts): () => Promise<void> {
       hostPath: folder,
       localDocker: false,
       ...(context === undefined ? {} : {context}),
-      configFile: window.serializedFile(candidate),
+      configFile: window.serializedFile(choice.configFile),
     });
     const opened = await openRemote(
       ports.opener,
@@ -102,7 +94,7 @@ export function reopenInContainer(ports: ReopenPorts): () => Promise<void> {
         target: {payload},
         rawHostString: payload,
       }),
-      {path: read.workspaceFolder, pathKind: 'folder', target: 'current'},
+      {path: choice.workspaceFolder, pathKind: 'folder', target: 'current'},
     );
     if (opened.kind === 'rejected') {
       logger.warn(`Reopen in Container was refused: ${opened.reason}`);
