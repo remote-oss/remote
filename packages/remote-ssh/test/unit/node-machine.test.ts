@@ -3,6 +3,7 @@ import {createServer} from 'node:net';
 import {
   clientPlatformOf,
   clientSearchOf,
+  drawLinkNumber,
   freeLoopbackPort,
   type MachinePlaces,
   newTemporaryToken,
@@ -80,6 +81,23 @@ describe('the machine a connect runs on', () => {
 
   it("contracts §S9: the helper's SOCKS port is free on the loopback once released", async () => {
     deepStrictEqual(await bindable(await freeLoopbackPort()), true);
+  });
+
+  it('F-2311 R2: an agent link number is an integer in 1..999999999', () => {
+    const draws = Array.from({length: 200}, () => drawLinkNumber());
+    deepStrictEqual(
+      draws.every(
+        draw => Number.isInteger(draw) && draw >= 1 && draw <= 999_999_999,
+      ),
+      true,
+    );
+  });
+
+  it("F-2311 R2: the machine's draw is the link number's", () => {
+    deepStrictEqual(
+      nodeMachineOf(PLACES, FACTS).drawLinkNumber,
+      drawLinkNumber,
+    );
   });
 
   it('contracts: two temporary tokens differ', () => {

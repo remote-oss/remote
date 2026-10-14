@@ -256,6 +256,9 @@ const LAUNCH_ORDER = [
   'local',
   'remote',
   'reconnect',
+  'agent',
+  'agent-off',
+  'x11',
   'failure-refused',
   'terminal',
   'socket',
@@ -267,6 +270,8 @@ const LAUNCH_ORDER = [
   'explorer',
   'explorer-alone',
   'explorer-no-proposals',
+  'trust',
+  'trust-terminal',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -355,7 +360,7 @@ describe('acceptance', () => {
 
   it('writes Host harness with the run key, its own known hosts and no agent', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run').split('\n\n')[0],
+      harnessSshConfig(49153, '/run', '/run/agent.sock').split('\n\n')[0],
       [
         'Host harness',
         '  HostName 127.0.0.1',
@@ -374,7 +379,7 @@ describe('acceptance', () => {
 
   it('coverage-13: Host 127.0.0.1 reaches the harness host by the address as typed', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run').split('\n\n')[1],
+      harnessSshConfig(49153, '/run', '/run/agent.sock').split('\n\n')[1],
       [
         'Host 127.0.0.1',
         '  Port 49153',
@@ -392,7 +397,7 @@ describe('acceptance', () => {
 
   it('F-2601 AC-1: Host refused points at a closed port of the loopback', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run').split('\n\n')[2],
+      harnessSshConfig(49153, '/run', '/run/agent.sock').split('\n\n')[2],
       [
         'Host refused',
         '  HostName 127.0.0.1',
@@ -404,7 +409,7 @@ describe('acceptance', () => {
 
   it('F-2601 AC-3: Host nowhere names a host that never resolves', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run').split('\n\n')[3],
+      harnessSshConfig(49153, '/run', '/run/agent.sock').split('\n\n')[3],
       ['Host nowhere', '  HostName nowhere.invalid', '  BatchMode yes'].join(
         '\n',
       ),
@@ -413,7 +418,7 @@ describe('acceptance', () => {
 
   it('F-2601 AC-6: Host stranger is the harness host with its own empty known hosts, and asks', () => {
     strictEqual(
-      harnessSshConfig(49153, '/run').split('\n\n')[4],
+      harnessSshConfig(49153, '/run', '/run/agent.sock').split('\n\n')[4],
       [
         'Host stranger',
         '  HostName 127.0.0.1',
@@ -431,7 +436,7 @@ describe('acceptance', () => {
   /** The alias blocks of the host's other accounts, after the four failure aliases. */
   function accountBlock(name: string): string {
     return (
-      harnessSshConfig(49153, '/run')
+      harnessSshConfig(49153, '/run', '/run/agent.sock')
         .split('\n\n')
         .find(block => block.startsWith(`Host ${name}\n`))
         ?.trimEnd() ?? ''
@@ -496,6 +501,35 @@ describe('acceptance', () => {
       [...sharedLines('noforward', 'harness-nofwd'), ...KEY_ALIAS_LINES].join(
         '\n',
       ),
+    );
+  });
+
+  it("connect-39: Hosts agentfwd and agentfwd-off log in to harness with the run key and forward the run's agent by its path", () => {
+    deepStrictEqual(
+      ['agentfwd', 'agentfwd-off'].map(alias => accountBlock(alias)),
+      ['agentfwd', 'agentfwd-off'].map(alias =>
+        [
+          ...sharedLines(alias, 'harness').map(line =>
+            line === '  IdentityAgent none'
+              ? '  IdentityAgent /run/agent.sock'
+              : line,
+          ),
+          ...KEY_ALIAS_LINES,
+          '  ForwardAgent /run/agent.sock',
+        ].join('\n'),
+      ),
+    );
+  });
+
+  it('connect-39: Host x11fwd logs in to harness with the run key and forwards X11 as trusted', () => {
+    strictEqual(
+      accountBlock('x11fwd'),
+      [
+        ...sharedLines('x11fwd', 'harness'),
+        ...KEY_ALIAS_LINES,
+        '  ForwardX11 yes',
+        '  ForwardX11Trusted yes',
+      ].join('\n'),
     );
   });
 
@@ -750,7 +784,7 @@ describe('acceptance', () => {
       });
     });
 
-    it("installs the packaged VSIX into the run's own extensions folder before the tests", async () => {
+    it("installs the packaged VSIX into the run's own extensions folder before the tests, with the run's user and shared data", async () => {
       workspace.write('dist/remote-ssh-edit-0.0.0.vsix', '');
       await runAcceptance(workspace.root, harness);
       deepStrictEqual(
@@ -760,6 +794,7 @@ describe('acceptance', () => {
             'code',
             `--extensions-dir=${path.join(harness.runFolder, 'extensions')}`,
             `--user-data-dir=${path.join(harness.runFolder, 'user-data')}`,
+            `--shared-data-dir=${path.join(harness.runFolder, 'shared-data')}`,
             '--install-extension',
             path.join(workspace.root, 'dist', 'remote-ssh-edit-0.0.0.vsix'),
           ].join(' '),
@@ -1333,6 +1368,7 @@ describe('acceptance', () => {
           '1.139.1',
           [
             '--user-data-dir=/run/user-data',
+            '--shared-data-dir=/run/shared-data',
             '--extensions-dir=/run/extensions',
             '--enable-proposed-api=remote-oss.remote-ssh',
             '--enable-proposed-api=remote-oss.acceptance-window-agent',
@@ -1570,7 +1606,7 @@ describe('acceptance', () => {
     });
 
     it('ruling 1: a failing connect opens a window on its alias', () => {
-      deepStrictEqual(configurations()[3]?.launchArgs.slice(0, 2), [
+      deepStrictEqual(configurations()[6]?.launchArgs.slice(0, 2), [
         '--folder-uri',
         'vscode-remote://ssh-remote+refused/home/harness',
       ]);
@@ -1579,8 +1615,8 @@ describe('acceptance', () => {
     it('ruling 1: a failing connect answers from its own script and record', () => {
       deepStrictEqual(
         [
-          configurations()[3]?.env.REMOTE_OSS_ACCEPTANCE_SCRIPT,
-          configurations()[3]?.env.REMOTE_OSS_ACCEPTANCE_RECORD,
+          configurations()[6]?.env.REMOTE_OSS_ACCEPTANCE_SCRIPT,
+          configurations()[6]?.env.REMOTE_OSS_ACCEPTANCE_RECORD,
         ],
         [
           path.join('/run', 'failure-refused-script.json'),
@@ -1715,7 +1751,7 @@ describe('acceptance', () => {
         configurations().map(
           configuration => configuration.useInstallation.fromPath,
         ),
-        Array.from({length: 11}, () => EXECUTABLE),
+        Array.from({length: 14}, () => EXECUTABLE),
       );
     });
 
@@ -1726,7 +1762,7 @@ describe('acceptance', () => {
             '--enable-proposed-api=remote-oss.remote-ssh',
           ),
         ),
-        Array.from({length: 11}, () => true),
+        Array.from({length: 14}, () => true),
       );
     });
 
@@ -1740,6 +1776,9 @@ describe('acceptance', () => {
           ['local', 'dist-local/**/*.test.cjs'],
           ['remote', 'dist-remote/**/*.test.cjs'],
           ['reconnect', 'dist-reconnect/**/*.test.cjs'],
+          ['agent', 'dist-forwarding/**/*.test.cjs'],
+          ['agent-off', 'dist-forwarding/**/*.test.cjs'],
+          ['x11', 'dist-forwarding/**/*.test.cjs'],
           ['failure-refused', 'dist-failure/**/*.test.cjs'],
           ['terminal', 'dist-terminal/**/*.test.cjs'],
           ['socket', 'dist-socket/**/*.test.cjs'],
@@ -1753,7 +1792,7 @@ describe('acceptance', () => {
     });
 
     it('D-85: the terminal launch opens the folder on ssh-remote+harness', () => {
-      deepStrictEqual(configurations()[4]?.launchArgs.slice(0, 2), [
+      deepStrictEqual(configurations()[7]?.launchArgs.slice(0, 2), [
         '--folder-uri',
         'vscode-remote://ssh-remote+harness/home/harness',
       ]);
@@ -1839,7 +1878,7 @@ describe('acceptance', () => {
 
     it('D-85: the slow launch loads the slow extension from the host, by its remote address', () => {
       deepStrictEqual(
-        configurations()[6]?.launchArgs.filter(argument =>
+        configurations()[9]?.launchArgs.filter(argument =>
           argument.startsWith('--extensionDevelopmentPath='),
         ),
         [
@@ -1885,6 +1924,9 @@ describe('acceptance', () => {
           'local',
           'remote',
           'reconnect',
+          'agent',
+          'agent-off',
+          'x11',
           'failure-refused',
           'terminal',
           'socket',
@@ -1906,6 +1948,9 @@ describe('acceptance', () => {
           'local',
           'remote',
           'reconnect',
+          'agent',
+          'agent-off',
+          'x11',
           'failure-refused',
           'terminal',
           'socket',
@@ -1925,7 +1970,7 @@ describe('acceptance', () => {
           .map(
             configuration => [configuration.extensionDevelopmentPath].flat()[0],
           ),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(() =>
+        Array.from({length: 13}, () =>
           path.join(workspace.root, 'tests', 'acceptance', 'runner-remote'),
         ),
       );
@@ -2154,6 +2199,7 @@ describe('acceptance', () => {
       workspace.write('tests/acceptance/suite-local/window.test.ts', '');
       workspace.write('tests/acceptance/suite-remote/window.test.ts', '');
       workspace.write('tests/acceptance/suite-reconnect/window.test.ts', '');
+      workspace.write('tests/acceptance/suite-forwarding/window.test.ts', '');
       workspace.write('tests/acceptance/suite-failure/window.test.ts', '');
       workspace.write('tests/acceptance/suite-terminal/window.test.ts', '');
       workspace.write('tests/acceptance/suite-socket/window.test.ts', '');

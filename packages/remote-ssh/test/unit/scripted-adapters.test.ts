@@ -107,6 +107,7 @@ const REAL: EditorAdapters = {
     translate: template => template,
   },
   terminals: new RecordingTerminals(),
+  linkTerminals: {runProgram: () => Promise.resolve()},
   failureDialog: {showError: () => Promise.resolve('real')},
   licenceDialog: {showModal: () => Promise.resolve('real')},
   platformPick: {pick: () => Promise.resolve('linux')},
@@ -968,6 +969,10 @@ describe('the scripted adapters answer from the script only', () => {
 
   it('#253: the terminals are the real ones', () => {
     strictEqual(scripted([]).adapters.terminals, REAL.terminals);
+  });
+
+  it('F-2311 5.0 step 5: the terminals that make the agent link are the real ones', () => {
+    strictEqual(scripted([]).adapters.linkTerminals, REAL.linkTerminals);
   });
 });
 

@@ -122,6 +122,20 @@ describe('a maintenance run (F-2411, F-2412)', () => {
     strictEqual(outcome.result, 'connectionFailed');
   });
 
+  it('F-2206 AC-33: a dismissed platform pick is a cancelled run, and no connection is opened', async () => {
+    const outcome = await perform('uninstall', {
+      decideTerms: () =>
+        Promise.resolve({
+          kind: 'failed',
+          failure: {kind: 'cancelled', reason: {id: 'S027'}},
+        }),
+    });
+    deepStrictEqual(
+      [outcome.result, recording.calls],
+      ['cancelled', ['validate', 'locateClient']],
+    );
+  });
+
   it('F-2411.7.E2: a login that failed is a failed connection', async () => {
     const outcome = await perform('kill', {
       openConnection: () => Promise.resolve(FAILED),

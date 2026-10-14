@@ -10,6 +10,7 @@
     "${configDir}/suite-local",
     "${configDir}/suite-remote",
     "${configDir}/suite-reconnect",
+    "${configDir}/suite-forwarding",
     "${configDir}/suite-failure",
     "${configDir}/suite-ports",
     "${configDir}/suite-platform",
@@ -27,6 +28,9 @@
     "${configDir}/suite-client/cases.json"
   ],
   "references": [
+    {
+      "path": "./windows"
+    },
     {
       "path": "../../packages/lib-forwarding"
     },

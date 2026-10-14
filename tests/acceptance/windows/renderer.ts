@@ -1,9 +1,9 @@
 /**
  * @fileoverview The renderer of a plainly started editor, read and clicked over the Chrome DevTools Protocol, as a user
- * sees and uses the window: a view's rows, and a click on a row's or a view's action. Only a launch with a debugging
- * port has it. The editor writes the port it chose into the user-data folder, and each window's title is its folder
- * name in brackets (the launch's `window.title`), so that a window is found by the name the agent gives it. The
- * selectors read the workbench of the run's pinned VSCodium build.
+ * sees and uses the window: a view's rows, a click on a row's or a view's action, and core's dialogs, read and
+ * answered. Only a launch with a debugging port has it. The editor writes the port it chose into the user-data folder,
+ * and each window's title is its folder name in brackets (the launch's `window.title`), so that a window is found by
+ * the name the agent gives it. The selectors read the workbench of the run's pinned VSCodium build.
  */
 
 import {existsSync, readFileSync} from 'node:fs';
@@ -41,6 +41,13 @@ interface EvaluateAnswer {
     };
   };
   error?: {message: string};
+}
+
+/** A dialog of core's, as the window shows it: its message, its detail and its buttons' labels in order. */
+export interface ShownDialog {
+  message: string;
+  details: string;
+  buttons: string[];
 }
 
 /** Polls `attempt` until it gives a value, for up to `milliseconds`; it fails naming what it waited for. */
@@ -116,19 +123,20 @@ export async function pageOf(
   );
 }
 
-/** Evaluates `expression` in window `name`'s page and returns its value; a thrown error fails with its text. */
-async function evaluate<Value>(
-  name: string,
+/** Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a failure. */
+async function evaluateAt<Value>(
+  address: string,
+  owner: string,
   expression: string,
 ): Promise<Value> {
-  const socket = new WebSocket(await pageOf(name));
+  const socket = new WebSocket(address);
   try {
     await new Promise<void>((resolve, reject) => {
       socket.addEventListener('open', () => {
         resolve();
       });
       socket.addEventListener('error', () => {
-        reject(new Error(`no protocol connection to window ${name}`));
+        reject(new Error(`no protocol connection to ${owner}`));
       });
     });
     const answer = await new Promise<EvaluateAnswer>(resolve => {
@@ -148,12 +156,20 @@ async function evaluate<Value>(
       answer.result?.exceptionDetails?.exception?.description ??
       answer.result?.exceptionDetails?.text;
     if (failure !== undefined) {
-      throw new Error(`window ${name}: ${failure}`);
+      throw new Error(`${owner}: ${failure}`);
     }
     return answer.result?.result?.value as Value;
   } finally {
     socket.close();
   }
+}
+
+/** Evaluates `expression` in window `name`'s page and returns its value; a thrown error fails with its text. */
+async function evaluate<Value>(
+  name: string,
+  expression: string,
+): Promise<Value> {
+  return evaluateAt(await pageOf(name), `window ${name}`, expression);
 }
 
 /** The page-side lookup of a view's pane by its header title; `undefined` when no pane has it. */
@@ -247,4 +263,84 @@ export async function titleAction(
     `[...pane.querySelectorAll('.pane-header')]`,
     actionTitle,
   );
+}
+
+/** The box of core's open dialog, and its buttons inside it ([oss] `src/vs/base/browser/ui/dialog/dialog.ts`). */
+const DIALOG_BOX = '.monaco-dialog-box';
+
+const DIALOG_BUTTONS = '.dialog-buttons .monaco-button';
+
+/** The page-side reading of the open dialog: `null` when none is open. */
+const DIALOG_EXPRESSION = `(() => {
+  const box = document.querySelector('${DIALOG_BOX}');
+  if (box === null) {
+    return null;
+  }
+  return {
+    message: box.querySelector('.dialog-message-text')?.textContent ?? '',
+    details: box.querySelector('.dialog-message-detail')?.textContent ?? '',
+    buttons: [...box.querySelectorAll('${DIALOG_BUTTONS}')].map(button => button.textContent ?? ''),
+  };
+})()`;
+
+/** The dialog open in window `name`, or `undefined` when none is. */
+export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
+  return (
+    (await evaluate<ShownDialog | null>(name, DIALOG_EXPRESSION)) ?? undefined
+  );
+}
+
+/** Waits until window `name` shows a dialog and returns it; it fails naming the window and every page's open dialog. */
+export async function waitForDialog(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<ShownDialog> {
+  try {
+    return await settled(
+      () => `a dialog in window ${name}`,
+      () => dialogOf(name),
+      milliseconds,
+    );
+  } catch (caught) {
+    const shown = await Promise.all(
+      (await pages()).map(async page => {
+        const open =
+          page.webSocketDebuggerUrl === undefined
+            ? null
+            : await evaluateAt<ShownDialog | null>(
+                page.webSocketDebuggerUrl,
+                `page ${page.title}`,
+                DIALOG_EXPRESSION,
+              );
+        return `${page.title}: ${open?.message ?? 'none'}`;
+      }),
+    );
+    throw new Error(
+      `${caught instanceof Error ? caught.message : String(caught)}; open dialogs: ${shown.join('; ')}`,
+      {cause: caught},
+    );
+  }
+}
+
+/** Clicks the button labelled exactly `label` of the dialog open in window `name`; it fails naming what it found. */
+export async function answerDialog(name: string, label: string): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const box = document.querySelector('${DIALOG_BOX}');
+      if (box === null) {
+        return 'no dialog open';
+      }
+      const buttons = [...box.querySelectorAll('${DIALOG_BUTTONS}')];
+      const button = buttons.find(each => each.textContent === ${JSON.stringify(label)});
+      if (button === undefined) {
+        return 'no button ' + ${JSON.stringify(JSON.stringify(label))} + ' among ' + JSON.stringify(buttons.map(each => each.textContent));
+      }
+      button.click();
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
 }

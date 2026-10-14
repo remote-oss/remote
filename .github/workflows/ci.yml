@@ -81,6 +81,10 @@ jobs:
       - run: pnpm identifiers # the git-ignored tables every later step reads
       - run: pnpm check-layout
       - run: pnpm check-identifiers
+      - run: pnpm check-consumed
+        if: github.ref_type != 'tag'
+      - run: node tools/identifiers.ts --consumed --release
+        if: github.ref_type == 'tag'
       - run: pnpm check-public-surface
       - run: pnpm check-coverage # every acceptance criterion tagged, and every tagged one cited by a test (#142)
       - run: pnpm typecheck

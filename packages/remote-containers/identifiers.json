@@ -1,0 +1,52 @@
+{
+  "source": "remote-oss/remote-containers#107 (F-1406)",
+  "standsDownFor": "ms-vscode-remote.remote-containers",
+  "standingDownKey": "remote-containers:standingDown",
+  "namespaces": {
+    "commands": ["remote-containers."],
+    "settings": ["dev.containers."],
+    "contextKeys": ["remote-containers:"],
+    "internalCommands": ["remote-oss."]
+  },
+  "contextKeys": [
+    {
+      "id": "remote-containers:standingDown",
+      "setter": "extension"
+    }
+  ],
+  "infoLineCommands": [],
+  "runtimeCommands": [],
+  "internal": [
+    {
+      "id": "remote-oss.gate.claim",
+      "role": "called",
+      "kind": "query"
+    }
+  ],
+  "invented": [
+    {
+      "id": "remote-containers:standingDown",
+      "kind": "contextKeys",
+      "spec": "F-1406",
+      "date": "2026-10-14"
+    }
+  ],
+  "settingPairs": [],
+  "ungated": [],
+  "locales": [
+    "cs",
+    "de",
+    "es",
+    "fr",
+    "it",
+    "ja",
+    "ko",
+    "pl",
+    "pt-br",
+    "qps-ploc",
+    "ru",
+    "tr",
+    "zh-cn",
+    "zh-tw"
+  ]
+}

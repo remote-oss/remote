@@ -22,7 +22,11 @@ The specs differ from the CLI's own behaviour in six known places (dossier §4):
 1. an empty `${localEnv:VAR:default}` gives the default (F-0304 BR-5a);
 2. `${containerEnv}` in `initializeCommand` is empty;
 3. `localEnv` is the editor's resolved environment;
-4. the window-title `name` needs a second pass without a container;
+4. the window-title `name` needs a second pass, `read-configuration` with the container once it exists. The
+   dossier's "even without a container" has no release-1 surface (amended 2026-10-14 on #764). The title and the
+   indicator show the name only once connected (F-0504 5.0 step 5). The picker's label is the raw, unsubstituted
+   `name` (F-0301 BR-3). A surface that needs the substituted name before the container exists brings that pass
+   back, under its own card;
 5. the workspace mount needs `--mount-workspace-git-root=false` (F-0301 §6.5, F-0302 BR-14);
 6. attach configurations can't go through `up --config` (not in release 1).
 
@@ -33,11 +37,19 @@ The specs differ from the CLI's own behaviour in six known places (dossier §4):
    package's entry script, `shell: false`, through the `CliHost` port (containers contracts §4). No other code imports
    it.
 2. **How we bend it, in this order, and only this way:**
-   1. **flags** the CLI already has (`--mount-workspace-git-root=false`, `--id-label`, `--docker-path`,
-      `--remote-env`, …);
-   2. **a pre-pass** that writes an `--override-config` file, for a value the specs resolve differently (deviations 1
-      to 4);
+   1. **the CLI's own inputs:** the flags it already has (`--mount-workspace-git-root=false`, `--id-label`,
+      `--docker-path`, …) and the environment it's spawned with;
+   2. **a pre-pass** that writes an `--override-config` file, for a value the specs resolve differently;
    3. **post-processing** of the JSON result and log lines.
+
+   Each deviation goes through the first mechanism that reaches it, and C3's card records which (amended 2026-10-14
+   on #764, measured on CLI 0.89.0):
+   - deviation 1 is the pre-pass, the only one that needs it;
+   - deviation 2 needs no mechanism, because the CLI already makes `${containerEnv}` empty in `initializeCommand`;
+   - deviation 3 is the spawn environment;
+   - deviation 4 is post-processing;
+   - deviation 5 is a flag;
+   - deviation 6 waits for attach, which isn't in release 1.
 
    A deviation none of these reaches is an upstream change to `devcontainers/cli` (MIT) and waits for its release.
    **We never fork, patch or vendor-modify the CLI.** A fork would need its own ADR.

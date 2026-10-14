@@ -49,6 +49,9 @@ const AUTHENTICATED_ONLY =
 /** The login line and, after it, the bootstrap's report that the session is ready for the commands. */
 const AUTHENTICATED = `${AUTHENTICATED_ONLY}LAYER1-READY\n`;
 
+/** The failure of the extension's own connect wait (card connect-50). */
+const TIMED_OUT = {kind: 'timeout', reason: {id: 'sshTimedOut'}} as const;
+
 function requestFor(socksPort: number | undefined): SshRequest {
   return {
     purpose: 'connection',
@@ -306,7 +309,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
   it('F-2308 BR-5: a question nobody can reach after the handshake times out', async () => {
     deepStrictEqual((await unreachable()).outcome, {
       kind: 'failed',
-      failure: {kind: 'timeout'},
+      failure: TIMED_OUT,
     });
   });
 
@@ -340,7 +343,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     made.clock.advance(600_000);
     deepStrictEqual(await result, {
       kind: 'failed',
-      failure: {kind: 'timeout'},
+      failure: TIMED_OUT,
     });
   });
 
@@ -348,7 +351,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     const made = fixture({timeoutSeconds: 10});
     const {result} = await started(made);
     made.clock.advance(12_000);
-    deepStrictEqual(await result, {kind: 'failed', failure: {kind: 'timeout'}});
+    deepStrictEqual(await result, {kind: 'failed', failure: TIMED_OUT});
   });
 
   it('ruling 4: the first output stops the wait', async () => {
@@ -390,6 +393,17 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
         ? await outcome.value.storeSharedRecord(RECORD)
         : undefined,
       false,
+    );
+  });
+
+  it('F-2410 BR-5, F-2311 R2: the lease finds no stored record, so each window plans fresh', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED);
+    const outcome = await result;
+    deepStrictEqual(
+      outcome.kind === 'done' ? outcome.value.storedRecord : outcome,
+      undefined,
     );
   });
 
@@ -474,7 +488,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     const made = fixture();
     const {result, terminal} = await started(made);
     terminal.write(`${AUTHENTICATED_ONLY}LAYER1-TIMEOUT 10\n`);
-    deepStrictEqual(await result, {kind: 'failed', failure: {kind: 'timeout'}});
+    deepStrictEqual(await result, {kind: 'failed', failure: TIMED_OUT});
   });
 
   it("F-2704 AC-13: a login shell that ended by itself fails the connect with no reason of ssh's", async () => {
@@ -489,7 +503,37 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     const {result, terminal} = await started(made);
     terminal.write(AUTHENTICATED_ONLY);
     made.clock.advance(13_000);
-    deepStrictEqual(await result, {kind: 'failed', failure: {kind: 'timeout'}});
+    deepStrictEqual(await result, {kind: 'failed', failure: TIMED_OUT});
+  });
+
+  it("F-2105 7.E3: in terminal mode, the wait, the prompt reader and the bootstrap's timeout give the same reason", async () => {
+    const waited = fixture({timeoutSeconds: 10});
+    const silent = await started(waited);
+    waited.clock.advance(12_000);
+    const booted = fixture();
+    const outlasted = await started(booted);
+    outlasted.terminal.write(`${AUTHENTICATED_ONLY}LAYER1-TIMEOUT 10\n`);
+    deepStrictEqual(
+      [
+        await silent.result,
+        (await unreachable()).outcome,
+        await outlasted.result,
+      ].map(outcome => (outcome.kind === 'failed' ? outcome.failure : outcome)),
+      [TIMED_OUT, TIMED_OUT, TIMED_OUT],
+    );
+  });
+
+  it("F-2105 BR-3: the terminal session's login shell is bounded at the connect wait", async () => {
+    const made = fixture({timeoutSeconds: 10, fromHost: true});
+    const {terminal} = await started(made);
+    terminal.write(AUTHENTICATED_ONLY);
+    await settled();
+    deepStrictEqual(
+      terminal.sent
+        .find(text => text.startsWith('LAYER1_SECONDS='))
+        ?.split('\n')[0],
+      'LAYER1_SECONDS=12',
+    );
   });
 
   it('contracts: the questions are taken down at the handover', async () => {

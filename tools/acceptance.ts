@@ -222,9 +222,14 @@ const READY_INTERVAL = 500;
  * host's other accounts: `password` (login by password only), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `mute` (a login shell that does not answer), `readonly` (a server data folder that exists
- * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster).
+ * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
+ * `agentfwd-off` and `x11fwd`, the harness account forwarding the run's agent at `agentSocket` and X11.
  */
-export function harnessSshConfig(port: number, runFolder: string): string {
+export function harnessSshConfig(
+  port: number,
+  runFolder: string,
+  agentSocket: string,
+): string {
   return [
     'Host harness',
     '  HostName 127.0.0.1',
@@ -331,6 +336,22 @@ export function harnessSshConfig(port: number, runFolder: string): string {
     ...keyAlias('certonly-nocert', CERTIFIED_PRINCIPAL, port, runFolder, [
       'id_second',
     ]),
+    // Two aliases, so the window with the setting off finds no connection, and no stored plan, of the other.
+    ...['agentfwd', 'agentfwd-off'].flatMap(alias =>
+      accountAlias(
+        alias,
+        'harness',
+        port,
+        runFolder,
+        [...keyLines(runFolder), `ForwardAgent ${agentSocket}`],
+        agentSocket,
+      ),
+    ),
+    ...accountAlias('x11fwd', 'harness', port, runFolder, [
+      ...keyLines(runFolder),
+      'ForwardX11 yes',
+      'ForwardX11Trusted yes',
+    ]),
   ].join('\n');
 }
 
@@ -376,20 +397,24 @@ function keyLines(runFolder: string): string[] {
   ];
 }
 
-/** One alias of the host's other accounts: the lines every one shares, its own known-hosts file, then `further`. */
+/**
+ * One alias of the host's other accounts: the lines every one shares, its own known-hosts file, then `further`. Its
+ * agent is `identityAgent`, none by default; ssh forwards no agent from an alias whose `IdentityAgent` is none.
+ */
 function accountAlias(
   alias: string,
   user: string,
   port: number,
   runFolder: string,
   further: readonly string[],
+  identityAgent = 'none',
 ): string[] {
   return [
     `Host ${alias}`,
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
     `  User ${user}`,
-    '  IdentityAgent none',
+    `  IdentityAgent ${identityAgent}`,
     '  StrictHostKeyChecking accept-new',
     '  ConnectTimeout 10',
     `  UserKnownHostsFile ${path.join(runFolder, `known_hosts_${alias}`)}`,
@@ -540,7 +565,7 @@ async function prepare(
   started.push(host.container);
   const port = host.port;
   const configFile = path.join(runFolder, 'ssh_config');
-  writeFileSync(configFile, harnessSshConfig(port, runFolder));
+  writeFileSync(configFile, harnessSshConfig(port, runFolder, agentSocket));
   writeUserSettings(runFolder, configFile);
   await waitForHost(dependencies, configFile);
   await dependencies.bundleSuite(root);
@@ -568,6 +593,7 @@ async function prepare(
       checked(command, editorCommand, [
         `--extensions-dir=${folder}`,
         `--user-data-dir=${path.join(runFolder, 'user-data')}`,
+        `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
         ...files.flatMap(file => ['--install-extension', file]),
       ]);
     }

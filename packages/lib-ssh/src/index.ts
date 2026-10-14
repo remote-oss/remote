@@ -48,6 +48,8 @@ export type {
   HostBlock,
 } from './config/add-host.ts';
 export {parseAddHostCommand} from './config/add-host.ts';
+export {lexConfiguration} from './config/lexer.ts';
+export type {LexResult} from './config/lexer.ts';
 export {writeHostBlock} from './config/writer.ts';
 export type {DiagnosticStringId, FailureKind} from './diagnostics/rules.ts';
 export type {
@@ -131,6 +133,8 @@ export {
   type ScriptFailureReason,
   readConnectionRequest,
   type SharedRecord,
+  type StoredAgentLink,
+  type StoredDisplay,
 } from './connection-server/messages.ts';
 export {
   LoginOwnership,

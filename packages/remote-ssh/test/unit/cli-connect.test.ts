@@ -18,6 +18,7 @@ import {
   BRIDGE_ADDRESS,
   CONTROL_TOKEN,
   leaseOf,
+  LINKED,
   type Recording,
   requiringToken,
   setup,
@@ -258,6 +259,16 @@ describe("the connect's CLI path: the token check", () => {
 });
 
 describe("the connect's CLI path: the window resolves", () => {
+  it("F-2311 5.0 step 5: the window gets its plans, and the link is started after the CLI's result", async () => {
+    const {result, recording} = await connectOverCli(undefined, () => ({
+      planForwarding: () => Promise.resolve(LINKED),
+    }));
+    deepStrictEqual(
+      [connectedOf(result).forwarding, recording.links],
+      [LINKED, [LINKED.agentLink]],
+    );
+  });
+
   it("§4a: the window's address is the bridge's", async () => {
     const {connection} = await resolved();
     deepStrictEqual(connection.connected.address, BRIDGE_ADDRESS);

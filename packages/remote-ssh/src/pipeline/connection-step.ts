@@ -115,6 +115,7 @@ export function openConnectionStep(
       value: {
         channel,
         socksPort: outcome.socksPort,
+        storedRecord: outcome.sharedRecord ?? undefined,
         storeSharedRecord: record => connection.storeSharedRecord(record),
         onNotice: listener => connection.onNotice(listener),
         answer: (promptId, text) => connection.answer(promptId, text),

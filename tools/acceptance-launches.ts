@@ -72,6 +72,8 @@ export interface PlainLaunch extends LaunchCommon {
   debuggingPort?: boolean;
   /** Extensions, by id, that the editor starts disabled. */
   disabledExtensions?: readonly string[];
+  /** Whether the editor starts with workspace trust on, so a folder opens untrusted until the user trusts it. */
+  workspaceTrust?: boolean;
 }
 
 /** One launch of the VSCodium run, in the order the run makes them. */
@@ -98,14 +100,22 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['remote-oss.remote-explorer', 'remote-explorer'],
 ]);
 
-/** What the explorer's launches share: the explorer, its proposed API and the debugging port. */
-const EXPLORER_LAUNCH = {
+/** What a launch the renderer helpers read needs: the debugging port, and window titles they can find a window by. */
+const RENDERER_LAUNCH = {
   kind: 'plain',
-  withExtensions: ['remote-oss.remote-explorer'],
   debuggingPort: true,
   // The renderer helpers find a window by its title: its folder name in brackets, `[]` for a window with none.
   settings: {'window.title': '[${rootName}]'},
 } as const;
+
+/** What the explorer's launches share: the explorer and its proposed API, read by the renderer helpers. */
+const EXPLORER_LAUNCH = {
+  ...RENDERER_LAUNCH,
+  withExtensions: ['remote-oss.remote-explorer'],
+} as const;
+
+/** What the trust launches share: workspace trust on, read by the renderer helpers. */
+const TRUST_LAUNCH = {...RENDERER_LAUNCH, workspaceTrust: true} as const;
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
@@ -397,10 +407,30 @@ export function hostSetupOf(
 }
 
 /**
+ * A launch of suite-forwarding: a window on `alias`, an alias of the harness account that forwards the agent or X11,
+ * whose connect finds the server an earlier launch's session started, with the case named for the suite.
+ */
+function forwardingLaunch(
+  label: string,
+  alias: string,
+  settings?: Readonly<Record<string, unknown>>,
+): Launch {
+  return {
+    label,
+    runner: 'runner-remote',
+    suite: 'suite-forwarding',
+    folderUri: `vscode-remote://ssh-remote+${alias}/home/harness`,
+    environment: {HARNESS_FORWARDING_CASE: label},
+    ...(settings === undefined ? {} : {settings}),
+  };
+}
+
+/**
  * The launches of the VSCodium run: `local` runs suite-local in a plain window; `remote` runs suite-remote in a
  * window on `ssh-remote+harness`, where the runner is an extension of the workspace kind; `reconnect` runs
- * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); each
- * failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
+ * suite-reconnect in a second launch on the same folder, which finds the first launch's server (ruling 2); `agent`,
+ * `agent-off` and `x11` run suite-forwarding on the aliases that forward the agent (the second with
+ * `remote.SSH.enableAgentForwarding` false) and X11, on that same server; each failing connect runs suite-failure in a window on its alias, answered from its own script; `terminal` runs
  * suite-terminal with `remote.SSH.useLocalServer` off; `socket` runs suite-socket with
  * `remote.SSH.remoteServerListenOnSocket` on; `slow` runs suite-slow with an extension that takes 15 s to
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
@@ -408,7 +438,9 @@ export function hostSetupOf(
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
  * same without enabling the proposed API; `explorer`, `explorer-alone` and `explorer-no-proposals` do the same with
  * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
- * proposed API; and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
+ * proposed API; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
+ * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
+ * and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
  * with its host setup and its own script.
  */
 export function launchesOf(root: string): Launch[] {
@@ -426,6 +458,11 @@ export function launchesOf(root: string): Launch[] {
       suite: 'suite-reconnect',
       folderUri: REMOTE_FOLDER_URI,
     },
+    forwardingLaunch('agent', 'agentfwd'),
+    forwardingLaunch('agent-off', 'agentfwd-off', {
+      'remote.SSH.enableAgentForwarding': false,
+    }),
+    forwardingLaunch('x11', 'x11fwd'),
     ...failureCases(root).map((failure): Launch => ({
       label: failureLabel(failure.label ?? failure.alias),
       runner: 'runner-remote',
@@ -507,6 +544,26 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-no-proposals',
       suite: 'explorer-no-proposals',
       proposedApi: false,
+    },
+    {
+      ...TRUST_LAUNCH,
+      label: 'trust',
+      suite: 'trust',
+      settings: {
+        ...TRUST_LAUNCH.settings,
+        // Core's default is never; the rows answer core's startup prompt, so this launch turns it on.
+        'security.workspace.trust.startupPrompt': 'once',
+      },
+    },
+    {
+      ...TRUST_LAUNCH,
+      label: 'trust-terminal',
+      suite: 'trust-terminal',
+      settings: {
+        ...TRUST_LAUNCH.settings,
+        'remote.SSH.useLocalServer': false,
+        'remote.SSH.remotePlatform': {harness: 'linux'},
+      },
     },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({
