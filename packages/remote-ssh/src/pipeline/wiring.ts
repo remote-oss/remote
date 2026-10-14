@@ -16,7 +16,11 @@ import type {HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {OverrideValue} from 'lib-product';
 import {type LocalDownloadMode, sshPolicyFor} from 'lib-server';
-import {buildInvocation, connectWaitMilliseconds} from 'lib-ssh';
+import {
+  buildInvocation,
+  connectWaitMilliseconds,
+  type HostListResult,
+} from 'lib-ssh';
 import type {
   AcquireConnectionOutcome,
   ConnectionAcquireRequest,
@@ -129,6 +133,8 @@ interface CliWiring {
 
 /** What the steps of every connect are made from. */
 export interface WiringPorts {
+  /** The hosts of the configuration files in effect, the reading the host pick uses: the connect's first check. */
+  configuredHosts(): HostListResult;
   settings: WiringSettings;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
@@ -401,6 +407,22 @@ export function stepsOf(
       ),
   });
   return {
+    checkConfigFile: () => {
+      const listing = ports.configuredHosts();
+      if ('parseError' in listing) {
+        return {
+          kind: 'failed',
+          failure: {
+            kind: 'invalidSetting',
+            reason: {
+              text: `${listing.parseError.file}: ${listing.parseError.reason}`,
+            },
+            logDetail: `the SSH configuration file cannot be parsed: ${listing.parseError.file}: ${listing.parseError.reason}`,
+          },
+        };
+      }
+      return {kind: 'done', value: undefined};
+    },
     checkStartSettings: input => serverSteps(input).checkStartSettings(input),
     validate: input => serverSteps(input).validate(input),
     checkInstallFolder: input => serverSteps(input).checkInstallFolder(input),

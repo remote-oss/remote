@@ -74,6 +74,17 @@ async function textFor(parts: Partial<Failed>): Promise<string | undefined> {
 }
 
 describe('the failure presenter', () => {
+  it('F-2201 AC-22: the dialog names the parse problem', async () => {
+    const text = await textFor({
+      kind: 'invalidSetting',
+      reason: {text: '/h/.ssh/config: unterminated quote after Host'},
+    });
+    deepStrictEqual(
+      text,
+      'Could not establish connection to "box": /h/.ssh/config: unterminated quote after Host.',
+    );
+  });
+
   it("F-2409 AC-29: no failure kind offers the Output Log's mitigation steps", async () => {
     const shown: string[] = [];
     for (const kind of Object.keys(KIND_MAY_RECOVER)) {
