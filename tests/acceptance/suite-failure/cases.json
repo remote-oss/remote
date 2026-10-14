@@ -184,6 +184,9 @@
     {
       "alias": "i686",
       "cite": "#670",
+      "settings": {
+        "remote.SSH.serverDownloadUrlTemplate": "${HARNESS_DOWNLOADS_HTTP}/ok/${os}-${arch}/${commit}"
+      },
       "script": [
         {
           "surface": "failureDialog",

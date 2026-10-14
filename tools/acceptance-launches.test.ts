@@ -145,6 +145,7 @@ describe('the launches of the VSCodium run', () => {
         'failure-refused-shown',
         'failure-platform-escape',
         'failure-port-range-busy',
+        'failure-i686',
         'terminal',
         'socket',
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
