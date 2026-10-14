@@ -15,31 +15,42 @@ import type {Duplex, Listening, LocalPort} from './ports.ts';
 /** The only address the library listens on or connects to. */
 const LOOPBACK = '127.0.0.1';
 
-/** A connection over `socket`. */
-function socketDuplex(socket: Socket): Duplex {
+/** The streams of a connection and how its end is told: what `streamDuplex` turns into a `Duplex`. */
+export interface DuplexStreams {
+  readable: Pick<NodeJS.ReadableStream, 'on' | 'pause' | 'resume'>;
+  writable: {
+    write(chunk: Uint8Array): boolean;
+    on(event: 'drain', listener: () => void): unknown;
+  };
+  /** Registers the function the connection calls once, when it has ended. */
+  whenEnded(listener: () => void): void;
+  /** Ends the connection now. */
+  destroy(): void;
+}
+
+/** A connection over `streams`, holding the bytes that come before its first data listener. */
+export function streamDuplex(streams: DuplexStreams): Duplex {
   const closeListeners: Array<() => void> = [];
   let closed = false;
-  // An error always ends in a close, which is how it is told.
-  socket.on('error', () => undefined);
-  socket.on('close', () => {
+  streams.whenEnded(() => {
     closed = true;
     for (const listener of closeListeners) {
       listener();
     }
   });
   return {
-    send: chunk => socket.write(chunk),
+    send: chunk => streams.writable.write(chunk),
     onDrain: listener => {
-      socket.on('drain', listener);
+      streams.writable.on('drain', listener);
     },
     pause: () => {
-      socket.pause();
+      streams.readable.pause();
     },
     resume: () => {
-      socket.resume();
+      streams.readable.resume();
     },
     onData: listener => {
-      socket.on('data', (chunk: Buffer) => {
+      streams.readable.on('data', (chunk: Buffer) => {
         listener(chunk);
       });
     },
@@ -51,9 +62,25 @@ function socketDuplex(socket: Socket): Duplex {
       }
     },
     close: () => {
-      socket.destroy();
+      streams.destroy();
     },
   };
+}
+
+/** A connection over `socket`. */
+function socketDuplex(socket: Socket): Duplex {
+  // An error always ends in a close, which is how it is told.
+  socket.on('error', () => undefined);
+  return streamDuplex({
+    readable: socket,
+    writable: socket,
+    whenEnded: listener => {
+      socket.on('close', listener);
+    },
+    destroy: () => {
+      socket.destroy();
+    },
+  });
 }
 
 /**

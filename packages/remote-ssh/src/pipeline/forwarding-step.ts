@@ -4,10 +4,9 @@
  * so that the editor's own trust check comes before it. Nothing here shows anything; it logs.
  */
 
-import type {HostChannel} from 'lib-host';
+import {type HostChannel, posixQuote} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {ProbedHost} from 'lib-server';
-import {posixQuote} from 'lib-ssh';
 import {type AgentLinkPlan, planAgentLink} from '../environment/agent-link.ts';
 import {type DisplayPlan, planDisplay} from '../environment/display.ts';
 import type {ForwardingPlans} from '../environment/forwarding.ts';

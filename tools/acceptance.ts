@@ -223,6 +223,22 @@ const READY_ATTEMPTS = 40;
 
 const READY_INTERVAL = 500;
 
+/** The password account behind an OpenSSH ControlMaster of the given mode, its socket `socket` in the run's folder. */
+function masterAlias(
+  name: string,
+  mode: string,
+  socket: string,
+  port: number,
+  runFolder: string,
+): string[] {
+  return accountAlias(name, 'harness-pw', port, runFolder, [
+    ...PASSWORD_LINES,
+    `ControlMaster ${mode}`,
+    `ControlPath ${path.join(runFolder, socket)}`,
+    'ControlPersist 600',
+  ]);
+}
+
 /**
  * The ssh_config of the run: `Host harness` with the run's key, its own known-hosts file and no agent; three
  * aliases that fail for the failure rows: `refused` (a closed port), `nowhere` (a name that never resolves, RFC 6761)
@@ -320,18 +336,16 @@ export function harnessSshConfig(
       runFolder,
       keyLines(runFolder),
     ),
-    ...accountAlias('master', 'harness-pw', port, runFolder, [
-      ...PASSWORD_LINES,
-      'ControlMaster auto',
-      `ControlPath ${path.join(runFolder, 'cm-%C')}`,
-      'ControlPersist 60',
-    ]),
-    ...accountAlias('master-ask', 'harness-pw', port, runFolder, [
-      ...PASSWORD_LINES,
-      'ControlMaster ask',
-      `ControlPath ${path.join(runFolder, 'cm-ask-%C')}`,
-      'ControlPersist 60',
-    ]),
+    ...masterAlias('master', 'auto', 'cm-%C', port, runFolder),
+    ...masterAlias('master-ask', 'ask', 'cm-ask-%C', port, runFolder),
+    ...masterAlias('master-yes', 'yes', 'cm-yes-%C', port, runFolder),
+    ...masterAlias(
+      'master-autoask',
+      'autoask',
+      'cm-autoask-%C',
+      port,
+      runFolder,
+    ),
     ...keyAlias('passkey', 'harness', port, runFolder, ['id_passphrase']),
     ...keyAlias('passkey-then-second', 'harness', port, runFolder, [
       'id_passphrase',

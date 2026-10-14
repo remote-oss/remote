@@ -105,6 +105,7 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/server/tsconfig.json',
   './tests/acceptance/windows/tsconfig.json',
   './tests/acceptance/no-proposals/tsconfig.json',
+  './tests/acceptance/default-ports/tsconfig.json',
   './tests/acceptance/terminal-pick/tsconfig.json',
   './tests/acceptance/explorer/tsconfig.json',
   './tests/acceptance/explorer-alone/tsconfig.json',

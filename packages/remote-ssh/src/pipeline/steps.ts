@@ -40,6 +40,8 @@ export interface ConnectInput {
   target: ConnectTarget;
   /** The host string exactly as the authority wrote it. */
   rawHostString: string;
+  /** The record key of the connection helper the connect acquires; when absent, `rawHostString`. */
+  connectionKey?: string;
   /** The resolver call of the window: 1 for the first, more for each reconnection. */
   attempt: number;
   isReconnection: boolean;
@@ -268,4 +270,6 @@ export interface ConnectSteps {
     input: ConnectInput,
     reported: ProbedHost['operatingSystem'],
   ): Promise<void>;
+  /** Forwards the ports of `remote.SSH.defaultForwardedPorts`, as the setting is when the call is made. */
+  applyDefaults(input: ConnectInput): Promise<void>;
 }

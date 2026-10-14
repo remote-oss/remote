@@ -7,7 +7,7 @@
 import type {EffectiveOptions} from '../config/effective.ts';
 import {configFilePath} from '../config/files.ts';
 import type {ClientPlatform} from '../config/platform.ts';
-import {posixQuote} from '../process/remote-program.ts';
+import {posixQuote} from 'lib-host';
 import type {SshTarget} from './target.ts';
 
 /** What an `ssh` run is for; a `copy` run uses `scp`. */

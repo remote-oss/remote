@@ -6,7 +6,8 @@
  */
 
 import type {Scheduler} from 'lib-helper';
-import {environmentPrefix, posixQuote} from '../process/remote-program.ts';
+import {posixQuote} from 'lib-host';
+import {environmentPrefix} from '../process/remote-program.ts';
 
 /** The characters of base64 text on one line of the input. */
 const BASE64_LINE_LENGTH = 76;

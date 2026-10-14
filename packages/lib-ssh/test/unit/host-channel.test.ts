@@ -6,6 +6,7 @@ import {
   type CopyOutcome,
   type CopyRequest,
   hostPathOf,
+  posixQuote,
   type ScriptOutcome,
   type ScriptRequest,
 } from 'lib-host';
@@ -13,7 +14,6 @@ import {
   LineSplitter,
   nodeLocalFiles,
   planScript,
-  posixQuote,
   type ProcessSpecification,
   SshHostChannel,
 } from '../../src/index.ts';
