@@ -38,6 +38,11 @@ import {
 } from './identifiers.generated.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
+import {
+  lifecyclePresenterOf,
+  type StatusProgressPort,
+  type TerminalPort,
+} from './surfaces/lifecycle-terminal.ts';
 import {licenceModalOf} from './surfaces/licence-modal.ts';
 import {rebuildContainer} from './open/rebuild.ts';
 import {reopenInContainer} from './open/reopen.ts';
@@ -68,6 +73,65 @@ interface Manifest {
 
 function translate(template: string): string {
   return vscode.l10n.t(template);
+}
+
+/** The editor's terminals as the lifecycle presenter uses them: a pseudoterminal that is transient and takes focus. */
+function terminalPortOf(): TerminalPort {
+  return {
+    open: (name, onInput, onClosed) => {
+      const written = new vscode.EventEmitter<string>();
+      const early: string[] = [];
+      let ready = false;
+      const terminal = vscode.window.createTerminal({
+        name,
+        isTransient: true,
+        // eslint-disable-next-line id-length -- the editor's name for the option
+        pty: {
+          onDidWrite: written.event,
+          open: () => {
+            ready = true;
+            for (const text of early.splice(0)) {
+              written.fire(text);
+            }
+          },
+          close: onClosed,
+          handleInput: onInput,
+        },
+      });
+      terminal.show(false);
+      return {
+        write: text => {
+          if (ready) {
+            written.fire(text);
+          } else {
+            early.push(text);
+          }
+        },
+        close: () => {
+          terminal.dispose();
+        },
+      };
+    },
+  };
+}
+
+/** The editor's window progress (its status bar entry) as the lifecycle presenter uses it. */
+function statusProgressPortOf(): StatusProgressPort {
+  return {
+    show: title => {
+      const ender: {finish?: () => void} = {};
+      const finished = new Promise<void>(resolve => {
+        ender.finish = resolve;
+      });
+      void vscode.window.withProgress(
+        {location: vscode.ProgressLocation.Window, title},
+        () => finished,
+      );
+      return () => {
+        ender.finish?.();
+      };
+    },
+  };
 }
 
 /** Called by the editor when the extension activates. */
@@ -316,9 +380,20 @@ export async function activate(
     const connector = containerConnectorOf({
       engineFor: file => served.preflight.engineFor(file),
       cliFor: environment => bridgeFor(environment, logger),
-      lifecycleFor: (engine, bridge) =>
-        // eslint-disable-next-line id-length -- the lifecycle's dependency is named cli
-        containerLifecycleOf({engine, cli: bridge, logger}),
+      lifecycleFor: (engine, bridge, presenter) =>
+        containerLifecycleOf({
+          engine,
+          // eslint-disable-next-line id-length -- the lifecycle's dependency is named cli
+          cli: bridge,
+          logger,
+          presenter,
+          clock: Date.now,
+        }),
+      lifecyclePresenter: lifecyclePresenterOf(
+        terminalPortOf(),
+        statusProgressPortOf(),
+        translate,
+      ),
       settings: () => {
         const configuration = vscode.workspace.getConfiguration();
         const written = configuration.inspect(

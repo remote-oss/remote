@@ -516,8 +516,24 @@ describe('the container connector: the connect (card containers-08)', () => {
   it('F-0408 BR-6: the CLI’s error events are logged as errors and the rest as debug lines', async () => {
     const scene = sceneOf();
     scene.cliEvents = [
-      {kind: 'log', level: 5, text: 'it broke', channel: undefined},
-      {kind: 'log', level: 3, text: 'it ran', channel: undefined},
+      {
+        kind: 'log',
+        level: 5,
+        text: 'it broke',
+        channel: undefined,
+        type: 'text',
+        timestamp: undefined,
+        startTimestamp: undefined,
+      },
+      {
+        kind: 'log',
+        level: 3,
+        text: 'it ran',
+        channel: undefined,
+        type: 'text',
+        timestamp: undefined,
+        startTimestamp: undefined,
+      },
       {
         kind: 'progress',
         name: 'Running',

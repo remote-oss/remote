@@ -277,6 +277,31 @@ describe('the output of the dev container CLI (card containers-04)', () => {
     );
   });
 
+  it('F-0415 5.1: an event keeps its type and its times', () => {
+    deepStrictEqual(
+      [
+        parseLogLine(
+          '{"type":"stop","level":2,"timestamp":120,"text":"Run: x","startTimestamp":100,"channel":"postCreate"}',
+        ),
+        parseLogLine(
+          '{"type":"start","level":2,"timestamp":100,"text":"Run: x","channel":"postCreate"}',
+        ),
+        parseLogLine('{"type":"raw","text":"a\\n","timestamp":"soon"}'),
+        parseLogLine('{"type":"other","text":"b"}'),
+      ].map(event =>
+        event.kind === 'log'
+          ? [event.type, event.timestamp, event.startTimestamp]
+          : undefined,
+      ),
+      [
+        ['stop', 120, 100],
+        ['start', 100, undefined],
+        ['raw', undefined, undefined],
+        ['text', undefined, undefined],
+      ],
+    );
+  });
+
   it('C3: text with ANSI codes is kept unchanged', () => {
     const event = parseLogLine(recorded('stderr-events.jsonl')[3] ?? '');
     deepStrictEqual(
@@ -292,6 +317,9 @@ describe('the output of the dev container CLI (card containers-04)', () => {
       level: 3,
       text: line,
       channel: undefined,
+      type: 'text',
+      timestamp: undefined,
+      startTimestamp: undefined,
     });
   });
 
@@ -312,6 +340,9 @@ describe('the output of the dev container CLI (card containers-04)', () => {
         level: 3,
         text: line,
         channel: undefined,
+        type: 'text',
+        timestamp: undefined,
+        startTimestamp: undefined,
       })),
     );
   });
@@ -320,8 +351,24 @@ describe('the output of the dev container CLI (card containers-04)', () => {
     deepStrictEqual(
       [parseLogLine('5'), parseLogLine('{"type":"text"}')],
       [
-        {kind: 'log', level: 3, text: '5', channel: undefined},
-        {kind: 'log', level: 3, text: '{"type":"text"}', channel: undefined},
+        {
+          kind: 'log',
+          level: 3,
+          text: '5',
+          channel: undefined,
+          type: 'text',
+          timestamp: undefined,
+          startTimestamp: undefined,
+        },
+        {
+          kind: 'log',
+          level: 3,
+          text: '{"type":"text"}',
+          channel: undefined,
+          type: 'text',
+          timestamp: undefined,
+          startTimestamp: undefined,
+        },
       ],
     );
   });

@@ -136,7 +136,15 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
         readConfiguration: (target, containerId, onEvent) => {
           scene.targets.push([target, containerId]);
           scene.calls.push('readConfiguration');
-          onEvent({kind: 'log', level: 3, text: 'reading', channel: undefined});
+          onEvent({
+            kind: 'log',
+            level: 3,
+            text: 'reading',
+            channel: undefined,
+            type: 'text',
+            timestamp: undefined,
+            startTimestamp: undefined,
+          });
           onEvent({
             kind: 'progress',
             name: 'Reading',

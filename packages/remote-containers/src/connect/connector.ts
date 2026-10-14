@@ -30,6 +30,7 @@ import {
   type ContainerLifecycle,
   type ContainerOutcome,
   type ContainerStep,
+  type LifecyclePresenter,
 } from '../lifecycle/container-lifecycle.ts';
 import {
   configurationEntries,
@@ -86,7 +87,11 @@ export interface ContainerConnectorDependencies {
   /** The CLI bridge for the environment its processes get. */
   cliFor(environment: Readonly<Record<string, string | undefined>>): CliBridge;
   /** The container lifecycle over an engine and a CLI. */
-  lifecycleFor(engine: EngineHost, cli: CliBridge): ContainerLifecycle;
+  lifecycleFor(
+    engine: EngineHost,
+    cli: CliBridge,
+    presenter: LifecyclePresenter,
+  ): ContainerLifecycle;
   /** The settings this connector reads, at every connect. */
   settings(): {
     dockerPath: unknown;
@@ -112,6 +117,8 @@ export interface ContainerConnectorDependencies {
   openRelay(
     request: RelayRequest,
   ): Promise<OpenRelay | {kind: 'failed'; failure: Failed}>;
+  /** What shows the lifecycle commands' terminal and progress. */
+  lifecyclePresenter: LifecyclePresenter;
   /** The extension's own store, where a rebuild command left its intent. */
   intents: IntentMemento;
   clock: () => number;
@@ -548,7 +555,11 @@ export function containerConnectorOf(
     if (checked.kind === 'failed') {
       return engineCheckFailed(checked.detail);
     }
-    lifecycle = dependencies.lifecycleFor(engine, bridge);
+    lifecycle = dependencies.lifecycleFor(
+      engine,
+      bridge,
+      dependencies.lifecyclePresenter,
+    );
     const rebuild = await takenRebuild(input);
     const prepared = await lifecycle.prepare(
       {
