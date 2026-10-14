@@ -1,0 +1,93 @@
+/**
+ * @fileoverview The registration of the container connector: the resolver of the `dev-container` authority behind the
+ * activation's own readiness, the window's label once the first resolve settles with the connection up, and the
+ * command the progress's "(show log)" link runs.
+ */
+
+import {
+  type LabelFormatterHost,
+  type Registration,
+  registerAuthorityLabel,
+  registerResolver,
+  type ResolverEditor,
+} from 'lib-authority';
+import type {CommandHost} from 'lib-identifiers';
+import {runtimeCommands} from '../identifiers.generated.ts';
+import type {Translate} from '../surfaces/engine-dialogs.ts';
+import type {ContainerConnector} from './connector.ts';
+import {phaseTitleOf, startTitleOf} from './progress-titles.ts';
+import {type PresenterPorts, slicePresenterOf} from './slice-presenter.ts';
+import {workspaceSuffixOf} from './window-identity.ts';
+
+/** What the registration needs of the editor. */
+export interface ConnectorRegistrationHost {
+  resolverEditor: ResolverEditor;
+  labels: LabelFormatterHost;
+  commands: CommandHost;
+  presenter: PresenterPorts;
+  translate: Translate;
+}
+
+/** What the activation hands over: whether the proposed resolvers API is there, and the log to reveal. */
+export interface ConnectorServed {
+  /** Whether the editor grants the resolvers proposal. */
+  resolversGranted: boolean;
+  revealLog(): void;
+}
+
+/** Registers the resolver, the label and the log command. */
+export async function registerContainerResolver(
+  host: ConnectorRegistrationHost,
+  connector: ContainerConnector,
+  served: ConnectorServed,
+): Promise<{registration: Registration['kind']; dispose(): void}> {
+  const {translate} = host;
+  const registration = await registerResolver(
+    host.resolverEditor,
+    {
+      family: 'dev-container',
+      connector,
+      presenter: slicePresenterOf(host.presenter, translate),
+      cancellable: false,
+      allowsTrust: false,
+      titleOf: phase => phaseTitleOf(phase, translate),
+      startTitle: () => startTitleOf(translate),
+    },
+    {
+      guard: () => Promise.resolve('serving'),
+      resolversGranted: () => Promise.resolve(served.resolversGranted),
+    },
+  );
+  const logCommand = host.commands.registerCommand(
+    runtimeCommands.revealLogTerminal,
+    () => {
+      served.revealLog();
+    },
+  );
+  let label: {dispose(): void} | undefined;
+  let disposed = false;
+  if (registration.kind === 'registered') {
+    const {resolver} = registration;
+    resolver.onFirstResolveSettled(() => {
+      const connection = resolver.currentConnection();
+      if (connection?.state === 'connected' && !disposed) {
+        label = registerAuthorityLabel(
+          host.labels,
+          connection.decodedTarget,
+          workspaceSuffixOf(connector.heldIdentity(), translate),
+        );
+      }
+    });
+  }
+  return {
+    registration: registration.kind,
+    dispose: () => {
+      disposed = true;
+      label?.dispose();
+      logCommand.dispose();
+      if (registration.kind === 'registered') {
+        registration.resolver.dispose();
+      }
+    },
+  };
+}

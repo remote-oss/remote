@@ -289,6 +289,9 @@ importers:
       lib-forwarding:
         specifier: workspace:*
         version: link:../lib-forwarding
+      lib-helper:
+        specifier: workspace:*
+        version: link:../lib-helper
       lib-host:
         specifier: workspace:*
         version: link:../lib-host
@@ -301,6 +304,9 @@ importers:
       lib-product:
         specifier: workspace:*
         version: link:../lib-product
+      lib-server:
+        specifier: workspace:*
+        version: link:../lib-server
       lib-standdown:
         specifier: workspace:*
         version: link:../lib-standdown

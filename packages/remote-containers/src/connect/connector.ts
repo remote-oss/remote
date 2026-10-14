@@ -1,0 +1,518 @@
+/**
+ * @fileoverview The connector the resolver host runs for every dev container resolve of the window: it checks the
+ * engine, has the container found or made, has the server installed and started inside it, relays a port on the host's
+ * loopback into it, and holds the connection until the window ends or connects again.
+ */
+
+import type {
+  ConnectInput,
+  ConnectPhase,
+  Connected,
+  Connector,
+  ContainerTarget,
+  Failed,
+} from 'lib-authority';
+import type {HostChannel} from 'lib-host';
+import type {Logger} from 'lib-log';
+import type {OverrideValue} from 'lib-product';
+import {
+  type DevContainerFolder,
+  devContainerTargetOf,
+} from '../authority/payload.ts';
+import type {CliTarget} from '../cli/cli-arguments.ts';
+import type {CliBridge} from '../cli/cli-bridge.ts';
+import type {CliEvent} from '../cli/cli-lines.ts';
+import type {EngineHost} from '../engine/engine-host.ts';
+import {executableOf} from '../engine/executable.ts';
+import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
+import {execChannelOf} from '../exec/exec-channel.ts';
+import {
+  type ContainerLifecycle,
+  type ContainerOutcome,
+  type ContainerStep,
+} from '../lifecycle/container-lifecycle.ts';
+import {idLabels} from '../lifecycle/labels.ts';
+import {withContext} from './context-engine.ts';
+import {
+  cancelled,
+  containerGone,
+  containerSetupFailed,
+  containerUnusable,
+  engineCheckFailed,
+  malformedAuthority,
+  remoteEngine,
+  transportLost,
+} from './failures.ts';
+import type {OpenRelay, RelayRequest} from './host-relay.ts';
+import {reconnectionOutcomeOf, type ContainerState} from './reconnection.ts';
+import type {
+  ServerRequest,
+  ServerResult,
+  StartedContainerServer,
+} from './server-steps.ts';
+import type {WindowIdentity} from './window-identity.ts';
+
+/** The CLI's level for an error event. */
+const CLI_ERROR_LEVEL = 5;
+
+/** How many characters of a container's identifier the log shows. */
+const IDENTIFIER_LENGTH = 12;
+
+/** The connector, with the identity the window's label reads. */
+export interface ContainerConnector extends Connector {
+  /** The identity of the connection the window holds; nothing before the first connect. */
+  heldIdentity(): WindowIdentity | undefined;
+}
+
+/** What the connector is made from. */
+export interface ContainerConnectorDependencies {
+  /** The engine for the program a connect will spawn. */
+  engineFor(file: string): EngineHost;
+  /** The CLI bridge for the environment its processes get. */
+  cliFor(environment: Readonly<Record<string, string | undefined>>): CliBridge;
+  /** The container lifecycle over an engine and a CLI. */
+  lifecycleFor(engine: EngineHost, cli: CliBridge): ContainerLifecycle;
+  /** The settings this connector reads, at every connect. */
+  settings(): {
+    dockerPath: unknown;
+    serverDownloadBaseUrl: OverrideValue | undefined;
+    serverDownloadFolder: unknown;
+  };
+  /** What the second check needs besides the engine and the program. */
+  preflight: Omit<PreflightDependencies, 'engineFor' | 'dockerPath'>;
+  editorEnvironment: Readonly<Record<string, string | undefined>>;
+  /** The server's steps over the channel, which the lib-server composition provides. */
+  runServer(
+    request: ServerRequest,
+    settings: {
+      serverDownloadBaseUrl: OverrideValue | undefined;
+      serverDownloadFolder: unknown;
+    },
+  ): Promise<ServerResult>;
+  /** The relay into the container, which the host's loopback listener provides. */
+  openRelay(
+    request: RelayRequest,
+  ): Promise<OpenRelay | {kind: 'failed'; failure: Failed}>;
+  clock: () => number;
+  logger: Logger;
+  revealLog(): void;
+}
+
+/** A set of listeners that each hear what is told, as the arguments the listeners take. */
+function subscribers<Arguments extends unknown[]>(): {
+  subscribe(listener: (...told: Arguments) => void): () => void;
+  tell(...told: Arguments): void;
+} {
+  const listeners = new Set<(...told: Arguments) => void>();
+  return {
+    subscribe: listener => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    tell: (...told) => {
+      for (const listener of [...listeners]) {
+        try {
+          listener(...told);
+        } catch {
+          // A listener's fault is its own; the others and the connect go on.
+        }
+      }
+    },
+  };
+}
+
+/** The connection the window holds. */
+interface Held {
+  containerId: string;
+  startedAt: string;
+  engine: EngineHost;
+  channel: HostChannel;
+  server: StartedContainerServer;
+  relay: OpenRelay;
+  identity: WindowIdentity;
+  connected: Connected;
+}
+
+/** The state of a container, or why it is not known. */
+type Inspected = ContainerState | 'unreachable';
+
+/** The state of the container from `docker inspect`. */
+async function inspectedState(
+  engine: EngineHost,
+  containerId: string,
+  cancellation: AbortSignal,
+): Promise<Inspected> {
+  const outcome = await engine.run(
+    [
+      'inspect',
+      '--type',
+      'container',
+      '--format',
+      '{{json .State}}',
+      containerId,
+    ],
+    {kind: 'none'},
+    {cancellation},
+  );
+  if (outcome.kind !== 'ran') {
+    return 'unreachable';
+  }
+  if (outcome.status !== 0) {
+    return outcome.stderr.includes('No such') ? 'missing' : 'unreachable';
+  }
+  try {
+    const state = JSON.parse(outcome.stdout) as {
+      Status?: unknown;
+      StartedAt?: unknown;
+    };
+    return typeof state.Status === 'string' &&
+      typeof state.StartedAt === 'string'
+      ? {status: state.Status, startedAt: state.StartedAt}
+      : 'unreachable';
+  } catch {
+    return 'unreachable';
+  }
+}
+
+/** The text of a container identifier the log shows. */
+function shortId(containerId: string): string {
+  return containerId.slice(0, IDENTIFIER_LENGTH);
+}
+
+/** Whether a signal has aborted; read again after each wait, since it can change while one waits. */
+function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
+/** The connector of Dev Containers. */
+export function containerConnectorOf(
+  dependencies: ContainerConnectorDependencies,
+): ContainerConnector {
+  const {logger} = dependencies;
+  const phases = subscribers<[ConnectPhase]>();
+  const lost = subscribers<[]>();
+  const closed = subscribers<[]>();
+  let running: AbortController | undefined;
+  let lifecycle: ContainerLifecycle | undefined;
+  let held: Held | undefined;
+  let checking = false;
+
+  /** Gives back the connection the window holds, and stops hearing its relay. */
+  function releaseHeld(): void {
+    const current = held;
+    held = undefined;
+    current?.relay.close();
+  }
+
+  /** Tells whether the transport of `connection` is still good, after one of its relayed connections ended. */
+  async function checkAfterClose(connection: Held): Promise<void> {
+    if (checking) {
+      return;
+    }
+    checking = true;
+    try {
+      const state = await inspectedState(
+        connection.engine,
+        connection.containerId,
+        new AbortController().signal,
+      );
+      if (held !== connection || state === 'unreachable') {
+        return;
+      }
+      const outcome = reconnectionOutcomeOf(connection, state, true);
+      if (outcome === 'transportLost') {
+        lost.tell();
+      } else if (outcome === 'containerGone') {
+        closed.tell();
+      }
+    } finally {
+      checking = false;
+    }
+  }
+
+  /** What a resolve answers when the window holds a connection and core reconnects. */
+  async function reconnect(
+    connection: Held,
+    cancellation: AbortSignal,
+  ): Promise<Connected | Failed> {
+    const state = await inspectedState(
+      connection.engine,
+      connection.containerId,
+      cancellation,
+    );
+    if (state === 'unreachable') {
+      return transportLost();
+    }
+    const alive =
+      state !== 'missing' &&
+      state.status === 'running' &&
+      state.startedAt === connection.startedAt
+        ? await serverAlive(connection, cancellation)
+        : undefined;
+    const outcome = reconnectionOutcomeOf(connection, state, alive);
+    if (outcome === 'held') {
+      return connection.connected;
+    }
+    return outcome === 'containerGone' ? containerGone() : transportLost();
+  }
+
+  /** Whether the held server's process runs, asked over the held channel. */
+  async function serverAlive(
+    connection: Held,
+    cancellation: AbortSignal,
+  ): Promise<boolean> {
+    const outcome = await connection.channel.runScript(
+      {
+        script: `kill -0 ${String(connection.server.processId)}`,
+        interpreter: 'posixShell',
+        environment: {},
+        input: {kind: 'text', text: ''},
+        cancellation,
+      },
+      () => undefined,
+    );
+    return outcome.kind === 'exited' && outcome.status === 0;
+  }
+
+  /** Writes a CLI event to the log: errors as errors, the rest as debug lines. */
+  function logCliEvent(event: CliEvent): void {
+    if (event.kind === 'progress') {
+      logger.debug(`${event.name}: ${event.status}`);
+    } else if (event.level >= CLI_ERROR_LEVEL) {
+      logger.error(event.text);
+    } else {
+      logger.debug(event.text);
+    }
+  }
+
+  /** The failure a container outcome that is not ready ends the connect with. */
+  function failureOf(
+    outcome: Exclude<ContainerOutcome, {kind: 'ready'}>,
+  ): Failed {
+    if (outcome.kind === 'cancelled') {
+      return cancelled();
+    }
+    return outcome.kind === 'unusable'
+      ? containerUnusable()
+      : containerSetupFailed();
+  }
+
+  /** What the CLI is told to read the configuration of the container's folder. */
+  function cliTargetOf(
+    folder: DevContainerFolder,
+    configFile: string,
+    dockerPath: string,
+  ): CliTarget {
+    return {
+      workspaceFolder: folder.hostPath,
+      configFile,
+      dockerPath,
+      idLabels: idLabels(folder.hostPath, configFile),
+      mountWorkspaceGitRoot: true,
+      mounts: [],
+      logLevel: 'info',
+    };
+  }
+
+  async function connectFresh(
+    folder: DevContainerFolder,
+    controller: AbortController,
+  ): Promise<Connected | Failed> {
+    const cancellation = controller.signal;
+    const settings = dependencies.settings();
+    const dockerPath =
+      typeof settings.dockerPath === 'string' && settings.dockerPath !== ''
+        ? settings.dockerPath
+        : 'docker';
+    const configFile = folder.configFile.fsPath ?? folder.configFile.path;
+    const file = executableOf(settings.dockerPath, undefined);
+    const written = file.kind === 'spawn' ? file.file : dockerPath;
+    const unwrapped = dependencies.engineFor(written);
+    const engine =
+      folder.context === undefined
+        ? unwrapped
+        : withContext(unwrapped, folder.context);
+    const bridge = dependencies.cliFor(
+      folder.context === undefined
+        ? dependencies.editorEnvironment
+        : {...dependencies.editorEnvironment, DOCKER_CONTEXT: folder.context},
+    );
+    phases.tell({name: 'initializing'});
+    const checked = await secondCheck(
+      {
+        ...dependencies.preflight,
+        engineFor: () => engine,
+        dockerPath: () => settings.dockerPath,
+      },
+      undefined,
+      cancellation,
+    );
+    if (checked.kind === 'failed') {
+      return engineCheckFailed(checked.detail);
+    }
+    lifecycle = dependencies.lifecycleFor(engine, bridge);
+    const prepared = await lifecycle.prepare(
+      {
+        folder: folder.hostPath,
+        configFile,
+        dockerPath,
+        logLevel: 'info',
+      },
+      (step: ContainerStep) => {
+        logger.info(step === 'startingContainer' ? 'Starting container' : step);
+      },
+      logCliEvent,
+      cancellation,
+    );
+    if (prepared.kind !== 'ready') {
+      return failureOf(prepared);
+    }
+    if (isAborted(cancellation)) {
+      return cancelled();
+    }
+    logger.info(
+      `container ${shortId(prepared.containerId)} was ${prepared.created ? 'newly started' : 'already running'}`,
+    );
+    const configuration = await bridge.readConfiguration(
+      cliTargetOf(folder, configFile, dockerPath),
+      prepared.containerId,
+      logCliEvent,
+      cancellation,
+    );
+    let name: string | undefined;
+    if (configuration.kind === 'configuration') {
+      const written = configuration.configuration.name;
+      name = typeof written === 'string' ? written : undefined;
+    } else {
+      logger.warn(
+        `the configuration's name could not be read: ${configuration.kind}`,
+      );
+    }
+    const channel = execChannelOf(
+      engine,
+      prepared.containerId,
+      prepared.remoteUser,
+    );
+    const server = await dependencies.runServer(
+      {
+        channel,
+        remoteUser: prepared.remoteUser,
+        volumeMounted: prepared.volumeMounted,
+        onPhase: phase => {
+          phases.tell({name: phase});
+        },
+        cancellation,
+      },
+      settings,
+    );
+    if (server.kind === 'failed') {
+      return server.failure;
+    }
+    if (isAborted(cancellation)) {
+      return cancelled();
+    }
+    const owner: {connection?: Held} = {};
+    const relay = await dependencies.openRelay({
+      engine,
+      containerId: prepared.containerId,
+      remoteUser: prepared.remoteUser,
+      nodePath: server.nodePath,
+      relayPath: server.relayPath,
+      containerPort: server.port,
+      onConnectionClosed: () => {
+        const {connection} = owner;
+        if (connection !== undefined && held === connection) {
+          void checkAfterClose(connection);
+        }
+      },
+    });
+    if (relay.kind === 'failed') {
+      return relay.failure;
+    }
+    const started = await inspectedState(
+      engine,
+      prepared.containerId,
+      cancellation,
+    );
+    if (isAborted(cancellation)) {
+      // The window was torn down while the connect finished: give the relay back.
+      relay.close();
+      return cancelled();
+    }
+    const connected: Connected = {
+      address: {host: '127.0.0.1', port: relay.hostPort},
+      connectionToken: server.connectionToken,
+      extensionHostEnv: {},
+      environmentTunnels: [],
+      trusted: false,
+    };
+    held = {
+      containerId: prepared.containerId,
+      startedAt:
+        started === 'missing' || started === 'unreachable'
+          ? ''
+          : started.startedAt,
+      engine,
+      channel,
+      server,
+      relay,
+      identity: {name, context: folder.context},
+      connected,
+    };
+    const connection = held;
+    owner.connection = connection;
+    relay.onClosed(() => {
+      if (held === connection) {
+        lost.tell();
+      }
+    });
+    return connected;
+  }
+
+  return {
+    async connect(input: ConnectInput): Promise<Connected | Failed> {
+      const controller = new AbortController();
+      running = controller;
+      const began = dependencies.clock();
+      logger.info('Resolving Remote');
+      try {
+        const target = input.target as ContainerTarget;
+        if (input.isReconnection && held !== undefined) {
+          return await reconnect(held, controller.signal);
+        }
+        releaseHeld();
+        if (target.outer !== undefined) {
+          return remoteEngine();
+        }
+        const decoded = devContainerTargetOf(target.payload);
+        if ('malformed' in decoded || decoded.kind === 'legacy') {
+          return malformedAuthority();
+        }
+        const result = await connectFresh(decoded, controller);
+        return result;
+      } finally {
+        logger.info(
+          `Resolving Remote: ${String(dependencies.clock() - began)} ms`,
+        );
+        if (running === controller) {
+          running = undefined;
+        }
+      }
+    },
+    cancel() {
+      running?.abort();
+      running = undefined;
+      lifecycle?.stopBackground();
+      releaseHeld();
+    },
+    revealDetails() {
+      dependencies.revealLog();
+    },
+    heldIdentity: () => held?.identity,
+    onPhase: listener => phases.subscribe(listener),
+    onTransportLost: listener => lost.subscribe(listener),
+    onTransportClosed: listener => closed.subscribe(listener),
+  };
+}

@@ -48,7 +48,11 @@ export interface ProbedHost {
 /** Why the probe gave no host. */
 export type ProbeFailure =
   | {kind: 'unsupportedPlatform'; reported: string}
-  | {kind: 'unsupportedArch'; reported: string}
+  | {
+      kind: 'unsupportedArch';
+      reported: string;
+      libc: 'glibc' | 'musl' | 'unknown';
+    }
   | {kind: 'prerequisiteMissing'; missing: readonly string[]}
   | {kind: 'probeFailed'; status: string}
   | {kind: 'unreadableFacts'; field: 'os' | 'arch'}
@@ -65,6 +69,11 @@ const REQUIRED_TOOLS = ['tar'];
 const TOOL_NAMES = ['wget', 'curl', 'tar', 'unzip', 'flock', 'gzip'];
 
 const OPERATING_SYSTEMS = ['linux', 'darwin'] as const;
+
+/** The C library a fact names; any other value is unknown. */
+function libcOf(fact: string | undefined): 'glibc' | 'musl' | 'unknown' {
+  return fact === 'glibc' || fact === 'musl' ? fact : 'unknown';
+}
 
 /** The host a block describes, or the field that no host of this library can have. */
 function hostOf(
@@ -84,10 +93,7 @@ function hostOf(
     host: {
       operatingSystem,
       architecture,
-      libc:
-        facts.libc === 'glibc' || facts.libc === 'musl'
-          ? facts.libc
-          : 'unknown',
+      libc: libcOf(facts.libc),
       release: facts.release ?? '',
       home: facts.home ?? '',
       temporaryFolder: facts.tmp ?? '',
@@ -134,7 +140,11 @@ export async function probe(
   if (block.status === 'UnsupportedArch') {
     return {
       kind: 'failed',
-      failure: {kind: 'unsupportedArch', reported: block.hostFacts.arch ?? ''},
+      failure: {
+        kind: 'unsupportedArch',
+        reported: block.hostFacts.arch ?? '',
+        libc: libcOf(block.hostFacts.libc),
+      },
     };
   }
   if (block.status !== 'Ok') {

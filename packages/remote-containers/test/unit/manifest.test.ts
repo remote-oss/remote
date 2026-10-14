@@ -43,6 +43,12 @@ const ENGLISH = {
   'configuration.title': 'Dev Containers',
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
+  'setting.ServerDownloadBaseUrl.description':
+    'Base URL for downloading the VS Code server. The path `/commit:{commit}/server-{platform}/{quality}` will be appended to this URL. Platforms include `linux-x64`, `linux-armhf`, `linux-arm64`, `linux-alpine`, and `alpine-arm64`. Quality is `stable` or `insider`.',
+  'setting.ServerDownloadBaseUrl.patternError':
+    'Must be a URL (e.g., https://example.com or https://example.com:8080/path).',
+  'setting.ServerDownloadFolder.description':
+    "Local folder for downloading and caching VS Code server archives. The archives will be stored as `{downloadFolder}/{commit}/vscode-server-{platform}[-{quality}].tar.gz`. Platforms include `linux-x64`, `linux-armhf`, `linux-arm64`, `linux-alpine`, and `alpine-arm64`. Quality is `stable` or `insider`. The `-{quality}` suffix is omitted for `stable`. The default is in the system's temp folder.",
 };
 
 describe('the manifest', () => {
@@ -100,6 +106,19 @@ describe('the manifest', () => {
               scope: 'application',
               description: '%setting.Dockerpath.description%',
             },
+            'remote.serverDownloadBaseUrl': {
+              type: 'string',
+              scope: 'application',
+              pattern: '^(?:[a-zA-Z][a-zA-Z0-9+.-]*://[^\\s/?#]+[^\\s]*)?$',
+              patternErrorMessage:
+                '%setting.ServerDownloadBaseUrl.patternError%',
+              description: '%setting.ServerDownloadBaseUrl.description%',
+            },
+            'remote.serverDownloadFolder': {
+              type: 'string',
+              scope: 'application',
+              description: '%setting.ServerDownloadFolder.description%',
+            },
           },
         },
       },
@@ -108,10 +127,12 @@ describe('the manifest', () => {
         'jsonc-parser': '3.3.1',
         'lib-authority': 'workspace:*',
         'lib-forwarding': 'workspace:*',
+        'lib-helper': 'workspace:*',
         'lib-host': 'workspace:*',
         'lib-identifiers': 'workspace:*',
         'lib-log': 'workspace:*',
         'lib-product': 'workspace:*',
+        'lib-server': 'workspace:*',
         'lib-standdown': 'workspace:*',
       },
     });
@@ -150,7 +171,7 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-1406.5: package.nls.json holds the four keys, and every key package.json uses is one of them', () => {
+  it('F-1406.5: package.nls.json holds its keys, and every key package.json uses is one of them', () => {
     const used = [...JSON.stringify(MANIFEST).matchAll(/%([^%"]+)%/g)].map(
       match => match[1],
     );
@@ -176,7 +197,7 @@ describe('the manifest', () => {
       standingDownKey: 'remote-containers:standingDown',
       namespaces: {
         commands: ['remote-containers.'],
-        settings: ['dev.containers.'],
+        settings: ['dev.containers.', 'remote.serverDownload'],
         contextKeys: ['remote-containers:'],
         internalCommands: ['remote-oss.'],
       },
@@ -184,7 +205,13 @@ describe('the manifest', () => {
         {id: 'remote-containers:standingDown', setter: 'extension'},
       ],
       infoLineCommands: [],
-      runtimeCommands: [],
+      runtimeCommands: [
+        {
+          id: 'remote-containers.revealLogTerminal',
+          purpose:
+            'the "(show log)" link of the connect progress, which reveals the Dev Containers log',
+        },
+      ],
       internal: [{id: 'remote-oss.gate.claim', role: 'called', kind: 'query'}],
       invented: [
         {

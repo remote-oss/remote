@@ -60,6 +60,18 @@
           "default": "docker",
           "scope": "application",
           "description": "%setting.Dockerpath.description%"
+        },
+        "remote.serverDownloadBaseUrl": {
+          "type": "string",
+          "scope": "application",
+          "pattern": "^(?:[a-zA-Z][a-zA-Z0-9+.-]*://[^\\s/?#]+[^\\s]*)?$",
+          "patternErrorMessage": "%setting.ServerDownloadBaseUrl.patternError%",
+          "description": "%setting.ServerDownloadBaseUrl.description%"
+        },
+        "remote.serverDownloadFolder": {
+          "type": "string",
+          "scope": "application",
+          "description": "%setting.ServerDownloadFolder.description%"
         }
       }
     }
@@ -69,10 +81,12 @@
     "jsonc-parser": "3.3.1",
     "lib-authority": "workspace:*",
     "lib-forwarding": "workspace:*",
+    "lib-helper": "workspace:*",
     "lib-host": "workspace:*",
     "lib-identifiers": "workspace:*",
     "lib-log": "workspace:*",
     "lib-product": "workspace:*",
+    "lib-server": "workspace:*",
     "lib-standdown": "workspace:*"
   }
 }

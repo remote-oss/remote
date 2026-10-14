@@ -4,19 +4,35 @@
  */
 
 import {readFile} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
-import {familySetupPortsOf} from 'lib-authority';
+import {familySetupPortsOf, resolverEditorOf} from 'lib-authority';
+import {nodeLocalPort, nodePortProber} from 'lib-forwarding';
+import {nodeTimer} from 'lib-helper';
 import {identifierHost} from 'lib-identifiers';
 import {profileOf} from 'lib-product';
+import {downloadPortOf, nodeClientFiles} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
 import {activateContainers} from './activation.ts';
+import {cliBridgeOf} from './cli/cli-bridge.ts';
+import {cliPathsOf} from './cli/cli-paths.ts';
+import {nodeCliHost} from './cli/node-cli-host.ts';
+import {systemCliPorts} from './cli/node-cli-ports.ts';
+import {overrideStoreOf} from './cli/override-files.ts';
+import {containerConnectorOf} from './connect/connector.ts';
+import {openHostRelay} from './connect/host-relay.ts';
+import {registerContainerResolver} from './connect/register-connector.ts';
+import {runServerSteps} from './connect/server-steps.ts';
 import {nodeEngineHost} from './engine/node-engine-host.ts';
 import {
   enabledApiProposals,
+  runtimeCommands,
   settings,
   standDown,
 } from './identifiers.generated.ts';
+import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
+import {licenceModalOf} from './surfaces/licence-modal.ts';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
 const STAND_DOWN_WARNING =
@@ -121,10 +137,153 @@ export async function activate(
     handlers: () => ({}),
   });
   if (result.kind === 'serving') {
-    context.subscriptions.push({
-      dispose: () => {
-        result.dispose();
+    const {served} = result;
+    const logger = served.logger;
+    const host = identifierHost(vscode, manifest);
+    const paths = cliPathsOf(context.extensionPath);
+    const scheduler = {setTimer: nodeTimer};
+    const clock = {
+      now: Date.now,
+      wait: (milliseconds: number) =>
+        new Promise<void>(resolve => {
+          setTimeout(resolve, milliseconds);
+        }),
+    };
+    const download = downloadPortOf((address, init) => fetch(address, init));
+    const acceptances = {
+      isAccepted: (storeKey: string) =>
+        context.globalState.get(storeKey) === true,
+      accept: async (storeKey: string) => {
+        await context.globalState.update(storeKey, true);
+      },
+    };
+    const modal = licenceModalOf(
+      {
+        showModal: (message, detail, buttons) =>
+          vscode.window.showWarningMessage(
+            message,
+            {modal: true, detail},
+            ...buttons,
+          ),
+      },
+      translate,
+      {
+        displayName: manifest.displayName,
+        applicationName: profile.applicationName,
+      },
+    );
+    const connector = containerConnectorOf({
+      engineFor: file => served.preflight.engineFor(file),
+      cliFor: environment =>
+        cliBridgeOf(
+          nodeCliHost(
+            {...paths, node: process.execPath},
+            environment,
+            systemCliPorts,
+          ),
+          {readText: file => readFile(file, 'utf8')},
+          overrideStoreOf(context.globalStorageUri.fsPath),
+          environment,
+          logger,
+        ),
+      lifecycleFor: (engine, bridge) =>
+        // eslint-disable-next-line id-length -- the lifecycle's dependency is named cli
+        containerLifecycleOf({engine, cli: bridge, logger}),
+      settings: () => {
+        const configuration = vscode.workspace.getConfiguration();
+        const written = configuration.inspect(
+          settings.serverDownloadBaseUrl.id,
+        )?.globalValue;
+        return {
+          dockerPath: configuration.get(settings.dockerPath.id),
+          serverDownloadBaseUrl:
+            typeof written === 'string' && written !== ''
+              ? {value: written, layer: 'defaultProfileUser'}
+              : undefined,
+          serverDownloadFolder: configuration.get(
+            settings.serverDownloadFolder.id,
+          ),
+        };
+      },
+      preflight: served.preflight,
+      editorEnvironment: process.env,
+      runServer: (request, serverSettings) =>
+        runServerSteps(
+          {
+            profile,
+            override: serverSettings.serverDownloadBaseUrl,
+            downloadFolder: serverSettings.serverDownloadFolder,
+            temporaryFolder: os.tmpdir(),
+            store: acceptances,
+            modal,
+            download,
+            files: nodeClientFiles,
+            clock,
+            newTemporaryToken: () =>
+              `${String(process.pid)}-${String(clock.now())}`,
+            logger,
+          },
+          request,
+        ),
+      openRelay: request =>
+        openHostRelay(
+          {
+            local: nodeLocalPort(),
+            prober: nodePortProber(),
+            scheduler,
+            logger,
+          },
+          request,
+        ),
+      clock: Date.now,
+      logger,
+      revealLog: () => {
+        logChannel?.show(true);
       },
     });
+    const registered = await registerContainerResolver(
+      {
+        resolverEditor: resolverEditorOf(vscode, {
+          detailsCommand: runtimeCommands.revealLogTerminal,
+        }),
+        labels: vscode.workspace,
+        commands: host,
+        presenter: {
+          showError: (message, detail, items) =>
+            Promise.resolve(
+              vscode.window.showErrorMessage(
+                message,
+                {modal: true, detail},
+                ...items,
+              ),
+            ),
+          openSetting: setting =>
+            vscode.commands.executeCommand(
+              'workbench.action.openSettings',
+              setting,
+            ),
+        },
+        translate,
+      },
+      connector,
+      {
+        resolversGranted: !served.missing.includes('resolvers'),
+        revealLog: () => {
+          logChannel?.show(true);
+        },
+      },
+    );
+    context.subscriptions.push(
+      {
+        dispose: () => {
+          registered.dispose();
+        },
+      },
+      {
+        dispose: () => {
+          result.dispose();
+        },
+      },
+    );
   }
 }

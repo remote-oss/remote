@@ -4,7 +4,7 @@
   "standingDownKey": "remote-containers:standingDown",
   "namespaces": {
     "commands": ["remote-containers."],
-    "settings": ["dev.containers."],
+    "settings": ["dev.containers.", "remote.serverDownload"],
     "contextKeys": ["remote-containers:"],
     "internalCommands": ["remote-oss."]
   },
@@ -15,7 +15,12 @@
     }
   ],
   "infoLineCommands": [],
-  "runtimeCommands": [],
+  "runtimeCommands": [
+    {
+      "id": "remote-containers.revealLogTerminal",
+      "purpose": "the \"(show log)\" link of the connect progress, which reveals the Dev Containers log"
+    }
+  ],
   "internal": [
     {
       "id": "remote-oss.gate.claim",

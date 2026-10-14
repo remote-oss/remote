@@ -340,7 +340,7 @@ describe('probe (V2)', () => {
     );
     deepStrictEqual(
       outcome.kind === 'failed' ? outcome.failure : outcome.kind,
-      {kind: 'unsupportedArch', reported: ''},
+      {kind: 'unsupportedArch', reported: '', libc: 'unknown'},
     );
   });
 
@@ -364,7 +364,19 @@ describe('probe (V2)', () => {
     );
     deepStrictEqual(
       outcome.kind === 'failed' ? outcome.failure : outcome.kind,
-      {kind: 'unsupportedArch', reported: 'i686'},
+      {kind: 'unsupportedArch', reported: 'i686', libc: 'unknown'},
+    );
+  });
+
+  it('F-2401.AC-10: UnsupportedArch names the C library it found', async () => {
+    const outcome = await probe(
+      recording(block('UnsupportedArch', 'host.arch=armv7l', 'host.libc=musl')),
+      parametersFor(),
+      NEVER_CANCELLED,
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure : outcome.kind,
+      {kind: 'unsupportedArch', reported: 'armv7l', libc: 'musl'},
     );
   });
 
