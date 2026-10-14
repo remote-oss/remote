@@ -8,6 +8,7 @@
 import type {CommandHandler} from 'lib-identifiers';
 import {
   type AddHostProblem,
+  lexConfiguration,
   parseAddHostCommand,
   writeHostBlock,
 } from 'lib-ssh';
@@ -106,13 +107,19 @@ export function addNewSshHostHandler(ports: AddHostPorts): CommandHandler {
         places.platform,
         translate,
       );
+      const exists = await files.exists(file);
+      let fileText = '';
+      if (exists) {
+        fileText = await files.read(file);
+        const lexed = lexConfiguration(fileText);
+        if ('parseError' in lexed) {
+          throw new Error(`${file}: ${lexed.parseError}`);
+        }
+      }
       const created = await createdFile(files, file, picked.role);
       await files.write(
         file,
-        writeHostBlock(
-          created.exists ? await files.read(file) : '',
-          parsed.block,
-        ),
+        writeHostBlock(created.exists ? fileText : '', parsed.block),
       );
       const openConfig = ownText({id: 'S099', values: []}, translate);
       const connectNow = ownText({id: 'S025', values: []}, translate);
