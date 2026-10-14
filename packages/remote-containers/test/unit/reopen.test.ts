@@ -4,6 +4,7 @@ import {MemorySink} from 'lib-log/testing/memory-sink';
 import {devContainerTargetOf} from '../../src/authority/payload.ts';
 import type {CliFailure, ConfigurationResult} from '../../src/cli/cli-lines.ts';
 import {reopenInContainer} from '../../src/open/reopen.ts';
+import type {PickerAnswer} from '../../src/config/choose-configuration.ts';
 import type {ReopenPorts} from '../../src/open/reopen-ports.ts';
 
 const FOLDER = '/w/p';
@@ -25,6 +26,10 @@ interface Setup {
   check: 'proceed' | 'stopped';
   context: string | undefined;
   existing: string[];
+  /** What the picker answers, and what the notices and dialogs showed. */
+  pick: PickerAnswer;
+  shown: string[];
+  contents: Record<string, string>;
   remoteName: string | undefined;
   folders: Array<{scheme: string; fsPath: string}>;
   trusted: boolean;
@@ -43,6 +48,9 @@ function setup(): Setup {
     check: 'proceed',
     context: undefined,
     existing: [CONFIG],
+    pick: {kind: 'picked', index: 0},
+    shown: [],
+    contents: {},
     remoteName: undefined,
     folders: [{scheme: 'file', fsPath: FOLDER}],
     trusted: true,
@@ -69,12 +77,50 @@ function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         scheme: 'file',
       }),
     },
-    files: {
-      isFile: file => {
-        state.calls.push(`isFile ${file}`);
-        return Promise.resolve(state.existing.includes(file));
+    config: {
+      files: {
+        list: folder => {
+          const entries = new Map<string, 'file' | 'folder'>();
+          for (const file of state.existing) {
+            const relative = file.slice(FOLDER.length + 1).split('/');
+            const parent = [FOLDER, ...relative.slice(0, -1)].join('/');
+            if (parent === folder) {
+              entries.set(relative.at(-1) ?? '', 'file');
+            }
+            for (let depth = 1; depth < relative.length; depth += 1) {
+              const above = [FOLDER, ...relative.slice(0, depth - 1)].join('/');
+              if (above === folder) {
+                entries.set(relative[depth - 1] ?? '', 'folder');
+              }
+            }
+          }
+          return Promise.resolve(
+            [...entries].map(([name, kind]) => ({name, kind})),
+          );
+        },
+        read: file =>
+          Promise.resolve(Buffer.from(state.contents[file] ?? '{"image":"i"}')),
       },
-      subfolders: () => Promise.resolve([]),
+      surfaces: {
+        pick: rows => {
+          state.shown.push(`pick ${String(rows.length)}`);
+          return Promise.resolve(state.pick);
+        },
+        dialogs: {
+          showError: (message, detail) => {
+            state.shown.push(`error ${message}${detail}`);
+            return Promise.resolve(undefined);
+          },
+          revealLog: () => undefined,
+        },
+        showWarning: () => Promise.resolve(undefined),
+        openPreview: () => Promise.resolve(),
+        showInformation: message => {
+          state.shown.push(`info ${message}`);
+        },
+      },
+      compare: (left, right) => left.localeCompare(right, 'en'),
+      translate: template => template,
     },
     settings: {dockerPath: () => state.dockerPath},
     engine: {
@@ -114,6 +160,12 @@ function linesOf(sink: MemorySink): string[] {
   return sink.lines.map(line => `${line.level}: ${line.message}`);
 }
 
+/** The target the first open went to. */
+function openedTarget(state: Setup): ReturnType<typeof devContainerTargetOf> {
+  const {authority} = state.commands[0]?.parameters[0] as {authority: string};
+  return devContainerTargetOf(authority.slice('dev-container+'.length));
+}
+
 /** Runs the command once. */
 async function reopened(state: Setup) {
   const {ports, sink} = portsOf(state);
@@ -133,7 +185,7 @@ describe('Reopen in Container', () => {
     );
     deepStrictEqual(
       [
-        state.calls.filter(call => !call.startsWith('isFile')),
+        state.calls,
         state.commands.map(each => each.command),
         authority.startsWith('dev-container+'),
         (state.commands[0]?.parameters[0] as {path: string}).path,
@@ -169,11 +221,7 @@ describe('Reopen in Container', () => {
     const state = setup();
     state.context = 'ctx1';
     await reopened(state);
-    const authority = (state.commands[0]?.parameters[0] as {authority: string})
-      .authority;
-    const target = devContainerTargetOf(
-      authority.slice('dev-container+'.length),
-    );
+    const target = openedTarget(state);
     deepStrictEqual('context' in target ? target.context : target, 'ctx1');
   });
 
@@ -238,33 +286,57 @@ describe('Reopen in Container', () => {
     deepStrictEqual([state.calls, state.commands], [['firstCheck /w/p'], []]);
   });
 
-  it('F-0301 5.0: no configuration opens nothing and says so in the log', async () => {
+  it('F-0301 6.2: no configuration opens nothing, shows the notice of ours once, and says so in the log', async () => {
     const state = setup();
     state.existing = [];
     const {lines} = await reopened(state);
     deepStrictEqual(
-      [state.commands, lines],
+      [state.commands, state.shown.length, lines],
       [
         [],
+        1,
         [
-          'info: Reopen in Container found no dev container configuration in /w/p',
+          'info: no dev container configuration in /w/p',
+          'info: Reopen in Container found no configuration in /w/p',
         ],
       ],
     );
   });
 
-  it('F-0301 5.0: two configurations open nothing and the log names them', async () => {
+  it('F-0301 5.0 step 4: two configurations show the picker, and the one picked is what the window reloads on', async () => {
     const state = setup();
     state.existing = [CONFIG, '/w/p/.devcontainer.json'];
-    const {lines} = await reopened(state);
+    state.pick = {kind: 'picked', index: 1};
+    await reopened(state);
+    const target = openedTarget(state);
     deepStrictEqual(
-      [state.commands, lines],
+      [state.shown, 'configFile' in target ? target.configFile.fsPath : target],
+      [['pick 2'], CONFIG],
+    );
+  });
+
+  it('F-0301 AC-8: a picker closed opens nothing and the CLI is not asked (6.3)', async () => {
+    const state = setup();
+    state.existing = [CONFIG, '/w/p/.devcontainer.json'];
+    state.pick = {kind: 'dismissed'};
+    await reopened(state);
+    deepStrictEqual(
+      [state.commands, state.calls.includes('readConfiguration /w/p')],
+      [[], false],
+    );
+  });
+
+  it('F-0301 7.E1: a configuration that cannot be read shows its dialog and opens nothing', async () => {
+    const state = setup();
+    state.contents[CONFIG] = '';
+    await reopened(state);
+    deepStrictEqual(
       [
-        [],
-        [
-          `info: Reopen in Container found 2 dev container configurations in /w/p: /w/p/.devcontainer.json, ${CONFIG}`,
-        ],
+        state.commands,
+        state.shown.length,
+        state.calls.includes('readConfiguration /w/p'),
       ],
+      [[], 1, false],
     );
   });
 
@@ -294,6 +366,7 @@ describe('Reopen in Container', () => {
       [
         [],
         [
+          'warn: the configuration could not be read: buildFailed',
           'warn: Reopen in Container could not read the configuration: buildFailed: no build',
         ],
       ],
@@ -302,11 +375,19 @@ describe('Reopen in Container', () => {
 
   it('contracts §6: a CLI failure with no message is logged with its kind', async () => {
     const state = setup();
-    state.read = {kind: 'cancelled'};
+    state.read = {kind: 'noResult', status: 1};
     const {lines} = await reopened(state);
     deepStrictEqual(lines, [
-      'warn: Reopen in Container could not read the configuration: cancelled',
+      'warn: the configuration could not be read: noResult',
+      'warn: Reopen in Container could not read the configuration: noResult',
     ]);
+  });
+
+  it('contracts §6: a read the CLI was cancelled in opens nothing and logs nothing', async () => {
+    const state = setup();
+    state.read = {kind: 'cancelled'};
+    const {lines} = await reopened(state);
+    deepStrictEqual([state.commands, lines], [[], []]);
   });
 
   it('F-0401 BR-1: an editor that refuses the open is logged with its reason', async () => {

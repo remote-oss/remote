@@ -100,6 +100,9 @@ export interface Scene {
   /** What the version query answers: its status and stderr. */
   version: {status: number; stderr: string};
   prepared: ContainerRequest[];
+  /** What the extension's store holds under the rebuild key, and the error its reading throws, if any. */
+  intentStore: unknown;
+  intentError: Error | undefined;
   configurationReads: Array<{
     target: CliTarget;
     containerId: string | undefined;
@@ -181,6 +184,8 @@ export function sceneOf(
     inspect: {answer: {status: 'running', startedAt: '2026-10-14T10:00:00Z'}},
     version: {status: 0, stderr: ''},
     prepared: [],
+    intentStore: undefined,
+    intentError: undefined,
     configurationReads: [],
     serverRequests: [],
     relayRequests: [],
@@ -339,6 +344,18 @@ export function sceneOf(
       dialogs: silentDialogs(),
     },
     editorEnvironment: {HOME: '/home/u', GITHUB_TOKEN: 's3cr3t-token'},
+    intents: {
+      get: () => {
+        if (scene.intentError !== undefined) {
+          throw scene.intentError;
+        }
+        return scene.intentStore;
+      },
+      update: (key, value) => {
+        scene.intentStore = value;
+        return Promise.resolve();
+      },
+    },
     runServer: async request => {
       scene.serverRequests.push(request);
       for (const phase of scene.phasesOfServer) {

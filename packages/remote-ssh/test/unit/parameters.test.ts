@@ -184,6 +184,7 @@ describe('the script parameters', () => {
           extensions: [],
           fileWatcherPollingMilliseconds: 0,
           useHostProxy: false,
+          requirementsHelper: false,
           readySeconds: 20,
           socketMode: false,
         },

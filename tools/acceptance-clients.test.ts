@@ -1,6 +1,6 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual, throws} from 'node:assert';
 import {spawnSync} from 'node:child_process';
-import {readFileSync, statSync} from 'node:fs';
+import {existsSync, readFileSync, statSync} from 'node:fs';
 import path from 'node:path';
 import {
   callsLogOf,
@@ -10,6 +10,7 @@ import {
   FAKE_CLIENTS,
   writeClients,
   writeTildeCopy,
+  rewriteClient,
 } from './acceptance-clients.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
@@ -44,7 +45,7 @@ describe('the fake ssh clients of the client search (card coverage-11)', () => {
     };
   }
 
-  it('coverage-11: the fakes are the ten of the table, each a file named ssh in a folder of its name', () => {
+  it('coverage-31: the fakes are the twelve of the table, each a file named ssh in a folder of its name', () => {
     deepStrictEqual(
       FAKE_CLIENTS.map(client => client.folder),
       [
@@ -58,7 +59,93 @@ describe('the fake ssh clients of the client search (card coverage-11)', () => {
         'old',
         'windows',
         'notexec',
+        'silent',
+        'vanishing',
       ],
+    );
+  });
+
+  it("coverage-31: the silent client's check branch has no printf, and its check prints nothing and exits 0", () => {
+    const silent = FAKE_CLIENTS.find(each => each.folder === 'silent');
+    const script =
+      silent === undefined ? 'missing' : clientScript(silent, '/log');
+    const branch = script.slice(
+      script.indexOf('then') + 5,
+      script.indexOf('exit'),
+    );
+    const call = callClient('silent', '-V');
+    deepStrictEqual(
+      [branch.includes('printf'), call.output, call.errorOutput, call.status],
+      [false, '', '', 0],
+    );
+  });
+
+  it("coverage-31: the vanishing client's check prints its banner, exits 0, and leaves no program", () => {
+    const call = callClient('vanishing', '-V');
+    deepStrictEqual(
+      [
+        call.output,
+        call.errorOutput,
+        call.status,
+        call.calls,
+        existsSync(fileOf('vanishing')),
+      ],
+      [
+        '',
+        'OpenSSH_9.6p1, OpenSSL 3.0.13\n',
+        0,
+        'vanishing/ssh\tcheck\n',
+        false,
+      ],
+    );
+  });
+
+  it('coverage-31: an attempt after one that deleted the vanishing client finds it again', () => {
+    callClient('vanishing', '-V');
+    rewriteClient(workspace.root, 'vanishing');
+    deepStrictEqual(
+      [
+        existsSync(fileOf('vanishing')),
+        statSync(fileOf('vanishing')).mode & 0o777,
+        callClient('vanishing', '-V').errorOutput,
+      ],
+      [true, 0o755, 'OpenSSH_9.6p1, OpenSSL 3.0.13\n'],
+    );
+  });
+
+  it('coverage-31: a rewrite for a folder that is not in the table throws', () => {
+    throws(() => {
+      rewriteClient(workspace.root, 'nosuch');
+    }, /the fake client nosuch is not in the table/);
+  });
+
+  it("coverage-31: every other fake's script is unchanged, the path script word for word", () => {
+    strictEqual(
+      clientScript(
+        {
+          folder: 'path',
+          banner: 'OpenSSH_9.6p1, OpenSSL 3.0.13',
+          stream: 'stderr',
+          status: 0,
+          mode: 0o755,
+        },
+        '/log',
+      ),
+      [
+        '#!/bin/sh',
+        'kind=connect',
+        'for argument in "$@"; do',
+        '  [ "$argument" = -G ] && kind=options',
+        'done',
+        '[ "${1:-}" = -V ] && kind=check',
+        "printf '%s\\t%s\\n' 'path/ssh' \"$kind\" >> '/log'",
+        'if [ "$kind" = check ]; then',
+        "  printf '%s\\n' 'OpenSSH_9.6p1, OpenSSL 3.0.13' >&2",
+        '  exit 0',
+        'fi',
+        'exec /usr/bin/ssh "$@"',
+        '',
+      ].join('\n'),
     );
   });
 

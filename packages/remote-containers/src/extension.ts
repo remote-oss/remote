@@ -3,7 +3,7 @@
  * proposed-API setup and the strings of the notices.
  */
 
-import {readdir, readFile, stat} from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
@@ -17,6 +17,7 @@ import {downloadPortOf, nodeClientFiles} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
 import {activateContainers} from './activation.ts';
 import {serializedUriOf} from './authority/payload.ts';
+import {configFilesOf, configSurfacesOf} from './config/config-ports.ts';
 import {type CliBridge, cliBridgeOf} from './cli/cli-bridge.ts';
 import {cliPathsOf} from './cli/cli-paths.ts';
 import {nodeCliHost} from './cli/node-cli-host.ts';
@@ -37,6 +38,7 @@ import {
 } from './identifiers.generated.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {licenceModalOf} from './surfaces/licence-modal.ts';
+import {rebuildContainer} from './open/rebuild.ts';
 import {reopenInContainer} from './open/reopen.ts';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
@@ -158,6 +160,22 @@ export async function activate(
       function firstFolder(): string | undefined {
         return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       }
+      function rebuildHandler(buildNoCache: boolean): () => Promise<void> {
+        return rebuildContainer(
+          {
+            window: {
+              remoteName: () => vscode.env.remoteName,
+              remoteAuthority: () => vscode.env.remoteAuthority,
+              reload: () =>
+                vscode.commands.executeCommand('workbench.action.reloadWindow'),
+            },
+            intents: context.globalState,
+            now: Date.now,
+            logger: served.logger,
+          },
+          {buildNoCache},
+        );
+      }
       return {
         reopenInContainer: {
           execute: reopenInContainer({
@@ -171,20 +189,52 @@ export async function activate(
               isTrusted: () => vscode.workspace.isTrusted,
               serializedFile: file => serializedUriOf(vscode.Uri.file(file)),
             },
-            files: {
-              isFile: file =>
-                stat(file).then(
-                  found => found.isFile(),
-                  () => false,
-                ),
-              subfolders: folder =>
-                readdir(folder, {withFileTypes: true}).then(
-                  entries =>
-                    entries
-                      .filter(entry => entry.isDirectory())
-                      .map(entry => entry.name),
-                  () => [],
-                ),
+            config: {
+              files: configFilesOf(
+                {
+                  readDirectory: folder =>
+                    vscode.workspace.fs.readDirectory(vscode.Uri.file(folder)),
+                  readFile: file =>
+                    vscode.workspace.fs.readFile(vscode.Uri.file(file)),
+                },
+                vscode.FileType,
+              ),
+              surfaces: configSurfacesOf(
+                {
+                  createQuickPick: () => vscode.window.createQuickPick(),
+                  showWarningMessage: (message, options, ...items) =>
+                    vscode.window.showWarningMessage(
+                      message,
+                      options,
+                      ...items,
+                    ),
+                  showInformationMessage: message =>
+                    vscode.window.showInformationMessage(message),
+                  showTextDocument: (file, options) =>
+                    vscode.window.showTextDocument(
+                      vscode.Uri.file(file),
+                      options,
+                    ),
+                  iconOf: name => new vscode.ThemeIcon(name),
+                },
+                {
+                  showError: (message, detail, items) =>
+                    Promise.resolve(
+                      vscode.window.showErrorMessage(
+                        message,
+                        {modal: true, detail},
+                        ...items,
+                      ),
+                    ),
+                  revealLog: () => {
+                    logChannel?.show(true);
+                  },
+                },
+                served.logger,
+              ),
+              compare: new Intl.Collator(undefined, {sensitivity: 'accent'})
+                .compare,
+              translate,
             },
             settings: {
               dockerPath: () =>
@@ -213,6 +263,8 @@ export async function activate(
             logger: served.logger,
           }),
         },
+        rebuildContainer: {execute: rebuildHandler(false)},
+        rebuildContainerNoCache: {execute: rebuildHandler(true)},
       };
     },
   });
@@ -275,6 +327,7 @@ export async function activate(
       },
       preflight: served.preflight,
       editorEnvironment: process.env,
+      intents: context.globalState,
       runServer: (request, serverSettings) =>
         runServerSteps(
           {

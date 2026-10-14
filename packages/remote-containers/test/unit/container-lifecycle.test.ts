@@ -137,6 +137,7 @@ async function prepared(
   engine: EngineHost,
   bridge = fakeBridge(),
   cancellation = new AbortController().signal,
+  request: ContainerRequest = REQUEST,
 ): Promise<{
   steps: ContainerStep[];
   outcome: ContainerOutcome;
@@ -153,7 +154,7 @@ async function prepared(
   const steps: ContainerStep[] = [];
   const events: CliEvent[] = [];
   const outcome = await lifecycle.prepare(
-    REQUEST,
+    request,
     step => steps.push(step),
     event => events.push(event),
     cancellation,
@@ -395,6 +396,88 @@ describe('containerLifecycleOf', () => {
         engine.commands.filter(command => command === LISTING).length,
       ],
       ['ready', 2],
+    );
+  });
+
+  /** A rebuild of a folder whose one container, `OLD`, has the state `status`; the CLI gives `NEW`. */
+  function rebuiltFrom(status: string, buildNoCache = false) {
+    return prepared(
+      scriptedEngine({
+        [LISTING]: [ran(`${OLD}\n`)],
+        [`inspect --type container ${OLD}`]: [ran(inspected([[OLD, status]]))],
+        [`inspect --type container ${NEW}`]: [
+          ran(inspected([[NEW, 'running']])),
+        ],
+      }),
+      fakeBridge(),
+      new AbortController().signal,
+      {...REQUEST, rebuild: {buildNoCache}},
+    );
+  }
+
+  it('F-0405 BR-3: a rebuild runs up with removeExistingContainer, always creates, and logs what it removes', async () => {
+    const result = await rebuiltFrom('running');
+    deepStrictEqual(
+      [
+        result.bridge.ups.map(each => each.options),
+        result.outcome.kind === 'ready' && result.outcome.created,
+        result.lines,
+      ],
+      [
+        [{removeExistingContainer: true, buildNoCache: false}],
+        true,
+        [
+          'info: rebuilding: the dev container CLI removes aaaaaaaaaaaa first',
+          'info: the lifecycle commands finished',
+        ],
+      ],
+    );
+  });
+
+  it('F-0405 5.1: a no-cache rebuild passes buildNoCache, and a folder with no container logs that', async () => {
+    const result = await prepared(
+      scriptedEngine(EMPTY_LISTING),
+      fakeBridge(),
+      new AbortController().signal,
+      {...REQUEST, rebuild: {buildNoCache: true}},
+    );
+    deepStrictEqual(
+      [result.bridge.ups.map(each => each.options), result.lines[0]],
+      [
+        [{removeExistingContainer: true, buildNoCache: true}],
+        'info: rebuilding: the dev container CLI removes no container first',
+      ],
+    );
+  });
+
+  it('F-0405 6.9: a rebuild replaces a paused container instead of failing', async () => {
+    const result = await rebuiltFrom('paused');
+    deepStrictEqual(
+      [result.outcome.kind, result.bridge.ups.length],
+      ['ready', 1],
+    );
+  });
+
+  it('F-0405 BR-3: a rebuild whose container gets another id writes no warning about it', async () => {
+    const result = await rebuiltFrom('exited');
+    deepStrictEqual(
+      result.lines.filter(line => line.includes('was chosen')),
+      [],
+    );
+  });
+
+  it('F-0409: an ordinary open is unchanged: up keeps the container and a paused one is unusable', async () => {
+    const result = await prepared(
+      scriptedEngine({
+        [LISTING]: [ran(`${OLD}\n`)],
+        [`inspect --type container ${OLD}`]: [
+          ran(inspected([[OLD, 'paused']])),
+        ],
+      }),
+    );
+    deepStrictEqual(
+      [result.outcome.kind, result.bridge.ups.length],
+      ['unusable', 0],
     );
   });
 

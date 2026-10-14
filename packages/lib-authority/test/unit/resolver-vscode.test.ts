@@ -297,6 +297,22 @@ describe('the editor behind the resolver host', () => {
     deepStrictEqual(await cancelsWhen('after'), 0);
   });
 
+  it('contracts §3.2: a timer calls back after its time, and a cancelled one never does', async () => {
+    const seen: Seen = {events: []};
+    const editor = resolverEditorOf(fakeEditor(seen), {
+      detailsCommand: DETAILS,
+    });
+    const called: string[] = [];
+    editor.startTimer(1, () => {
+      called.push('kept');
+    });
+    editor.startTimer(1, () => {
+      called.push('cancelled');
+    })();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    deepStrictEqual(called, ['kept']);
+  });
+
   it("contracts §3.2: notAvailable is the editor's NotAvailable", () => {
     const seen: Seen = {events: []};
     const error = resolverEditorOf(fakeEditor(seen), {

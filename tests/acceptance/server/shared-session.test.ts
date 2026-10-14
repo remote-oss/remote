@@ -50,7 +50,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
         readySeconds: 10,
         socketMode: false,
       },
-      [],
+      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
       {
         lockLoop: lockLoop(),
         logger: createLogger(undefined, {minimumLevel: () => 'info'}),

@@ -29,12 +29,17 @@ export type PhaseName =
   | 'startingServer'
   | 'serverDownloadPercent';
 
+/** The latest the progress opens after a resolve starts. */
+const PROGRESS_FALLBACK_MILLISECONDS = 1500;
+
 /** A stage the connector reports, with the share downloaded for `serverDownloadPercent`. */
 export interface ConnectPhase {
   name: PhaseName;
   percent?: number;
   /** Whether the progress shows the "(details)" link in front of this stage's text. */
   details?: boolean;
+  /** Sets the text the progress shows without opening it; a stage that is not quiet opens it. */
+  quiet?: true;
 }
 
 /** What the connector is asked to connect to. */
@@ -118,6 +123,8 @@ export interface ResolverEditor {
     resolver: EditorResolver,
   ): {dispose(): void};
   progress: ProgressPort;
+  /** Calls `callback` once after `milliseconds`; the returned function cancels it. */
+  startTimer(milliseconds: number, callback: () => void): () => void;
   /** The editor's error for an authority that cannot be resolved; `handled` tells it nothing more is to be shown. */
   notAvailable(message: string | undefined, handled: boolean): Error;
   /** The editor's error for one that may be tried again. */
@@ -307,28 +314,60 @@ export async function registerResolver(
     decoded: DecodedTarget,
     input: ConnectInput,
   ): Promise<Connected | Failed> {
-    return editor.progress.withProgress(
-      {
-        title: options.startTitle(decoded),
-        cancellable: options.cancellable,
-        onCancel: () => {
-          connector.cancel();
+    let shown: {title: string; details: boolean} | undefined;
+    let report: ((title: string, details: boolean) => void) | undefined;
+    let opened = false;
+    const releases: Array<() => void> = [];
+    const settled = new Promise<void>(resolve => {
+      releases.push(resolve);
+    });
+    function open(): void {
+      if (opened) {
+        return;
+      }
+      opened = true;
+      stopTimer();
+      void editor.progress.withProgress(
+        {
+          title: options.startTitle(decoded),
+          cancellable: options.cancellable,
+          onCancel: () => {
+            connector.cancel();
+          },
+          onDetails: () => {
+            connector.revealDetails();
+          },
         },
-        onDetails: () => {
-          connector.revealDetails();
+        async update => {
+          report = update;
+          if (shown !== undefined) {
+            update(shown.title, shown.details);
+          }
+          await settled;
         },
-      },
-      async update => {
-        const stop = connector.onPhase(phase => {
-          update(options.titleOf(phase, decoded), phase.details === true);
-        });
-        try {
-          return await connector.connect(input);
-        } finally {
-          stop();
-        }
-      },
-    );
+      );
+    }
+    const stopTimer = editor.startTimer(PROGRESS_FALLBACK_MILLISECONDS, open);
+    const stop = connector.onPhase(phase => {
+      shown = {
+        title: options.titleOf(phase, decoded),
+        details: phase.details === true,
+      };
+      if (report !== undefined) {
+        report(shown.title, shown.details);
+      } else if (phase.quiet !== true) {
+        open();
+      }
+    });
+    try {
+      return await connector.connect(input);
+    } finally {
+      stop();
+      stopTimer();
+      for (const release of releases) {
+        release();
+      }
+    }
   }
 
   async function resolveOne(

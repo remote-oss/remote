@@ -307,6 +307,15 @@ describe('the prompt surface: waiting for another window (#253 Q12)', () => {
   });
 });
 
+describe('the prompt surface: the login started (card connect-78)', () => {
+  it('contracts: the login-started notice leaves the prompts open', async () => {
+    const context = setup();
+    await question(context, 1, PASSWORD_TEXT);
+    context.lease.send({type: 'loginStarted'});
+    deepStrictEqual(context.editor.last().signal.aborted, false);
+  });
+});
+
 describe('the prompt surface: its end', () => {
   it('F-2305: ending it stops listening to the lease', () => {
     const context = setup();

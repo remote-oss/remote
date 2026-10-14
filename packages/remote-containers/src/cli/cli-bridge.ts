@@ -26,7 +26,7 @@ import {
 } from './cli-lines.ts';
 import {rawHoldOf} from './cli-raw-lines.ts';
 import {referencedSecrets, scrubbed, type Secret} from './cli-secrets.ts';
-import {overrideText} from './override-pre-pass.ts';
+import {dropsImage, overrideText} from './override-pre-pass.ts';
 import type {OverrideStore} from './override-files.ts';
 
 /** How long the CLI may keep running after its result line before it is ended. */
@@ -117,6 +117,11 @@ export function cliBridgeOf(
     const configText = await files.readText(target.configFile).catch(() => '');
     const secrets = referencedSecrets(configText, editorEnvironment);
     const rewritten = overrideText(configText, editorEnvironment);
+    if (dropsImage(configText)) {
+      logger.info(
+        "the configuration's image is ignored, because it also builds from a Dockerfile (F-0412 Q-1)",
+      );
+    }
     const overrideFile =
       rewritten === undefined ? undefined : await overrides.write(rewritten);
     try {

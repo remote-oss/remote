@@ -201,7 +201,7 @@ describe('the connect pipeline, when it works', () => {
       options,
     );
     deepStrictEqual(recording.phases, [
-      {kind: 'initializing'},
+      {kind: 'initializing', quiet: true},
       {kind: 'downloading'},
       {kind: 'serverDownloadPercent', percent: 40},
       {kind: 'downloadingLocally'},

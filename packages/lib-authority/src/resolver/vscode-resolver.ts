@@ -123,6 +123,12 @@ export function resolverEditorOf(
         editorResolverOf(editor, resolver),
       ),
     progress: progressOf(editor, options),
+    startTimer: (milliseconds, callback) => {
+      const timer = setTimeout(callback, milliseconds);
+      return () => {
+        clearTimeout(timer);
+      };
+    },
     notAvailable: (message, handled) =>
       editor.RemoteAuthorityResolverError.NotAvailable(message, handled),
     temporarilyNotAvailable: message =>

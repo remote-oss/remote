@@ -14,6 +14,10 @@ import {
   STARTED_SERVER,
   type Scene,
 } from './connector.fixture.ts';
+import {
+  REBUILD_INTENTS_KEY,
+  storeRebuildIntent,
+} from '../../src/open/rebuild-intent.ts';
 
 function tick(): Promise<unknown> {
   return new Promise(resolve => setImmediate(resolve));
@@ -133,6 +137,93 @@ describe('the container connector: the connect (card containers-08)', () => {
         ['initializing', 'installing', 'startingServer'],
       ],
     );
+  });
+
+  /** Leaves a no-cache rebuild intent for the payload, as the reload of a rebuild command does. */
+  async function withIntent(scene: Scene): Promise<void> {
+    await storeRebuildIntent(
+      {
+        get: () => scene.intentStore,
+        update: (key, value) => {
+          scene.intentStore = value;
+          return Promise.resolve();
+        },
+      },
+      PAYLOAD,
+      {buildNoCache: true},
+      0,
+    );
+  }
+
+  it('contracts §3: the first attempt takes the intent and hands it to C7', async () => {
+    const scene = sceneOf();
+    await withIntent(scene);
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.prepared[0]?.rebuild,
+        scene.intentStore,
+        messages(scene).includes(
+          'the window asked for a rebuild (no cache: true)',
+        ),
+      ],
+      [{buildNoCache: true}, {}, true],
+    );
+  });
+
+  it('F-0502: a reconnection never takes the intent', async () => {
+    const scene = sceneOf();
+    await withIntent(scene);
+    await scene.connector.connect(inputOf(PAYLOAD, {isReconnection: true}));
+    deepStrictEqual(
+      [
+        scene.prepared[0]?.rebuild,
+        REBUILD_INTENTS_KEY in {[REBUILD_INTENTS_KEY]: 1},
+        Object.keys(scene.intentStore as object).length,
+      ],
+      [undefined, true, 1],
+    );
+  });
+
+  it('contracts §3: a later attempt never takes the intent', async () => {
+    const scene = sceneOf();
+    await withIntent(scene);
+    await scene.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
+    deepStrictEqual(scene.prepared[0]?.rebuild, undefined);
+  });
+
+  it('contracts §3: an unreadable store is an ordinary open, with one warning', async () => {
+    const scene = sceneOf();
+    scene.intentError = new Error('store gone');
+    const result = await connected(scene);
+    deepStrictEqual(
+      [
+        scene.prepared[0]?.rebuild,
+        messages(scene).filter(line =>
+          line.startsWith('the rebuild intent could not be read'),
+        ),
+        'connectionToken' in result,
+      ],
+      [undefined, ['the rebuild intent could not be read: store gone'], true],
+    );
+  });
+
+  it('contracts §3: a store that throws something that is not an error is read by its text', async () => {
+    const scene = sceneOf();
+    scene.intentError = 'quota' as unknown as Error;
+    await connected(scene);
+    deepStrictEqual(
+      messages(scene).filter(line =>
+        line.startsWith('the rebuild intent could not be read'),
+      ),
+      ['the rebuild intent could not be read: quota'],
+    );
+  });
+
+  it('F-0409: an ordinary open hands C7 no rebuild', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    deepStrictEqual(scene.prepared[0]?.rebuild, undefined);
   });
 
   it('F-0503 AC-1: a reused server has no installing phase', async () => {
@@ -319,7 +410,7 @@ describe('the container connector: the connect (card containers-08)', () => {
       'Starting container',
       'containerReady',
       'container c1c1c1c1c1c1 was newly started',
-      'Resolving Remote: 25 ms',
+      'Resolving Remote: 50 ms',
     ]);
   });
 
@@ -388,6 +479,28 @@ describe('the container connector: the connect (card containers-08)', () => {
         scene.relayRequests,
       ],
       [['serverFailed'][0], [['node', true]], []],
+    );
+  });
+
+  it('contracts §5.2: the connector passes a root channel of the same container', async () => {
+    const scene = sceneOf();
+    await scene.connector.connect(inputOf(PAYLOAD));
+    const [request] = scene.serverRequests;
+    const before = scene.engineCalls.length;
+    await request?.rootChannel.runScript(
+      {
+        script: 'true',
+        interpreter: 'posixShell',
+        environment: {},
+        input: {kind: 'text', text: ''},
+        cancellation: new AbortController().signal,
+      },
+      () => undefined,
+    );
+    const argv = scene.engineCalls[before]?.argv ?? [];
+    deepStrictEqual(
+      [argv.slice(0, 4), argv.includes(READY.containerId)],
+      [['exec', '-i', '--user', 'root'], true],
     );
   });
 

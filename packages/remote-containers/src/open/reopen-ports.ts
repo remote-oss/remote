@@ -7,7 +7,7 @@ import type {OpenerHost} from 'lib-authority';
 import type {Logger} from 'lib-log';
 import type {SerializedUri} from '../authority/payload.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
-import type {CandidateFiles} from './config-candidates.ts';
+import type {ConfigurationPorts} from '../config/choose-configuration.ts';
 
 /** What the command reads of the window it runs in, at each call. */
 interface WindowPort {
@@ -30,7 +30,7 @@ interface EnginePort {
 /** Everything the command needs. */
 export interface ReopenPorts {
   window: WindowPort;
-  files: CandidateFiles;
+  config: Omit<ConfigurationPorts, 'cli' | 'logger'>;
   settings: {dockerPath(): unknown};
   engine: EnginePort;
   bridge: Pick<CliBridge, 'readConfiguration'>;
