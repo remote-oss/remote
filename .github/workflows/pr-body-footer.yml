@@ -1,0 +1,31 @@
+# Removes the "Generated with Claude Code" footer and the claude.ai session link from a pull request's body (the user's
+# order, athena on 2026-10-14); tools/pr-body-footer.ts holds the lines it removes. A body without them is left alone,
+# so the `edited` event this job's own edit fires does nothing. A fork's pull request is skipped, as in ci.yml, and the
+# tool is taken from the base, never from the pull request's head.
+name: pr-body-footer
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  strip:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: |
+            tools
+            .node-version
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - run: node tools/pr-body-footer.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
