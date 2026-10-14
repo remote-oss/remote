@@ -109,6 +109,17 @@ function hostOf(
   };
 }
 
+/** The host's platform as the templates name it: a musl Linux is `alpine`. */
+export function templatePlatformOf(host: ProbedHost): {
+  operatingSystem: ProbedHost['operatingSystem'] | 'alpine';
+  architecture: ProbedHost['architecture'];
+} {
+  return {
+    operatingSystem: host.libc === 'musl' ? 'alpine' : host.operatingSystem,
+    architecture: host.architecture,
+  };
+}
+
 /** Runs the probe step on a host and reads what it reported. */
 export async function probe(
   channel: HostChannel,

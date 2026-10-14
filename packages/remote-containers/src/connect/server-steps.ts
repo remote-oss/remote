@@ -34,10 +34,10 @@ import {
   type LicenceModal,
   type Plan,
   plan,
-  type ProbedHost,
   probe,
   type ScriptParameters,
   startOrReuse,
+  templatePlatformOf,
   transfer,
   type TransferFailure,
 } from 'lib-server';
@@ -111,18 +111,6 @@ function failedWith(failure: Failed): ServerResult {
   return {kind: 'failed', failure};
 }
 
-/** The platform name the tree and the templates use: a musl Linux is `alpine`. */
-function platformOf(host: ProbedHost): {
-  architecture: ProbedHost['architecture'];
-  operatingSystem: ProbedHost['operatingSystem'] | 'alpine';
-} {
-  const onMusl = host.libc === 'musl';
-  return {
-    architecture: host.architecture,
-    operatingSystem: onMusl ? 'alpine' : host.operatingSystem,
-  };
-}
-
 /** The download override's policy of Dev Containers in `policies`; a table without one is a defect. */
 export function containersOverridePolicy(
   policies: typeof OVERRIDE_POLICIES = OVERRIDE_POLICIES,
@@ -139,7 +127,7 @@ export function containersOverridePolicy(
 /** The name an archive is kept under on the client: `<server>-<platform>[-<quality>].tar.gz`, no suffix for stable. */
 function archiveNameOf(
   profile: ProductProfile,
-  platform: ReturnType<typeof platformOf>,
+  platform: ReturnType<typeof templatePlatformOf>,
 ): string {
   const suffix = profile.quality === 'stable' ? '' : `-${profile.quality}`;
   return `${profile.serverApplicationName}-${platform.operatingSystem}-${platform.architecture}${suffix}.tar.gz`;
@@ -214,7 +202,8 @@ function probeFailure(
         failure.reported,
       );
     case 'prerequisiteMissing':
-      return requirementsNotMet(failure.missing.join(', '));
+      logger.info(`the container lacks: ${failure.missing.join(', ')}`);
+      return serverFailed();
     case 'channelFailed':
       return failure.failure.kind === 'cancelled'
         ? cancelled()
@@ -263,7 +252,7 @@ export async function runServerSteps(
   if (discovered.kind === 'failed') {
     return failedWith(probeFailure(discovered, logger));
   }
-  const platform = platformOf(discovered.host);
+  const platform = templatePlatformOf(discovered.host);
   const installTree =
     cacheFolders(
       profile,

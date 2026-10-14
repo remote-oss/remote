@@ -531,7 +531,7 @@ describe('the server steps of a connect (card containers-08)', () => {
     });
   });
 
-  it('F-0503 7.E1: a probe that finds a tool missing is requirementsNotMet naming it', async () => {
+  it('F-0503 7.E1: a probe that finds a tool missing is serverFailed, and the log names the tool', async () => {
     const channel = new RecordingChannel({
       identity: 'c1',
       platformHint: 'linux',
@@ -547,10 +547,13 @@ describe('the server steps of a connect (card containers-08)', () => {
         ),
       ],
     });
-    const {result} = await runSteps(channel);
+    const {result, seen} = await runSteps(channel);
     deepStrictEqual(
-      result.kind === 'failed' && [result.failure.kind, result.failure.reason],
-      ['requirementsNotMet', {text: 'tar'}],
+      [failureKind(result), seen.sink.lines.map(line => line.message)],
+      [
+        'serverFailed',
+        ['the probe failed: prerequisiteMissing', 'the container lacks: tar'],
+      ],
     );
   });
 
@@ -620,9 +623,10 @@ describe('the server steps of a connect (card containers-08)', () => {
     );
   });
 
-  it('R-68: a licence the user declines ends the connect as cancelled', async () => {
+  it('F-1402 AC-2: a licence the user declines ends the connect as cancelled, with no transfer and no start', async () => {
     const licensed: ProductProfile = {...PROFILE, serverLicense: ['terms']};
-    const {result, seen} = await runSteps(channelOf(), {
+    const channel = channelOf();
+    const {result, seen} = await runSteps(channel, {
       profile: licensed,
       override: {
         value: 'https://update.code.visualstudio.com/x/${os}-${arch}.tar.gz',
@@ -630,7 +634,33 @@ describe('the server steps of a connect (card containers-08)', () => {
       },
       modal: {askUser: () => Promise.resolve('cancel')},
     });
-    deepStrictEqual([failureKind(result), seen.downloads], ['cancelled', []]);
+    deepStrictEqual(
+      [
+        failureKind(result),
+        seen.downloads,
+        channel.calls.filter(call => call.operation === 'copyToHost'),
+        scriptsOf(channel).some(isStart),
+      ],
+      ['cancelled', [], [], false],
+    );
+  });
+
+  it('R-68: a licence the user accepts is passed to the start', async () => {
+    const licensed: ProductProfile = {...PROFILE, serverLicense: ['terms']};
+    const channel = channelOf();
+    await runSteps(channel, {
+      profile: licensed,
+      override: {
+        value: 'https://update.code.visualstudio.com/x/${os}-${arch}.tar.gz',
+        layer: 'defaultProfileUser',
+      },
+    });
+    deepStrictEqual(
+      (scriptsOf(channel).find(isStart) ?? '').includes(
+        "'--accept-server-license-terms'",
+      ),
+      true,
+    );
   });
 
   it('F-0503 7.E2: a download that fails once is tried again and the connect goes on, with one line naming what failed', async () => {

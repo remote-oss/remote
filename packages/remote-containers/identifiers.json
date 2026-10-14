@@ -12,6 +12,10 @@
     {
       "id": "remote-containers:standingDown",
       "setter": "extension"
+    },
+    {
+      "id": "hideConnectCommands",
+      "setter": "extension"
     }
   ],
   "infoLineCommands": [],

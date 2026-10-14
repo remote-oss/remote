@@ -1,10 +1,11 @@
 /**
- * @fileoverview The payload of a `dev-container` authority: the lowercase hex of a JSON text that names the host
- * folder, the Docker context when it is not the default, and the configuration file as the editor serializes its URI.
- * A payload that is a plain host path is the older form.
+ * @fileoverview The payload of a dev-container authority: the lowercase hex of a JSON text that names the host folder,
+ * the Docker context and the configuration file, and its reading back. A plain host path in hex is the legacy form.
  */
 
-/** A `file` or `vscode-fileHost` URI as the editor serializes it, in that member order. */
+import {recordOf} from '../json-record.ts';
+
+/** A `file` or `vscode-fileHost` URI as the editor writes it, in that member order. */
 export interface SerializedUri {
   $mid: 1;
   fsPath?: string;
@@ -13,41 +14,38 @@ export interface SerializedUri {
   scheme: string;
 }
 
-/** A folder opened in a dev container. */
-export interface DevContainerFolder {
-  kind: 'folder';
-  /** The absolute host folder. */
-  hostPath: string;
-  /** Always false when written. */
-  localDocker: boolean;
-  /** A Docker context that is not the default. */
-  context?: string;
-  configFile: SerializedUri;
-}
-
-/** The older payload: a plain host path. */
-interface DevContainerLegacy {
-  kind: 'legacy';
-  hostPath: string;
-}
-
-/** What a payload names: a folder with its configuration, or the older plain host path. */
-export type DevContainerTarget = DevContainerFolder | DevContainerLegacy;
-
-/** A payload that does not decode, and the step that failed. */
-export interface PayloadMalformed {
-  malformed: 'hex' | 'json' | 'shape';
-}
-
-/** What a URI shows without being serialized: the five members are built from these. */
-export interface UriParts {
+/** What the editor's URI offers for the five members. */
+interface UriParts {
   fsPath: string;
   path: string;
   scheme: string;
   toString(): string;
 }
 
-/** The URI as the five members of its serialized form, without asking the editor to serialize it. */
+/** A folder opened in a container: the host folder, the Docker context if it is not the default, and the file. */
+export interface DevContainerFolder {
+  kind: 'folder';
+  hostPath: string;
+  localDocker: boolean;
+  context?: string;
+  configFile: SerializedUri;
+}
+
+/** A payload that is only a host path. */
+interface DevContainerLegacy {
+  kind: 'legacy';
+  hostPath: string;
+}
+
+/** What a payload names. */
+export type DevContainerTarget = DevContainerFolder | DevContainerLegacy;
+
+/** A payload that is not a target, and the step that refused it. */
+export interface PayloadMalformed {
+  malformed: 'hex' | 'json' | 'shape';
+}
+
+/** The five members of a URI in the order of the editor's own form, read without its `toJSON`. */
 export function serializedUriOf(uri: UriParts): SerializedUri {
   return {
     $mid: 1,
@@ -58,7 +56,7 @@ export function serializedUriOf(uri: UriParts): SerializedUri {
   };
 }
 
-/** The payload for a folder target. */
+/** The payload of a target: its JSON text, members in a fixed order, as lowercase hex. */
 export function devContainerPayloadOf(target: DevContainerFolder): string {
   const text = JSON.stringify({
     hostPath: target.hostPath,
@@ -71,76 +69,84 @@ export function devContainerPayloadOf(target: DevContainerFolder): string {
   return Buffer.from(text, 'utf8').toString('hex');
 }
 
-type Fields = Record<string, unknown>;
-
-function isFields(value: unknown): value is Fields {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+/** Whether a member is absent or a string. */
+function optionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
 }
 
-function isText(value: unknown): value is string {
-  return typeof value === 'string';
-}
-
-/** The configuration file of a payload, or nothing when it is not one. */
+/** The configuration file of a payload, or nothing when a member has the wrong type. */
 function configFileOf(value: unknown): SerializedUri | undefined {
-  if (!isFields(value) || !isText(value.path) || !isText(value.scheme)) {
-    return undefined;
-  }
-  const {fsPath, external} = value;
+  const file = recordOf(value);
   if (
-    (fsPath !== undefined && !isText(fsPath)) ||
-    (external !== undefined && !isText(external))
+    file === undefined ||
+    typeof file.path !== 'string' ||
+    typeof file.scheme !== 'string' ||
+    !optionalString(file.fsPath) ||
+    !optionalString(file.external)
   ) {
     return undefined;
   }
   return {
     $mid: 1,
-    ...(fsPath === undefined ? {} : {fsPath}),
-    ...(external === undefined ? {} : {external}),
-    path: value.path,
-    scheme: value.scheme,
+    ...(typeof file.fsPath === 'string' ? {fsPath: file.fsPath} : {}),
+    ...(typeof file.external === 'string' ? {external: file.external} : {}),
+    path: file.path,
+    scheme: file.scheme,
   };
 }
 
-/** The target a payload names, or why it does not decode. */
-export function devContainerTargetOf(
-  payload: string,
-): DevContainerTarget | PayloadMalformed {
+/** The Docker context of a payload: none, a name, or `false` for a `settings` member of the wrong shape. */
+function contextOf(settings: unknown): string | undefined | false {
+  if (settings === undefined) {
+    return undefined;
+  }
+  const record = recordOf(settings);
+  return record !== undefined &&
+    typeof record.context === 'string' &&
+    record.context !== ''
+    ? record.context
+    : false;
+}
+
+/** The target a JSON object names, or the refusal for its shape. */
+function folderOf(parsed: unknown): DevContainerFolder | PayloadMalformed {
+  const record = recordOf(parsed);
+  const context = contextOf(record?.settings);
+  const configFile = configFileOf(record?.configFile);
   if (
-    payload === '' ||
-    payload.length % 2 !== 0 ||
-    !/^[0-9a-f]+$/.test(payload)
-  ) {
-    return {malformed: 'hex'};
-  }
-  const text = Buffer.from(payload, 'hex').toString('utf8');
-  if (!text.trimStart().startsWith('{')) {
-    return {kind: 'legacy', hostPath: text};
-  }
-  let parsed: Fields;
-  try {
-    parsed = JSON.parse(text) as Fields;
-  } catch {
-    return {malformed: 'json'};
-  }
-  const {hostPath, localDocker, settings} = parsed;
-  const configFile = configFileOf(parsed.configFile);
-  const context = isFields(settings) ? settings.context : undefined;
-  if (
-    !isText(hostPath) ||
-    hostPath === '' ||
-    typeof localDocker !== 'boolean' ||
-    (settings !== undefined &&
-      (!isFields(settings) || !isText(context) || context === '')) ||
+    typeof record?.hostPath !== 'string' ||
+    record.hostPath === '' ||
+    typeof record.localDocker !== 'boolean' ||
+    context === false ||
     configFile === undefined
   ) {
     return {malformed: 'shape'};
   }
   return {
     kind: 'folder',
-    hostPath,
-    localDocker,
-    ...(isText(context) ? {context} : {}),
+    hostPath: record.hostPath,
+    localDocker: record.localDocker,
+    ...(context === undefined ? {} : {context}),
     configFile,
   };
+}
+
+/** Reads a payload: a folder target, the legacy host path, or why it is neither. */
+export function devContainerTargetOf(
+  payload: string,
+): DevContainerTarget | PayloadMalformed {
+  if (!/^(?:[0-9a-f]{2})+$/.test(payload)) {
+    return {malformed: 'hex'};
+  }
+  const text = Buffer.from(payload, 'hex').toString('utf8');
+  if (!text.trimStart().startsWith('{')) {
+    return {kind: 'legacy', hostPath: text};
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return {malformed: 'json'};
+  }
+  return folderOf(parsed);
 }

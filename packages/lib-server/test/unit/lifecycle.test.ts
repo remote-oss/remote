@@ -10,10 +10,12 @@ import {
   kill,
   type MaintenanceOutcome,
   probe,
+  type ProbedHost,
   type ProbeOutcome,
   RESULT_BEGIN,
   RESULT_END,
   runStep,
+  templatePlatformOf,
   uninstall,
 } from '../../src/index.ts';
 import {
@@ -377,6 +379,37 @@ describe('probe (V2)', () => {
     deepStrictEqual(
       outcome.kind === 'failed' ? outcome.failure : outcome.kind,
       {kind: 'unsupportedArch', reported: 'armv7l', libc: 'musl'},
+    );
+  });
+
+  it('F-2401: a host is named for the templates by its system and architecture, and a musl Linux is alpine', () => {
+    function host(libc: 'glibc' | 'musl' | 'unknown'): ProbedHost {
+      return {
+        operatingSystem: 'linux',
+        architecture: 'arm64',
+        libc,
+        release: '',
+        home: '/home/u',
+        temporaryFolder: '/tmp',
+        loginShell: 'sh',
+        tools: [],
+        busyboxWget: false,
+        sshAuthSock: '',
+        display: '',
+        installed: false,
+        installFolder: '',
+        treeComplete: false,
+      };
+    }
+    deepStrictEqual(
+      (['glibc', 'musl', 'unknown'] as const).map(libc =>
+        templatePlatformOf(host(libc)),
+      ),
+      [
+        {operatingSystem: 'linux', architecture: 'arm64'},
+        {operatingSystem: 'alpine', architecture: 'arm64'},
+        {operatingSystem: 'linux', architecture: 'arm64'},
+      ],
     );
   });
 

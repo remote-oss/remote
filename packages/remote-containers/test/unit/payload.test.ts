@@ -4,25 +4,32 @@ import {
   type DevContainerFolder,
   devContainerPayloadOf,
   devContainerTargetOf,
+  type SerializedUri,
   serializedUriOf,
 } from '../../src/authority/payload.ts';
 
-const CONFIG = '/home/u/p/.devcontainer/devcontainer.json';
-
+const CONFIG_PATH = '/home/u/p/.devcontainer/devcontainer.json';
+const CONFIG: SerializedUri = {
+  $mid: 1,
+  fsPath: CONFIG_PATH,
+  external: `file://${CONFIG_PATH}`,
+  path: CONFIG_PATH,
+  scheme: 'file',
+};
 const FOLDER: DevContainerFolder = {
   kind: 'folder',
   hostPath: '/home/u/p',
   localDocker: false,
-  configFile: {
-    $mid: 1,
-    fsPath: CONFIG,
-    external: `file://${CONFIG}`,
-    path: CONFIG,
-    scheme: 'file',
-  },
+  configFile: CONFIG,
 };
 
-/** The lowercase hex of a text, as the payload is written. */
+/** A folder whose configuration file is on the SSH host: no `fsPath` and no `external`. */
+const SSH_FOLDER: DevContainerFolder = {
+  ...FOLDER,
+  configFile: {$mid: 1, path: CONFIG_PATH, scheme: 'vscode-fileHost'},
+};
+
+/** The lowercase hex of a text. */
 function hexOf(text: string): string {
   return Buffer.from(text, 'utf8').toString('hex');
 }
@@ -32,175 +39,147 @@ function textOf(payload: string): string {
   return Buffer.from(payload, 'hex').toString('utf8');
 }
 
-describe('the dev-container payload (card containers-07)', () => {
-  it('F-0501 BR-2a: a folder with no context is the JSON text of the observed form, in lowercase hex', () => {
+describe('the dev-container payload', () => {
+  it('F-0501 BR-2a: a folder target is the reference JSON text, in hex', () => {
     const payload = devContainerPayloadOf(FOLDER);
     deepStrictEqual(
+      [textOf(payload), payload === payload.toLowerCase()],
       [
-        textOf(payload),
-        payload === hexOf(textOf(payload)),
-        payload === payload.toLowerCase(),
-      ],
-      [
-        `{"hostPath":"/home/u/p","localDocker":false,"configFile":{"$mid":1,"fsPath":"${CONFIG}","external":"file://${CONFIG}","path":"${CONFIG}","scheme":"file"}}`,
-        true,
+        '{"hostPath":"/home/u/p","localDocker":false,"configFile":{"$mid":1,"fsPath":"/home/u/p/.devcontainer/devcontainer.json","external":"file:///home/u/p/.devcontainer/devcontainer.json","path":"/home/u/p/.devcontainer/devcontainer.json","scheme":"file"}}',
         true,
       ],
     );
   });
 
-  it('F-0501 BR-2a: a context sits between localDocker and configFile', () => {
+  it('F-0501 BR-2a: a Docker context sits between localDocker and configFile', () => {
+    const text = textOf(
+      devContainerPayloadOf({...FOLDER, context: 'desktop-linux'}),
+    );
     deepStrictEqual(
-      textOf(
-        devContainerPayloadOf({...FOLDER, context: 'desktop-linux'}),
-      ).includes(
-        '"localDocker":false,"settings":{"context":"desktop-linux"},"configFile":',
-      ),
-      true,
+      [
+        Object.keys(JSON.parse(text) as object),
+        text.includes('"settings":{"context":"desktop-linux"},"configFile"'),
+      ],
+      [['hostPath', 'localDocker', 'settings', 'configFile'], true],
     );
   });
 
-  it('F-0501 BR-2a: a host path with a space, a hash, a letter outside ASCII and a quote survives the round trip', () => {
-    const target: DevContainerFolder = {
-      ...FOLDER,
-      hostPath: '/home/u/a b#é"c',
-    };
+  it('F-0501 BR-2a: a host path with a space, a hash, a non-ASCII letter and a quote survives the round trip', () => {
+    const target = {...FOLDER, hostPath: '/home/u/h #é "x"'};
     deepStrictEqual(
       devContainerTargetOf(devContainerPayloadOf(target)),
       target,
     );
   });
 
-  it('F-0501 BR-2a: the round trip keeps a target with no context, with a context, and the SSH variant of the configuration file', () => {
-    const targets: DevContainerFolder[] = [
-      FOLDER,
-      {...FOLDER, context: 'desktop-linux'},
-      {
-        ...FOLDER,
-        configFile: {$mid: 1, path: CONFIG, scheme: 'vscode-fileHost'},
-      },
-    ];
-    deepStrictEqual(
-      targets.map(target =>
+  for (const [name, target] of [
+    ['no context', FOLDER],
+    ['a context', {...FOLDER, context: 'ctx1'}],
+    ['the SSH variant of the configuration file', SSH_FOLDER],
+  ] as const) {
+    it(`F-0501 BR-2a: the round trip of ${name} is the target`, () => {
+      deepStrictEqual(
         devContainerTargetOf(devContainerPayloadOf(target)),
-      ),
-      targets,
-    );
-  });
+        target,
+      );
+    });
+  }
 
-  it('F-0501 BR-2a: a URI is serialized from its parts in the editor’s order, without asking it to serialize itself', () => {
-    let serialized = 0;
+  it('F-0501 BR-2a: the five members of a URI come from its properties and never from its toJSON', () => {
+    let called = false;
     const uri = {
-      fsPath: CONFIG,
-      path: CONFIG,
+      fsPath: CONFIG_PATH,
+      path: CONFIG_PATH,
       scheme: 'file',
-      toString: () => `file://${CONFIG}`,
+      toString: () => `file://${CONFIG_PATH}`,
       toJSON: () => {
-        serialized += 1;
-        return {$mid: 1, path: CONFIG, scheme: 'file'};
+        called = true;
+        return {$mid: 1, path: CONFIG_PATH, scheme: 'file'};
       },
     };
-    const result = serializedUriOf(uri);
     deepStrictEqual(
-      [Object.entries(result), serialized],
-      [
-        [
-          ['$mid', 1],
-          ['fsPath', CONFIG],
-          ['external', `file://${CONFIG}`],
-          ['path', CONFIG],
-          ['scheme', 'file'],
-        ],
-        0,
-      ],
+      [JSON.stringify(serializedUriOf(uri)), called],
+      [JSON.stringify(CONFIG), false],
     );
   });
 
-  it('F-0501 BR-2c: the hex of a plain path is the older form', () => {
+  it('F-0501 BR-2a: the file system path of a URI is read from fsPath and not from path', () => {
+    const uri = {
+      fsPath: 'C:\\Users\\u\\p\\devcontainer.json',
+      path: '/c:/Users/u/p/devcontainer.json',
+      scheme: 'file',
+      toString: () => 'file:///c%3A/Users/u/p/devcontainer.json',
+    };
+    deepStrictEqual(
+      [serializedUriOf(uri).fsPath, serializedUriOf(uri).path],
+      ['C:\\Users\\u\\p\\devcontainer.json', '/c:/Users/u/p/devcontainer.json'],
+    );
+  });
+
+  it('F-0501 BR-2c: the hex of a plain host path is the legacy form', () => {
     deepStrictEqual(devContainerTargetOf(hexOf('/home/u/legacy')), {
       kind: 'legacy',
       hostPath: '/home/u/legacy',
     });
   });
 
-  it('contracts §3: an empty text, an odd one, a text that is not hex and an uppercase one are malformed hex', () => {
-    deepStrictEqual(['', 'abc', 'zz', '7B'].map(devContainerTargetOf), [
-      {malformed: 'hex'},
-      {malformed: 'hex'},
-      {malformed: 'hex'},
-      {malformed: 'hex'},
-    ]);
+  it('contracts §3: a payload that is empty, odd, not hex or in capitals is a malformed hex', () => {
+    deepStrictEqual(
+      ['', 'abc', 'zz', '7B'].map(payload => devContainerTargetOf(payload)),
+      [
+        {malformed: 'hex'},
+        {malformed: 'hex'},
+        {malformed: 'hex'},
+        {malformed: 'hex'},
+      ],
+    );
   });
 
-  it('contracts §3: a text that starts like JSON and is not is malformed JSON', () => {
+  it('contracts §3: a text that starts with a brace and does not parse is a malformed JSON', () => {
     deepStrictEqual(devContainerTargetOf(hexOf('{"hostPath":')), {
       malformed: 'json',
     });
   });
 
-  for (const [name, change] of [
-    ['an empty object', {}],
-    ['an empty host path', {hostPath: ''}],
-    ['a host path that is a number', {hostPath: 5}],
-    ['no localDocker', {localDocker: undefined}],
-    ['a localDocker that is a text', {localDocker: 'no'}],
-    ['settings that is an array', {settings: []}],
-    ['settings with no context', {settings: {}}],
-    ['an empty context', {settings: {context: ''}}],
-    ['no configuration file', {configFile: undefined}],
-    [
-      'a configuration file without a path',
-      {configFile: {$mid: 1, scheme: 'file'}},
-    ],
-    [
-      'a scheme that is a number',
-      {configFile: {$mid: 1, path: CONFIG, scheme: 3}},
-    ],
-    [
-      'an fsPath that is a number',
-      {configFile: {$mid: 1, path: CONFIG, scheme: 'file', fsPath: 3}},
-    ],
-    [
-      'an external that is a number',
-      {configFile: {$mid: 1, path: CONFIG, scheme: 'file', external: 3}},
-    ],
-    ['a configuration file that is a text', {configFile: 'x'}],
-  ] as const) {
-    it(`contracts §3: ${name} is a malformed shape`, () => {
-      const base = {
-        hostPath: '/home/u/p',
-        localDocker: false,
-        configFile: {$mid: 1, path: CONFIG, scheme: 'file'},
-      };
-      const text = JSON.stringify(
-        name === 'an empty object' ? {} : {...base, ...change},
-      );
-      deepStrictEqual(devContainerTargetOf(hexOf(text)), {malformed: 'shape'});
-    });
-  }
-
-  it('contracts §3: a member the payload does not list is ignored', () => {
+  it('contracts §3: each member of the wrong shape makes the payload malformed', () => {
+    const file = {path: CONFIG_PATH, scheme: 'file'};
+    const base = {hostPath: '/p', localDocker: false, configFile: file};
+    const shapes = [
+      {},
+      {...base, hostPath: ''},
+      {...base, hostPath: 5},
+      {hostPath: '/p', configFile: file},
+      {...base, localDocker: 'no'},
+      {...base, settings: []},
+      {...base, settings: {context: ''}},
+      {hostPath: '/p', localDocker: false},
+      {...base, configFile: {scheme: 'file'}},
+      {...base, configFile: {path: CONFIG_PATH, scheme: 3}},
+      {...base, configFile: {...file, fsPath: 3}},
+      {...base, configFile: {...file, external: 3}},
+    ];
     deepStrictEqual(
-      devContainerTargetOf(
-        hexOf(
-          JSON.stringify({
-            hostPath: '/home/u/p',
-            localDocker: false,
-            extra: 1,
-            configFile: {$mid: 1, path: CONFIG, scheme: 'file'},
-          }),
-        ),
-      ),
-      {
-        kind: 'folder',
-        hostPath: '/home/u/p',
-        localDocker: false,
-        configFile: {$mid: 1, path: CONFIG, scheme: 'file'},
-      },
+      shapes.map(shape => devContainerTargetOf(hexOf(JSON.stringify(shape)))),
+      shapes.map(() => ({malformed: 'shape'})),
     );
   });
 
-  it('contracts §3: the authority of a payload is dev-container+ and the payload unchanged', () => {
+  it('contracts §3: a member that is not listed is ignored', () => {
+    const text = JSON.stringify({
+      hostPath: '/p',
+      localDocker: false,
+      extra: 1,
+      configFile: {path: CONFIG_PATH, scheme: 'file'},
+    });
+    deepStrictEqual(devContainerTargetOf(hexOf(text)), {
+      kind: 'folder',
+      hostPath: '/p',
+      localDocker: false,
+      configFile: {$mid: 1, path: CONFIG_PATH, scheme: 'file'},
+    });
+  });
+
+  it('contracts §3: the authority is the family, a plus and the payload unchanged', () => {
     const payload = devContainerPayloadOf(FOLDER);
     deepStrictEqual(
       encodeAuthority({

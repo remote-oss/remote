@@ -485,8 +485,14 @@ describe('the container connector: cancelling (card containers-08)', () => {
     release?.();
     const result = await connecting;
     deepStrictEqual(
-      [failedKind(result), scene.stopped, scene.relayRequests.length],
-      ['cancelled', 1, 0],
+      [
+        failedKind(result),
+        scene.stopped,
+        scene.serverRequests.length,
+        scene.configurationReads.length,
+        scene.relayRequests.length,
+      ],
+      ['cancelled', 1, 0, 0, 0],
     );
   });
 
@@ -723,6 +729,19 @@ describe('the container connector: a reconnection (card containers-08)', () => {
       [0],
     );
     deepStrictEqual([outcome.again, outcome.reran], [outcome.first, false]);
+  });
+
+  it('F-0502 7.E1: the held server’s process is asked about by its own id', async () => {
+    const {scene} = await held();
+    scene.inspect.answer = {
+      status: 'running',
+      startedAt: '2026-10-14T10:00:00Z',
+    };
+    await scene.connector.connect(inputOf(PAYLOAD, {isReconnection: true}));
+    deepStrictEqual(
+      scene.killScripts.map(text => text.includes('kill -0 77')),
+      [true],
+    );
   });
 
   it('F-0502 7.E1: a running container whose server is gone is transportLost, and nothing is prepared or started again', async () => {

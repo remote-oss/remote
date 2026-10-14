@@ -39,6 +39,14 @@
       "card": "#745",
       "slice": "0.3 explorer increment 2",
       "decision": "explorer brief 2026-10-13: increment 2"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "contextKeys",
+      "key": "hideConnectCommands",
+      "card": "#766",
+      "slice": "containers release 1",
+      "decision": "F-0504 BR-8 (2026-09-26): defined, never set"
     }
   ]
 }

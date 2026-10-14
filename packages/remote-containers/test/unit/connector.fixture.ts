@@ -125,6 +125,8 @@ export interface Scene {
   dockerPath: unknown;
   /** The exit statuses of the next `kill -0` runs. */
   killStatuses: number[];
+  /** What the runs over the channel were given on their input, as text. */
+  killScripts: string[];
   /** Holds the opening of the relay until it settles. */
   relayGate: (() => Promise<void>) | undefined;
 }
@@ -194,11 +196,14 @@ export function sceneOf(
     relayOutcome: 'open',
     dockerPath: 'docker',
     killStatuses: [],
+    killScripts: [],
     relayGate: undefined,
     ...overrides,
   };
   const kills = fakeEngine(
-    ...Array.from({length: 8}, (): SpawnPlan => process => {
+    ...Array.from({length: 8}, (): SpawnPlan => async process => {
+      await process.stdinEnded;
+      scene.killScripts.push(process.stdin().toString('utf8'));
       process.exit(scene.killStatuses.shift() ?? 0);
     }),
   );
