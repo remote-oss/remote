@@ -110,6 +110,17 @@ describe('helper parameters', () => {
 });
 
 describe('the environment a helper passes on', () => {
+  it('helper-04: leaves out the variable that runs the editor as Node.js', () => {
+    deepStrictEqual(
+      inheritedEnvironment({
+        ELECTRON_RUN_AS_NODE: '1',
+        REMOTE_OSS_HELPER_PARAMETERS: '{}',
+        PATH: '/bin',
+      }),
+      {PATH: '/bin'},
+    );
+  });
+
   it("leaves out the variable that carries the helper's parameters", () => {
     deepStrictEqual(
       inheritedEnvironment({
