@@ -4,6 +4,7 @@
  * acceptances. Nothing here imports the editor; the extension passes the adapters and the operations.
  */
 
+import type {TunnelOpener} from './forwarding/default-forwards.ts';
 import type {AcceptanceStore} from 'lib-server';
 import type {FilePickPort} from './config/file-choice.ts';
 import type {DownloadProgressPort} from './cli/server-download-progress.ts';
@@ -96,6 +97,8 @@ export interface SurfaceContext {
   applyTerminalEnvironment: (
     variables: Readonly<Record<string, string>>,
   ) => void;
+  /** The editor's tunnel service, which the default forwarded ports are opened through. */
+  tunnels: TunnelOpener;
 }
 
 /** The setting the platform is written to. */
@@ -139,6 +142,7 @@ export function editorSurfacesOf(
     terminals: adapters.terminals,
     linkTerminals: adapters.linkTerminals,
     applyTerminalEnvironment: context.applyTerminalEnvironment,
+    tunnels: context.tunnels,
     pickPlatform: async (alias, cancellation) => {
       const picked = await pickRemotePlatform(
         adapters.platformPick,

@@ -32,8 +32,10 @@ side ends. `{kind: 'socket'}` is refused in release 1.
 
 **`connect(input)`, in order** (F-0408 §5.0; each step reports its phase through `onPhase`):
 1. Decode the payload (§3). A malformed payload fails as `Failed{kind: 'malformedAuthority', silent: false}`.
-2. C2's pre-flight checks. Their dialogs belong to F-0201. A failed check returns `Failed` with
-   `userAlreadyNotified: true`.
+2. C2's second pre-flight check (F-0201 5.0 step 5; the first check ran before the reload, in C6's flow, and showed
+   its own F-0201 dialog). It shows nothing: a failure returns its detail id (S339, S104 or S144), and the connector
+   returns `Failed{userAlreadyNotified: false}` with that reason, for C8 to present as F-0202's three-button dialog
+   (amended 2026-10-14, containers-03 §6.1, #842).
 3. C7: find, reuse, start or create the container (F-0409, F-0412, F-0415), with the rebuild intent if the payload
    carries one (F-0405 BR-17).
 4. lib-server: probe, plan, transfer and start over C11 with the remote-containers policy row (§5), the licence gate

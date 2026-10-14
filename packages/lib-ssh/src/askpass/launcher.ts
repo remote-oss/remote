@@ -5,7 +5,7 @@
 
 import {chmod, mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
-import {posixQuote} from '../process/remote-program.ts';
+import {posixQuote} from 'lib-host';
 import {launcherPath} from './paths.ts';
 
 /** The script text: the editor's executable runs the askpass program as Node.js and passes `ssh`'s arguments on. */

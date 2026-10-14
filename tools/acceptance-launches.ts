@@ -517,6 +517,16 @@ export function launchesOf(root: string): Launch[] {
     },
     {label: 'windows', kind: 'plain', suite: 'windows'},
     {
+      label: 'default-ports',
+      kind: 'plain',
+      suite: 'default-ports',
+      settings: {
+        'remote.SSH.defaultForwardedPorts': [
+          {name: 'web', remotePort: 8632, localPort: 18632},
+        ],
+      },
+    },
+    {
       label: 'no-proposals',
       kind: 'plain',
       suite: 'no-proposals',
