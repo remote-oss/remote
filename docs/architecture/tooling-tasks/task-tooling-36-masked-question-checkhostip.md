@@ -70,8 +70,12 @@ file.
 - **Removal, in place:** `/etc/hosts` is a bind mount in containerised runners and in this lab (measured 2026-10-14:
   `findmnt /etc/hosts` shows a tmpfs bind). There `sed -i` fails with `can't move … Resource busy`, since it renames a
   new file over the old one. So the run rewrites the file's content without replacing the file:
-  `sudo -n sh -c 'grep -v -F "# remote-oss-acceptance <runId>" /etc/hosts > <run>/hosts.kept; cat <run>/hosts.kept > /etc/hosts'`
-  (measured: `cat >` works on the bind mount where `sed -i` doesn't). grep's exit 1 (no other line) still rewrites.
+  `sudo -n sh -c 'grep -v -F "# remote-oss-acceptance <runId>" /etc/hosts > <run>/hosts.kept; status=$?; [ "$status" -le 1 ] && cat <run>/hosts.kept > /etc/hosts'`
+  (measured: `cat >` works on the bind mount where `sed -i` doesn't). The rewrite runs only when grep's status is 0
+  (lines kept) or 1 (no line kept). A failing grep (status 2, an unreadable file for example) leaves `/etc/hosts`
+  untouched, and the run reports the status. Before this guard, `;` ran `cat` anyway and truncated the file (dike
+  reproduced 0 bytes on a runner). The sweep removes several run ids with one `grep -v -F -e … -e …`, under the same
+  guard.
   - **The run's own line:** the run removes it in a `finally` around the launches, and in the run's `SIGINT` and
     `SIGTERM` handlers, the same ones that stop its containers.
   - **Stale lines, at the start of every run:** before it adds its own line, the run sweeps every marker line whose
@@ -86,6 +90,8 @@ file.
     - a hosts file holding a marker line of a run id with no container, and one of a run id that has one: the
       start-of-run sweep removes the first and keeps the second;
     - a launch that throws: the run's own line is removed.
+    - grep failing with status 2 (the recording runner answers 2): no `cat` is run, `/etc/hosts` is unchanged, and the
+      run's log names the status.
 - **No sudo:** if `sudo -n true` fails, the run doesn't add the line and sets `HARNESS_HOSTS_LINE=absent`. The rows of
   §4.2 then fail with `<name> needs passwordless sudo to add a line to /etc/hosts`. They don't skip, and every other
   launch is unaffected.

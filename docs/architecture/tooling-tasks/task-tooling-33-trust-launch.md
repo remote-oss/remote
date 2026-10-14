@@ -182,9 +182,15 @@ The rows quote the labels step 1 measured, which should be these.
 | `openWindow('harness', 's1')` | `isTrusted('s1')` is false; `waitForDialog('s1')` gives the startup prompt of §3.4 |
 | `answerDialog('s1', 'Yes, I trust the authors')` | the dialog is gone, and `isTrusted('s1')` becomes true within 10 s |
 | `openWindow('harness', 's2')`; `waitForDialog('s2')`, then `answerDialog('s2', "No, I don't trust the authors")` | `isTrusted('s2')` stays false; `dialogOf('s2')` is `undefined` |
-| in `trust-terminal` (core's defaults), `openWindow('harness', 's3')` | `isTrusted('s3')` false, and no dialog until the connect asks for trust; then `waitForDialog('s3')` gives the trust request of §3.4 |
 | `openWindow('harness', 's4')`; `waitForDialog('s4')`, then `answerDialog('s4', 'No such button')` | fails, and the failure lists the open dialog's two labels. Then `answerDialog('s4', "No, I don't trust the authors")` closes it |
 | `answerDialog('s2', 'Yes, I trust the authors')` after s2's dialog was answered | fails, naming window `s2` and saying no dialog is open |
+
+**The `trust-terminal` smoke row** (`tests/acceptance/trust-terminal/trust-terminal.test.ts`, its own file: a plain
+launch runs only its own suite folder, dike on #731):
+
+| Given | Expected |
+|---|---|
+| in `trust-terminal` (core's defaults), `openWindow('harness', 's3')` | `isTrusted('s3')` false, and no dialog until the connect asks for trust; then `waitForDialog('s3')` gives the trust request of §3.4 |
 
 **Criterion rows written in this PR** (`trust/trust.test.ts`):
 

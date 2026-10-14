@@ -186,9 +186,14 @@ On the `glibc227` image, as a second build stage:
 - **`debian`:** `runner: 'runner-remote'`, suite `suite-debian`, folder `vscode-remote://ssh-remote+debian/home/harness`,
   with no template setting, as `remote`.
 
-Both suite folders get a `tsconfig.json` (like `explorer/`'s for `prereqs`, like `suite-remote/`'s for `suite-debian`). They're registered where those are: the
-root `tsconfig.json`'s `references`, `eslint.config.ts`'s `TYPESCRIPT_PROJECTS`, `knip.jsonc`'s entries, and the
-README's launch list.
+**Registering the two suites:**
+- **`prereqs`** is a plain launch. Its folder gets a `tsconfig.json` like `explorer/`'s, and is registered where
+  `explorer/` is: the root `tsconfig.json`'s `references`, `eslint.config.ts`'s `TYPESCRIPT_PROJECTS` and `knip.jsonc`'s
+  entries.
+- **`suite-debian`** is a runner suite. Runner suites have no `tsconfig.json` of their own: add `"${configDir}/suite-debian"`
+  to the `include` list of `tests/acceptance/tsconfig.json`, beside `suite-remote` (dike on #731), and to `knip.jsonc`'s
+  entries as the other runner suites are.
+- Both go in the README's launch list.
 
 ### 3.7 Window helpers (`windows/harness.ts`, `windows/renderer.ts`)
 
