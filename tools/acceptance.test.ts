@@ -394,7 +394,9 @@ describe('acceptance', () => {
   });
 
   it('coverage-39: Host blackhole names an address of TEST-NET-1, which is never routed, so a connect waits', () => {
-    const blocks = harnessSshConfig(49153, '/run').split('\n\n');
+    const blocks = harnessSshConfig(49153, '/run', '/run/agent.sock').split(
+      '\n\n',
+    );
     strictEqual(
       blocks.find(block => block.startsWith('Host blackhole')),
       ['Host blackhole', '  HostName 192.0.2.1', '  BatchMode yes'].join('\n'),

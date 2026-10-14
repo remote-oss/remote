@@ -57,6 +57,8 @@ export interface AgentEvent {
   remotePort?: number;
   /** The output channel a `state` event saw shown in the window, or null. */
   visibleOutputChannel?: string | null;
+  /** The names of the window's terminals, hidden ones included, as a `state` event saw them. */
+  terminals?: string[];
 }
 
 /** One line of the record the extensions append to. */
