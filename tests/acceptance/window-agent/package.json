@@ -19,7 +19,8 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onResolveRemoteAuthority:ssh-remote"
+    "onResolveRemoteAuthority:ssh-remote",
+    "onResolveRemoteAuthority:dev-container"
   ],
   "enabledApiProposals": [
     "tunnels"

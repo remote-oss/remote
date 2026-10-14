@@ -103,6 +103,7 @@ const TYPESCRIPT_PROJECTS = [
   './packages/*/tsconfig.test.json',
   './tests/acceptance/tsconfig.json',
   './tests/acceptance/server/tsconfig.json',
+  './tests/acceptance/containers-cli/tsconfig.json',
   './tests/acceptance/windows/tsconfig.json',
   './tests/acceptance/no-proposals/tsconfig.json',
   './tests/acceptance/default-ports/tsconfig.json',
@@ -112,6 +113,9 @@ const TYPESCRIPT_PROJECTS = [
   './tests/acceptance/explorer-no-proposals/tsconfig.json',
   './tests/acceptance/trust/tsconfig.json',
   './tests/acceptance/trust-terminal/tsconfig.json',
+  './tests/acceptance/containers/tsconfig.json',
+  './tests/acceptance/containers-standdown/tsconfig.json',
+  './tests/acceptance/containers-no-proposals/tsconfig.json',
 ];
 
 const DEFAULT_EXPORT_BAN = {
