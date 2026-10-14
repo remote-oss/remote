@@ -714,7 +714,7 @@ describe('acceptance', () => {
       });
     });
 
-    it("installs the packaged VSIX into the run's own extensions folder before the tests", async () => {
+    it("installs the packaged VSIX into the run's own extensions folder before the tests, with the run's user and shared data", async () => {
       workspace.write('dist/remote-ssh-edit-0.0.0.vsix', '');
       await runAcceptance(workspace.root, harness);
       deepStrictEqual(
@@ -724,6 +724,7 @@ describe('acceptance', () => {
             'code',
             `--extensions-dir=${path.join(harness.runFolder, 'extensions')}`,
             `--user-data-dir=${path.join(harness.runFolder, 'user-data')}`,
+            `--shared-data-dir=${path.join(harness.runFolder, 'shared-data')}`,
             '--install-extension',
             path.join(workspace.root, 'dist', 'remote-ssh-edit-0.0.0.vsix'),
           ].join(' '),
