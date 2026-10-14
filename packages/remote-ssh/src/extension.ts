@@ -86,6 +86,10 @@ import {
 } from './surfaces/scripted-adapters.ts';
 import {PORTS_VIEW_KEY} from './surfaces/label-formatter.ts';
 import {loginTerminalsOf} from './surfaces/login-terminal.ts';
+import {
+  linkTerminalsOf,
+  terminalEnvironmentOf,
+} from './surfaces/window-forwarding.ts';
 
 /** The page about SSH configuration files that the picker's Help row opens. */
 const CONFIG_HELP_ADDRESS =
@@ -340,6 +344,7 @@ async function surfaceAdapters(): Promise<EditorAdapters> {
     {
       prompts: promptEditorOf(vscode, translate),
       terminals: loginTerminalsOf(vscode, homedir()),
+      linkTerminals: linkTerminalsOf(vscode),
       failureDialog: failureDialogOf(vscode),
       licenceDialog: licenceDialogOf(vscode),
       platformPick: platformPickPortOf(vscode, translate),
@@ -392,6 +397,9 @@ async function registerConnectOf(
       acceptanceState: context.globalState,
       noticeState: context.globalState,
       logger: served.logger,
+      applyTerminalEnvironment: terminalEnvironmentOf(
+        context.environmentVariableCollection,
+      ),
     },
   );
   const machine = nodeMachineOf(

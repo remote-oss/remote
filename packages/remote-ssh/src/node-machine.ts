@@ -4,7 +4,7 @@
  * folders it owns and the editor's `fetch`.
  */
 
-import {randomBytes} from 'node:crypto';
+import {randomBytes, randomInt} from 'node:crypto';
 import {type AddressInfo, createServer} from 'node:net';
 import {homedir, tmpdir} from 'node:os';
 import path from 'node:path';
@@ -77,6 +77,11 @@ export function newTemporaryToken(): string {
   return `${String(process.pid)}-${randomBytes(6).toString('hex')}`;
 }
 
+/** A cryptographic random integer in 1..999999999, which names an agent link. */
+export function drawLinkNumber(): number {
+  return randomInt(1, 1_000_000_000);
+}
+
 /** The machine over Node, from the extension's `places` and Node's `facts`. */
 export function nodeMachineOf(
   places: MachinePlaces,
@@ -120,6 +125,7 @@ export function nodeMachineOf(
     local: nodeLocalPort(),
     prober: nodePortProber(),
     newTemporaryToken,
+    drawLinkNumber,
   };
 }
 

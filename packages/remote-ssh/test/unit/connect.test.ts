@@ -23,6 +23,8 @@ import {
   HOST,
   INPUT,
   leaseOf,
+  LINKED,
+  NO_FORWARDING,
   type Recording,
   never,
   OPENED,
@@ -929,8 +931,88 @@ describe('the connect pipeline, what it keeps and gives back', () => {
         architecture: 'x64',
         temporaryFolder: '/tmp',
         connectionToken: 'secret-token',
+        ...NO_FORWARDING,
       },
     ]);
+  });
+
+  it("F-2311 R2: the shared record keeps the window's plans for the connection's later windows", async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {planForwarding: () => Promise.resolve(LINKED)}),
+      options,
+    );
+    deepStrictEqual(
+      [recording.records[0]?.agentLink, recording.records[0]?.display],
+      [LINKED.agentLink, LINKED.display],
+    );
+  });
+
+  it('F-2311 R1: the plans are made with the lease and the host the probe found, before the install plan', async () => {
+    const {recording, options} = setup();
+    const given: unknown[] = [];
+    await connect(
+      INPUT,
+      steps(recording, {
+        planForwarding: (input, lease, host) => {
+          given.push(lease.socksPort, host.operatingSystem);
+          recording.calls.push('planForwarding');
+          return Promise.resolve(NO_FORWARDING);
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        given,
+        recording.calls.slice(
+          recording.calls.indexOf('probe'),
+          3 + recording.calls.indexOf('probe'),
+        ),
+      ],
+      [
+        [1080, 'linux'],
+        ['probe', 'planForwarding', 'plan'],
+      ],
+    );
+  });
+
+  it('F-2311 5.0 step 5: the window gets its plans, and the link is started once, after the tunnel', async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        planForwarding: () => Promise.resolve(LINKED),
+        linkAgent: (lease, plan) => {
+          recording.calls.push('linkAgent');
+          recording.links.push(plan);
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'forwarding' in result ? result.forwarding : result,
+        recording.links,
+        recording.calls.indexOf('linkAgent') >
+          recording.calls.indexOf('openTunnel'),
+      ],
+      [LINKED, [LINKED.agentLink], true],
+    );
+  });
+
+  it('F-2311 5.0 step 5: a connect that fails starts no link', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        planForwarding: () => Promise.resolve(LINKED),
+        openTunnel: tunnelFails,
+      }),
+      options,
+    );
+    deepStrictEqual(recording.links, []);
   });
 
   it('stores no shared record when the tunnel does not open', async () => {

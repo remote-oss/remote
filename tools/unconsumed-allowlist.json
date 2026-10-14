@@ -3,20 +3,6 @@
     {
       "package": "remote-ssh",
       "kind": "settings",
-      "key": "enableAgentForwarding",
-      "card": "#676",
-      "slice": "0.2 slice 2"
-    },
-    {
-      "package": "remote-ssh",
-      "kind": "settings",
-      "key": "enableX11Forwarding",
-      "card": "#676",
-      "slice": "0.2 slice 2"
-    },
-    {
-      "package": "remote-ssh",
-      "kind": "settings",
       "key": "defaultForwardedPorts",
       "card": "#677",
       "slice": "0.2 slice 2"
@@ -36,20 +22,6 @@
       "card": "#674",
       "slice": "deferred",
       "decision": "D-60"
-    },
-    {
-      "package": "remote-ssh",
-      "kind": "module",
-      "key": "src/environment/agent-link.ts",
-      "card": "#676",
-      "slice": "0.2 slice 2"
-    },
-    {
-      "package": "remote-ssh",
-      "kind": "module",
-      "key": "src/environment/display.ts",
-      "card": "#676",
-      "slice": "0.2 slice 2"
     },
     {
       "package": "remote-explorer",

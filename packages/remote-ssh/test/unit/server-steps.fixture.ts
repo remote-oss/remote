@@ -174,6 +174,7 @@ export function leaseOn(channel: RecordingChannel): ConnectionLease {
   return {
     channel,
     socksPort: 1080,
+    storedRecord: undefined,
     storeSharedRecord: () => Promise.resolve(true),
     onNotice: () => () => undefined,
     answer: () => Promise.resolve(false),
@@ -224,5 +225,7 @@ export function surfacesOf(
     downloadProgress: SILENT_PROGRESS,
     revealLog,
     rejectBindHost: () => undefined,
+    linkTerminals: {runProgram: () => Promise.resolve()},
+    applyTerminalEnvironment: () => undefined,
   };
 }
