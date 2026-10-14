@@ -34,6 +34,7 @@ import {
   pickHost,
   runWith,
   serverProcesses,
+  serversGoneWithin,
   setting,
   settingsText,
   typeHost,
@@ -74,7 +75,9 @@ async function failedUninstall(
   } catch (caught) {
     return {mark, message: String(caught), time: Date.now()};
   }
-  throw new Error('the uninstall did not fail');
+  throw new Error(
+    `the uninstall did not fail; ${window}'s record: ${JSON.stringify(linesSince(mark, window))}`,
+  );
 }
 
 /** The time of the host pick's line since `mark`, in window `window`. */
@@ -96,7 +99,7 @@ function makeDataFolder(): Promise<string> {
 }
 
 /** Waits until `file` no longer exists on the host, for up to 10 s. */
-async function goneWithin(file: string): Promise<void> {
+async function removedWithin(file: string): Promise<void> {
   try {
     await waitFor(
       `${file} to be removed`,
@@ -105,7 +108,7 @@ async function goneWithin(file: string): Promise<void> {
     );
   } catch (caught) {
     throw new Error(
-      `${String(caught)}; the log:\n${connectionLog().slice(-25).join('\n')}`,
+      `${String(caught)}; local's last lines: ${JSON.stringify(recordLines(undefined, 'local').slice(-4))}; the log:\n${connectionLog().slice(-25).join('\n')}`,
       {cause: caught},
     );
   }
@@ -165,10 +168,11 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
   this.timeout(900_000);
 
   /** The user files around the rows that must not change them. */
-  const filesAround: Array<[unknown, unknown]> = [];
+  const filesAround: Array<[string, unknown, unknown]> = [];
 
   before(async () => {
     await setting('remote.SSH.remotePlatform', undefined);
+    await setting('remote.SSH.useLocalServer', undefined);
     await closeAllButLocal();
   });
 
@@ -214,21 +218,25 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
   it('F-2412 AC-4, AC-5, AC-6: a picked host is uninstalled with no UI, its folder and servers gone, the window unchanged', async () => {
     await closeAllButLocal();
     await openConnected('u1', INSTALL_MILLISECONDS);
-    const running = (await serverProcesses()).length > 0;
+    const servers = await serverProcesses();
     const state = await windowState('local');
+    const marker = `${DATA_FOLDER}/uninstall-marker`;
+    await onHostAs('harness', 'touch', marker);
     const before = userFiles();
     const mark = await uninstallWith('local', [pickHost('harness')]);
-    filesAround.push([before, userFiles()]);
-    await goneWithin(DATA_FOLDER);
-    await waitFor(
-      'the server processes to end',
-      async () => (await serverProcesses()).length === 0,
-      10_000,
-    );
+    filesAround.push(['AC-4', before, userFiles()]);
+    const removed = !(await existsOnHost(marker));
+    await serversGoneWithin(servers, 10_000);
     deepStrictEqual(
-      [running, surfacesSince(mark, 'local'), await windowState('local')],
-      [true, ['hostPick'], state],
+      [
+        servers.length > 0,
+        removed,
+        surfacesSince(mark, 'local'),
+        await windowState('local'),
+      ],
+      [true, true, ['hostPick'], state],
     );
+    await closeAllButLocal();
   });
 
   it('F-2412 AC-7: the next open installs the server again', async () => {
@@ -246,14 +254,14 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
   it('F-2412 AC-22: a typed user@alias is uninstalled with the typed user', async () => {
     await closeAllButLocal();
     const mark = await uninstallWith('local', [typeHost('harness@harness')]);
-    await goneWithin(DATA_FOLDER);
+    await removedWithin(DATA_FOLDER);
     deepStrictEqual(surfacesSince(mark, 'local'), ['hostPick']);
   });
 
   it('F-2412 AC-12: a refused host fails within 2 s with the handler’s error and no notice of ours', async () => {
     const before = userFiles();
     const failed = await failedUninstall('local', [pickHost('refused')]);
-    filesAround.push([before, userFiles()]);
+    filesAround.push(['AC-12', before, userFiles()]);
     deepStrictEqual(
       [
         failed.message.includes(UNINSTALL_FAILED),
@@ -311,6 +319,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
   });
 
   it('F-2412 AC-21: Configure SSH Hosts and Add New SSH Host end the uninstall and remove nothing', async () => {
+    await closeAllButLocal();
     await makeDataFolder();
     const configure = await uninstallWith('local', [
       pickHost('Configure SSH Hosts...'),
@@ -352,7 +361,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
     await makeDataFolder();
     try {
       await uninstallWith('local', [pickHost('harness')]);
-      await goneWithin(DATA_FOLDER);
+      await removedWithin(DATA_FOLDER);
       const kept = await Promise.all(
         siblings.map(folder => existsOnHost(`${folder}/x`)),
       );
@@ -448,7 +457,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       pickHost('passkey'),
       {surface: 'maskedInput', match: 'passphrase', answer: {text: passphrase}},
     ]);
-    await goneWithin(DATA_FOLDER);
+    await removedWithin(DATA_FOLDER);
     deepStrictEqual(
       [
         question?.startsWith('Enter passphrase for ssh key'),
@@ -479,7 +488,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
         pickHost('harness'),
         platform('linux'),
       ]);
-      await goneWithin(DATA_FOLDER);
+      await removedWithin(DATA_FOLDER);
       deepStrictEqual(
         [surfacesSince(mark, 'local'), await terminalsOf('local')],
         [['hostPick', 'platformPick'], terminals],
@@ -492,7 +501,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
         pickHost('harness'),
         platform('linux'),
       ]);
-      await goneWithin(DATA_FOLDER);
+      await removedWithin(DATA_FOLDER);
       deepStrictEqual(
         [
           surfacesSince(mark, 'local'),
@@ -508,24 +517,24 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
       try {
         await setting('remote.SSH.remotePlatform', {harness: 'linux'});
         await makeDataFolder();
-        const exact = await uninstallWith('local', [pickHost('harness')]);
-        await goneWithin(DATA_FOLDER);
+        const exact = surfacesSince(
+          await uninstallWith('local', [pickHost('harness')]),
+          'local',
+        );
+        await removedWithin(DATA_FOLDER);
         await setting('remote.SSH.remotePlatform', {'uninstall-*': 'linux'});
         await makeDataFolder();
-        const wildcard = await uninstallWith('local', [
-          pickHost('uninstall-new'),
-        ]);
-        await goneWithin(DATA_FOLDER);
+        const wildcard = surfacesSince(
+          await uninstallWith('local', [pickHost('uninstall-new')]),
+          'local',
+        );
+        await removedWithin(DATA_FOLDER);
         const other = await uninstallWith('local', [
           pickHost('password'),
           platform('dismiss'),
         ]);
         deepStrictEqual(
-          [
-            surfacesSince(exact, 'local'),
-            surfacesSince(wildcard, 'local'),
-            surfacesSince(other, 'local'),
-          ],
+          [exact, wildcard, surfacesSince(other, 'local')],
           [['hostPick'], ['hostPick'], ['hostPick', 'platformPick']],
         );
       } finally {
@@ -541,7 +550,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
         pickHost('harness'),
         platform('dismiss'),
       ]);
-      filesAround.push([before, userFiles()]);
+      filesAround.push(['AC-31', before, userFiles()]);
       deepStrictEqual(
         [surfacesSince(mark, 'local'), await existsOnHost(DATA_FOLDER)],
         [['hostPick', 'platformPick'], true],
@@ -550,7 +559,7 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
 
     it('F-2412 AC-33: macOS uninstalls as Linux does', async () => {
       await uninstallWith('local', [pickHost('harness'), platform('macOS')]);
-      await goneWithin(DATA_FOLDER);
+      await removedWithin(DATA_FOLDER);
       await waitFor(
         'the server processes to end',
         async () => (await serverProcesses()).length === 0,
@@ -592,10 +601,15 @@ describe('Uninstall VS Code Server (card coverage-40)', function () {
   describe('afterwards', () => {
     it('F-2412 AC-23: no uninstall writes the settings or the keybindings file', () => {
       deepStrictEqual(
-        filesAround.map(
-          ([before, after]) => JSON.stringify(before) === JSON.stringify(after),
-        ),
-        [true, true, true],
+        filesAround.map(([label, before, after]) => [
+          label,
+          JSON.stringify(before) === JSON.stringify(after),
+        ]),
+        [
+          ['AC-4', true],
+          ['AC-12', true],
+          ['AC-31', true],
+        ],
       );
     });
   });

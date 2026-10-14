@@ -4,7 +4,7 @@
  * changes them.
  */
 
-import {mkdirSync, readFileSync} from 'node:fs';
+import {mkdirSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
@@ -124,13 +124,15 @@ export function linesSince(mark: number, window: string): RecordLine[] {
 
 /**
  * Runs `command` in window `window` with `answers` scripted for it, and gives the mark of the record it started
- * from.
+ * from. The script is lined up with the window's cursor first, so an entry an earlier command left unused can't
+ * answer this one.
  */
 export async function runWith(
   window: string,
   command: string,
   answers: readonly AppendedEntry[],
 ): Promise<number> {
+  alignScript(window);
   appendScript(answers.map(answer => ({...answer, window})));
   const mark = recordLines().length;
   try {
@@ -241,4 +243,60 @@ export function existsOnHost(file: string): Promise<boolean> {
     () => true,
     () => false,
   );
+}
+
+/** The surfaces whose record lines move a window's cursor through the script, as the scripted adapters count them. */
+const ANSWERED_SURFACES = new Set([
+  'pick',
+  'maskedInput',
+  'textInput',
+  'platformPick',
+  'hostPick',
+  'filePick',
+  'failureDialog',
+  'notice',
+  'mitigationPick',
+  'licenceModal',
+]);
+
+/**
+ * Lines up the script with window `window`'s cursor, so that the next entries appended for it are the ones the cursor
+ * reaches. The cursor is the count of the window's answered record lines; an earlier file may have left entries no
+ * question used, or rewritten the script (`scriptEntries`) so that it holds fewer entries for the window than it
+ * answered. Unused entries of the window are dropped, and a missing count is made up with placeholders before the
+ * cursor, which no question reads again. The entries of other windows are untouched.
+ */
+export function alignScript(window: string): void {
+  const scriptFile = variable('REMOTE_OSS_ACCEPTANCE_SCRIPT');
+  const entries =
+    (
+      JSON.parse(readFileSync(scriptFile, 'utf8')) as {
+        entries?: Array<{window?: string}>;
+      }
+    ).entries ?? [];
+  const answered = recordLines().filter(
+    line =>
+      line.window === window &&
+      line.matched &&
+      line.held !== true &&
+      ANSWERED_SURFACES.has(line.surface),
+  ).length;
+  let counted = 0;
+  const kept = entries.filter(entry => {
+    if (entry.window !== undefined && entry.window !== window) {
+      return true;
+    }
+    counted += 1;
+    return counted <= answered;
+  });
+  const placeholders = Array.from(
+    {length: Math.max(0, answered - counted)},
+    () => ({surface: 'notice', match: '', answer: 'dismiss', window}),
+  );
+  const tempFile = `${scriptFile}.${String(process.pid)}.tmp`;
+  writeFileSync(
+    tempFile,
+    JSON.stringify({entries: [...placeholders, ...kept]}),
+  );
+  renameSync(tempFile, scriptFile);
 }
