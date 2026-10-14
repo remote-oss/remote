@@ -84,7 +84,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
     await clearVolume();
   });
 
-  it('F-0419 5.0 step 6 (V1): a non-root remote user connects on a fresh volume; the shared folders are root 0777 and the commit folder is the user’s', async () => {
+  it('contracts §5.2 (v1): a non-root remote user connects on a fresh volume; the shared folders are root 0777 and the commit folder is the user’s', async () => {
     await clearVolume();
     const folder = devContainerFolder('volume-user', {
       name: 'Volume User',
@@ -121,7 +121,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
     await closeWindow(name);
   });
 
-  it('F-0419 7.E4 (V2): a server folder that is root 0700 stays so, the install fails with the setup dialog, and the missing folders under it are made 0777', async () => {
+  it('F-0419 AC-24 (v2): a server folder that is root 0700 stays so, the install fails with the setup dialog, and the missing folders under it are made 0777', async () => {
     await clearVolume();
     await onVolume(`mkdir -m 0700 ${serverFolder}`);
     const folder = devContainerFolder('volume-closed', {
