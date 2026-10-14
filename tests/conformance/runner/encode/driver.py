@@ -5,6 +5,7 @@ Nothing here opens its own CDP or WebSocket connection: every UI interaction goe
 Docker is only ever asked for state, labels and mounts (never command lines, never exec into anything).
 """
 import json
+import signal
 import os
 import shlex
 import subprocess
@@ -17,13 +18,14 @@ import redact
 # environment for subprocesses that must talk to the HOST's Docker / lab tooling, never to some DOCKER_HOST of ours
 BASE_ENV = {k: v for k, v in os.environ.items()
             if k not in ("DOCKER_HOST", "DOCKER_CONTEXT", "LAB_DOCKER_SOCK", "LAB_HOME", "LAB_WINDOW", "LAB_JSON",
-                         "LAB_HOST", "LAB_SLOT", "LAB_PASSENV", "LAB_AGENT", "LAB_RUN_TARGET")}
+                         "LAB_HOST", "LAB_SLOT", "LAB_PASSENV", "LAB_AGENT", "LAB_RUN_TARGET", "LAB_CMD_EXACT")}
 
 STATE_WHATS = ("title", "dialogs", "notifications", "statusbar", "contextmenu", "banner", "editors", "welcome",
                "sidebar")
-SIMPLE_WHATS = STATE_WHATS + ("quickpick", "notification_center", "windows", "files")
+SIMPLE_WHATS = STATE_WHATS + ("quickpick", "notification_center", "windows", "files", "opened_urls")
 DICT_WHATS = ("view", "hover", "docker", "panel", "statusbar", "contextmenu", "suggest", "hovertext", "markers", "tokens", "folds", "outline",
-              "breadcrumbs")
+              "breadcrumbs", "target_files", "user_settings", "notification_order")
+TARGET_FILES_INTERVAL = 2   # seconds between the two reads of a target_files observation (the case may say 1 to 30)
 # Editor observations (lab verbs of the same name, remote-ssh-edit 2026-10-02): the payload keys kept from the verb's
 # JSON output. Expectation key: <kind>:<file or "active">[@line[:col]].
 EDITOR_PAYLOAD = {
@@ -148,6 +150,13 @@ NAVIGATION_ERRORS = ("Execution context was destroyed", "Target page, context or
                      "frame was detached", "Target closed", "navigation", "has been closed")
 
 
+def shown_has(shown, want):
+    """Whether `shown` holds `want`, or core's cut of it: a label longer than 40 characters shows as its first 40 plus "…"
+    (F-2502 BR-9; [oss] remoteIndicator.ts REMOTE_STATUS_LABEL_MAX_LENGTH). `want` is the whole host label, such as
+    "SSH: ${SSH_HOST}" substituted; no other cut matches (athena on #229)."""
+    return want in shown or (len(want) > 40 and want[:40] + "\u2026" in shown)
+
+
 def screen_only(st):
     """What `quiet` compares: the screen, without how long the `lab` call took (`_seconds`) or other bookkeeping;
     on a busy host the timing changed on every poll and the quiet timer never settled (F-0419, 2026-10-01)."""
@@ -164,20 +173,28 @@ class Session:
     def __init__(self, slot, host, ph, docker=None, known_names=(), log=None, run_target=None):
         self.slot, self.host, self.ph, self.docker = slot, host, ph, docker
         self.run_target = run_target   # "<alias>:<case folder>": the run's narrower R-63 rule (fixture.window_start: local)
+        self.exact = False             # cmd matches the exact palette title only (LAB_CMD_EXACT; window: {close})
         self.known_names = set(known_names)
+        self.target_files = None   # the run's `sshtarget files` on its per-case target (record sets it), else None
+        self.user_settings = None  # the run's reader of its slot profile's settings.json (record sets it), else None
+        self.urls_start = 0        # how many URLs the slot's log held when the case began (mark_urls); older ones are not its
         self.window = None
         self.log = log or (lambda *_: None)
 
     # ---- lab
-    def lab(self, *args, timeout=180):
+    def lab(self, *args, timeout=180, stdin=None):
+        """A lab verb; stdin (text) goes to the process's standard input, never its command line."""
         env = dict(BASE_ENV, LAB_SLOT=str(self.slot), LAB_JSON="1")
         if self.window:
             env["LAB_WINDOW"] = self.window
         if self.run_target:
             env["LAB_RUN_TARGET"] = self.run_target
+        if self.exact:
+            env["LAB_CMD_EXACT"] = "1"
         t0 = time.time()
         try:
-            p = subprocess.run([caselib.LAB, *map(str, args)], capture_output=True, text=True, env=env, timeout=timeout)
+            p = subprocess.run([caselib.LAB, *map(str, args)], capture_output=True, text=True, env=env, timeout=timeout,
+                               input=stdin)
             out = p.stdout.strip().splitlines()
             try:
                 res = json.loads(out[-1]) if out else {"ok": False, "error": "no output: " + p.stderr.strip()[:300]}
@@ -196,11 +213,11 @@ class Session:
         st = self.lab("state", timeout=60)
         return st if st.get("ok") and "title" in st else None
 
-    def act(self, *args, timeout=180):
+    def act(self, *args, timeout=180, stdin=None):
         """An action verb. When its own action reloads or navigates the window, `lab` loses the page before it can
         print the state ("Execution context was destroyed"); the action happened, so it counts as done as soon as a
         fresh state read works (F-0419-AC14-13, 2026-10-01)."""
-        res = self.lab(*args, timeout=timeout)
+        res = self.lab(*args, timeout=timeout, stdin=stdin)
         err = str(res.get("error") or "") + " " + str(res.get("errorDetail") or "")
         if res.get("ok") or not any(n in err for n in NAVIGATION_ERRORS):
             return res
@@ -219,6 +236,10 @@ class Session:
         timeout = float(timeout) * wait_scale()
         deadline = time.time() + timeout
         quiet = next((float(c["quiet"]) for c in conds if "quiet" in c), None)
+        if any("notification_seen" in c for c in conds) and not self.keeper_alive():
+            # athena on kit #241 (A): a gap in the log must never pass as "not shown"
+            return {"ok": False, "error": "notification_seen: the notification log keeper (lab notification-log-keep) is "
+                                          "not running for this window", "polls": 0, "conditions": {}}
         last, since, polls = None, time.time(), 0
         detail = {}
         while True:
@@ -243,7 +264,58 @@ class Session:
                         "polls": polls, "conditions": detail, "state": st}
             time.sleep(1.0)
 
+    def _lab_env(self):
+        env = dict(BASE_ENV, LAB_SLOT=str(self.slot), LAB_JSON="1")
+        return env
+
+    def start_keeper(self):
+        """athena on kit #241 (A): the resident `lab notification-log-keep` of this window (CDP init scripts live only
+        while their session stays attached). The provisioner starts it with the window and again on restart."""
+        self.stop_keeper()
+        self._keeper = subprocess.Popen([caselib.LAB, "notification-log-keep"], env=self._lab_env(), stdin=subprocess.DEVNULL,
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+    def stop_keeper(self):
+        k = getattr(self, "_keeper", None)
+        self._keeper = None
+        if k and k.poll() is None:
+            try:
+                os.killpg(k.pid, signal.SIGTERM)
+                k.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                k.kill()
+
+    def keeper_alive(self):
+        k = getattr(self, "_keeper", None)
+        return bool(k) and k.poll() is None
+
+    def notifications_seen(self):
+        """{epoch, seen: [{seq, text}]}: every notification appearance since the log began (lab.mjs keeps it in the page),
+        or None when the window cannot be read."""
+        r = self.lab("notifications-seen", timeout=60)
+        return r if r.get("ok") and isinstance(r.get("seen"), list) else None
+
+    def begin_step(self, i):
+        """athena on kit #241 (A): notification_seen counts appearances since its step began: from window start for the
+        first step (a remote start's short stages happen while provisioning), from the log's length at the step's start
+        for every later one (a new epoch, after a reload, counts whole)."""
+        if i == 0:
+            self._seen_mark = None
+            return
+        r = self.notifications_seen()
+        self._seen_mark = (r["epoch"], len(r["seen"])) if r else None
+
+    def _seen_since_mark(self, text):
+        r = self.notifications_seen()
+        if r is None:
+            return False
+        mark = getattr(self, "_seen_mark", None)
+        entries = [e for e in r["seen"] if not (mark and mark[0] == r.get("epoch") and e.get("seq", 0) < mark[1])]
+        return any(text in str(e.get("text") or "") for e in entries)
+
     def _cond(self, kind, arg, st):
+        if kind == "notification_seen":   # a stage shorter than a poll counts: any appearance since the step began
+            return self._seen_since_mark(arg)
         if kind in ("quickpick", "dialog", "no_dialog", "no_notification", "notification", "statusbar", "title") and st is None:
             return False
         if kind == "quickpick":
@@ -265,7 +337,7 @@ class Session:
         if kind == "notification":
             return any(arg in (n.get("text") or "") for n in st["notifications"])
         if kind == "statusbar":
-            return any(arg in (i.get("text") or "") or arg in (i.get("aria") or "") for i in st["statusBar"])
+            return any(shown_has(i.get("text") or "", arg) or shown_has(i.get("aria") or "", arg) for i in st["statusBar"])
         if kind == "title":
             return arg in st["title"]
         if kind == "windows":
@@ -319,12 +391,76 @@ class Session:
                 elif kind == "statusbar":   # the remote indicator and the extension's items, plus the core items named
                     out["statusbar"] = self._observe_simple("statusbar", st, core=arg.get("core") or [])
                 elif kind == "panel":   # R-49: the panel part, its tabs, terminals and Output channel; never their text
-                    p = self.lab("panel", timeout=60)
-                    out["panel"] = {k: v for k, v in p.items() if k not in ("command", "args", "ok")} if p.get("ok") \
-                        else {"error": p.get("error")}
+                    out["panel"] = self._observe_panel()
+                elif kind == "user_settings":   # athena on kit #227 (item 3): the named keys of settings.json only
+                    out["user_settings"] = self.user_settings(arg["keys"]) if self.user_settings else \
+                        {"error": "user_settings needs the run's profile"}
+                elif kind == "target_files":
+                    out[f"target_files:{arg['path']}"] = self._observe_target_files(arg)
+                elif kind == "notification_order":
+                    out["notification_order"] = self._observe_order(arg)
                 elif kind in EDITOR_PAYLOAD:
                     out[editor_key(kind, arg)] = self._observe_editor(kind, arg)
         return redact.redact_obj(out)
+
+    def mark_urls(self):
+        """Note how many URLs the slot's log already holds, so `opened_urls` gives only this case's (athena on #228)."""
+        u = self.lab("urls", timeout=60)
+        self.urls_start = len(u.get("urls", [])) if u.get("ok") else 0
+
+    def _observe_order(self, pair):
+        """athena on kit #241 (option (2), F-2403 AC6-1): whether A's first appearance in the window's notification log
+        (from the window's start; the log notification_seen reads, matched the same way) comes before B's first. Records
+        the pair and `held`, or why not (`A not seen`, `B not seen`, `B before A`); no times, so replays compare equal. An
+        observation, never a wait: the case waits for the state that ends the flow first. A notification whose text holds
+        both is not an order, so it gives `B before A`."""
+        a, b = pair
+        if not self.keeper_alive():   # a gap in the log must never pass as "not seen" (athena on #241 (A))
+            return {"error": "lab error: notification_order: the notification log keeper is not running for this window"}
+        r = self.notifications_seen()
+        if r is None:
+            return {"error": "lab error: notification_order: the window's notification log cannot be read"}
+
+        def first(text):
+            return next((i for i, e in enumerate(r["seen"]) if text in str(e.get("text") or "")), None)
+        ia, ib = first(a), first(b)
+        result = "A not seen" if ia is None else "B not seen" if ib is None else "held" if ia < ib else "B before A"
+        return {"pair": [a, b], "result": result}
+
+    def _observe_target_files(self, arg):
+        """athena on kit #218 (item 3): the per-case target after the connection closed, read twice `interval` seconds
+        apart through the kit's own exec. Each entry's size is recorded as its change between the two reads (grew, same,
+        shrank, gone, new), never the bytes, so two runs can agree; processes are executable names (comm) from the
+        second read. Never contents, argv or environment."""
+        if not self.target_files:
+            return {"error": "target_files needs the case's own SSH target"}
+        first = self.target_files(arg["path"])
+        time.sleep(float(arg.get("interval") or TARGET_FILES_INTERVAL))
+        second = self.target_files(arg["path"])
+        if "error" in first or "error" in second:
+            return {"error": first.get("error") or second.get("error")}
+        a = {e["name"]: e for e in first["entries"]}
+        b = {e["name"]: e for e in second["entries"]}
+
+        def change(name):
+            if name not in b:
+                return "gone"
+            if name not in a:
+                return "new"
+            if b[name]["type"] != "file":
+                return "same"
+            return "grew" if b[name]["size"] > a[name]["size"] else "shrank" if b[name]["size"] < a[name]["size"] else "same"
+        return {"exists": second["exists"],
+                "entries": [{"name": n, "type": (b.get(n) or a[n])["type"], "change": change(n)} for n in sorted(set(a) | set(b))],
+                "processes": second["processes"]}
+
+    def _observe_panel(self):
+        """`lab panel` without the call's bookkeeping. `_seconds` (how long the call took) stayed in, so a closed panel's
+        {"visible": false, "_seconds": 0.2} never agreed with the next run's (F-2304-AC33-1, 2026-10-12)."""
+        p = self.lab("panel", timeout=60)
+        if not p.get("ok"):
+            return {"error": p.get("error")}
+        return {k: v for k, v in p.items() if k not in ("command", "args", "ok") and not k.startswith("_")}
 
     def _observe_editor(self, kind, arg):
         """One editor observation through the lab verb of the same name (one JSON argument; LAB_JSON output)."""
@@ -372,6 +508,9 @@ class Session:
                 it = self.lab("items", "400", timeout=120)
                 q["items"] = it.get("items", []) if it.get("ok") else {"error": it.get("error")}
             return q
+        if w == "opened_urls":   # athena on kit #227 (item 2): the URLs this case's windows asked to open, in order
+            u = self.lab("urls", timeout=60)
+            return u.get("urls", [])[self.urls_start:] if u.get("ok") else {"error": u.get("error")}
         if w == "notification_center":
             n = self.lab("notifications", timeout=60)
             return n.get("notifications", []) if n.get("ok") else {"error": n.get("error")}
