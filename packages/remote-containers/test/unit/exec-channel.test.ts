@@ -470,7 +470,9 @@ describe('the exec channel (card containers-02)', () => {
       remotePath: '/d/a',
       cancellation: controller.signal,
     });
-    await new Promise(resolve => setImmediate(resolve));
+    while (engine.processes.length === 0) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
     controller.abort();
     const outcome = await copying;
     deepStrictEqual(
