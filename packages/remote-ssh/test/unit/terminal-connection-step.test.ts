@@ -615,4 +615,16 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
       [false, false],
     );
   });
+
+  it("ADR-0010: a terminal that ends after authentication is not classified from the shell's output", async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(`${AUTHENTICATED_ONLY}x@h: Permission denied (fridge).\n`);
+    terminal.end(255, 'process');
+    const outcome = await result;
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure.kind : outcome,
+      'unknown',
+    );
+  });
 });
