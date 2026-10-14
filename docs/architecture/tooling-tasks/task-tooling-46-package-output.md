@@ -43,17 +43,24 @@ and it isn't `picocolors`.
 ## 3. The orchestrator (`package-run.ts`)
 
 `runPackage(root, phases, out)`:
-- `phases` is `{identifiers(root): Promise<string[]>; build(root): Promise<string[]>; package(root): string[]; size(file): number}`.
-  The real values are `generateTables`, `buildPackages(root, [])`, `packageExtensions(root, [])` and
+- `phases` is `{identifiers(root): Promise<string[]>; build(root): Promise<string[]>; package(root, folders: readonly string[]): string[]; size(file): number}`.
+  The real values are `generateTables`, `buildPackages(root, [])`, `packageExtensions(root, folders)` and
   `statSync(file).size`. Tests pass fakes.
+- **The arguments** (dike on #825). `pnpm package remote-explorer` works today: pnpm appends the arguments to the
+  script's last command, `node tools/package-extensions.ts`, so they name the folders to package. Several cards'
+  gates use it (containers-01, explorer-03b, -03c and -04). So:
+  - every argument after the script name that doesn't start with `--` is a folder for the package phase;
+  - `--plain` (§4.1) isn't a folder, and neither is any other `--` argument;
+  - the build phase keeps `[]`, as today: it builds every package, and only packaging is narrowed.
 - `out` is `{write(text: string): void; isTerminal: boolean; environment: Readonly<Record<string, string | undefined>>; argv: readonly string[]}`.
   The real values are `process.stdout.write`, `process.stdout.isTTY === true`, `process.env` and `process.argv`.
 - It runs the three phases **in order, in this one process**, and times each one with `performance.now()`, in
   milliseconds.
 - It reads each `.vsix`'s size from the package phase's outcomes (`<folder>: <path>`, the path relative to `root`).
 - **Mode** (`chooseMode`, §4.1):
-  - `plain`: write each outcome as `identifiers: <o>\n`, then `build: <o>\n`, then `package: <o>\n`, in the phases'
-    order. These are exactly today's lines;
+  - `plain`: write each phase's lines **as soon as that phase ends**: `identifiers: <o>\n` for each outcome after the
+    identifiers phase, then `build: <o>\n` after the build phase, then `package: <o>\n` after the package phase. These
+    are exactly today's lines, at today's moments, so a failing build still shows the `identifiers:` lines first;
   - `styled` or `styled-mono`: write `renderPackageRun(run, style)` once, at the end.
 - **On an error in a phase:**
   - `plain` writes `<phase>: <message>` to stderr, as each tool does today;
@@ -198,7 +205,8 @@ with the mock-up's sizes (412, 168, 503 and 71 KB as bytes × 1024), and timings
 |---|---|---|
 | tooling-46 §1 | mode `plain`, fake phases giving today's outcomes | the written text is exactly the `identifiers: …`, `build: …` and `package: …` lines, in order, each ending `\n`, and nothing else |
 | tooling-46 §3 | mode `styled-mono`, the same | one write, equal to `renderPackageRun` of the run, with the fake sizes and the measured timings (the fake phases add no delay, so the test checks the values are numbers ≥ 0, not their size) |
-| tooling-46 §3 | the build phase rejects with `Error('boom')`, `plain` | stderr `build: boom`, no package phase called, `exitCode` 1 |
+| tooling-46 §3 | the build phase rejects with `Error('boom')`, `plain` | the `identifiers:` lines were written first, then stderr `build: boom`; no package phase called; `exitCode` 1 |
+| tooling-46 §3 | `argv` `['node', 'package-run.ts', 'remote-explorer', '--plain', 'remote-ssh']` | the package phase gets `['remote-explorer', 'remote-ssh']`; the build phase got `[]`; mode `plain` |
 | tooling-46 §3 | the same, `styled-mono` | the identifiers phase's lines, then `  ✖ build: boom` |
 | tooling-46 §3 | the order | the fake phases record that identifiers, then build, then package ran |
 
