@@ -369,6 +369,7 @@ export function harnessSshConfig(
     'Host blackhole',
     '  HostName 192.0.2.1',
     '  BatchMode yes',
+    '',
   ].join('\n');
 }
 
