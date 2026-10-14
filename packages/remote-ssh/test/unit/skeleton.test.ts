@@ -247,7 +247,7 @@ describe('manifest (card remote-ssh-01 table)', () => {
     );
   });
 
-  it('activationEvents: the seven, in order, with no wildcards or startup', () => {
+  it('F-2501 AC-1: activationEvents: the seven, in order, with no wildcards or startup', () => {
     deepStrictEqual(manifest().activationEvents, [
       'onCommand:remote-internal.getSshFoldersHistory',
       'onCommand:remote-internal.deleteSshFolderFromHistory',

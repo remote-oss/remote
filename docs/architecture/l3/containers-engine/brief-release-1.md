@@ -131,7 +131,9 @@ reviewed yet.
    - the stand-down for `ms-vscode-remote.remote-containers` follows R-54, R-77 and R-78;
    - the standing-down key is ours (R-27).
 8. **The manifest contributes only what release 1 handles** (D-86's principle, enforced by tooling-31's check): the
-   `dev-container` activation event, release 1's commands and settings, and no views. Every AC that counts the full
+   `dev-container` activation event and `onStartupFinished` (amended 2026-10-14 on #892: F-0410's Edit Locally opens
+   the configuration in the new local window, so the extension must be active there), release 1's commands and
+   settings, and no views. Every AC that counts the full
    contribution set is `deferred` with the reason "containers release 1: the full contribution set comes with later
    increments":
    - F-0101 AC-1, 2, 6, 13 and 14;

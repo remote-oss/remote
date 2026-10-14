@@ -97,6 +97,20 @@ async function askEngine(
   };
 }
 
+/** The two lines with which the engine's client says a container is gone, at the start of a line. */
+const VANISHED_LINES = [
+  'Error response from daemon: No such container: ',
+  'Error: No such container: ',
+];
+
+/** Whether `stderr` has a line in which the engine says a container is gone; a line only mentioning it does not count. */
+function vanishedIn(stderr: string): boolean {
+  return stderr
+    .split('\n')
+    .map(line => (line.endsWith('\r') ? line.slice(0, -1) : line))
+    .some(line => VANISHED_LINES.some(form => line.startsWith(form)));
+}
+
 /** Lists the containers made for a folder and reads their facts. */
 async function discover(
   engine: EngineHost,
@@ -127,7 +141,7 @@ async function discover(
     return {kind: 'cancelled'};
   }
   if (inspected.kind === 'failed') {
-    return inspected.stderr.includes('No such container')
+    return vanishedIn(inspected.stderr)
       ? {kind: 'vanished'}
       : {kind: 'discoveryFailed', detail: inspected.detail};
   }

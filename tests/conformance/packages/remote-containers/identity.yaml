@@ -1,0 +1,11 @@
+# Identity values the normalizer replaces with placeholders before any comparison (encode/normalize.py):
+# the extension under test's id becomes ${EXT_ID}, its display name in notification sources ${EXT_NAME}, the
+# editor's product name in window titles ${APP_NAME}. Set reimplementation.extension_id (and display_name)
+# to your build's values; see runner/README.md.
+reimplementation:
+  extension_id: remote-oss.remote-containers
+  display_name: null
+app_names:
+- Visual Studio Code
+- VSCodium
+- Code - OSS

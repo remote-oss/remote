@@ -384,6 +384,7 @@ async function registerConnectOf(
     }),
     {
       settings: host,
+      configuredHosts: () => configuredHosts(host),
       translate,
       help: served.help,
       names: {

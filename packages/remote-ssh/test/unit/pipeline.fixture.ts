@@ -245,6 +245,8 @@ export function steps(
     return value;
   }
   return {
+    checkConfigFile: () =>
+      note('checkConfigFile', {kind: 'done', value: undefined}),
     checkStartSettings: () =>
       note('checkStartSettings', {kind: 'done', value: undefined}),
     validate: () => note('validate', {kind: 'done', value: undefined}),
