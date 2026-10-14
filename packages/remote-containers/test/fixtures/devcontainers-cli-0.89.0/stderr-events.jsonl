@@ -1,0 +1,7 @@
+{"type":"text","level":3,"timestamp":1791946302031,"text":"@devcontainers/cli 0.89.0. Node.js v24.21.0. linux 7.2.7-200.fc44.x86_64 x64."}
+{"type":"start","level":2,"timestamp":1791946302576,"text":"Run: docker ps -q -a --filter label=c3probe=1"}
+{"type":"stop","level":2,"timestamp":1791946302586,"text":"Run: docker ps -q -a --filter label=c3probe=1","startTimestamp":1791946302576}
+{"type":"raw","level":3,"timestamp":1791946305954,"text":"\u001b[1mRunning the postCreateCommand from devcontainer.json...\u001b[0m\r\n\r\n","channel":"postCreate"}
+{"type":"progress","name":"Running postCreateCommand...","status":"running","stepDetail":"echo created > /tmp/c3-created","channel":"postCreate"}
+{"type":"progress","name":"Running postCreateCommand...","status":"succeeded","channel":"postCreate"}
+(node:1456880) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.

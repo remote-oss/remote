@@ -24,6 +24,12 @@ const STALE_EDITOR_SECONDS = 7200;
 /** The image name of the SSH host; the run's tag keeps each run's build and container its own. */
 export const HOST_IMAGE = 'remote-oss-acceptance-host';
 
+/** The label every dev container of the containers launches carries, and the images built for them. */
+export const DEVCONTAINER_LABEL = 'remote-oss.acceptance.devcontainer';
+
+/** The image name of the dev containers' base image; the run's tag keeps each run's build its own. */
+export const DEVCONTAINER_IMAGE = 'remote-oss-acceptance-devcontainer';
+
 /** The result of one command: its exit status and its standard output and error. */
 export interface CommandResult {
   status: number;
@@ -93,6 +99,127 @@ export function acceptanceRunId(
 /** The image tag of the run: `remote-oss-acceptance-host:<run id>`. */
 export function hostImageOf(runId: string): string {
   return `${HOST_IMAGE}:${runId}`;
+}
+
+/** The image tag of the run's dev container image: `remote-oss-acceptance-devcontainer:<run id>`. */
+export function devContainerImageOf(runId: string): string {
+  return `${DEVCONTAINER_IMAGE}:${runId}`;
+}
+
+/**
+ * Builds the run's dev container image from `tests/acceptance/devcontainer-image`, labelled with the run and as a dev
+ * container's, and returns its tag.
+ */
+export function buildDevContainerImage(
+  command: CommandRunner,
+  root: string,
+  runId: string,
+): string {
+  const imageTag = devContainerImageOf(runId);
+  checked(command, 'docker', [
+    'build',
+    '--load',
+    '--quiet',
+    '--label',
+    `${RUN_LABEL}=${runId}`,
+    '--label',
+    `${DEVCONTAINER_LABEL}=1`,
+    '--tag',
+    imageTag,
+    path.join(root, 'tests', 'acceptance', 'devcontainer-image'),
+  ]);
+  return imageTag;
+}
+
+/** The ids of a quiet Docker listing, one per line. */
+function idsOf(quiet: string): string[] {
+  return quiet
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line !== '');
+}
+
+/** One Docker object of an `inspect` line: its id, the run it carries and its creation time. */
+interface LabelledObject {
+  objectId: string;
+  runId: string;
+  createdSeconds: number;
+}
+
+/** The format of an `inspect` line: the id, the run label's value and the creation time, separated by spaces. */
+const LABELLED_FORMAT = `{{.Id}} {{index .Config.Labels "${RUN_LABEL}"}} {{.Created}}`;
+
+/** The objects of `inspect` lines in `LABELLED_FORMAT`. */
+function labelledObjects(lines: string): LabelledObject[] {
+  return lines
+    .split('\n')
+    .map(line => line.trim().split(' '))
+    .filter(fields => fields.length === 3)
+    .map(([objectId = '', runId = '', created = '']) => ({
+      objectId,
+      runId,
+      createdSeconds: Date.parse(created) / 1000,
+    }));
+}
+
+/**
+ * Removes the dev containers and their images that another run left: each with the dev container label, another run's
+ * label and a creation time more than two hours before `nowSeconds`. Age is the key, not another run's id alone,
+ * because two jobs may share a runner's daemon and a younger object belongs to a run that may still be going.
+ */
+export function sweepStaleDevContainers(
+  command: CommandRunner,
+  runId: string,
+  nowSeconds: number,
+): void {
+  function isStale(object: LabelledObject): boolean {
+    return (
+      object.runId !== runId &&
+      nowSeconds - object.createdSeconds > STALE_EDITOR_SECONDS
+    );
+  }
+  const filter = `label=${DEVCONTAINER_LABEL}=1`;
+  const containers = idsOf(
+    checked(command, 'docker', ['ps', '--all', '--quiet', '--filter', filter]),
+  );
+  if (containers.length > 0) {
+    for (const stale of labelledObjects(
+      checked(command, 'docker', [
+        'inspect',
+        '--type',
+        'container',
+        '--format',
+        LABELLED_FORMAT,
+        ...containers,
+      ]),
+    ).filter(isStale)) {
+      checked(command, 'docker', ['rm', '--force', stale.objectId]);
+    }
+  }
+  const images = idsOf(
+    checked(command, 'docker', [
+      'image',
+      'ls',
+      '--quiet',
+      '--no-trunc',
+      '--filter',
+      filter,
+    ]),
+  );
+  if (images.length > 0) {
+    for (const stale of labelledObjects(
+      checked(command, 'docker', [
+        'image',
+        'inspect',
+        '--format',
+        LABELLED_FORMAT,
+        ...images,
+      ]),
+    ).filter(isStale)) {
+      // An image another stale container still used is gone with it, or still in use by a live one: no error.
+      command('docker', ['image', 'rm', '--force', stale.objectId]);
+    }
+  }
 }
 
 /** The characters of the run's password for the user `harness-pw`, and its length. */
@@ -190,23 +317,28 @@ export function startHostContainer(
   return {container, port, keyFile, passwordFile};
 }
 
-/** The container ids of a `docker ps --quiet` answer. */
-function containersOf(quiet: string): string[] {
-  return quiet
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line !== '');
-}
-
 /**
  * Removes the run's containers (by the run's label, forced), ends an editor still on the run's user-data folder, and
- * removes its image tag; what is already gone is not an
+ * removes its image tags and its dev containers' images; what is already gone is not an
  * error. A container that still carries the run's label afterwards makes it throw, naming the ids, so a failed
  * removal fails the run instead of keeping the run's state on the shared machine.
  */
 export function cleanRun(command: CommandRunner, runId: string): void {
   const filter = `label=${RUN_LABEL}=${runId}`;
-  for (const containerId of containersOf(
+  // The images of the run's dev containers, noted before the containers go; the run's own tag is removed below.
+  const devContainerImages = idsOf(
+    checked(command, 'docker', [
+      'ps',
+      '--all',
+      '--filter',
+      filter,
+      '--filter',
+      `label=${DEVCONTAINER_LABEL}=1`,
+      '--format',
+      '{{.Image}}',
+    ]),
+  );
+  for (const containerId of idsOf(
     checked(command, 'docker', ['ps', '--all', '--quiet', '--filter', filter]),
   )) {
     checked(command, 'docker', ['rm', '--force', containerId]);
@@ -222,9 +354,15 @@ export function cleanRun(command: CommandRunner, runId: string): void {
     '--',
     'acceptance-[0-9]+-[0-9]+-[A-Za-z0-9_-]+-[A-Za-z0-9]+/user-data',
   ]);
-  // The image may already be gone: its removal's status is ignored.
+  // The images may already be gone: their removal's status is ignored.
   command('docker', ['image', 'rm', '--force', hostImageOf(runId)]);
-  const remaining = containersOf(
+  for (const image of new Set([
+    ...devContainerImages,
+    devContainerImageOf(runId),
+  ])) {
+    command('docker', ['image', 'rm', '--force', image]);
+  }
+  const remaining = idsOf(
     checked(command, 'docker', ['ps', '--all', '--quiet', '--filter', filter]),
   );
   if (remaining.length > 0) {
