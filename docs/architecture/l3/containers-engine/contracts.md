@@ -106,6 +106,22 @@ its content:
    without it. When the `vscode` volume is mounted, a second probe with the tree reads `treeComplete`, and the plan
    reads that probe's facts. Without the volume there's one probe and no tree. C10's rows check `INSTALL_TREE` in the
    install, start and cleanup scripts, and its absence from the first probe.
+   **The volume's shared folders (amended 2026-10-14, daedalus; the user's `scriptFailed` on a non-root image):** a fresh
+   named volume is `root:root 0755`, so the remote user can't create the tree. When the volume is mounted, after the first
+   probe and before the second, C10 runs one fixed script of ours over a C11 channel opened with `--user root`. For each of
+   `/vscode/vscode-server`, `…/bin`, `…/bin/<platform>` and `…/extensionsCache` that **doesn't exist**, it runs `mkdir` and
+   then `chmod 0777` on that folder. It never changes an existing folder's owner or mode, so F-0419 7.E4 and 7.E5 hold as
+   observed: a root-only `0700` tree stays unusable, and the install then fails as observed. This is F-0419 5.0 step 6's
+   layout.
+   - `<platform>` is the first probe's `templatePlatformOf`, checked against `^[a-z0-9-]+$` and passed as a script
+     parameter, never interpolated unchecked.
+   - The script reports through our result block (ADR-0010).
+   - A refused or failed root step is logged and the connect goes on, so the remote user's install fails or succeeds on
+     its own terms.
+   - The install, the start and the commit folder stay the remote user's (0755): F-0419 calls the owner reference data
+     for its layout decision, and a later container's other user can read and run it.
+   - Running the whole tree install as root is rejected, because it would leave root-owned files in the user's
+     `~/.vscode-server`.
 3. **lib-authority:** nothing new. `Failed.silent`, `Connected.trusted` and the container codec already exist (dossier
    Q3 and Q6 are answered by them).
 
