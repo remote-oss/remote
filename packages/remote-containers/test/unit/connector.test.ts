@@ -53,6 +53,17 @@ async function connected(scene: Scene) {
   return result;
 }
 
+/** The CLI's answer for a configuration whose layers list these extensions. */
+function withMerged(extensions: string[]): Scene['configuration'] {
+  return {
+    kind: 'configuration',
+    configuration: {name: 'Proj'},
+    workspaceFolder: '/workspaces/proj',
+    workspaceMount: undefined,
+    mergedConfiguration: {customizations: {vscode: [{extensions}]}},
+  };
+}
+
 describe('the container connector: the connect (card containers-08)', () => {
   it('contracts §2 step 1: a malformed payload, a legacy one and an outer hop fail at once, with no engine call', async () => {
     const scene = sceneOf();
@@ -332,6 +343,83 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it("F-0505 5.0 step 5: a new container's start carries the effective list, and the log names it", async () => {
+    const scene = sceneOf();
+    scene.defaultExtensions = ['c.d'];
+    scene.configuration = withMerged(['a.b']);
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.serverRequests.map(request => request.defaultExtensions),
+        messages(scene).filter(line => line.includes('extensions to install')),
+      ],
+      [
+        [['a.b', 'c.d']],
+        ['extensions to install in the new container: a.b, c.d'],
+      ],
+    );
+  });
+
+  it('F-0505 AC-14: a reused container installs nothing, and says nothing of it', async () => {
+    const scene = sceneOf();
+    scene.outcome = {...READY, created: false};
+    scene.defaultExtensions = ['c.d'];
+    scene.configuration = withMerged(['a.b']);
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.serverRequests.map(request => request.defaultExtensions),
+        messages(scene).some(line => line.includes('extensions to install')),
+      ],
+      [[[]], false],
+    );
+  });
+
+  it('F-0505 BR-10: an empty list says so', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    deepStrictEqual(
+      [
+        scene.serverRequests.map(request => request.defaultExtensions),
+        messages(scene).includes('no extensions to install'),
+      ],
+      [[[]], true],
+    );
+  });
+
+  it("F-0504 BR-2 with F-0505: a failed identity read keeps the setting's ids", async () => {
+    const scene = sceneOf();
+    scene.defaultExtensions = ['c.d'];
+    scene.configuration = {kind: 'malformedResult', field: 'configuration'};
+    await connected(scene);
+    deepStrictEqual(
+      scene.serverRequests.map(request => request.defaultExtensions),
+      [['c.d']],
+    );
+  });
+
+  it('F-0505 AC-27: the deprecated setting is used when the new one is unset', async () => {
+    const scene = sceneOf();
+    scene.deprecatedDefaultExtensions = ['x.y'];
+    await connected(scene);
+    deepStrictEqual(
+      scene.serverRequests.map(request => request.defaultExtensions),
+      [['x.y']],
+    );
+  });
+
+  it('F-0505 6.4 step 8: the settings are read at each connect', async () => {
+    const scene = sceneOf();
+    scene.defaultExtensions = ['one.a'];
+    await connected(scene);
+    scene.defaultExtensions = ['two.b'];
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      scene.serverRequests.map(request => request.defaultExtensions),
+      [['one.a'], ['two.b']],
+    );
+  });
+
   it('contracts §2: a configuration file whose URI has no file system path is read by its path', async () => {
     const scene = sceneOf();
     const folder: DevContainerFolder = {
@@ -410,6 +498,7 @@ describe('the container connector: the connect (card containers-08)', () => {
       'Starting container',
       'containerReady',
       'container c1c1c1c1c1c1 was newly started',
+      'no extensions to install',
       'Resolving Remote: 50 ms',
     ]);
   });

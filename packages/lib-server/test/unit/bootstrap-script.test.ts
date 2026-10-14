@@ -1081,6 +1081,37 @@ describe('the POSIX bootstrap script', () => {
       ]);
     });
 
+    it('F-0505 BR-7: an entry with a quote, a substitution, a leading double quote or a space reaches the server as one literal argument', () => {
+      const marker = `${host.environment.HOME ?? ''}/pwned`;
+      const entries = [
+        `a.b'; touch ${marker} #`,
+        `c.d$(touch ${marker})`,
+        `e.f\`touch ${marker}\``,
+        `"$(touch ${marker})"`,
+        '"i.j',
+        'g.h@1 --evil',
+        'x.y@3.0.1',
+      ];
+      const parameters = parametersFor();
+      parameters.start.extensions = entries;
+      startFacts(parameters);
+      const words = readFileSync(
+        `${host.environment.SERVER_ARGUMENTS ?? ''}.lines`,
+        'utf8',
+      )
+        .trimEnd()
+        .split('\n');
+      deepStrictEqual(
+        [
+          words.flatMap((word, index) =>
+            words[index - 1] === '--install-extension' ? [word] : [],
+          ),
+          existsSync(marker),
+        ],
+        [entries, false],
+      );
+    });
+
     it('F-6601: the file watcher polling option is passed with its interval', () => {
       const parameters = parametersFor();
       parameters.start.fileWatcherPollingMilliseconds = 500;

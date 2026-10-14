@@ -331,7 +331,7 @@ export async function startOrReuse(
   options: RuntimeOptions,
   startPolicy: Pick<
     ServerPolicyRecord,
-    'allowedExtraStartOptions' | 'requirementsCheck'
+    'allowedExtraStartOptions' | 'extensionEntries' | 'requirementsCheck'
   >,
   dependencies: RuntimeDependencies,
   cancellation: AbortSignal,
@@ -348,6 +348,7 @@ export async function startOrReuse(
   const extensions = keptExtensions(
     options.defaultExtensions,
     dependencies.logger,
+    startPolicy.extensionEntries,
   );
   const windows = channel.platformHint() === 'windows';
   const parameters: ScriptParameters = {

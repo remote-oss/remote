@@ -90,6 +90,8 @@ export interface ServerRequest {
   remoteUser: string;
   /** Whether the container mounts the `vscode` volume, so that the server installs into its shared tree. */
   volumeMounted: boolean;
+  /** The extensions the server installs when it starts: the new container's list, empty for a container that is reused. */
+  defaultExtensions: readonly string[];
   onPhase(phase: 'installing' | 'startingServer'): void;
   cancellation: AbortSignal;
 }
@@ -443,7 +445,7 @@ export async function runServerSteps(
       portRange: '',
       licenceAccepted: licence.acceptanceFlag,
       graceSeconds: 0,
-      defaultExtensions: [],
+      defaultExtensions: request.defaultExtensions,
       fileWatcherPollingMilliseconds: 0,
       readySeconds: READY_SECONDS,
       socketMode: false,

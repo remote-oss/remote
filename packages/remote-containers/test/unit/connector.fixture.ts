@@ -133,6 +133,9 @@ export interface Scene {
   phasesOfServer: Array<'installing' | 'startingServer'>;
   relayOutcome: 'open' | Failed;
   dockerPath: unknown;
+  /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
+  defaultExtensions: unknown;
+  deprecatedDefaultExtensions: unknown;
   /** The exit statuses of the next `kill -0` runs. */
   killStatuses: number[];
   /** What the runs over the channel were given on their input, as text. */
@@ -207,6 +210,8 @@ export function sceneOf(
     phasesOfServer: ['installing', 'startingServer'],
     relayOutcome: 'open',
     dockerPath: 'docker',
+    defaultExtensions: undefined,
+    deprecatedDefaultExtensions: undefined,
     killStatuses: [],
     killScripts: [],
     relayGate: undefined,
@@ -328,6 +333,8 @@ export function sceneOf(
       dockerPath: scene.dockerPath,
       serverDownloadBaseUrl: undefined,
       serverDownloadFolder: undefined,
+      defaultExtensions: scene.defaultExtensions,
+      deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,
     }),
     preflight: {
       logger: createLogger(sink, {minimumLevel: () => 'debug'}),

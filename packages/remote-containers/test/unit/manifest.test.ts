@@ -59,6 +59,14 @@ const ENGLISH = {
     'Base URL for downloading the VS Code server. The path `/commit:{commit}/server-{platform}/{quality}` will be appended to this URL. Platforms include `linux-x64`, `linux-armhf`, `linux-arm64`, `linux-alpine`, and `alpine-arm64`. Quality is `stable` or `insider`.',
   'setting.ServerDownloadBaseUrl.patternError':
     'Must be a URL (e.g., https://example.com or https://example.com:8080/path).',
+  'setting.Defaultextensions.description':
+    'Configures the list of extensions to always install while creating a container.',
+  'setting.Defaultextensions.itemError':
+    "Expected format '${publisher}.${name}'. Example: 'vscode.csharp'.",
+  'setting.Remotecontainersdefaultextensions.deprecation':
+    "Use 'dev.containers.defaultExtensions' instead.",
+  'setting.Remotecontainersdefaultextensions.markdownDeprecation':
+    'Use `#dev.containers.defaultExtensions#` instead.',
   'setting.ServerDownloadFolder.description':
     "Local folder for downloading and caching VS Code server archives. The archives will be stored as `{downloadFolder}/{commit}/vscode-server-{platform}[-{quality}].tar.gz`. Platforms include `linux-x64`, `linux-armhf`, `linux-arm64`, `linux-alpine`, and `alpine-arm64`. Quality is `stable` or `insider`. The `-{quality}` suffix is omitted for `stable`. The default is in the system's temp folder.",
 };
@@ -175,6 +183,25 @@ describe('the manifest', () => {
               type: 'string',
               scope: 'application',
               description: '%setting.ServerDownloadFolder.description%',
+            },
+            'dev.containers.defaultExtensions': {
+              type: 'array',
+              default: [],
+              scope: 'application',
+              items: {
+                type: 'string',
+                pattern:
+                  '([a-z0-9A-Z][a-z0-9-A-Z]*)\\.([a-z0-9A-Z][a-z0-9-A-Z]*)',
+                errorMessage: '%setting.Defaultextensions.itemError%',
+              },
+              description: '%setting.Defaultextensions.description%',
+            },
+            'remote.containers.defaultExtensions': {
+              scope: 'application',
+              deprecationMessage:
+                '%setting.Remotecontainersdefaultextensions.deprecation%',
+              markdownDeprecationMessage:
+                '%setting.Remotecontainersdefaultextensions.markdownDeprecation%',
             },
           },
         },
@@ -367,7 +394,11 @@ describe('the manifest', () => {
       standingDownKey: 'remote-containers:standingDown',
       namespaces: {
         commands: ['remote-containers.'],
-        settings: ['dev.containers.', 'remote.serverDownload'],
+        settings: [
+          'dev.containers.',
+          'remote.containers.',
+          'remote.serverDownload',
+        ],
         contextKeys: ['remote-containers:'],
         internalCommands: ['remote-oss.'],
       },
@@ -393,7 +424,13 @@ describe('the manifest', () => {
           date: '2026-10-14',
         },
       ],
-      settingPairs: [],
+      settingPairs: [
+        {
+          current: 'dev.containers.defaultExtensions',
+          legacy: 'remote.containers.defaultExtensions',
+          winner: 'current',
+        },
+      ],
       ungated: [],
       locales: LOCALES,
     });

@@ -279,6 +279,7 @@ async function runSteps(
   channel: RecordingChannel,
   options: Parameters<typeof dependenciesOf>[1] & {
     volume?: boolean;
+    defaultExtensions?: readonly string[];
     cancellation?: AbortSignal;
     root?: RecordingChannel;
   } = {},
@@ -295,6 +296,7 @@ async function runSteps(
     rootChannel: options.root ?? rootChannelOf(),
     remoteUser: 'node',
     volumeMounted: options.volume ?? false,
+    defaultExtensions: options.defaultExtensions ?? [],
     onPhase: phase => {
       seen.phases.push(phase);
     },
@@ -341,6 +343,29 @@ describe('the server steps of a connect (card containers-08)', () => {
         },
         ['installing', 'startingServer'],
       ],
+    );
+  });
+
+  it("F-0505 5.0 step 5: the new container's extensions reach the start as installs, in order", async () => {
+    const channel = channelOf();
+    await runSteps(channel, {defaultExtensions: ['a.b', 'c.d']});
+    const start = scriptsOf(channel).find(isStart) ?? '';
+    deepStrictEqual(
+      [
+        start.indexOf("'--install-extension' 'a.b'") <
+          start.indexOf("'--install-extension' 'c.d'"),
+        start.includes("'--install-extension' 'a.b'"),
+      ],
+      [true, true],
+    );
+  });
+
+  it('F-0505 BR-11: a request with no extensions starts the server with no install', async () => {
+    const channel = channelOf();
+    await runSteps(channel);
+    deepStrictEqual(
+      (scriptsOf(channel).find(isStart) ?? '').includes('--install-extension'),
+      false,
     );
   });
 

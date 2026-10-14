@@ -36,6 +36,7 @@ import {
   settings,
   standDown,
 } from './identifiers.generated.ts';
+import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {licenceModalOf} from './surfaces/licence-modal.ts';
 import {rebuildContainer} from './open/rebuild.ts';
@@ -272,6 +273,15 @@ export async function activate(
     const {served} = result;
     const logger = served.logger;
     const host = identifierHost(vscode, manifest);
+    void moveInstallIfLocal({
+      userValue: key =>
+        vscode.workspace.getConfiguration().inspect(key)?.globalValue,
+      writeUserValue: (key, value) =>
+        vscode.workspace
+          .getConfiguration()
+          .update(key, value, vscode.ConfigurationTarget.Global),
+      logger,
+    });
     const scheduler = {setTimer: nodeTimer};
     const clock = {
       now: Date.now,
@@ -323,6 +333,12 @@ export async function activate(
           serverDownloadFolder: configuration.get(
             settings.serverDownloadFolder.id,
           ),
+          defaultExtensions: configuration.inspect(
+            settings.defaultExtensions.id,
+          )?.globalValue,
+          deprecatedDefaultExtensions: configuration.inspect(
+            settings.defaultExtensions.legacyId,
+          )?.globalValue,
         };
       },
       preflight: served.preflight,
