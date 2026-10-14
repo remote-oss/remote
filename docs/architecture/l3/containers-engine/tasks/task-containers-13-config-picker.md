@@ -21,8 +21,9 @@ components.md C4; contracts.md §4). Builder: `task:claude`. Size: M (about 2 ag
 
 **Leaves:**
 - **No configuration at all** (6.2, AC-7, AC-49): the add-configuration wizard is F-0801, in increment 2 (brief §2).
-  Until then `chooseConfiguration` answers `noConfiguration`, and the command logs and shows nothing, as containers-07
-  does today. The catalogue already defers AC-7 and AC-49.
+  Until then `chooseConfiguration` shows a short notice of ours and answers `noConfiguration` (athena on #890; §3.4,
+  §3.6 step 1). The notice is removed when F-0801's wizard replaces it, and the release notes list it as release 1's
+  interim behaviour. The catalogue keeps AC-7 and AC-49 deferred.
 - **"Use Template" on the 7.E2 dialog** (STR:S389) opens F-0801's wizard, so it comes with F-0801 too. Release 1 shows
   the S113 warning with core's Cancel only (§3.5).
 - **The dialogs of a configuration the CLI rejects** (7.E3, 7.E5: Edit, More Actions..., Retry) are C8's, in
@@ -149,6 +150,11 @@ export function hasContainerSource(parsed: Record<string, unknown>): boolean;
 | S113 | `Dev Container configuration '{0}' file is missing image information. You can add this manually or overwrite with a template.` | F-0801 3.4 (owner), F-0405 7.E8, F-0301 7.E2 |
 | S411 | `Workspace folder in devcontainer.json must be an absolute path.` | F-0301 3.4, 7.E10 |
 | S049 | `Cancelled container configuration selection.` | F-0301 3.4: the log only, never shown (6.3) |
+| `noConfiguration` (ours, no S-id; ADR-0008) | `No dev container configuration was found in this folder. Add a .devcontainer/devcontainer.json file, then run the command again.` | athena on #890: release 1's interim notice for F-0301 6.2, until F-0801 |
+
+The `noConfiguration` text is an invented string with no reference counterpart. Add it to the invented list kept on
+remote-containers' identity decision issue (F-1406, binding rulings "Naming invented identifiers"), and comment there
+with the template and #890.
 
 `S324` `Show Log` is containers-03's (`ENGINE_TEMPLATES`): import it, and don't define it twice (dupes). Add the
 English templates as keys of `l10n/bundle.l10n.json`, and the same keys in every locale bundle, as containers-03 did.
@@ -180,6 +186,8 @@ export interface ConfigSurfaces {
   showWarning(message: string, detail: string, items: readonly string[]): Promise<string | undefined>;
   /** Opens the file in a preview editor tab. */
   openPreview(file: string): Promise<void>;
+  /** A non-modal information message with no buttons; not awaited (`window.showInformationMessage`). */
+  showInformation(message: string): void;
 }
 
 /** Everything `chooseConfiguration` needs. */
@@ -241,7 +249,8 @@ export function chooseConfiguration(
 
 **In order:**
 1. `candidates = discoverConfigurations(folder, files, compare)`. With none, log at info
-   `no dev container configuration in <folder>` and answer `noConfiguration`.
+   `no dev container configuration in <folder>`, call `surfaces.showInformation(<noConfiguration>)` once, and answer
+   `noConfiguration`. No other surface is called, and nothing is opened.
 2. **One candidate:** it's chosen, with no picker (BR-4, AC-1, AC-2).
 3. **Two or more:** for each candidate, `read` it. `unreadable` gives the fallback label (7.E9's preferred outcome:
    it's listed, AC-42). Otherwise `labelOf(place, parseConfiguration(decodeConfiguration(bytes)))`. The reads are
@@ -343,7 +352,7 @@ react to the five answers the same way. Neither re-implements discovery or the d
 | 7.E2, AC-10, AC-54, AC-70 | `{"name":"x"}` | `showWarning('', <S113 with the relative path>, [])`, and `openPreview` only after it settles; `rejected`; no `readConfiguration` |
 | 6.3, AC-8 | `pick` answers `dismissed` | the info line with S049's text; no dialog, no preview, no `readConfiguration`; `dismissed` |
 | 5.0 step 6, AC-15 | `pick` answers `openFile` on row 2 | `openPreview` with row 2's file; no `readConfiguration`; `dismissed` |
-| 6.2 | no candidate | `noConfiguration`; no surface called; the info line |
+| 6.2 (athena on #890) | no candidate | `noConfiguration`; exactly one `showInformation` with the `noConfiguration` text; no `pick`, dialog, warning or preview; the info line |
 | 7.E10 (preferred), AC-44 | (each) the CLI's substituted `workspaceFolder` `src`; `relative/sub/dir` | `showError(<S411>, '', [S324])`; `rejected` |
 | 7.E10 | the configuration's `workspaceFolder` `${localWorkspaceFolder}/x`, which the CLI gives as `/w/p/x` | `chosen` |
 | contracts §6 | `readConfiguration` gives `configurationFailed` | the warn line with the kind; `readFailed` with the file and that failure; no dialog of C4's |
