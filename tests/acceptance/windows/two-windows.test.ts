@@ -81,8 +81,9 @@ describe('windows of one editor on the same host (the first window is local)', f
     deepStrictEqual(
       [
         recordLines('progress', 'b').length > 0,
-        recordLines('progress')
+        recordLines()
           .slice(recordStart)
+          .filter(line => line.surface === 'progress')
           .every(line => ['b', 'c'].includes(line.window)),
       ],
       [true, true],
