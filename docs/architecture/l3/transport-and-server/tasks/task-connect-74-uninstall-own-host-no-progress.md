@@ -45,20 +45,21 @@ the default mode, Uninstall picking `harness` does turn `u1` into an empty local
    try {
      await ports.killLocalServer(payloadOf(held.target));
      await ports.editor.switchToLocalWindow();
-   } finally {
+   } catch (caught) {
      ports.stayInWindow();
+     throw caught;
    }
    ```
 
-   - The `finally` runs only on this branch, after `leaveWindow()`. When the switch happens, the extension host goes
-     away and nothing after it runs. When the kill or the switch throws, the flag is cleared and the error reaches the
-     caller unchanged.
-   - **A switch that returns without switching** (`vscode.newWindow` resolves while the window stays, for example when
-     the user cancels a save prompt) also clears the flag. F-2412 doesn't define this case, so the end state is ours
-     (athena, #860): the local server has ended, so the window stays **disconnected until a reload**. The reconnection
-     core started during the leave was refused (handled, silent), and the reload resolves again and reconnects, since
-     `leaving` lives in the extension host. That matches 6.2's "Disconnected from SSH" end state. There's no message of
-     ours.
+   - **Why not a `finally`** (measured by iris on #871, a scratch merge with #872, the windows launch):
+     `vscode.newWindow` with `reuseWindow` resolves **before** the window is replaced. A `finally` clears the flag
+     while core is already reconnecting, and AC-17's row shows `['hostPick', 'progress', 'progress']` again. So
+     `stayInWindow()` runs only when the kill or the switch throws, and the error reaches the caller unchanged.
+   - **A switch that returns without switching** (for example the user cancels a save prompt): the flag stays set,
+     and nothing strands. The resolve core started during the leave was refused with a handled not-available error,
+     and core doesn't resolve again after one. So the window stays **disconnected until a reload**, as it would with
+     the flag cleared, and the reload starts a new extension host, where `leaving` is unset, so it reconnects. That is
+     the end state athena named on #860: it matches 6.2's "Disconnected from SSH", and there's no message of ours.
    - The `actsOnHost` branch (`useLocalServer` false, 6.2 step 4) is unchanged. Its window is reconnected by core, as
      AC-36 wants.
 4. **Kill Current and Kill on the own host (`killOwnHost`, `maintenance-commands.ts:83-97`) are unchanged.** They have
@@ -74,7 +75,7 @@ the default mode, Uninstall picking `harness` does turn `u1` into an empty local
 | lib-authority `resolver-host.test.ts` | `F-2412 AC-17: a resolve after leave() leaves the connection state alone` | connected, then `leave()` and a resolve | `currentConnection().state` as before the resolve |
 | remote-ssh `maintenance-commands.test.ts` | `F-2412 AC-17: the own-host uninstall leaves the window before it ends the local server` | default mode, the held host picked | the ports' calls in order: `leaveWindow`, `killLocalServer`, `switchToLocalWindow` |
 | remote-ssh `maintenance-commands.test.ts` | `F-2412 AC-17: a switch that throws puts the window back` | `switchToLocalWindow` rejects | `stayInWindow` called once; the rejection reaches the caller |
-| remote-ssh `maintenance-commands.test.ts` | `F-2412 AC-17: a switch that returns without switching puts the window back` | `switchToLocalWindow` resolves | `stayInWindow` called once, after `switchToLocalWindow`; `uninstall()` resolves, nothing thrown |
+| remote-ssh `maintenance-commands.test.ts` | `F-2412 AC-17: a switch that returns keeps the window leaving` | `switchToLocalWindow` resolves | no `stayInWindow`; `uninstall()` resolves, nothing thrown |
 | remote-ssh `maintenance-commands.test.ts` | `F-2412 AC-17: a kill that throws puts the window back without a switch` | `killLocalServer` rejects | `stayInWindow` called once; no `switchToLocalWindow`; the rejection reaches the caller |
 | remote-ssh `maintenance-commands.test.ts` | `F-2412 BR-6: the own-host uninstall with useLocalServer false never leaves the window` | terminal mode, the held host picked | no `leaveWindow` |
 | remote-ssh `maintenance-commands.test.ts` | `F-2411 6.1: the own-host kill doesn't leave the window` | Kill Current in default mode | no `leaveWindow` |
@@ -92,9 +93,10 @@ The first, fourth and fifth rows fail on main, where the operations don't exist.
 
 ## 4. Open rows
 
-**Measure, and record it in the PR:** in the acceptance build, does `vscode.newWindow` with `reuseWindow` resolve while
-the window stays, when the user cancels a save prompt for a dirty editor? §2.3's `finally` is right either way, so the
-answer changes no code. It tells the release notes whether the "disconnected until a reload" state can be reached.
+**Measure, and record it in the PR:** does `vscode.newWindow` with `reuseWindow` resolve while the window stays, when
+the user cancels a save prompt for a dirty editor? The code is the same either way. The answer tells the release notes
+whether the "disconnected until a reload" state can be reached. The normal return is measured already: it resolves
+before the window is replaced (iris, #871).
 
 ## 5. Gates and review
 
