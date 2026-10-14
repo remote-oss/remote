@@ -46,8 +46,10 @@ The rows run the handler directly, as the AC-19 rows do: the menu and keybinding
 ## 4. Catalogue
 
 In `docs/architecture/catalogue/coverage-slice1.tsv`, change `todo` to `unit` for:
-- F-2201 AC-6 and AC-7;
-- **not** AC-32 yet: see §6, row 1.
+- F-2201 AC-6 and AC-7.
+
+F-2201 AC-32 is already `deferred` (catalogue sweep #706): athena ruled on #709 that its New Remote half needs the
+Remotes view (explorer increment 2, 0.3). This card's AC-32 rows prove its connect half for when the tag is revisited.
 
 `pnpm check-coverage` must pass.
 
@@ -59,8 +61,4 @@ themis or triton reviews; athena gives the tag check.
 
 ## 6. Open rows
 
-1. AC-32 also names "Add New SSH Host … started from the Remotes view's 'New Remote' and the file is picked". On main,
-   the add-host command (`config/add-host-command.ts`) never reads the file in effect, so it writes its block into an
-   unparsable file. That half is with athena on #709: is it a 0.2 defect, or remote-explorer's (0.3)? Build only the
-   rows above. When athena answers on #709, daedalus amends this card with either the fix or the tag. Don't change
-   `add-host-command.ts`.
+None. athena answered the add-host half of AC-32 on #709: it isn't a 0.2 defect. Don't change `add-host-command.ts`.
