@@ -82,7 +82,7 @@ describe('the pending edit at activation (card containers-11)', () => {
     options: {
       remoteName?: string;
       folders?: Array<{scheme: string; fsPath: string}>;
-      openFails?: boolean;
+      openFails?: unknown;
     } = {},
   ) {
     const store = memento();
@@ -96,8 +96,9 @@ describe('the pending edit at activation (card containers-11)', () => {
       now: () => 2000,
       open: file => {
         opened.push(file);
-        return options.openFails === true
-          ? Promise.reject(new Error('gone'))
+        return 'openFails' in options
+          ? // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the row feeds a rejection that is not an Error
+            Promise.reject(options.openFails)
           : Promise.resolve();
       },
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
@@ -144,9 +145,16 @@ describe('the pending edit at activation (card containers-11)', () => {
   });
 
   it('F-0410: a failed open is logged at warn, and the activation goes on', async () => {
-    const seen = await activated({openFails: true});
+    const seen = await activated({openFails: new Error('gone')});
     deepStrictEqual(seen.lines, [
       'warn: the configuration file could not be opened: gone',
+    ]);
+  });
+
+  it('contracts: a failed open that is not an error is logged by its text', async () => {
+    const seen = await activated({openFails: 'refused'});
+    deepStrictEqual(seen.lines, [
+      'warn: the configuration file could not be opened: refused',
     ]);
   });
 });

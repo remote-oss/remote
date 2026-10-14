@@ -5,7 +5,10 @@ import {
   failureDialogOf,
   quickPickOf,
 } from '../../src/surfaces/failure-dialog.ts';
-import {FAILURE_TEMPLATES} from '../../src/surfaces/failure-strings.ts';
+import {
+  FAILURE_TEMPLATES,
+  reasonText,
+} from '../../src/surfaces/failure-strings.ts';
 
 function identity(template: string): string {
   return template;
@@ -218,6 +221,18 @@ describe('the failure dialog (card containers-11)', () => {
     deepStrictEqual(
       quickPickOf(undefined, identity).items.map(item => item.label),
       ['Reload Window', 'Open Recent...', 'Open Documentation'],
+    );
+  });
+});
+
+describe('the text of a failure’s reason (card containers-11)', () => {
+  it('contracts: a failure with no reason has no text', () => {
+    deepStrictEqual(
+      [
+        reasonText(undefined, template => template),
+        reasonText({text: 'x'}, template => template),
+      ],
+      ['', 'x'],
     );
   });
 });

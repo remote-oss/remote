@@ -5,7 +5,6 @@
  */
 
 import {
-  type DecodedTarget,
   type LabelFormatterHost,
   type Registration,
   registerAuthorityLabel,
@@ -16,7 +15,7 @@ import type {CommandHost} from 'lib-identifiers';
 import type {Logger} from 'lib-log';
 import {
   type DevContainerFolder,
-  devContainerTargetOf,
+  decodedFolderOf,
 } from '../authority/payload.ts';
 import {runtimeCommands} from '../identifiers.generated.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
@@ -46,19 +45,6 @@ export interface ConnectorServed {
   logger: Logger;
 }
 
-/** The folder a decoded target names, or none when the window has no connection yet or its payload names no folder. */
-function folderOf(
-  decoded: DecodedTarget | undefined,
-): DevContainerFolder | undefined {
-  const target =
-    decoded === undefined || !('payload' in decoded.target)
-      ? undefined
-      : devContainerTargetOf(decoded.target.payload);
-  return target !== undefined && 'kind' in target && target.kind === 'folder'
-    ? target
-    : undefined;
-}
-
 /** Registers the resolver, the label and the log command. */
 export async function registerContainerResolver(
   host: ConnectorRegistrationHost,
@@ -69,7 +55,7 @@ export async function registerContainerResolver(
   let handle:
     Extract<Registration, {kind: 'registered'}>['resolver'] | undefined;
   function currentTarget(): DevContainerFolder | undefined {
-    return folderOf(handle?.currentConnection()?.decodedTarget);
+    return decodedFolderOf(handle?.currentConnection()?.decodedTarget);
   }
   const registration = await registerResolver(
     host.resolverEditor,

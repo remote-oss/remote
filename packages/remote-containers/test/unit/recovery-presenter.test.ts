@@ -35,6 +35,8 @@ interface Script {
   picks?: Array<string | undefined>;
   target?: DevContainerFolder | undefined;
   keepFails?: boolean;
+  /** A rejection of the keep that is not an Error. */
+  keepRefusal?: string;
 }
 
 /** A presenter over recording ports; `later` queues its tasks until `flush` runs them. */
@@ -56,6 +58,10 @@ function presenting(script: Script = {}) {
       },
       keepEdit: (folder, configFile) => {
         calls.push(`keepEdit ${folder} ${configFile}`);
+        if (script.keepRefusal !== undefined) {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the row feeds a rejection that is not an Error
+          return Promise.reject(script.keepRefusal);
+        }
         return script.keepFails === true
           ? Promise.reject(new Error('disk full'))
           : Promise.resolve();
@@ -178,6 +184,22 @@ describe('the failure presenter C8 (card containers-11)', () => {
         'openLocally /w',
         [
           'warn: the configuration file could not be kept for the next window: disk full',
+        ],
+      ],
+    );
+  });
+
+  it('contracts: a pending edit refused with a text that is not an error is logged by that text, and the folder still opens', async () => {
+    const {calls, sink} = await present(containerSetupFailed(), {
+      errors: [EDIT],
+      keepRefusal: 'quota',
+    });
+    deepStrictEqual(
+      [calls.at(-1), sink.lines.map(line => `${line.level}: ${line.message}`)],
+      [
+        'openLocally /w',
+        [
+          'warn: the configuration file could not be kept for the next window: quota',
         ],
       ],
     );
