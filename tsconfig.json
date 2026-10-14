@@ -131,6 +131,9 @@
       "path": "tests/acceptance/no-proposals"
     },
     {
+      "path": "tests/acceptance/default-ports"
+    },
+    {
       "path": "tests/acceptance/terminal-pick"
     },
     {

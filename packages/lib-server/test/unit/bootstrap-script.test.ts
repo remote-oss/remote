@@ -2066,6 +2066,66 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(afterStep('kill', markers), []);
     });
 
+    /** The install's own `node`, under bin/<commit>/, which every process of a direct install's server runs. */
+    function installNode(): string {
+      return `${dataFolder()}/bin/abc123/node`;
+    }
+
+    it('F-2411.BR-3: kill stops an extension host under bin/ that no pid file names', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        extensionHost: started('extensionHost', installNode(), [
+          `${dataFolder()}/bin/abc123/out/bootstrap-fork`,
+          '--type=extensionHost',
+        ]),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('kill', markers), ['extensionHost']);
+    });
+
+    it('F-2411.BR-3: kill stops a file watcher whose parent has gone', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        fileWatcher: started('fileWatcher', installNode(), [
+          `${dataFolder()}/bin/abc123/out/bootstrap-fork`,
+          '--type=fileWatcher',
+        ]),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('kill', markers), ['fileWatcher']);
+    });
+
+    it('F-2411.BR-3: kill stops a launcher shell running a script under bin/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        launcher: startedScript(
+          'launcher',
+          'sh',
+          path.join(dataFolder(), 'bin', 'abc123', 'bin', 'code-server'),
+        ),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('kill', markers), ['launcher']);
+    });
+
+    it('F-2412 AC-27: kill leaves a sleep that only names a path under bin/', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        sleeper: started('sleeper', 'sleep', ['30', installNode()]),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('kill', markers), []);
+    });
+
+    it('F-2411.BR-3: kill leaves the exec-server launcher', () => {
+      runScript(host, single('install'), parametersFor());
+      const markers = {
+        launcher: started('launcher', `${dataFolder()}/code-abc123`),
+      };
+      spawnSync('/bin/sleep', ['0.5']);
+      deepStrictEqual(afterStep('kill', markers), []);
+    });
+
     it("F-2411.BR-3: kill leaves the CLI's command-shell and its supervisor", () => {
       runScript(host, single('install'), parametersFor());
       const cliFile = `${dataFolder()}/codium-cli`;

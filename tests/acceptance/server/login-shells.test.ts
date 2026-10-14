@@ -97,7 +97,21 @@ function exportingProfile(name: string, value: string): LayerRow {
 
 /** The layer-1 rows each login shell can show on this host. */
 const LAYER_ROWS: Readonly<Record<string, readonly LayerRow[]>> = {
-  busybox: [exportingProfile('.profile', 'fromprofile')],
+  busybox: [
+    exportingProfile('.profile', 'fromprofile'),
+    {
+      title:
+        'ADR-0010: a .profile that prints LAYER1-START and an exit line changes nothing',
+      files: [
+        {
+          name: '.profile',
+          text: 'echo LAYER1-START\necho "exit 3"\nexport LAYER1=stillthere\n',
+        },
+      ],
+      script: PRINT_ONE,
+      expected: ['stillthere'],
+    },
+  ],
   bash: [
     exportingProfile('.bash_profile', 'frombashprofile'),
     exportingProfile('.profile', 'fromprofile'),

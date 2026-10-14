@@ -104,4 +104,40 @@ describe('the setup report of ssh -v (F-2105, F-2308 BR-5)', () => {
       [],
     );
   });
+
+  it("F-2102 AC-26: a mux client's session line is the authenticated marker", () => {
+    deepStrictEqual(
+      [
+        setupMarkerOf(
+          'debug1: mux_client_request_session: master session id: 7',
+        ),
+        setupMarkerOf(
+          'debug1: mux_client_request_session: master session id: 7\r',
+        ),
+      ],
+      ['authenticated', 'authenticated'],
+    );
+  });
+
+  it("F-2102 AC-26: the mux client's other lines are no marker", () => {
+    deepStrictEqual(
+      [
+        setupMarkerOf(
+          "debug1: auto-mux: Trying existing master at '/home/u/.ssh/cm/abc'",
+        ),
+        setupMarkerOf('debug1: mux_client_request_session: entering'),
+      ],
+      [undefined, undefined],
+    );
+  });
+
+  it("F-2102 AC-26: the first marker of a mux client's run", () => {
+    deepStrictEqual(
+      firstSetupMarker([
+        "debug1: auto-mux: Trying existing master at '/home/u/.ssh/cm/abc'",
+        'debug1: mux_client_request_session: master session id: 7',
+      ]),
+      'authenticated',
+    );
+  });
 });

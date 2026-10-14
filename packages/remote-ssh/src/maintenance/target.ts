@@ -4,6 +4,8 @@
  * ids, never English text — the surface resolves them from the package's string table.
  */
 
+import type {SshTarget} from 'lib-ssh';
+import {payloadOf} from '../connect/connect-commands.ts';
 import type {StringRef} from '../connect/picker-model.ts';
 
 /**
@@ -17,13 +19,15 @@ export function hostPartOf(target: string): string {
 
 /**
  * Whether the target is the window's own host: exact, case-sensitive equality of the target as given and the
- * window's authority host. A different spelling of the same host is another host.
+ * window's authority host, the user and the port included. A different spelling of the same host is another host.
  */
 export function isOwnHost(
-  target: string,
-  windowHost: string | undefined,
+  target: SshTarget,
+  windowTarget: SshTarget | undefined,
 ): boolean {
-  return windowHost !== undefined && target === windowHost;
+  return (
+    windowTarget !== undefined && payloadOf(target) === payloadOf(windowTarget)
+  );
 }
 
 /** The notice that the server on the host was killed. */

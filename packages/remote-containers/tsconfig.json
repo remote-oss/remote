@@ -5,6 +5,12 @@
       "path": "../lib-authority"
     },
     {
+      "path": "../lib-forwarding"
+    },
+    {
+      "path": "../lib-host"
+    },
+    {
       "path": "../lib-identifiers"
     },
     {

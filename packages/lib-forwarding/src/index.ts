@@ -38,7 +38,11 @@ export {
   openForwardedTunnel,
 } from './window-tunnel/forwarded.ts';
 export {socksDialer, type SocksDialerInit} from './window-tunnel/socks.ts';
-export {nodeLocalPort} from './window-tunnel/node-network.ts';
+export {
+  type DuplexStreams,
+  nodeLocalPort,
+  streamDuplex,
+} from './window-tunnel/node-network.ts';
 export {
   effectiveUseLocalServer,
   loginsPerConnect,
