@@ -167,7 +167,7 @@ describe('F-2102 the lifecycle through the one login of the shared ssh session',
     );
   });
 
-  it('F-2411: a kill through the same session stops the server it started', async () => {
+  it('contracts S9: F-2411, a kill through the same session stops the server it started', async () => {
     const parameters = parametersFor();
     await runStep(
       session.channel,

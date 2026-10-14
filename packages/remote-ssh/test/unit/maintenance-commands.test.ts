@@ -190,13 +190,13 @@ describe('Kill VS Code Server on Host... (F-2411)', () => {
 });
 
 describe('Uninstall VS Code Server from Host... (F-2412)', () => {
-  it('F-2412.AC-5: the picked host is uninstalled and nothing is shown', async () => {
+  it('F-2412.AC-4: the picked host is uninstalled and nothing is shown', async () => {
     const scenario = setup();
     await scenario.uninstall();
     deepStrictEqual([scenario.runs, scenario.notices], [['uninstall dev'], []]);
   });
 
-  it('F-2412.AC-4: Escape on the pick runs nothing', async () => {
+  it('F-2412.AC-3: Escape on the pick runs nothing', async () => {
     const scenario = setup({picked: undefined});
     await scenario.uninstall();
     deepStrictEqual(scenario.runs, []);

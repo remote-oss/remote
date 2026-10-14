@@ -176,6 +176,46 @@ F-2202.AC-31	todo
 F-2202.AC-32	todo	
 F-2202.AC-33	todo	
 F-2202.AC-34	unit	
+F-2204.AC-1	todo	
+F-2204.AC-2	todo	
+F-2204.AC-3	todo	
+F-2204.AC-4	todo	
+F-2204.AC-5	todo	
+F-2204.AC-6	todo	
+F-2204.AC-7	todo	
+F-2204.AC-8	todo	
+F-2204.AC-9	todo	
+F-2204.AC-10	unit	
+F-2204.AC-11	todo	
+F-2204.AC-12	unit	
+F-2204.AC-13	unit	
+F-2204.AC-14	unit	
+F-2204.AC-15	todo	
+F-2204.AC-16	unit	
+F-2204.AC-17	unit	
+F-2204.AC-18	unit	
+F-2204.AC-19	todo	
+F-2204.AC-20	unit	
+F-2204.AC-21	unit	
+F-2204.AC-22	unit	
+F-2204.AC-23	unit	
+F-2204.AC-24	unit	
+F-2204.AC-25	unit	
+F-2204.AC-26	todo	
+F-2204.AC-27	todo	
+F-2204.AC-28	todo	
+F-2204.AC-29	todo	
+F-2204.AC-30	deferred	build order slice 1: the Remotes view is remote-explorer's
+F-2204.AC-31	todo	
+F-2204.AC-32	todo	
+F-2204.AC-33	todo	
+F-2204.AC-34	todo	
+F-2204.AC-35	todo	
+F-2204.AC-36	todo	
+F-2204.AC-37	todo	
+F-2204.AC-38	unit	
+F-2204.AC-39	unit	
+F-2204.AC-40	todo	
 F-2206.AC-1	todo	
 F-2206.AC-2	todo	
 F-2206.AC-3	core	core: the quick pick's filter by typed text
@@ -248,6 +288,66 @@ F-2301.AC-31	todo
 F-2301.AC-32	todo	
 F-2301.AC-33	todo	
 F-2301.AC-34	unit	
+F-2302.AC-1	todo	
+F-2302.AC-2	todo	
+F-2302.AC-3	todo	
+F-2302.AC-4	todo	
+F-2302.AC-5	todo	
+F-2302.AC-6	core	core: the indicator, the window title and the Explorer's empty view of the switched window
+F-2302.AC-7	todo	
+F-2302.AC-8	todo	
+F-2302.AC-9	todo	
+F-2302.AC-10	todo	
+F-2302.AC-11	core	core: the save prompt of a dirty editor before the window reloads
+F-2302.AC-12	core	core: the save prompt's Cancel, which keeps the window as it was
+F-2302.AC-13	core	core: the save prompt's Don't Save
+F-2302.AC-14	core	core: the save prompts of several dirty editors and Save As
+F-2302.AC-15	core	core: hot exit, which restores the unsaved text without a prompt
+F-2302.AC-16	core	core: the save prompt of an empty window's Untitled editor
+F-2302.AC-17	todo	
+F-2302.AC-18	todo	
+F-2302.AC-19	todo	
+F-2302.AC-20	todo	
+F-2302.AC-21	todo	
+F-2302.AC-22	todo	
+F-2302.AC-23	todo	
+F-2302.AC-24	core	core: Close Remote Connection's empty window and the Open Recent order
+F-2302.AC-25	todo	
+F-2302.AC-26	todo	
+F-2302.AC-27	todo	
+F-2302.AC-28	todo	
+F-2302.AC-29	todo	
+F-2302.AC-30	core	core: the save prompt's Save
+F-2302.AC-31	todo	
+F-2302.AC-32	todo	
+F-2302.AC-33	todo	
+F-2302.AC-34	todo	
+F-2303.AC-1	unit	
+F-2303.AC-2	unit	
+F-2303.AC-3	todo	
+F-2303.AC-4	todo	
+F-2303.AC-5	todo	
+F-2303.AC-6	todo	
+F-2303.AC-7	core	core: the new window's title, indicator and the Explorer's empty view
+F-2303.AC-8	todo	
+F-2303.AC-9	todo	
+F-2303.AC-10	unit	
+F-2303.AC-11	unit	
+F-2303.AC-12	unit	
+F-2303.AC-13	todo	
+F-2303.AC-14	todo	
+F-2303.AC-15	todo	
+F-2303.AC-16	todo	
+F-2303.AC-17	todo	
+F-2303.AC-18	todo	
+F-2303.AC-19	todo	
+F-2303.AC-20	todo	
+F-2303.AC-21	todo	
+F-2303.AC-22	todo	
+F-2303.AC-23	todo	
+F-2303.AC-24	todo	
+F-2303.AC-25	todo	
+F-2303.AC-26	todo	
 F-2304.AC-1	acceptance	
 F-2304.AC-2	unit	
 F-2304.AC-3	todo	
@@ -469,6 +569,76 @@ F-2409.AC-27	acceptance
 F-2409.AC-28	todo	
 F-2409.AC-29	todo	
 F-2409.AC-30	todo	
+F-2411.AC-1	todo	
+F-2411.AC-2	todo	
+F-2411.AC-3	todo	
+F-2411.AC-4	todo	
+F-2411.AC-5	todo	
+F-2411.AC-6	acceptance	
+F-2411.AC-7	todo	
+F-2411.AC-8	todo	
+F-2411.AC-9	todo	
+F-2411.AC-10	todo	
+F-2411.AC-11	unit	
+F-2411.AC-12	todo	
+F-2411.AC-13	todo	
+F-2411.AC-14	todo	
+F-2411.AC-15	todo	
+F-2411.AC-16	todo	
+F-2411.AC-17	todo	
+F-2411.AC-18	todo	
+F-2411.AC-19	todo	
+F-2411.AC-20	todo	
+F-2411.AC-21	todo	
+F-2411.AC-22	todo	
+F-2411.AC-23	todo	
+F-2411.AC-24	todo	
+F-2411.AC-25	todo	
+F-2411.AC-26	todo	
+F-2411.AC-27	core	core: the Cannot reconnect dialog's Cancel and the disconnected indicator
+F-2411.AC-28	todo	
+F-2411.AC-29	todo	
+F-2411.AC-30	todo	
+F-2411.AC-31	todo	
+F-2411.AC-32	todo	
+F-2411.AC-33	todo	
+F-2412.AC-1	todo	
+F-2412.AC-2	todo	
+F-2412.AC-3	todo	
+F-2412.AC-4	todo	
+F-2412.AC-5	acceptance	
+F-2412.AC-6	todo	
+F-2412.AC-7	todo	
+F-2412.AC-8	todo	
+F-2412.AC-9	todo	
+F-2412.AC-10	todo	
+F-2412.AC-11	todo	
+F-2412.AC-12	todo	
+F-2412.AC-13	todo	
+F-2412.AC-14	todo	
+F-2412.AC-15	todo	
+F-2412.AC-16	todo	
+F-2412.AC-17	todo	
+F-2412.AC-18	todo	
+F-2412.AC-19	todo	
+F-2412.AC-20	todo	
+F-2412.AC-21	todo	
+F-2412.AC-22	unit	
+F-2412.AC-23	todo	
+F-2412.AC-24	todo	
+F-2412.AC-25	todo	
+F-2412.AC-26	todo	
+F-2412.AC-27	todo	
+F-2412.AC-28	todo	
+F-2412.AC-29	todo	
+F-2412.AC-30	todo	
+F-2412.AC-31	todo	
+F-2412.AC-32	todo	
+F-2412.AC-33	todo	
+F-2412.AC-34	todo	
+F-2412.AC-35	todo	
+F-2412.AC-36	todo	
+F-2412.AC-37	todo	
 F-2501.AC-1	todo	
 F-2501.AC-2	todo	
 F-2501.AC-3	core	core: the remote indicator's text and the window title
@@ -576,6 +746,33 @@ F-2601.AC-34	todo
 F-2601.AC-35	todo	
 F-2601.AC-36	todo	
 F-2601.AC-37	core	core: the dialog's rendering: icon, no heading
+F-2605.AC-1	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-2	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-3	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-4	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-5	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-6	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-7	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-8	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-9	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-10	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-11	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-12	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-13	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-14	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-15	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-16	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-17	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-18	todo	
+F-2605.AC-19	todo	
+F-2605.AC-20	todo	
+F-2605.AC-21	todo	
+F-2605.AC-22	todo	
+F-2605.AC-23	todo	
+F-2605.AC-24	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-25	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-26	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
+F-2605.AC-27	deferred	D-86: only clearAllSessionHints of F-2605 is in 0.2
 F-3902.AC-1	todo	
 F-3902.AC-2	todo	
 F-3902.AC-3	acceptance	

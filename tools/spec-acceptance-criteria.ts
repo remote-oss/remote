@@ -3,15 +3,18 @@
  * file is seeded from.
  */
 
-/** The features of slice 1, as the build order lists them; the last two decision records have no criteria. */
+/** The features of slice 1, as the build order lists them, and the six added to 0.2 later; two decision records have no criteria. */
 export const SLICE_ONE_FEATURES: readonly string[] = [
   'F-2001',
   'F-2101',
   'F-2102',
   'F-2201',
   'F-2202',
+  'F-2204',
   'F-2206',
   'F-2301',
+  'F-2302',
+  'F-2303',
   'F-2304',
   'F-2305',
   'F-2306',
@@ -19,9 +22,12 @@ export const SLICE_ONE_FEATURES: readonly string[] = [
   'F-2401',
   'F-2403',
   'F-2409',
+  'F-2411',
+  'F-2412',
   'F-2501',
   'F-2502',
   'F-2601',
+  'F-2605',
   'F-3901',
   'F-3902',
   'F-3903',
