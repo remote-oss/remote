@@ -510,16 +510,28 @@ describe('startDetached', () => {
     await started.stop();
   });
 
-  /** A program that ignores SIGTERM, starts a child of its own, and writes the child's pid to `file`. */
-  function stubborn(file: string): Program {
+  /**
+   * A program whose child, in its group, writes each signal it gets to `file` after its own pid; the program writes
+   * `exited` there when SIGTERM ends it.
+   */
+  function family(file: string, programIgnoresTerm = false): Program {
+    const childScript = [
+      "const fs = require('node:fs');",
+      `const file = ${JSON.stringify(file)};`,
+      "fs.appendFileSync(file, 'child ' + process.pid + '\\n');",
+      "for (const name of ['SIGTERM', 'SIGINT', 'SIGHUP']) { process.on(name, () => fs.appendFileSync(file, name + '\\n')); }",
+      'setInterval(() => undefined, 1000);',
+    ].join(' ');
     return {
       file: process.execPath,
       programArguments: [
         '-e',
         [
-          "process.on('SIGTERM', () => undefined);",
-          "const child = require('node:child_process').spawn(process.execPath, ['-e', \"process.on('SIGTERM', () => undefined); setInterval(() => undefined, 1000)\"], {stdio: 'ignore'});",
-          `require('node:fs').writeFileSync(${JSON.stringify(file)}, String(child.pid));`,
+          "const fs = require('node:fs');",
+          `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childScript)}], {stdio: 'ignore'});`,
+          programIgnoresTerm
+            ? "process.on('SIGTERM', () => undefined);"
+            : `process.on('SIGTERM', () => { fs.appendFileSync(${JSON.stringify(file)}, 'exited\\n'); process.exit(0); });`,
           'setInterval(() => undefined, 1000);',
         ].join(' '),
       ],
@@ -527,47 +539,92 @@ describe('startDetached', () => {
     };
   }
 
-  /** Whether the process `processId` is alive. */
+  /** The lines `family` wrote, once its child has started. */
+  async function linesOnceStarted(file: string): Promise<string[]> {
+    while (
+      !existsSync(file) ||
+      !readFileSync(file, 'utf8').includes('child ')
+    ) {
+      await pause(20);
+    }
+    return readFileSync(file, 'utf8')
+      .split('\n')
+      .filter(line => line !== '');
+  }
+
+  /** Whether the process `processId` still runs: a zombie waiting for a parent to reap it doesn't. */
   function alive(processId: number): boolean {
     try {
-      process.kill(processId, 0);
-      return true;
+      return !/^\d+ \(.*\) Z /.test(
+        readFileSync(`/proc/${String(processId)}/stat`, 'utf8'),
+      );
     } catch {
       return false;
     }
   }
 
-  it('tooling-51: stop resolves only once the whole group has ended, its children included', async () => {
-    const file = path.join(workspace.root, 'child');
-    const started = startDetached(writer(path.join(workspace.root, 'ticks')));
-    const parent = startDetached(stubborn(file), {
-      graceMilliseconds: 300,
-      pollMilliseconds: 20,
-    });
-    while (!existsSync(file)) {
-      await pause(20);
-    }
-    const child = Number(readFileSync(file, 'utf8'));
-    await Promise.all([started.stop(), parent.stop()]);
-    strictEqual(alive(child), false);
+  const QUICK = {
+    graceMilliseconds: 400,
+    afterKillMilliseconds: 400,
+    pollMilliseconds: 20,
+    groupAlive: (groupId: number) => {
+      try {
+        process.kill(-groupId, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+
+  it('tooling-51: SIGTERM goes to the program alone, never to its group, and stop waits until the group has ended', async () => {
+    const file = path.join(workspace.root, 'signals');
+    const started = startDetached(family(file), QUICK);
+    const child = Number((await linesOnceStarted(file))[0]?.split(' ')[1]);
+    await started.stop();
+    const lines = readFileSync(file, 'utf8')
+      .split('\n')
+      .filter(line => line !== '');
+    deepStrictEqual([lines.slice(1), alive(child)], [['exited'], false]);
   });
 
-  it('tooling-51: a group that ignores SIGTERM is killed once the grace has passed, and not before', async () => {
-    const file = path.join(workspace.root, 'child');
-    const started = startDetached(stubborn(file), {
-      graceMilliseconds: 400,
-      pollMilliseconds: 20,
-    });
-    while (!existsSync(file)) {
-      await pause(20);
-    }
-    const child = Number(readFileSync(file, 'utf8'));
+  it('tooling-51: a program that ignores SIGTERM has its group killed once the grace has passed, and not before', async () => {
+    const file = path.join(workspace.root, 'signals');
+    const started = startDetached(family(file, true), QUICK);
+    const child = Number((await linesOnceStarted(file))[0]?.split(' ')[1]);
     const began = Date.now();
     await started.stop();
     const took = Date.now() - began;
     deepStrictEqual(
       [alive(child), took >= 400, took < 3000],
       [false, true, true],
+    );
+  });
+
+  it('tooling-51: a group still there after SIGKILL ends the wait after its bound, with a line on stderr', async () => {
+    const started = startDetached(writer(path.join(workspace.root, 'ticks')), {
+      ...QUICK,
+      groupAlive: () => true,
+    });
+    await pause(100);
+    const written: string[] = [];
+    const original = console.error;
+    console.error = (message: unknown) => {
+      written.push(String(message));
+    };
+    const began = Date.now();
+    try {
+      await started.stop();
+    } finally {
+      console.error = original;
+    }
+    deepStrictEqual(
+      [
+        Date.now() - began < 3000,
+        written.length,
+        written[0]?.includes('still there after SIGKILL'),
+      ],
+      [true, 1, true],
     );
   });
 });

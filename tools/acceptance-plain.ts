@@ -261,10 +261,13 @@ export interface Started {
   stop(): Promise<void>;
 }
 
-/** How long a stopped group has to end after SIGTERM, and how often it is looked at meanwhile, in milliseconds. */
+/** How long a stopped program has to end, in milliseconds: after SIGTERM, then after SIGKILL, and how often it's looked at. */
 export interface StopTiming {
   graceMilliseconds: number;
+  afterKillMilliseconds: number;
   pollMilliseconds: number;
+  /** Whether any process of a group is left; a zombie its parent never reaped counts. */
+  groupAlive(groupId: number): boolean;
 }
 
 /**
@@ -273,40 +276,41 @@ export interface StopTiming {
  */
 const STOP_TIMING: StopTiming = {
   graceMilliseconds: 10_000,
+  afterKillMilliseconds: 5000,
   pollMilliseconds: 100,
+  groupAlive: groupId => {
+    try {
+      process.kill(-groupId, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  },
 };
 
-/** Whether any process of the group `groupId` is left. */
-function groupAlive(groupId: number): boolean {
+/** Sends `signal` to the process, or with `group` to its whole group, if it is still there. */
+function signal(processId: number, name: NodeJS.Signals, group: boolean): void {
   try {
-    process.kill(-groupId, 0);
-    return true;
+    process.kill(group ? -processId : processId, name);
   } catch {
-    return false;
+    // It is already gone.
   }
 }
 
-/** Sends `signal` to the group `groupId`, if any of it is left. */
-function signalGroup(groupId: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(-groupId, signal);
-  } catch {
-    // The group is already gone.
-  }
-}
-
-/** Ends the group `groupId`: SIGTERM, then SIGKILL once the grace has passed, and resolves when none of it is left. */
-async function endGroup(groupId: number, timing: StopTiming): Promise<void> {
-  signalGroup(groupId, 'SIGTERM');
-  const deadline = Date.now() + timing.graceMilliseconds;
-  let killed = false;
-  while (groupAlive(groupId)) {
-    if (!killed && Date.now() >= deadline) {
-      signalGroup(groupId, 'SIGKILL');
-      killed = true;
+/** Waits until `done` holds or `milliseconds` have passed; whether `done` held. */
+async function waitUntil(
+  done: () => boolean,
+  milliseconds: number,
+  pollMilliseconds: number,
+): Promise<boolean> {
+  const deadline = Date.now() + milliseconds;
+  while (!done()) {
+    if (Date.now() >= deadline) {
+      return false;
     }
-    await new Promise(resolve => setTimeout(resolve, timing.pollMilliseconds));
+    await new Promise(resolve => setTimeout(resolve, pollMilliseconds));
   }
+  return true;
 }
 
 /** Starts a program detached, in a group of its own, so that stopping it stops the processes it started too. */
@@ -319,13 +323,49 @@ export function startDetached(
     detached: true,
     stdio: 'ignore',
   });
+  let exited = false;
+  child.on('exit', () => {
+    exited = true;
+  });
   // A program that cannot start has no process group to stop; the error must not end the harness unhandled.
-  child.on('error', () => undefined);
+  child.on('error', () => {
+    exited = true;
+  });
   child.unref();
   return {
     stop: async () => {
-      if (child.pid !== undefined) {
-        await endGroup(child.pid, timing);
+      const groupId = child.pid;
+      if (groupId === undefined) {
+        return;
+      }
+      // The program first, alone: an editor whose GPU and zygote processes go down with it aborts instead of quitting,
+      // and leaves its main socket behind. Its group follows it when it quits.
+      signal(groupId, 'SIGTERM', false);
+      const group: number = groupId;
+      function ended(): boolean {
+        return exited && !timing.groupAlive(group);
+      }
+      if (
+        await waitUntil(
+          ended,
+          timing.graceMilliseconds,
+          timing.pollMilliseconds,
+        )
+      ) {
+        return;
+      }
+      signal(groupId, 'SIGKILL', true);
+      if (
+        !(await waitUntil(
+          ended,
+          timing.afterKillMilliseconds,
+          timing.pollMilliseconds,
+        ))
+      ) {
+        // Zombies nobody reaps keep a group alive for ever; a later editor is safe from them, so the run goes on.
+        console.error(
+          `acceptance: the process group ${String(groupId)} of ${program.file} was still there after SIGKILL`,
+        );
       }
     },
   };
