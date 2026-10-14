@@ -1,8 +1,10 @@
 {
   "name": "remote-containers",
-  "version": "0.0.0",
+  "displayName": "Dev Containers",
+  "description": "%description%",
+  "version": "0.1.0",
+  "publisher": "remote-oss",
   "private": true,
-  "description": "Develop inside a container that carries its own toolchain, so each project brings its environment with it.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -12,11 +14,48 @@
   "bugs": {
     "url": "https://github.com/remote-oss/remote/issues"
   },
+  "engines": {
+    "vscode": "^1.139.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
   "keywords": [
     "remote development",
     "remote",
     "containers",
     "docker",
     "devcontainer"
-  ]
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%capabilities.untrustedWorkspaces.description%"
+    }
+  },
+  "activationEvents": [
+    "onResolveRemoteAuthority:dev-container"
+  ],
+  "enabledApiProposals": [
+    "resolvers",
+    "tunnels",
+    "workspaceTrust",
+    "terminalDimensions",
+    "contribEditSessions",
+    "contribViewsRemote",
+    "contribRemoteHelp"
+  ],
+  "l10n": "./l10n",
+  "dependencies": {
+    "lib-authority": "workspace:*",
+    "lib-identifiers": "workspace:*",
+    "lib-log": "workspace:*",
+    "lib-product": "workspace:*",
+    "lib-standdown": "workspace:*"
+  }
 }

@@ -1,3 +1,20 @@
 {
-  "extends": "../../tsconfig.base.json"
+  "extends": "../../tsconfig.base.json",
+  "references": [
+    {
+      "path": "../lib-authority"
+    },
+    {
+      "path": "../lib-identifiers"
+    },
+    {
+      "path": "../lib-log"
+    },
+    {
+      "path": "../lib-product"
+    },
+    {
+      "path": "../lib-standdown"
+    }
+  ]
 }

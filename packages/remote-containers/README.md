@@ -9,7 +9,7 @@ This extension is under development; its features arrive in coming releases.
 | | |
 |---|---|
 | Maintainers | remote-oss |
-| Features | none yet (they arrive in a later release) |
-| Components | none yet |
-| Allowed imports | none yet |
-| Coverage exclusions | none |
+| Features | the package manifest and activation: the guard against another enabled Dev Containers extension, the proposed-API setup, and the Dev Containers log |
+| Components | `containers.package-shell` (`package.json`, `identifiers.json`, `src/activation.ts`, `src/extension.ts`) |
+| Allowed imports | `lib-authority`, `lib-identifiers`, `lib-log`, `lib-product`, `lib-standdown`; `vscode` and `node:` modules in `src/extension.ts` only |
+| Coverage exclusions | `src/extension.ts`: it loads the `vscode` module, which exists only in the extension host |

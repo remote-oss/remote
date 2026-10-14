@@ -1,0 +1,10 @@
+{
+  "Dev Containers stays inactive in this window because another Dev Containers extension is enabled. Both use the same commands, settings and remote connections. Disable one of the two extensions and reload the window.": "Dev Containers stays inactive in this window because another Dev Containers extension is enabled. Both use the same commands, settings and remote connections. Disable one of the two extensions and reload the window.",
+  "Show Dev Containers Extension": "Show Dev Containers Extension",
+  "{0} needs proposed VS Code APIs that {1} has not enabled for it. Add {2} to 'enable-proposed-api' in argv.json, then restart {1}.": "{0} needs proposed VS Code APIs that {1} has not enabled for it. Add {2} to 'enable-proposed-api' in argv.json, then restart {1}.",
+  "The previous setup attempt did not enable the proposed APIs {0} needs. Check that 'enable-proposed-api' in argv.json lists 'remote-oss.remote-containers', then restart {1}.": "The previous setup attempt did not enable the proposed APIs {0} needs. Check that 'enable-proposed-api' in argv.json lists 'remote-oss.remote-containers', then restart {1}.",
+  "Quit and start {1} again to apply the changes to argv.json.": "Quit and start {1} again to apply the changes to argv.json.",
+  "Configure Runtime Arguments": "Configure Runtime Arguments",
+  "Not Now": "Not Now",
+  "Quit {1}": "Quit {1}"
+}

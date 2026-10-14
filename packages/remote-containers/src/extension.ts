@@ -1,0 +1,89 @@
+/**
+ * @fileoverview The entry of Dev Containers in the desktop editor: it hands the editor to the activation, with the
+ * proposed-API setup and the strings of the notices.
+ */
+
+import {readFile} from 'node:fs/promises';
+import path from 'node:path';
+import * as vscode from 'vscode';
+import {familySetupPortsOf} from 'lib-authority';
+import {identifierHost} from 'lib-identifiers';
+import {profileOf} from 'lib-product';
+import {standDownHost} from 'lib-standdown';
+import {activateContainers} from './activation.ts';
+import {enabledApiProposals, standDown} from './identifiers.generated.ts';
+
+/** The warning of a window where the other Dev Containers extension runs, and its button. */
+const STAND_DOWN_WARNING =
+  'Dev Containers stays inactive in this window because another Dev Containers extension is enabled. Both use the same commands, settings and remote connections. Disable one of the two extensions and reload the window.';
+const STAND_DOWN_BUTTON = 'Show Dev Containers Extension';
+
+/** The English templates of the proposed-API setup notices; the placeholders are filled by the setup. */
+const SETUP_TEXT_TEMPLATES = {
+  setup:
+    "{0} needs proposed VS Code APIs that {1} has not enabled for it. Add {2} to 'enable-proposed-api' in argv.json, then restart {1}.",
+  failedAttempt:
+    "The previous setup attempt did not enable the proposed APIs {0} needs. Check that 'enable-proposed-api' in argv.json lists 'remote-oss.remote-containers', then restart {1}.",
+  restart: 'Quit and start {1} again to apply the changes to argv.json.',
+  configureButton: 'Configure Runtime Arguments',
+  notNowButton: 'Not Now',
+  quitButton: 'Quit {1}',
+};
+
+/** What the editor tells about the extension, as far as activation reads it. */
+interface Manifest {
+  displayName: string;
+  version: string;
+  contributes?: {commands?: Array<{command: string; title: string}>};
+}
+
+function translate(template: string): string {
+  return vscode.l10n.t(template);
+}
+
+/** Called by the editor when the extension activates. */
+export async function activate(
+  context: vscode.ExtensionContext,
+): Promise<void> {
+  const manifest = context.extension.packageJSON as Manifest;
+  const profile = profileOf(
+    await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
+  );
+  const result = await activateContainers({
+    // The generated table has no `commands` until the manifest contributes one.
+    table: {commands: {}, standDown},
+    standDownTexts: {
+      warning: translate(STAND_DOWN_WARNING),
+      button: translate(STAND_DOWN_BUTTON),
+    },
+    standDown: standDownHost(vscode),
+    commands: identifierHost(vscode, manifest),
+    channels: vscode.window,
+    clock: Date.now,
+    banner: {
+      displayName: manifest.displayName,
+      extensionVersion: manifest.version,
+      editorName: vscode.env.appName,
+      editorVersion: vscode.version,
+      editorCommit: profile.commit,
+    },
+    gate: logFailure =>
+      familySetupPortsOf(vscode, context, {
+        displayName: manifest.displayName,
+        proposals: enabledApiProposals,
+        viewIds: [],
+        templates: SETUP_TEXT_TEMPLATES,
+        translate,
+        dataFolderName: () => Promise.resolve(profile.dataFolderName),
+        logFailure,
+      }),
+    handlers: () => ({}),
+  });
+  if (result.kind === 'serving') {
+    context.subscriptions.push({
+      dispose: () => {
+        result.dispose();
+      },
+    });
+  }
+}
