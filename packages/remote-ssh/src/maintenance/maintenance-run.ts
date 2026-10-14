@@ -28,11 +28,29 @@ export type MaintenanceSteps = Pick<
   | 'maintain'
 >;
 
-/** The input of a connect to `target` outside any window: the host as the authority would name it. */
-export function maintenanceInputOf(target: SshTarget): ConnectInput {
+/**
+ * The record key of a maintenance run's own connection helper: the host string, a NUL, which no authority holds, and
+ * the run's key. So it never equals a window's key, and two runs never share one.
+ */
+export function maintenanceConnectionKey(
+  target: SshTarget,
+  runKey: string,
+): string {
+  return `${payloadOf(target)}\u0000maintenance-${runKey}`;
+}
+
+/**
+ * The input of a connect to `target` outside any window: the host as the authority would name it, and a connection
+ * helper of the run's own, keyed by `runKey`.
+ */
+export function maintenanceInputOf(
+  target: SshTarget,
+  runKey: string,
+): ConnectInput {
   return {
     target: connectTargetOf(target),
     rawHostString: payloadOf(target),
+    connectionKey: maintenanceConnectionKey(target, runKey),
     attempt: 1,
     isReconnection: false,
     windowId: 'maintenance',
