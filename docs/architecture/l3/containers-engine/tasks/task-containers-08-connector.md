@@ -137,9 +137,12 @@ then runs these steps. **A step that fails returns its `Failed` at once (§3.7),
    - `unusable` → `containerUnusable`;
    - `discoveryFailed` → `containerSetupFailed`;
    - a `CliFailure` → `containerSetupFailed`, or `cancelled` for `{kind: 'cancelled'}`.
-6. **The identity.** `cli.readConfiguration(target, containerId, cancellation)`. `name` is the result's
+6. **The identity.** `cli.readConfiguration(target, containerId, onCliEvent, cancellation)`, with the same CLI event
+   handler as C7's `up` (containers-04 at bb9525fe gives `readConfiguration` an event callback; its errors arrive as a
+   log event and the `configurationFailed` failure). `name` is the result's
    `configuration.name` when that's a string; otherwise `name` is `undefined`. A failure here doesn't fail the
-   connect: log one warn line, `the configuration's name could not be read: <kind>`, and leave `name` `undefined`. That
+   connect: log one warn line, `the configuration's name could not be read: <kind>` (`configurationFailed`,
+   `malformedResult` and the rest of `CliFailure`), and leave `name` `undefined`. That
    value is read fresh at every resolve (F-0504 BR-2, AC-28).
 7. **The server** (§3.5). Its failures map through §3.7.
 8. **The host listener and relay** (§3.6). Its failures map through §3.7.
