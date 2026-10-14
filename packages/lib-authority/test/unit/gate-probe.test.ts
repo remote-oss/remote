@@ -173,6 +173,22 @@ describe('probing the proposals of the editor (F-1403)', () => {
     );
   });
 
+  it('F-0101.BR-9: workspaceTrust, terminalDimensions and contribEditSessions cannot be probed, and no member is read', async () => {
+    const editor = new FakeApi();
+    const probes = await probeProposals(editor, {
+      proposals: [
+        'workspaceTrust',
+        'terminalDimensions',
+        'contribEditSessions',
+      ],
+      viewIds: [],
+    });
+    deepStrictEqual(
+      [probes.map(probe => probe.state), editor.reads],
+      [['unprobeable', 'unprobeable', 'unprobeable'], []],
+    );
+  });
+
   it('F-1403: the proposals come back in the order they were asked for', async () => {
     const probes = await probeProposals(new FakeApi(), {
       proposals: ['tunnels', 'resolvers', 'contribRemoteHelp'],

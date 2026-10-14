@@ -275,7 +275,23 @@ importers:
 
   packages/lib-wsl: {}
 
-  packages/remote-containers: {}
+  packages/remote-containers:
+    dependencies:
+      lib-authority:
+        specifier: workspace:*
+        version: link:../lib-authority
+      lib-identifiers:
+        specifier: workspace:*
+        version: link:../lib-identifiers
+      lib-log:
+        specifier: workspace:*
+        version: link:../lib-log
+      lib-product:
+        specifier: workspace:*
+        version: link:../lib-product
+      lib-standdown:
+        specifier: workspace:*
+        version: link:../lib-standdown
 
   packages/remote-explorer:
     dependencies:

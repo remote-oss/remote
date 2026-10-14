@@ -12,7 +12,10 @@ export type ProposalName =
   | 'contribViewsRemote'
   | 'terminalDataWriteEvent'
   | 'contribRemoteHelp'
-  | 'extensionsAny';
+  | 'extensionsAny'
+  | 'workspaceTrust'
+  | 'terminalDimensions'
+  | 'contribEditSessions';
 
 /** Whether the editor grants a proposal, denies it, or gives no way to tell. */
 export type ProposalState = 'granted' | 'missing' | 'unprobeable';
