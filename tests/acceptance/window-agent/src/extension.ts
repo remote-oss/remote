@@ -175,6 +175,9 @@ export function activate(context: vscode.ExtensionContext): void {
           each.uri.toString(),
         ),
         trusted: vscode.workspace.isTrusted,
+        remoteSshActive:
+          vscode.extensions.getExtension('remote-oss.remote-ssh')?.isActive ??
+          false,
       });
     }),
     vscode.commands.registerCommand(

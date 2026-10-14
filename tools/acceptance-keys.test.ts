@@ -146,6 +146,19 @@ describe('makeRunKeys', function () {
     );
   });
 
+  it("coverage-19: the unauthorised key has no passphrase and isn't given to the host", () => {
+    deepStrictEqual(
+      [
+        runProgram('ssh-keygen', ['-y', '-P', '', '-f', keys.unauthorisedKey])
+          .status,
+        keys.hostArguments.some(argument =>
+          argument.includes(publicKeyOf(keys.unauthorisedKey)),
+        ),
+      ],
+      [0, false],
+    );
+  });
+
   it('tooling-29: the host is given the passphrase and second public keys, and the authority', () => {
     deepStrictEqual(keys.hostArguments, [
       '--env',
