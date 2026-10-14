@@ -11,7 +11,12 @@ import {identifierHost} from 'lib-identifiers';
 import {profileOf} from 'lib-product';
 import {standDownHost} from 'lib-standdown';
 import {activateContainers} from './activation.ts';
-import {enabledApiProposals, standDown} from './identifiers.generated.ts';
+import {nodeEngineHost} from './engine/node-engine-host.ts';
+import {
+  enabledApiProposals,
+  settings,
+  standDown,
+} from './identifiers.generated.ts';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
 const STAND_DOWN_WARNING =
@@ -49,6 +54,7 @@ export async function activate(
   const profile = profileOf(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
+  let logChannel: vscode.OutputChannel | undefined;
   const result = await activateContainers({
     // The generated table has no `commands` until the manifest contributes one.
     table: {commands: {}, standDown},
@@ -58,7 +64,12 @@ export async function activate(
     },
     standDown: standDownHost(vscode),
     commands: identifierHost(vscode, manifest),
-    channels: vscode.window,
+    channels: {
+      createOutputChannel: name => {
+        logChannel = vscode.window.createOutputChannel(name);
+        return logChannel;
+      },
+    },
     clock: Date.now,
     banner: {
       displayName: manifest.displayName,
@@ -77,6 +88,36 @@ export async function activate(
         dataFolderName: () => Promise.resolve(profile.dataFolderName),
         logFailure,
       }),
+    preflight: logger => ({
+      engineFor: nodeEngineHost,
+      dockerPath: () =>
+        vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+      dialogs: {
+        showError: (message, detail, items) =>
+          Promise.resolve(
+            vscode.window.showErrorMessage(
+              message,
+              {modal: true, detail},
+              ...items,
+            ),
+          ),
+        openExternal: address =>
+          Promise.resolve(vscode.env.openExternal(vscode.Uri.parse(address))),
+        revealLog: () => {
+          logChannel?.show(true);
+        },
+      },
+      translate,
+      setTimer: (milliseconds, callback) => {
+        const timer = setTimeout(callback, milliseconds);
+        return () => {
+          clearTimeout(timer);
+        };
+      },
+      clock: Date.now,
+      logger,
+      searchPath: () => process.env.PATH ?? '',
+    }),
     handlers: () => ({}),
   });
   if (result.kind === 'serving') {

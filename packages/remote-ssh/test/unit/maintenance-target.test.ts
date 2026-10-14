@@ -39,22 +39,32 @@ describe('hostPartOf (the host of a typed target)', () => {
 
 describe('isOwnHost (the target against the window host)', () => {
   it('F-2411.BR-7: the same host is the own host', () => {
-    deepStrictEqual(isOwnHost('devbox', 'devbox'), true);
+    deepStrictEqual(isOwnHost({host: 'devbox'}, {host: 'devbox'}), true);
   });
 
-  it('F-2411.BR-7: another spelling, user, or different host is not', () => {
+  it('F-2411.BR-7: another spelling or different host is not', () => {
     deepStrictEqual(
       [
-        isOwnHost('DEVBOX', 'devbox'),
-        isOwnHost('lab@devbox', 'devbox'),
-        isOwnHost('10.0.0.5', 'devbox'),
+        isOwnHost({host: 'DEVBOX'}, {host: 'devbox'}),
+        isOwnHost({host: '10.0.0.5'}, {host: 'devbox'}),
       ],
-      [false, false, false],
+      [false, false],
+    );
+  });
+
+  it('F-2411 6.7: a user or a port makes another host string', () => {
+    deepStrictEqual(
+      [
+        isOwnHost({host: 'devbox', user: 'lab'}, {host: 'devbox'}),
+        isOwnHost({host: 'devbox', port: 22}, {host: 'devbox'}),
+        isOwnHost({host: 'devbox', user: 'lab'}, {host: 'devbox', user: 'lab'}),
+      ],
+      [false, false, true],
     );
   });
 
   it('F-2411.BR-7: no window host is never the own host', () => {
-    deepStrictEqual(isOwnHost('devbox', undefined), false);
+    deepStrictEqual(isOwnHost({host: 'devbox'}, undefined), false);
   });
 });
 

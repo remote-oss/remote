@@ -51,8 +51,23 @@
     "contribRemoteHelp"
   ],
   "l10n": "./l10n",
+  "contributes": {
+    "configuration": {
+      "title": "%configuration.title%",
+      "properties": {
+        "dev.containers.dockerPath": {
+          "type": "string",
+          "default": "docker",
+          "scope": "application",
+          "description": "%setting.Dockerpath.description%"
+        }
+      }
+    }
+  },
   "dependencies": {
     "lib-authority": "workspace:*",
+    "lib-forwarding": "workspace:*",
+    "lib-host": "workspace:*",
     "lib-identifiers": "workspace:*",
     "lib-log": "workspace:*",
     "lib-product": "workspace:*",
