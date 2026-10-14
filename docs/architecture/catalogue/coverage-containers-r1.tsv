@@ -322,7 +322,7 @@ F-0409.AC-11	todo
 F-0409.AC-12	todo	
 F-0409.AC-13	todo	
 F-0409.AC-14	todo	
-F-0409.AC-15	todo	
+F-0409.AC-15	unit	
 F-0409.AC-16	deferred	containers release 1: later (the Remote Explorer views)
 F-0409.AC-17	todo	
 F-0409.AC-18	deferred	containers release 1: later (Windows, WSL and macOS)
@@ -332,10 +332,10 @@ F-0409.AC-21	deferred	containers release 1: later (remote engines)
 F-0409.AC-22	todo	
 F-0409.AC-23	todo	
 F-0409.AC-24	todo	
-F-0409.AC-25	todo	
+F-0409.AC-25	unit	
 F-0409.AC-26	todo	
 F-0409.AC-27	deferred	containers release 1: later (Compose)
-F-0409.AC-28	todo	
+F-0409.AC-28	unit	
 F-0409.AC-30	deferred	containers release 1: later (the Remote Explorer views)
 F-0409.AC-31	todo	
 F-0409.AC-32	deferred	containers release 1: later (Windows, WSL and macOS)
