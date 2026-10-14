@@ -325,6 +325,7 @@ export async function startOrReuse(
       )
         ? options.fileWatcherPollingMilliseconds
         : 0,
+      useHostProxy: allowedExtraOptions.includes('useHostProxy'),
       readySeconds: options.readySeconds,
       socketMode: options.socketMode,
     },

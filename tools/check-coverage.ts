@@ -1,14 +1,16 @@
 /**
- * @fileoverview check-coverage: keeps the acceptance criteria of the first slice, one tag each in one file, and the
- * names of the tests in agreement.
+ * @fileoverview check-coverage: keeps the acceptance criteria of each coverage file, one tag each, and the names of the
+ * tests in agreement.
  *
  *     node tools/check-coverage.ts
  *
- * The file is docs/architecture/catalogue/coverage-slice1.tsv: `ac`, `tag`, `reason` per line. A test row proves the
+ * The files are those of `COVERAGE_SCOPES` under docs/architecture/catalogue (the first slice of Remote - SSH, and
+ * Remote - Containers release 1), each with its own features: `ac`, `tag`, `reason` per line. An id's number may end in
+ * a lower-case letter (`AC-17b`). A test row proves the
  * criteria its name starts with (feature ids, each with its `AC-` numbers, after a space or a dot, in a `, `-separated list, then a colon). The check fails when a line is malformed, when a tag asks for a
  * kind of row that does not cite the criterion, when a row cites a criterion the file does not have, or when an
- * acceptance row of the slice names a feature and no criterion. It prints how many criteria each tag holds. Exit 0 when it passes, 1
- * with problems, 2 when the file cannot be read.
+ * acceptance row names a feature of a file and no criterion. It prints how many criteria each tag holds, per file. Exit 0
+ * when it passes, 1 with problems, 2 when a file cannot be read.
  */
 
 import {existsSync, readFileSync} from 'node:fs';
@@ -19,15 +21,14 @@ import {
   REPOSITORY_ROOT,
   sortedEntries,
 } from './repository.ts';
-import {SLICE_ONE_FEATURES} from './spec-acceptance-criteria.ts';
+import {
+  COVERAGE_SCOPES,
+  type CoverageScope,
+  SLICE_ONE_SCOPE,
+} from './spec-acceptance-criteria.ts';
 
-/** Where the file lies under the repository root. */
-export const COVERAGE_FILE = path.join(
-  'docs',
-  'architecture',
-  'catalogue',
-  'coverage-slice1.tsv',
-);
+/** Where the first slice's file lies under the repository root. */
+export const COVERAGE_FILE = SLICE_ONE_SCOPE.file;
 
 /** The tags of a criterion, `todo` meaning not tagged yet. */
 const TAGS = [
@@ -44,10 +45,13 @@ type Tag = (typeof TAGS)[number];
 /** The tags whose line must say why. */
 const REASON_TAGS: readonly string[] = ['core', 'deferred'];
 
-const AC_PATTERN = /^(F-\d{4})\.AC-(\d+)$/;
+const AC_PATTERN = /^(F-\d{4})\.AC-(\d+)([a-z]?)$/;
 
-/** One feature's part of a cite: its id, then its criteria, `AC-1` or a list `AC-1, AC-3`, after a space or a dot. */
-const FEATURE_CITE = String.raw`F-\d{4}[ .]AC-\d+(?:, ?AC-\d+)*`;
+/**
+ * One feature's part of a cite: its id, then its criteria, `AC-1` or a list `AC-1, AC-3b`, after a space or a dot. A
+ * number may end in a lower-case letter.
+ */
+const FEATURE_CITE = String.raw`F-\d{4}[ .]AC-\d+[a-z]?(?:, ?AC-\d+[a-z]?)*`;
 
 /**
  * The criteria a name or cite starts with: one or more feature cites separated by `, `, then an optional lower-case case
@@ -60,7 +64,11 @@ const CITE_PATTERN = new RegExp(
 /** What the check found. */
 export type CoverageReport =
   | {kind: 'unreadable'; file: string}
-  | {kind: 'checked'; problems: string[]; counts: Record<Tag, number>};
+  | {
+      kind: 'checked';
+      problems: string[];
+      counts: Array<{file: string; counts: Record<Tag, number>}>;
+    };
 
 /** One test row: where it is, its name, and whether it is an acceptance row. */
 interface Row {
@@ -80,12 +88,12 @@ export function citedBy(name: string): string[] {
   }
   const criteria: string[] = [];
   for (const featureCite of (match[1] ?? '').matchAll(
-    /(F-\d{4})[ .]AC-(\d+)((?:, ?AC-\d+)*)/g,
+    /(F-\d{4})[ .]AC-(\d+[a-z]?)((?:, ?AC-\d+[a-z]?)*)/g,
   )) {
     const [, feature, first, rest] = featureCite;
     const numbers = [
       first,
-      ...[...(rest ?? '').matchAll(/AC-(\d+)/g)].map(each => each[1]),
+      ...[...(rest ?? '').matchAll(/AC-(\d+[a-z]?)/g)].map(each => each[1]),
     ];
     for (const number of numbers) {
       criteria.push(`${String(feature)}.AC-${String(number)}`);
@@ -186,24 +194,28 @@ interface Line {
   id: string;
   feature: string;
   index: number;
+  letter: string;
   tagName: string;
   reason: string;
 }
 
-/** Orders two lines by feature, then by criterion number. */
+/** Orders two lines by feature, then by criterion number, then by letter: AC-3, AC-3b, AC-4. */
 function before(left: Line, right: Line): boolean {
-  return left.feature === right.feature
-    ? left.index < right.index
-    : left.feature < right.feature;
+  if (left.feature !== right.feature) {
+    return left.feature < right.feature;
+  }
+  return left.index === right.index
+    ? left.letter < right.letter
+    : left.index < right.index;
 }
 
-/** The place of a line in a report; the number is padded so that a sorted report keeps the file's order. */
-function place(number: number): string {
-  return `${COVERAGE_FILE}:${String(number).padStart(5, '0')}`;
+/** The place of a line of `file` in a report; the number is padded so that a sorted report keeps the file's order. */
+function place(file: string, number: number): string {
+  return `${file}:${String(number).padStart(5, '0')}`;
 }
 
-/** Reads the lines of the file, reporting the malformed ones. */
-function linesOf(text: string, problems: string[]): Line[] {
+/** Reads the lines of `file`'s text, reporting the malformed ones. */
+function linesOf(file: string, text: string, problems: string[]): Line[] {
   const lines: Line[] = [];
   const seen = new Set<string>();
   let previous: Line | undefined;
@@ -217,17 +229,19 @@ function linesOf(text: string, problems: string[]): Line[] {
       }
       const fields = content.split('\t');
       if (fields.length !== 3) {
-        problems.push(`${place(number)}: wrong number of fields`);
+        problems.push(`${place(file, number)}: wrong number of fields`);
         return;
       }
       const [criterion = '', tagName = '', reason = ''] = fields;
       const match = AC_PATTERN.exec(criterion);
       if (match === null) {
-        problems.push(`${place(number)}: AC id out of form: ${criterion}`);
+        problems.push(
+          `${place(file, number)}: AC id out of form: ${criterion}`,
+        );
         return;
       }
       if (!(TAGS as readonly string[]).includes(tagName)) {
-        problems.push(`${place(number)}: unknown tag: ${tagName}`);
+        problems.push(`${place(file, number)}: unknown tag: ${tagName}`);
         return;
       }
       const line: Line = {
@@ -235,16 +249,17 @@ function linesOf(text: string, problems: string[]): Line[] {
         id: criterion,
         feature: match[1] ?? '',
         index: Number(match[2]),
+        letter: String(match[3]),
         tagName,
         reason,
       };
       if (seen.has(criterion)) {
-        problems.push(`${place(number)}: ${criterion} is repeated`);
+        problems.push(`${place(file, number)}: ${criterion} is repeated`);
         return;
       }
       seen.add(criterion);
       if (previous !== undefined && !before(previous, line)) {
-        problems.push(`${place(number)}: ${criterion} is out of order`);
+        problems.push(`${place(file, number)}: ${criterion} is out of order`);
       }
       previous = line;
       lines.push(line);
@@ -252,15 +267,19 @@ function linesOf(text: string, problems: string[]): Line[] {
   return lines;
 }
 
-/** Checks the tags of the lines against their reasons. */
-function reasonProblems(lines: readonly Line[], problems: string[]): void {
+/** Checks the tags of `file`'s lines against their reasons. */
+function reasonProblems(
+  file: string,
+  lines: readonly Line[],
+  problems: string[],
+): void {
   for (const line of lines) {
     const needs = REASON_TAGS.includes(line.tagName);
     if (needs && line.reason === '') {
-      problems.push(`${place(line.number)}: ${line.id} needs a reason`);
+      problems.push(`${place(file, line.number)}: ${line.id} needs a reason`);
     } else if (!needs && line.reason !== '') {
       problems.push(
-        `${place(line.number)}: ${line.id} has a reason, which is only for core or deferred`,
+        `${place(file, line.number)}: ${line.id} has a reason, which is only for core or deferred`,
       );
     }
   }
@@ -268,6 +287,7 @@ function reasonProblems(lines: readonly Line[], problems: string[]): void {
 
 /** Checks what the tags promise against the rows that cite the criteria. */
 function rowProblems(
+  scope: CoverageScope,
   lines: readonly Line[],
   rows: readonly Row[],
   problems: string[],
@@ -280,9 +300,9 @@ function rowProblems(
     for (const criterion of cited) {
       (testRow.acceptance ? acceptanceCited : unitCited).add(criterion);
       const feature = criterion.slice(0, 6);
-      if (SLICE_ONE_FEATURES.includes(feature) && !known.has(criterion)) {
+      if (scope.features.includes(feature) && !known.has(criterion)) {
         problems.push(
-          `${testRow.file}: row "${testRow.name}" cites ${criterion}, which the slice's file doesn't have`,
+          `${testRow.file}: row "${testRow.name}" cites ${criterion}, which ${scope.file} doesn't have`,
         );
       }
     }
@@ -291,7 +311,7 @@ function rowProblems(
       testRow.acceptance &&
       cited.length === 0 &&
       named !== undefined &&
-      SLICE_ONE_FEATURES.includes(named)
+      scope.features.includes(named)
     ) {
       problems.push(
         `${testRow.file}: row "${testRow.name}" names ${named} without an AC`,
@@ -301,7 +321,7 @@ function rowProblems(
   for (const line of lines) {
     if (line.tagName === 'acceptance' && !acceptanceCited.has(line.id)) {
       problems.push(
-        `${place(line.number)}: ${line.id} is tagged acceptance and no acceptance row cites it`,
+        `${place(scope.file, line.number)}: ${line.id} is tagged acceptance and no acceptance row cites it`,
       );
     }
     if (
@@ -310,22 +330,14 @@ function rowProblems(
       !acceptanceCited.has(line.id)
     ) {
       problems.push(
-        `${place(line.number)}: ${line.id} is tagged unit and no row cites it`,
+        `${place(scope.file, line.number)}: ${line.id} is tagged unit and no row cites it`,
       );
     }
   }
 }
 
-/** Runs the check over the repository at `root`. */
-export function checkCoverage(root: string): CoverageReport {
-  const file = path.join(root, COVERAGE_FILE);
-  if (!existsSync(file)) {
-    return {kind: 'unreadable', file: COVERAGE_FILE};
-  }
-  const problems: string[] = [];
-  const lines = linesOf(readFileSync(file, 'utf8'), problems);
-  reasonProblems(lines, problems);
-  rowProblems(lines, rowsOf(root), problems);
+/** The count of `lines` per tag. */
+function countsOf(lines: readonly Line[]): Record<Tag, number> {
   const counts: Record<Tag, number> = {
     acceptance: 0,
     unit: 0,
@@ -337,6 +349,32 @@ export function checkCoverage(root: string): CoverageReport {
   for (const line of lines) {
     counts[line.tagName as Tag] += 1;
   }
+  return counts;
+}
+
+/** Runs the check over the repository at `root`, for every coverage file of `scopes`. */
+export function checkCoverage(
+  root: string,
+  scopes: readonly CoverageScope[] = COVERAGE_SCOPES,
+): CoverageReport {
+  const missing = scopes.find(
+    scope => !existsSync(path.join(root, scope.file)),
+  );
+  if (missing !== undefined) {
+    return {kind: 'unreadable', file: missing.file};
+  }
+  const problems: string[] = [];
+  const rows = rowsOf(root);
+  const counts = scopes.map(scope => {
+    const lines = linesOf(
+      scope.file,
+      readFileSync(path.join(root, scope.file), 'utf8'),
+      problems,
+    );
+    reasonProblems(scope.file, lines, problems);
+    rowProblems(scope, lines, rows, problems);
+    return {file: scope.file, counts: countsOf(lines)};
+  });
   return {kind: 'checked', problems: problems.sort(), counts};
 }
 
@@ -348,7 +386,10 @@ export function outputOf(report: CoverageReport): {
   if (report.kind === 'unreadable') {
     return {lines: [`check-coverage: cannot read ${report.file}`], exitCode: 2};
   }
-  const counts = TAGS.map(name => `${name}: ${String(report.counts[name])}`);
+  const counts = report.counts.flatMap(each => [
+    `${each.file}:`,
+    ...TAGS.map(name => `${name}: ${String(each.counts[name])}`),
+  ]);
   return {
     lines: [...report.problems, ...counts],
     exitCode: report.problems.length === 0 ? 0 : 1,

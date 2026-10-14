@@ -731,6 +731,41 @@ export function noHelperWithin(milliseconds: number): Promise<void> {
   );
 }
 
+/** Whether the process `processId` runs. */
+export function runs(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Waits until none of `processIds` runs, for up to `milliseconds`. */
+export function goneWithin(
+  processIds: readonly number[],
+  milliseconds: number,
+): Promise<void> {
+  return waitFor(
+    `${processIds.join(', ')} to end`,
+    () => processIds.every(processId => !runs(processId)),
+    milliseconds,
+  );
+}
+
+/** Waits until a connection helper other than those in `known` runs, for up to `milliseconds`. */
+export function newHelperWithin(
+  known: readonly number[],
+  milliseconds: number,
+): Promise<void> {
+  return waitFor(
+    'a new connection helper',
+    async () =>
+      (await connectionHelpers()).some(processId => !known.includes(processId)),
+    milliseconds,
+  );
+}
+
 /** One scripted answer of the host pick of window `window`. */
 export function hostAnswer(
   window: string,
@@ -742,4 +777,38 @@ export function hostAnswer(
     answer,
     window,
   } as const;
+}
+
+/** The exit status of the client's `ssh` with the run's ssh_config and `parameters`. */
+async function sshStatus(parameters: readonly string[]): Promise<number> {
+  try {
+    await execFileAsync('ssh', [
+      '-F',
+      variable('HARNESS_SSH_CONFIG'),
+      ...parameters,
+    ]);
+    return 0;
+  } catch (caught) {
+    return (caught as {code?: number}).code ?? 1;
+  }
+}
+
+/**
+ * Whether the ControlMaster of `alias` runs and answers `-O check`. The control command is given `ControlMaster=no`:
+ * OpenSSH's mux client ignores `-O` for the `yes` and `ask` modes and logs in afresh.
+ */
+export async function masterCheck(alias: string): Promise<boolean> {
+  return (
+    (await sshStatus(['-o', 'ControlMaster=no', '-O', 'check', alias])) === 0
+  );
+}
+
+/** Ends the ControlMaster of `alias`, if one runs. */
+export async function masterExit(alias: string): Promise<void> {
+  await sshStatus(['-o', 'ControlMaster=no', '-O', 'exit', alias]);
+}
+
+/** Whether a login to `alias` with no question succeeds, which it does only through a master that runs. */
+export async function batchLogin(alias: string): Promise<boolean> {
+  return (await sshStatus(['-o', 'BatchMode=yes', alias, 'true'])) === 0;
 }

@@ -90,6 +90,7 @@ interface Fixture {
   termsAsked: ConnectionTerms[];
   connecting: (
     cancellation?: AbortSignal,
+    input?: ConnectInput,
   ) => ReturnType<ReturnType<typeof openConnectionStep>>;
 }
 
@@ -186,8 +187,8 @@ function fixture(
     },
     channelsFor,
     termsAsked,
-    connecting: cancellation =>
-      step(INPUT, TERMS, cancellation ?? new AbortController().signal),
+    connecting: (cancellation, input) =>
+      step(input ?? INPUT, TERMS, cancellation ?? new AbortController().signal),
   };
 }
 
@@ -216,6 +217,13 @@ describe('the connection step', () => {
       ],
       ['harness', true],
     );
+  });
+
+  it('F-2411.BR-2: the acquire is keyed by the connection key when the input names one', async () => {
+    const {requests, connecting} = fixture();
+    void connecting(undefined, {...INPUT, connectionKey: 'x'});
+    await settled();
+    deepStrictEqual(requests[0]?.hostString, 'x');
   });
 
   it('gives the pipeline the channel for the connection that is set up, once the login is done', async () => {

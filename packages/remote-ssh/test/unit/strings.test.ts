@@ -24,6 +24,7 @@ const FAILURE_TEXTS = [
   'Cancel',
   'Close Remote',
   'Connecting was canceled',
+  'Connecting with SSH timed out',
   'Copying VS Code Server to host with scp',
   'Could not establish connection to "{0}"',
   'Could not establish connection to "{0}": {1}',

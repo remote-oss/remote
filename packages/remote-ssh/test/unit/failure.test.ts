@@ -791,7 +791,14 @@ describe('the reading of each library failure (no library text is shown)', () =>
     );
   });
 
-  it('a lost transport, a gone helper, a timeout and a cancel map unchanged', () => {
+  it('F-2105 7.E3: the shared connection\'s own wait gives the reason "Connecting with SSH timed out"', () => {
+    deepStrictEqual(ofConnection({kind: 'timeout'}), {
+      kind: 'timeout',
+      reason: {id: 'sshTimedOut'},
+    });
+  });
+
+  it('a lost transport, a gone helper and a cancel map unchanged, and a timeout gets its reason (connect-50)', () => {
     deepStrictEqual(
       [
         ofConnection({kind: 'transportLost'}),
@@ -802,7 +809,7 @@ describe('the reading of each library failure (no library text is shown)', () =>
       [
         {kind: 'channelClosed'},
         {kind: 'channelClosed'},
-        {kind: 'timeout'},
+        {kind: 'timeout', reason: {id: 'sshTimedOut'}},
         {kind: 'cancelled'},
       ],
     );

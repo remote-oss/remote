@@ -8,19 +8,22 @@ import {
   connected,
   connectedWithin,
   connectionHelpers,
+  goneWithin,
   hostAnswer,
   inWindow,
   isOpen,
   kill,
   messagesSince,
+  newHelperWithin,
   noHelperWithin,
   openWindow,
+  readUserSettings,
   recordLines,
   reloadWindow,
+  restoreUserSettings,
+  runs,
   settingIn,
   sshChildren,
-  readUserSettings,
-  restoreUserSettings,
   userSettings,
   variable,
   waitFor,
@@ -42,41 +45,6 @@ const PER_WINDOW = {
   'remote.SSH.useLocalServer': false,
   'remote.SSH.remotePlatform': {harness: 'linux'},
 };
-
-/** Whether the process `processId` runs. */
-function runs(processId: number): boolean {
-  try {
-    process.kill(processId, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Waits until none of `processIds` runs, for up to `milliseconds`. */
-function goneWithin(
-  processIds: readonly number[],
-  milliseconds: number,
-): Promise<void> {
-  return waitFor(
-    `${processIds.join(', ')} to end`,
-    () => processIds.every(processId => !runs(processId)),
-    milliseconds,
-  );
-}
-
-/** Waits until a connection helper other than those in `known` runs, for up to `milliseconds`. */
-function newHelperWithin(
-  known: readonly number[],
-  milliseconds: number,
-): Promise<void> {
-  return waitFor(
-    'a new connection helper',
-    async () =>
-      (await connectionHelpers()).some(processId => !known.includes(processId)),
-    milliseconds,
-  );
-}
 
 describe('the local connection server on a key host (card coverage-14)', function () {
   this.timeout(300000);

@@ -1,7 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {
   acceptanceCriteriaOf,
+  CONTAINERS_RELEASE_ONE_FEATURES,
+  CONTAINERS_RELEASE_ONE_SCOPE,
+  COVERAGE_SCOPES,
   SLICE_ONE_FEATURES,
+  SLICE_ONE_SCOPE,
 } from './spec-acceptance-criteria.ts';
 
 const BODY = [
@@ -84,6 +88,67 @@ describe('the features of slice 1', () => {
         ].every(feature => SLICE_ONE_FEATURES.includes(feature)),
       ],
       [26, true],
+    );
+  });
+});
+
+describe('acceptanceCriteriaOf, the forms of Remote - Containers', () => {
+  const containersBody = [
+    '- **F-0101.AC-3** Given a window.',
+    '- **F-0101.AC-3b** Given a second window.',
+    '- **F-0101.AC-35 (reimplementation only, F-1402)** Given a setting.',
+    '- **F-0101.AC-36 (reimplementation only)** Removed: merged into AC-35.',
+    '- **F-0101.AC-3B** An upper-case letter is not a form.',
+    '- **F-0101.AC-37** Merged into AC-35: its check is there.',
+  ].join('\n');
+
+  it('containers release 1: takes a letter after the number and a note after the id, and skips a removed or merged one', () => {
+    deepStrictEqual(acceptanceCriteriaOf(containersBody, 'F-0101'), [
+      'F-0101.AC-3',
+      'F-0101.AC-3b',
+      'F-0101.AC-35',
+    ]);
+  });
+
+  it('containers release 1: AC-35 is not read as AC-3', () => {
+    deepStrictEqual(
+      acceptanceCriteriaOf(
+        '- **F-0101.AC-35 (note)** Given a setting.',
+        'F-0101',
+      ),
+      ['F-0101.AC-35'],
+    );
+  });
+});
+
+describe('the coverage files', () => {
+  it('containers release 1: the first slice and containers release 1, each with its features and repository', () => {
+    deepStrictEqual(
+      COVERAGE_SCOPES.map(scope => [
+        scope.file,
+        scope.features.length,
+        scope.repository,
+      ]),
+      [
+        [SLICE_ONE_SCOPE.file, SLICE_ONE_FEATURES.length, 'remote-ssh'],
+        [
+          CONTAINERS_RELEASE_ONE_SCOPE.file,
+          CONTAINERS_RELEASE_ONE_FEATURES.length,
+          'remote-containers',
+        ],
+      ],
+    );
+  });
+
+  it('containers release 1: twenty-four features, F-0416, F-0419 and F-0106 among them', () => {
+    deepStrictEqual(
+      [
+        CONTAINERS_RELEASE_ONE_FEATURES.length,
+        ['F-0416', 'F-0419', 'F-0106'].every(feature =>
+          CONTAINERS_RELEASE_ONE_FEATURES.includes(feature),
+        ),
+      ],
+      [24, true],
     );
   });
 });
