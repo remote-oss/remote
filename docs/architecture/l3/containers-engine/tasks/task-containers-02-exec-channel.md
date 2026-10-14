@@ -88,8 +88,9 @@ the engine). C11 builds it in the adapter, and C2's card writes its rows, since 
 ## 3. The argv builders (`exec/exec-arguments.ts`, pure)
 
 ```
-scriptArguments(containerId, user, environmentNames) =
-  ['exec', '-i', '--user', user, ...environmentNames.flatMap(name => ['-e', name]), containerId, 'sh', '-s']
+scriptArguments(containerId, user, environmentNames, scriptByteCount) =
+  ['exec', '-i', '--user', user, ...environmentNames.flatMap(name => ['-e', name]), containerId,
+   'sh', '-c', preludeCommand(scriptByteCount)]
 copyArguments(containerId, user, directory) =
   ['exec', '-i', '--user', user, containerId, 'tar', '-x', '-f', '-', '-C', directory]
 dialArguments(containerId, user, nodePath, relayScriptPath, port) =
@@ -100,6 +101,20 @@ dialArguments(containerId, user, nodePath, relayScriptPath, port) =
 in `EngineOptions.environment` of the `docker` process, which hands them to the container. So no value appears in
 `docker`'s argv or in `ps` (R-26, contracts §1). A name that isn't `^[A-Za-z_][A-Za-z0-9_]*$` is refused before
 spawning: `spawnFailed`, naming the variable.
+
+**The prelude, not `sh -s`** (themis on #760, measured): `sh -s` with the script followed by the input doesn't leave
+the input to the script on BusyBox ash (and dash with larger inputs): `printf 'cat\nhello world input\n' | sh -s` runs
+the input as commands there (`sh: hello: not found`, measured again on `alpine:3.22`), and only bash behaves. So the
+channel uses lib-ssh's prelude form, which themis measured on ash, dash and bash with small and 400 KB inputs:
+- `preludeCommand(byteCount)` is `eval "$(dd bs=1 count=<byteCount> 2>/dev/null)"`. The shell reads exactly the
+  script's bytes with `dd`, evaluates them, and the script's own reads see the rest of stdin, the input.
+- Only the byte count appears in argv, never the script.
+- **It moves to lib-host,** with `posixQuote`: both go in `packages/lib-host/src/shell-words.ts`, exported from lib-host's
+  index. lib-ssh's `preludeProgram(byteCount)` (`process/remote-program.ts`) becomes
+  `` `sh -c ${posixQuote(preludeCommand(byteCount))}` `` over the moved functions, and lib-ssh imports `posixQuote` from
+  lib-host. Its output stays byte-identical, and lib-ssh's existing rows prove it unchanged.
+- athena amends containers contracts §1's `runScript` line from `sh -s` to this form. Build to this card; the contract
+  follows.
 
 **Interpreters:** `powershell` is refused before spawning: `spawnFailed`, "the powershell interpreter is not available
 in a container".
@@ -156,11 +171,11 @@ the card adds nothing for it.
   - Refusals (§3) and a missing input file come first: `spawnFailed`, before anything runs. Check the file with
     `node:fs/promises` `access`, through a `files` parameter so the unit rows fake it. The parameter defaults to the
     Node implementation.
-  - Spawn `scriptArguments`, with the request's environment as `EngineOptions.environment`.
-  - Write `script` to stdin, followed by `\n` when it doesn't end with one, then the input (the text as UTF-8, or the
-    file streamed as in §4), then close stdin. `sh -s` reads its commands line by line, and POSIX requires it to leave
-    standard input just after the command it has read. So the script's own reads see exactly the input. The contract
-    case `digestsInput` proves it on the real container.
+  - Encode `script` as UTF-8, and spawn `scriptArguments(…, scriptBytes.length)` with the request's environment as
+    `EngineOptions.environment`.
+  - Write exactly the script's bytes to stdin, with nothing added, then the input (the text as UTF-8, or the file
+    streamed as in §4), then close stdin. The prelude's `dd` reads the script's bytes and no more, so the script's own
+    reads see exactly the input. The contract case `digestsInput` proves it on the real container.
   - Split stdout into lines (`\n`, with a trailing `\r` removed) and call `onLine` for each, in order. Flush the last
     partial line on exit, then settle with `exitOutcome`. After a cancellation, deliver no more lines.
   - Keep stderr's last 20 lines for the details.
@@ -212,10 +227,8 @@ socket.pipe(process.stdout);
 - It answers `{kind: 'written', path}` on status 0. Otherwise it answers `{kind: 'failed', detail}`: the channel failure,
   or `relay script not written (exit <n>)`.
 - C10 calls it after lib-server's install, and C10's card says so.
-- `posixQuote` comes from lib-ssh today. remote-containers mustn't import lib-ssh (components §3), so add
-  `posixQuote(value)` to `exec-arguments.ts` with the same rule (`'…'` with `'` written as `'\''`). If `pnpm dupes` flags
-  the copy, move lib-ssh's into lib-host, export it from there, and use it from both. lib-host is the natural owner of a
-  shell-quoting helper for channels, and the move is a small refactor in this PR.
+- `posixQuote` comes from lib-host (§3, moved there from lib-ssh in this PR). remote-containers mustn't import lib-ssh
+  (components §3).
 
 **`execDialer(engine, containerId, user, nodePath, relayScriptPath)`:**
 - `dial({kind: 'socket'})` rejects with `Error('a socket target is not available in a container')`.
@@ -237,10 +250,11 @@ socket.pipe(process.stdout);
 
 | File | Given | Expected |
 |---|---|---|
-| `exec-arguments.test.ts` | `scriptArguments('c1', 'node', ['A', 'B_2'])` | `['exec','-i','--user','node','-e','A','-e','B_2','c1','sh','-s']` |
+| `exec-arguments.test.ts` | `scriptArguments('c1', 'node', ['A', 'B_2'], 42)` | `['exec','-i','--user','node','-e','A','-e','B_2','c1','sh','-c','eval "$(dd bs=1 count=42 2>/dev/null)"']` |
+| lib-host `shell-words.test.ts` | `preludeCommand(42)`; `posixQuote("it's")` | `eval "$(dd bs=1 count=42 2>/dev/null)"`; `'it'\''s'` |
+| lib-ssh `remote-program.test.ts` | `preludeProgram(42)` | exactly main's string, `sh -c 'eval "$(dd bs=1 count=42 2>/dev/null)"'` (the existing rows pass unchanged) |
 | | `copyArguments('c1', 'node', '/tmp/x y')` | the directory as one element, unchanged |
 | | `dialArguments('c1', 'node', '/srv/node', '/d/relay-abc.js', 41000)` | `[…,'c1','/srv/node','/d/relay-abc.js','41000']` |
-| | `posixQuote("it's")` | `'it'\''s'` |
 | `tar-stream.test.ts` | `ustarHeader('a.tar.gz', 5)`, then 5 bytes, then `ustarTrailer(5)` | a valid archive: `tar -t -v -f -` on the machine (spawned in the row) lists `a.tar.gz` with size 5. Also the length is 512 + 512 + 1024, and the checksum field holds the sum the row computes |
 | | a 101-byte name; size 2³³ | `RangeError` naming each |
 | | size 0, 512, 513 | trailer lengths 1024, 1024, 1535 |
@@ -271,7 +285,7 @@ as `packages/lib-ssh/test/unit/host-channel-contract.test.ts` does over its fake
 | no shell | `copyToHost` to `/tmp/a b/it's.tar.gz` | the argv holds `/tmp/a b` as one element; the tar header names `it's.tar.gz` |
 | contracts §1 | `runScript` with `interpreter: 'powershell'` | `spawnFailed`, no spawn |
 | contracts §1 | an environment name `A-B` | `spawnFailed` naming `A-B`, no spawn |
-| contracts §1 | a script without a final newline, input text `x` | stdin received `<script>\nx`, then end |
+| contracts §1 | a script `echo é` (7 UTF-8 bytes) without a final newline, input text `x` | argv ends with `count=7`; stdin received exactly the 7 bytes, then `x`, then end; nothing added between them |
 | contracts §1 | `copyToHost` of a 200 000-byte file, with a fake stdin that returns false from `write` every second call | every byte arrives in order, with the header first and the trailer last; the stream waited for `drain` each time |
 | contracts §1 | `identity()`, `platformHint()`, and `clientPathOnHost` | `'c1'`, `'linux'`, undefined; `hostPathOf(channel, f)` is undefined |
 | relay | `installRelayScript` over a recording channel (`lib-host/testing/recording-channel`) | one `runScript` whose script holds `umask 022`, `chmod 0644` and the quoted `relayScriptPath(dataFolder)`, and whose input is `RELAY_SCRIPT`; status 0 gives `written` |
@@ -324,7 +338,7 @@ test:acceptance:server` (paste the new file's summary).
 
 1. A stopped container's `docker exec` ends with a status and stderr that none of §5's rules map to `channelClosed`.
    Report what was measured.
-2. `sh -s` in the harness container reads past the script into the input, so `digestsInput` fails. Report it, and
-   don't switch to lib-ssh's prelude form by guess.
+2. `digestsInput` fails on the real container even with the prelude form. Report the measured stdin and output; don't
+   change the form by guess.
 3. lib-forwarding can't export a stream `Duplex` without changing `socketDuplex`'s behaviour for its other callers.
    Then write the exec one in `exec-dialer.ts`, and report.
