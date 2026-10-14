@@ -96,11 +96,13 @@ describe(`the client search of ${label}`, () => {
   });
 
   it(`${cite} (${label}): no notification or dialog of the client search`, () => {
+    const shown = recordLines().filter(
+      line => line.surface === 'failureDialog' || line.surface === 'notice',
+    );
     deepStrictEqual(
-      recordLines().filter(
-        line => line.surface === 'failureDialog' || line.surface === 'notice',
-      ),
+      shown,
       [],
+      `${JSON.stringify(shown)}\nthe connection log:\n${connectionLog().join('\n')}`,
     );
   });
 
