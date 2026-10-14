@@ -122,7 +122,7 @@ containers-12's gate decides there.
 
 | Id | English template |
 |---|---|
-| S426 | `{0} Reopen folder to develop in a container ([learn more](https://aka.ms/vscode-remote/docker)).{1}` |
+| S426 | `{0} Reopen folder to develop in a container ([learn more](<CONTAINERS_INTRODUCTION>)).{1}` |
 | S186 | `Folder contains a Dev Container configuration file.` |
 | S293 | `Reopen in Container` |
 | S150 | `Don't Show Again...` |
@@ -130,7 +130,20 @@ containers-12's gate decides there.
 | S035 | `Any Folder` |
 | S101 | `Current Folder` |
 
-Copy them verbatim from the spec's 3.4. The keys go into `l10n/bundle.l10n.json` and every locale bundle, as
+Copy them verbatim from the spec's 3.4, with one exception: **S426's link target is ours** (R-31, athena on
+#927). The text, "learn more" included, stays verbatim (R-29), and the target becomes our README's introduction:
+
+```ts
+/** The page S426's "learn more" opens: the extension's introduction. */
+export const CONTAINERS_INTRODUCTION =
+  'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md';
+```
+
+It sits beside containers-11's `CONTAINERS_DOCUMENTATION` and `CONTAINERS_REQUIREMENTS`, in the same module. The
+template interpolates the constant (`` `…([learn more](${CONTAINERS_INTRODUCTION}))…` ``), so the address is written
+once, and the bundles' key is the resulting English text. Never the aka.ms address.
+
+The keys go into `l10n/bundle.l10n.json` and every locale bundle, as
 containers-03 did. `check-string-tables` checks them. If another table already defines one of them, import it, and
 don't define it twice (dupes).
 
@@ -170,6 +183,7 @@ Neither key is registered with `setKeysForSync` (R-27).
 | `test/unit/manifest.test.ts` | the command's contribution and its absent `when` |
 | `tests/acceptance/containers/reopen-notification.test.ts` | new: §4.2 |
 | `tests/acceptance/windows/harness.ts`, `tests/acceptance/containers/gate.test.ts` | move `openFolderWindow` from gate.test.ts into harness.ts (both files use it: dupes) |
+| `tools/public-surface.ts`, `tools/public-surface.test.ts` | the aka.ms rule and its rows (§4.1) |
 | `docs/architecture/catalogue/coverage-containers-r1.tsv` | §5 |
 
 ## 4. Rows
@@ -178,7 +192,7 @@ Neither key is registered with `setKeysForSync` (R-27).
 
 | Name | Given | Expected |
 |---|---|---|
-| `F-0402 AC-1: a local folder with a configuration shows S426 with S186 and the two buttons` | defaults | one `show`: `Folder contains a Dev Container configuration file. Reopen folder to develop in a container ([learn more](https://aka.ms/vscode-remote/docker)).` and `['Reopen in Container', "Don't Show Again..."]` |
+| `F-0402 AC-1: a local folder with a configuration shows S426 with S186 and the two buttons` | defaults | one `show`: `Folder contains a Dev Container configuration file. Reopen folder to develop in a container ([learn more](https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md)).` and `['Reopen in Container', "Don't Show Again..."]` |
 | `F-0402 AC-2: Reopen in Container runs the reopen command and stores nothing` | `show` answers S293 | `reopen` once; both mementos unwritten |
 | `F-0402 AC-3: Don't Show Again... shows the follow-up` | S150 | the second `show`: S151 with `['Any Folder', 'Current Folder']` |
 | `F-0402 AC-4: Current Folder stores the time in the workspace state` | S150, then S101, `now` 1000 | workspace `{suppressedAt: 1000}`; global unwritten |
@@ -199,6 +213,18 @@ Neither key is registered with `setKeysForSync` (R-27).
 
 `manifest.test.ts`: `F-0402 3.1: the reset command is contributed under Dev Containers with no when`.
 
+**`tools/public-surface.ts`: no aka.ms address ships** (R-31, athena on #927). Today the check reads the shipped
+files for process wording only. It gains a second rule over the same files: an `https://aka.ms/` address anywhere in
+them fails, naming the file and the address. The licence hosts' allow-list (lib-product's `serverLicenseUrl` hosts,
+when one ships in a string table) is the only exception, and today it's empty. Its rows, in `tools/public-surface.test.ts`:
+
+| Name | Expected |
+|---|---|
+| `R-31: an aka.ms address in a localisation bundle fails, naming the file and the address` | a fixture `l10n/bundle.l10n.json` holding `https://aka.ms/x`: one problem line with both |
+| `R-31: an aka.ms address in package.nls fails too` | the same for `package.nls.json` |
+| `R-31: an address of our own passes` | `https://github.com/remote-oss/remote/...`: no problem |
+| `R-31: the repository's shipped files hold no aka.ms address` | the real run over the repository: no problem |
+
 ### 4.2 Acceptance (`tests/acceptance/containers/reopen-notification.test.ts`, the containers launch)
 
 Each row opens its own `devContainerFolder` (§2.1 of containers-09) with `openFolderWindow`, so the rows don't share
@@ -206,7 +232,7 @@ storage ids.
 
 | # | Steps | Assertions |
 |---|---|---|
-| N1 | `devContainerFolder('notice-shown', {name: 'Notice'})`, open it | within 10 s of the agent's activation, a toast with exactly `Folder contains a Dev Container configuration file. Reopen folder to develop in a container (learn more).` and `notificationButtons` `['Reopen in Container', "Don't Show Again..."]` (AC-1) |
+| N1 | `devContainerFolder('notice-shown', {name: 'Notice'})`, open it | within 10 s of the agent's activation, a toast with exactly `Folder contains a Dev Container configuration file. Reopen folder to develop in a container (learn more).`, its "learn more" anchor's `href` our README's address, and `notificationButtons` `['Reopen in Container', "Don't Show Again..."]` (AC-1) |
 | N2 | In N1's window, `answerNotification('Reopen in Container')` | the same window reaches `remoteName` `dev-container` with its folder under `/workspaces/notice-shown` (AC-2). Close it |
 | N3 | Open `notice-current` and answer `Don't Show Again...` | the toast is now exactly `Don't show again for the current folder or for any folder?` with buttons `['Any Folder', 'Current Folder']` (AC-3) |
 | N4 | Answer `Current Folder`, close the window, and open `notice-current` again; then open `notice-other` | `notice-current` shows no reopen toast within 10 s, and `notice-other` shows it (AC-4) |
