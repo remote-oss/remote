@@ -35,10 +35,15 @@ lookup runs inside the acquire, only on the path that claims the key and starts 
   `prepare: () => Promise<PreparedStart<Refusal>>`, where
   `PreparedStart<Refusal> = {kind: 'ready'; options: Record<…>; payload: Record<…>} | {kind: 'refused'; refusal: Refusal}`.
   `AcquireRequest` and `AcquireOutcome` take the type parameter `Refusal`.
-- `start(environment, request, record)` calls `request.prepare()` after the claim and before the spawn, once. The
-  record written by the claim gets the prepared `payload`: write the claim's record without a payload, and rewrite it
-  with the payload before the spawn, under the same nonce. If a rewrite isn't possible with the registry's file port,
-  claim with a placeholder and say so in the PR.
+- **The record:** the claim writes the record with an **empty payload, `{}`**, and nothing rewrites it. A per-user
+  registry holds no secret beyond the nonce (`types.ts`; athena on #816). The prepared payload may hold effective ssh
+  options such as `ProxyCommand`, `SetEnv` or `RemoteCommand`, so it never goes into the registry file.
+- **The prepared payload's path:** `start(environment, request, record)` calls `request.prepare()` after the claim and
+  before the spawn, once. Its `options` and `payload` reach the helper only through the spawn's parameters:
+  `spawnSpecification`'s `HelperParameters`, carried in `REMOTE_OSS_HELPER_PARAMETERS` (`client/spawn.ts`), never in
+  argv. The helper serves the payload in its welcome (`runtime/serve.ts`), as it does today.
+- **Joiners** read the payload from the welcome, `lease.payload` (`client/lease.ts`), exactly as `socksPort` is read
+  today. `HelperRecord.payload` is no longer read by any client.
 - `{kind: 'refused', refusal}` → remove the record, as the `spawnFailed` path does, so the key is free at once, and
   return the new `AcquireOutcome` member `{kind: 'refused'; refusal: Refusal}`.
 - A cancellation that lands during `prepare` → remove the record, then `{kind: 'failed', failure: 'cancelled'}`.
@@ -56,11 +61,12 @@ lookup runs inside the acquire, only on the path that claims the key and starts 
 - `acquireConnection` passes a `prepare` to lib-helper. When it's called:
   - it takes the free SOCKS port;
   - it calls the request's `prepare`;
-  - on `ready`, it adds `socksPort` and `recordFile` to the options, and puts the payload
-    `{socksPort, runFacts: JSON.stringify(runFacts)}` in the record.
+  - on `ready`, it adds `socksPort` and `recordFile` to the options, and returns the payload
+    `{socksPort, runFacts: JSON.stringify(runFacts)}` to lib-helper. lib-helper hands it to the helper through the spawn
+    parameters, never into the record (§2.1).
 - `AcquireConnectionOutcome` gains `{kind: 'refused'; refusal: Refusal}`.
-- `ConnectedState` (the `connect` outcome) gains `runFacts: RunFacts`, read from `this.lease.payload.runFacts` and
-  parsed. A missing or unparsable value fails the connect as `{kind: 'helperRefused', reason: 'no run facts'}`, as a
+- `ConnectedState` (the `connect` outcome) gains `runFacts: RunFacts`, read from `this.lease.payload.runFacts` (the
+  welcome's payload) and parsed. A missing or unparsable value fails the connect as `{kind: 'helperRefused', reason: 'no run facts'}`, as a
   missing SOCKS port does today.
 - `ConnectionLimits` reach `SharedConnection` as a function, `limits: () => ConnectionLimits`, called when the login
   wait starts, so a joining window's limits can be decided after the acquire (§2.3).
@@ -97,7 +103,8 @@ lookup runs inside the acquire, only on the path that claims the key and starts 
 
 | Cite | Given | Expected |
 |---|---|---|
-| F-2101 BR-9 | a free key | `prepare` called once, before the spawn; the spawn's options and the record's payload are the prepared ones |
+| F-2101 BR-9 | a free key | `prepare` called once, before the spawn; the spawn's parameters carry the prepared options and payload |
+| lib-helper `types.ts` (no secret in the registry) | a start, then a join | the record file's `payload` is `{}`; the starter's and the joiner's `lease.payload` both hold the prepared values (from the welcome) |
 | F-2101 6.4 | an existing, live helper | `prepare` never called; the lease joins |
 | F-2101 6.4 | a stale record replaced by a live one (`replaceStale` → `existing`) | `prepare` never called |
 | F-2101 BR-9 | `prepare` refusing `'r'` | outcome `{kind: 'refused', refusal: 'r'}`; no spawn; the record file is gone |
@@ -107,7 +114,7 @@ lookup runs inside the acquire, only on the path that claims the key and starts 
 
 | Cite | Given | Expected |
 |---|---|---|
-| F-2101 BR-9 | a start | the record's payload holds `socksPort` and `runFacts` (JSON of the prepared facts) |
+| F-2101 BR-9 | a start | the spawn parameters' payload holds `socksPort` and `runFacts` (JSON of the prepared facts); the record file's payload is `{}` |
 | F-2101 6.4 | a join, then `connect` | `connected.runFacts` equals the starter's facts |
 | contracts | a payload without `runFacts` | `connect` fails `helperRefused` `no run facts` |
 | contracts | `refused` from `prepare` | `acquireConnection` gives `{kind: 'refused', refusal}` |
@@ -140,7 +147,5 @@ Request athena only; hermes assigns the peer.
 
 ## 5. Open rows (stop and report on #815)
 
-1. The registry's file port can't rewrite a claimed record's payload without a race against a joiner reading it.
-   Report the port's operations.
-2. A step after `openConnection` needs `state.programs` or `state.effective` before `connected` returns, on the join
+1. A step after `openConnection` needs `state.programs` or `state.effective` before `connected` returns, on the join
    path. Name it.
