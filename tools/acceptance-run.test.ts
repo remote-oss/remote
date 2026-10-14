@@ -22,10 +22,12 @@ import {
   acceptanceRunId,
   buildDevContainerImage,
   cleanRun,
+  connectRunNetwork,
   hostImageOf,
   type HostContainer,
   newPassword,
   RUN_LABEL,
+  runNetworkOf,
   startHostContainer,
   sweepStaleDevContainers,
 } from './acceptance-run.ts';
@@ -387,6 +389,193 @@ describe('the password of the start (card tooling-17)', () => {
   });
 });
 
+const NETWORK = 'remote-oss-acceptance-77-2';
+
+/** The `docker network inspect` that finds the run's network already there, or not. */
+const NETWORKS_OF_ANY_RUN = [
+  'network',
+  'ls',
+  '--quiet',
+  '--filter',
+  `label=${RUN_LABEL}`,
+];
+
+describe('the run network (card tooling-47)', () => {
+  it('tooling-47: the network is named after the run', () => {
+    strictEqual(runNetworkOf(RUN_ID), NETWORK);
+  });
+
+  it('tooling-47: connectRunNetwork creates the labelled network once, connects the host and gives its address', () => {
+    const scripted = scriptedCommands();
+    scripted.passes(''); // docker network ls, the sweep
+    scripted.fails(1, 'No such network'); // docker network inspect
+    scripted.passes(); // docker network create
+    scripted.passes(); // docker network connect
+    scripted.passes('172.18.0.2\n'); // docker inspect, the address
+
+    const address = connectRunNetwork(scripted, RUN_ID, 'c1');
+
+    deepStrictEqual(
+      [address, scripted.calls],
+      [
+        '172.18.0.2',
+        [
+          {program: 'docker', argv: NETWORKS_OF_ANY_RUN},
+          {program: 'docker', argv: ['network', 'inspect', NETWORK]},
+          {
+            program: 'docker',
+            argv: [
+              'network',
+              'create',
+              '--label',
+              `${RUN_LABEL}=${RUN_ID}`,
+              NETWORK,
+            ],
+          },
+          {program: 'docker', argv: ['network', 'connect', NETWORK, 'c1']},
+          {
+            program: 'docker',
+            argv: [
+              'inspect',
+              '--format',
+              `{{(index .NetworkSettings.Networks "${NETWORK}").IPAddress}}`,
+              'c1',
+            ],
+          },
+        ],
+      ],
+    );
+  });
+
+  it('tooling-47: a second host of the run joins the network that is there and creates none', () => {
+    const scripted = scriptedCommands();
+    scripted.passes(''); // docker network ls, the sweep
+    scripted.passes(); // docker network inspect: it exists
+    scripted.passes(); // docker network connect
+    scripted.passes('172.18.0.3\n'); // docker inspect, the address
+
+    const address = connectRunNetwork(scripted, RUN_ID, 'c2');
+
+    deepStrictEqual(
+      [
+        address,
+        scripted.calls.some(call => call.argv.includes('create')),
+        scripted.calls.map(call => call.argv.slice(0, 2).join(' ')),
+      ],
+      [
+        '172.18.0.3',
+        false,
+        [
+          'network ls',
+          'network inspect',
+          'network connect',
+          'inspect --format',
+        ],
+      ],
+    );
+  });
+
+  it('tooling-47: the opening sweep removes a labelled network older than two hours with no container, before the run creates its own', () => {
+    const scripted = scriptedCommands();
+    const nowMilliseconds = 1_000_000_000;
+    scripted.passes('stale1\n'); // docker network ls, the sweep
+    scripted.passes(`${String(nowMilliseconds / 1000 - 7201)} 0\n`); // docker network inspect stale1
+    scripted.passes(); // docker network rm stale1
+    scripted.fails(1, 'No such network'); // docker network inspect, the run's
+    scripted.passes(); // docker network create
+    scripted.passes(); // docker network connect
+    scripted.passes('172.18.0.2\n'); // docker inspect, the address
+
+    connectRunNetwork(scripted, RUN_ID, 'c1', () => nowMilliseconds);
+
+    deepStrictEqual(
+      [
+        scripted.calls.map(call => call.argv.slice(0, 2).join(' ')),
+        scripted.calls[2]?.argv,
+      ],
+      [
+        [
+          'network ls',
+          'network inspect',
+          'network rm',
+          'network inspect',
+          'network create',
+          'network connect',
+          'inspect --format',
+        ],
+        ['network', 'rm', 'stale1'],
+      ],
+    );
+  });
+
+  it('tooling-47: the sweep leaves a younger network, one with a container, and one it cannot read', () => {
+    const scripted = scriptedCommands();
+    const nowMilliseconds = 1_000_000_000;
+    scripted.passes('young\nbusy\nunreadable\nodd\n'); // docker network ls
+    scripted.passes(`${String(nowMilliseconds / 1000 - 7199)} 0\n`); // young
+    scripted.passes(`${String(nowMilliseconds / 1000 - 9000)} 1\n`); // busy
+    scripted.fails(1, 'No such network'); // unreadable
+    scripted.passes('not two numbers\n'); // odd
+    scripted.fails(1, 'No such network'); // docker network inspect, the run's
+    scripted.passes(); // docker network create
+    scripted.passes(); // docker network connect
+    scripted.passes('172.18.0.2\n'); // docker inspect, the address
+
+    connectRunNetwork(scripted, RUN_ID, 'c1', () => nowMilliseconds);
+
+    deepStrictEqual(
+      scripted.calls.filter(
+        call => call.argv[0] === 'network' && call.argv[1] === 'rm',
+      ),
+      [],
+    );
+  });
+
+  it('tooling-47: a stale network that another job removed first does not fail the sweep', () => {
+    const scripted = scriptedCommands();
+    const nowMilliseconds = 1_000_000_000;
+    scripted.passes('gone\n'); // docker network ls
+    scripted.passes(`${String(nowMilliseconds / 1000 - 8000)} 0\n`); // docker network inspect
+    scripted.fails(1, 'No such network'); // docker network rm: already removed
+    scripted.fails(1, 'No such network'); // docker network inspect, the run's
+    scripted.passes(); // docker network create
+    scripted.passes(); // docker network connect
+    scripted.passes('172.18.0.2\n'); // docker inspect, the address
+
+    strictEqual(
+      connectRunNetwork(scripted, RUN_ID, 'c1', () => nowMilliseconds),
+      '172.18.0.2',
+    );
+  });
+
+  it('tooling-47: a host with no address on the run network throws, naming the container and the network', () => {
+    const scripted = scriptedCommands();
+    scripted.passes(''); // docker network ls
+    scripted.fails(1, 'No such network'); // docker network inspect
+    scripted.passes(); // docker network create
+    scripted.passes(); // docker network connect
+    scripted.passes('  \n'); // docker inspect: no address
+
+    throws(
+      () => {
+        connectRunNetwork(scripted, RUN_ID, 'c1');
+      },
+      {message: `the host c1 has no address on ${NETWORK}`},
+    );
+  });
+
+  it('tooling-47: a network that cannot be created fails the run with the error', () => {
+    const scripted = scriptedCommands();
+    scripted.passes(''); // docker network ls
+    scripted.fails(1, 'No such network'); // docker network inspect
+    scripted.fails(1, 'all predefined address pools have been fully subnetted'); // docker network create
+
+    throws(() => {
+      connectRunNetwork(scripted, RUN_ID, 'c1');
+    }, /network create .* all predefined address pools have been fully subnetted/);
+  });
+});
+
 describe('cleanRun (card tooling-10)', () => {
   it("removes the run's containers by label and its image tag, then proves nothing is left", () => {
     const scripted = scriptedCommands();
@@ -394,11 +583,13 @@ describe('cleanRun (card tooling-10)', () => {
     scripted.passes('c1\nc2\n'); // docker ps, the first listing
     scripted.passes(); // docker rm --force c1
     scripted.passes(); // docker rm --force c2
+    scripted.passes(''); // docker network ls, the run's networks
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force
     scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps, the second listing
+    scripted.passes(''); // docker network ls, the second listing
 
     cleanRun(scripted, RUN_ID);
 
@@ -428,6 +619,16 @@ describe('cleanRun (card tooling-10)', () => {
       },
       {program: 'docker', argv: ['rm', '--force', 'c1']},
       {program: 'docker', argv: ['rm', '--force', 'c2']},
+      {
+        program: 'docker',
+        argv: [
+          'network',
+          'ls',
+          '--quiet',
+          '--filter',
+          'label=remote-oss.acceptance.run=77-2',
+        ],
+      },
       {
         program: 'pkill',
         argv: ['-f', '--', 'acceptance-77-2-[A-Za-z0-9]+/user-data'],
@@ -465,6 +666,16 @@ describe('cleanRun (card tooling-10)', () => {
           'label=remote-oss.acceptance.run=77-2',
         ],
       },
+      {
+        program: 'docker',
+        argv: [
+          'network',
+          'ls',
+          '--quiet',
+          '--filter',
+          'label=remote-oss.acceptance.run=77-2',
+        ],
+      },
     ]);
   });
 
@@ -472,26 +683,30 @@ describe('cleanRun (card tooling-10)', () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker ps, the dev containers' images
     scripted.passes(''); // docker ps
+    scripted.passes(''); // docker network ls, the run's networks
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.fails(1, 'No such image'); // docker image rm --force
     scripted.fails(1, 'No such image'); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps
+    scripted.passes(''); // docker network ls, the second listing
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 7);
+    strictEqual(scripted.calls.length, 9);
   });
 
   it("throws naming the container when one still carries the run's label", () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker ps, the dev containers' images
     scripted.passes(''); // docker ps
+    scripted.passes(''); // docker network ls, the run's networks
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force
     scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes('c9\n'); // docker ps, the second listing
+    scripted.passes(''); // docker network ls, the second listing
 
     throws(
       () => {
@@ -501,16 +716,98 @@ describe('cleanRun (card tooling-10)', () => {
     );
   });
 
+  it("tooling-47: removes the run's networks after its containers and before the images", () => {
+    const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps, the dev containers' images
+    scripted.passes('c1\n'); // docker ps
+    scripted.passes(); // docker rm --force c1
+    scripted.passes('n1\nn2\n'); // docker network ls, the run's networks
+    scripted.passes(); // docker network rm n1
+    scripted.passes(); // docker network rm n2
+    scripted.passes(); // pkill
+    scripted.passes(); // pkill, stale editors
+    scripted.passes(); // docker image rm --force
+    scripted.passes(); // docker image rm --force, the dev container tag
+    scripted.passes(''); // docker ps, the second listing
+    scripted.passes(''); // docker network ls, the second listing
+
+    cleanRun(scripted, RUN_ID);
+
+    deepStrictEqual(
+      scripted.calls
+        .filter(
+          call =>
+            (call.argv[0] === 'network' && call.argv[1] !== 'ls') ||
+            call.argv[0] === 'rm' ||
+            (call.argv[0] === 'image' && call.argv[1] === 'rm'),
+        )
+        .map(call => call.argv.join(' ')),
+      [
+        'rm --force c1',
+        'network rm n1',
+        'network rm n2',
+        `image rm --force remote-oss-acceptance-host:${RUN_ID}`,
+        `image rm --force remote-oss-acceptance-devcontainer:${RUN_ID}`,
+      ],
+    );
+  });
+
+  it("tooling-47: throws naming the network when one still carries the run's label", () => {
+    const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps, the dev containers' images
+    scripted.passes(''); // docker ps
+    scripted.passes(''); // docker network ls
+    scripted.passes(); // pkill
+    scripted.passes(); // pkill, stale editors
+    scripted.passes(); // docker image rm --force
+    scripted.passes(); // docker image rm --force, the dev container tag
+    scripted.passes(''); // docker ps, the second listing
+    scripted.passes('n9\n'); // docker network ls, the second listing
+
+    throws(
+      () => {
+        cleanRun(scripted, RUN_ID);
+      },
+      {
+        message: `the run ${RUN_ID} still owns networks after the clean-up: n9`,
+      },
+    );
+  });
+
+  it('tooling-47: names the containers and the networks when both are left', () => {
+    const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps, the dev containers' images
+    scripted.passes(''); // docker ps
+    scripted.passes(''); // docker network ls
+    scripted.passes(); // pkill
+    scripted.passes(); // pkill, stale editors
+    scripted.passes(); // docker image rm --force
+    scripted.passes(); // docker image rm --force, the dev container tag
+    scripted.passes('c9\n'); // docker ps, the second listing
+    scripted.passes('n9\n'); // docker network ls, the second listing
+
+    throws(
+      () => {
+        cleanRun(scripted, RUN_ID);
+      },
+      {
+        message: `the run ${RUN_ID} still owns containers after the clean-up: c9 and networks after the clean-up: n9`,
+      },
+    );
+  });
+
   it("prunes nothing and filters every container listing by the run's label alone", () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker ps, the dev containers' images
     scripted.passes('c1\n'); // docker ps
     scripted.passes(); // docker rm --force c1
+    scripted.passes(''); // docker network ls, the run's networks
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force
     scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps
+    scripted.passes(''); // docker network ls, the second listing
 
     cleanRun(scripted, RUN_ID);
 
@@ -556,15 +853,17 @@ describe('cleanRun (card tooling-10)', () => {
     const scripted = scriptedCommands();
     scripted.passes(''); // docker ps, the dev containers' images
     scripted.passes(''); // docker ps
+    scripted.passes(''); // docker network ls, the run's networks
     scripted.fails(1, ''); // pkill matched nothing
     scripted.fails(1, ''); // pkill, stale editors, matched nothing
     scripted.passes(); // docker image rm --force
     scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps
+    scripted.passes(''); // docker network ls, the second listing
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 7);
+    strictEqual(scripted.calls.length, 9);
   });
 
   it("containers-09: notes the run's dev containers' images before removing the containers, then removes them and the run's dev container tag", () => {
@@ -575,12 +874,14 @@ describe('cleanRun (card tooling-10)', () => {
     scripted.passes('d1\nc1\n'); // docker ps, the run's containers
     scripted.passes(); // docker rm --force d1
     scripted.passes(); // docker rm --force c1
+    scripted.passes(''); // docker network ls, the run's networks
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force, the host
     scripted.fails(1, 'image is being used'); // docker image rm --force, the uid image
     scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps, the second listing
+    scripted.passes(''); // docker network ls, the second listing
 
     cleanRun(scripted, RUN_ID);
 
