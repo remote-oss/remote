@@ -9,7 +9,7 @@
     no VS Code entry in the server table);
   - R-28 and F-3905 (no telemetry, no payload lines in logs);
   - R-47, R-58, R-68 with R-80 (the source-based licence test alone);
-  - ADR-0010 (2026-10-14): remote and program output is read only between our whole-line `remote-oss-` markers, or in
+  - ADR-0010 (2026-10-14): remote and program output is read only between our own whole-line markers, or in
     a program's documented, anchored form, and every parser has a noisy-neighbour row;
   - R-79 (one hang rule), R-83 (servers start with telemetry off), R-86 (F-3908: no deliberate failure), D-60
     (clauses that need a lab run are marked "provisional (lab)" and keep their defaults).
