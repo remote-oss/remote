@@ -413,7 +413,7 @@ export function stepsOf(
         return {
           kind: 'failed',
           failure: {
-            kind: 'invalidSetting',
+            kind: 'configFileUnparsable',
             reason: {
               text: `${listing.parseError.file}: ${listing.parseError.reason}`,
             },

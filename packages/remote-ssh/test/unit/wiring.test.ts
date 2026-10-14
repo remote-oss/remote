@@ -385,7 +385,7 @@ describe("the composition of a connect's steps", () => {
         {
           kind: 'failed',
           failure: {
-            kind: 'invalidSetting',
+            kind: 'configFileUnparsable',
             reason: {text: '/h/.ssh/config: unterminated quote after Host'},
             logDetail:
               'the SSH configuration file cannot be parsed: /h/.ssh/config: unterminated quote after Host',

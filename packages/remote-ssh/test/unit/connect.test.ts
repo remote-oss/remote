@@ -322,7 +322,7 @@ describe('the connect pipeline, when a step fails', () => {
         checkConfigFile: () => ({
           kind: 'failed',
           failure: {
-            kind: 'invalidSetting',
+            kind: 'configFileUnparsable',
             reason: {text: '/h/.ssh/config: unterminated quote after Host'},
           },
         }),
@@ -333,10 +333,10 @@ describe('the connect pipeline, when a step fails', () => {
       [result, recording.calls],
       [
         {
-          kind: 'invalidSetting',
+          kind: 'configFileUnparsable',
           reason: {text: '/h/.ssh/config: unterminated quote after Host'},
           retryable: false,
-          silent: false,
+          silent: true,
           userAlreadyNotified: false,
           hints: [],
           diagnostics: [],
