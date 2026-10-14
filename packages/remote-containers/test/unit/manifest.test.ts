@@ -40,6 +40,9 @@ const ENGLISH = {
     'Develop inside a container that carries its own toolchain, so each project brings its environment with it.',
   'capabilities.untrustedWorkspaces.description':
     'Opening a folder in a container requires workspace trust.',
+  'configuration.title': 'Dev Containers',
+  'setting.Dockerpath.description':
+    'Docker (or Podman or WSLc) executable name or path.',
 };
 
 describe('the manifest', () => {
@@ -87,6 +90,19 @@ describe('the manifest', () => {
         'contribRemoteHelp',
       ],
       l10n: './l10n',
+      contributes: {
+        configuration: {
+          title: '%configuration.title%',
+          properties: {
+            'dev.containers.dockerPath': {
+              type: 'string',
+              default: 'docker',
+              scope: 'application',
+              description: '%setting.Dockerpath.description%',
+            },
+          },
+        },
+      },
       dependencies: {
         '@devcontainers/cli': '0.89.0',
         'jsonc-parser': '3.3.1',
@@ -123,14 +139,18 @@ describe('the manifest', () => {
     ]);
   });
 
-  it('containers-01: the manifest contributes nothing and has no browser entry or icon', () => {
+  it('containers-01: the manifest has no browser entry or icon, and contributes the one setting', () => {
     deepStrictEqual(
-      ['contributes', 'browser', 'icon'].map(key => key in MANIFEST),
-      [false, false, false],
+      [
+        'browser' in MANIFEST,
+        'icon' in MANIFEST,
+        Object.keys(MANIFEST.contributes as object),
+      ],
+      [false, false, ['configuration']],
     );
   });
 
-  it('F-1406.5: package.nls.json holds the two keys, and every key package.json uses is one of them', () => {
+  it('F-1406.5: package.nls.json holds the four keys, and every key package.json uses is one of them', () => {
     const used = [...JSON.stringify(MANIFEST).matchAll(/%([^%"]+)%/g)].map(
       match => match[1],
     );

@@ -20,6 +20,8 @@ import {
 } from '../../src/index.ts';
 
 const PARAMETERS = 'REMOTE_OSS_HELPER_PARAMETERS';
+import {RUN_FACTS} from './connection-fixture.ts';
+
 const LIMITS: ConnectionLimits = {
   requestMilliseconds: 1000,
   loginMilliseconds: 5000,
@@ -65,6 +67,7 @@ describe('the window side against a helper that does not follow the protocol', (
   /** A connection to a helper that serves `payload` and answers as `plans` says. */
   async function connection(
     payload: Record<string, number> = {socksPort: 41000},
+    runFacts: string | null = JSON.stringify(RUN_FACTS),
   ): Promise<SharedConnection> {
     const outcome = await driven(
       acquire(environment, {
@@ -72,9 +75,13 @@ describe('the window side against a helper that does not follow the protocol', (
         namespace: 'ssh.connection',
         helperKey: 'harness',
         script: '/ext/helper.js',
-        options: {},
         policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
-        payload,
+        prepare: () =>
+          Promise.resolve({
+            kind: 'ready',
+            options: {},
+            payload: runFacts === null ? payload : {...payload, runFacts},
+          }),
         cancellation: new AbortController().signal,
       }),
     );
@@ -83,7 +90,7 @@ describe('the window side against a helper that does not follow the protocol', (
     }
     const shared = new SharedConnection(
       outcome.lease,
-      LIMITS,
+      () => LIMITS,
       environment.timer,
     );
     shared.onNotice(notice => heard.push(notice));
@@ -124,6 +131,25 @@ describe('the window side against a helper that does not follow the protocol', (
       clock,
     );
   });
+
+  for (const [name, runFacts] of [
+    ['missing', null],
+    ['unreadable', 'not json'],
+    ['not run facts', '{"sshProgram": 3}'],
+  ] as const) {
+    it(`contracts: a welcome whose run facts are ${name} fails the connect as helperRefused`, async () => {
+      plans.set('connect', {
+        reply: {type: 'refused', reason: 'alreadyConnected'},
+      });
+      deepStrictEqual(
+        await connect(await connection({socksPort: 41000}, runFacts)),
+        {
+          kind: 'failed',
+          failure: {kind: 'helperRefused', reason: 'no run facts'},
+        },
+      );
+    });
+  }
 
   it('fails a connect that the helper rejects', async () => {
     plans.set('connect', {fail: 'reject'});
@@ -185,6 +211,7 @@ describe('the window side against a helper that does not follow the protocol', (
     plans.set('sharedRecord', {reply: {type: 'accepted'}});
     deepStrictEqual(await connect(await connection()), {
       kind: 'connected',
+      runFacts: RUN_FACTS,
       socksPort: 41000,
       sharedRecord: null,
     });
@@ -198,6 +225,7 @@ describe('the window side against a helper that does not follow the protocol', (
     plans.set('sharedRecord', {reply: {type: 'sharedRecord', record: RECORD}});
     deepStrictEqual(await connect(await connection()), {
       kind: 'connected',
+      runFacts: RUN_FACTS,
       socksPort: 41000,
       sharedRecord: RECORD,
     });

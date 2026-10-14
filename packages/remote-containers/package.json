@@ -51,6 +51,19 @@
     "contribRemoteHelp"
   ],
   "l10n": "./l10n",
+  "contributes": {
+    "configuration": {
+      "title": "%configuration.title%",
+      "properties": {
+        "dev.containers.dockerPath": {
+          "type": "string",
+          "default": "docker",
+          "scope": "application",
+          "description": "%setting.Dockerpath.description%"
+        }
+      }
+    }
+  },
   "dependencies": {
     "@devcontainers/cli": "0.89.0",
     "jsonc-parser": "3.3.1",
