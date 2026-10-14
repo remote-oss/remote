@@ -21,9 +21,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
-          sparse-checkout: |
-            tools
-            .node-version
+          sparse-checkout: tools # cone mode: the root's files, .node-version among them, come too
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
