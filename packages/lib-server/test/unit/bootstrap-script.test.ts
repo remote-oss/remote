@@ -1468,6 +1468,29 @@ describe('the POSIX bootstrap script', () => {
       );
     });
 
+    it('ADR-0010: a ready line behind a prefix is not the ready line, in port mode and in socket mode', () => {
+      const socketStart = quickStart();
+      socketStart.start.socketMode = true;
+      deepStrictEqual(
+        [
+          statusOf(host, single('start'), quickStart(), {
+            environment: {
+              SERVER_SILENT: 'yes',
+              SERVER_LOG_BEFORE: 'noise Extension host agent listening on 9999',
+            },
+          }),
+          statusOf(host, single('start'), socketStart, {
+            environment: {
+              SERVER_SILENT: 'yes',
+              SERVER_LOG_BEFORE:
+                'noise Extension host agent listening on /tmp/code-noise',
+            },
+          }),
+        ],
+        ['ServerFailedToStart', 'ServerFailedToStart'],
+      );
+    });
+
     it('ADR-0010: the ready port is digits only', () => {
       deepStrictEqual(
         statusOf(host, single('start'), quickStart(), {
@@ -1578,6 +1601,25 @@ describe('the POSIX bootstrap script', () => {
               SERVER_EXIT: '1',
               SERVER_LOG_BEFORE:
                 'note: * !!!! Server terminated due to presence of CVE-2020-1416 !!!!',
+            },
+          },
+        ),
+        {status: 'ServerFailedToStart', 'server.failure': undefined},
+      );
+    });
+
+    it('ADR-0010: the CVE line with text after it is not the CVE failure', () => {
+      deepStrictEqual(
+        statusAndFacts(
+          host,
+          single('start'),
+          quickStart(),
+          ['server.failure'],
+          {
+            environment: {
+              SERVER_EXIT: '1',
+              SERVER_LOG_BEFORE:
+                '* !!!! Server terminated due to presence of CVE-2020-1416 !!!! (quoted)',
             },
           },
         ),
