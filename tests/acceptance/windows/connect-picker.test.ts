@@ -12,6 +12,7 @@ import {
   waitFor,
   windowEvents,
   windowState,
+  withoutActivity,
 } from './harness.ts';
 
 /** The pick of hosts' question. */
@@ -37,7 +38,7 @@ function failureEntries(window: string) {
 
 /** What a window shows of itself, with how many times its agent activated and deactivated. */
 async function snapshot(name: string) {
-  const state = await windowState(name);
+  const state = withoutActivity(await windowState(name));
   const events = windowEvents(name).map(each => each.event);
   return {
     state,

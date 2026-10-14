@@ -31,6 +31,8 @@ export interface RunKeys {
   passphraseAskpass: string;
   /** A key protected by the same passphrase that the host does not accept. */
   strangerKey: string;
+  /** A key without a passphrase that the host does not accept. */
+  unauthorisedKey: string;
   /** A second key without a passphrase. */
   secondKey: string;
   /** A copy of the second key with mode 0644, which ssh refuses to use. */
@@ -106,6 +108,8 @@ export function makeRunKeys(
   );
   const strangerKey = path.join(runFolder, 'id_passphrase_stranger');
   protectedKey(command, passphraseAskpass, strangerKey, 'acceptance-stranger');
+  const unauthorisedKey = path.join(runFolder, 'id_unauthorised');
+  plainKey(command, unauthorisedKey, 'acceptance-unauthorised');
   const secondKey = path.join(runFolder, 'id_second');
   plainKey(command, secondKey, 'acceptance-second');
   const looseKey = path.join(runFolder, 'id_loose');
@@ -131,6 +135,7 @@ export function makeRunKeys(
     passphraseFile,
     passphraseAskpass,
     strangerKey,
+    unauthorisedKey,
     secondKey,
     looseKey,
     certifiedKey,

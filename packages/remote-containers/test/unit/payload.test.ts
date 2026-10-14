@@ -103,6 +103,19 @@ describe('the dev-container payload', () => {
     );
   });
 
+  it('F-0501 BR-2a: the file system path of a URI is read from fsPath and not from path', () => {
+    const uri = {
+      fsPath: 'C:\\Users\\u\\p\\devcontainer.json',
+      path: '/c:/Users/u/p/devcontainer.json',
+      scheme: 'file',
+      toString: () => 'file:///c%3A/Users/u/p/devcontainer.json',
+    };
+    deepStrictEqual(
+      [serializedUriOf(uri).fsPath, serializedUriOf(uri).path],
+      ['C:\\Users\\u\\p\\devcontainer.json', '/c:/Users/u/p/devcontainer.json'],
+    );
+  });
+
   it('F-0501 BR-2c: the hex of a plain host path is the legacy form', () => {
     deepStrictEqual(devContainerTargetOf(hexOf('/home/u/legacy')), {
       kind: 'legacy',

@@ -186,6 +186,9 @@ export function activate(context: vscode.ExtensionContext): void {
           vscode.window.visibleTextEditors.map(editor => editor.document.uri),
         ),
         trusted: vscode.workspace.isTrusted,
+        remoteSshActive:
+          vscode.extensions.getExtension('remote-oss.remote-ssh')?.isActive ??
+          false,
         terminals: vscode.window.terminals.map(terminal => terminal.name),
       });
     }),

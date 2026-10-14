@@ -84,6 +84,27 @@
     },
     {
       "package": "remote-containers",
+      "kind": "module",
+      "key": "src/lifecycle/container-lifecycle.ts",
+      "card": "#769",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/lifecycle/labels.ts",
+      "card": "#769",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/lifecycle/inspect-lines.ts",
+      "card": "#769",
+      "slice": "containers release 1"
+    },
+    {
+      "package": "remote-containers",
       "kind": "contextKeys",
       "key": "hideConnectCommands",
       "card": "#766",
