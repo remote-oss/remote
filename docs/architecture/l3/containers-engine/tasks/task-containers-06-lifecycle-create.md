@@ -95,8 +95,10 @@ A missing or wrong-typed field is `{kind: 'discoveryFailed', detail: 'inspect: <
 
 **Engine failures.** Either run answering `failed`, or exiting non-zero, gives `{kind: 'discoveryFailed', detail}`.
 - `detail` is the spawn message, or the first stderr line.
-- A container removed between step 1 and step 2 makes `inspect` exit 1 with `Error: No such container: <id>`. C7 then
-  runs discovery once more, from step 1. A second miss is `discoveryFailed`.
+- A container removed between step 1 and step 2 makes `inspect` exit 1 with stderr containing `No such container`.
+  On Docker 29.x the text is `Error response from daemon: No such container: <id>` (themis measured it on #770); older
+  clients print `Error: No such container: <id>`. C7 matches the substring `No such container`, never the whole line,
+  then runs discovery once more, from step 1. A second miss is `discoveryFailed`.
 
 **What C7 never does:** pass a value through a shell. Each value is its own argv element, with `shell: false` (C2's
 adapter).
@@ -299,7 +301,8 @@ where a row needs them.
 - `F-0409 AC-7 (C7's half)` and `AC-46 (C7's half)`: `paused`, and `restarting`, → `unusable`. The fake bridge got no
   call (boundary 4).
 - `ps` answering `failed` (`spawn dk ENOENT`) → `discoveryFailed` with that detail; no bridge call.
-- **`inspect` answering `No such container`:**
+- **`inspect` answering `No such container`** (run once with each stderr text: `Error response from daemon: No such
+  container: c1` and `Error: No such container: c1`):
   - once → discovery runs again, and the second answer decides;
   - twice → `discoveryFailed`.
 - **`up` failures:**
