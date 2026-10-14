@@ -39,8 +39,13 @@ The specs differ from the CLI's own behaviour in six known places (dossier §4):
    3. **post-processing** of the JSON result and log lines.
 
    Each deviation goes through the first mechanism that reaches it, and C3's card records which (amended 2026-10-14
-   on #764: deviation 3 is the spawn environment, deviation 4 is post-processing, and only deviation 1 needs the
-   pre-pass).
+   on #764, measured on CLI 0.89.0):
+   - deviation 1 is the pre-pass, the only one that needs it;
+   - deviation 2 needs no mechanism, because the CLI already makes `${containerEnv}` empty in `initializeCommand`;
+   - deviation 3 is the spawn environment;
+   - deviation 4 is post-processing;
+   - deviation 5 is a flag;
+   - deviation 6 waits for attach, which isn't in release 1.
 
    A deviation none of these reaches is an upstream change to `devcontainers/cli` (MIT) and waits for its release.
    **We never fork, patch or vendor-modify the CLI.** A fork would need its own ADR.
