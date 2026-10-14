@@ -1,4 +1,5 @@
 import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
+import type {CommandHandler} from 'lib-identifiers';
 import type {HostListResult, SshTarget} from 'lib-ssh';
 import {
   type ConnectCommandConnection,
@@ -380,6 +381,23 @@ describe('Connect to the active host (card connect-21)', () => {
       fakes.connection,
     ).openEmptyWindowOnCurrentHost.execute();
     deepStrictEqual(fakes.opened, []);
+  });
+
+  it('F-2303 AC-19: an argument never names another host', async () => {
+    const fakes = runWith(undefined, {
+      remoteName: 'ssh-remote',
+      current: CONNECTED,
+    });
+    const handler: CommandHandler = connectCommandHandlers(
+      fakes.editor,
+      fakes.connection,
+    ).openEmptyWindowOnCurrentHost;
+    await handler.execute('other');
+    await handler.execute({host: 'other'});
+    deepStrictEqual(fakes.opened, [
+      ['ssh-remote+dev', 'new'],
+      ['ssh-remote+dev', 'new'],
+    ]);
   });
 });
 
