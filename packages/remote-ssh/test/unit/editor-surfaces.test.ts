@@ -48,6 +48,7 @@ function surfacesWith(
   const adapters: EditorAdapters = {
     prompts: SILENT_PROMPTS,
     terminals: new RecordingTerminals(),
+    linkTerminals: {runProgram: () => Promise.resolve()},
     failureDialog: {showError: () => Promise.resolve(changes.dialogAnswer)},
     licenceDialog: {showModal: () => Promise.resolve(undefined)},
     platformPick: {pick: () => Promise.resolve(changes.platform)},
@@ -115,6 +116,7 @@ function surfacesWith(
     },
     noticeState: {get: () => undefined, update: () => Promise.resolve()},
     logger: createLogger(calls.logged, {minimumLevel: () => 'info'}),
+    applyTerminalEnvironment: () => undefined,
   };
   return {surfaces: editorSurfacesOf(adapters, operations, context), calls};
 }

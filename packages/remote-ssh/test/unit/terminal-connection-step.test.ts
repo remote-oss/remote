@@ -393,6 +393,17 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     );
   });
 
+  it('F-2410 BR-5, F-2311 R2: the lease finds no stored record, so each window plans fresh', async () => {
+    const made = fixture();
+    const {result, terminal} = await started(made);
+    terminal.write(AUTHENTICATED);
+    const outcome = await result;
+    deepStrictEqual(
+      outcome.kind === 'done' ? outcome.value.storedRecord : outcome,
+      undefined,
+    );
+  });
+
   /** The notices a lease hears while the terminal ends twice, when `unsubscribe` is set after the subscription. */
   async function noticesAtEnd(
     unsubscribe: boolean,

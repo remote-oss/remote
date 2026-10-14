@@ -9,6 +9,16 @@ import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
 import type {SpawnFailure} from '../process/session.ts';
 
+/** The agent link a connection's first window planned: none and why, or the link's path and its target. */
+export type StoredAgentLink =
+  | {kind: 'none'; reason: 'settingOff' | 'noForwardedSocket'}
+  | {kind: 'link'; linkPath: string; target: string};
+
+/** The display a connection's first window planned: none and why, or the display's value. */
+export type StoredDisplay =
+  | {kind: 'none'; reason: 'settingOff' | 'noSessionDisplay'}
+  | {kind: 'display'; value: string};
+
 /** What a later window needs to reuse the server of a connection; held by the helper, never written to a file. */
 export interface SharedRecord {
   remotePort: number;
@@ -16,6 +26,10 @@ export interface SharedRecord {
   architecture: string;
   temporaryFolder: string;
   connectionToken: string;
+  /** The first window's agent link plan, which a later window of the connection keeps. */
+  agentLink?: StoredAgentLink;
+  /** The first window's display plan, which a later window of the connection keeps. */
+  display?: StoredDisplay;
 }
 
 /** What a window asks of the helper. */
@@ -93,6 +107,40 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   );
 }
 
+/** A stored agent link plan, or undefined for a value of any other shape. */
+function readAgentLink(value: unknown): StoredAgentLink | undefined {
+  if (!isFields(value)) {
+    return undefined;
+  }
+  if (
+    value.kind === 'none' &&
+    (value.reason === 'settingOff' || value.reason === 'noForwardedSocket')
+  ) {
+    return {kind: 'none', reason: value.reason};
+  }
+  return value.kind === 'link' &&
+    typeof value.linkPath === 'string' &&
+    typeof value.target === 'string'
+    ? {kind: 'link', linkPath: value.linkPath, target: value.target}
+    : undefined;
+}
+
+/** A stored display plan, or undefined for a value of any other shape. */
+function readDisplay(value: unknown): StoredDisplay | undefined {
+  if (!isFields(value)) {
+    return undefined;
+  }
+  if (
+    value.kind === 'none' &&
+    (value.reason === 'settingOff' || value.reason === 'noSessionDisplay')
+  ) {
+    return {kind: 'none', reason: value.reason};
+  }
+  return value.kind === 'display' && typeof value.value === 'string'
+    ? {kind: 'display', value: value.value}
+    : undefined;
+}
+
 function readSharedRecord(value: unknown): SharedRecord | undefined {
   if (!isFields(value)) {
     return undefined;
@@ -104,19 +152,26 @@ function readSharedRecord(value: unknown): SharedRecord | undefined {
     temporaryFolder,
     connectionToken,
   } = value;
-  return typeof remotePort === 'number' &&
-    typeof operatingSystem === 'string' &&
-    typeof architecture === 'string' &&
-    typeof temporaryFolder === 'string' &&
-    typeof connectionToken === 'string'
-    ? {
-        remotePort,
-        operatingSystem,
-        architecture,
-        temporaryFolder,
-        connectionToken,
-      }
-    : undefined;
+  if (
+    typeof remotePort !== 'number' ||
+    typeof operatingSystem !== 'string' ||
+    typeof architecture !== 'string' ||
+    typeof temporaryFolder !== 'string' ||
+    typeof connectionToken !== 'string'
+  ) {
+    return undefined;
+  }
+  const agentLink = readAgentLink(value.agentLink);
+  const display = readDisplay(value.display);
+  return {
+    remotePort,
+    operatingSystem,
+    architecture,
+    temporaryFolder,
+    connectionToken,
+    ...(agentLink === undefined ? {} : {agentLink}),
+    ...(display === undefined ? {} : {display}),
+  };
 }
 
 /** The request a body is, or undefined when it is none. */

@@ -138,6 +138,7 @@ function assemblyInputs(
     local: new FakeLocalPort(),
     prober: changes.prober ?? new FakeProber({}),
     newTemporaryToken: () => 'token',
+    drawLinkNumber: () => 7,
   };
   return {surfaces, machine, clock, recorded};
 }
@@ -424,6 +425,17 @@ describe("the assembled ports' settings", () => {
         loggerOf(recorded),
       ).settings.useExecServer(),
       true,
+    );
+  });
+
+  it('F-2311 R1, F-2312 R1: the forwarding switches are read from the settings at each call', () => {
+    const {surfaces, machine, recorded} = assemblyInputs({
+      'remote.SSH.enableAgentForwarding': false,
+    });
+    const {settings} = wiringPortsOf(surfaces, machine, loggerOf(recorded));
+    deepStrictEqual(
+      [settings.agentForwarding(), settings.x11Forwarding()],
+      [false, true],
     );
   });
 

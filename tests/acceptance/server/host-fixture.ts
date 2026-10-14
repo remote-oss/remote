@@ -173,7 +173,11 @@ export async function startHost(
     container = host.container;
     const port = host.port;
     const configFile = path.join(runFolder, 'ssh_config');
-    writeFileSync(configFile, harnessSshConfig(port, runFolder));
+    // The server rows start no agent, and no row uses the alias that forwards one.
+    writeFileSync(
+      configFile,
+      harnessSshConfig(port, runFolder, path.join(runFolder, 'agent.sock')),
+    );
     await waitForHost(configFile);
     const base = baseFor(configFile, 'harness');
     const channel = channelTo(base);

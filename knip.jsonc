@@ -32,6 +32,7 @@
         "suite-local/*.test.ts",
         "suite-remote/*.test.ts",
         "suite-reconnect/*.test.ts",
+        "suite-forwarding/*.test.ts",
         "suite-failure/*.test.ts",
         "suite-ports/*.test.ts",
         "suite-install/*.test.ts",
