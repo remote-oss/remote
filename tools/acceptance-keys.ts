@@ -175,6 +175,24 @@ export function startRunAgent(socket: string): Started {
 /** The longest socket path the run uses: below the 104 bytes of the smallest `sun_path` among the platforms. */
 export const SOCKET_PATH_LIMIT = 100;
 
+/** The longest name an alias's control socket has: `cm-autoask-` and the 40 characters of `%C`, and the 17 that `ssh` adds while it binds. */
+const LONGEST_CONTROL_SOCKET = 'cm-autoask-'.length + 40 + 17;
+
+/**
+ * The folder of the ControlMaster sockets of the run's aliases: the run's folder, or, when the longest socket name in
+ * it would pass the limit of a Unix socket path, a short folder `shortFolder` makes (by default a new one under
+ * `/tmp`). A runner's temporary folder and run id make a run folder too deep for it.
+ */
+export function controlFolderOf(
+  runFolder: string,
+  shortFolder: () => string = () => mkdtempSync('/tmp/control-'),
+): string {
+  return Buffer.byteLength(runFolder) + 1 + LONGEST_CONTROL_SOCKET <=
+    SOCKET_PATH_LIMIT
+    ? runFolder
+    : shortFolder();
+}
+
 /**
  * Where the run's agent listens: `agent.sock` in the run's folder, or, when that path is too long for a Unix socket,
  * in a short folder `shortFolder` makes (by default a new one under `/tmp`).
