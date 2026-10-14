@@ -1,7 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import type {ConnectInput, ConnectPhase} from 'lib-authority';
 import type {TransferPhase} from 'lib-server';
-import type {ConnectOptions} from '../../src/pipeline/connect.ts';
+import type {ConnectOptions, PhaseEvent} from '../../src/pipeline/connect.ts';
 import {connectorOf, type SshConnector} from '../../src/pipeline/connector.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
@@ -136,7 +136,7 @@ describe('the connector over the connect pipeline', () => {
 
   it('F-2304: the stages of the connect reach the phase listeners', async () => {
     deepStrictEqual((await phasesHeard({kind: 'downloading'})).slice(0, 2), [
-      {name: 'initializing', details: true},
+      {name: 'initializing', details: true, quiet: true},
       {name: 'downloading'},
     ]);
   });
@@ -159,7 +159,7 @@ describe('the connector over the connect pipeline', () => {
       (await tunnelPhasesHeard(() => false)).find(
         given => given.name === 'settingUpTunnel',
       ),
-      {name: 'settingUpTunnel'},
+      {name: 'settingUpTunnel', quiet: true},
     );
   });
 
@@ -168,7 +168,7 @@ describe('the connector over the connect pipeline', () => {
       (await tunnelPhasesHeard(() => true)).find(
         given => given.name === 'settingUpTunnel',
       ),
-      {name: 'settingUpTunnel', details: true},
+      {name: 'settingUpTunnel', details: true, quiet: true},
     );
   });
 
@@ -180,7 +180,7 @@ describe('the connector over the connect pipeline', () => {
     });
     deepStrictEqual(
       [calls, heard.find(given => given.name === 'settingUpTunnel')],
-      [1, {name: 'settingUpTunnel', details: true}],
+      [1, {name: 'settingUpTunnel', details: true, quiet: true}],
     );
   });
 
@@ -340,14 +340,16 @@ describe('the connector over the connect pipeline', () => {
     deepStrictEqual(heard, []);
   });
 
-  /** The phases heard for a connect whose connection step reports that it waits for another window. */
-  async function phasesHeardWhileWaiting(): Promise<ConnectPhase[]> {
+  /** The phases heard for a connect whose connection step reports `events`. */
+  async function phasesHeardAfter(
+    ...events: PhaseEvent[]
+  ): Promise<ConnectPhase[]> {
     const {recording, options} = setup();
     const connector = connectorOf({
       stepsFor: onPhase =>
         steps(recording, {
           openConnection: (...given) => {
-            onPhase({kind: 'waitingForOtherWindow'});
+            events.forEach(onPhase);
             return steps(recording).openConnection(...given);
           },
         }),
@@ -366,7 +368,7 @@ describe('the connector over the connect pipeline', () => {
 
   it('contracts: a stage a step reports through the listener it was given reaches the phase listeners', async () => {
     deepStrictEqual(
-      (await phasesHeardWhileWaiting()).some(
+      (await phasesHeardAfter({kind: 'waitingForOtherWindow'})).some(
         phase => phase.name === 'waitingForOtherWindow',
       ),
       true,
@@ -375,11 +377,48 @@ describe('the connector over the connect pipeline', () => {
 
   it('F-2102 5.2 step 3: the waiting stage carries no details link', async () => {
     deepStrictEqual(
-      (await phasesHeardWhileWaiting()).find(
+      (await phasesHeardAfter({kind: 'waitingForOtherWindow'})).find(
         phase => phase.name === 'waitingForOtherWindow',
       ),
       {name: 'waitingForOtherWindow'},
     );
+  });
+
+  it("F-2304 6.1: the pipeline's first initializing and the tunnel stage are quiet", async () => {
+    deepStrictEqual(
+      (await tunnelPhasesHeard(() => false)).filter(
+        given => given.quiet === true,
+      ),
+      [
+        {name: 'initializing', details: true, quiet: true},
+        {name: 'settingUpTunnel', quiet: true},
+      ],
+    );
+  });
+
+  it("F-2304 BR-11: an initializing stage that is not quiet, as the login's, is told not quiet", async () => {
+    deepStrictEqual(
+      (await phasesHeardAfter({kind: 'initializing'})).filter(
+        phase => phase.name === 'initializing',
+      ),
+      [
+        {name: 'initializing', details: true, quiet: true},
+        {name: 'initializing', details: true},
+      ],
+    );
+  });
+
+  it('contracts §3.2: a prompt re-tells the last stage, not quiet', async () => {
+    const heard = await phasesHeardAfter(
+      {kind: 'downloading'},
+      {kind: 'settingUpTunnel'},
+      {kind: 'promptShown'},
+    );
+    deepStrictEqual(heard.slice(1, 4), [
+      {name: 'downloading'},
+      {name: 'settingUpTunnel', quiet: true},
+      {name: 'settingUpTunnel'},
+    ]);
   });
 
   it('connect-14: each connect makes its own steps', async () => {

@@ -12,27 +12,40 @@ import {notificationCentre} from '../windows/renderer.ts';
 /** The window the rows open: a `dev-container` authority whose payload is the hex of `{}`, which only activates the package. */
 const WINDOW = 'gate-setup';
 
-/** The commands Dev Containers contributes: they stay registered without the proposed API (brief ruling 9). */
-const CONTRIBUTED = (
-  (
-    JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          '..',
-          '..',
-          '..',
-          'packages',
-          'remote-containers',
-          'package.json',
-        ),
-        'utf8',
+/** The package's own file `name`, parsed. */
+function packageFile(name: string): unknown {
+  return JSON.parse(
+    readFileSync(
+      path.join(
+        import.meta.dirname,
+        '..',
+        '..',
+        '..',
+        'packages',
+        'remote-containers',
+        name,
       ),
-    ) as {contributes?: {commands?: Array<{command: string}>}}
-  ).contributes?.commands ?? []
-)
-  .map(entry => entry.command)
-  .sort();
+      'utf8',
+    ),
+  );
+}
+
+/**
+ * The commands Dev Containers registers: the ones it contributes, which stay registered without the proposed API
+ * (brief ruling 9), and the runtime commands it registers without contributing.
+ */
+const REGISTERED = [
+  ...(
+    (
+      packageFile('package.json') as {
+        contributes?: {commands?: Array<{command: string}>};
+      }
+    ).contributes?.commands ?? []
+  ).map(entry => entry.command),
+  ...(
+    packageFile('identifiers.json') as {runtimeCommands: Array<{id: string}>}
+  ).runtimeCommands.map(entry => entry.id),
+].sort();
 
 /**
  * The start of Dev Containers' setup notice, with the proposed API not enabled. Core raises the notice beside its own
@@ -80,7 +93,7 @@ describe('Dev Containers without its proposed API (card containers-09, gate row 
         ),
         commands: await commandsOf(WINDOW, 'remote-containers.'),
       },
-      {setup: 1, failures: [], commands: CONTRIBUTED},
+      {setup: 1, failures: [], commands: REGISTERED},
     );
   });
 });

@@ -36,6 +36,7 @@ import {serverDownloadProgress} from '../../src/cli/server-download-progress.ts'
 import type {LoginLease} from '../../src/pipeline/connection-step.ts';
 import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
 import type {ConnectInput, StepFailure} from '../../src/pipeline/steps.ts';
+import type {PhaseEvent} from '../../src/pipeline/connect.ts';
 import {
   type ChannelRun,
   stepsOf as stepsWith,
@@ -64,6 +65,7 @@ import {
   PROFILE,
   leaseOn,
   lines,
+  modalAnswering,
 } from './server-steps.fixture.ts';
 
 /** The server settings with nothing set, and `changes` applied. */
@@ -792,9 +794,14 @@ describe("a connect's socket mode (card connect-41)", () => {
 
 describe('the connection step by mode (card connect-17)', () => {
   /** Opens the connection of a connect in `mode`, and what the shared and the terminal steps were asked for. */
-  async function connectIn(mode: ConnectionMode) {
+  async function connectIn(
+    mode: ConnectionMode,
+    onPhase: (event: PhaseEvent, seen: WiringSeen) => void = () => undefined,
+  ) {
     const {ports, seen} = portsOf({mode});
-    const steps = stepsOf(ports);
+    const steps = stepsWith(ports, event => {
+      onPhase(event, seen);
+    });
     await steps.locateClient(inputFor('dev'));
     void steps
       .openConnection(inputFor('dev'), TERMS, new AbortController().signal)
@@ -819,6 +826,14 @@ describe('the connection step by mode (card connect-17)', () => {
     );
   });
 
+  it('F-2304 BR-11: a terminal connect reports initializing before the terminal starts', async () => {
+    const events: Array<PhaseEvent['kind'] | number> = [];
+    await connectIn('terminal', (event, seen) => {
+      events.push(event.kind, seen.terminals.opened.length);
+    });
+    deepStrictEqual(events.slice(0, 2), ['initializing', 0]);
+  });
+
   it('F-2410 BR-2: socket mode, which is the terminal mode, opens the install terminal', async () => {
     const seen = await connectIn('terminal');
     deepStrictEqual(seen.terminals.opened[0]?.name, 'install');
@@ -841,6 +856,52 @@ describe('the connection step by mode (card connect-17)', () => {
       [seen.acquires.length, seen.terminals.opened.length],
       [0, 1],
     );
+  });
+});
+
+describe('the stage that precedes a prompt (card connect-78)', () => {
+  it('F-2304 BR-11: the platform pick is preceded by a phase that opens the progress', async () => {
+    const order: string[] = [];
+    const {ports} = portsOf();
+    const steps = stepsWith(
+      {
+        ...ports,
+        terms: {
+          ...ports.terms,
+          settings: () => ({
+            remotePlatform: {},
+            windowsRemotes: [],
+            useLocalServer: false,
+            enableRemoteCommand: false,
+          }),
+          pickPlatform: () => {
+            order.push('asked');
+            return Promise.resolve('linux');
+          },
+        },
+      },
+      event => order.push(event.kind),
+    );
+    await steps.decideTerms(inputFor('dev'), new AbortController().signal);
+    deepStrictEqual(order, ['promptShown', 'asked']);
+  });
+
+  it('F-2304 BR-11: the licence question is preceded by a phase that opens the progress', async () => {
+    const order: string[] = [];
+    const {ports} = portsOf();
+    const steps = stepsWith(
+      {
+        ...ports,
+        server: dependencies({
+          profile: {...PROFILE, serverLicense: ['terms']},
+          modal: modalAnswering('accept', order),
+        }),
+      },
+      event => order.push(event.kind),
+    );
+    steps.plan(inputFor('dev'), {...HOST, installed: true});
+    await steps.gate(inputFor('dev'), new AbortController().signal);
+    deepStrictEqual(order.slice(0, 1), ['promptShown']);
   });
 });
 

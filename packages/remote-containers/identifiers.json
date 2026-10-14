@@ -20,6 +20,10 @@
     {
       "id": "hideConnectCommands",
       "setter": "extension"
+    },
+    {
+      "id": "hideRebuildCommands",
+      "setter": "extension"
     }
   ],
   "infoLineCommands": [],

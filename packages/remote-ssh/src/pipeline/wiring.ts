@@ -260,6 +260,16 @@ export function stepsOf(
     logger: ports.logger,
   };
 
+  /** `question`, preceded by a stage that opens the progress, so that no prompt shows before the progress does. */
+  function prompting<Arguments extends unknown[], Result>(
+    question: (...argumentList: Arguments) => Result,
+  ): (...argumentList: Arguments) => Result {
+    return (...argumentList) => {
+      onPhase({kind: 'promptShown'});
+      return question(...argumentList);
+    };
+  }
+
   /** The connection's settings, read once for this connect, so all of its runs use the same. */
   function connectionSettings(): ConnectionRequestSettings {
     held.connection ??= ports.settings.connection();
@@ -272,6 +282,10 @@ export function stepsOf(
   ): ReturnType<typeof createServerSteps> {
     held.server ??= createServerSteps({
       ...ports.server,
+      modal: {
+        ...ports.server.modal,
+        askUser: prompting(ports.server.modal.askUser.bind(ports.server.modal)),
+      },
       settings: hostServerSettings(
         ports.settings.server(),
         hostAlias(input.target),
@@ -309,7 +323,10 @@ export function stepsOf(
     });
   }
 
-  const terms = createTermsSteps(ports.terms);
+  const terms = createTermsSteps({
+    ...ports.terms,
+    pickPlatform: prompting(ports.terms.pickPlatform),
+  });
   const locateClient = locateClientStep({
     ...ports.locate,
     configFile: () => connectionSettings().configFile,
@@ -435,9 +452,12 @@ export function stepsOf(
     locateClient,
     openConnection: (input, connectTerms, cancellation) => {
       held.opening = {input, terms: connectTerms};
-      return (
-        ports.locate.mode() === 'shared' ? sharedConnection : terminalConnection
-      )(input, connectTerms, cancellation);
+      if (ports.locate.mode() === 'shared') {
+        return sharedConnection(input, connectTerms, cancellation);
+      }
+      // A terminal connect always logs in, so its progress opens now.
+      onPhase({kind: 'initializing'});
+      return terminalConnection(input, connectTerms, cancellation);
     },
     probe: (input, ...rest) => serverSteps(input).probe(input, ...rest),
     planForwarding: async (input, lease, host, cancellation) => {

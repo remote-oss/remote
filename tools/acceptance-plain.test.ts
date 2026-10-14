@@ -1,5 +1,5 @@
 import {deepStrictEqual, doesNotThrow, strictEqual, throws} from 'node:assert';
-import {existsSync, statSync} from 'node:fs';
+import {existsSync, readFileSync, statSync} from 'node:fs';
 import path from 'node:path';
 import {
   debuggingPortFile,
@@ -329,6 +329,7 @@ describe('runPlainLaunch', () => {
         return {
           stop: () => {
             happened.push('stop');
+            return Promise.resolve();
           },
         };
       },
@@ -377,6 +378,41 @@ describe('runPlainLaunch', () => {
     }
   });
 
+  it('tooling-51: the launch ends only once the editor has stopped, so the next launch never meets it', async () => {
+    const {steps, happened} = recordingSteps('pass');
+    let release: (() => void) | undefined;
+    const launching = runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, {
+      ...steps,
+      start: program => {
+        steps.start(program);
+        return {
+          stop: () =>
+            new Promise<void>(resolve => {
+              release = () => {
+                happened.push('stopped');
+                resolve();
+              };
+            }),
+        };
+      },
+    });
+    let settled = false;
+    void launching.then(() => {
+      settled = true;
+    });
+    while (release === undefined) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const settledWhileStopping = settled;
+    release();
+    await launching;
+    deepStrictEqual(
+      [settledWhileStopping, happened],
+      [false, ['start', 'tests', 'stopped']],
+    );
+  });
+
   it('D-85: it stops the editor when the tests fail', async () => {
     const {steps, happened} = recordingSteps('fail');
     await runPlainLaunch('/repo', PLAIN_RUN, LAUNCH, steps);
@@ -417,6 +453,24 @@ describe('runPlainLaunch', () => {
       ),
       ['/run/windows/agent/pids', '/run/windows/agent/pids'],
     );
+  });
+
+  it('coverage-25a: each explorer launch points its editor and its tests at its own agent folder', async () => {
+    for (const launch of launchesOf(REPOSITORY_ROOT).filter(each =>
+      each.label.startsWith('explorer'),
+    )) {
+      const {steps, programs} = recordingSteps('pass');
+      await runPlainLaunch('/repo', PLAIN_RUN, launch, steps);
+      deepStrictEqual(
+        programs.map(
+          program => program.environment.REMOTE_OSS_ACCEPTANCE_WINDOWS,
+        ),
+        [
+          path.join('/run', launch.label, 'agent', 'pids'),
+          path.join('/run', launch.label, 'agent', 'pids'),
+        ],
+      );
+    }
   });
 
   it('D-85: a launch’s own environment wins over the run’s', async () => {
@@ -477,7 +531,7 @@ describe('startDetached', () => {
     const file = path.join(workspace.root, 'ticks');
     const started = startDetached(writer(file));
     await pause(400);
-    started.stop();
+    await started.stop();
     strictEqual(existsSync(file), true);
   });
 
@@ -485,8 +539,7 @@ describe('startDetached', () => {
     const file = path.join(workspace.root, 'ticks');
     const started = startDetached(writer(file));
     await pause(400);
-    started.stop();
-    await pause(200);
+    await started.stop();
     const before = statSync(file).size;
     await pause(300);
     strictEqual(statSync(file).size, before);
@@ -499,18 +552,133 @@ describe('startDetached', () => {
       environment: {},
     });
     doesNotThrow(() => {
-      started.stop();
+      void started.stop();
     });
   });
 
   it('D-85: stopping a program twice is harmless', async () => {
     const started = startDetached(writer(path.join(workspace.root, 'ticks')));
     await pause(200);
-    started.stop();
-    await pause(200);
-    doesNotThrow(() => {
-      started.stop();
+    await started.stop();
+    await started.stop();
+  });
+
+  /**
+   * A program whose child, in its group, writes each signal it gets to `file` after its own pid; the program writes
+   * `exited` there when SIGTERM ends it.
+   */
+  function family(file: string, programIgnoresTerm = false): Program {
+    const childScript = [
+      "const fs = require('node:fs');",
+      `const file = ${JSON.stringify(file)};`,
+      "fs.appendFileSync(file, 'child ' + process.pid + '\\n');",
+      "for (const name of ['SIGTERM', 'SIGINT', 'SIGHUP']) { process.on(name, () => fs.appendFileSync(file, name + '\\n')); }",
+      'setInterval(() => undefined, 1000);',
+    ].join(' ');
+    return {
+      file: process.execPath,
+      programArguments: [
+        '-e',
+        [
+          "const fs = require('node:fs');",
+          `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childScript)}], {stdio: 'ignore'});`,
+          programIgnoresTerm
+            ? "process.on('SIGTERM', () => undefined);"
+            : `process.on('SIGTERM', () => { fs.appendFileSync(${JSON.stringify(file)}, 'exited\\n'); process.exit(0); });`,
+          'setInterval(() => undefined, 1000);',
+        ].join(' '),
+      ],
+      environment: {},
+    };
+  }
+
+  /** The lines `family` wrote, once its child has started. */
+  async function linesOnceStarted(file: string): Promise<string[]> {
+    while (
+      !existsSync(file) ||
+      !readFileSync(file, 'utf8').includes('child ')
+    ) {
+      await pause(20);
+    }
+    return readFileSync(file, 'utf8')
+      .split('\n')
+      .filter(line => line !== '');
+  }
+
+  /** Whether the process `processId` still runs: a zombie waiting for a parent to reap it doesn't. */
+  function alive(processId: number): boolean {
+    try {
+      return !/^\d+ \(.*\) Z /.test(
+        readFileSync(`/proc/${String(processId)}/stat`, 'utf8'),
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  const QUICK = {
+    graceMilliseconds: 400,
+    afterKillMilliseconds: 400,
+    pollMilliseconds: 20,
+    groupAlive: (groupId: number) => {
+      try {
+        process.kill(-groupId, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+
+  it('tooling-51: SIGTERM goes to the program alone, never to its group, and stop waits until the group has ended', async () => {
+    const file = path.join(workspace.root, 'signals');
+    const started = startDetached(family(file), QUICK);
+    const child = Number((await linesOnceStarted(file))[0]?.split(' ')[1]);
+    await started.stop();
+    const lines = readFileSync(file, 'utf8')
+      .split('\n')
+      .filter(line => line !== '');
+    deepStrictEqual([lines.slice(1), alive(child)], [['exited'], false]);
+  });
+
+  it('tooling-51: a program that ignores SIGTERM has its group killed once the grace has passed, and not before', async () => {
+    const file = path.join(workspace.root, 'signals');
+    const started = startDetached(family(file, true), QUICK);
+    const child = Number((await linesOnceStarted(file))[0]?.split(' ')[1]);
+    const began = Date.now();
+    await started.stop();
+    const took = Date.now() - began;
+    deepStrictEqual(
+      [alive(child), took >= 400, took < 3000],
+      [false, true, true],
+    );
+  });
+
+  it('tooling-51: a group still there after SIGKILL ends the wait after its bound, with a line on stderr', async () => {
+    const started = startDetached(writer(path.join(workspace.root, 'ticks')), {
+      ...QUICK,
+      groupAlive: () => true,
     });
+    await pause(100);
+    const written: string[] = [];
+    const original = console.error;
+    console.error = (message: unknown) => {
+      written.push(String(message));
+    };
+    const began = Date.now();
+    try {
+      await started.stop();
+    } finally {
+      console.error = original;
+    }
+    deepStrictEqual(
+      [
+        Date.now() - began < 3000,
+        written.length,
+        written[0]?.includes('still there after SIGKILL'),
+      ],
+      [true, 1, true],
+    );
   });
 });
 

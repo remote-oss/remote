@@ -3,6 +3,8 @@
   "capabilities.untrustedWorkspaces.description": "Opening a folder in a container requires workspace trust.",
   "configuration.title": "Dev Containers",
   "commands.Reopenincontainer.title": "Reopen in Container",
+  "commands.Rebuildcontainer.title": "Rebuild Container",
+  "commands.Rebuildcontainerwithoutcache.title": "Rebuild Container Without Cache",
   "setting.Dockerpath.description": "Docker (or Podman or WSLc) executable name or path.",
   "setting.ServerDownloadBaseUrl.description": "Base URL for downloading the VS Code server. The path `/commit:{commit}/server-{platform}/{quality}` will be appended to this URL. Platforms include `linux-x64`, `linux-armhf`, `linux-arm64`, `linux-alpine`, and `alpine-arm64`. Quality is `stable` or `insider`.",
   "setting.ServerDownloadBaseUrl.patternError": "Must be a URL (e.g., https://example.com or https://example.com:8080/path).",

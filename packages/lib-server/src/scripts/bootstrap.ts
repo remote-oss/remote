@@ -694,6 +694,11 @@ const DISCARD_BODY: readonly string[] = ['finish Ok'];
 const UNINSTALL_BODY: readonly string[] = [
   '[ -n "$DATA_ROOT" ] && [ -n "$DATA_FOLDER" ] || finish Ok',
   'stop_servers',
+  'if [ "$DATA_ROOT" != "$HOME" ]; then',
+  '  [ -n "$HOME" ] || finish Ok',
+  '  DATA_DIR=$HOME/$DATA_FOLDER',
+  '  stop_servers',
+  'fi',
   'rm -rf "${DATA_DIR:?}"',
   'finish Ok',
 ];

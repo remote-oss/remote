@@ -2,7 +2,7 @@
 # Triggers (athena on #142, ruling 4): every pull request from this repository runs the checks and the cheap acceptance
 # jobs (slice 1, server lifecycle) at its head, so that "passing in CI" means the head, not the last dispatch. The
 # costly jobs (real server, VSCodium, host variants) stay opt-in on a manual dispatch, and always run on the tag of a
-# release (`<package>-v<semver>`). The jobs run on the self-hosted runners, so they use no Actions minutes.
+# release (`<package>-v<semver>`). Every push to main runs the VSCodium job alone: the backstop for main's launches. The jobs run on the self-hosted runners, so they use no Actions minutes.
 # A draft pull request runs nothing: its pushes would hold the runners while merge-ready heads wait. Marking it ready for
 # review starts its run (`ready_for_review`), and that run, at the head, is the one green-at-head looks for.
 name: ci
@@ -26,7 +26,10 @@ on:
         description: Also run the host-variant rows, once per login shell and download tool of the SSH host
         type: boolean
         default: false
+  # a push to main runs the VSCodium job alone: the backstop that shows whether main's launches are green, which PR CI
+  # never runs; the other jobs ran on the pull request's merge ref
   push:
+    branches: [main]
     tags: ['*-v*']
 
 permissions:
@@ -67,9 +70,9 @@ jobs:
           fi
 
   checks:
-    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    if: (github.event_name != 'pull_request' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')) || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
-    timeout-minutes: 10
+    timeout-minutes: 20 # 5 to 7.6 min on a free runner; 10 was cut twice under load (2026-10-14)
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6 # the version comes from packageManager in package.json
@@ -88,6 +91,8 @@ jobs:
       - run: pnpm check-public-surface
       - run: pnpm check-coverage # every acceptance criterion tagged, and every tagged one cited by a test (#142)
       - run: pnpm typecheck
+      # eslint's heap is 6 GiB (package.json); the runner's cgroup cap must stay above it (8 GiB since #692)
+      - run: echo "runner memory.max $(cat /sys/fs/cgroup/memory.max)"
       - run: pnpm lint
       - run: pnpm lint:shell # shellcheck is preinstalled on the runner
       - run: pnpm check-licences
@@ -105,7 +110,7 @@ jobs:
     name: ${{ matrix.check }}
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     strategy:
@@ -133,7 +138,7 @@ jobs:
     name: acceptance (slice 1)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
@@ -172,7 +177,7 @@ jobs:
     name: acceptance (server lifecycle)
     needs: changes
     if: >-
-      !cancelled() && needs.changes.result != 'failure' && (github.event_name != 'pull_request' ||
+      !cancelled() && needs.changes.result != 'failure' && !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
       needs.changes.outputs.docs-only != 'true'))
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
@@ -240,7 +245,13 @@ jobs:
   # the runner. Opt-in on a dispatch (the `vscodium` input); the tag of a release runs it always.
   acceptance-vscodium:
     name: acceptance (vscodium)
-    if: inputs.vscodium || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    if: inputs.vscodium || (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'))
+    # GitHub keeps one pending job per group, and a newer one replaces it. Pushes to main have their own group, where
+    # only the latest main matters; each release tag has a group of its own, so nothing displaces it; dispatches keep
+    # theirs, fed one at a time, so a main push never displaces them.
+    concurrency:
+      group: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' && 'acceptance-vscodium-main' || format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}
+      cancel-in-progress: false
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:

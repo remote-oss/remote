@@ -3,10 +3,10 @@
  *
  *     node tools/seed-coverage.ts [<name>]
  *
- * `<name>` picks the file, `slice1` (the default) or `containers-r1`, as in `coverage-<name>.tsv`. It reads the issue
- * number of each of the file's features from the catalogue, fetches the feature's issue with `gh issue view` and takes
- * the criteria from its body. Run it once, commit the output, and tag the lines by hand afterwards; running it again
- * overwrites the tags.
+ * `<name>` picks the set, `slice1` (the default), `containers-r1` or `explorer`, and writes the set's file. It reads
+ * the issue number of each of the set's features from the catalogue, fetches the feature's issue with `gh issue view`
+ * in its own repository and takes the criteria from its body. Run it once, commit the output, and tag the lines by
+ * hand afterwards; running it again overwrites the tags.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -23,27 +23,35 @@ import {
 /** The organisation the repositories of the feature issues are in. */
 const SPEC_OWNER = 'remote-oss';
 
+/** The issue of a catalogue row: its number, and the repository the issue lives in. */
+export interface CatalogueIssue {
+  repository: string;
+  issue: number;
+}
+
 /**
- * The issue number of each feature of `repository` (`remote-ssh` by default), from the catalogue's columns of the
- * feature and of its issue.
+ * The issue of every feature of the catalogue that has one: its number, and the repository of its issue, `remote-oss/`
+ * plus the row's repository column.
  */
-export function issueNumbersOf(
-  catalogue: string,
-  repository = SLICE_ONE_SCOPE.repository,
-): Map<string, number> {
+export function issueNumbersOf(catalogue: string): Map<string, CatalogueIssue> {
   const [header = '', ...rows] = catalogue.split('\n');
   const columns = header.split('\t');
   const idColumn = columns.indexOf('id');
   const issueColumn = columns.indexOf('issue');
   const repositoryColumn = columns.indexOf('repo');
-  const numbers = new Map<string, number>();
+  const issues = new Map<string, CatalogueIssue>();
   for (const catalogueRow of rows) {
     const fields = catalogueRow.split('\t');
-    if (fields[repositoryColumn] === repository) {
-      numbers.set(fields[idColumn] ?? '', Number(fields[issueColumn]));
+    const issueField = fields[issueColumn] ?? '';
+    if (fields[idColumn] === undefined || !/^\d+$/.test(issueField)) {
+      continue;
     }
+    issues.set(fields[idColumn], {
+      repository: `${SPEC_OWNER}/${fields[repositoryColumn] ?? ''}`,
+      issue: Number(issueField),
+    });
   }
-  return numbers;
+  return issues;
 }
 
 /** A criterion id's feature, number and letter: an id ending in `.AC-17b` has the number 17 and the letter `b`. */
@@ -81,18 +89,18 @@ export type Program = (
   programArguments: readonly string[],
 ) => {status: number | null; stdout: string; stderr: string};
 
-/** The body of a feature's issue in `repository` (`remote-ssh` by default), from `gh`. */
+/** The body of issue `issue` of `repository` (`remote-oss/` plus the repository name), from `gh`. */
 export function bodyOf(
   issue: number,
+  repository: string,
   program: Program,
-  repository = SLICE_ONE_SCOPE.repository,
 ): string {
   const result = program('gh', [
     'issue',
     'view',
     String(issue),
     '-R',
-    `${SPEC_OWNER}/${repository}`,
+    repository,
     '--json',
     'body',
     '--jq',
@@ -110,31 +118,29 @@ export function seedFor(
   program: Program,
   scope: CoverageScope = SLICE_ONE_SCOPE,
 ): string {
-  const numbers = issueNumbersOf(catalogue, scope.repository);
+  const numbers = issueNumbersOf(catalogue);
   return seedOf(
     scope.features.flatMap(feature => {
-      const issue = numbers.get(feature);
-      if (issue === undefined) {
+      const entry = numbers.get(feature);
+      if (entry === undefined) {
         throw new Error(`${feature} is not in the catalogue`);
       }
       return acceptanceCriteriaOf(
-        bodyOf(issue, program, scope.repository),
+        bodyOf(entry.issue, entry.repository, program),
         feature,
       );
     }),
   );
 }
 
-/** The coverage file `name` picks, as in `coverage-<name>.tsv`; none picks the first slice's. */
+/** The set `name` picks by its name; none picks the first slice's. */
 export function scopeNamed(name: string | undefined): CoverageScope {
   if (name === undefined) {
     return SLICE_ONE_SCOPE;
   }
-  const scope = COVERAGE_SCOPES.find(
-    candidate => path.basename(candidate.file) === `coverage-${name}.tsv`,
-  );
+  const scope = COVERAGE_SCOPES.find(candidate => candidate.name === name);
   if (scope === undefined) {
-    throw new Error(`no coverage file coverage-${name}.tsv`);
+    throw new Error(`no coverage set named ${name}`);
   }
   return scope;
 }

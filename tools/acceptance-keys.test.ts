@@ -252,7 +252,7 @@ describe('the run agent', function () {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       const listed = runProgram('ssh-add', ['-l'], {SSH_AUTH_SOCK: socket});
-      agent.stop();
+      await agent.stop();
       for (let attempt = 0; attempt < 50 && existsSync(socket); attempt++) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }

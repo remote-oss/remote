@@ -85,10 +85,10 @@ export async function containerAddress(): Promise<string> {
   const {stdout} = await execFileAsync('docker', [
     'inspect',
     '-f',
-    '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
+    '{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}',
     container,
   ]);
-  return stdout.trim();
+  return stdout.trim().split('\n')[0] ?? '';
 }
 
 /** Whether another machine of the run reaches `address` on `port` within five seconds, then drops the socket. */

@@ -304,12 +304,14 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30: an explorer launch titles each window with its folder name in brackets', () => {
+  it('coverage-25a: an explorer launch titles each window with its folder name in brackets, the remote name after', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('explorer'))
         .map(launch => launch.settings),
-      Array.from({length: 3}, () => ({'window.title': '[${rootName}]'})),
+      Array.from({length: 3}, () => ({
+        'window.title': '[${rootName}]${remoteName}',
+      })),
     );
   });
 
@@ -661,10 +663,10 @@ describe('the client-search launches', () => {
     launch.label.startsWith('client-'),
   );
 
-  it('coverage-11: there are 18, one for each case of the cases file', () => {
+  it('coverage-31: there are 21, one for each case of the cases file', () => {
     deepStrictEqual(
       [searches.length, clientCases(REPOSITORY_ROOT).length],
-      [18, 18],
+      [21, 21],
     );
   });
 

@@ -2,13 +2,14 @@
  * @fileoverview The renderer of a plainly started editor, read and clicked over the Chrome DevTools Protocol, as a user
  * sees and uses the window: a view's rows, a click on a row's or a view's action, and core's dialogs, read and
  * answered. Only a launch with a debugging port has it. The editor writes the port it chose into the user-data folder,
- * and each window's title is its folder name in brackets (the launch's `window.title`), so that a window is found by
- * the name the agent gives it. The selectors read the workbench of the run's pinned VSCodium build.
+ * and a window's title follows the launch's `window.title`: the folder name in brackets, the remote name after it on
+ * the explorer launches, so that a window is found by what its agent reports of it. The selectors read the workbench
+ * of the run's pinned VSCodium build.
  */
 
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {variable} from './harness.ts';
+import {variable, windowState} from './harness.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
@@ -87,11 +88,47 @@ async function debuggingPort(): Promise<number> {
   );
 }
 
-/** Whether a window's title, `[<root name>]`, belongs to the window the agent calls `name`. */
-function isWindowTitled(title: string, name: string): boolean {
-  return name === 'local'
-    ? title === '[]'
-    : title === `[${name}]` || title.startsWith(`[${name} [`);
+/** What a window reports of itself for the page choice: its folders, and the remote it is on. */
+export interface PageState {
+  folders: readonly string[];
+  remoteName: string | null;
+}
+
+/** The window title's part of a folder: its name in the last path part, decoded from the URI's percent-encoding. */
+function folderName(folder: string): string {
+  const encoded = path.basename(folder);
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    // A name with a stray percent sign has no decoding.
+    return encoded;
+  }
+}
+
+/**
+ * The title of the page of a window with this state among `titles`: the folder name in brackets, `[]` for a local
+ * window with no folder, and `[]` plus the remote name for a remote one. It fails when two titles match, naming both:
+ * two folder-less windows of one kind can't be told apart, and the gate rows never have two.
+ */
+export function pageTitleFor(
+  state: PageState,
+  titles: readonly string[],
+): string | undefined {
+  const folder = state.folders[0];
+  const matching = titles.filter(title =>
+    folder === undefined
+      ? state.remoteName === null
+        ? title === '[]'
+        : title.startsWith('[]') && title !== '[]'
+      : title === `[${folderName(folder)}]` ||
+        title.startsWith(`[${folderName(folder)} [`),
+  );
+  if (matching.length > 1) {
+    throw new Error(
+      `two pages match the window's state: ${JSON.stringify(matching)}`,
+    );
+  }
+  return matching[0];
 }
 
 /** The pages of the renderer, from the debugging port's list. */
@@ -103,21 +140,52 @@ async function pages(): Promise<DebugTarget[]> {
   return targets.filter(target => target.type === 'page');
 }
 
-/** The protocol address of window `name`'s page, once exactly one page carries its title. */
+/**
+ * The state of window `name` for the page choice, or `undefined` when it doesn't arrive within `remaining`
+ * milliseconds: a window that never reports a page of its own fails with the titles, not the agent's wait.
+ */
+async function stateForPage(
+  name: string,
+  remaining: number,
+): Promise<Awaited<ReturnType<typeof windowState>> | undefined> {
+  const state = windowState(name);
+  state.catch(() => undefined);
+  return Promise.race([
+    state,
+    new Promise<undefined>(resolve => {
+      setTimeout(resolve, remaining, undefined);
+    }),
+  ]);
+}
+
+/** The protocol address of window `name`'s page, once exactly one page carries the title its state gives it. */
 export async function pageOf(
   name: string,
   milliseconds = WAIT_MILLISECONDS,
 ): Promise<string> {
   let titles: string[] = [];
+  const started = Date.now();
   return settled(
     () => `one page of window ${name} among ${JSON.stringify(titles)}`,
     async () => {
       const found = await pages();
       titles = found.map(page => page.title);
-      const matching = found.filter(page => isWindowTitled(page.title, name));
-      return matching.length === 1
-        ? matching[0]?.webSocketDebuggerUrl
-        : undefined;
+      const state = await stateForPage(
+        name,
+        milliseconds - (Date.now() - started),
+      );
+      const title =
+        state === undefined
+          ? undefined
+          : pageTitleFor(
+              {folders: state.folders, remoteName: state.remoteName},
+              titles,
+            );
+      const chosen =
+        title === undefined
+          ? undefined
+          : found.find(page => page.title === title);
+      return chosen?.webSocketDebuggerUrl;
     },
     milliseconds,
   );
