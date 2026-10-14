@@ -270,4 +270,6 @@ export interface ConnectSteps {
     input: ConnectInput,
     reported: ProbedHost['operatingSystem'],
   ): Promise<void>;
+  /** Forwards the ports of `remote.SSH.defaultForwardedPorts`, as the setting is when the call is made. */
+  applyDefaults(input: ConnectInput): Promise<void>;
 }

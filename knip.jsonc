@@ -43,6 +43,7 @@
         "slow-remote/src/extension.ts",
         "windows/*.test.ts",
         "no-proposals/*.test.ts",
+        "default-ports/*.test.ts",
         "terminal-pick/*.test.ts",
         "explorer/*.test.ts",
         "explorer-alone/*.test.ts",
