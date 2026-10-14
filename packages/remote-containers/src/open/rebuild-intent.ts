@@ -21,7 +21,7 @@ export interface RebuildOptions {
 
 /** A taken intent: when it was stored, and what it asks. */
 export interface RebuildIntent {
-  at: number;
+  storedAt: number;
   removeExistingContainer: true;
   buildNoCache: boolean;
 }
@@ -71,5 +71,7 @@ export async function takeRebuildIntent(
     now,
     isIntentValue,
   );
-  return entry === undefined ? undefined : {at: entry.at, ...entry.value};
+  return entry === undefined
+    ? undefined
+    : {storedAt: entry.storedAt, ...entry.value};
 }

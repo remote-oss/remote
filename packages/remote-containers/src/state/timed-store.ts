@@ -14,9 +14,9 @@ export interface IntentMemento {
 }
 
 /** One stored entry: when it was written, and what it holds. */
-interface TimedEntry {
-  at: number;
-  value: unknown;
+export interface TimedEntry<Value> {
+  storedAt: number;
+  value: Value;
 }
 
 /** Whether a value is a plain object. */
@@ -29,56 +29,62 @@ function liveEntries(
   stored: unknown,
   now: number,
   isValue: (value: unknown) => boolean,
-): Record<string, TimedEntry> {
-  const kept: Record<string, TimedEntry> = {};
+): Array<[string, TimedEntry<unknown>]> {
   if (!isObject(stored)) {
-    return kept;
+    return [];
   }
-  for (const [id, entry] of Object.entries(stored)) {
+  const kept: Array<[string, TimedEntry<unknown>]> = [];
+  for (const [entryName, entry] of Object.entries(stored)) {
     if (
       isObject(entry) &&
-      typeof entry.at === 'number' &&
-      Number.isFinite(entry.at) &&
-      now - entry.at >= 0 &&
-      now - entry.at <= TIMED_ENTRY_MILLISECONDS &&
+      typeof entry.storedAt === 'number' &&
+      Number.isFinite(entry.storedAt) &&
+      now - entry.storedAt >= 0 &&
+      now - entry.storedAt <= TIMED_ENTRY_MILLISECONDS &&
       isValue(entry.value)
     ) {
-      kept[id] = {at: entry.at, value: entry.value};
+      kept.push([entryName, {storedAt: entry.storedAt, value: entry.value}]);
     }
   }
   return kept;
 }
 
-/** Writes `value` for `id`, dropping the entries that expired. A failed write rejects to the caller. */
-export async function storeTimedEntry<Value>(
+/** Writes `value` under `entryName`, dropping the entries that expired. A failed write rejects to the caller. */
+export async function storeTimedEntry(
   memento: IntentMemento,
   key: string,
-  id: string,
-  value: Value,
+  entryName: string,
+  value: unknown,
   now: number,
 ): Promise<void> {
-  const entries = liveEntries(memento.get(key), now, () => true);
-  entries[id] = {at: now, value};
-  await memento.update(key, entries);
+  const others = liveEntries(memento.get(key), now, () => true).filter(
+    ([name]) => name !== entryName,
+  );
+  await memento.update(
+    key,
+    Object.fromEntries([...others, [entryName, {storedAt: now, value}]]),
+  );
 }
 
 /**
- * Takes the entry for `id` once. The map is written back only when it differs from what was read, so a read with
- * nothing to take writes nothing. A failed write rejects to the caller.
+ * Takes the entry under `entryName` once. The map is written back only when it differs from what was read, so a read
+ * with nothing to take writes nothing. A failed write rejects to the caller.
  */
 export async function takeTimedEntry<Value>(
   memento: IntentMemento,
   key: string,
-  id: string,
+  entryName: string,
   now: number,
   isValue: (value: unknown) => value is Value,
-): Promise<{at: number; value: Value} | undefined> {
+): Promise<TimedEntry<Value> | undefined> {
   const stored = memento.get(key);
   const entries = liveEntries(stored, now, isValue);
-  const taken = entries[id] as {at: number; value: Value} | undefined;
-  delete entries[id];
-  if (JSON.stringify(entries) !== JSON.stringify(stored ?? {})) {
-    await memento.update(key, entries);
+  const remaining = Object.fromEntries(
+    entries.filter(([name]) => name !== entryName),
+  );
+  if (JSON.stringify(remaining) !== JSON.stringify(stored ?? {})) {
+    await memento.update(key, remaining);
   }
-  return taken;
+  return entries.find(([name]) => name === entryName)?.[1] as
+    TimedEntry<Value> | undefined;
 }
