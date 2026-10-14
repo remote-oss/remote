@@ -1,0 +1,39 @@
+# The required check of a conformance suite repository's pull requests into main, named by the organisation's ruleset
+# at a pinned tag of this repository, so a pull request cannot change it: every path the pull request adds, changes,
+# deletes or renames from must lie under tests/conformance/ (.github/ included in what is refused).
+# The paths are the pull request's own changes, from the merge base (BASE...HEAD), so commits main gained after the
+# branch was cut are not counted as the pull request's.
+name: suite-scope
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  suite-scope:
+    # this repository keeps the workflow for the ruleset; its own pull requests are not a suite's
+    if: github.repository != 'remote-oss/remote'
+    runs-on: ${{ vars.SUITE_SCOPE_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Every changed path is under tests/conformance/
+        run: |
+          paths=$(git diff --no-renames --name-only "$BASE...$HEAD")
+          printf 'changed:\n%s\n' "$paths"
+          outside=$(printf '%s\n' "$paths" | grep -v '^tests/conformance/' | grep -v '^$' || true)
+          if [ -n "$outside" ]; then
+            printf 'refused: paths outside tests/conformance/:\n%s\n' "$outside" >&2
+            exit 1
+          fi
+          [ -n "$paths" ] || { echo 'refused: the pull request changes nothing' >&2; exit 1; }
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
