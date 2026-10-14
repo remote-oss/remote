@@ -57,6 +57,16 @@
         "command": "remote-containers.reopenInContainer",
         "title": "%commands.Reopenincontainer.title%",
         "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.rebuildContainer",
+        "title": "%commands.Rebuildcontainer.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.rebuildContainerNoCache",
+        "title": "%commands.Rebuildcontainerwithoutcache.title%",
+        "category": "Dev Containers"
       }
     ],
     "menus": {
@@ -64,6 +74,14 @@
         {
           "command": "remote-containers.reopenInContainer",
           "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.rebuildContainer",
+          "when": "!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.rebuildContainerNoCache",
+          "when": "!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown"
         }
       ],
       "statusBar/remoteIndicator": [
@@ -71,6 +89,11 @@
           "command": "remote-containers.reopenInContainer",
           "group": "remote_30_dev-container_2_actions@8",
           "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.rebuildContainer",
+          "group": "remote_30_dev-container_2_actions@5",
+          "when": "!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown"
         }
       ]
     },

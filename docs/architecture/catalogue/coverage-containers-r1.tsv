@@ -253,7 +253,7 @@ F-0405.AC-5	todo
 F-0405.AC-6	todo	
 F-0405.AC-7	todo	
 F-0405.AC-8	todo	
-F-0405.AC-9	todo	
+F-0405.AC-9	deferred	containers release 1: F-0303's notification is increment 2
 F-0405.AC-10	todo	
 F-0405.AC-11	todo	
 F-0405.AC-12	todo	
@@ -264,7 +264,7 @@ F-0405.AC-16	todo
 F-0405.AC-17	todo	
 F-0405.AC-18	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0405.AC-19	todo	
-F-0405.AC-20	todo	
+F-0405.AC-20	deferred	containers release 1: later (multi-root workspaces)
 F-0405.AC-21	deferred	containers release 1: later (Compose)
 F-0405.AC-22	deferred	containers release 1: later (attach)
 F-0405.AC-23	todo	
@@ -273,7 +273,7 @@ F-0405.AC-25	todo
 F-0405.AC-26	todo	
 F-0405.AC-27	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0405.AC-28	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0405.AC-29	todo	
+F-0405.AC-29	unit	
 F-0405.AC-30	todo	
 F-0405.AC-31	todo	
 F-0405.AC-32	todo	
