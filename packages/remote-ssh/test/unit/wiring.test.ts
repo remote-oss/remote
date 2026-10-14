@@ -1,5 +1,7 @@
+import type {TunnelOptions} from '../../src/forwarding/default-forwards.ts';
 import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
+import {parseDefaultForwards} from 'lib-forwarding';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
 import {RecordingChannel} from 'lib-host/testing/recording-channel';
@@ -106,6 +108,8 @@ interface WiringSeen {
   progress: string[];
   /** The link terminals run, by name, with the program and its arguments. */
   linkTerminals: Array<{name: string; command: string[]}>;
+  /** The tunnels the editor was asked for. */
+  tunnels: TunnelOptions[];
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -126,6 +130,7 @@ function portsOf(
     localDownloadMode?: LocalDownloadMode;
     agentForwarding?: boolean;
     x11Forwarding?: boolean;
+    defaultForwards?: unknown;
   } = {},
 ): {ports: WiringPorts; seen: WiringSeen} {
   const seen: WiringSeen = {
@@ -139,12 +144,19 @@ function portsOf(
     cliLocal: changes.cliLocal ?? new FakeLocalPort(),
     presented: [],
     progress: [],
+    tunnels: [],
     linkTerminals: [],
   };
   const logger = createLogger(seen.sink, {
     minimumLevel: (): Level => 'info',
   });
   const ports: WiringPorts = {
+    tunnels: {
+      openTunnel: options => {
+        seen.tunnels.push(options);
+        return Promise.resolve({});
+      },
+    },
     settings: {
       preconnect: () => changes.preconnect,
       server: () => serverSettings(changes.server),
@@ -162,6 +174,7 @@ function portsOf(
       localDownloadMode: () => changes.localDownloadMode ?? 'auto',
       agentForwarding: () => changes.agentForwarding ?? true,
       x11Forwarding: () => changes.x11Forwarding ?? true,
+      defaultForwards: () => parseDefaultForwards(changes.defaultForwards),
     },
     terms: {
       settings: () => ({
@@ -1148,6 +1161,38 @@ describe("the composition's channel and window environment", () => {
         progress: [],
       },
     );
+  });
+
+  it('F-2507 W4: the applyDefaults step opens the tunnels the setting gives, as the setting is when the step runs', async () => {
+    const changes: {defaultForwards: unknown} = {
+      defaultForwards: [{remotePort: 8000}],
+    };
+    const wired = portsOf();
+    const ports: WiringPorts = {
+      ...wired.ports,
+      settings: {
+        ...wired.ports.settings,
+        defaultForwards: () => parseDefaultForwards(changes.defaultForwards),
+      },
+    };
+    const steps = stepsOf(ports);
+    changes.defaultForwards = [
+      {name: 'web', remotePort: 8001, localPort: 18001},
+    ];
+    await steps.applyDefaults(inputFor('dev'));
+    deepStrictEqual(wired.seen.tunnels, [
+      {
+        remoteAddress: {host: 'localhost', port: 8001},
+        localAddressPort: 18001,
+        label: 'web',
+      },
+    ]);
+  });
+
+  it('F-2507.AC-6: the applyDefaults step shows no notice and presents no failure', async () => {
+    const wired = portsOf({defaultForwards: [{remotePort: 8000}]});
+    await stepsOf(wired.ports).applyDefaults(inputFor('dev'));
+    deepStrictEqual([wired.seen.presented, wired.seen.progress], [[], []]);
   });
 
   it('F-2507: an entry left out is logged with its position and why', async () => {

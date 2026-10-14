@@ -229,5 +229,6 @@ export function surfacesOf(
     rejectBindHost: () => undefined,
     linkTerminals: {runProgram: () => Promise.resolve()},
     applyTerminalEnvironment: () => undefined,
+    tunnels: {openTunnel: () => Promise.resolve({})},
   };
 }
