@@ -20,6 +20,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   acceptanceRunId,
+  buildDevContainerImage,
   checked,
   cleanRun,
   type CommandResult,
@@ -29,6 +30,7 @@ import {
   newPassword,
   RUN_LABEL,
   startHostContainer,
+  sweepStaleDevContainers,
 } from './acceptance-run.ts';
 
 const RUN_ID = '77-2';
@@ -386,17 +388,32 @@ describe('the password of the start (card tooling-17)', () => {
 describe('cleanRun (card tooling-10)', () => {
   it("removes the run's containers by label and its image tag, then proves nothing is left", () => {
     const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps, the dev containers' images
     scripted.passes('c1\nc2\n'); // docker ps, the first listing
     scripted.passes(); // docker rm --force c1
     scripted.passes(); // docker rm --force c2
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force
+    scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps, the second listing
 
     cleanRun(scripted, RUN_ID);
 
     deepStrictEqual(scripted.calls, [
+      {
+        program: 'docker',
+        argv: [
+          'ps',
+          '--all',
+          '--filter',
+          'label=remote-oss.acceptance.run=77-2',
+          '--filter',
+          'label=remote-oss.acceptance.devcontainer=1',
+          '--format',
+          '{{.Image}}',
+        ],
+      },
       {
         program: 'docker',
         argv: [
@@ -430,6 +447,15 @@ describe('cleanRun (card tooling-10)', () => {
       {
         program: 'docker',
         argv: [
+          'image',
+          'rm',
+          '--force',
+          'remote-oss-acceptance-devcontainer:77-2',
+        ],
+      },
+      {
+        program: 'docker',
+        argv: [
           'ps',
           '--all',
           '--quiet',
@@ -442,23 +468,27 @@ describe('cleanRun (card tooling-10)', () => {
 
   it('does not throw when the image is already gone', () => {
     const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps, the dev containers' images
     scripted.passes(''); // docker ps
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.fails(1, 'No such image'); // docker image rm --force
+    scripted.fails(1, 'No such image'); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 5);
+    strictEqual(scripted.calls.length, 7);
   });
 
   it("throws naming the container when one still carries the run's label", () => {
     const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps, the dev containers' images
     scripted.passes(''); // docker ps
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force
+    scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes('c9\n'); // docker ps, the second listing
 
     throws(
@@ -469,13 +499,15 @@ describe('cleanRun (card tooling-10)', () => {
     );
   });
 
-  it("prunes nothing and filters every listing by the run's label alone", () => {
+  it("prunes nothing and filters every container listing by the run's label alone", () => {
     const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps, the dev containers' images
     scripted.passes('c1\n'); // docker ps
     scripted.passes(); // docker rm --force c1
     scripted.passes(); // pkill
     scripted.passes(); // pkill, stale editors
     scripted.passes(); // docker image rm --force
+    scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps
 
     cleanRun(scripted, RUN_ID);
@@ -488,7 +520,12 @@ describe('cleanRun (card tooling-10)', () => {
             !call.argv.some(argValue => argValue.includes('prune')),
         ),
         listings: scripted.calls
-          .filter(call => call.program === 'docker' && call.argv[0] === 'ps')
+          .filter(
+            call =>
+              call.program === 'docker' &&
+              call.argv[0] === 'ps' &&
+              call.argv.includes('--quiet'),
+          )
           .map(call => call.argv),
       },
       {
@@ -515,14 +552,132 @@ describe('cleanRun (card tooling-10)', () => {
 
   it('does not throw when no editor of the run is running', () => {
     const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps, the dev containers' images
     scripted.passes(''); // docker ps
     scripted.fails(1, ''); // pkill matched nothing
     scripted.fails(1, ''); // pkill, stale editors, matched nothing
     scripted.passes(); // docker image rm --force
+    scripted.passes(); // docker image rm --force, the dev container tag
     scripted.passes(''); // docker ps
 
     cleanRun(scripted, RUN_ID);
 
-    strictEqual(scripted.calls.length, 5);
+    strictEqual(scripted.calls.length, 7);
+  });
+
+  it("containers-09: notes the run's dev containers' images before removing the containers, then removes them and the run's dev container tag", () => {
+    const scripted = scriptedCommands();
+    scripted.passes(
+      'vsc-gate-image-0123-uid\nremote-oss-acceptance-devcontainer:77-2\n',
+    ); // docker ps, the images
+    scripted.passes('d1\nc1\n'); // docker ps, the run's containers
+    scripted.passes(); // docker rm --force d1
+    scripted.passes(); // docker rm --force c1
+    scripted.passes(); // pkill
+    scripted.passes(); // pkill, stale editors
+    scripted.passes(); // docker image rm --force, the host
+    scripted.fails(1, 'image is being used'); // docker image rm --force, the uid image
+    scripted.passes(); // docker image rm --force, the dev container tag
+    scripted.passes(''); // docker ps, the second listing
+
+    cleanRun(scripted, RUN_ID);
+
+    deepStrictEqual(
+      scripted.calls
+        .filter(call => call.argv[0] === 'image' || call.argv[0] === 'rm')
+        .map(call => call.argv.at(-1)),
+      [
+        'd1',
+        'c1',
+        'remote-oss-acceptance-host:77-2',
+        'vsc-gate-image-0123-uid',
+        'remote-oss-acceptance-devcontainer:77-2',
+      ],
+    );
+  });
+});
+
+describe('the dev container image and its sweep (card containers-09)', () => {
+  /** Now, in seconds: 2026-10-14T12:00:00Z. */
+  const NOW_SECONDS = Date.parse('2026-10-14T12:00:00Z') / 1000;
+
+  it('containers-09: builds the image from the devcontainer-image folder with the run label, the dev container label and the run tag', () => {
+    const scripted = scriptedCommands();
+    scripted.passes();
+
+    const imageTag = buildDevContainerImage(scripted, '/repo', RUN_ID);
+
+    deepStrictEqual(
+      [imageTag, scripted.calls],
+      [
+        'remote-oss-acceptance-devcontainer:77-2',
+        [
+          {
+            program: 'docker',
+            argv: [
+              'build',
+              '--load',
+              '--quiet',
+              '--label',
+              'remote-oss.acceptance.run=77-2',
+              '--label',
+              'remote-oss.acceptance.devcontainer=1',
+              '--tag',
+              'remote-oss-acceptance-devcontainer:77-2',
+              path.join('/repo', 'tests', 'acceptance', 'devcontainer-image'),
+            ],
+          },
+        ],
+      ],
+    );
+  });
+
+  it("containers-09: the sweep removes only another run's dev containers and images older than two hours", () => {
+    const scripted = scriptedCommands();
+    scripted.passes('mine\nold\nyoung\n'); // docker ps
+    scripted.passes(
+      [
+        'mine 77-2 2026-10-14T08:00:00Z',
+        'old 12-1-build 2026-10-14T09:00:00.123456789Z',
+        'young 12-2-build 2026-10-14T11:50:00Z',
+      ].join('\n'),
+    ); // docker inspect
+    scripted.passes(); // docker rm --force old
+    scripted.passes('sha256:a\nsha256:b\n'); // docker image ls
+    scripted.passes(
+      [
+        'sha256:a 12-1-build 2026-10-14T09:00:00Z',
+        'sha256:b 12-2-build 2026-10-14T11:50:00Z',
+      ].join('\n'),
+    ); // docker image inspect
+    scripted.fails(1, 'image is being used'); // docker image rm --force sha256:a
+
+    sweepStaleDevContainers(scripted, RUN_ID, NOW_SECONDS);
+
+    deepStrictEqual(
+      scripted.calls
+        .filter(call => call.argv.includes('rm'))
+        .map(call => call.argv),
+      [
+        ['rm', '--force', 'old'],
+        ['image', 'rm', '--force', 'sha256:a'],
+      ],
+    );
+  });
+
+  it('containers-09: a sweep with no labelled container or image inspects nothing', () => {
+    const scripted = scriptedCommands();
+    scripted.passes(''); // docker ps
+    scripted.passes(''); // docker image ls
+
+    sweepStaleDevContainers(scripted, RUN_ID, NOW_SECONDS);
+
+    deepStrictEqual(
+      scripted.calls.map(call => call.argv.slice(0, 2)),
+      [
+        ['ps', '--all'],
+        ['image', 'ls'],
+      ],
+    );
   });
 });

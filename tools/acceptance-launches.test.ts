@@ -7,6 +7,7 @@ import {
   failureCases,
   LABEL_FORM,
   launchesOf,
+  needsDevContainerImage,
   HOST_CASE_SUITES,
   type HostCase,
   hostCases,
@@ -36,7 +37,7 @@ function hostLaunchLabels(): string[] {
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, no-proposals, the three explorer launches, the two trust launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, no-proposals, the three explorer launches, the two trust launches, the three containers launches and the ports cases in the order of theirs', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -61,6 +62,9 @@ describe('the launches of the VSCodium run', () => {
         'explorer-no-proposals',
         'trust',
         'trust-terminal',
+        'containers',
+        'containers-standdown',
+        'containers-no-proposals',
         ...hostLaunchLabels(),
       ],
     );
@@ -99,7 +103,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30, tooling-33: only the explorer launches install the explorer, they and the trust launches open a debugging port, and only explorer-alone disables remote-ssh', () => {
+  it('tooling-30, tooling-33, containers-09: only the explorer launches install the explorer and the containers launches Dev Containers, they and the trust launches open a debugging port, and only explorer-alone disables remote-ssh', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -132,7 +136,56 @@ describe('the launches of the VSCodium run', () => {
         ],
         ['trust', undefined, true, undefined],
         ['trust-terminal', undefined, true, undefined],
+        ['containers', ['remote-oss.remote-containers'], true, undefined],
+        [
+          'containers-standdown',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
+        [
+          'containers-no-proposals',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
       ],
+    );
+  });
+
+  it('containers-09: the containers launches draw dialogs in the window and download the server from the run’s host; only containers-standdown has a stand-in, and only containers-no-proposals turns the proposed API off', () => {
+    deepStrictEqual(
+      launches
+        .filter(launch => launch.label.startsWith('containers'))
+        .map(launch => [
+          launch.label,
+          launch.suite,
+          launch.settings,
+          launch.kind === 'plain' ? launch.standIns : undefined,
+          launch.proposedApi,
+        ]),
+      ['containers', 'containers-standdown', 'containers-no-proposals'].map(
+        label => [
+          label,
+          label,
+          {
+            'window.title': '[${rootName}]',
+            'window.dialogStyle': 'custom',
+            'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+          },
+          label === 'containers-standdown'
+            ? ['ms-vscode-remote.remote-containers']
+            : undefined,
+          label === 'containers-no-proposals' ? false : undefined,
+        ],
+      ),
+    );
+  });
+
+  it('containers-09: only the containers launches need the run’s dev container image', () => {
+    deepStrictEqual(
+      launches.filter(needsDevContainerImage).map(launch => launch.label),
+      ['containers', 'containers-standdown', 'containers-no-proposals'],
     );
   });
 
@@ -205,7 +258,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, the explorer and trust launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -225,6 +278,9 @@ describe('the launches of the VSCodium run', () => {
         'explorer-no-proposals',
         'trust',
         'trust-terminal',
+        'containers',
+        'containers-standdown',
+        'containers-no-proposals',
         ...hostLaunchLabels(),
       ],
     );
@@ -736,12 +792,12 @@ describe('the launch with no runner', () => {
     );
   });
 
-  it('F-3903 §5 rule 4: only the two no-proposals launches leave the proposed API out', () => {
+  it('F-3903 §5 rule 4: only the three no-proposals launches leave the proposed API out', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.proposedApi === false)
         .map(launch => launch.label),
-      ['no-proposals', 'explorer-no-proposals'],
+      ['no-proposals', 'explorer-no-proposals', 'containers-no-proposals'],
     );
   });
 

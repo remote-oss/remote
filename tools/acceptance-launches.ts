@@ -72,6 +72,11 @@ export interface PlainLaunch extends LaunchCommon {
   disabledExtensions?: readonly string[];
   /** Whether the editor starts with workspace trust on, so a folder opens untrusted until the user trusts it. */
   workspaceTrust?: boolean;
+  /**
+   * Ids of stand-ins the run puts into this launch's own extensions folder before it starts: a manifest only, with no
+   * code and no contribution, carrying the id it stands for.
+   */
+  standIns?: readonly string[];
 }
 
 /** One launch of the VSCodium run, in the order the run makes them. */
@@ -96,6 +101,7 @@ export interface FailureCase {
 /** The extensions only some launches install, by id, with their package folders. */
 export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
   ['remote-oss.remote-explorer', 'remote-explorer'],
+  ['remote-oss.remote-containers', 'remote-containers'],
 ]);
 
 /** What a launch the renderer helpers read needs: the debugging port, and window titles they can find a window by. */
@@ -114,6 +120,20 @@ const EXPLORER_LAUNCH = {
 
 /** What the trust launches share: workspace trust on, read by the renderer helpers. */
 const TRUST_LAUNCH = {...RENDERER_LAUNCH, workspaceTrust: true} as const;
+
+/**
+ * What the containers launches share: Dev Containers and its proposed API, the renderer, core's dialogs drawn in the
+ * window where the renderer reads them, and the server downloaded from the run's download host.
+ */
+const CONTAINERS_LAUNCH = {
+  ...RENDERER_LAUNCH,
+  withExtensions: ['remote-oss.remote-containers'],
+  settings: {
+    ...RENDERER_LAUNCH.settings,
+    'window.dialogStyle': 'custom',
+    'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+  },
+} as const;
 
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
@@ -430,6 +450,8 @@ function forwardingLaunch(
  * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
  * proposed API; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
+ * `containers`, `containers-standdown` and `containers-no-proposals` do the same with Dev Containers installed, the
+ * second with a stand-in carrying the other Dev Containers extension's id and the third without the proposed API;
  * and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
  * with its host setup and its own script.
  */
@@ -555,6 +577,19 @@ export function launchesOf(root: string): Launch[] {
         'remote.SSH.remotePlatform': {harness: 'linux'},
       },
     },
+    {...CONTAINERS_LAUNCH, label: 'containers', suite: 'containers'},
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-standdown',
+      suite: 'containers-standdown',
+      standIns: ['ms-vscode-remote.remote-containers'],
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-no-proposals',
+      suite: 'containers-no-proposals',
+      proposedApi: false,
+    },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({
         label: hostCaseLabel(suite, hostCase),
@@ -571,6 +606,14 @@ export function launchesOf(root: string): Launch[] {
     ),
   ];
   return launches;
+}
+
+/** Whether a launch installs Dev Containers, whose rows need the run's dev container image. */
+export function needsDevContainerImage(launch: Launch): boolean {
+  return (
+    launch.kind === 'plain' &&
+    (launch.withExtensions ?? []).includes('remote-oss.remote-containers')
+  );
 }
 
 /** The folder a suite is bundled into: `dist` for the shared suite, `dist-<name>` for `suite-<name>`. */
