@@ -63,8 +63,15 @@ edits the middle of the function. That's where #604, #608 and #612 collided.
    - `activationContextOf(context): Promise<ActivationContext>` builds it once, at the top of `activate`. It's today's
      first lines.
    - **It stays inside the composition root** (athena): only `src/extension.ts` and `src/activation/*` import it.
-   - An ESLint `no-restricted-imports` entry for `packages/remote-ssh/src/**` enforces that, excluding those files. A
-     lint fixture row, or the rule's own test if the config has one, shows an import from `src/connect/` failing.
+   - **The ESLint rule** (dike): `eslint.config.ts` already has a `no-restricted-imports` block for
+     `packages/*/src/**` (near lines 337–352) with the `testing/` pattern. Flat config replaces a rule's options
+     rather than merging them, so the new block can't be a separate one.
+     - The existing block gains a second pattern, the `ActivationContext` module, for every file except
+       `packages/remote-ssh/src/extension.ts` and `packages/remote-ssh/src/activation/**`. That's done with a second
+       block that **repeats the `testing/` pattern** and adds the new one, scoped to remote-ssh.
+     - `tools/eslint-config.test.ts` gains two rows:
+       - a remote-ssh `src/connect/` file importing `src/activation/context.ts` is an error;
+       - a remote-ssh `src/` file importing `testing/` is still an error, so the ban can't be lost silently.
 4. **One module per feature** in `src/activation/`, each exporting one async function:
 
    | Module | Signature | Moves from `extension.ts` |
@@ -74,11 +81,17 @@ edits the middle of the function. That's where #604, #608 and #612 collided.
    | `companion-feature.ts` | `companionFeature(context, served, connect: {activeConnection(): …}): vscode.Disposable` | the `createProtocol` and `serveSliceEndpoints` block |
 
    **A feature that needs another's result takes it as an explicit parameter.** The companion feature takes the
-   connect's `activeConnection`, as `extension.ts:304` passes it today. So the order of the calls in `activate` is
+   connect's `activeConnection`, as `activate` passes it today (`activeConnection: () => connect.activeConnection()`). So the order of the calls in `activate` is
    visible in their data.
 5. **A feature module only wires** (athena): it calls covered modules with the narrow values they take, such as
-   `context.host` or `served.logger`, never with the whole context. Any branch or computation belongs in a covered
-   module, not here.
+   `context.host` or `served.logger`, never with the whole context. Any **new** branch or computation belongs in a
+   covered module, not here.
+   - **Carve-out: code moved as it is.** The helpers of points 2 and 4 move unchanged: `recordAuthority`
+     (`mkdirSync`, `writeFileSync`), `acceptanceResolverEditorOf`, `registerConnectOf`, `configuredHosts` and
+     `acceptanceWindowName` (an `existsSync` ternary and a timer).
+   - Extracting their logic into covered modules is a refactor of its own, outside this card. The PR lists them as the
+     moved-as-is exceptions, so a later card can take them.
+   - From this card on, a change to them that adds logic moves that logic into a covered module.
 6. **`activate` becomes a short, linear list:**
    1. build the context;
    2. run the setup with `configFileHandlerOf(context)`, and return if not serving;
@@ -99,7 +112,7 @@ edits the middle of the function. That's where #604, #608 and #612 collided.
 
 **What this doesn't remove:** two cards that each add a feature in the same window still both append one call line at
 the end of `activate`. That's a one-line conflict, which `git` often resolves, instead of interleaved edits in the
-middle of a 120-line function. A generated registry isn't worth it here: the order of the calls matters, as point 4
+middle of a long function. A generated registry isn't worth it here: the order of the calls matters, as point 4
 shows (athena accepted the ordered list).
 
 ## 3. Gates and review
@@ -111,9 +124,10 @@ feature modules, and the wiring rows split by step (card tooling-40, #800)`. Req
 ## 4. Land when
 
 Most remote-ssh product branches touch `extension.ts` or `wiring.test.ts`.
-- **The live collision:** open PR **#753** (connect-39, approved) adds to `extension.ts` (+8), `pipeline/wiring.ts`
-  (+52) and `wiring.test.ts` (+161). Land this card after #753 merges, or have #753's builder merge it right after,
-  with the rules below.
+- **Open PRs at the time of writing (main 7dd735ac):** #753 (connect-39) has merged, so its changes to
+  `extension.ts`, `pipeline/wiring.ts` and `wiring.test.ts` are already on main. Before starting, the builder lists
+  the open PRs that touch `src/extension.ts` or `test/unit/wiring.test.ts` (`gh pr list` with each PR's files), names
+  them in the PR, and tells hermes.
 - **When:** right after a quiet window, telling hermes the moment it merges.
 
 An in-flight branch resolves like this:

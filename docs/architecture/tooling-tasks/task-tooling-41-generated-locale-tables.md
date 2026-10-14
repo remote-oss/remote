@@ -70,6 +70,13 @@ default bundle" is then dead, so it goes. The 14 current bundles' German, French
 - **`tools/check-layout.ts`** runs `checkStringTables` in-process (lines 141–143 and 228), so it relies on the tables
   being generated. The CI step order above guarantees that. Locally, `pnpm check-layout` becomes
   `pnpm -s identifiers && tools/check-layout`.
+- **`pnpm check-public-surface`** becomes `pnpm -s identifiers && node tools/public-surface.ts`, so it also reads
+  generated tables when run locally.
+- **Running one test file directly** (`npx mocha <file>`) on a fresh clone needs `pnpm identifiers` run once first.
+  That's already true today for the identifier tables. The repository README's paragraph on `pnpm identifiers`
+  (line 30) gains the locale tables.
+- **The real-server job** runs mocha with no build. Nothing it runs reads `l10n/` or the nls tables, so it's
+  unaffected.
 - **`tools/public-surface.ts`** adds `translations` to `PACKAGE_FOLDERS`, so the hand-written translations (today
   remote-ssh-edit's 14 runtime texts) are scanned for banned words. The generated tables are scanned as before, after
   `pnpm identifiers`.

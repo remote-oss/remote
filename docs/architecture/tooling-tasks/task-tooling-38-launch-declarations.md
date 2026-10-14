@@ -72,9 +72,16 @@ there, edits the exact label lists `LAUNCH_ORDER` (`tools/acceptance.test.ts`) a
      `dist-*/*.test.cjs`, which run in the editor's window. A bundled module can't list a source folder.
    - **What the launch passes:** each case launch's `environment` gains `HARNESS_CASE`, the case object as JSON,
      beside today's `HARNESS_<SUITE>_CASE` name.
+   - **Run tokens:** `withRunTokens` (`tools/acceptance.ts`, near line 904) rewrites `<run>` and `<path>` in every
+     environment string when the launch starts, `HARNESS_CASE` included. The client cases hold 14 `<run>` tokens, so
+     the window sees the case with them substituted, as a case's own settings already are. The launch declaration
+     holds the case as written in its file; the substitution happens only there, at launch.
    - **What the suites read:** `tests/acceptance/suite/cases.ts` (new) exports
      `caseOfLaunch<Case>(): Case`, which parses `process.env.HARNESS_CASE` and throws, naming the variable, when it's
-     missing or isn't JSON. Each of the four suites uses it in place of its `cases.json` import and its `.find(...)`
+     missing or isn't JSON.
+   - **A missing case now fails in all four suites.** Today `client.test.ts:78` throws, while `ports.test.ts:26` and
+     `install.test.ts:42` tolerate it (`?? ''`, `?.`) and then fail a row. With `caseOfLaunch`, all four throw at load,
+     naming the variable, which is the clearer failure. Each of the four suites uses it in place of its `cases.json` import and its `.find(...)`
      by name.
    - The suites read no case file, so nothing needs bundling.
 4. `launchesOf(root)` reads every `tests/acceptance/*/launch.json`, expands the case entries, and sorts by `order`.
@@ -122,15 +129,29 @@ test:unit`, so CI fails on a bad declaration before any run.
 - **New tools rows, over fixtures:** a duplicate `order`; a duplicate label; an unknown `base`; `base` merging
   (settings key by key); a case suite read in file-name order; a `keepServer` first case; a folder without tests. The
   changed tools files are at 100 %.
-- **Suites:** the four case suites use `caseOfLaunch` (§1.3). A tools row checks that each case launch's environment
-  holds `HARNESS_CASE` equal to its case.
+- **Suites:** the four case suites use `caseOfLaunch` (§1.3). A tools row checks that each case launch's environment,
+  **before** `withRunTokens`, holds `HARNESS_CASE` equal to its case file's content. A second row checks that after
+  `withRunTokens('/run', '/bin')` the `<run>` tokens of a client case are replaced inside `HARNESS_CASE`.
 - **`check-coverage`** reads cites from `cases/*.json`, so its `casesCites` reads the folder.
 - **Fixtures:** every tools test that writes a `cases.json` into a temporary workspace writes `cases/<NNN>-<name>.json`
   files instead. That's in `tools/acceptance.test.ts`, `tools/acceptance-launches.test.ts` and
   `tools/check-coverage.test.ts`: about 20 places, found with `grep -n "cases.json" tools/*.test.ts`.
   - A helper in `tools/temporary-workspace.ts`, `writeCases(workspace, suite, cases)`, writes them in order with gaps
-    of 10, so each fixture is one call.
-  - The fixtures for the new gates use it too.
+    of 10, so each fixture is one call. Each file is named from the entry's `label ?? alias`.
+  - **Fixtures it can't express, written file by file instead** (dike's list):
+    - **Entries with no name,** such as `check-coverage.test.ts`'s `{cite}`, `{alias}`, `{label}` and `{bound}`
+      entries (near lines 236, 244, 405 and 415). Written as `cases/010-case.json`, `020-case.json`, …: check-coverage
+      reads cites from every file of the folder whatever its name. Only `launchesOf`'s name gate checks names, and
+      these fixtures don't run it.
+    - **The "cases file with no list" fixture** (`{}`, near line 252). Its meaning, a suite with no cases, becomes an
+      empty `cases/` folder. Its expectation, no cites, is unchanged.
+    - **A row whose message quotes the path** (near line 410). Its expected message now names the case file,
+      `suite-x/cases/010-case.json`.
+    - **Aliases that break `LABEL_FORM`** (`acceptance-launches.test.ts`, near lines 286–322). The case-file name gate
+      would fire before the alias check, because the file name is built from the alias. So these fixtures use a valid
+      file name (`010-bad.json`) whose content has the bad alias. The name gate compares the file name with
+      `label ?? alias`, and the alias check comes first in the reader, so `/alias must match/` still holds. The
+      reader's order of the two checks is written down in the function's JSDoc.
 
 ## 4. The migration, in one PR
 
@@ -172,6 +193,8 @@ All gates, the full VSCodium run green, and the changed tools files at 100 %. PR
 launches are declared in their suite folders (card tooling-38, #798)`. Request athena only.
 
 ## 7. Open rows (stop and report on #798)
+
+0. A fixture of §3 that §3's rules don't cover. Name it and say how it's written.
 
 1. A launch whose position depends on another in a way `order` can't express, for example a launch that must
    immediately follow a case of a case suite. Name it.

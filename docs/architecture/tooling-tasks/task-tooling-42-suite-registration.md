@@ -30,7 +30,8 @@ same spot as the next suite's.
 3. **`eslint.config.ts`:** `TYPESCRIPT_PROJECTS` lists `'./tests/acceptance/tsconfig.json'` and
    `'./tests/acceptance/*/tsconfig.json'`. That replaces `server`, `windows` and each plain suite's line.
 4. **The root `tsconfig.json`'s `references`:** TypeScript has no glob here, so the list stays.
-   - It's kept sorted by path. A new suite then inserts by name rather than appending at the end.
+   - It isn't sorted today. The migration sorts it by path, once, and from then on it's kept sorted. A new suite then
+     inserts by name rather than appending at the end.
    - A new tools row, `tooling-42: the root tsconfig references every tsconfig under tests/acceptance, sorted`, runs
      over the repository in `pnpm test:unit`. It fails, naming the path, on a missing or unsorted reference.
 5. **The README, split by topic:**

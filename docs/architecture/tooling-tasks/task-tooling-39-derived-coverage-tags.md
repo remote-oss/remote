@@ -65,7 +65,9 @@ The rule "a `unit` or `acceptance` tag needs a citing row" goes: it's true by co
    - The only difference allowed is a criterion tagged `unit` on main that an acceptance row also cites. Its effective
      tag becomes `acceptance`, which is what the rows say. List each one in the PR.
    - Any other difference is a stop (§8).
-3. `tools/seed-coverage.ts` writes `open` instead of `todo`, and `tools/seed-coverage.test.ts`'s rows expect
+3. **The six `core` and `deferred` lines that rows cite** (dike's count) stay as they are: a citation doesn't change a
+   hand-set tag, and nothing in §2 flags it. The PR lists them for athena, in case one should be `open`.
+4. `tools/seed-coverage.ts` writes `open` instead of `todo`, and `tools/seed-coverage.test.ts`'s rows expect
    `\topen\t` in place of `\ttodo\t` (its row `#142: gives every criterion the tag todo and no reason` is renamed
    `… the tag open …`).
 

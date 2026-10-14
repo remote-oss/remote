@@ -9,7 +9,7 @@ Behaviour doesn't change, and no row's name changes.
 
 ## 1. `scripted-adapters.ts` → one module per surface, behind a hand-written index
 
-**Today:** one 736-line file holds:
+**Today:** one file holds:
 - the shared machinery: switch and variables, `entriesOf`, `answeredOf`, and inside `scriptedAdapters` the functions
   `record`, `signalExists`, `untilSignal` and `answerFrom`;
 - the `ScriptEntry` union and `RecordLine`;
@@ -59,15 +59,24 @@ A card that adds a surface edits the union, the record, the surface table and th
      the same `adapter`.
 5. **`scripted-adapters.ts`** keeps `scriptedAdapters`, `adaptersFor`, `progressFor`, `channelPortFor` and the
    window-name functions.
+   - `unusedEntries`, which reads `entriesOf` and `answeredOf`, moves into `ScriptCore`, and `scriptedAdapters`
+     returns `core.unusedEntries` as today's `unusedEntries`.
    - `scriptedAdapters` builds one `ScriptCore` and maps `SCRIPTED_SURFACES` over it.
    - It checks with `satisfies` that every key of `EditorAdapters` it replaces is present.
    - `extension.ts`'s imports are unchanged.
 6. **Adding a surface** is one new module, one sorted index line and one union member in `entries.ts`. Two cards
    conflict only when they add neighbours.
-   - **The limit:** the acceptance suites keep their own copies of the entry types (`tests/acceptance/suite-local/
-     script.ts`, `tests/acceptance/windows/harness.ts`). They're bundled apart from product `src`, so a surface the
-     suites script still edits those copies.
-7. **`test/unit/scripted-adapters.test.ts` (2062 lines)** splits:
+   - **The harness too** (athena, ruling C): the acceptance suites' own copies of the entry types go.
+     `tests/acceptance/suite-local/script.ts` (its `ScriptEntry` and `RecordLine`) and the windows harness's
+     `RecordLine` and `WindowScriptEntry` (`windows/record.ts` after §2) become
+     `import type {RecordLine, ScriptEntry} from '../../../packages/remote-ssh/src/surfaces/scripted/entries.ts'`,
+     with `WindowScriptEntry` an alias of `ScriptEntry`.
+     - Acceptance code already imports from `packages/remote-ssh/src`, for example `suite-client/client.test.ts` and
+       `suite-remote/remote-window.test.ts`. A type import is erased when the suites are bundled, so the bundles don't
+       change.
+     - A harness copy that holds a field the product's type lacks, such as a test-only field, is an open row (§5).
+     - So adding a surface is one module, one index line and one `entries.ts` member, for the harness as well.
+7. **`test/unit/scripted-adapters.test.ts`** splits:
    - each surface's rows go to `test/unit/scripted/<module>.test.ts`;
    - the core's rows (`record`, signals, `answerFrom`) go to `test/unit/scripted/script-core.test.ts`;
    - the rows of `progressFor`, `channelPortFor` and the window-name functions stay in `scripted-adapters.test.ts`;
@@ -82,8 +91,8 @@ Its exports move unchanged into these files:
 
 | File | Exports |
 |---|---|
-| `windows/shared.ts` | `variable`, and the private helpers several areas use: `waitUntil`, `countOf`, `send`, `agentFile`, `execFileAsync`, `WAIT_MILLISECONDS`. They're exported from here for the area files |
-| `windows/record.ts` | `RecordLine`, `WindowScriptEntry`, `windowEvents`, `scriptEntries`, `recordLines`, `connectionLog`, `heldLines`, `signal`, `appendScript` |
+| `windows/shared.ts` | `variable`, and the private helpers several areas use: `agentFolder`, `agentFile`, `waitUntil`, `send`, `execFileAsync`, `WAIT_MILLISECONDS`. They're exported from here for the area files |
+| `windows/record.ts` | `RecordLine`, `WindowScriptEntry`, `windowEvents`, `countOf`, `scriptEntries`, `recordLines`, `connectionLog`, `heldLines`, `signal`, `appendScript` |
 | `windows/agent.ts` | `AgentEvent`, `inWindow`, `openWindow`, `emptyWindows`, `nextEmptyName`, `nextEmptyWindow`, `windowNameOrder`, `reloadWindow`, `closeWindow`, `windowState`, `isTrusted`, `trustSettled` |
 | `windows/host.ts` | `onHost`, `hostPassword`, `acceptedPasswords`, `fingerprintOf`, `agentKeys`, `agentAdd`, `agentClear` |
 | `windows/processes.ts` | `connectionHelpers`, `sshChildren`, `waitFor`, `kill` |
@@ -91,11 +100,16 @@ Its exports move unchanged into these files:
 
 - Exports added on main before the build go to the area they belong to, and are listed in the PR.
 - A private helper used by one area only goes to that area's file.
+- **`countOf` goes to `record.ts`, next to `windowEvents`, which it calls.** So `shared.ts` imports nothing from an area
+  file, and the area files import `shared.ts` only: no cycle. The cycle lint rule covers only `packages/**`, so it
+  wouldn't catch one here, and the builder checks the import graph by hand and says so in the PR.
 - `harness.ts` is deleted.
 - **No barrel:** a re-exporting `harness.ts` would bring the shared appends back. Every suite imports from the area
   files.
-- **The importers to update:** `grep -rln "harness.ts'" tests/acceptance` lists them (17 files at 3b766429). The
-  README lines that name `windows/harness.ts` (two at 3b766429) name the area files instead.
+- **The importers to update:** the files that import `windows/harness.ts`, 17 at cb544167, by dike's count. List them
+  with `grep -rlnE "windows/harness\.ts'" tests/acceptance` plus the files under `tests/acceptance/windows/` that
+  import `'./harness.ts'`. Don't use a bare `harness.ts'` grep: it also finds the 10 importers of the unrelated
+  `suite/harness.ts`. The README lines that name `windows/harness.ts` name the area files instead.
 
 ## 3. Gates and review
 
@@ -110,11 +124,14 @@ PR title `remote-ssh, tests: scripted adapters per surface, and the windows harn
 ## 4. Land when
 
 Right after a quiet window, telling hermes when it merges. Every harness card in flight touches one of these files.
-- **The live collisions** are two open PRs:
-  - **#753** (connect-39, approved) changes `scripted-adapters.ts` (+5/-1, a `real` pass-through);
-  - **#779** changes `scripted-adapters.ts` (+9/-2) and `suite-local/script.ts`.
+- **The live collisions** (at main 7dd735ac; #753 has merged, so its changes are on main):
+  - **#779** (coverage-12) changes `scripted-adapters.ts`, its test and `suite-local/script.ts`. Its `script.ts` type
+    edit moves into the surface's module and `entries.ts`, since the copy is gone.
+  - **#797** (coverage-16) and **#807** (coverage-39) change `windows/harness.ts`. Their new helpers move into their
+    area files.
 
-  Land this card after both, or have their builders merge it right after, with the rules below.
+  Before starting, the builder refreshes this list from GitHub (the open PRs touching these files) and names it in the
+  PR. Land this card after them, or have their builders merge it right after, with the rules below.
 
 An in-flight branch resolves like this:
 - **A new surface:** it moves into a module, with an index line and an `entries.ts` member.
@@ -129,5 +146,8 @@ An in-flight branch resolves like this:
 ## 5. Open rows (stop and report on #804)
 
 1. Two surface blocks share state other than through the core (a variable both read and write). Name it.
-2. A surface block reads something from the closure that §1.2's `ScriptCore` doesn't expose. Name it, and the
+2. A harness copy of the entry types (`suite-local/script.ts`, `windows/harness.ts`) holds a field or a surface
+   that the product's types lack. Name it; athena decides whether it joins the product type or stays a harness-only
+   extension declared in the harness file.
+3. A surface block reads something from the closure that §1.2's `ScriptCore` doesn't expose. Name it, and the
    builder adds it to `ScriptCore` only if it's shared, never a surface's own state.

@@ -23,12 +23,14 @@ an entry. Each such row becomes one of these:
      (`translatedStrings`).
    - It gains the reverse check: a default-bundle key that no source translates is a problem,
      `l10n/bundle.l10n.json: "<key>" is never translated`.
-   - **Which sources count:** the package's own `src/`, **and the `src/` of every workspace library in its
-     `package.json` `dependencies`** (`lib-*`). A library's `vscode.l10n.t` call runs in the extension's own l10n
-     context, so the extension's bundle must hold the library's strings. dike ran the check on main: remote-ssh's one
-     key not translated in its own `src/`, `'{0}' is not possible in the current context.`, is translated by
+   - **Which sources count for the reverse check** (athena, ruling B): the package's own `src/`, **and the `src/` of
+     every workspace library in its dependency closure**: its `package.json` `dependencies` (`lib-*`), their
+     `dependencies`, and so on, transitively. A library's `vscode.l10n.t` call runs in the extension's own l10n
+     context, so a key a library translates is a used key. dike ran the check on main: remote-ssh's one key not
+     translated in its own `src/`, `'{0}' is not possible in the current context.`, is translated by
      `lib-identifiers/src/editor-adapter.ts`, so with the libraries counted it passes.
-   - The forward check reads the same sources, so a library string missing from a bundle is reported too.
+   - **The forward check stays as today:** it reads the package's own `src/` only. Widening it to the libraries would
+     force lib-identifiers' key into remote-explorer's and remote-containers' bundles.
    - With both directions, the bundle's key set equals the code's strings, and the set half of the row goes.
    - **Two assertions of the old row stay as rows (b):**
      - every default-bundle value equals its key (English is the key itself), over the bundle as it is, with no list;
@@ -61,8 +63,16 @@ an entry. Each such row becomes one of these:
 
 ## 3. Rows of the change itself
 
-- **`tools/string-tables.test.ts`:** a default-bundle key no source translates gives the new problem. A key a source
-  translates gives none. A package without `src/` reports nothing new. At 100 %.
+- **`tools/string-tables.test.ts`,** at 100 %:
+  - a default-bundle key no source translates gives the new problem;
+  - a key the package's own `src/` translates gives none;
+  - a key only a direct dependency library translates gives none;
+  - **a key only a library reached through another library translates gives none:** the package depends on `lib-a`,
+    which depends on `lib-b`, which translates the key;
+  - a key only a library *outside* the closure translates gives the problem;
+  - the forward check still reports a key the package's own `src/` translates and its bundle lacks, but not a key only
+    a library translates;
+  - a package without `src/` reports nothing new.
 - **No row's name changes** unless it drops a count. Then the new name says what it asserts, keeps its cite, and the
   PR lists the old and new names.
 
