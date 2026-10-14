@@ -21,7 +21,13 @@ import {
 } from './bounds.ts';
 import {hostAlias, sshTargetOf} from './host-settings.ts';
 import type {ConnectState} from './locate-step.ts';
-import type {ConnectInput, ConnectionTerms} from './steps.ts';
+import type {
+  ConnectInput,
+  ConnectionTerms,
+  ConnectWaits,
+  StepFailure,
+  StepResult,
+} from './steps.ts';
 
 /** The settings the request reads, as the editor reports them. */
 export interface ConnectionRequestSettings {
@@ -92,28 +98,47 @@ export function runBaseOf(
   };
 }
 
-/** The acquire request of one connect, apart from the host string and the cancellation. */
+/**
+ * The acquire request of one connect, apart from the host string and the cancellation. Its preparation runs only in
+ * the window that starts the helper: it looks the client up with `locate`, which fills `state`, and builds the helper's
+ * start values and the run facts from what was found. A lookup that fails refuses the start with its failure.
+ */
 export function connectionRequestOf(
   input: ConnectInput,
   terms: ConnectionTerms,
   state: ConnectState,
   settings: ConnectionRequestSettings,
   environment: ConnectionRequestEnvironment,
-): Omit<ConnectionAcquireRequest, 'hostString' | 'cancellation'> {
-  const base = runBaseOf(input, terms, state, settings, environment);
-  const userAskpass = environment.processEnvironment.SSH_ASKPASS ?? '';
+  locate: () => Promise<StepResult<ConnectWaits>>,
+): Omit<ConnectionAcquireRequest<StepFailure>, 'hostString' | 'cancellation'> {
   return {
     folder: environment.registryFolder,
     script: environment.helperScript,
-    options: {
-      request: JSON.stringify({...base, purpose: 'connection'}),
-      unboundedWaitSeconds: HOST_ZERO_TIMEOUT_SECONDS,
-      runtimeFolder: environment.runtimeFolder,
-      runtime: environment.runtime,
-      askpassProgram: environment.askpassProgram,
-      displayHost: hostAlias(input.target),
-      externalAskpass: settings.externalAskpass && userAskpass !== '',
-      askpassFirstMessageMilliseconds: DEFAULT_FIRST_MESSAGE_MILLISECONDS,
+    prepare: async () => {
+      const located = await locate();
+      if (located.kind === 'failed') {
+        return {kind: 'refused', refusal: located.failure};
+      }
+      const base = runBaseOf(input, terms, state, settings, environment);
+      const userAskpass = environment.processEnvironment.SSH_ASKPASS ?? '';
+      return {
+        kind: 'ready',
+        runFacts: {
+          sshProgram: base.programs.sshProgram,
+          scpProgram: base.programs.scpProgram,
+          effective: base.effective,
+        },
+        options: {
+          request: JSON.stringify({...base, purpose: 'connection'}),
+          unboundedWaitSeconds: HOST_ZERO_TIMEOUT_SECONDS,
+          runtimeFolder: environment.runtimeFolder,
+          runtime: environment.runtime,
+          askpassProgram: environment.askpassProgram,
+          displayHost: hostAlias(input.target),
+          externalAskpass: settings.externalAskpass && userAskpass !== '',
+          askpassFirstMessageMilliseconds: DEFAULT_FIRST_MESSAGE_MILLISECONDS,
+        },
+      };
     },
     policy: HELPER_POLICY,
   };

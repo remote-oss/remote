@@ -89,7 +89,7 @@ function started(fake: ReturnType<typeof fakeEditor>) {
 }
 
 describe('the host pick of the connect commands (card connect-21)', () => {
-  it('F-2301 AC-4: the pick has no title, one choice and the placeholder of the spec, and stays open when the focus moves', () => {
+  it('F-2411 5.0, F-2301 AC-4: the pick has no title, one choice and the placeholder of the spec, and stays open when the focus moves', () => {
     const {pick} = started(fakeEditor());
     deepStrictEqual(
       [pick.title, pick.canSelectMany, pick.ignoreFocusOut, pick.placeholder],
@@ -107,7 +107,7 @@ describe('the host pick of the connect commands (card connect-21)', () => {
     pick.hide();
   });
 
-  it('F-2301 AC-4: the first row is focused', () => {
+  it('F-2411 5.0, F-2301 AC-4: the first row is focused', () => {
     const {pick} = started(fakeEditor());
     deepStrictEqual(pick.activeItems, pick.items.slice(0, 1));
     pick.hide();
