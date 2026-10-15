@@ -1,14 +1,14 @@
 /**
- * @fileoverview The Reopen in Container command for a local window with one folder: it checks the engine, has a
- * configuration chosen and read, and reloads the same window on a dev-container authority at the folder the container
- * will show. It never creates or starts a container; the resolve does.
+ * @fileoverview The Reopen in Container command for a local window with one folder: it checks the engine and has a
+ * configuration chosen and read, both before the reload, and reloads the same window on a dev-container authority at
+ * the folder the container will show. It never creates or starts a container; the resolve does.
  */
 
 import {encodeAuthority, openRemote} from 'lib-authority';
 import {devContainerPayloadOf} from '../authority/payload.ts';
 import type {CliFailure} from '../cli/cli-lines.ts';
-import {chooseConfiguration} from '../config/choose-configuration.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
+import {beforeReload} from './pre-reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
 
 /** What a CLI failure says in the log: its kind and, when it has one, its message. */
@@ -49,55 +49,62 @@ export function reopenInContainer(ports: ReopenPorts): () => Promise<void> {
     if (folder === undefined) {
       return;
     }
-    if ((await ports.engine.firstCheck(folder)) === 'stopped') {
-      return;
-    }
     // With the folder as base, the setting always names a program.
     const executable = executableOf(
       ports.settings.dockerPath(),
       folder,
     ) as Extract<Executable, {kind: 'spawn'}>;
-    const choice = await chooseConfiguration(
+    const {choice, progress} = await beforeReload(
+      {
+        firstCheck: (base, dialogs) => ports.engine.firstCheck(base, dialogs),
+        dialogs: ports.dialogs,
+        // eslint-disable-next-line id-length -- the choice's dependency is named cli
+        config: {...ports.config, cli: ports.bridge, logger},
+        progress: ports.progress,
+      },
       {
         folder,
         dockerPath: executable.file,
         cancellation: new AbortController().signal,
       },
-      // eslint-disable-next-line id-length -- the choice's dependency is named cli
-      {...ports.config, cli: ports.bridge, logger},
     );
-    if (choice.kind === 'noConfiguration') {
-      logger.info(`Reopen in Container found no configuration in ${folder}`);
-      return;
-    }
-    if (choice.kind === 'readFailed') {
-      logger.warn(
-        `Reopen in Container could not read the configuration: ${failureText(choice.failure)}`,
+    try {
+      if (choice.kind === 'noConfiguration') {
+        logger.info(`Reopen in Container found no configuration in ${folder}`);
+        return;
+      }
+      if (choice.kind === 'readFailed') {
+        logger.warn(
+          `Reopen in Container could not read the configuration: ${failureText(choice.failure)}`,
+        );
+        return;
+      }
+      if (choice.kind !== 'chosen') {
+        return;
+      }
+      const context = await ports.engine.currentContext(executable.file);
+      const payload = devContainerPayloadOf({
+        kind: 'folder',
+        hostPath: folder,
+        localDocker: false,
+        ...(context === undefined ? {} : {context}),
+        configFile: window.serializedFile(choice.configFile),
+      });
+      progress.close();
+      const opened = await openRemote(
+        ports.opener,
+        encodeAuthority({
+          family: 'dev-container',
+          target: {payload},
+          rawHostString: payload,
+        }),
+        {path: choice.workspaceFolder, pathKind: 'folder', target: 'current'},
       );
-      return;
-    }
-    if (choice.kind !== 'chosen') {
-      return;
-    }
-    const context = await ports.engine.currentContext(executable.file);
-    const payload = devContainerPayloadOf({
-      kind: 'folder',
-      hostPath: folder,
-      localDocker: false,
-      ...(context === undefined ? {} : {context}),
-      configFile: window.serializedFile(choice.configFile),
-    });
-    const opened = await openRemote(
-      ports.opener,
-      encodeAuthority({
-        family: 'dev-container',
-        target: {payload},
-        rawHostString: payload,
-      }),
-      {path: choice.workspaceFolder, pathKind: 'folder', target: 'current'},
-    );
-    if (opened.kind === 'rejected') {
-      logger.warn(`Reopen in Container was refused: ${opened.reason}`);
+      if (opened.kind === 'rejected') {
+        logger.warn(`Reopen in Container was refused: ${opened.reason}`);
+      }
+    } finally {
+      progress.close();
     }
   }
 

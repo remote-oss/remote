@@ -7,6 +7,8 @@ import {
   type ConfigurationChoice,
   type PickerAnswer,
 } from '../../src/config/choose-configuration.ts';
+import type {FirstCheckResult} from '../../src/engine/preflight.ts';
+import {type Pending, pendingOf, settled, unhandledDuring} from './pending.ts';
 
 const FOLDER = '/w/p';
 const DOCKER = '/usr/bin/docker';
@@ -25,6 +27,10 @@ interface Scene {
   /** What the error dialogs answer. */
   errorAnswer: string | undefined;
   read: ConfigurationResult | CliFailure;
+  /** What the CLI's read answers when a row wants to settle it by hand; else `read` is the answer. */
+  reading: Promise<ConfigurationResult | CliFailure> | undefined;
+  /** The engine check, which a row may hold open. */
+  engineCheck: Promise<FirstCheckResult>;
   calls: string[];
   rows: unknown[];
   targets: unknown[];
@@ -47,6 +53,8 @@ function sceneOf(contents: Scene['contents']): Scene {
     answer: {kind: 'picked', index: 0},
     errorAnswer: undefined,
     read: configurationOf('/workspaces/p'),
+    reading: undefined,
+    engineCheck: Promise.resolve('proceed'),
     calls: [],
     rows: [],
     targets: [],
@@ -80,7 +88,12 @@ function listing(scene: Scene): Record<string, Array<[string, string]>> {
 async function choose(scene: Scene): Promise<ConfigurationChoice> {
   const tree = listing(scene);
   return chooseConfiguration(
-    {folder: FOLDER, dockerPath: DOCKER, cancellation: NEVER},
+    {
+      folder: FOLDER,
+      dockerPath: DOCKER,
+      cancellation: NEVER,
+      engineCheck: scene.engineCheck,
+    },
     {
       files: {
         list: folder =>
@@ -151,7 +164,7 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
             status: 'running',
             detail: undefined,
           });
-          return Promise.resolve(scene.read);
+          return scene.reading ?? Promise.resolve(scene.read);
         },
       },
       compare: new Intl.Collator('en', {sensitivity: 'accent'}).compare,
@@ -163,6 +176,10 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
 
 function lines(scene: Scene): string[] {
   return scene.sink.lines.map(line => `${line.level}: ${line.message}`);
+}
+
+function infoLines(scene: Scene): string[] {
+  return lines(scene).filter(line => line.startsWith('info'));
 }
 
 function S181(relative: string): string {
@@ -483,5 +500,209 @@ describe('choosing the configuration (card containers-13)', () => {
       scene.calls.filter(call => /write|save|create/i.test(call)),
       [],
     );
+  });
+});
+
+/** The calls of a scene that reached a surface. */
+function surfaceCalls(scene: Scene): string[] {
+  return scene.calls.filter(call =>
+    /^(pick|showError|showWarning|openPreview|showInformation|revealLog)/.test(
+      call,
+    ),
+  );
+}
+
+/** What the CLI's read gives. */
+type ReadResult = ConfigurationResult | CliFailure;
+
+/** Chooses with the check held open, and then settled as `outcome`: what had happened by then, and the answer. */
+async function chosenWhileChecking(scene: Scene, outcome: FirstCheckResult) {
+  const check = pendingOf<FirstCheckResult>();
+  scene.engineCheck = check.promise;
+  const answered: {choice?: ConfigurationChoice} = {};
+  const choosing = choose(scene).then(choice => {
+    answered.choice = choice;
+  });
+  await settled();
+  const during = {choice: answered.choice, calls: [...scene.calls]};
+  check.resolve(outcome);
+  await choosing;
+  return {during, choice: answered.choice};
+}
+
+/** Chooses with a check that stopped, then ends the CLI's read as `end` says: the answer, and the info lines at each time. */
+async function stoppedBeforeRead(
+  scene: Scene,
+  end: (reading: Pending<ReadResult>) => void,
+) {
+  const reading = pendingOf<ReadResult>();
+  scene.reading = reading.promise;
+  scene.engineCheck = Promise.resolve('stopped');
+  const choice = await choose(scene);
+  const before = infoLines(scene);
+  end(reading);
+  await settled();
+  return {choice, before, after: infoLines(scene)};
+}
+
+describe('choosing the configuration while the engine is checked (card containers-24)', () => {
+  it('ruling (c): a stopped check answers stopped and shows nothing, on every surface path', async () => {
+    const pair = {[ALPHA]: IMAGE, [BETA]: IMAGE};
+    const none = sceneOf({});
+    const picker = sceneOf(pair);
+    const refused = sceneOf({[ONLY]: ''});
+    const warned = sceneOf({[ONLY]: '{"name":"x"}'});
+    const relative = sceneOf({[ONLY]: IMAGE});
+    relative.read = configurationOf('src');
+    const outcomes: unknown[] = [];
+    for (const scene of [none, picker, refused, warned, relative]) {
+      scene.engineCheck = Promise.resolve('stopped');
+      outcomes.push([await choose(scene), surfaceCalls(scene)]);
+    }
+    deepStrictEqual(
+      outcomes,
+      Array.from({length: 5}, () => [{kind: 'stopped'}, []]),
+    );
+  });
+
+  it('ruling (c): a configuration of one file is read by the CLI while the check runs, and chosen only after it passes', async () => {
+    const {during, choice} = await chosenWhileChecking(
+      sceneOf({[ONLY]: IMAGE}),
+      'proceed',
+    );
+    deepStrictEqual(
+      [during, choice],
+      [
+        {
+          choice: undefined,
+          calls: [`read ${ONLY}`, 'readConfiguration'],
+        },
+        {
+          kind: 'chosen',
+          configFile: `/w/p/${ONLY}`,
+          workspaceFolder: '/workspaces/p',
+        },
+      ],
+    );
+  });
+
+  it('ruling (c): a read that fails is answered readFailed only after the check passes', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    scene.read = {kind: 'configurationFailed', message: 'bad'};
+    const {during, choice} = await chosenWhileChecking(scene, 'proceed');
+    deepStrictEqual(
+      [during.choice, choice],
+      [
+        undefined,
+        {
+          kind: 'readFailed',
+          configFile: `/w/p/${ONLY}`,
+          failure: {kind: 'configurationFailed', message: 'bad'},
+        },
+      ],
+    );
+  });
+
+  it('ruling (c): with several files the labels are read while the check runs, the picker waits for a passing check, and the CLI read follows the pick', async () => {
+    const scene = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    const {during} = await chosenWhileChecking(scene, 'proceed');
+    deepStrictEqual(
+      [
+        during.calls,
+        scene.calls.indexOf('pick') < scene.calls.indexOf('readConfiguration'),
+      ],
+      [[`read ${ALPHA}`, `read ${BETA}`], true],
+    );
+  });
+
+  it('ruling (c): a check that stops while the labels are read shows no picker and starts no read', async () => {
+    const scene = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    const {choice} = await chosenWhileChecking(scene, 'stopped');
+    deepStrictEqual(
+      [
+        choice,
+        scene.calls.includes('pick'),
+        scene.calls.includes('readConfiguration'),
+      ],
+      [{kind: 'stopped'}, false, false],
+    );
+  });
+
+  it('ruling (c): a picker the user closes is dismissed, since the check had passed before it showed', async () => {
+    const scene = sceneOf({[ALPHA]: IMAGE, [BETA]: IMAGE});
+    scene.answer = {kind: 'dismissed'};
+    deepStrictEqual(await choose(scene), {kind: 'dismissed'});
+  });
+
+  it('ruling (c): a stopped check does not wait for the CLI read, and the read that ends later is logged at info', async () => {
+    const {choice, before, after} = await stoppedBeforeRead(
+      sceneOf({[ONLY]: IMAGE}),
+      reading => {
+        reading.resolve({kind: 'configurationFailed', message: 'bad'});
+      },
+    );
+    deepStrictEqual(
+      [choice, before, after],
+      [
+        {kind: 'stopped'},
+        [],
+        [
+          'info: the configuration was read while the engine check failed: configurationFailed',
+        ],
+      ],
+    );
+  });
+
+  it('ruling (c): a read that rejects while the check runs is handled, and is the failure of the choice once the check passes', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    const reading = pendingOf<ReadResult>();
+    scene.reading = reading.promise;
+    const check = pendingOf<FirstCheckResult>();
+    scene.engineCheck = check.promise;
+    let failure: unknown;
+    const unhandled = await unhandledDuring(async () => {
+      const choosing = choose(scene).catch((caught: unknown) => {
+        failure = caught;
+      });
+      await settled();
+      reading.reject(new Error('boom'));
+      await settled();
+      check.resolve('proceed');
+      await choosing;
+    });
+    deepStrictEqual(
+      [unhandled, failure instanceof Error ? failure.message : failure],
+      [[], 'boom'],
+    );
+  });
+
+  it('ruling (c): a read that rejects when the check has stopped is logged at info with its message and is not unhandled', async () => {
+    let after: string[] = [];
+    const unhandled = await unhandledDuring(async () => {
+      ({after} = await stoppedBeforeRead(sceneOf({[ONLY]: IMAGE}), reading => {
+        reading.reject(new Error('boom'));
+      }));
+    });
+    deepStrictEqual(
+      [unhandled, after],
+      [
+        [],
+        [
+          'info: the configuration was read while the engine check failed: boom',
+        ],
+      ],
+    );
+  });
+
+  it('ruling (c): a rejection that is not an error is logged by its text', async () => {
+    const {after} = await stoppedBeforeRead(
+      sceneOf({[ONLY]: IMAGE}),
+      reading => {
+        reading.reject('plain');
+      },
+    );
+    deepStrictEqual(after, [
+      'info: the configuration was read while the engine check failed: plain',
+    ]);
   });
 });

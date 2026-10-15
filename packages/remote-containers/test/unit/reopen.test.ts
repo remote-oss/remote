@@ -6,9 +6,12 @@ import type {CliFailure, ConfigurationResult} from '../../src/cli/cli-lines.ts';
 import {reopenInContainer} from '../../src/open/reopen.ts';
 import type {PickerAnswer} from '../../src/config/choose-configuration.ts';
 import type {ReopenPorts} from '../../src/open/reopen-ports.ts';
+import {pendingOf, settled} from './pending.ts';
 
 const FOLDER = '/w/p';
 const CONFIG = '/w/p/.devcontainer/devcontainer.json';
+const START =
+  '[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)';
 const CONFIGURATION: ConfigurationResult = {
   kind: 'configuration',
   configuration: {},
@@ -37,6 +40,10 @@ interface Setup {
   dockerPath: unknown;
   waitOnCheck: Promise<void>;
   targets: unknown[];
+  /** The order of the progress and the open, as far as the rows on them look. */
+  order: string[];
+  /** What the progress asked the clock for. */
+  timers: Array<{milliseconds: number; callback: () => void}>;
 }
 
 function setup(): Setup {
@@ -58,6 +65,8 @@ function setup(): Setup {
     dockerPath: 'docker',
     waitOnCheck: Promise.resolve(),
     targets: [],
+    order: [],
+    timers: [],
   };
 }
 
@@ -134,6 +143,24 @@ function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         return Promise.resolve(state.context);
       },
     },
+    dialogs: {
+      showError: () => Promise.resolve(undefined),
+      openExternal: () => Promise.resolve(undefined),
+      revealLog: () => undefined,
+    },
+    progress: {
+      showProgress: (title, until) => {
+        state.order.push(`progress shown ${title}`);
+        void until.then(() => {
+          state.order.push('progress closed');
+        });
+      },
+      setTimer: (milliseconds, callback) => {
+        state.timers.push({milliseconds, callback});
+        return () => undefined;
+      },
+      translate: template => template,
+    },
     bridge: {
       readConfiguration: target => {
         state.targets.push(target);
@@ -144,6 +171,9 @@ function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
     opener: {
       executeCommand: (command, ...parameters) => {
         state.commands.push({command, parameters});
+        queueMicrotask(() => {
+          state.order.push('open');
+        });
         return state.rejects === undefined
           ? Promise.resolve(undefined)
           : Promise.reject(new Error(state.rejects));
@@ -170,7 +200,22 @@ function openedTarget(state: Setup): ReturnType<typeof devContainerTargetOf> {
 async function reopened(state: Setup) {
   const {ports, sink} = portsOf(state);
   await reopenInContainer(ports)();
+  await settled();
   return {lines: linesOf(sink)};
+}
+
+/** Runs the command with the progress shown while the first check waits, and gives the order of what followed. */
+async function reopenedSlowly(state: Setup): Promise<string[]> {
+  const release = pendingOf<undefined>();
+  state.waitOnCheck = release.promise;
+  const {ports} = portsOf(state);
+  const running = reopenInContainer(ports)();
+  await settled();
+  state.timers[0]?.callback();
+  release.resolve(undefined);
+  await running;
+  await settled();
+  return state.order;
 }
 
 describe('Reopen in Container', () => {
@@ -279,11 +324,49 @@ describe('Reopen in Container', () => {
     );
   });
 
-  it('F-0201 5.0: a first check that stopped ends the command before any lookup', async () => {
+  it('F-0201 5.0, ruling (c): a first check that stopped ends the command with no reload and no lookup of the Docker context', async () => {
     const state = setup();
     state.check = 'stopped';
     await reopened(state);
-    deepStrictEqual([state.calls, state.commands], [['firstCheck /w/p'], []]);
+    deepStrictEqual(
+      [state.calls, state.commands],
+      [['firstCheck /w/p', 'readConfiguration /w/p'], []],
+    );
+  });
+
+  it('ruling (c): the progress closes before the reload', async () => {
+    const state = setup();
+    deepStrictEqual(
+      [
+        await reopenedSlowly(state),
+        state.timers.map(timer => timer.milliseconds),
+      ],
+      [[`progress shown ${START}`, 'progress closed', 'open'], [500]],
+    );
+  });
+
+  it('ruling (c): the progress closes in the end of every other answer, and nothing opens', async () => {
+    const answers: Array<(state: Setup) => void> = [
+      state => {
+        state.check = 'stopped';
+      },
+      state => {
+        state.read = {kind: 'buildFailed', message: 'no build'};
+      },
+      state => {
+        state.read = {kind: 'cancelled'};
+      },
+    ];
+    const seen = [];
+    for (const answer of answers) {
+      const state = setup();
+      answer(state);
+      seen.push(await reopenedSlowly(state));
+    }
+    deepStrictEqual(
+      seen,
+      answers.map(() => [`progress shown ${START}`, 'progress closed']),
+    );
   });
 
   it('F-0301 6.2: no configuration opens nothing, shows the notice of ours once, and says so in the log', async () => {
@@ -407,6 +490,7 @@ describe('Reopen in Container', () => {
     const handler = reopenInContainer(ports);
     const first = handler();
     await handler();
+    await settled();
     const during = [...state.calls];
     release.forEach(each => {
       each();
@@ -420,7 +504,7 @@ describe('Reopen in Container', () => {
         state.commands.length,
       ],
       [
-        ['firstCheck /w/p'],
+        ['firstCheck /w/p', 'readConfiguration /w/p'],
         ['info: Reopen in Container is already running'],
         2,
       ],
