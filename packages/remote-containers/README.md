@@ -10,7 +10,7 @@ The server that powers a dev container window runs inside the container, so the 
 
 - a glibc image with glibc 2.28 or newer, with `libstdc++` and `ldconfig`, or an Alpine (musl) image, on a 64-bit
   Intel/AMD or 64-bit ARM machine;
-- `sh` and `tar`. The server is downloaded on your machine and copied in, so the container needs neither `wget` nor
+- `sh` and `tar`. The editor downloads the server archive and copies it in, so the container needs neither `wget` nor
   `curl` for it.
 
 The extension checks this every time a window connects. When the container does not meet the requirements, the dialog
