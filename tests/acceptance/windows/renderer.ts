@@ -9,7 +9,7 @@
 
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {variable, windowState} from './harness.ts';
+import {inWindow, variable, windowState} from './harness.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
@@ -381,6 +381,136 @@ export async function toggleRow(
   if (missing !== null) {
     throw new Error(`window ${name}, view ${viewName}: ${missing}`);
   }
+}
+
+/** The lines the visible terminal of window `name` shows now, without the empty ones at the end. */
+export async function terminalText(name: string): Promise<string[]> {
+  const rows = await evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.xterm-rows')].filter(each => each.offsetParent !== null).flatMap(each => each.innerText.split('\\n'))`,
+  );
+  const lines = rows.map(each => each.replace(/\s+$/, ''));
+  while (lines.at(-1) === '') {
+    lines.pop();
+  }
+  return lines;
+}
+
+/**
+ * The lines a terminal's viewport scrolled through while `done` did not hold, in order: each reading of the viewport is
+ * joined to what was read before, at the longest overlap. It reads every 200 ms and fails naming the last lines after
+ * `milliseconds`.
+ */
+export async function terminalHistory(
+  name: string,
+  done: (lines: readonly string[]) => boolean,
+  milliseconds: number,
+): Promise<string[]> {
+  const history: string[] = [];
+  const deadline = Date.now() + milliseconds;
+  for (;;) {
+    let reading: string[] = [];
+    try {
+      reading = await terminalText(name);
+    } catch {
+      // The page may be between two windows for a moment.
+    }
+    let overlap = Math.min(history.length, reading.length);
+    while (
+      overlap > 0 &&
+      history.slice(history.length - overlap).join('\n') !==
+        reading.slice(0, overlap).join('\n')
+    ) {
+      overlap -= 1;
+    }
+    history.push(...reading.slice(overlap));
+    if (done(history)) {
+      return history;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `timed out waiting for the terminal text of window ${name}; it read ${JSON.stringify(history.slice(-12))}`,
+      );
+    }
+    await new Promise(resolve => setTimeout(resolve, POLL_MILLISECONDS));
+  }
+}
+
+/** The names of the terminals of window `name`: the one tab of a single terminal, or each entry of the tab list. */
+export async function terminalTabs(name: string): Promise<string[]> {
+  const names = await evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('.single-terminal-tab, .terminal-tabs-entry .label-name')].map(each => (each.textContent ?? '').trim())`,
+  );
+  return names.filter(each => each !== '');
+}
+
+/** The text of the status bar's progress entry of window `name`, or `undefined` when none shows. */
+export async function statusProgress(
+  name: string,
+): Promise<string | undefined> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `document.querySelector('[id="status.progress"]')?.getAttribute('aria-label') ?? null`,
+    )) ?? undefined
+  );
+}
+
+/** The text of the remote indicator in the status bar of window `name` (core's "Opening Remote..." while it resolves). */
+export async function remoteIndicator(name: string): Promise<string> {
+  return (
+    await evaluate<string>(
+      name,
+      `document.querySelector('[id="status.host"]')?.textContent ?? ''`,
+    )
+  ).trim();
+}
+
+/** Whether the focus of window `name` is inside a terminal. */
+export async function terminalFocused(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `document.activeElement?.closest('.xterm') !== null && document.activeElement?.closest('.xterm') !== undefined`,
+  );
+}
+
+/** Types `key` into the focused terminal of window `name`, as the keyboard events a user's key press makes. */
+export async function pressKey(name: string, key: string): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const target = document.activeElement;
+      if (target === null || target.closest('.xterm') === null) {
+        return 'the focus is not in a terminal';
+      }
+      for (const type of ['keydown', 'keypress', 'keyup']) {
+        target.dispatchEvent(new KeyboardEvent(type, {key: ${JSON.stringify(key)}, code: 'Key' + ${JSON.stringify(key.toUpperCase())}, charCode: ${JSON.stringify(key)}.charCodeAt(0), keyCode: ${JSON.stringify(key)}.toUpperCase().charCodeAt(0), bubbles: true, cancelable: true}));
+      }
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
+}
+
+/** The rows of "Terminal: Switch Active Terminal" in window `name`, which this opens and closes. */
+export async function switchTerminalItems(name: string): Promise<string[]> {
+  await inWindow(name, 'workbench.action.quickOpenTerm');
+  const labels = await settled(
+    () => `the Switch Active Terminal list of window ${name}`,
+    async () =>
+      (await evaluate<string[] | null>(
+        name,
+        `(() => {
+          const list = document.querySelector('.quick-input-list');
+          return list === null ? null : [...list.querySelectorAll('.monaco-list-row .label-name')].map(each => each.textContent ?? '');
+        })()`,
+      )) ?? undefined,
+  );
+  await inWindow(name, 'workbench.action.closeQuickOpen');
+  return labels;
 }
 
 /** What a row of a view shows beyond its text: its icon and the accessible label that carries its tooltip. */
