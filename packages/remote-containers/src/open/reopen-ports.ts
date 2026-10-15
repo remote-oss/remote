@@ -10,6 +10,7 @@ import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {ConfigurationPorts} from '../config/choose-configuration.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import type {TrustOutcome} from '../trust/trust-gate.ts';
+import type {OpenGatePorts} from './open-gate.ts';
 import type {PreReloadProgressPorts} from './pre-reload-progress.ts';
 
 /** What the command reads of the window it runs in, at each call. */
@@ -34,6 +35,8 @@ interface EnginePort {
 
 /** Everything the command needs. */
 export interface ReopenPorts {
+  /** The guard of the open path, which holds the command back while a proposal it needs is missing. */
+  gate: OpenGatePorts;
   window: WindowPort;
   /** The trust check of the window's folder, which asks the editor's dialog when the folder isn't trusted yet. */
   ensureTrusted(): Promise<TrustOutcome>;

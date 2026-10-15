@@ -261,6 +261,11 @@ export async function activate(
       return {
         reopenInContainer: {
           execute: reopenInContainer({
+            gate: {
+              missing: served.missing,
+              setupAgain: () => served.setupAgain(),
+              logger: served.logger,
+            },
             window: {
               remoteName: () => vscode.env.remoteName,
               folders: windowFolders,

@@ -8,6 +8,7 @@ import {encodeAuthority, openRemote} from 'lib-authority';
 import {devContainerPayloadOf} from '../authority/payload.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
 import {mountGitWorktreeCommonDirOf} from '../connect/mount-settings.ts';
+import {openPathAllowed} from './open-gate.ts';
 import {beforeReload} from './pre-reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
 
@@ -32,6 +33,9 @@ export function reopenInContainer(ports: ReopenPorts): () => Promise<void> {
   }
 
   async function attempt(): Promise<void> {
+    if (!(await openPathAllowed(ports.gate, 'Reopen in Container'))) {
+      return;
+    }
     const folder = folderToReopen();
     if (folder === undefined || (await ports.ensureTrusted()) !== 'trusted') {
       return;

@@ -1,18 +1,24 @@
 import {deepStrictEqual} from 'node:assert';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
+import {activations, openFolderWindow} from '../windows/folder-windows.ts';
 import {
   activeEditorOf,
+  closeWindow,
   commandsOf,
+  devContainerFolder,
+  devContainersOf,
   inWindow,
   reloadWindow,
   waitFor,
   windowEvents,
+  windowState,
 } from '../windows/harness.ts';
 import {
   answerNotification,
   notificationButtons,
   notificationCentre,
+  windowTitle,
 } from '../windows/renderer.ts';
 
 /** The window the rows open: a `dev-container` authority whose payload is the hex of `{}`, which only activates the package. */
@@ -152,5 +158,40 @@ describe('Dev Containers without its proposed API (card containers-09, gate row 
     await reloadWindow(WINDOW);
     await new Promise(resolve => setTimeout(resolve, 15_000));
     deepStrictEqual(await setupNotices(WINDOW), []);
+  });
+
+  it('F-0101 AC-15: Reopen in Container on a configured folder leaves the window local (BR-9 2 (d)), with no remote and no failed-resolve error, and the setup notice is the only one', async () => {
+    const folder = devContainerFolder('c36-no-proposals');
+    const name = await openFolderWindow(folder);
+    const activated = activations(name);
+    const title = await windowTitle(name);
+    await inWindow(name, 'remote-containers.reopenInContainer');
+    await new Promise(resolve => setTimeout(resolve, 10_000));
+    const notices = await notificationCentre(name);
+    deepStrictEqual(
+      {
+        activated: activations(name) - activated,
+        remoteName: (await windowState(name)).remoteName,
+        title: await windowTitle(name),
+        resolveErrors: notices.filter(text =>
+          text.startsWith('No remote extension installed to resolve'),
+        ),
+        others: notices.filter(
+          text =>
+            !text.startsWith(SETUP_START) &&
+            !text.startsWith(FAILED_ATTEMPT_START),
+        ),
+        containers: await devContainersOf(folder),
+      },
+      {
+        activated: 0,
+        remoteName: null,
+        title,
+        resolveErrors: [],
+        others: [],
+        containers: [],
+      },
+    );
+    await closeWindow(name);
   });
 });
