@@ -1,12 +1,13 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {writeFileSync} from 'node:fs';
+import {chmodSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
+  inWindow,
   reloadingCommand,
   reloadWindow,
   reopenInContainer,
@@ -130,6 +131,47 @@ async function rebuiltWithoutDocker(
     await reloadingCommand(name, command);
     const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
     return {dialog, indicator: (await statusItem(name, 'status.host')).text};
+  } finally {
+    await setUserSetting('dev.containers.dockerPath', undefined);
+  }
+}
+
+/** A dialog as the rows compare it: its message, its detail and its buttons in sorted order. */
+function dialogText(dialog: ShownDialog): [string, string, string[]] {
+  return [dialog.message, dialog.details, [...dialog.buttons].sort()];
+}
+
+/**
+ * In a local window on `folder`, whose container `containerId` exists, runs Rebuild and Reopen in Container with
+ * `dev.containers.dockerPath` set to `dockerPath`, answers its dialog with Cancel, and gives the dialog, the window's
+ * remote name and the folder's containers after it.
+ */
+async function rebuildCancelled(
+  folder: string,
+  dockerPath: string,
+): Promise<{
+  dialog: [string, string, string[]];
+  remoteName: string | null;
+  containers: string[];
+}> {
+  await setUserSetting('dev.containers.dockerPath', dockerPath);
+  try {
+    const name = await openFolderWindow(folder);
+    // The command waits on its dialog, so it's answered before the command is awaited.
+    const running = inWindow(
+      name,
+      'remote-containers.rebuildAndReopenInContainer',
+    );
+    const dialog = await waitForDialog(name);
+    await answerDialog(name, 'Cancel');
+    await running;
+    const outcome = {
+      dialog: dialogText(dialog),
+      remoteName: (await windowState(name)).remoteName,
+      containers: await devContainersOf(folder),
+    };
+    await closeWindow(name);
+    return outcome;
   } finally {
     await setUserSetting('dev.containers.dockerPath', undefined);
   }
@@ -419,6 +461,56 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       );
     } finally {
       await setUserSetting('dev.containers.cacheVolume', undefined);
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0405 AC-26 (b26b): in a local window with a missing docker, Rebuild and Reopen shows the engine dialog, and Cancel keeps the container', async () => {
+    const folder = devContainerFolder('rebuild-local');
+    try {
+      const kept = await containerLeftBy(folder);
+      const missing = '/nonexistent/docker';
+      deepStrictEqual(await rebuildCancelled(folder, missing), {
+        dialog: [
+          'Docker version 17.12.0 or later required.',
+          `Command not found: '${missing}'. Check the license for details.`,
+          ['Cancel', 'Install', 'License'],
+        ],
+        remoteName: null,
+        containers: [kept],
+      });
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0405 AC-26 (b26c): in a local window whose docker reaches no daemon, Rebuild and Reopen shows the engine error, and Cancel keeps the container', async () => {
+    const folder = devContainerFolder('rebuild-daemon');
+    try {
+      const kept = await containerLeftBy(folder);
+      const {stdout: docker} = await execFileAsync('sh', [
+        '-c',
+        'command -v docker',
+      ]);
+      const wrapper = path.join(
+        variable('HARNESS_RUN_FOLDER'),
+        'docker-no-daemon',
+      );
+      writeFileSync(
+        wrapper,
+        `#!/bin/sh\nDOCKER_HOST=unix:///tmp/remote-oss-no-daemon.sock exec ${docker.trim()} "$@"\n`,
+      );
+      chmodSync(wrapper, 0o755);
+      deepStrictEqual(await rebuildCancelled(folder, wrapper), {
+        dialog: [
+          'Docker returned an error.',
+          'Make sure the Docker daemon is running.',
+          ['Cancel', 'Show Log'],
+        ],
+        remoteName: null,
+        containers: [kept],
+      });
+    } finally {
       await removeContainers(folder);
     }
   });
