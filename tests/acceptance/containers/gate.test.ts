@@ -32,6 +32,23 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+/** What `/tmp/created` holds in container `containerId`, written by the configuration's postCreateCommand. */
+async function markerOf(containerId: string): Promise<string> {
+  const {stdout} = await execFileAsync('docker', [
+    'exec',
+    containerId,
+    'cat',
+    '/tmp/created',
+  ]);
+  return stdout.trim();
+}
+
+/** The ids of every container the engine has, running or not. */
+async function containerIds(): Promise<string[]> {
+  const {stdout} = await execFileAsync('docker', ['ps', '--all', '--quiet']);
+  return stdout.split('\n').filter(line => line !== '');
+}
+
 /** The text the pre-reload progress shows once its link is rendered (S087). */
 const PRE_RELOAD_TOAST = 'Connecting to Dev Container (show log)';
 
@@ -211,6 +228,79 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
         containers: (await devContainersOf(folder)).length,
       },
       {remoteName: 'dev-container', containers: 1},
+    );
+    await closeWindow(name);
+  });
+
+  it('F-0405 AC-4, AC-5, AC-6 (gate-row-5): Rebuild Container in a dev container window reloads the same window onto a new container, whose postCreateCommand ran again, with no confirmation and no notice', async () => {
+    const folder = devContainerFolder('gate-rebuild', {
+      name: 'Gate Rebuild',
+      postCreateCommand: 'date +%s%N > /tmp/created',
+    });
+    const name = await openFolderWindow(folder);
+    await reopenInContainer(name);
+    const [first = ''] = await devContainersOf(folder);
+    const before = await markerOf(first);
+    await reopenInContainer(
+      name,
+      300_000,
+      'remote-containers.rebuildContainer',
+    );
+    await new Promise(resolve => setTimeout(resolve, 10_000));
+    const containers = await devContainersOf(folder);
+    const [second = ''] = containers;
+    const remaining = await containerIds();
+    const after = await markerOf(second);
+    const centre = await notificationCentre(name);
+    deepStrictEqual(
+      {
+        containerCount: containers.length,
+        replaced: second !== first,
+        oldRemoved: !remaining.some(remainingId =>
+          first.startsWith(remainingId),
+        ),
+        markerRewritten: after !== before && after !== '',
+        remoteName: (await windowState(name)).remoteName,
+        centre,
+      },
+      {
+        containerCount: 1,
+        replaced: true,
+        oldRemoved: true,
+        markerRewritten: true,
+        remoteName: 'dev-container',
+        centre: [],
+      },
+    );
+    await closeWindow(name);
+  });
+
+  it('F-0405 AC-8 (gate-row-5b): Rebuild Without Cache and Reopen in Container in a local window opens the folder in a new container', async () => {
+    const folder = path.join(variable('HARNESS_RUN_FOLDER'), 'gate-rebuild');
+    const [second = ''] = await devContainersOf(folder);
+    const before = await markerOf(second);
+    const name = await openFolderWindow(folder);
+    await reopenInContainer(
+      name,
+      300_000,
+      'remote-containers.rebuildNoCacheAndReopenInContainer',
+    );
+    const containers = await devContainersOf(folder);
+    const [third = ''] = containers;
+    const after = await markerOf(third);
+    deepStrictEqual(
+      {
+        remoteName: (await windowState(name)).remoteName,
+        containerCount: containers.length,
+        replaced: third !== second,
+        markerRewritten: after !== before && after !== '',
+      },
+      {
+        remoteName: 'dev-container',
+        containerCount: 1,
+        replaced: true,
+        markerRewritten: true,
+      },
     );
     await closeWindow(name);
   });

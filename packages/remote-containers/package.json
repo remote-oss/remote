@@ -70,6 +70,16 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.rebuildAndReopenInContainer",
+        "title": "%commands.Rebuildandreopenincontainer.title%",
+        "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.rebuildNoCacheAndReopenInContainer",
+        "title": "%commands.Rebuildwithoutcacheandreopenincontainer.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.explorerTargetsRefresh",
         "title": "%commands.explorerTargetsRefresh.title%",
         "category": "Dev Containers",
@@ -92,6 +102,14 @@
         {
           "command": "remote-containers.rebuildContainerNoCache",
           "when": "!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.rebuildAndReopenInContainer",
+          "when": "!hideRebuildCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.rebuildNoCacheAndReopenInContainer",
+          "when": "!hideRebuildCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.explorerTargetsRefresh",

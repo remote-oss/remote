@@ -56,8 +56,8 @@ F-0106.AC-28	todo
 F-0106.AC-29	core	core: the workspace wording of the Workspace Trust dialog
 F-0106.AC-30	todo	
 F-0106.AC-31	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
-F-0106.AC-32	todo	
-F-0106.AC-33	todo	
+F-0106.AC-32	unit	
+F-0106.AC-33	unit	
 F-0106.AC-34	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0106.AC-35	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0106.AC-36	deferred	containers release 1: later (volumes and Clone in Volume)
@@ -248,11 +248,11 @@ F-0403.AC-28	todo
 F-0405.AC-1	todo	
 F-0405.AC-2	deferred	containers release 1: the full contribution set comes with later increments
 F-0405.AC-3	deferred	containers release 1: the full contribution set comes with later increments
-F-0405.AC-4	todo	
-F-0405.AC-5	todo	
-F-0405.AC-6	todo	
+F-0405.AC-4	acceptance	
+F-0405.AC-5	acceptance	
+F-0405.AC-6	acceptance	
 F-0405.AC-7	todo	
-F-0405.AC-8	todo	
+F-0405.AC-8	acceptance	
 F-0405.AC-9	deferred	containers release 1: F-0303's notification is increment 2
 F-0405.AC-10	todo	
 F-0405.AC-11	todo	
@@ -274,7 +274,7 @@ F-0405.AC-26	todo
 F-0405.AC-27	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0405.AC-28	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0405.AC-29	unit	
-F-0405.AC-30	todo	
+F-0405.AC-30	unit	
 F-0405.AC-31	todo	
 F-0405.AC-32	todo	
 F-0405.AC-33	todo	

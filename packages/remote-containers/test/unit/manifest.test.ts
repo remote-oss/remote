@@ -36,9 +36,37 @@ function readJson(file: string): Record<string, unknown> {
 
 const MANIFEST = readJson('package.json');
 
+/** The four rebuild commands as the manifest contributes them, after Reopen in Container. */
+const REBUILD_COMMANDS = [
+  {
+    command: 'remote-containers.rebuildContainer',
+    title: '%commands.Rebuildcontainer.title%',
+    category: 'Dev Containers',
+  },
+  {
+    command: 'remote-containers.rebuildContainerNoCache',
+    title: '%commands.Rebuildcontainerwithoutcache.title%',
+    category: 'Dev Containers',
+  },
+  {
+    command: 'remote-containers.rebuildAndReopenInContainer',
+    title: '%commands.Rebuildandreopenincontainer.title%',
+    category: 'Dev Containers',
+  },
+  {
+    command: 'remote-containers.rebuildNoCacheAndReopenInContainer',
+    title: '%commands.Rebuildwithoutcacheandreopenincontainer.title%',
+    category: 'Dev Containers',
+  },
+];
+
 /** The `when` clause of the in-container rebuild commands. */
 const REBUILD_WHEN =
   '!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown';
+
+/** The `when` clause of the rebuild commands of a local window. */
+const REBUILD_REOPEN_WHEN =
+  '!hideRebuildCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
 
 /** The `when` clause of the command's palette entry and menu entry. */
 const REOPEN_WHEN =
@@ -72,6 +100,10 @@ const ENGLISH = {
   'commands.explorerTargetsRefresh.title': 'Refresh',
   'views.targetsContainers.name': 'Dev Containers',
   ...WELCOME_TEXTS,
+  'commands.Rebuildandreopenincontainer.title':
+    'Rebuild and Reopen in Container',
+  'commands.Rebuildwithoutcacheandreopenincontainer.title':
+    'Rebuild Without Cache and Reopen in Container',
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
   'setting.ServerDownloadBaseUrl.description':
@@ -192,16 +224,7 @@ describe('the manifest', () => {
             title: '%commands.Reopenincontainer.title%',
             category: 'Dev Containers',
           },
-          {
-            command: 'remote-containers.rebuildContainer',
-            title: '%commands.Rebuildcontainer.title%',
-            category: 'Dev Containers',
-          },
-          {
-            command: 'remote-containers.rebuildContainerNoCache',
-            title: '%commands.Rebuildcontainerwithoutcache.title%',
-            category: 'Dev Containers',
-          },
+          ...REBUILD_COMMANDS,
           {
             command: 'remote-containers.explorerTargetsRefresh',
             title: '%commands.explorerTargetsRefresh.title%',
@@ -225,6 +248,14 @@ describe('the manifest', () => {
             {
               command: 'remote-containers.rebuildContainerNoCache',
               when: REBUILD_WHEN,
+            },
+            {
+              command: 'remote-containers.rebuildAndReopenInContainer',
+              when: REBUILD_REOPEN_WHEN,
+            },
+            {
+              command: 'remote-containers.rebuildNoCacheAndReopenInContainer',
+              when: REBUILD_REOPEN_WHEN,
             },
             {
               command: 'remote-containers.explorerTargetsRefresh',
@@ -480,7 +511,7 @@ describe('the manifest', () => {
     );
   });
 
-  it('F-0405 3.1: the in-container rebuild commands have the titles of the reference, in the category Dev Containers', () => {
+  it('F-0405 3.1: the four rebuild commands have the titles of the reference, in the category Dev Containers', () => {
     const contributes = MANIFEST.contributes as {
       commands: Array<{command: string; title: string; category: string}>;
     };
@@ -489,26 +520,21 @@ describe('the manifest', () => {
         contributes.commands.filter(entry =>
           entry.command.startsWith('remote-containers.rebuild'),
         ),
-        readJson('package.nls.json')['commands.Rebuildcontainer.title'],
-        readJson('package.nls.json')[
-          'commands.Rebuildcontainerwithoutcache.title'
-        ],
+        [
+          'commands.Rebuildcontainer.title',
+          'commands.Rebuildcontainerwithoutcache.title',
+          'commands.Rebuildandreopenincontainer.title',
+          'commands.Rebuildwithoutcacheandreopenincontainer.title',
+        ].map(key => readJson('package.nls.json')[key]),
       ],
       [
+        [...REBUILD_COMMANDS],
         [
-          {
-            command: 'remote-containers.rebuildContainer',
-            title: '%commands.Rebuildcontainer.title%',
-            category: 'Dev Containers',
-          },
-          {
-            command: 'remote-containers.rebuildContainerNoCache',
-            title: '%commands.Rebuildcontainerwithoutcache.title%',
-            category: 'Dev Containers',
-          },
+          'Rebuild Container',
+          'Rebuild Container Without Cache',
+          'Rebuild and Reopen in Container',
+          'Rebuild Without Cache and Reopen in Container',
         ],
-        'Rebuild Container',
-        'Rebuild Container Without Cache',
       ],
     );
   });
@@ -574,6 +600,30 @@ describe('the manifest', () => {
             when: 'view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && !hideRebuildCommands && !remote-containers:standingDown',
           },
         ],
+      },
+    );
+  });
+
+  it('F-0405 3.1: the and-reopen rebuild commands are in the palette for a local window with a folder, and in no other menu', () => {
+    deepStrictEqual(
+      menusOf([
+        'remote-containers.rebuildAndReopenInContainer',
+        'remote-containers.rebuildNoCacheAndReopenInContainer',
+      ]),
+      {
+        commandPalette: [
+          {
+            command: 'remote-containers.rebuildAndReopenInContainer',
+            when: REBUILD_REOPEN_WHEN,
+          },
+          {
+            command: 'remote-containers.rebuildNoCacheAndReopenInContainer',
+            when: REBUILD_REOPEN_WHEN,
+          },
+        ],
+        'statusBar/remoteIndicator': [],
+        'view/title': [],
+        'view/item/context': [],
       },
     );
   });

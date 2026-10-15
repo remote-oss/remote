@@ -1,5 +1,5 @@
 /**
- * @fileoverview The ports of the Reopen in Container command: what it reads of the window, the file system, the settings
+ * @fileoverview The ports of the Reopen in Container command and its rebuild variants: what it reads of the window, the file system, the settings
  * and the engine, and the CLI and the opener it calls. Types only; the editor's adapters are made in `extension.ts`.
  */
 
@@ -9,6 +9,7 @@ import type {SerializedUri} from '../authority/payload.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {ConfigurationPorts} from '../config/choose-configuration.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
+import type {IntentMemento} from '../state/timed-store.ts';
 import type {TrustOutcome} from '../trust/trust-gate.ts';
 import type {OpenGatePorts} from './open-gate.ts';
 import type {PreReloadProgressPorts} from './pre-reload-progress.ts';
@@ -39,7 +40,10 @@ export interface ReopenPorts {
   gate: OpenGatePorts;
   window: WindowPort;
   /** The trust check of the window's folder, which asks the editor's dialog when the folder isn't trusted yet. */
-  ensureTrusted(): Promise<TrustOutcome>;
+  ensureTrusted(commandTitle: string): Promise<TrustOutcome>;
+  /** Where a rebuild leaves its intent for the resolve that follows the reload. */
+  intents: IntentMemento;
+  now(): number;
   config: Omit<ConfigurationPorts, 'cli' | 'logger'>;
   settings: {
     dockerPath(): unknown;

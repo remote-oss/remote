@@ -3,7 +3,11 @@ import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {devContainerTargetOf} from '../../src/authority/payload.ts';
 import type {CliFailure, ConfigurationResult} from '../../src/cli/cli-lines.ts';
-import {reopenInContainer} from '../../src/open/reopen.ts';
+import {reopenHandlersOf} from '../../src/open/reopen.ts';
+import {
+  REBUILD_INTENTS_KEY,
+  type RebuildOptions,
+} from '../../src/open/rebuild-intent.ts';
 import type {PickerAnswer} from '../../src/config/choose-configuration.ts';
 import type {ReopenPorts} from '../../src/open/reopen-ports.ts';
 import type {TrustOutcome} from '../../src/trust/trust-gate.ts';
@@ -37,6 +41,11 @@ interface Setup {
   remoteName: string | undefined;
   folders: Array<{scheme: string; fsPath: string}>;
   trust: TrustOutcome;
+  /** The command titles the trust check was asked for. */
+  titles: string[];
+  /** What the intent store was asked to write, and whether it refuses. */
+  updates: unknown[];
+  intentFailure: unknown;
   /** What the activation's probe found missing, and what the probe after it finds. */
   missing: string[];
   missingAfter: string[];
@@ -68,6 +77,9 @@ function setup(): Setup {
     remoteName: undefined,
     folders: [{scheme: 'file', fsPath: FOLDER}],
     trust: 'trusted',
+    titles: [],
+    updates: [],
+    intentFailure: undefined,
     missing: [],
     missingAfter: [],
     waitOnTrust: Promise.resolve(),
@@ -104,11 +116,27 @@ function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         scheme: 'file',
       }),
     },
-    ensureTrusted: async () => {
+    ensureTrusted: async title => {
+      state.titles.push(title);
       state.calls.push('ensureTrusted');
       await state.waitOnTrust;
       return state.trust;
     },
+    intents: {
+      get: () => undefined,
+      update: (key, value) => {
+        state.calls.push('storeIntent');
+        state.order.push('store');
+        if (state.intentFailure !== undefined) {
+          // The row on a rejection that is not an error needs exactly that.
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+          return Promise.reject(state.intentFailure);
+        }
+        state.updates.push([key, value]);
+        return Promise.resolve();
+      },
+    },
+    now: () => 1000,
     config: {
       files: {
         list: folder => {
@@ -222,10 +250,18 @@ function openedTarget(state: Setup): ReturnType<typeof devContainerTargetOf> {
   return devContainerTargetOf(authority.slice('dev-container+'.length));
 }
 
-/** Runs the command once. */
-async function reopened(state: Setup) {
+/** The handler of the command, or of its rebuild variant. */
+function handlerOf(
+  ports: ReopenPorts,
+  rebuild?: RebuildOptions,
+): () => Promise<void> {
+  return reopenHandlersOf(ports)(rebuild);
+}
+
+/** Runs the command once, or its rebuild variant. */
+async function reopened(state: Setup, rebuild?: RebuildOptions) {
   const {ports, sink} = portsOf(state);
-  await reopenInContainer(ports)();
+  await handlerOf(ports, rebuild)();
   await settled();
   return {lines: linesOf(sink)};
 }
@@ -235,7 +271,7 @@ async function reopenedSlowly(state: Setup): Promise<string[]> {
   const release = pendingOf<undefined>();
   state.waitOnCheck = release.promise;
   const {ports} = portsOf(state);
-  const running = reopenInContainer(ports)();
+  const running = handlerOf(ports)();
   await settled();
   state.timers[0]?.callback();
   release.resolve(undefined);
@@ -251,11 +287,12 @@ async function reopenedSlowly(state: Setup): Promise<string[]> {
 async function reentered(
   state: Setup,
   hold: 'waitOnCheck' | 'waitOnTrust',
+  rebuild?: RebuildOptions,
 ): Promise<{during: string[]; lines: string[]}> {
   const release = pendingOf<undefined>();
   state[hold] = release.promise;
   const {ports, sink} = portsOf(state);
-  const handler = reopenInContainer(ports);
+  const handler = handlerOf(ports, rebuild);
   const first = handler();
   await handler();
   await settled();
@@ -544,7 +581,7 @@ describe('Reopen in Container', () => {
     state.dockerPath = 'bin/docker';
     const files: string[] = [];
     const {ports} = portsOf(state);
-    await reopenInContainer({
+    await handlerOf({
       ...ports,
       bridge: {
         readConfiguration: target => {
@@ -624,6 +661,166 @@ describe('Reopen in Container', () => {
         ['ensureTrusted'],
         ['ensureTrusted', 'ensureTrusted'],
         ['info: Reopen in Container is already running'],
+      ],
+    );
+  });
+
+  it('F-0405 BR-1, AC-8: a rebuild and reopen stores the intent for the payload right before the reload, after the whole flow', async () => {
+    const state = setup();
+    await reopened(state, {buildNoCache: false});
+    const {authority} = state.commands[0]?.parameters[0] as {
+      authority: string;
+    };
+    deepStrictEqual(
+      [
+        state.updates,
+        state.calls,
+        state.order.filter(entry => entry === 'store' || entry === 'open'),
+      ],
+      [
+        [
+          [
+            REBUILD_INTENTS_KEY,
+            {
+              [authority.slice('dev-container+'.length)]: {
+                storedAt: 1000,
+                value: {removeExistingContainer: true, buildNoCache: false},
+              },
+            },
+          ],
+        ],
+        [
+          'ensureTrusted',
+          'firstCheck /w/p',
+          'readConfiguration /w/p',
+          'currentContext',
+          'storeIntent',
+        ],
+        ['store', 'open'],
+      ],
+    );
+  });
+
+  it('F-0405 5.1: the no-cache variant stores buildNoCache, and an ordinary Reopen stores nothing', async () => {
+    const noCache = setup();
+    await reopened(noCache, {buildNoCache: true});
+    const ordinary = setup();
+    await reopened(ordinary);
+    deepStrictEqual(
+      [
+        JSON.stringify(noCache.updates).includes('"buildNoCache":true'),
+        ordinary.updates,
+        ordinary.calls.includes('storeIntent'),
+      ],
+      [true, [], false],
+    );
+  });
+
+  it('F-0106 AC-32, AC-33: the rebuild variants ask for trust under their own titles, and a decline stores nothing and opens nothing', async () => {
+    const seen = [];
+    for (const rebuild of [{buildNoCache: false}, {buildNoCache: true}]) {
+      const state = setup();
+      state.trust = 'declined';
+      await reopened(state, rebuild);
+      seen.push([state.titles, state.updates, state.commands]);
+    }
+    deepStrictEqual(seen, [
+      [['Rebuild and Reopen in Container'], [], []],
+      [['Rebuild Without Cache and Reopen in Container'], [], []],
+    ]);
+  });
+
+  it('F-0405 BR-17: an intent that cannot be stored means no reload, and one warn line', async () => {
+    const failures = [new Error('disk'), 'gone'];
+    const seen = [];
+    for (const failure of failures) {
+      const state = setup();
+      state.intentFailure = failure;
+      const {lines} = await reopened(state, {buildNoCache: false});
+      seen.push([state.commands, lines]);
+    }
+    deepStrictEqual(seen, [
+      [[], ['warn: the rebuild intent could not be stored: disk']],
+      [[], ['warn: the rebuild intent could not be stored: gone']],
+    ]);
+  });
+
+  it('F-0405 AC-13: a rebuild stores nothing when the flow ends before the reload: no configuration, a stopped first check, a picker closed', async () => {
+    const changes: Array<(state: Setup) => void> = [
+      state => {
+        state.existing = [];
+      },
+      state => {
+        state.check = 'stopped';
+      },
+      state => {
+        state.existing = [CONFIG, '/w/p/.devcontainer.json'];
+        state.pick = {kind: 'dismissed'};
+      },
+    ];
+    const seen = [];
+    for (const change of changes) {
+      const state = setup();
+      change(state);
+      await reopened(state, {buildNoCache: false});
+      seen.push([state.updates, state.commands]);
+    }
+    deepStrictEqual(
+      seen,
+      changes.map(() => [[], []]),
+    );
+  });
+
+  it('F-0405 AC-30: the rebuild variants name themselves in the log of a window they do nothing in, and of a second call', async () => {
+    const away = setup();
+    away.remoteName = 'dev-container';
+    const {lines: awayLines} = await reopened(away, {buildNoCache: false});
+    const state = setup();
+    const {lines} = await reentered(state, 'waitOnCheck', {buildNoCache: true});
+    deepStrictEqual(
+      [awayLines, lines.filter(line => line.includes('already running'))],
+      [
+        ['info: Rebuild and Reopen in Container does nothing in this window'],
+        [
+          'info: Rebuild Without Cache and Reopen in Container is already running',
+        ],
+      ],
+    );
+  });
+
+  it('F-0405 BR-1: a Reopen and a rebuild and reopen never run at once in one window', async () => {
+    const state = setup();
+    const release = pendingOf<undefined>();
+    state.waitOnCheck = release.promise;
+    const {ports, sink} = portsOf(state);
+    const handlers = reopenHandlersOf(ports);
+    const first = handlers()();
+    await settled();
+    await handlers({buildNoCache: false})();
+    release.resolve(undefined);
+    await first;
+    deepStrictEqual(
+      [
+        linesOf(sink).filter(line => line.includes('already running')),
+        state.updates,
+      ],
+      [['info: Rebuild and Reopen in Container is already running'], []],
+    );
+  });
+
+  it('F-0101 AC-15: a rebuild and reopen without resolvers is held back under its own title, before the trust check', async () => {
+    const state = setup();
+    state.missing = ['resolvers'];
+    state.missingAfter = ['resolvers'];
+    const {lines} = await reopened(state, {buildNoCache: true});
+    deepStrictEqual(
+      [state.calls, state.updates, lines],
+      [
+        ['setupAgain'],
+        [],
+        [
+          'info: Rebuild Without Cache and Reopen in Container needs the proposed API: resolvers; the window stays as it is',
+        ],
       ],
     );
   });

@@ -42,7 +42,7 @@ import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
 import {rebuildContainer} from './open/rebuild.ts';
-import {reopenInContainer} from './open/reopen.ts';
+import {reopenHandlersOf} from './open/reopen.ts';
 import {
   showTargetsWhenRegistered,
   type TargetsNode,
@@ -299,120 +299,120 @@ export async function activate(
           {buildNoCache},
         );
       }
-      return {
-        reopenInContainer: {
-          execute: reopenInContainer({
-            gate: {
-              missing: served.missing,
-              setupAgain: () => served.setupAgain(),
-              logger: served.logger,
-            },
-            window: {
-              remoteName: () => vscode.env.remoteName,
-              folders: windowFolders,
-              serializedFile: file => serializedUriOf(vscode.Uri.file(file)),
-            },
-            ensureTrusted: () =>
-              ensureTrusted(served.trust, {
-                translate,
-                logger: served.logger,
-                setupAgain: () => served.setupAgain(),
-                commandTitle: 'Reopen in Container',
-              }),
-            config: {
-              files: configFilesOf(
-                {
-                  readDirectory: folder =>
-                    vscode.workspace.fs.readDirectory(vscode.Uri.file(folder)),
-                  readFile: file =>
-                    vscode.workspace.fs.readFile(vscode.Uri.file(file)),
-                },
-                vscode.FileType,
-              ),
-              surfaces: configSurfacesOf(
-                {
-                  createQuickPick: () => vscode.window.createQuickPick(),
-                  showWarningMessage: (message, options, ...items) =>
-                    vscode.window.showWarningMessage(
-                      message,
-                      options,
-                      ...items,
-                    ),
-                  showInformationMessage: message =>
-                    vscode.window.showInformationMessage(message),
-                  showTextDocument: (file, options) =>
-                    vscode.window.showTextDocument(
-                      vscode.Uri.file(file),
-                      options,
-                    ),
-                  iconOf: name => new vscode.ThemeIcon(name),
-                },
-                {
-                  showError: (message, detail, items) =>
-                    Promise.resolve(
-                      vscode.window.showErrorMessage(
-                        message,
-                        {modal: true, detail},
-                        ...items,
-                      ),
-                    ),
-                  revealLog: () => {
-                    logChannel?.show(true);
-                  },
-                },
-                served.logger,
-              ),
-              compare: new Intl.Collator(undefined, {sensitivity: 'accent'})
-                .compare,
-              translate,
-            },
-            settings: {
-              dockerPath: () =>
-                vscode.workspace.getConfiguration().get(settings.dockerPath.id),
-              mountGitWorktreeCommonDir: () =>
-                vscode.workspace
-                  .getConfiguration()
-                  .inspect(settings.experimentalMountGitWorktreeCommonDir.id)
-                  ?.globalValue,
-            },
-            engine: {
-              firstCheck: (base, dialogs) =>
-                firstCheck(
-                  {...served.preflight, dialogs},
-                  base,
-                  new AbortController().signal,
-                ),
-              currentContext: () =>
-                currentContext(
-                  served.preflight,
-                  firstFolder(),
-                  new AbortController().signal,
-                ),
-            },
-            dialogs: served.preflight.dialogs,
-            progress: {
-              showProgress: (title, until) => {
-                void vscode.window.withProgress(
-                  {
-                    location: vscode.ProgressLocation.Notification,
-                    title,
-                    cancellable: false,
-                  },
-                  () => until,
-                );
-              },
-              setTimer: (milliseconds, callback) =>
-                served.preflight.setTimer(milliseconds, callback),
-              translate,
-            },
-            bridge: bridgeFor(process.env, served.logger),
-            opener: {
-              executeCommand: (command, ...parameters) =>
-                vscode.commands.executeCommand(command, ...parameters),
-              addressOf: parts => vscode.Uri.from(parts),
-            },
+      const reopenHandler = reopenHandlersOf({
+        gate: {
+          missing: served.missing,
+          setupAgain: () => served.setupAgain(),
+          logger: served.logger,
+        },
+        window: {
+          remoteName: () => vscode.env.remoteName,
+          folders: windowFolders,
+          serializedFile: file => serializedUriOf(vscode.Uri.file(file)),
+        },
+        ensureTrusted: commandTitle =>
+          ensureTrusted(served.trust, {
+            translate,
             logger: served.logger,
+            setupAgain: () => served.setupAgain(),
+            commandTitle,
           }),
+        intents: context.globalState,
+        now: Date.now,
+        config: {
+          files: configFilesOf(
+            {
+              readDirectory: folder =>
+                vscode.workspace.fs.readDirectory(vscode.Uri.file(folder)),
+              readFile: file =>
+                vscode.workspace.fs.readFile(vscode.Uri.file(file)),
+            },
+            vscode.FileType,
+          ),
+          surfaces: configSurfacesOf(
+            {
+              createQuickPick: () => vscode.window.createQuickPick(),
+              showWarningMessage: (message, options, ...items) =>
+                vscode.window.showWarningMessage(message, options, ...items),
+              showInformationMessage: message =>
+                vscode.window.showInformationMessage(message),
+              showTextDocument: (file, options) =>
+                vscode.window.showTextDocument(vscode.Uri.file(file), options),
+              iconOf: name => new vscode.ThemeIcon(name),
+            },
+            {
+              showError: (message, detail, items) =>
+                Promise.resolve(
+                  vscode.window.showErrorMessage(
+                    message,
+                    {modal: true, detail},
+                    ...items,
+                  ),
+                ),
+              revealLog: () => {
+                logChannel?.show(true);
+              },
+            },
+            served.logger,
+          ),
+          compare: new Intl.Collator(undefined, {sensitivity: 'accent'})
+            .compare,
+          translate,
+        },
+        settings: {
+          dockerPath: () =>
+            vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+          mountGitWorktreeCommonDir: () =>
+            vscode.workspace
+              .getConfiguration()
+              .inspect(settings.experimentalMountGitWorktreeCommonDir.id)
+              ?.globalValue,
+        },
+        engine: {
+          firstCheck: (base, dialogs) =>
+            firstCheck(
+              {...served.preflight, dialogs},
+              base,
+              new AbortController().signal,
+            ),
+          currentContext: () =>
+            currentContext(
+              served.preflight,
+              firstFolder(),
+              new AbortController().signal,
+            ),
+        },
+        dialogs: served.preflight.dialogs,
+        progress: {
+          showProgress: (title, until) => {
+            void vscode.window.withProgress(
+              {
+                location: vscode.ProgressLocation.Notification,
+                title,
+                cancellable: false,
+              },
+              () => until,
+            );
+          },
+          setTimer: (milliseconds, callback) =>
+            served.preflight.setTimer(milliseconds, callback),
+          translate,
+        },
+        bridge: bridgeFor(process.env, served.logger),
+        opener: {
+          executeCommand: (command, ...parameters) =>
+            vscode.commands.executeCommand(command, ...parameters),
+          addressOf: parts => vscode.Uri.from(parts),
+        },
+        logger: served.logger,
+      });
+      return {
+        reopenInContainer: {execute: reopenHandler()},
+        rebuildAndReopenInContainer: {
+          execute: reopenHandler({buildNoCache: false}),
+        },
+        rebuildNoCacheAndReopenInContainer: {
+          execute: reopenHandler({buildNoCache: true}),
         },
         rebuildContainer: {execute: rebuildHandler(false)},
         rebuildContainerNoCache: {execute: rebuildHandler(true)},
