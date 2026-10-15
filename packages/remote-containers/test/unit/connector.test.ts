@@ -802,6 +802,94 @@ describe('the container connector: the connect (card containers-08)', () => {
   });
 });
 
+describe('the container connector: the folder trust (card containers-17)', () => {
+  it('F-0106 6.3: the connect asks for trust after the configuration read and before any engine call', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    await connected(scene);
+    deepStrictEqual(scene.atTrust, {reads: 1, engineCalls: 0});
+  });
+
+  it('F-0106 6.2: a trusted folder connects with no request and no modal', async () => {
+    const scene = sceneOf();
+    const result = await connected(scene);
+    deepStrictEqual(
+      [scene.trustCalls, 'connectionToken' in result],
+      [['isTrusted'], true],
+    );
+  });
+
+  it('F-0106 BR-2: trust granted in the resolve goes on to prepare the container', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    await connected(scene);
+    deepStrictEqual([scene.trustCalls.length, scene.prepared.length], [2, 1]);
+  });
+
+  it('F-0106 6.4a, AC-42: a decline shows S360 with S377, reopens the folder locally, and ends silent with nothing prepared', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    scene.trustAnswer = false;
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        scene.trustCalls.slice(2),
+        failedKind(result),
+        'silent' in result && result.silent,
+        'retryable' in result && result.retryable,
+        scene.prepared,
+        scene.engineCalls,
+      ],
+      [
+        [
+          'showDeclined The local folder is currently not trusted. | Trust is required to build a dev container from it. The folder will now reopen locally.',
+          'reopenLocally /work/proj',
+        ],
+        'trustDeclined',
+        true,
+        false,
+        [],
+        [],
+      ],
+    );
+  });
+
+  it('brief ruling 9: an unavailable trust request reopens locally without the modal, after the setup notice', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    scene.trustAnswer = new Error('proposal');
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        scene.setupAgains,
+        scene.trustCalls.slice(2),
+        failedKind(result),
+        scene.prepared,
+      ],
+      [1, ['reopenLocally /work/proj'], 'trustDeclined', []],
+    );
+  });
+
+  it('F-0106 6.3: a connect cancelled while the trust dialog is open neither shows the modal nor reopens the folder', async () => {
+    const scene = sceneOf();
+    scene.trusted = false;
+    let answer: ((trusted: boolean) => void) | undefined;
+    scene.trustAnswer = () =>
+      new Promise(resolve => {
+        answer = resolve;
+      });
+    const connecting = scene.connector.connect(inputOf(PAYLOAD));
+    await tick();
+    scene.connector.cancel();
+    answer?.(false);
+    const result = await connecting;
+    deepStrictEqual(
+      [scene.trustCalls.slice(2), failedKind(result)],
+      [[], 'trustDeclined'],
+    );
+  });
+});
+
 describe('the container connector: cancelling (card containers-08)', () => {
   it('contracts §2 cancel: a cancel during the preparation ends the connect as cancelled, stops the background and opens no relay', async () => {
     const scene = sceneOf();

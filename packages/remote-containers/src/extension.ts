@@ -590,6 +590,25 @@ export async function activate(
       preflight: served.preflight,
       editorEnvironment: process.env,
       intents: context.globalState,
+      trust: served.trust,
+      trustNeeds: {
+        translate,
+        logger: served.logger,
+        setupAgain: () => served.setupAgain(),
+      },
+      showDeclined: async (message, detail) => {
+        await vscode.window.showInformationMessage(message, {
+          modal: true,
+          detail,
+        });
+      },
+      reopenLocally: async hostPath => {
+        await vscode.commands.executeCommand(
+          'vscode.openFolder',
+          vscode.Uri.file(hostPath),
+          {forceReuseWindow: true},
+        );
+      },
       runServer: (request, serverSettings) =>
         runServerSteps(
           {

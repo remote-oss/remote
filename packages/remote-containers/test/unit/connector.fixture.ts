@@ -150,6 +150,15 @@ export interface Scene {
   killScripts: string[];
   /** Holds the opening of the relay until it settles. */
   relayGate: (() => Promise<void>) | undefined;
+  /** Whether the editor says the folder is trusted, and what its trust request answers: true, false or a refusal. */
+  trusted: boolean;
+  trustAnswer: boolean | Error | (() => Promise<boolean>);
+  /** What the connect asked of the trust port, of the modal and of the window, in order. */
+  trustCalls: string[];
+  /** The `setupAgain` calls the trust check made. */
+  setupAgains: number;
+  /** How many reads of the configuration had run, and how many engine calls had been made, when trust was read. */
+  atTrust: {reads: number; engineCalls: number} | undefined;
 }
 
 /** A container prepared and ready. */
@@ -227,6 +236,11 @@ export function sceneOf(
     killStatuses: [],
     killScripts: [],
     relayGate: undefined,
+    trusted: true,
+    trustAnswer: true,
+    trustCalls: [],
+    setupAgains: 0,
+    atTrust: undefined,
     timerDelays: [],
     timers: [],
     ...overrides,
@@ -387,6 +401,42 @@ export function sceneOf(
         scene.intentStore = value;
         return Promise.resolve();
       },
+    },
+    trust: {
+      isTrusted: () => {
+        scene.atTrust = {
+          reads: scene.configurationReads.length,
+          engineCalls: scene.engineCalls.length,
+        };
+        scene.trustCalls.push('isTrusted');
+        return scene.trusted;
+      },
+      request: message => {
+        scene.trustCalls.push(`request ${message}`);
+        const {trustAnswer} = scene;
+        if (typeof trustAnswer === 'function') {
+          return trustAnswer();
+        }
+        return typeof trustAnswer === 'boolean'
+          ? Promise.resolve(trustAnswer)
+          : Promise.reject(trustAnswer);
+      },
+    },
+    trustNeeds: {
+      translate: template => template,
+      logger: createLogger(sink, {minimumLevel: () => 'debug'}),
+      setupAgain: () => {
+        scene.setupAgains += 1;
+        return Promise.resolve();
+      },
+    },
+    showDeclined: (message, detail) => {
+      scene.trustCalls.push(`showDeclined ${message} | ${detail}`);
+      return Promise.resolve();
+    },
+    reopenLocally: hostPath => {
+      scene.trustCalls.push(`reopenLocally ${hostPath}`);
+      return Promise.resolve();
     },
     runServer: async request => {
       scene.serverRequests.push(request);

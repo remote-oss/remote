@@ -38,6 +38,11 @@ const TRUST_QUESTION = 'Do you trust the authors of the files in this folder?';
 const S265 =
   'Opening a folder in a Dev Container may execute arbitrary code both inside and outside the container.';
 
+/** The modal that says the local folder is not trusted, and its detail, STR:S360 and STR:S377. */
+const S360 = 'The local folder is currently not trusted.';
+const S377 =
+  'Trust is required to build a dev container from it. The folder will now reopen locally.';
+
 /** A path in the run's folder. */
 function inRun(name: string): string {
   return path.join(variable('HARNESS_RUN_FOLDER'), name);
@@ -227,11 +232,12 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     await closeWindow(name);
   });
 
-  it('F-0106 AC-39 (t2): trust is not forced in the connected window, and untrusting the local folder makes the next reload restricted', async () => {
+  it('F-0106 AC-39, AC-41, AC-42 (t2): trust is not forced in the connected window; Don’t Trust makes the next resolve ask, and declining shows S360 with S377, then reopens the folder locally and restricted, with the container kept', async () => {
     const folder = devContainerFolder('gate-trust-manage', {
       name: 'Trust Manage',
     });
     const name = await trustedContainerWindow(folder);
+    const [containerId = ''] = await devContainersOf(folder);
     await inWindow(name, 'workbench.trust.manage');
     await waitFor(
       'the trust editor of the connected window',
@@ -239,13 +245,40 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       30_000,
     );
     await clickButton(name, "Don't Trust");
-    await reloadWindow(name);
+    const reloaded = reloadWindow(name);
+    const asked = await waitForDialog(name);
+    const askedText = await dialogText(name);
+    await answerDialog(name, 'Cancel');
+    const declined = await waitForDialog(name);
+    const declinedText = await dialogText(name);
+    await answerDialog(name, 'OK');
+    await reloaded;
+    await waitFor(
+      `window ${name} to be a local folder again`,
+      async () => (await windowState(name)).remoteName === null,
+      60_000,
+    );
     deepStrictEqual(
       {
-        remoteName: (await windowState(name)).remoteName,
+        asked: [asked.message, askedText?.includes(S265)],
+        declined: [
+          declined.message,
+          declinedText?.includes(S377),
+          declined.buttons,
+        ],
         trusted: await trustSettled(name, false),
+        containers: await devContainersOf(folder),
+        folders: (await windowState(name)).folders.map(entry =>
+          decodeURIComponent(entry),
+        ),
       },
-      {remoteName: 'dev-container', trusted: false},
+      {
+        asked: [TRUST_QUESTION, true],
+        declined: [S360, true, ['OK']],
+        trusted: false,
+        containers: [containerId],
+        folders: [`file://${folder}`],
+      },
     );
     await closeWindow(name);
   });

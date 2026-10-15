@@ -34,6 +34,8 @@ export interface TrustNeeds {
 /** The English template of the body the extension gives the editor's trust dialog, by its string id. */
 export const TRUST_TEMPLATES = {
   S265: 'Opening a folder in a Dev Container may execute arbitrary code both inside and outside the container.',
+  S360: 'The local folder is currently not trusted.',
+  S377: 'Trust is required to build a dev container from it. The folder will now reopen locally.',
 } as const;
 
 /** The text of an error. */
