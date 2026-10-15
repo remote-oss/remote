@@ -5,3 +5,4 @@
 !dist/extension.js
 !dist/cli-preload.js
 !dist/devcontainers-cli/**
+!resources/**

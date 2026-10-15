@@ -68,6 +68,15 @@
         "command": "remote-containers.rebuildContainerNoCache",
         "title": "%commands.Rebuildcontainerwithoutcache.title%",
         "category": "Dev Containers"
+      },
+      {
+        "command": "remote-containers.explorerTargetsRefresh",
+        "title": "%commands.explorerTargetsRefresh.title%",
+        "category": "Dev Containers",
+        "icon": {
+          "light": "resources/light/refresh.svg",
+          "dark": "resources/dark/refresh.svg"
+        }
       }
     ],
     "menus": {
@@ -83,6 +92,29 @@
         {
           "command": "remote-containers.rebuildContainerNoCache",
           "when": "!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.explorerTargetsRefresh",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "remote-containers.explorerTargetsRefresh",
+          "group": "navigation@3",
+          "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "workbench.action.closeFolder",
+          "group": "1_folder@1",
+          "when": "view == targetsContainers && viewItem =~ /(^| )activeFolder( |$)/ && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.rebuildContainer",
+          "group": "2_container@1",
+          "when": "view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && !hideRebuildCommands && !remote-containers:standingDown"
         }
       ],
       "statusBar/remoteIndicator": [
@@ -98,6 +130,40 @@
         }
       ]
     },
+    "views": {
+      "remote": [
+        {
+          "id": "targetsContainers",
+          "name": "%views.targetsContainers.name%",
+          "group": "targets@2",
+          "when": "!hideConnectCommands",
+          "remoteName": [
+            "dev-container",
+            "attached-container",
+            "exec",
+            "k8s-container",
+            "apple-container"
+          ]
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "targetsContainers",
+        "contents": "%viewsWelcome.targetsContainers.needsDockerStartOrInstall%",
+        "when": "remote-containers:needsDockerStartOrInstall && !remote-containers:standingDown"
+      },
+      {
+        "view": "targetsContainers",
+        "contents": "%viewsWelcome.targetsContainers.noContainersWithFolder%",
+        "when": "remote-containers:noContainersWithFolder && !remote-containers:standingDown"
+      },
+      {
+        "view": "targetsContainers",
+        "contents": "%viewsWelcome.targetsContainers.noContainersWithoutFolder%",
+        "when": "remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
+      }
+    ],
     "configuration": {
       "title": "%configuration.title%",
       "properties": {

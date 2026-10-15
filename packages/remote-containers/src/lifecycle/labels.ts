@@ -30,6 +30,20 @@ export type Decision =
     }
   | {kind: 'unusable'; containerId: string; status: string};
 
+/** The local folder a container was made for, from the first of its folder labels that names one: the current, then the legacy. */
+export function localFolderOf(
+  labels: Readonly<Record<string, string>>,
+): string | undefined {
+  return labels[FOLDER_LABEL] ?? labels[LEGACY_FOLDER_LABEL];
+}
+
+/** The configuration file a container was made from, when it carries the label that names one. */
+export function configFileOf(
+  labels: Readonly<Record<string, string>>,
+): string | undefined {
+  return labels[CONFIG_LABEL];
+}
+
 /**
  * The folder, or the repository, a container was made for, from the first of its folder labels the container carries: the
  * current one, then the legacy ones. None for a container made for no folder.
@@ -37,11 +51,7 @@ export type Decision =
 export function devContainerFolderOf(
   labels: Readonly<Record<string, string>>,
 ): string | undefined {
-  return (
-    labels[FOLDER_LABEL] ??
-    labels[LEGACY_FOLDER_LABEL] ??
-    labels[LEGACY_REPOSITORY_LABEL]
-  );
+  return localFolderOf(labels) ?? labels[LEGACY_REPOSITORY_LABEL];
 }
 
 /** Whether the labels make the container a dev container: it carries one of the folder labels. */

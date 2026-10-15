@@ -24,6 +24,18 @@
     {
       "id": "hideRebuildCommands",
       "setter": "extension"
+    },
+    {
+      "id": "remote-containers:needsDockerStartOrInstall",
+      "setter": "extension"
+    },
+    {
+      "id": "remote-containers:noContainersWithFolder",
+      "setter": "extension"
+    },
+    {
+      "id": "remote-containers:noContainersWithoutFolder",
+      "setter": "extension"
     }
   ],
   "infoLineCommands": [],
