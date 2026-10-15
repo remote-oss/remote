@@ -3,8 +3,10 @@ import {
   type ContainerFacts,
   createdKey,
   decide,
+  devContainerFolderOf,
   discoveryArguments,
   idLabels,
+  isDevContainer,
   legacyDiscoveryArguments,
   legacyIdLabels,
 } from '../../src/lifecycle/labels.ts';
@@ -326,6 +328,42 @@ describe('how a folder is labelled and its container chosen', () => {
         {kind: 'use', containerId: 'bb', status: 'exited', idLabels: STANDARD},
         {kind: 'use', containerId: 'bb', status: 'exited', idLabels: STANDARD},
       ],
+    );
+  });
+
+  it('F-0901 AC-30, AC-31, AC-32 (6.14): the folder labels make a dev container, the repository one included, and the volume labels do not', () => {
+    const cases: Array<Record<string, string>> = [
+      {'devcontainer.local_folder': '/w/a'},
+      {'vsch.local.folder': '/w/b'},
+      {'vsch.local.repository': 'https://example.test/r.git'},
+      {'vsc.devcontainer.volume.name': 'volume'},
+      {'vsch.local.volume': 'volume'},
+      {},
+    ];
+    deepStrictEqual(
+      cases.map(labels => [
+        devContainerFolderOf(labels),
+        isDevContainer(labels),
+      ]),
+      [
+        ['/w/a', true],
+        ['/w/b', true],
+        ['https://example.test/r.git', true],
+        [undefined, false],
+        [undefined, false],
+        [undefined, false],
+      ],
+    );
+  });
+
+  it('F-0901 BR-1: the current folder label wins over the legacy ones', () => {
+    deepStrictEqual(
+      devContainerFolderOf({
+        'vsch.local.repository': 'https://example.test/r.git',
+        'vsch.local.folder': '/w/old',
+        'devcontainer.local_folder': '/w/new',
+      }),
+      '/w/new',
     );
   });
 });

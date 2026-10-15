@@ -57,5 +57,18 @@
   "Open Recent...": "Open Recent...",
   "Pick an action to help resolve the problem.": "Pick an action to help resolve the problem.",
   "Reload Window": "Reload Window",
-  "Retry": "Retry"
+  "Retry": "Retry",
+  "Dev Containers": "Dev Containers",
+  "Other Containers": "Other Containers",
+  "{0} ago": "{0} ago",
+  "{0} days": "{0} days",
+  "{0} day": "{0} day",
+  "{0} hours": "{0} hours",
+  "{0} hour": "{0} hour",
+  "{0} minutes": "{0} minutes",
+  "{0} minute": "{0} minute",
+  "{0} seconds": "{0} seconds",
+  "{0} second": "{0} second",
+  "{0} years": "{0} years",
+  "{0} year": "{0} year"
 }
