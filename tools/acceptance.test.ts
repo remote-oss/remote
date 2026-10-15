@@ -354,6 +354,7 @@ const LAUNCH_ORDER = [
   'containers-no-proposals',
   'containers-trust',
   'containers-volume',
+  'containers-explorer',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -912,6 +913,15 @@ describe('acceptance', () => {
               path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
             ],
           })),
+          {
+            folder: path.join('/run', 'extensions-containers-explorer'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+              path.join(workspace.root, 'dist', 'remote-explorer-0.0.0.vsix'),
+            ],
+          },
         ],
       );
     });

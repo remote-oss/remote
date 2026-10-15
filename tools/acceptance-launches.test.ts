@@ -69,6 +69,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-no-proposals',
         'containers-trust',
         'containers-volume',
+        'containers-explorer',
         ...hostLaunchLabels(),
       ],
     );
@@ -180,11 +181,17 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        [
+          'containers-explorer',
+          ['remote-oss.remote-containers', 'remote-oss.remote-explorer'],
+          true,
+          undefined,
+        ],
       ],
     );
   });
 
-  it('containers-09, containers-12: the containers launches draw dialogs in the window and download the server from the run’s host; containers and containers-standdown have the other extension’s stand-in, only containers-no-proposals turns the proposed API off, containers-volume has neither, and only containers-trust silences core’s startup trust prompt', () => {
+  it('containers-09, containers-12: the containers launches draw dialogs in the window and download the server from the run’s host; containers and containers-standdown have the other extension’s stand-in, only containers-no-proposals turns the proposed API off, containers-volume has neither, containers-explorer adds the explorer, and only containers-trust silences core’s startup trust prompt', () => {
     const shared = {
       'window.title': '[${rootName}]',
       'window.dialogStyle': 'custom',
@@ -236,6 +243,13 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        [
+          'containers-explorer',
+          'containers-explorer',
+          shared,
+          undefined,
+          undefined,
+        ],
       ],
     );
   });
@@ -249,6 +263,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-no-proposals',
         'containers-trust',
         'containers-volume',
+        'containers-explorer',
       ],
     );
   });
@@ -358,6 +373,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-no-proposals',
         'containers-trust',
         'containers-volume',
+        'containers-explorer',
         ...hostLaunchLabels(),
       ],
     );

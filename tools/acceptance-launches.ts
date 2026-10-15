@@ -466,10 +466,11 @@ function forwardingLaunch(
  * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
  * proposed API; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
- * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust` and `containers-volume` do the
- * same with Dev Containers installed, the second with a stand-in carrying the other Dev Containers extension's id, the
- * third without the proposed API, the fourth with workspace trust on and core's startup prompt off and the fifth for the
- * rows that clear the `vscode` volume's server folder;
+ * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume` and
+ * `containers-explorer` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
+ * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
+ * Explorer installed beside it;
  * and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
  * with its host setup and its own script.
  */
@@ -654,6 +655,15 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-volume',
       suite: 'containers-volume',
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-explorer',
+      suite: 'containers-explorer',
+      withExtensions: [
+        'remote-oss.remote-containers',
+        'remote-oss.remote-explorer',
+      ],
     },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({

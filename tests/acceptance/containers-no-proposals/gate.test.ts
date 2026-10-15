@@ -18,6 +18,7 @@ import {
   answerNotification,
   notificationButtons,
   notificationCentre,
+  viewRows,
   windowTitle,
 } from '../windows/renderer.ts';
 
@@ -123,6 +124,20 @@ describe('Dev Containers without its proposed API (card containers-09, gate row 
       {setup: 1, failures: [], commands: REGISTERED},
     );
   });
+  it('F-0906 AC-16, F-0101 BR-9 (gate-row-17): the Remote Explorer has no Dev Containers view, and no error notification says that no view is registered', async () => {
+    await inWindow(WINDOW, 'workbench.view.remote');
+    await new Promise(resolve => setTimeout(resolve, 5_000));
+    deepStrictEqual(
+      {
+        view: await viewRows(WINDOW, 'Dev Containers'),
+        errors: (await notificationCentre(WINDOW)).filter(text =>
+          text.includes('No view is registered'),
+        ),
+      },
+      {view: undefined, errors: []},
+    );
+  });
+
   it('F-0101 AC-15: the primary button opens argv.json, and saving and closing it unchanged offers the restart', async () => {
     await answerNotification(
       WINDOW,

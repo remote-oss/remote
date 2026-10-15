@@ -7,7 +7,10 @@ import type {
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
 import {
+  REGISTRATION_POLL_MILLISECONDS,
+  REGISTRATION_POLLS,
   showTargets,
+  showTargetsWhenRegistered,
   specOf,
   type TargetsNode,
   type TargetsProvider,
@@ -67,6 +70,10 @@ function inspectJson(containers: readonly FakeContainer[]): string {
 /** What a row steers, and what the fakes recorded. */
 interface Scene {
   commands: string[];
+  /** What the view asked the clock for, and how many of those waits were stopped. */
+  timers: Array<{milliseconds: number; callback: () => void}>;
+  stopped: number;
+  commandFailure: Error | undefined;
   containers: FakeContainer[];
   /** What `docker ps` and `docker inspect` answer; a function when a row holds or changes the answer. */
   listing: (() => EngineRunOutcome | Promise<EngineRunOutcome>) | undefined;
@@ -91,6 +98,9 @@ interface Scene {
 function sceneOf(): Scene {
   return {
     commands: [`${views.targetsContainers}.focus`],
+    timers: [],
+    stopped: 0,
+    commandFailure: undefined,
     containers: [],
     listing: undefined,
     inspecting: undefined,
@@ -144,7 +154,10 @@ function engineOf(scene: Scene, name: string): EngineHost {
 function portsOf(scene: Scene): TargetsViewPorts {
   return {
     editor: {
-      commandIds: () => Promise.resolve(scene.commands),
+      commandIds: () =>
+        scene.commandFailure === undefined
+          ? Promise.resolve(scene.commands)
+          : Promise.reject(scene.commandFailure),
       setContext: (key, value) => {
         scene.contexts.push([key, value]);
         return scene.contextFailure === undefined
@@ -181,6 +194,12 @@ function portsOf(scene: Scene): TargetsViewPorts {
     },
     exists: file => Promise.resolve(scene.existing.has(file)),
     now: () => CLOCK,
+    setTimer: (milliseconds, callback) => {
+      scene.timers.push({milliseconds, callback});
+      return () => {
+        scene.stopped += 1;
+      };
+    },
     translate: template => template,
     logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
   };
@@ -258,6 +277,113 @@ async function populatedThenHeld(scene: Scene) {
 }
 
 describe('the Dev Containers view (card containers-30)', () => {
+  it('F-0906 7.E1: a view that core registers after the package activated is shown on the next look, once, and then no look is made', async () => {
+    const scene = sceneOf();
+    scene.commands = [];
+    const view = showTargetsWhenRegistered(portsOf(scene));
+    await settled();
+    const first = [
+      scene.created.length,
+      scene.timers.map(each => each.milliseconds),
+    ];
+    scene.commands = [`${views.targetsContainers}.focus`];
+    scene.timers[0]?.callback();
+    await settled();
+    await view.refresh();
+    deepStrictEqual(
+      [first, scene.created.length, scene.timers.length, lines(scene)],
+      [[0, [REGISTRATION_POLL_MILLISECONDS]], 1, 1, []],
+    );
+  });
+
+  it('F-0906 AC-16: a view that is never registered is looked for at each poll, then given up with one log line', async () => {
+    const scene = sceneOf();
+    scene.commands = [];
+    showTargetsWhenRegistered(portsOf(scene));
+    for (let poll = 0; poll < REGISTRATION_POLLS; poll += 1) {
+      await settled();
+      scene.timers.at(-1)?.callback();
+    }
+    await settled();
+    deepStrictEqual(
+      [scene.timers.length, scene.created.length, lines(scene)],
+      [
+        REGISTRATION_POLLS,
+        0,
+        ['info: the Dev Containers view is not registered, so it is not shown'],
+      ],
+    );
+  });
+
+  it('F-0906 7.E1: disposing while the view is awaited stops the wait, and nothing is shown after', async () => {
+    const scene = sceneOf();
+    scene.commands = [];
+    const view = showTargetsWhenRegistered(portsOf(scene));
+    await settled();
+    view.dispose();
+    scene.commands = [`${views.targetsContainers}.focus`];
+    scene.timers[0]?.callback();
+    await settled();
+    deepStrictEqual([scene.stopped, scene.created.length], [1, 0]);
+  });
+
+  it('F-0906 7.E1: disposing while a look is in flight leaves the view it finds disposed', async () => {
+    const scene = sceneOf();
+    const view = showTargetsWhenRegistered(portsOf(scene));
+    view.dispose();
+    await settled();
+    deepStrictEqual(scene.disposed, ['visibility', 'view']);
+  });
+
+  it('F-0906 7.E1: a view that is registered at once is shown with no wait, refreshed through the handle, and disposed with it', async () => {
+    const scene = sceneOf();
+    scene.containers = [containerOf(OTHER)];
+    const view = showTargetsWhenRegistered(portsOf(scene));
+    await settled();
+    await view.refresh();
+    view.dispose();
+    deepStrictEqual(
+      [scene.timers.length, scene.runs, scene.disposed],
+      [0, ['setting ps', 'setting inspect'], ['visibility', 'view']],
+    );
+  });
+
+  it('F-0906 7.E1: disposing after the view is shown disposes it, and a Refresh before it is shown does nothing', async () => {
+    const scene = sceneOf();
+    scene.commands = [];
+    const view = showTargetsWhenRegistered(portsOf(scene));
+    await settled();
+    await view.refresh();
+    scene.commands = [`${views.targetsContainers}.focus`];
+    scene.timers[0]?.callback();
+    await settled();
+    view.dispose();
+    deepStrictEqual([scene.runs, scene.disposed], [[], ['visibility', 'view']]);
+  });
+
+  it('F-0906 7.E1: a look that fails is logged at error, and the first look too', async () => {
+    const scene = sceneOf();
+    scene.commandFailure = new Error('no commands');
+    showTargetsWhenRegistered(portsOf(scene));
+    await settled();
+    deepStrictEqual(lines(scene), [
+      'error: the Dev Containers view could not be shown: no commands',
+    ]);
+  });
+
+  it('F-0906 7.E1: a later look that fails is logged by its text when it is not an error', async () => {
+    const scene = sceneOf();
+    scene.commands = [];
+    showTargetsWhenRegistered(portsOf(scene));
+    await settled();
+    scene.commandFailure = 'plain' as unknown as Error;
+    scene.timers[0]?.callback();
+    await settled();
+    deepStrictEqual(lines(scene), [
+      'error: the Dev Containers view could not be shown: plain',
+    ]);
+  });
+
   it('F-0901 3.3, BR-13: a header is expanded and bare, and a row carries its id, texts and token string, and is expanded only with children under it', () => {
     const child = rowOf({id: 'child'});
     deepStrictEqual(
@@ -304,19 +430,13 @@ describe('the Dev Containers view (card containers-30)', () => {
     );
   });
 
-  it('F-0906 AC-16, 7.E1: without the focus command no tree view is made and nothing is read, and the log says so', async () => {
+  it('F-0906 AC-16, 7.E1: without the focus command no tree view is made and nothing is read', async () => {
     const scene = sceneOf();
     scene.commands = ['workbench.action.reloadWindow'];
     const view = await showTargets(portsOf(scene));
     deepStrictEqual(
       [view, scene.created, scene.runs, scene.contexts, lines(scene)],
-      [
-        undefined,
-        [],
-        [],
-        [],
-        ['info: the Dev Containers view is not registered, so it is not shown'],
-      ],
+      [undefined, [], [], [], []],
     );
   });
 
