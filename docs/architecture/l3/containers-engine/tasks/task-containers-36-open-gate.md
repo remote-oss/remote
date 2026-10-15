@@ -22,7 +22,7 @@ export interface OpenGatePorts {
   /** `served.missing`: what the activation's probe found missing. */
   missing: readonly string[];
   /** `served.setupAgain`: probes again and shows the warning within BR-9 (c)'s cap. */
-  setupAgain(): Promise<{decision: {missing: readonly string[]}}>;
+  setupAgain(): Promise<{decision: {missing: readonly string[]}; interaction: Promise<unknown>}>;
   logger: Logger;
 }
 /**
@@ -34,7 +34,8 @@ export async function openPathAllowed(ports: OpenGatePorts, command: string): Pr
 
 - **Nothing of `OPEN_PATH_PROPOSALS` missing:** `true`, and `setupAgain` isn't called. A missing `contribViewsRemote`
   holds back only the views (#960), and nothing else holds back anything.
-- **One missing:** `await setupAgain()` once (BR-9 point 2 (a)). Then:
+- **One missing:** `await setupAgain()` once (BR-9 point 2 (a)). Read only its `decision`, which is the new probe's
+  (athena, #981). **Never await its `interaction`:** that settles only when the user answers the notice. Then:
   - the new decision still lacks one: log one info line, `<command> needs the proposed API: <the missing ones, comma
     separated>; the window stays as it is`, and return `false`;
   - the new decision lacks none: return `true` (in practice a grant needs a restart, so this branch is for
@@ -63,7 +64,9 @@ CLI read.
   - the same for `workspaceTrust`;
   - nothing missing: `true`, no `setupAgain`;
   - only `contribViewsRemote` missing: `true`, no `setupAgain`;
-  - missing at activation, granted by the new probe: `true`.
+  - missing at activation, granted by the new probe: `true`;
+  - `setupAgain`'s `interaction` never settles (a promise that's never resolved): the guard still returns `false`
+    (athena, #981).
 - `reopen.test.ts`: `F-0101 BR-9, AC-15: without resolvers, Reopen calls nothing but setupAgain`. None of the window's
   folders or trust, the engine's first check, the bridge, the opener or the progress is called, and nothing reloads.
   The same for `workspaceTrust`. With nothing missing, the existing rows pass unchanged.
@@ -79,5 +82,5 @@ CLI read.
 Run all gates with the changed files at 100 %, and the containers launches. PR title: `remote-containers: no reload
 while resolvers or workspaceTrust is missing (card containers-36, #976)`. Request athena only.
 
-**Open row (stop and report on #976):** `setupAgain()`'s decision doesn't carry the probe's `missing` list in a form
-this guard can read.
+`setupAgain()`'s `decision.missing` is the new probe's: `runSetup` probes on every call, and `decide()` puts `missing`
+on every kind (athena, #981).
