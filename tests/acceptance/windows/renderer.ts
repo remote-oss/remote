@@ -675,3 +675,41 @@ export async function waitForQuickPick(
     milliseconds,
   );
 }
+
+/** Whether the status bar of window `name` has an item whose DOM id is `itemId`. */
+export async function hasStatusItem(
+  name: string,
+  itemId: string,
+): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `document.getElementById(${JSON.stringify(itemId)}) !== null`,
+  );
+}
+
+/** The text of the window `name`'s page, as a reader sees it: the editors, the views and the status bar. */
+export async function pageText(name: string): Promise<string> {
+  return evaluate<string>(name, 'document.body.innerText');
+}
+
+/**
+ * Clicks the button of an editor of window `name` whose text is exactly `label`: a button of an editor's page, which
+ * `answerDialog` does not reach since that one is a dialog's. It fails naming what it found.
+ */
+export async function clickButton(name: string, label: string): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const buttons = [...document.querySelectorAll('.editor-instance .monaco-button')];
+      const button = buttons.find(each => each.textContent?.trim() === ${JSON.stringify(label)});
+      if (button === undefined) {
+        return 'no button ' + ${JSON.stringify(JSON.stringify(label))} + ' among ' + JSON.stringify(buttons.map(each => each.textContent));
+      }
+      button.click();
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
+}

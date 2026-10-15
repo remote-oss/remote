@@ -63,7 +63,7 @@ F-0106.AC-35	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0106.AC-36	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0106.AC-37	deferred	containers release 1: later (attach)
 F-0106.AC-38	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0106.AC-39	todo	
+F-0106.AC-39	acceptance	
 F-0106.AC-40	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0106.AC-41	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
 F-0106.AC-42	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
