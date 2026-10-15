@@ -13,7 +13,7 @@ import {
   settingIn,
   waitFor,
   windowEvents,
-} from '../windows/harness.ts';
+} from './harness.ts';
 
 const execFileAsync = promisify(execFile);
 

@@ -26,7 +26,7 @@ import {
   activations,
   openFolderWindow,
   setUserSetting,
-} from './folder-windows.ts';
+} from '../windows/folder-windows.ts';
 
 const execFileAsync = promisify(execFile);
 
