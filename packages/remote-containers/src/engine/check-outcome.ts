@@ -24,9 +24,45 @@ type SecondCheckFailure = 'S339' | 'S104' | 'S144';
 export type SecondCheckOutcome =
   {kind: 'passed'} | {kind: 'failed'; detail: SecondCheckFailure};
 
-/** The engine refused: the stderr says the user may not use it. */
-function isPermissionDenied(stderr: string): boolean {
-  return /permission denied/i.test(stderr);
+/** What a failing query's stderr says: the user may not use the engine, the program isn't there, or the engine failed. */
+type StderrOutcome = 'permission' | 'notFound' | 'engineError';
+
+/** The start of a line the Docker CLI writes for its own warnings, which are not its verdict. */
+const WARNING_PREFIX = 'WARNING:';
+
+/**
+ * The starts of the lines with which the Docker CLI reports its own transport and daemon failures. What follows such a
+ * line may be another program's text: the daemon's reply, or an ssh host's stderr.
+ */
+const ENGINE_FAILURE_PREFIXES: readonly string[] = [
+  'Error response from daemon:',
+  'error during connect:',
+  'failed to connect to the docker API at ',
+  'Cannot connect to the Docker daemon at ',
+];
+
+/**
+ * What a failing query's stderr says: the Docker CLI's own warnings are skipped, a line that starts with one of its
+ * transport or daemon prefixes decides an engine failure whatever else stderr holds, and the text rule (permission denied, then not found) applies only to the lines that are left.
+ */
+function stderrOutcomeOf(stderr: string): StderrOutcome {
+  const lines = stderr
+    .split('\n')
+    .map(line => line.replace(/\r$/, ''))
+    .filter(line => !line.startsWith(WARNING_PREFIX));
+  if (
+    lines.some(line =>
+      ENGINE_FAILURE_PREFIXES.some(prefix => line.startsWith(prefix)),
+    )
+  ) {
+    return 'engineError';
+  }
+  if (lines.some(line => /permission denied/i.test(line))) {
+    return 'permission';
+  }
+  return lines.some(line => /not ?found/i.test(line))
+    ? 'notFound'
+    : 'engineError';
 }
 
 /** The outcome of one query that does not pass, or undefined when it exited 0 in time. */
@@ -42,10 +78,7 @@ function failureOf(
   if (query.status === 0) {
     return undefined;
   }
-  if (isPermissionDenied(query.stderr)) {
-    return 'permission';
-  }
-  return /not ?found/i.test(query.stderr) ? 'notFound' : 'engineError';
+  return stderrOutcomeOf(query.stderr);
 }
 
 /**
@@ -88,6 +121,6 @@ export function secondCheckOutcomeOf(
   }
   return {
     kind: 'failed',
-    detail: isPermissionDenied(query.stderr) ? 'S104' : 'S144',
+    detail: stderrOutcomeOf(query.stderr) === 'permission' ? 'S104' : 'S144',
   };
 }
