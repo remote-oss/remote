@@ -28,6 +28,8 @@ import {
   type Sleeper,
   downloadWithRetry,
   editorChoiceOf,
+  chosenLaunches,
+  runArgumentsOf,
   type CommandResult,
   failureText,
   harnessSshConfig,
@@ -936,6 +938,27 @@ describe('acceptance', () => {
   });
 
   describe('runAcceptance', () => {
+    it('tooling-50: a run given labels makes only those launches, in the run order', async () => {
+      await runAcceptance(workspace.root, harness, 'vscodium', [
+        'remote',
+        'local',
+      ]);
+      deepStrictEqual(harness.launched, ['local', 'remote']);
+    });
+
+    it('tooling-50: an unknown label fails with 2 before anything starts', async () => {
+      const code = await runAcceptance(workspace.root, harness, 'vscodium', [
+        'local',
+        'no-such-launch',
+      ]);
+      deepStrictEqual([code, harness.calls], [2, []]);
+    });
+
+    it('tooling-50: no launch reachable makes nothing and passes', async () => {
+      const code = await runAcceptance(workspace.root, harness, 'vscodium', []);
+      deepStrictEqual([code, harness.calls, harness.launched], [0, [], []]);
+    });
+
     it('#439: the run removes the suite bundles when it ends', async () => {
       workspace.write('tests/acceptance/dist-remote/window.test.cjs', '');
       await runAcceptance(workspace.root, harness, 'vscodium');
@@ -2542,6 +2565,40 @@ describe('acceptance', () => {
 
     it('#253 Q14: an extra argument is not understood', () => {
       strictEqual(editorChoiceOf(['--editor', 'vscode', 'more']), undefined);
+    });
+
+    it('tooling-50: --launches takes a comma list, none or all, with VSCodium only', () => {
+      deepStrictEqual(
+        [
+          runArgumentsOf(['--editor', 'vscodium', '--launches', 'a,b']),
+          runArgumentsOf(['--editor', 'vscodium', '--launches', 'none']),
+          runArgumentsOf(['--launches', 'all', '--editor', 'vscodium']),
+          runArgumentsOf(['--editor', 'vscode', '--launches', 'a']),
+          runArgumentsOf(['--editor', 'vscodium', '--launches']),
+          runArgumentsOf(['--editor', 'vscodium']),
+        ],
+        [
+          {editor: 'vscodium', launches: ['a', 'b']},
+          {editor: 'vscodium', launches: []},
+          {editor: 'vscodium'},
+          undefined,
+          undefined,
+          {editor: 'vscodium'},
+        ],
+      );
+    });
+
+    it('tooling-50: an unknown label names the known ones', () => {
+      strictEqual(
+        chosenLaunches(
+          [
+            {label: 'local', runner: 'runner', suite: 'suite-local'},
+            {label: 'remote', runner: 'runner-remote', suite: 'suite-remote'},
+          ],
+          ['remote', 'nope'],
+        ),
+        'unknown launch label(s): nope; the known ones: local, remote',
+      );
     });
 
     it('#253 Q14: the tool exits 2 with the usage line for an unknown editor', () => {
