@@ -486,15 +486,39 @@ export async function reloadWindow(name: string): Promise<void> {
 }
 
 /**
- * Runs Reopen in Container in window `name` and resolves on the window's next `activated`. The command isn't awaited:
- * the reload ends the extension host before it can answer, as with `reloadWindow`.
+ * Runs Reopen in Container in window `name` and resolves on the window's next `activated`, which comes with the
+ * reload, before the connect is done. The command isn't awaited: the reload ends the extension host before it can
+ * answer, as with `reloadWindow`. A row whose window never reaches its folder (a dialog instead) waits from here.
  */
-export async function reopenInContainer(name: string): Promise<void> {
+async function reopenStarted(name: string): Promise<void> {
   const before = countOf(name, 'activated');
   send(name, 'remote-containers.reopenInContainer', []);
   await waitUntil(
     `window ${name} to activate in its container`,
     () => countOf(name, 'activated') > before,
+  );
+}
+
+/**
+ * Runs Reopen in Container in window `name` and resolves once the window is connected to its container: the window
+ * reads its workspace folder through the container's file system, which it can't before the connect is done.
+ */
+export async function reopenInContainer(
+  name: string,
+  milliseconds = 300_000,
+): Promise<void> {
+  await reopenStarted(name);
+  await waitFor(
+    `window ${name} to connect to its container`,
+    async () => {
+      try {
+        await inWindow(name, 'acceptance.agent.statFolder');
+        return (await windowState(name)).remoteName === 'dev-container';
+      } catch {
+        return false;
+      }
+    },
+    milliseconds,
   );
 }
 
@@ -609,9 +633,10 @@ export async function extensionPresent(
 }
 
 /**
- * What window `name` reports of itself: the remote it is on, the authority it is on and its folders. A remote
- * window's authority is written by its own extension when it resolves, which may lag the window's agent, so a
- * remote window's state is re-asked until the authority is there; a local window reports once.
+ * What window `name` reports of itself: the remote it is on, the authority it is on and its folders. An SSH window's
+ * authority is written by remote-ssh when it resolves, which may lag the window's agent, so an SSH window's state is
+ * re-asked until the authority is there. Any other window reports once: no other extension writes an authority, so a
+ * dev container window's is always null.
  */
 export async function windowState(name: string): Promise<{
   remoteName: string | null;
@@ -629,7 +654,7 @@ export async function windowState(name: string): Promise<{
       remoteSshActive: last?.remoteSshActive ?? false,
     };
     if (
-      state.remoteName === null ||
+      state.remoteName !== 'ssh-remote' ||
       state.remoteAuthority !== null ||
       Date.now() > deadline
     ) {
