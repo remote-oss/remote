@@ -16,6 +16,7 @@ export function inertRecoveryPorts(
     openExternal: () => Promise.resolve(),
     openSetting: () => Promise.resolve(),
     later: () => undefined,
+    disconnected: () => undefined,
     logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
     ...replaced,
   };

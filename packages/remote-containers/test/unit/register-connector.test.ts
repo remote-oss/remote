@@ -36,6 +36,10 @@ async function registered(
   options: {
     resolversGranted?: boolean;
     failure?: Failed;
+    /** What each connect answers in turn; the last answer is repeated. */
+    answers?: Array<Connected | Failed>;
+    /** What the user does with a failure dialog: a button, Escape, or leaves it open until `closeDialog`. */
+    dialog?: {button: string} | 'escape' | 'open';
     identity?: {name: string | undefined; context: string | undefined};
     canonical?: (
       authority: string,
@@ -44,6 +48,11 @@ async function registered(
   } = {},
 ) {
   const warned: string[] = [];
+  const answers = [...(options.answers ?? [])];
+  let identity = options.identity;
+  const dialogHold: {close: (choice: string | undefined) => void} = {
+    close: () => undefined,
+  };
   const events: string[] = [];
   const shown: string[][] = [];
   const requests: ProgressRequest[] = [];
@@ -57,13 +66,17 @@ async function registered(
       for (const listener of listeners) {
         listener({name: 'installing'});
       }
-      return Promise.resolve(options.failure ?? CONNECTED);
+      return Promise.resolve(
+        (answers.length > 1 ? answers.shift() : answers[0]) ??
+          options.failure ??
+          CONNECTED,
+      );
     },
     cancel: () => undefined,
     onHeldChanged: () => () => undefined,
     revealDetails: () => undefined,
-    heldIdentity: () => options.identity,
     heldConnection: () => undefined,
+    heldIdentity: () => identity,
     canonicalPathOf: options.canonical ?? (() => Promise.resolve(undefined)),
     onPhase: listener => {
       listeners.push(listener);
@@ -108,8 +121,17 @@ async function registered(
       commands: host,
       presenter: inertRecoveryPorts({
         showError: (message, detail, buttons) => {
-          shown.push([...buttons]);
-          return Promise.resolve('Retry');
+          shown.push(buttons.map(button => button.title));
+          if (options.dialog === 'open') {
+            return new Promise<string | undefined>(resolve => {
+              dialogHold.close = resolve;
+            });
+          }
+          return Promise.resolve(
+            options.dialog === 'escape'
+              ? undefined
+              : (options.dialog?.button ?? 'Retry'),
+          );
         },
       }),
       translate: template => template,
@@ -139,7 +161,47 @@ async function registered(
     recording,
     revealed: () => revealed,
     warned,
+    identify: (next: typeof identity) => {
+      identity = next;
+    },
+    closeDialog: (choice: string | undefined) => {
+      dialogHold.close(choice);
+    },
   };
+}
+
+/** The authority of a window whose folder is known, so the dialog offers Edit. */
+const FOLDER_PAYLOAD = devContainerPayloadOf({
+  kind: 'folder',
+  hostPath: '/w',
+  localDocker: false,
+  configFile: {
+    $mid: 1,
+    path: '/w/.devcontainer/devcontainer.json',
+    scheme: 'file',
+  },
+});
+const FOLDER_AUTHORITY = encodeAuthority({
+  family: 'dev-container',
+  target: {payload: FOLDER_PAYLOAD},
+  rawHostString: FOLDER_PAYLOAD,
+});
+
+/** Resolves the window's authority as attempt `attempt` and waits for it to settle, whatever its end. */
+async function settledResolve(
+  seen: Awaited<ReturnType<typeof registered>>,
+  attempt: number,
+  authority = AUTHORITY,
+): Promise<void> {
+  await seen.recording
+    .registered()
+    ?.resolve(authority, {resolveAttempt: attempt})
+    .catch(() => undefined);
+}
+
+/** The workspace suffix of each label formatter registered so far. */
+function suffixesOf(seen: Awaited<ReturnType<typeof registered>>): string[] {
+  return seen.formatters.map(formatter => formatter.formatting.workspaceSuffix);
 }
 
 describe('the registration of the container connector (card containers-08)', () => {
@@ -275,27 +337,10 @@ describe('the registration of the container connector (card containers-08)', () 
   });
 
   it('F-0410 AC-1: a failed connect shows the dialog with Edit for the folder of the window’s authority', async () => {
-    const payload = devContainerPayloadOf({
-      kind: 'folder',
-      hostPath: '/w',
-      localDocker: false,
-      configFile: {
-        $mid: 1,
-        path: '/w/.devcontainer/devcontainer.json',
-        scheme: 'file',
-      },
-    });
     const seen = await registered({failure: containerSetupFailed()});
     await seen.recording
       .registered()
-      ?.resolve(
-        encodeAuthority({
-          family: 'dev-container',
-          target: {payload},
-          rawHostString: payload,
-        }),
-        {resolveAttempt: 1},
-      )
+      ?.resolve(FOLDER_AUTHORITY, {resolveAttempt: 1})
       .catch(() => undefined);
     deepStrictEqual(seen.shown, [
       ['Retry', 'Edit devcontainer.json Locally', 'More Actions...'],
@@ -309,5 +354,111 @@ describe('the registration of the container connector (card containers-08)', () 
       ?.resolve(AUTHORITY, {resolveAttempt: 1})
       .catch(() => undefined);
     deepStrictEqual(seen.shown, [['Retry', 'More Actions...']]);
+  });
+
+  it('F-0410 5.0 step 4: a window whose dialog is left by More Actions... registers the unnamed label, so it is titled Dev Container', async () => {
+    const seen = await registered({
+      failure: containerSetupFailed(),
+      dialog: {button: 'More Actions...'},
+    });
+    await settledResolve(seen, 1);
+    deepStrictEqual(
+      [
+        seen.formatters.map(formatter => formatter.authority),
+        suffixesOf(seen),
+        seen.disposed,
+      ],
+      [['dev-container+7b7d'], ['Dev Container'], []],
+    );
+  });
+
+  it('F-0410 5.0 step 4: Escape on the dialog is More Actions..., and registers the label too', async () => {
+    const seen = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'escape',
+    });
+    await settledResolve(seen, 1);
+    deepStrictEqual(suffixesOf(seen), ['Dev Container']);
+  });
+
+  it('F-0410 5.0 steps 2 and 4, AC-1: while the dialog is open there is no label, and it comes when the user leaves the dialog', async () => {
+    const seen = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'open',
+    });
+    const running = settledResolve(seen, 1);
+    await new Promise(resolve => setImmediate(resolve));
+    const whileOpen = suffixesOf(seen);
+    seen.closeDialog('More Actions...');
+    await running;
+    deepStrictEqual([whileOpen, suffixesOf(seen)], [[], ['Dev Container']]);
+  });
+
+  it('F-0410 5.0 step 4: Retry reloads the window, so no label is registered', async () => {
+    const seen = await registered({
+      failure: containerSetupFailed(),
+      dialog: {button: 'Retry'},
+    });
+    await settledResolve(seen, 1);
+    deepStrictEqual(seen.formatters, []);
+  });
+
+  it('F-0410 5.0 step 4: Edit Locally leaves the authority, so no label is registered', async () => {
+    const seen = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'open',
+    });
+    const running = settledResolve(seen, 1, FOLDER_AUTHORITY);
+    await new Promise(resolve => setImmediate(resolve));
+    seen.closeDialog('Edit devcontainer.json Locally');
+    await running;
+    deepStrictEqual(seen.formatters, []);
+  });
+
+  it('F-0410 5.0 step 4: a failed settle that shows no dialog registers the label at once', async () => {
+    const seen = await registered({
+      failure: {...containerSetupFailed(), silent: true},
+      dialog: 'open',
+    });
+    await settledResolve(seen, 1);
+    deepStrictEqual(suffixesOf(seen), ['Dev Container']);
+  });
+
+  it('F-0410 5.0 step 4: a later failure leaves the label that is there, and a later connect replaces it with the named one', async () => {
+    const seen = await registered({
+      answers: [containerSetupFailed(), containerSetupFailed(), CONNECTED],
+      dialog: {button: 'More Actions...'},
+    });
+    await settledResolve(seen, 1);
+    await settledResolve(seen, 2);
+    const afterFailures = seen.formatters.length;
+    seen.identify({name: 'Proj', context: undefined});
+    await settledResolve(seen, 3);
+    deepStrictEqual(
+      [afterFailures, suffixesOf(seen), seen.disposed],
+      [1, ['Dev Container', 'Dev Container: Proj'], ['label']],
+    );
+  });
+
+  it('F-0504 AC-1: a connected first resolve registers the named label only', async () => {
+    const seen = await registered({
+      identity: {name: 'Proj', context: undefined},
+    });
+    await settledResolve(seen, 1);
+    deepStrictEqual(
+      [suffixesOf(seen), seen.disposed],
+      [['Dev Container: Proj'], []],
+    );
+  });
+
+  it('F-0410 5.0 step 4: a label that comes after dispose is not registered, for a failure either', async () => {
+    const seen = await registered({
+      failure: containerSetupFailed(),
+      dialog: {button: 'More Actions...'},
+    });
+    const running = settledResolve(seen, 1);
+    seen.result.dispose();
+    await running;
+    deepStrictEqual(seen.formatters, []);
   });
 });

@@ -20,9 +20,11 @@ import {
   answerDialog,
   dialogDetailLines,
   dialogOf,
+  pressEscape,
   primaryButtonOf,
   type ShownDialog,
   statusItem,
+  windowTitle,
   waitForDialog,
   waitForQuickPick,
 } from '../windows/renderer.ts';
@@ -140,6 +142,51 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
       {
         saying: {message: '', details: S034},
         indicator: 'Opening Remote...',
+      },
+    );
+  });
+
+  it('F-0410 AC-1 (buttons): the dialog has exactly Edit devcontainer.json Locally, More Actions... and Retry in the editor’s order, with no Cancel of its own and Retry primary, the title and the indicator stay as they were while it is open, and Escape is More Actions...', async () => {
+    const {name, dialog} = await failed(
+      folderOf('recover-buttons', {
+        runArgs: [...runLabelArguments(), '--no-such-flag'],
+      }),
+    );
+    const primary = await primaryButtonOf(name);
+    const whileOpen = {
+      title: await windowTitle(name),
+      indicator: (await statusItem(name, 'status.host')).text,
+    };
+    await pressEscape(name);
+    const pick = await waitForQuickPick(name, 30_000);
+    deepStrictEqual(
+      {buttons: dialog.buttons, primary, whileOpen, pick: pick.placeholder},
+      {
+        buttons: ['Edit devcontainer.json Locally', 'More Actions...', 'Retry'],
+        primary: 'Retry',
+        whileOpen: {title: '[recover-buttons]', indicator: 'Opening Remote...'},
+        pick: S272,
+      },
+    );
+  });
+
+  it('F-0410 AC-5 (title): a window whose connect failed is titled [Dev Container], and the indicator reads Disconnected from Dev Container after More Actions...', async () => {
+    const {name} = await failed(
+      folderOf('recover-title', {
+        runArgs: [...runLabelArguments(), '--no-such-flag'],
+      }),
+    );
+    await answerDialog(name, 'More Actions...');
+    await waitForQuickPick(name, 30_000);
+    await pressEscape(name);
+    deepStrictEqual(
+      {
+        title: await windowTitle(name),
+        indicator: (await statusItem(name, 'status.host')).text,
+      },
+      {
+        title: '[recover-title [Dev Container]]',
+        indicator: 'Disconnected from Dev Container',
       },
     );
   });

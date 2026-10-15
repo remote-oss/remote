@@ -768,6 +768,20 @@ export async function answerDialog(name: string, label: string): Promise<void> {
   }
 }
 
+/** Presses Escape in window `name`: a key event on the element that has focus, as the keyboard sends it. */
+export async function pressEscape(name: string): Promise<void> {
+  await evaluate<null>(
+    name,
+    `(() => {
+      const target = document.activeElement ?? document.body;
+      for (const type of ['keydown', 'keyup']) {
+        target.dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
+      }
+      return null;
+    })()`,
+  );
+}
+
 /**
  * The lines of the detail of the dialog open in window `name`, as the dialog draws them: core renders a line break of
  * the detail as an element, which the detail's `textContent` leaves out. Empty when no dialog is open.

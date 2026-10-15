@@ -1,7 +1,8 @@
 /**
  * @fileoverview The registration of the container connector: the resolver of the `dev-container` authority behind the
- * activation's own readiness, the window's label once the first resolve settles with the connection up, and the
- * command the progress's "(show log)" link runs.
+ * activation's own readiness, the window's label (the named one once a resolve settles with the connection up, the
+ * unnamed one once the window is disconnected, never while a failure dialog is open) and the command the progress's
+ * "(show log)" link runs.
  */
 
 import {
@@ -32,7 +33,7 @@ export interface ConnectorRegistrationHost {
   resolverEditor: ResolverEditor;
   labels: LabelFormatterHost;
   commands: CommandHost;
-  presenter: RecoveryPorts;
+  presenter: Omit<RecoveryPorts, 'disconnected'>;
   translate: Translate;
 }
 
@@ -57,16 +58,41 @@ export async function registerContainerResolver(
   function currentTarget(): DevContainerFolder | undefined {
     return decodedFolderOf(handle?.currentConnection()?.decodedTarget);
   }
+  let label: {dispose(): void} | undefined;
+  let disposed = false;
+  let dialogs = 0;
+  /** The label with no name, for a window that is disconnected and has none yet; never while a dialog is open. */
+  function registerUnnamedLabel(): void {
+    const target = handle?.currentConnection()?.decodedTarget;
+    if (target === undefined || label !== undefined || disposed) {
+      return;
+    }
+    label = registerAuthorityLabel(
+      host.labels,
+      target,
+      workspaceSuffixOf(undefined, translate),
+    );
+  }
+  const dialogPresenter = recoveryPresenterOf(
+    {...host.presenter, disconnected: registerUnnamedLabel},
+    () => currentTarget(),
+    translate,
+  );
   const registration = await registerResolver(
     host.resolverEditor,
     {
       family: 'dev-container',
       connector,
-      presenter: recoveryPresenterOf(
-        host.presenter,
-        () => currentTarget(),
-        translate,
-      ),
+      presenter: {
+        present: async failed => {
+          dialogs += 1;
+          try {
+            return await dialogPresenter.present(failed);
+          } finally {
+            dialogs -= 1;
+          }
+        },
+      },
       cancellable: false,
       allowsTrust: false,
       titleOf: phase => phaseTitleOf(phase, translate),
@@ -89,19 +115,27 @@ export async function registerContainerResolver(
       served.revealLog();
     },
   );
-  let label: {dispose(): void} | undefined;
-  let disposed = false;
   if (registration.kind === 'registered') {
     const {resolver} = registration;
     handle = resolver;
-    resolver.onFirstResolveSettled(() => {
+    resolver.onResolveSettled(() => {
       const connection = resolver.currentConnection();
-      if (connection?.state === 'connected' && !disposed) {
+      if (connection === undefined || disposed) {
+        return;
+      }
+      if (connection.state === 'connected') {
+        label?.dispose();
         label = registerAuthorityLabel(
           host.labels,
           connection.decodedTarget,
           workspaceSuffixOf(connector.heldIdentity(), translate),
         );
+      } else {
+        queueMicrotask(() => {
+          if (dialogs === 0) {
+            registerUnnamedLabel();
+          }
+        });
       }
     });
   }
