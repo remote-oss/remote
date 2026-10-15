@@ -26,6 +26,12 @@ on:
         description: Also run the host-variant rows, once per login shell and download tool of the SSH host
         type: boolean
         default: false
+      launches:
+        description: >-
+          With vscodium, the launches to make: all, none, or labels joined by commas (for a change,
+          node tools/acceptance-select.ts --base <sha> --head <sha> prints the launches it can reach)
+        type: string
+        default: all
   # a push to main runs the VSCodium job alone: the backstop that shows whether main's launches are green, which PR CI
   # never runs; the other jobs ran on the pull request's merge ref
   push:
@@ -267,12 +273,15 @@ jobs:
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sudo sysctl --write kernel.apparmor_restrict_unprivileged_userns=0
           fi
+      # a dispatch may name the launches; a push to main and a release tag make every launch
       - run: |
           if command -v xvfb-run >/dev/null; then
-            xvfb-run --auto-servernum pnpm test:acceptance:vscodium
+            xvfb-run --auto-servernum pnpm test:acceptance:vscodium --launches "${LAUNCHES:-all}"
           else
-            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium
+            DISPLAY=${DISPLAY:-:99} pnpm test:acceptance:vscodium --launches "${LAUNCHES:-all}"
           fi
+        env:
+          LAUNCHES: ${{ github.event_name == 'workflow_dispatch' && inputs.launches || 'all' }}
       - if: always()
         run: pnpm acceptance:clean
 

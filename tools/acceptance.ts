@@ -14,6 +14,7 @@ import {holdClientPorts, type PortHolder} from './acceptance-occupy.ts';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -905,7 +906,20 @@ export async function runAcceptance(
   root: string,
   dependencies: HarnessDependencies,
   editor: EditorChoice = 'vscode',
+  selected?: readonly string[],
 ): Promise<number> {
+  const chosen =
+    editor === 'vscodium' ? chosenLaunches(launchesOf(root), selected) : [];
+  if (typeof chosen === 'string') {
+    console.error(`acceptance: ${chosen}`);
+    return 2;
+  }
+  if (editor === 'vscodium' && selected !== undefined) {
+    reportSelection(launchesOf(root), chosen);
+    if (chosen.length === 0) {
+      return 0;
+    }
+  }
   // The run id in the name lets the clean-up find the editor of a run that was killed.
   const runFolder = mkdtempSync(
     path.join(
@@ -948,7 +962,7 @@ export async function runAcceptance(
         JSON.stringify({entries: client.script ?? []}),
       );
     }
-    const launches = editor === 'vscodium' ? launchesOf(root) : [];
+    const launches = chosen;
     if (editor === 'vscodium') {
       writeClients(runFolder);
       writeTildeCopy(runFolder);
@@ -1390,7 +1404,76 @@ export function runTestCli(
 
 /** What a run prints when its arguments are not understood. */
 export const USAGE =
-  'usage: node tools/acceptance.ts [--editor vscode|vscodium]';
+  'usage: node tools/acceptance.ts [--editor vscode|vscodium [--launches all|none|<label>,...]]';
+
+/**
+ * The launches a run makes: every one when `selected` is undefined, else those whose label it names,
+ * in the run's order; an error text naming the known labels when it names an unknown one.
+ */
+export function chosenLaunches(
+  launches: readonly Launch[],
+  selected: readonly string[] | undefined,
+): Launch[] | string {
+  if (selected === undefined) {
+    return [...launches];
+  }
+  const known = launches.map(launch => launch.label);
+  const unknown = selected.filter(label => !known.includes(label));
+  if (unknown.length > 0) {
+    return `unknown launch label(s): ${unknown.join(', ')}; the known ones: ${known.join(', ')}`;
+  }
+  return launches.filter(launch => selected.includes(launch.label));
+}
+
+/** Prints the launches a selected run makes and skips, and adds them to the job's summary when there is one. */
+function reportSelection(
+  launches: readonly Launch[],
+  chosen: readonly Launch[],
+): void {
+  const made = chosen.map(launch => launch.label);
+  const skipped = launches
+    .map(launch => launch.label)
+    .filter(label => !made.includes(label));
+  const text =
+    made.length === 0
+      ? `no launch reachable: none made, ${String(skipped.length)} skipped`
+      : `launches made (${String(made.length)}): ${made.join(', ')}; skipped (${String(skipped.length)}): ${skipped.join(', ') || '-'}`;
+  console.log(`acceptance: ${text}`);
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (summary !== undefined && summary !== '') {
+    appendFileSync(summary, `**VSCodium launches:** ${text}\n`);
+  }
+}
+
+/** The run's editor and launch selection from its arguments, or undefined when they are not understood. */
+export function runArgumentsOf(
+  commandArguments: readonly string[],
+): {editor: EditorChoice; launches?: string[]} | undefined {
+  const flagIndex = commandArguments.indexOf('--launches');
+  if (flagIndex === -1) {
+    const editor = editorChoiceOf(commandArguments);
+    return editor === undefined ? undefined : {editor};
+  }
+  const value = commandArguments[flagIndex + 1];
+  const rest = [
+    ...commandArguments.slice(0, flagIndex),
+    ...commandArguments.slice(flagIndex + 2),
+  ];
+  if (
+    value === undefined ||
+    value === '' ||
+    editorChoiceOf(rest) !== 'vscodium'
+  ) {
+    return undefined;
+  }
+  if (value === 'all') {
+    return {editor: 'vscodium'};
+  }
+  return {
+    editor: 'vscodium',
+    launches: value === 'none' ? [] : value.split(','),
+  };
+}
 
 /** The editor the arguments choose (VS Code when they name none), or undefined when they are not understood. */
 export function editorChoiceOf(
@@ -1436,8 +1519,8 @@ export function unpackArchive(archive: Uint8Array, folder: string): void {
 }
 
 if (isMainModule(import.meta.url)) {
-  const editor = editorChoiceOf(process.argv.slice(2));
-  if (editor === undefined) {
+  const parsed = runArgumentsOf(process.argv.slice(2));
+  if (parsed === undefined) {
     console.error(USAGE);
     process.exitCode = 2;
   } else {
@@ -1482,7 +1565,8 @@ if (isMainModule(import.meta.url)) {
             },
           ),
       },
-      editor,
+      parsed.editor,
+      parsed.launches,
     );
   }
 }
