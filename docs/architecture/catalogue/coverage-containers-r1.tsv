@@ -23,13 +23,13 @@ F-0101.AC-21	todo
 F-0101.AC-22	deferred	containers release 1: later (the attach, Kubernetes and Apple families)
 F-0106.AC-1	unit	
 F-0106.AC-2	deferred	containers release 1: increment 2 (authoring)
-F-0106.AC-3	todo	
-F-0106.AC-4	todo	
+F-0106.AC-3	acceptance	
+F-0106.AC-4	acceptance	
 F-0106.AC-5	unit	
 F-0106.AC-6	todo	
 F-0106.AC-6a	todo	
 F-0106.AC-6b	todo	
-F-0106.AC-7	todo	
+F-0106.AC-7	acceptance	
 F-0106.AC-7a	todo	
 F-0106.AC-8	unit	
 F-0106.AC-8a	todo	
@@ -51,7 +51,7 @@ F-0106.AC-23	deferred	containers release 1: later (trust for attach, pod and vol
 F-0106.AC-24	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0106.AC-25	deferred	containers release 1: later (trust for attach, pod and volume windows, the revocation reload and the per-profile flags)
 F-0106.AC-26	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0106.AC-27	todo	
+F-0106.AC-27	acceptance	
 F-0106.AC-28	todo	
 F-0106.AC-29	core	core: the workspace wording of the Workspace Trust dialog
 F-0106.AC-30	todo	
@@ -214,7 +214,7 @@ F-0401.AC-17	todo
 F-0401.AC-18	todo	
 F-0401.AC-19	deferred	containers release 1: later (remote engines)
 F-0401.AC-20	todo	
-F-0401.AC-21	todo	
+F-0401.AC-21	acceptance	
 F-0401.AC-22	deferred	containers release 1: later (remote engines)
 F-0401.AC-23	unit	
 F-0403.AC-1	todo	
