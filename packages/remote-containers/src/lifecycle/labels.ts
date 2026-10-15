@@ -6,6 +6,8 @@
 
 const FOLDER_LABEL = 'devcontainer.local_folder';
 const CONFIG_LABEL = 'devcontainer.config_file';
+const LEGACY_FOLDER_LABEL = 'vsch.local.folder';
+const LEGACY_QUALITY_LABEL = 'vsch.quality';
 
 /** What discovery knows of one container. */
 export interface ContainerFacts {
@@ -19,12 +21,22 @@ export interface ContainerFacts {
 /** What to do with the folder's container. */
 export type Decision =
   | {kind: 'create'}
-  | {kind: 'use'; containerId: string; status: 'running' | 'exited' | 'created'}
+  | {
+      kind: 'use';
+      containerId: string;
+      status: 'running' | 'exited' | 'created';
+      idLabels: string[];
+    }
   | {kind: 'unusable'; containerId: string; status: string};
 
 /** The two labels that identify the container of a folder and a configuration file, in the order the CLI is given them. */
 export function idLabels(folder: string, configFile: string): string[] {
   return [`${FOLDER_LABEL}=${folder}`, `${CONFIG_LABEL}=${configFile}`];
+}
+
+/** The labels of a container made before the `devcontainer.*` labels, in the order the CLI is given them. */
+export function legacyIdLabels(folder: string): string[] {
+  return [`${LEGACY_FOLDER_LABEL}=${folder}`, `${LEGACY_QUALITY_LABEL}=stable`];
 }
 
 /** The arguments of the engine query that lists the ids of every container made for a folder. */
@@ -37,6 +49,28 @@ export function discoveryArguments(folder: string): string[] {
     '--filter',
     `label=${FOLDER_LABEL}=${folder}`,
   ];
+}
+
+/** The arguments of the engine query that lists the ids of the legacy containers of a folder. */
+export function legacyDiscoveryArguments(folder: string): string[] {
+  return [
+    'ps',
+    '-a',
+    '-q',
+    '--no-trunc',
+    '--filter',
+    `label=${LEGACY_FOLDER_LABEL}=${folder}`,
+    '--filter',
+    `label=${LEGACY_QUALITY_LABEL}=stable`,
+  ];
+}
+
+/** Whether a container carries the legacy pair for this folder. */
+export function isLegacy(folder: string, container: ContainerFacts): boolean {
+  return (
+    container.labels[LEGACY_FOLDER_LABEL] === folder &&
+    container.labels[LEGACY_QUALITY_LABEL] === 'stable'
+  );
 }
 
 const CREATED_PATTERN = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?Z$/;
@@ -71,15 +105,17 @@ function newestOf(
 }
 
 /**
- * Decides from labels alone. A container is a candidate when it is labelled with exactly this folder, with this
- * configuration file or none, and is not being removed. Those labelled with both come before those labelled with the
- * folder only; within a tier the newest wins, whatever its status.
+ * Decides from labels alone. Legacy-labelled containers come first, then those labelled with both, then those
+ * labelled with the folder only; within a tier the newest wins, whatever its status.
  */
 export function decide(
   folder: string,
   configFile: string,
   containers: readonly ContainerFacts[],
 ): Decision {
+  const legacy = containers.filter(
+    container => isLegacy(folder, container) && container.status !== 'removing',
+  );
   const candidates = containers.filter(
     container =>
       container.labels[FOLDER_LABEL] === folder &&
@@ -90,7 +126,10 @@ export function decide(
   const exact = candidates.filter(
     container => container.labels[CONFIG_LABEL] === configFile,
   );
-  const chosen = newestOf(exact.length > 0 ? exact : candidates);
+  const tier =
+    legacy.length > 0 ? legacy : exact.length > 0 ? exact : candidates;
+  const fromLegacy = tier === legacy;
+  const chosen = newestOf(tier);
   if (chosen === undefined) {
     return {kind: 'create'};
   }
@@ -99,7 +138,14 @@ export function decide(
     chosen.status === 'exited' ||
     chosen.status === 'created'
   ) {
-    return {kind: 'use', containerId: chosen.id, status: chosen.status};
+    return {
+      kind: 'use',
+      containerId: chosen.id,
+      status: chosen.status,
+      idLabels: fromLegacy
+        ? legacyIdLabels(folder)
+        : idLabels(folder, configFile),
+    };
   }
   return {kind: 'unusable', containerId: chosen.id, status: chosen.status};
 }

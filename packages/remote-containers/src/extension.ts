@@ -36,6 +36,7 @@ import {
   settings,
   standDown,
 } from './identifiers.generated.ts';
+import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
@@ -312,9 +313,9 @@ export async function activate(
                 vscode.workspace.getConfiguration().get(settings.dockerPath.id),
             },
             engine: {
-              firstCheck: base =>
+              firstCheck: (base, dialogs) =>
                 firstCheck(
-                  served.preflight,
+                  {...served.preflight, dialogs},
                   base,
                   new AbortController().signal,
                 ),
@@ -324,6 +325,22 @@ export async function activate(
                   firstFolder(),
                   new AbortController().signal,
                 ),
+            },
+            dialogs: served.preflight.dialogs,
+            progress: {
+              showProgress: (title, until) => {
+                void vscode.window.withProgress(
+                  {
+                    location: vscode.ProgressLocation.Notification,
+                    title,
+                    cancellable: false,
+                  },
+                  () => until,
+                );
+              },
+              setTimer: (milliseconds, callback) =>
+                served.preflight.setTimer(milliseconds, callback),
+              translate,
             },
             bridge: bridgeFor(process.env, served.logger),
             opener: {
@@ -423,6 +440,11 @@ export async function activate(
           serverDownloadFolder: configuration.get(
             settings.serverDownloadFolder.id,
           ),
+          cacheVolume: () =>
+            cacheVolumeOf(
+              configuration.inspect(settings.cacheVolume.id)?.globalValue,
+              configuration.inspect(settings.cacheVolume.legacyId)?.globalValue,
+            ),
           defaultExtensions: configuration.inspect(
             settings.defaultExtensions.id,
           )?.globalValue,

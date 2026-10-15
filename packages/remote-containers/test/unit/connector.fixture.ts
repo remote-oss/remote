@@ -28,6 +28,7 @@ import type {
   EngineOptions,
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
+import {cacheVolumeOf} from '../../src/lifecycle/cache-volume.ts';
 import type {
   ContainerLifecycle,
   ContainerOutcome,
@@ -133,6 +134,9 @@ export interface Scene {
   phasesOfServer: Array<'installing' | 'startingServer'>;
   relayOutcome: 'open' | Failed;
   dockerPath: unknown;
+  /** What the settings' `inspect` answers for the two `cacheVolume` settings; nothing, when the scene leaves it absent. */
+  cacheVolumeInspect:
+    {globalValue?: unknown; workspaceValue?: unknown} | undefined;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
   defaultExtensions: unknown;
   deprecatedDefaultExtensions: unknown;
@@ -210,6 +214,7 @@ export function sceneOf(
     phasesOfServer: ['installing', 'startingServer'],
     relayOutcome: 'open',
     dockerPath: 'docker',
+    cacheVolumeInspect: undefined,
     defaultExtensions: undefined,
     deprecatedDefaultExtensions: undefined,
     killStatuses: [],
@@ -338,6 +343,11 @@ export function sceneOf(
       dockerPath: scene.dockerPath,
       serverDownloadBaseUrl: undefined,
       serverDownloadFolder: undefined,
+      cacheVolume: () =>
+        cacheVolumeOf(
+          scene.cacheVolumeInspect?.globalValue,
+          scene.cacheVolumeInspect?.globalValue,
+        ),
       defaultExtensions: scene.defaultExtensions,
       deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,
     }),

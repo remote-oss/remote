@@ -119,6 +119,17 @@
           "scope": "application",
           "description": "%setting.ServerDownloadFolder.description%"
         },
+        "dev.containers.cacheVolume": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "%setting.CacheVolume.description%"
+        },
+        "remote.containers.cacheVolume": {
+          "scope": "application",
+          "deprecationMessage": "%setting.CacheVolume.deprecationMessage%",
+          "markdownDeprecationMessage": "%setting.CacheVolume.markdownDeprecationMessage%"
+        },
         "dev.containers.defaultExtensions": {
           "type": "array",
           "default": [],
