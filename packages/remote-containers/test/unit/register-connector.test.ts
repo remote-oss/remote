@@ -153,6 +153,22 @@ async function registered(
   };
 }
 
+/** Resolves the window's authority as attempt `attempt` and waits for it to settle, whatever its end. */
+async function settledResolve(
+  seen: Awaited<ReturnType<typeof registered>>,
+  attempt: number,
+): Promise<void> {
+  await seen.recording
+    .registered()
+    ?.resolve(AUTHORITY, {resolveAttempt: attempt})
+    .catch(() => undefined);
+}
+
+/** The workspace suffix of each label formatter registered so far. */
+function suffixesOf(seen: Awaited<ReturnType<typeof registered>>): string[] {
+  return seen.formatters.map(formatter => formatter.formatting.workspaceSuffix);
+}
+
 describe('the registration of the container connector (card containers-08)', () => {
   it('contracts §3.2: the resolver of dev-container is registered when the editor grants the proposal', async () => {
     const seen = await registered();
@@ -324,19 +340,14 @@ describe('the registration of the container connector (card containers-08)', () 
 
   it('F-0410 5.0 step 4: a first resolve that fails registers the unnamed label, so the window is titled Dev Container', async () => {
     const seen = await registered({failure: containerSetupFailed()});
-    await seen.recording
-      .registered()
-      ?.resolve(AUTHORITY, {resolveAttempt: 1})
-      .catch(() => undefined);
+    await settledResolve(seen, 1);
     deepStrictEqual(
       [
-        seen.formatters.map(formatter => [
-          formatter.authority,
-          formatter.formatting.workspaceSuffix,
-        ]),
+        seen.formatters.map(formatter => formatter.authority),
+        suffixesOf(seen),
         seen.disposed,
       ],
-      [[['dev-container+7b7d', 'Dev Container']], []],
+      [['dev-container+7b7d'], ['Dev Container'], []],
     );
   });
 
@@ -344,22 +355,13 @@ describe('the registration of the container connector (card containers-08)', () 
     const seen = await registered({
       answers: [containerSetupFailed(), containerSetupFailed(), CONNECTED],
     });
-    const resolver = seen.recording.registered();
-    await resolver
-      ?.resolve(AUTHORITY, {resolveAttempt: 1})
-      .catch(() => undefined);
-    await resolver
-      ?.resolve(AUTHORITY, {resolveAttempt: 2})
-      .catch(() => undefined);
+    await settledResolve(seen, 1);
+    await settledResolve(seen, 2);
     const afterFailures = seen.formatters.length;
     seen.identify({name: 'Proj', context: undefined});
-    await resolver?.resolve(AUTHORITY, {resolveAttempt: 3});
+    await settledResolve(seen, 3);
     deepStrictEqual(
-      [
-        afterFailures,
-        seen.formatters.map(formatter => formatter.formatting.workspaceSuffix),
-        seen.disposed,
-      ],
+      [afterFailures, suffixesOf(seen), seen.disposed],
       [1, ['Dev Container', 'Dev Container: Proj'], ['label']],
     );
   });
@@ -368,22 +370,16 @@ describe('the registration of the container connector (card containers-08)', () 
     const seen = await registered({
       identity: {name: 'Proj', context: undefined},
     });
-    await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 1});
+    await settledResolve(seen, 1);
     deepStrictEqual(
-      [
-        seen.formatters.map(formatter => formatter.formatting.workspaceSuffix),
-        seen.disposed,
-      ],
+      [suffixesOf(seen), seen.disposed],
       [['Dev Container: Proj'], []],
     );
   });
 
   it('F-0410 5.0 step 4: a label that comes after dispose is not registered, for a failure either', async () => {
     const seen = await registered({failure: containerSetupFailed()});
-    const resolver = seen.recording.registered();
-    const running = resolver
-      ?.resolve(AUTHORITY, {resolveAttempt: 1})
-      .catch(() => undefined);
+    const running = settledResolve(seen, 1);
     seen.result.dispose();
     await running;
     deepStrictEqual(seen.formatters, []);

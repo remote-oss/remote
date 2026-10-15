@@ -99,20 +99,19 @@ export async function registerContainerResolver(
       if (connection === undefined || disposed) {
         return;
       }
-      if (connection.state === 'connected') {
-        label?.dispose();
-        label = registerAuthorityLabel(
-          host.labels,
-          connection.decodedTarget,
-          workspaceSuffixOf(connector.heldIdentity(), translate),
-        );
-      } else if (label === undefined) {
-        label = registerAuthorityLabel(
-          host.labels,
-          connection.decodedTarget,
-          workspaceSuffixOf(undefined, translate),
-        );
+      const connected = connection.state === 'connected';
+      if (!connected && label !== undefined) {
+        return;
       }
+      label?.dispose();
+      label = registerAuthorityLabel(
+        host.labels,
+        connection.decodedTarget,
+        workspaceSuffixOf(
+          connected ? connector.heldIdentity() : undefined,
+          translate,
+        ),
+      );
     });
   }
   return {
