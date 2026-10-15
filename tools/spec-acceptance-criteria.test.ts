@@ -147,15 +147,21 @@ describe('the coverage files', () => {
     );
   });
 
-  it('containers release 1: twenty-four features, F-0416, F-0419 and F-0106 among them', () => {
+  it('containers release 1: twenty-eight features, F-0416, F-0419, F-0106 and the four views features of #960 among them', () => {
     deepStrictEqual(
       [
         CONTAINERS_RELEASE_ONE_FEATURES.length,
-        ['F-0416', 'F-0419', 'F-0106'].every(feature =>
-          CONTAINERS_RELEASE_ONE_FEATURES.includes(feature),
-        ),
+        [
+          'F-0416',
+          'F-0419',
+          'F-0106',
+          'F-0901',
+          'F-0902',
+          'F-0903',
+          'F-0906',
+        ].every(feature => CONTAINERS_RELEASE_ONE_FEATURES.includes(feature)),
       ],
-      [24, true],
+      [28, true],
     );
   });
 });

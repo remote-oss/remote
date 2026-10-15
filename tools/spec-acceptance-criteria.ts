@@ -35,7 +35,7 @@ export const SLICE_ONE_FEATURES: readonly string[] = [
   'F-3903',
 ];
 
-/** The features of Remote - Containers release 1, as its brief cuts them; three decision records have no criteria. */
+/** The features of Remote - Containers release 1, as its brief cuts them, and the four views features of #960; three decision records have no criteria. */
 export const CONTAINERS_RELEASE_ONE_FEATURES: readonly string[] = [
   'F-0101',
   'F-0106',
@@ -57,6 +57,10 @@ export const CONTAINERS_RELEASE_ONE_FEATURES: readonly string[] = [
   'F-0503',
   'F-0504',
   'F-0505',
+  'F-0901',
+  'F-0902',
+  'F-0903',
+  'F-0906',
   'F-1401',
   'F-1402',
   'F-1403',

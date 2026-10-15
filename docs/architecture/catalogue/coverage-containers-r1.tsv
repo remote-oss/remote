@@ -809,6 +809,178 @@ F-0505.AC-35	core	core: the Extensions view and the disabled-extension hover
 F-0505.AC-36	deferred	containers release 1: later (Compose, volumes and the Kubernetes family)
 F-0505.AC-37	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0505.AC-38	core	core: the local certificates, from the server's host proxy
+F-0901.AC-1	deferred	containers 0.4: F-0806 later
+F-0901.AC-2	todo	
+F-0901.AC-3	deferred	containers 0.4: F-0905 later
+F-0901.AC-4	todo	
+F-0901.AC-5	deferred	containers 0.4: F-0406 later
+F-0901.AC-6	todo	
+F-0901.AC-7	deferred	containers 0.4: C12 attach later
+F-0901.AC-8	todo	
+F-0901.AC-9	todo	
+F-0901.AC-10	todo	
+F-0901.AC-11	todo	
+F-0901.AC-12	deferred	containers 0.4: C12 attach later
+F-0901.AC-13	deferred	containers 0.4: C12 attach later
+F-0901.AC-14	deferred	containers 0.4: F-0406 later
+F-0901.AC-15	todo	
+F-0901.AC-16	todo	
+F-0901.AC-17	deferred	containers 0.4: F-1302 later
+F-0901.AC-18	deferred	containers 0.4: F-0406 later
+F-0901.AC-19	deferred	containers 0.4: Kubernetes later
+F-0901.AC-20	deferred	containers 0.4: C12 attach later
+F-0901.AC-21	deferred	containers 0.4: F-0905 later
+F-0901.AC-22	todo	
+F-0901.AC-23	deferred	containers 0.4: F-0406 later
+F-0901.AC-24	todo	
+F-0901.AC-25	todo	
+F-0901.AC-26	deferred	containers 0.4: F-1302 later
+F-0901.AC-27	deferred	containers 0.4: C13 volumes later
+F-0901.AC-28	deferred	containers 0.4: C12 attach later
+F-0901.AC-29	deferred	containers 0.4: F-0406 later
+F-0901.AC-30	todo	
+F-0901.AC-31	todo	
+F-0901.AC-32	deferred	containers 0.4: C12 attach later
+F-0901.AC-33	deferred	containers 0.4: C12 attach later
+F-0901.AC-34	deferred	containers 0.4: C13 volumes later
+F-0901.AC-35	todo	
+F-0901.AC-36	todo	
+F-0901.AC-37	deferred	containers 0.4: Compose later
+F-0901.AC-38	deferred	containers 0.4: C12 attach later
+F-0901.AC-39	todo	
+F-0901.AC-40	todo	
+F-0901.AC-41	deferred	containers 0.4: C12 attach later
+F-0901.AC-42	todo	
+F-0901.AC-43	todo	
+F-0901.AC-44	todo	
+F-0901.AC-45	todo	
+F-0901.AC-46	deferred	containers 0.4: C12 attach later
+F-0901.AC-47	deferred	containers 0.4: C12 attach later
+F-0901.AC-48	todo	
+F-0901.AC-49	todo	
+F-0901.AC-50	deferred	containers 0.4: Windows, WSL and macOS later
+F-0901.AC-51	deferred	containers 0.4: Windows, WSL and macOS later
+F-0901.AC-52	deferred	containers 0.4: Windows, WSL and macOS later
+F-0901.AC-53	deferred	containers 0.4: C12 attach later
+F-0901.AC-54	todo	
+F-0901.AC-55	todo	
+F-0901.AC-56	deferred	containers 0.4: F-0905 later
+F-0901.AC-57	todo	
+F-0901.AC-58	deferred	containers 0.4: C12 attach later
+F-0902.AC-1	todo	
+F-0902.AC-2	todo	
+F-0902.AC-3	todo	
+F-0902.AC-4	deferred	containers 0.4: C12 attach later
+F-0902.AC-5	todo	
+F-0902.AC-6	todo	
+F-0902.AC-7	deferred	containers 0.4: C12 attach later
+F-0902.AC-8	deferred	containers 0.4: C12 attach later
+F-0902.AC-9	deferred	containers 0.4: C12 attach later
+F-0902.AC-10	deferred	containers 0.4: C12 attach later
+F-0902.AC-11	todo	
+F-0902.AC-12	todo	
+F-0902.AC-13	todo	
+F-0902.AC-14	deferred	containers 0.4: C12 attach later
+F-0902.AC-15	todo	
+F-0902.AC-16	todo	
+F-0902.AC-17	todo	
+F-0902.AC-18	deferred	containers 0.4: C12 attach later
+F-0902.AC-19	deferred	containers 0.4: C12 attach later
+F-0902.AC-20	deferred	containers 0.4: C12 attach later
+F-0902.AC-21	deferred	containers 0.4: C12 attach later
+F-0902.AC-22	deferred	containers 0.4: C12 attach later
+F-0902.AC-23	deferred	containers 0.4: C12 attach later
+F-0902.AC-24	todo	
+F-0902.AC-25	todo	
+F-0902.AC-26	deferred	containers 0.4: C12 attach later
+F-0902.AC-27	deferred	containers 0.4: C12 attach later
+F-0902.AC-28	todo	
+F-0902.AC-29	deferred	containers 0.4: F-0904 later
+F-0902.AC-30	deferred	containers 0.4: C12 attach later
+F-0902.AC-31	deferred	containers 0.4: Compose later
+F-0902.AC-32	deferred	containers 0.4: C12 attach later
+F-0902.AC-33	deferred	containers 0.4: C12 attach later
+F-0902.AC-34	todo	
+F-0902.AC-35	todo	
+F-0902.AC-36	todo	
+F-0902.AC-37	todo	
+F-0902.AC-38	todo	
+F-0902.AC-39	todo	
+F-0902.AC-40	todo	
+F-0902.AC-41	deferred	containers 0.4: C12 attach later
+F-0902.AC-42	deferred	containers 0.4: C12 attach later
+F-0902.AC-43	todo	
+F-0902.AC-44	deferred	containers 0.4: Windows, WSL and macOS later
+F-0902.AC-45	deferred	containers 0.4: Windows, WSL and macOS later
+F-0902.AC-46	deferred	containers 0.4: C12 attach later
+F-0902.AC-47	deferred	containers 0.4: F-0904 later
+F-0902.AC-48	deferred	containers 0.4: C12 attach later
+F-0902.AC-49	todo	
+F-0902.AC-50	todo	
+F-0902.AC-51	todo	
+F-0902.AC-52	deferred	containers 0.4: C12 attach later
+F-0902.AC-53	deferred	containers 0.4: C12 attach later
+F-0902.AC-54	todo	
+F-0902.AC-55	todo	
+F-0903.AC-1	todo	
+F-0903.AC-2	deferred	containers 0.4: F-0903 toolbar commands later
+F-0903.AC-3	deferred	containers 0.4: C13 volumes later
+F-0903.AC-4	deferred	containers 0.4: C12 attach later
+F-0903.AC-5	deferred	containers 0.4: C12 attach later
+F-0903.AC-6	todo	
+F-0903.AC-7	deferred	containers 0.4: F-0903 toolbar commands later
+F-0903.AC-8	todo	
+F-0903.AC-9	todo	
+F-0903.AC-10	todo	
+F-0903.AC-11	deferred	containers 0.4: C13 volumes later
+F-0903.AC-12	deferred	containers 0.4: C13 volumes later
+F-0903.AC-13	todo	
+F-0903.AC-14	deferred	containers 0.4: C13 volumes later
+F-0903.AC-15	deferred	containers 0.4: Windows, WSL and macOS later
+F-0903.AC-16	deferred	containers 0.4: Compose later
+F-0903.AC-17	deferred	containers 0.4: C12 attach later
+F-0903.AC-18	todo	
+F-0903.AC-19	deferred	containers 0.4: C12 attach later
+F-0903.AC-20	deferred	containers 0.4: F-0410 recovery container later
+F-0903.AC-21	todo	
+F-0903.AC-22	deferred	containers 0.4: Windows, WSL and macOS later
+F-0903.AC-23	todo	
+F-0903.AC-24	deferred	containers 0.4: C13 volumes later
+F-0903.AC-25	deferred	containers 0.4: C13 volumes later
+F-0903.AC-26	todo	
+F-0903.AC-27	todo	
+F-0903.AC-28	todo	
+F-0903.AC-29	todo	
+F-0903.AC-30	todo	
+F-0903.AC-31	deferred	containers 0.4: F-0903 toolbar commands later
+F-0903.AC-32	deferred	containers 0.4: F-0903 toolbar commands later
+F-0903.AC-33	todo	
+F-0903.AC-34	todo	
+F-0903.AC-35	todo	
+F-0903.AC-36	todo	
+F-0906.AC-1	todo	
+F-0906.AC-2	deferred	containers 0.4: F-0904 later
+F-0906.AC-3	deferred	containers 0.4: F-0904 later
+F-0906.AC-4	deferred	containers 0.4: F-0904 later
+F-0906.AC-5	deferred	containers 0.4: C12 attach later
+F-0906.AC-6	deferred	containers 0.4: F-0406 later
+F-0906.AC-7	deferred	containers 0.4: C12 attach later
+F-0906.AC-8	deferred	containers 0.4: C12 attach later
+F-0906.AC-9	deferred	containers 0.4: C12 attach later
+F-0906.AC-10	deferred	containers 0.4: C12 attach later
+F-0906.AC-11	deferred	containers 0.4: Kubernetes later
+F-0906.AC-12	todo	
+F-0906.AC-13	todo	
+F-0906.AC-14	todo	
+F-0906.AC-15	todo	
+F-0906.AC-16	todo	
+F-0906.AC-17	deferred	containers 0.4: F-0504 BR-8 later
+F-0906.AC-18	deferred	containers 0.4: F-0904 later
+F-0906.AC-19	deferred	containers 0.4: C12 attach later
+F-0906.AC-20	todo	
+F-0906.AC-21	deferred	containers 0.4: Windows, WSL and macOS later
+F-0906.AC-22	deferred	containers 0.4: F-0904 later
+F-0906.AC-23	todo	
 F-1402.AC-1	todo	
 F-1402.AC-2	todo	
 F-1402.AC-3	todo	
