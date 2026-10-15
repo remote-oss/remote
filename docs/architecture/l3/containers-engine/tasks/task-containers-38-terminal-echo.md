@@ -1,6 +1,6 @@
 # Task card containers-38: one echo per run in the "Configuring..." terminal (the run's input mode through the stdin contract)
 
-Issue: #TBD (release 1). Milestone 0.4. Size: M. Builder: `task:claude`.
+Issue: #1021 (release 1). Milestone 0.4. Size: M. Builder: `task:claude`.
 
 **Design:** athena's ruling on the in-container double-echo follow-up of the #1019 review (the ruling and its
 corrections in the `remote-oss/remote-containers#124` area; F-0415 7.E6 and AC-36). The run's input mode goes
@@ -170,4 +170,4 @@ so the flip is the wiring line. No mode flip lands without the re-verification.
 ## 4. Gates and review
 
 Run all gates with the changed files at 100 %, and the containers launches. PR title: `remote-containers: the
-"Configuring..." terminal echoes a run's input once (card containers-38, #TBD)`. Request athena only.
+"Configuring..." terminal echoes a run's input once (card containers-38, #1021)`. Request athena only.
