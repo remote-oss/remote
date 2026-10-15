@@ -37,6 +37,9 @@ interface Setup {
   remoteName: string | undefined;
   folders: Array<{scheme: string; fsPath: string}>;
   trust: TrustOutcome;
+  /** What the activation's probe found missing, and what the probe after it finds. */
+  missing: string[];
+  missingAfter: string[];
   waitOnTrust: Promise<void>;
   rejects: string | undefined;
   dockerPath: unknown;
@@ -65,6 +68,8 @@ function setup(): Setup {
     remoteName: undefined,
     folders: [{scheme: 'file', fsPath: FOLDER}],
     trust: 'trusted',
+    missing: [],
+    missingAfter: [],
     waitOnTrust: Promise.resolve(),
     rejects: undefined,
     dockerPath: 'docker',
@@ -80,6 +85,14 @@ function setup(): Setup {
 function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
   const sink = new MemorySink();
   const ports: ReopenPorts = {
+    gate: {
+      missing: state.missing,
+      setupAgain: () => {
+        state.calls.push('setupAgain');
+        return Promise.resolve({decision: {missing: state.missingAfter}});
+      },
+      logger: createLogger(sink, {minimumLevel: () => 'info'}),
+    },
     window: {
       remoteName: () => state.remoteName,
       folders: () => state.folders,
@@ -363,6 +376,45 @@ describe('Reopen in Container', () => {
         [],
         ['info: Reopen in Container does nothing in this window'],
       ]),
+    );
+  });
+
+  it('F-0101 AC-15: without resolvers or without workspaceTrust, Reopen calls nothing but setupAgain, and the window stays as it is (BR-9)', async () => {
+    const seen = [];
+    for (const proposal of ['resolvers', 'workspaceTrust']) {
+      const state = setup();
+      state.missing = [proposal];
+      state.missingAfter = [proposal];
+      const {lines} = await reopened(state);
+      seen.push([state.calls, state.commands, lines]);
+    }
+    deepStrictEqual(
+      seen,
+      ['resolvers', 'workspaceTrust'].map(proposal => [
+        ['setupAgain'],
+        [],
+        [
+          `info: Reopen in Container needs the proposed API: ${proposal}; the window stays as it is`,
+        ],
+      ]),
+    );
+  });
+
+  it('F-0101 AC-15: a proposal the new probe finds granted lets Reopen go on, and a missing contribViewsRemote holds nothing back (BR-9)', async () => {
+    const granted = setup();
+    granted.missing = ['resolvers'];
+    await reopened(granted);
+    const views = setup();
+    views.missing = ['contribViewsRemote'];
+    await reopened(views);
+    deepStrictEqual(
+      [
+        granted.calls[0],
+        granted.commands.length,
+        views.calls[0],
+        views.commands.length,
+      ],
+      ['setupAgain', 1, 'ensureTrusted', 1],
     );
   });
 
