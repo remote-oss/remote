@@ -6,18 +6,10 @@
 
 import {encodeAuthority, openRemote} from 'lib-authority';
 import {devContainerPayloadOf} from '../authority/payload.ts';
-import type {CliFailure} from '../cli/cli-lines.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
 import {mountGitWorktreeCommonDirOf} from '../connect/mount-settings.ts';
 import {beforeReload} from './pre-reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
-
-/** What a CLI failure says in the log: its kind and, when it has one, its message. */
-function failureText(failure: CliFailure): string {
-  return 'message' in failure
-    ? `${failure.kind}: ${failure.message}`
-    : failure.kind;
-}
 
 /** The handler of the command over `ports`. A call made while another runs returns at once. */
 export function reopenInContainer(ports: ReopenPorts): () => Promise<void> {
@@ -69,12 +61,6 @@ export function reopenInContainer(ports: ReopenPorts): () => Promise<void> {
     try {
       if (choice.kind === 'noConfiguration') {
         logger.info(`Reopen in Container found no configuration in ${folder}`);
-        return;
-      }
-      if (choice.kind === 'readFailed') {
-        logger.warn(
-          `Reopen in Container could not read the configuration: ${failureText(choice.failure)}`,
-        );
         return;
       }
       if (choice.kind !== 'chosen') {

@@ -137,14 +137,14 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
     );
   });
 
-  it('C3: read-configuration asks for the merged configuration, with or without a container id', () => {
+  it('F-0410 AC-13: read-configuration asks for the merged configuration only together with a container id', () => {
     deepStrictEqual(
       [
         readConfigurationArguments(TARGET),
         readConfigurationArguments(TARGET, 'abc'),
       ].map(list => list.slice(-3)),
       [
-        ['--log-format', 'json', '--include-merged-configuration'],
+        ['info', '--log-format', 'json'],
         ['--container-id', 'abc', '--include-merged-configuration'],
       ],
     );

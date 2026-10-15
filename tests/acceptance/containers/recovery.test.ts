@@ -107,6 +107,25 @@ describe('Dev Containers failure dialog and quick pick (card containers-11)', fu
     }
   });
 
+  it('F-0410 AC-13 (r1): a nonexistent image shows no message and the generic detail in the reloaded window, and makes no container', async () => {
+    const folder = folderOf('recover-missing-image', {
+      image: 'remote-oss-acceptance-missing:none',
+    });
+    const {name, dialog} = await failed(folder);
+    deepStrictEqual(
+      {
+        saying: sayingOf(dialog),
+        indicator: (await statusItem(name, 'status.host')).text,
+        containers: await devContainersOf(folder),
+      },
+      {
+        saying: {message: '', details: S034},
+        indicator: 'Opening Remote...',
+        containers: [],
+      },
+    );
+  });
+
   it('F-0410 AC-1 (r1b): a setup that fails for a reason of its own shows no message and the generic detail, and the window stays on Opening Remote...', async () => {
     const {name, dialog} = await failed(
       folderOf('recover-generic', {

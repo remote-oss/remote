@@ -82,14 +82,18 @@ export function runUserCommandsArguments(
   ];
 }
 
-/** Reads the configuration, merged with the container's metadata when a container id is given. */
+/**
+ * Reads the configuration. With a container id it is merged with the container's metadata; without one the merge would
+ * read the image's metadata and pull the image, which the read before a reload must not do.
+ */
 export function readConfigurationArguments(
   target: CliTarget,
   containerId?: string,
 ): string[] {
   return [
     ...commonArguments('read-configuration', target),
-    ...(containerId === undefined ? [] : ['--container-id', containerId]),
-    '--include-merged-configuration',
+    ...(containerId === undefined
+      ? []
+      : ['--container-id', containerId, '--include-merged-configuration']),
   ];
 }
