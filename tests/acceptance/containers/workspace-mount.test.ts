@@ -18,7 +18,6 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
-  dialogOf,
   type ShownDialog,
   waitForDialog,
   windowTitle,
@@ -640,9 +639,9 @@ describe('F-0411 workspace mount and folder (card containers-26)', function () {
     }
   });
 
-  // Open row on #954: the product shows the absolute-path saying in the dialog's details, not its message; the row
-  // waits for the ruling before it is an acceptance row.
-  it.skip('F-0411 AC-41 (w10): an empty workspaceFolder makes no container and leaves the folder to reopen locally', async () => {
+  // The ruling on #954: the absolute-path saying is the dialog's detail with an empty message, the family's modal
+  // error shape; the row answers the dialog's Cancel and checks that no container was made.
+  it('F-0411 AC-41 (w10): an empty workspaceFolder makes no container and leaves the folder to reopen locally', async () => {
     const folder = devContainerFolder('c26-empty-folder', {
       workspaceFolder: '',
     });
@@ -651,70 +650,30 @@ describe('F-0411 workspace mount and folder (card containers-26)', function () {
       name = await openFolderWindow(folder);
       const before = activations(name);
       const running = inWindow(name, 'remote-containers.reopenInContainer');
-      const deadline = Date.now() + 60_000;
-      let dialog: ShownDialog | undefined;
-      let reference = false;
-      for (;;) {
-        dialog = await dialogOf(name);
-        if (dialog !== undefined) {
-          break;
-        }
-        if (activations(name) > before) {
-          reference = true;
-          break;
-        }
-        if (Date.now() > deadline) {
-          throw new Error(
-            'neither the dialog nor the activation came within 60 s',
-          );
-        }
-        await new Promise(resolve => setTimeout(resolve, 250));
-      }
-      if (dialog === undefined) {
-        throw new Error('the row found neither the dialog nor the activation');
-      }
-      let actual: Record<string, unknown>;
-      let expected: Record<string, unknown>;
-      if (reference) {
-        console.log('w10: the reference outcome (the reload connected)');
-        actual = {
-          reference: true,
-          containers: await devContainersOf(folder),
-          remoteName: (await windowState(name)).remoteName,
-        };
-        expected = {
-          reference: true,
-          containers: [],
-          remoteName: 'dev-container',
-        };
-      } else {
-        console.log('w10: the preferred outcome (the absolute-path dialog)');
-        const saying = sayingAndButtons(dialog);
-        await answerDialog(name, 'Cancel');
-        await running;
-        actual = {
-          reference: false,
+      const saying = sayingAndButtons(await waitForDialog(name, 60_000));
+      await answerDialog(name, 'Cancel');
+      await running;
+      deepStrictEqual(
+        {
           saying,
           activations: activations(name),
           remoteName: (await windowState(name)).remoteName,
           containers: await devContainersOf(folder),
-        };
-        expected = {
-          reference: false,
+        },
+        {
           saying: {
             saying: {
-              message:
+              message: '',
+              details:
                 'Workspace folder in devcontainer.json must be an absolute path.',
-              details: '',
             },
             buttons: ['Cancel', 'Show Log'],
           },
           activations: before,
           remoteName: null,
           containers: [],
-        };
-      }
-      deepStrictEqual(actual, expected);
+        },
+      );
     } finally {
       if (name) await closeWindow(name);
       await removeContainers(folder);
