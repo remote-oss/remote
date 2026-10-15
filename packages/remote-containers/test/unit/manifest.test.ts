@@ -75,6 +75,47 @@ const ENGLISH = {
     "Use 'dev.containers.cacheVolume' instead.",
   'setting.CacheVolume.markdownDeprecationMessage':
     'Use `#dev.containers.cacheVolume#` instead.',
+  'setting.WorkspaceMountConsistency.description':
+    'The consistency level used for the workspace mount (existing containers must be rebuilt to take effect).',
+  'setting.WorkspaceMountConsistency.consistent': 'Perfect consistency.',
+  'setting.WorkspaceMountConsistency.cached':
+    'The host\u2019s view is authoritative.',
+  'setting.WorkspaceMountConsistency.delegated':
+    'The container\u2019s view is authoritative.',
+  'setting.WorkspaceMountConsistency.deprecationMessage':
+    "Use 'dev.containers.workspaceMountConsistency' instead.",
+  'setting.WorkspaceMountConsistency.markdownDeprecationMessage':
+    'Use `#dev.containers.workspaceMountConsistency#` instead.',
+  'setting.MountGitWorktreeCommonDir.description':
+    'Mount the Git worktree common dir for Git operations to work in the container. This requires the worktree to be created with relative paths (`git worktree add --relative-paths`).',
+};
+
+const MOUNT_SETTINGS = {
+  'dev.containers.workspaceMountConsistency': {
+    type: 'string',
+    default: 'cached',
+    scope: 'application',
+    enum: ['consistent', 'cached', 'delegated'],
+    enumDescriptions: [
+      '%setting.WorkspaceMountConsistency.consistent%',
+      '%setting.WorkspaceMountConsistency.cached%',
+      '%setting.WorkspaceMountConsistency.delegated%',
+    ],
+    description: '%setting.WorkspaceMountConsistency.description%',
+  },
+  'remote.containers.workspaceMountConsistency': {
+    scope: 'application',
+    deprecationMessage:
+      '%setting.WorkspaceMountConsistency.deprecationMessage%',
+    markdownDeprecationMessage:
+      '%setting.WorkspaceMountConsistency.markdownDeprecationMessage%',
+  },
+  'dev.containers.experimentalMountGitWorktreeCommonDir': {
+    type: 'boolean',
+    default: false,
+    scope: 'application',
+    description: '%setting.MountGitWorktreeCommonDir.description%',
+  },
 };
 
 describe('the manifest', () => {
@@ -224,6 +265,7 @@ describe('the manifest', () => {
               markdownDeprecationMessage:
                 '%setting.Remotecontainersdefaultextensions.markdownDeprecation%',
             },
+            ...MOUNT_SETTINGS,
           },
         },
       },
@@ -292,6 +334,18 @@ describe('the manifest', () => {
       ],
     );
   });
+  it('F-0411 3.2, F-0102 3.2: the two mount settings and the deprecated consistency key are contributed with their shapes, and nothing else', () => {
+    const properties = (
+      MANIFEST.contributes as {
+        configuration: {properties: Record<string, unknown>};
+      }
+    ).configuration.properties;
+    deepStrictEqual(
+      Object.keys(MOUNT_SETTINGS).map(key => properties[key]),
+      Object.values(MOUNT_SETTINGS),
+    );
+  });
+
   it('containers-11 (athena on #892): the activation events are the resolve of the dev-container authority and the end of the startup', () => {
     deepStrictEqual(MANIFEST.activationEvents, [
       'onResolveRemoteAuthority:dev-container',
@@ -488,6 +542,11 @@ describe('the manifest', () => {
         {
           current: 'dev.containers.defaultExtensions',
           legacy: 'remote.containers.defaultExtensions',
+          winner: 'current',
+        },
+        {
+          current: 'dev.containers.workspaceMountConsistency',
+          legacy: 'remote.containers.workspaceMountConsistency',
           winner: 'current',
         },
       ],

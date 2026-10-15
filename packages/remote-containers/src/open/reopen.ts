@@ -8,6 +8,7 @@ import {encodeAuthority, openRemote} from 'lib-authority';
 import {devContainerPayloadOf} from '../authority/payload.ts';
 import type {CliFailure} from '../cli/cli-lines.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
+import {mountGitWorktreeCommonDirOf} from '../connect/mount-settings.ts';
 import {beforeReload} from './pre-reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
 
@@ -65,6 +66,9 @@ export function reopenInContainer(ports: ReopenPorts): () => Promise<void> {
       {
         folder,
         dockerPath: executable.file,
+        mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
+          ports.settings.mountGitWorktreeCommonDir(),
+        ),
         cancellation: new AbortController().signal,
       },
     );

@@ -36,7 +36,11 @@ interface EnginePort {
 export interface ReopenPorts {
   window: WindowPort;
   config: Omit<ConfigurationPorts, 'cli' | 'logger'>;
-  settings: {dockerPath(): unknown};
+  settings: {
+    dockerPath(): unknown;
+    /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
+    mountGitWorktreeCommonDir(): unknown;
+  };
   engine: EnginePort;
   /** The dialogs of the first check. */
   dialogs: EngineDialogPort;
