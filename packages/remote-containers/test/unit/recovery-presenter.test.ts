@@ -49,7 +49,15 @@ function presenting(script: Script = {}) {
   const presenter = recoveryPresenterOf(
     {
       showError: (message, detail, buttons) => {
-        calls.push(`showError ${message}|${detail}|${buttons.join(',')}`);
+        calls.push(
+          `showError ${message}|${detail}|${buttons
+            .map(button =>
+              button.isCloseAffordance === true
+                ? `${button.title} (close)`
+                : button.title,
+            )
+            .join(',')}`,
+        );
         return Promise.resolve(errors.shift());
       },
       pick: (placeholder, labels) => {
@@ -121,7 +129,7 @@ describe('the failure presenter C8 (card containers-11)', () => {
       [
         'reload',
         [
-          `showError |An error occurred setting up the container.|Retry,${EDIT},More Actions...`,
+          `showError |An error occurred setting up the container.|Retry,${EDIT},More Actions... (close)`,
         ],
       ],
     );
@@ -234,6 +242,22 @@ describe('the failure presenter C8 (card containers-11)', () => {
     deepStrictEqual(
       [beforeFlush, seen.calls[2]?.startsWith('pick ')],
       [['handled', 2, 'later'], true],
+    );
+  });
+
+  it('F-0410 5.0 step 2: only More Actions... is the close affordance, in a requirements dialog too, so the editor adds no Cancel', async () => {
+    const failing = presenting({errors: ['Retry']});
+    await failing.presenter.present(containerSetupFailed());
+    const requirements = presenting({errors: ['Learn More']});
+    await requirements.presenter.present(
+      requirementsNotMet('Error: Missing GLIBC'),
+    );
+    deepStrictEqual(
+      [failing.calls[0], requirements.calls[0]?.split('|')[2]],
+      [
+        `showError |An error occurred setting up the container.|Retry,${EDIT},More Actions... (close)`,
+        `Learn More,${EDIT},More Actions... (close)`,
+      ],
     );
   });
 

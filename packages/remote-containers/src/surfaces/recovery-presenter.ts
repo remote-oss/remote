@@ -32,13 +32,22 @@ const SERVER_SOURCE_BUTTONS = {
 /** The setting whose address a missing server source asks the user to set. */
 const DOWNLOAD_SETTING = 'remote.serverDownloadBaseUrl';
 
+/** One button of the modal error: its label, and whether Escape chooses it. */
+export interface ErrorButton {
+  title: string;
+  isCloseAffordance?: boolean;
+}
+
 /** What the presenter shows and opens. */
 export interface RecoveryPorts {
-  /** Shows the modal error; resolves with the chosen button's label, or undefined. */
+  /**
+   * Shows the modal error. The editor adds a Cancel of its own unless a button is the close affordance, which Escape
+   * chooses. Resolves with the chosen button's label, or undefined.
+   */
   showError(
     message: string,
     detail: string,
-    buttons: readonly string[],
+    buttons: readonly ErrorButton[],
   ): PromiseLike<string | undefined>;
   /** Shows the quick pick; resolves with the chosen label, or undefined. */
   pick(
@@ -105,7 +114,7 @@ export function recoveryPresenterOf(
     const chosen = await ports.showError(
       '',
       reasonText(failed.reason, translate),
-      [open, translate(SERVER_SOURCE_BUTTONS.cancel)],
+      [{title: open}, {title: translate(SERVER_SOURCE_BUTTONS.cancel)}],
     );
     if (chosen === open) {
       await ports.openSetting(DOWNLOAD_SETTING);
@@ -123,9 +132,12 @@ export function recoveryPresenterOf(
       const chosen = await ports.showError(
         dialog.message,
         dialog.detail,
-        dialog.buttons.map(button => button.label),
+        dialog.buttons.map(button => ({
+          title: button.label,
+          ...(button.action === 'moreActions' ? {isCloseAffordance: true} : {}),
+        })),
       );
-      // Escape is the last button, the close affordance: More Actions....
+      // Escape chooses the close affordance, More Actions..., which the editor gives back as the choice.
       const button = dialog.buttons.find(each => each.label === chosen);
       if (button?.action === 'retry') {
         return 'reload';

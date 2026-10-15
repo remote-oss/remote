@@ -176,6 +176,8 @@ export interface ResolverHandle {
   lastResolve(): LastResolve;
   /** Calls `listener` once, when the first resolve of this extension host settles. */
   onFirstResolveSettled(listener: () => void): void;
+  /** Calls `listener` after every resolve of this window settles, the first and each later one, in success or in failure. */
+  onResolveSettled(listener: () => void): void;
   /** The window is about to leave its remote: later resolves end at once, handled and silent, until `stay()`. */
   leave(): void;
   /** Puts the resolver back after `leave()`, so the next resolve runs as before. */
@@ -223,6 +225,7 @@ interface Memory {
   connectedBefore: boolean;
   settled: boolean;
   listeners: Array<() => void>;
+  settledListeners: Array<() => void>;
 }
 
 function connectionOf(
@@ -263,6 +266,7 @@ export async function registerResolver(
     connectedBefore: false,
     settled: false,
     listeners: [],
+    settledListeners: [],
   };
   const {connector} = options;
   const state = {disposed: false, leaving: false, queue: Promise.resolve()};
@@ -271,10 +275,18 @@ export async function registerResolver(
     event: Parameters<ConnectionTracker['apply']>[0],
   ): void {
     const applied = tracker.apply(event);
+    const settling =
+      applied.changed &&
+      (event.kind === 'resolveSucceeded' || event.kind === 'resolveFailed');
     if (applied.firstResolveSettled) {
       memory.settled = true;
       const listeners = memory.listeners.splice(0);
       for (const listener of listeners) {
+        listener();
+      }
+    }
+    if (settling) {
+      for (const listener of memory.settledListeners) {
         listener();
       }
     }
@@ -464,6 +476,9 @@ export async function registerResolver(
         } else {
           memory.listeners.push(listener);
         }
+      },
+      onResolveSettled: listener => {
+        memory.settledListeners.push(listener);
       },
       leave: () => {
         state.leaving = true;

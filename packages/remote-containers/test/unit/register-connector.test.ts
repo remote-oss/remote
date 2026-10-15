@@ -36,6 +36,8 @@ async function registered(
   options: {
     resolversGranted?: boolean;
     failure?: Failed;
+    /** What each connect answers in turn; the last answer is repeated. */
+    answers?: Array<Connected | Failed>;
     identity?: {name: string | undefined; context: string | undefined};
     canonical?: (
       authority: string,
@@ -44,6 +46,8 @@ async function registered(
   } = {},
 ) {
   const warned: string[] = [];
+  const answers = [...(options.answers ?? [])];
+  let identity = options.identity;
   const events: string[] = [];
   const shown: string[][] = [];
   const requests: ProgressRequest[] = [];
@@ -57,13 +61,17 @@ async function registered(
       for (const listener of listeners) {
         listener({name: 'installing'});
       }
-      return Promise.resolve(options.failure ?? CONNECTED);
+      return Promise.resolve(
+        (answers.length > 1 ? answers.shift() : answers[0]) ??
+          options.failure ??
+          CONNECTED,
+      );
     },
     cancel: () => undefined,
     onHeldChanged: () => () => undefined,
     revealDetails: () => undefined,
-    heldIdentity: () => options.identity,
     heldConnection: () => undefined,
+    heldIdentity: () => identity,
     canonicalPathOf: options.canonical ?? (() => Promise.resolve(undefined)),
     onPhase: listener => {
       listeners.push(listener);
@@ -108,7 +116,7 @@ async function registered(
       commands: host,
       presenter: inertRecoveryPorts({
         showError: (message, detail, buttons) => {
-          shown.push([...buttons]);
+          shown.push(buttons.map(button => button.title));
           return Promise.resolve('Retry');
         },
       }),
@@ -139,6 +147,9 @@ async function registered(
     recording,
     revealed: () => revealed,
     warned,
+    identify: (next: typeof identity) => {
+      identity = next;
+    },
   };
 }
 
@@ -309,5 +320,72 @@ describe('the registration of the container connector (card containers-08)', () 
       ?.resolve(AUTHORITY, {resolveAttempt: 1})
       .catch(() => undefined);
     deepStrictEqual(seen.shown, [['Retry', 'More Actions...']]);
+  });
+
+  it('F-0410 5.0 step 4: a first resolve that fails registers the unnamed label, so the window is titled Dev Container', async () => {
+    const seen = await registered({failure: containerSetupFailed()});
+    await seen.recording
+      .registered()
+      ?.resolve(AUTHORITY, {resolveAttempt: 1})
+      .catch(() => undefined);
+    deepStrictEqual(
+      [
+        seen.formatters.map(formatter => [
+          formatter.authority,
+          formatter.formatting.workspaceSuffix,
+        ]),
+        seen.disposed,
+      ],
+      [[['dev-container+7b7d', 'Dev Container']], []],
+    );
+  });
+
+  it('F-0410 5.0 step 4: a later failure leaves the label that is there, and a later connect replaces it with the named one', async () => {
+    const seen = await registered({
+      answers: [containerSetupFailed(), containerSetupFailed(), CONNECTED],
+    });
+    const resolver = seen.recording.registered();
+    await resolver
+      ?.resolve(AUTHORITY, {resolveAttempt: 1})
+      .catch(() => undefined);
+    await resolver
+      ?.resolve(AUTHORITY, {resolveAttempt: 2})
+      .catch(() => undefined);
+    const afterFailures = seen.formatters.length;
+    seen.identify({name: 'Proj', context: undefined});
+    await resolver?.resolve(AUTHORITY, {resolveAttempt: 3});
+    deepStrictEqual(
+      [
+        afterFailures,
+        seen.formatters.map(formatter => formatter.formatting.workspaceSuffix),
+        seen.disposed,
+      ],
+      [1, ['Dev Container', 'Dev Container: Proj'], ['label']],
+    );
+  });
+
+  it('F-0504 AC-1: a connected first resolve registers the named label only', async () => {
+    const seen = await registered({
+      identity: {name: 'Proj', context: undefined},
+    });
+    await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 1});
+    deepStrictEqual(
+      [
+        seen.formatters.map(formatter => formatter.formatting.workspaceSuffix),
+        seen.disposed,
+      ],
+      [['Dev Container: Proj'], []],
+    );
+  });
+
+  it('F-0410 5.0 step 4: a label that comes after dispose is not registered, for a failure either', async () => {
+    const seen = await registered({failure: containerSetupFailed()});
+    const resolver = seen.recording.registered();
+    const running = resolver
+      ?.resolve(AUTHORITY, {resolveAttempt: 1})
+      .catch(() => undefined);
+    seen.result.dispose();
+    await running;
+    deepStrictEqual(seen.formatters, []);
   });
 });

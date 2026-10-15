@@ -8,12 +8,13 @@ import {
 
 /** An editor that records what it is asked and answers `answer`. */
 function editor(answer?: string) {
+  const answered = answer === undefined ? undefined : {title: answer};
   const calls: unknown[][] = [];
   const fake: RecoveryEditor<object> = {
     window: {
       showErrorMessage: (message, options, ...items) => {
         calls.push(['showErrorMessage', message, options, ...items]);
-        return Promise.resolve(answer);
+        return Promise.resolve(answered);
       },
       showQuickPick: (items, options) => {
         calls.push(['showQuickPick', items, options]);
@@ -46,9 +47,12 @@ function editor(answer?: string) {
 }
 
 describe('the editor adapters of the failure presenter (card containers-11)', () => {
-  it('F-0410 AC-1: the error is modal, with the detail and the buttons, and answers the chosen label', async () => {
+  it('F-0410 AC-1: the error is modal, with the detail and the buttons with their close affordance, and answers the chosen label', async () => {
     const {ports, calls} = editor('Retry');
-    const chosen = await ports.showError('', 'detail', ['Retry', 'More']);
+    const chosen = await ports.showError('', 'detail', [
+      {title: 'Retry'},
+      {title: 'More', isCloseAffordance: true},
+    ]);
     deepStrictEqual(
       [chosen, calls],
       [
@@ -58,8 +62,8 @@ describe('the editor adapters of the failure presenter (card containers-11)', ()
             'showErrorMessage',
             '',
             {modal: true, detail: 'detail'},
-            'Retry',
-            'More',
+            {title: 'Retry'},
+            {title: 'More', isCloseAffordance: true},
           ],
         ],
       ],

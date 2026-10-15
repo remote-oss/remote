@@ -3,7 +3,7 @@
  * behind the ports the presenter takes. The editor's module is handed in, so nothing here imports it.
  */
 
-import type {RecoveryPorts} from './recovery-presenter.ts';
+import type {ErrorButton, RecoveryPorts} from './recovery-presenter.ts';
 
 /** The parts of the editor's API the adapters use; the `vscode` namespace has them. */
 export interface RecoveryEditor<Address> {
@@ -11,8 +11,8 @@ export interface RecoveryEditor<Address> {
     showErrorMessage(
       message: string,
       options: {modal: boolean; detail: string},
-      ...items: string[]
-    ): PromiseLike<string | undefined>;
+      ...items: ErrorButton[]
+    ): PromiseLike<ErrorButton | undefined>;
     showQuickPick(
       items: readonly string[],
       options: {placeHolder: string},
@@ -35,12 +35,14 @@ export function recoveryPortsOf<Address>(
 ): RecoveryPorts {
   return {
     ...own,
-    showError: (message, detail, buttons) =>
-      editor.window.showErrorMessage(
-        message,
-        {modal: true, detail},
-        ...buttons,
-      ),
+    showError: async (message, detail, buttons) =>
+      (
+        await editor.window.showErrorMessage(
+          message,
+          {modal: true, detail},
+          ...buttons,
+        )
+      )?.title,
     pick: (placeholder, labels) =>
       editor.window.showQuickPick(labels, {placeHolder: placeholder}),
     openLocally: folder =>

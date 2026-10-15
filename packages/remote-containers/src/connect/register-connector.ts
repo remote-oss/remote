@@ -94,13 +94,23 @@ export async function registerContainerResolver(
   if (registration.kind === 'registered') {
     const {resolver} = registration;
     handle = resolver;
-    resolver.onFirstResolveSettled(() => {
+    resolver.onResolveSettled(() => {
       const connection = resolver.currentConnection();
-      if (connection?.state === 'connected' && !disposed) {
+      if (connection === undefined || disposed) {
+        return;
+      }
+      if (connection.state === 'connected') {
+        label?.dispose();
         label = registerAuthorityLabel(
           host.labels,
           connection.decodedTarget,
           workspaceSuffixOf(connector.heldIdentity(), translate),
+        );
+      } else if (label === undefined) {
+        label = registerAuthorityLabel(
+          host.labels,
+          connection.decodedTarget,
+          workspaceSuffixOf(undefined, translate),
         );
       }
     });

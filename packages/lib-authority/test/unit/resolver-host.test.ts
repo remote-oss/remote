@@ -893,6 +893,46 @@ describe("the resolver host: the window's connection (F-8201.BR-3)", () => {
   });
 });
 
+describe('the resolver host: every settled resolve is announced (card containers-35)', () => {
+  it('card containers-35: onResolveSettled fires once per resolve that settles, the first and a later one, connected or not', async () => {
+    const context = await setup();
+    const states: Array<string | undefined> = [];
+    handleOf(context.registration).onResolveSettled(() => {
+      states.push(handleOf(context.registration).currentConnection()?.state);
+    });
+    await resolve(context, AUTHORITY, 1);
+    context.connector.answer = FAILURE;
+    await failureOf(context);
+    deepStrictEqual(states, ['connected', 'failed']);
+  });
+
+  it('card containers-35: onResolveSettled does not fire for a resolve that is still running, nor for a lost transport', async () => {
+    const context = await setup();
+    let calls = 0;
+    handleOf(context.registration).onResolveSettled(() => {
+      calls += 1;
+    });
+    await resolve(context);
+    context.connector.close();
+    deepStrictEqual(calls, 1);
+  });
+
+  it('card containers-35: onFirstResolveSettled still fires once', async () => {
+    const context = await setup();
+    let first = 0;
+    let every = 0;
+    handleOf(context.registration).onFirstResolveSettled(() => {
+      first += 1;
+    });
+    handleOf(context.registration).onResolveSettled(() => {
+      every += 1;
+    });
+    await resolve(context, AUTHORITY, 1);
+    await resolve(context, AUTHORITY, 2);
+    deepStrictEqual([first, every], [1, 2]);
+  });
+});
+
 describe('the resolver host: leaving the remote (F-2412 AC-17)', () => {
   it('F-2412 AC-17: a resolve after leave() starts no progress and no connect, and ends handled', async () => {
     const context = await setup();
