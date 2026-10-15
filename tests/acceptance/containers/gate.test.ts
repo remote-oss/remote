@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
-import {readdirSync} from 'node:fs';
+import {readdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
@@ -13,11 +13,13 @@ import {
   inWindow,
   reopenInContainer,
   variable,
+  waitFor,
   windowState,
 } from '../windows/harness.ts';
 import {
   answerDialog,
   notificationCentre,
+  notifications,
   statusItem,
   waitForDialog,
   windowTitle,
@@ -29,6 +31,9 @@ import {
 } from '../windows/folder-windows.ts';
 
 const execFileAsync = promisify(execFile);
+
+/** The text the pre-reload progress shows once its link is rendered (S087). */
+const PRE_RELOAD_TOAST = 'Connecting to Dev Container (show log)';
 
 describe('Dev Containers release 1 gate rows (card containers-09)', function () {
   this.timeout(600_000);
@@ -156,6 +161,56 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
         labels: `${folder}|${path.join(folder, '.devcontainer', 'devcontainer.json')}`,
         reopenRegistered: true,
       },
+    );
+    await closeWindow(name);
+  });
+
+  it('F-0401 5.0 steps 2 and 3, ruling (c) (P1): with a Docker that answers after a second, the Connecting to Dev Container toast is on screen before the window reloads, and then it connects', async () => {
+    const wrapper = path.join(variable('HARNESS_RUN_FOLDER'), 'slow-docker');
+    writeFileSync(wrapper, '#!/bin/sh\nsleep 1\nexec docker "$@"\n', {
+      mode: 0o755,
+    });
+    const folder = devContainerFolder('gate-slow', {name: 'Gate Slow'});
+    await setUserSetting('dev.containers.dockerPath', wrapper);
+    try {
+      const name = await openFolderWindow(folder);
+      await Promise.all([
+        reopenInContainer(name),
+        waitFor(
+          `the toast ${PRE_RELOAD_TOAST} before the reload`,
+          async () => {
+            try {
+              return (await notifications(name)).includes(PRE_RELOAD_TOAST);
+            } catch {
+              return false;
+            }
+          },
+          30_000,
+        ),
+      ]);
+      deepStrictEqual(
+        {
+          remoteName: (await windowState(name)).remoteName,
+          containers: (await devContainersOf(folder)).length,
+        },
+        {remoteName: 'dev-container', containers: 1},
+      );
+      await closeWindow(name);
+    } finally {
+      await setUserSetting('dev.containers.dockerPath', undefined);
+    }
+  });
+
+  it('F-0401 5.0 step 2, ruling (c) (P2): with the plain docker, Reopen in Container connects, and what shows before the reload is not asserted', async () => {
+    const folder = devContainerFolder('gate-plain', {name: 'Gate Plain'});
+    const name = await openFolderWindow(folder);
+    await reopenInContainer(name);
+    deepStrictEqual(
+      {
+        remoteName: (await windowState(name)).remoteName,
+        containers: (await devContainersOf(folder)).length,
+      },
+      {remoteName: 'dev-container', containers: 1},
     );
     await closeWindow(name);
   });
