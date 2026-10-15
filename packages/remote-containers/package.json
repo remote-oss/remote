@@ -39,7 +39,8 @@
     }
   },
   "activationEvents": [
-    "onResolveRemoteAuthority:dev-container"
+    "onResolveRemoteAuthority:dev-container",
+    "onStartupFinished"
   ],
   "enabledApiProposals": [
     "resolvers",

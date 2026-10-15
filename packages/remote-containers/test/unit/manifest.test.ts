@@ -111,7 +111,10 @@ describe('the manifest', () => {
           description: '%capabilities.untrustedWorkspaces.description%',
         },
       },
-      activationEvents: ['onResolveRemoteAuthority:dev-container'],
+      activationEvents: [
+        'onResolveRemoteAuthority:dev-container',
+        'onStartupFinished',
+      ],
       enabledApiProposals: [
         'resolvers',
         'tunnels',
@@ -289,10 +292,10 @@ describe('the manifest', () => {
       ],
     );
   });
-
-  it('containers-01: the only activation event is the resolve of the dev-container authority', () => {
+  it('containers-11 (athena on #892): the activation events are the resolve of the dev-container authority and the end of the startup', () => {
     deepStrictEqual(MANIFEST.activationEvents, [
       'onResolveRemoteAuthority:dev-container',
+      'onStartupFinished',
     ]);
   });
 

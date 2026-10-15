@@ -17,6 +17,8 @@ import {
   type CliEvent,
   type CliFailure,
   type ConfigurationResult,
+  daemonRefusalOf,
+  type DaemonRefusal,
   readStderrLine,
   readConfigurationResult,
   readRunUserCommandsResult,
@@ -28,6 +30,9 @@ import {rawHoldOf} from './cli-raw-lines.ts';
 import {referencedSecrets, scrubbed, type Secret} from './cli-secrets.ts';
 import {dropsImage, overrideText} from './override-pre-pass.ts';
 import type {OverrideStore} from './override-files.ts';
+
+/** The colour codes of a terminal line. */
+const COLOUR_CODES = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 
 /** How long the CLI may keep running after its result line before it is ended. */
 const GUARD_MILLISECONDS = 30_000;
@@ -52,6 +57,26 @@ export interface CliBridge {
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
   ): Promise<ConfigurationResult | CliFailure>;
+}
+
+/** The last refusal the Docker client's words in `text` say, one line at a time with colour codes and the CR gone. */
+function refusalIn(text: string): DaemonRefusal | undefined {
+  return text
+    .split('\n')
+    .map(line =>
+      daemonRefusalOf(line.replace(COLOUR_CODES, '').replace(/\r$/u, '')),
+    )
+    .findLast(found => found !== undefined);
+}
+
+/** A setup failure with the daemon's refusal on it, when there was one; any other result as it is. */
+function withRefusal<Result extends {kind: string}>(
+  result: Result,
+  refusal: DaemonRefusal | undefined,
+): Result {
+  return result.kind === 'setupFailed' && refusal !== undefined
+    ? {...result, refusal}
+    : result;
 }
 
 /** The client's files the bridge reads. */
@@ -138,11 +163,16 @@ export function cliBridgeOf(
       }
       cancellation.addEventListener('abort', forward, {once: true});
       let lastError: string | undefined;
+      let refusal: DaemonRefusal | undefined;
       const rawHold = rawHoldOf();
       function deliver(unscrubbed: CliEvent): void {
         const event = scrubbedEvent(unscrubbed, secrets);
         if (event.kind === 'log') {
           lastError = firstLine(event.text);
+          // Only the client's own lines count: a lifecycle command's output has a channel.
+          refusal =
+            (event.channel === undefined ? refusalIn(event.text) : undefined) ??
+            refusal;
         }
         onEvent(event);
       }
@@ -178,7 +208,10 @@ export function cliBridgeOf(
           return {kind: 'cancelled'};
         }
         return scrubbedResult(
-          read(finished.result, finished.status, lastError),
+          withRefusal(
+            read(finished.result, finished.status, lastError),
+            refusal,
+          ),
           secrets,
         );
       } finally {

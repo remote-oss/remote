@@ -4,6 +4,7 @@
  */
 
 import type {FailureReason, Failed} from 'lib-authority';
+import type {DaemonRefusal} from '../cli/cli-lines.ts';
 
 /** A failure of `kind`; none has a hint or a diagnostic of its own. */
 function failure(
@@ -45,9 +46,19 @@ export function containerUnusable(): Failed {
   return failure('containerUnusable', {}, GENERIC);
 }
 
-/** The container could not be found, started or created. */
-export function containerSetupFailed(): Failed {
-  return failure('containerSetupFailed', {}, GENERIC);
+/** The string of each refusal the Docker daemon words: a mount it rejects, a port that is already taken. */
+const REFUSAL_REASONS: Record<DaemonRefusal, FailureReason> = {
+  invalidMount: {id: 'S018'},
+  portAllocated: {id: 'S019'},
+};
+
+/** The container could not be found, started or created; `refusal` is why the daemon refused, when it said. */
+export function containerSetupFailed(refusal?: DaemonRefusal): Failed {
+  return failure(
+    'containerSetupFailed',
+    {},
+    refusal === undefined ? GENERIC : REFUSAL_REASONS[refusal],
+  );
 }
 
 /** No place is known to download the server from for this editor. */
