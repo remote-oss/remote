@@ -1,6 +1,9 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import {promisify} from 'node:util';
+import {volumeServerFolder} from 'lib-product';
 import {
   closeWindow,
   devContainerFolder,
@@ -16,6 +19,22 @@ const execFileAsync = promisify(execFile);
 
 /** The detail of F-0410's generic dialog (S034). */
 const SETUP_FAILED = 'An error occurred setting up the container.';
+
+/** The product's server folder on the volume, from the application name of the editor under test and lib-product's rule. */
+function serverFolderOf(): string {
+  const product = JSON.parse(
+    readFileSync(
+      path.join(
+        path.dirname(variable('HARNESS_VSCODIUM_EXECUTABLE')),
+        'resources',
+        'app',
+        'product.json',
+      ),
+      'utf8',
+    ),
+  ) as {applicationName: string};
+  return `/vscode/${volumeServerFolder(product.applicationName)}`;
+}
 
 /** Runs `script` as root in a throwaway container of the run's image that mounts the `vscode` volume; its stdout. */
 async function onVolume(script: string): Promise<string> {
@@ -76,9 +95,6 @@ async function serverFolders(): Promise<string[]> {
 
 describe("C10's root step for the vscode volume (card containers-25)", function () {
   this.timeout(600_000);
-  /** The product's server folder on the volume, as V1's connect made it; V2 closes it. */
-  let serverFolder = '';
-
   after(async () => {
     // Later launches install afresh into a volume of their own making.
     await clearVolume();
@@ -97,12 +113,13 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
     console.log(
       `containers-25 V1: the server folders: ${JSON.stringify(folders)}`,
     );
-    serverFolder = folders[0]?.split(' ')[2] ?? '';
+    const serverFolder = serverFolderOf();
     deepStrictEqual(
       {
         remoteName: state.remoteName,
         containers: (await devContainersOf(folder)).length,
         shared: folders.slice(0, 3).map(line => line.split(' ').slice(0, 2)),
+        names: folders.slice(0, 2).map(line => line.split(' ')[2]),
         depths: folders.map(line => line.split(' ')[2]?.split('/').length),
         commitOwner: folders[3]?.split(' ')[0],
       },
@@ -114,6 +131,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
           ['root', '777'],
           ['root', '777'],
         ],
+        names: [serverFolder, `${serverFolder}/bin`],
         depths: [3, 4, 5, 6],
         commitOwner: 'node',
       },
@@ -123,6 +141,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
 
   it('F-0419 AC-24 (v2): a server folder that is root 0700 stays so, the install fails with the setup dialog, and the missing folders under it are made 0777', async () => {
     await clearVolume();
+    const serverFolder = serverFolderOf();
     await onVolume(`mkdir -m 0700 ${serverFolder}`);
     const folder = devContainerFolder('volume-closed', {
       name: 'Volume Closed',
