@@ -15,6 +15,7 @@ import {
   localFolderOf,
 } from '../lifecycle/labels.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
+import {watchContainerEvents} from './targets-events.ts';
 import {
   inspectArguments,
   LIST_ARGUMENTS,
@@ -111,6 +112,8 @@ export interface TargetsViewPorts {
   now(): number;
   /** Calls `callback` after `milliseconds`; the result stops the wait. */
   setTimer(milliseconds: number, callback: () => void): () => void;
+  /** Calls the listener when `dev.containers.dockerPath` changes. */
+  onDockerPathChange(listener: () => void): {dispose(): void};
   translate: Translate;
   logger: Logger;
 }
@@ -170,6 +173,7 @@ export async function showTargets(
   const stopping = new AbortController();
   let current: TargetsTree | undefined;
   let reading: Promise<TargetsTree> | undefined;
+  let visible = false;
 
   /** The engine of the connection the window holds, else the one the setting names; none when it names no program. */
   function engineOf(held: HeldConnection | undefined): EngineHost | undefined {
@@ -296,8 +300,19 @@ export async function showTargets(
         listener();
       });
     }
+    if (visible) {
+      events.start();
+    }
     return next;
   }
+
+  const events = watchContainerEvents({
+    engine: () => engineOf(ports.held()),
+    rebuild: () => rebuild(),
+    setTimer: (milliseconds, callback) =>
+      ports.setTimer(milliseconds, callback),
+    logger,
+  });
 
   function rebuild(): Promise<TargetsTree> {
     reading ??= build().finally(() => {
@@ -318,13 +333,33 @@ export async function showTargets(
     getChildren: async node => childrenOf(current ?? (await rebuild()), node),
     getTreeItem: specOf,
   });
-  const visibility = treeView.onDidChangeVisibility(visible => {
-    if (visible) {
-      rebuild().catch((caught: unknown) => {
-        logger.error(
-          `the Dev Containers view could not be rebuilt: ${caught instanceof Error ? caught.message : String(caught)}`,
-        );
-      });
+  function rebuildLogged(): void {
+    rebuild().catch((caught: unknown) => {
+      logger.error(
+        `the Dev Containers view could not be rebuilt: ${caught instanceof Error ? caught.message : String(caught)}`,
+      );
+    });
+  }
+
+  const visibility = treeView.onDidChangeVisibility(isVisible => {
+    visible = isVisible;
+    if (isVisible) {
+      events.start();
+      rebuildLogged();
+    } else {
+      events.stop();
+    }
+  });
+  const dockerPath = ports.onDockerPathChange(() => {
+    if (ports.held() !== undefined) {
+      return;
+    }
+    events.stop();
+    const stale = reading;
+    if (stale === undefined) {
+      rebuildLogged();
+    } else {
+      stale.then(rebuildLogged, rebuildLogged);
     }
   });
   return {
@@ -336,6 +371,8 @@ export async function showTargets(
         return;
       }
       stopping.abort();
+      events.stop();
+      dockerPath.dispose();
       visibility.dispose();
       treeView.dispose();
       listeners.clear();

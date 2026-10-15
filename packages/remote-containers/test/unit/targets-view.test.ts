@@ -19,6 +19,7 @@ import {
 } from '../../src/explorer/targets-view.ts';
 import {views} from '../../src/identifiers.generated.ts';
 import type {TargetRow} from '../../src/explorer/targets-model.ts';
+import {fakeEngine, type FakeEngine} from './fake-engine.ts';
 import {pendingOf, settled} from './pending.ts';
 
 const CLOCK = Date.parse('2026-10-14T12:00:00Z');
@@ -92,6 +93,10 @@ interface Scene {
   visibility: Array<(visible: boolean) => void>;
   changes: number;
   disposed: string[];
+  /** The fake `docker` of each engine, by its name, for the events process. */
+  docker: Record<string, FakeEngine>;
+  pathListeners: Array<() => void>;
+  pathSubscriptions: number;
   sink: MemorySink;
 }
 
@@ -117,6 +122,9 @@ function sceneOf(): Scene {
     visibility: [],
     changes: 0,
     disposed: [],
+    docker: {},
+    pathListeners: [],
+    pathSubscriptions: 0,
     sink: new MemorySink(),
   };
 }
@@ -147,7 +155,8 @@ function engineOf(scene: Scene, name: string): EngineHost {
         },
       );
     },
-    spawn: () => Promise.reject(new Error('the view never spawns')),
+    spawn: (argv, options) =>
+      (scene.docker[name] ??= fakeEngine()).spawn(argv, options),
   };
 }
 
@@ -194,6 +203,15 @@ function portsOf(scene: Scene): TargetsViewPorts {
     },
     exists: file => Promise.resolve(scene.existing.has(file)),
     now: () => CLOCK,
+    onDockerPathChange: listener => {
+      scene.pathListeners.push(listener);
+      scene.pathSubscriptions += 1;
+      return {
+        dispose: () => {
+          scene.pathSubscriptions -= 1;
+        },
+      };
+    },
     setTimer: (milliseconds, callback) => {
       scene.timers.push({milliseconds, callback});
       return () => {
@@ -264,6 +282,22 @@ function rowOf(overrides: Partial<TargetRow>): TargetRow {
     children: [],
     ...overrides,
   };
+}
+
+/** The view over a scene with one container, shown once and read once. */
+async function populated(scene: Scene) {
+  scene.containers = [containerOf(OTHER)];
+  const {view, provider} = await shown(scene);
+  await provider.getChildren(undefined);
+  return {view, provider};
+}
+
+/** The same view, made visible, so that its events process runs. */
+async function populatedAndVisible(scene: Scene) {
+  const {view, provider} = await populated(scene);
+  scene.visibility[0]?.(true);
+  await settled();
+  return {view, provider};
 }
 
 /** The view over a scene with one container, shown once, and then with its next listing held until the row settles it. */
@@ -382,6 +416,188 @@ describe('the Dev Containers view (card containers-30)', () => {
     deepStrictEqual(lines(scene), [
       'error: the Dev Containers view could not be shown: plain',
     ]);
+  });
+
+  it('F-0901 §16, 6.7: the events process runs only while the view is visible: started on visible, ended on hidden, and ended on dispose', async () => {
+    const scene = sceneOf();
+    scene.containers = [containerOf(OTHER)];
+    const {view, provider} = await shown(scene);
+    await provider.getChildren(undefined);
+    const hidden = scene.docker.setting?.processes.length ?? 0;
+    scene.visibility[0]?.(true);
+    await settled();
+    const started = scene.docker.setting?.processes.map(each => each.argv[0]);
+    scene.visibility[0]?.(false);
+    await settled();
+    const ended = scene.docker.setting?.processes.map(each => each.killed);
+    scene.visibility[0]?.(true);
+    await settled();
+    view.dispose();
+    await settled();
+    deepStrictEqual(
+      [
+        hidden,
+        started,
+        ended,
+        scene.docker.setting?.processes.map(each => each.killed),
+      ],
+      [0, ['events'], [true], [true, true]],
+    );
+  });
+
+  it('F-0901 §16, AC-56: a Docker event rebuilds the tree once, after the quiet moment, with one change and no Refresh', async () => {
+    const scene = sceneOf();
+    const {provider} = await populatedAndVisible(scene);
+    scene.containers = [containerOf(OTHER), containerOf(THIRD)];
+    scene.docker.setting?.processes[0]?.print(
+      '{"Type":"container","Action":"start"}\n',
+    );
+    await settled();
+    const before = idsOf(await rowsOf(provider)).sort();
+    scene.timers.at(-1)?.callback();
+    await settled();
+    deepStrictEqual(
+      [before, idsOf(await rowsOf(provider)).sort(), scene.changes],
+      [[OTHER], [OTHER, THIRD], 2],
+    );
+  });
+
+  it('F-0901 AC-40: with the view shown and visible nothing asks the clock for a rebuild: no timer is set without an event', async () => {
+    const scene = sceneOf();
+    await populatedAndVisible(scene);
+    deepStrictEqual(scene.timers.length, 0);
+  });
+
+  it('F-0901 §16: a program that is not named gives no events process while the view is visible', async () => {
+    const scene = sceneOf();
+    scene.dockerPath = 'bin/docker';
+    scene.folders = [];
+    const {provider} = await shown(scene);
+    scene.visibility[0]?.(true);
+    await provider.getChildren(undefined);
+    await settled();
+    deepStrictEqual(Object.keys(scene.docker), []);
+  });
+
+  it('F-0901 6.21, AC-44: in a local window a dockerPath change ends the events process and rebuilds with the new program, which gives the Docker welcome when it is missing, and no process', async () => {
+    const scene = sceneOf();
+    const {provider} = await populatedAndVisible(scene);
+    scene.dockerPath = 'bin/docker';
+    scene.folders = [];
+    scene.pathListeners[0]?.();
+    await settled();
+    deepStrictEqual(
+      [
+        scene.docker.setting?.processes.map(each => each.killed),
+        await provider.getChildren(undefined),
+        scene.contexts.slice(-3),
+      ],
+      [
+        [true],
+        [],
+        [
+          ['remote-containers:needsDockerStartOrInstall', true],
+          ['remote-containers:noContainersWithFolder', false],
+          ['remote-containers:noContainersWithoutFolder', false],
+        ],
+      ],
+    );
+  });
+
+  it('F-0901 6.21: in a local window a dockerPath change to a program that starts restarts the events process on the new engine', async () => {
+    const scene = sceneOf();
+    await populatedAndVisible(scene);
+    scene.dockerPath = '/other/docker';
+    scene.pathListeners[0]?.();
+    await settled();
+    deepStrictEqual(
+      [
+        [...new Set(scene.engineFiles)],
+        scene.docker.setting?.processes.length,
+        scene.docker.setting?.processes.map(each => each.killed),
+      ],
+      [['docker', '/other/docker'], 2, [true, false]],
+    );
+  });
+
+  it('F-0901 6.21: a dockerPath change while the view is hidden rebuilds and starts no process', async () => {
+    const scene = sceneOf();
+    await populated(scene);
+    scene.runs.length = 0;
+    scene.pathListeners[0]?.();
+    await settled();
+    deepStrictEqual(
+      [scene.runs, Object.keys(scene.docker)],
+      [['setting ps', 'setting inspect'], []],
+    );
+  });
+
+  it('F-0901 6.21: a dockerPath change while a read runs waits for it and then reads again with the new program', async () => {
+    const scene = sceneOf();
+    scene.containers = [containerOf(OTHER)];
+    const {view, hold, provider} = await populatedThenHeld(scene);
+    const refreshing = view.refresh();
+    await settled();
+    scene.runs.length = 0;
+    scene.dockerPath = '/other/docker';
+    scene.pathListeners[0]?.();
+    await settled();
+    const during = [...scene.runs];
+    scene.listing = undefined;
+    hold.resolve({kind: 'ran', status: 0, stdout: `${OTHER}\n`, stderr: ''});
+    await refreshing;
+    await settled();
+    deepStrictEqual(
+      [during, scene.runs, idsOf(await rowsOf(provider))],
+      [[], ['setting inspect', 'setting ps', 'setting inspect'], [OTHER]],
+    );
+  });
+
+  it('F-0901 6.21 step 4, AC-45: in a dev container window a dockerPath change changes nothing: no rebuild, the events process stays on the held engine, and a container created afterwards still appears', async () => {
+    const scene = sceneOf();
+    scene.containers = [containerOf(OWN_ID)];
+    scene.held = connectionOf(scene, OWN_ID);
+    const {provider} = await shown(scene);
+    await provider.getChildren(undefined);
+    scene.visibility[0]?.(true);
+    await settled();
+    scene.runs.length = 0;
+    scene.dockerPath = '/changed/docker';
+    scene.pathListeners[0]?.();
+    await settled();
+    const unchanged = [
+      [...scene.runs],
+      scene.docker.held?.processes.map(each => each.killed),
+    ];
+    scene.containers = [containerOf(OWN_ID), containerOf(OTHER)];
+    scene.docker.held?.processes[0]?.print('{"Type":"container"}\n');
+    await settled();
+    scene.timers.at(-1)?.callback();
+    await settled();
+    deepStrictEqual(
+      [
+        unchanged,
+        scene.docker.held?.processes.length,
+        scene.runs,
+        scene.engineFiles,
+        idsOf(await rowsOf(provider)).sort(),
+      ],
+      [
+        [[], [false]],
+        1,
+        ['held ps', 'held inspect'],
+        [],
+        [OWN_ID, OTHER].sort(),
+      ],
+    );
+  });
+
+  it('F-0901 6.21: the dockerPath subscription ends with the view', async () => {
+    const scene = sceneOf();
+    const {view} = await shown(scene);
+    const subscribed = scene.pathSubscriptions;
+    view.dispose();
+    deepStrictEqual([subscribed, scene.pathSubscriptions], [1, 0]);
   });
 
   it('F-0901 3.3, BR-13: a header is expanded and bare, and a row carries its id, texts and token string, and is expanded only with children under it', () => {
@@ -724,9 +940,7 @@ describe('the Dev Containers view (card containers-30)', () => {
 
   it('F-0901 6.7: becoming visible rebuilds the tree, hiding does not', async () => {
     const scene = sceneOf();
-    scene.containers = [containerOf(OTHER)];
-    const {provider} = await shown(scene);
-    await provider.getChildren(undefined);
+    await populated(scene);
     scene.runs.length = 0;
     scene.visibility[0]?.(false);
     await settled();

@@ -14,41 +14,18 @@ import {
   waitFor,
 } from '../windows/harness.ts';
 import {
-  rowDetails,
   type RowDetails,
   welcomeLink,
   welcomeText,
 } from '../windows/renderer.ts';
 import {openFolderWindow, setUserSetting} from '../windows/folder-windows.ts';
+import {rowsWhen, VIEW} from '../windows/dev-containers-view.ts';
 
 const execFileAsync = promisify(execFile);
-
-const VIEW = 'Dev Containers';
 
 /** The words of the welcome text when the window has a folder and no container exists (F-0901 3.3 #2, with the links of unregistered commands as plain words). */
 const WELCOME_WITH_FOLDER =
   "Get started with containers by running one of the Dev Containers commands. You can reopen the current folder in a container, or open another folder in a container. Open Folder in Container If you're new to containers and want to try a sample, there are several to choose from.";
-
-/** Waits until view `VIEW` of window `name` has rows that `ready` accepts, and gives them. */
-async function rowsWhen(
-  name: string,
-  ready: (rows: RowDetails[]) => boolean,
-): Promise<RowDetails[]> {
-  let shown: RowDetails[] = [];
-  await waitFor(
-    `the rows of ${VIEW} in window ${name}`,
-    async () => {
-      try {
-        shown = (await rowDetails(name, VIEW)) ?? [];
-      } catch {
-        return false;
-      }
-      return ready(shown);
-    },
-    60_000,
-  );
-  return shown;
-}
 
 /** The labels of rows, in order. */
 function labelsOf(rows: readonly RowDetails[]): string[] {
