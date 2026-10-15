@@ -6,7 +6,9 @@ import type {
   EngineHost,
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
+import {sharedContainerEvents} from '../../src/explorer/targets-events.ts';
 import {
+  engineOfWindow,
   showTargets,
   showTargetsWhenRegistered,
   specOf,
@@ -163,7 +165,7 @@ function engineOf(scene: Scene, name: string): EngineHost {
 }
 
 function portsOf(scene: Scene): TargetsViewPorts {
-  return {
+  const ports: Omit<TargetsViewPorts, 'events'> = {
     editor: {
       commandIds: () =>
         scene.commandFailure === undefined
@@ -222,6 +224,14 @@ function portsOf(scene: Scene): TargetsViewPorts {
     },
     translate: template => template,
     logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
+  };
+  return {
+    ...ports,
+    events: sharedContainerEvents({
+      engine: () => engineOfWindow(ports, scene.held),
+      setTimer: ports.setTimer,
+      logger: ports.logger,
+    }),
   };
 }
 

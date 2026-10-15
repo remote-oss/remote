@@ -47,7 +47,9 @@ import {
   type DetailsView,
   showDetailsWhenRegistered,
 } from './explorer/details-view.ts';
+import {sharedContainerEvents} from './explorer/targets-events.ts';
 import {
+  engineOfWindow,
   showTargetsWhenRegistered,
   type TargetsView,
   type TreeItemSpec,
@@ -648,16 +650,26 @@ export async function activate(
       createTreeView: <Node>(viewId: string, provider: TreeProvider<Node>) =>
         treeViewOf(viewId, provider, context.extensionUri),
     };
-    targetsView = showTargetsWhenRegistered({
-      editor: explorerEditor,
-      held: () => connector.heldConnection(),
+    const windowEngine = {
       dockerPath: () =>
         vscode.workspace.getConfiguration().get(settings.dockerPath.id),
       folders: () =>
         (vscode.workspace.workspaceFolders ?? []).map(
           folder => folder.uri.fsPath,
         ),
-      engineFor: file => served.preflight.engineFor(file),
+      engineFor: (file: string) => served.preflight.engineFor(file),
+    };
+    const containerEvents = sharedContainerEvents({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      setTimer: (milliseconds, callback) =>
+        served.preflight.setTimer(milliseconds, callback),
+      logger,
+    });
+    targetsView = showTargetsWhenRegistered({
+      editor: explorerEditor,
+      held: () => connector.heldConnection(),
+      ...windowEngine,
+      events: containerEvents,
       exists: file =>
         Promise.resolve(vscode.workspace.fs.stat(vscode.Uri.file(file))).then(
           () => true,
@@ -679,6 +691,7 @@ export async function activate(
       editor: explorerEditor,
       held: () => connector.heldConnection(),
       onHeldChanged: listener => connector.onHeldChanged(listener),
+      events: containerEvents,
       setTimer: (milliseconds, callback) =>
         served.preflight.setTimer(milliseconds, callback),
       translate,

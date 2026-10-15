@@ -5,6 +5,7 @@ import type {EngineHost} from '../../src/engine/engine-host.ts';
 import {
   EVENT_QUIET_MILLISECONDS,
   EVENTS_ARGUMENTS,
+  sharedContainerEvents,
   watchContainerEvents,
 } from '../../src/explorer/targets-events.ts';
 import {fakeEngine, type FakeEngine, type SpawnPlan} from './fake-engine.ts';
@@ -35,6 +36,19 @@ function sceneOf(...plans: SpawnPlan[]): Scene {
   };
 }
 
+/** The timers of the scene: each wait is recorded, and the function that stops it marks it stopped. */
+function timerOf(
+  scene: Scene,
+): (milliseconds: number, callback: () => void) => () => void {
+  return (milliseconds, callback) => {
+    const timer = {milliseconds, callback, stopped: false};
+    scene.timers.push(timer);
+    return () => {
+      timer.stopped = true;
+    };
+  };
+}
+
 function watcherOf(scene: Scene): ReturnType<typeof watchContainerEvents> {
   return watchContainerEvents({
     engine: () => scene.watched,
@@ -47,13 +61,7 @@ function watcherOf(scene: Scene): ReturnType<typeof watchContainerEvents> {
         throw scene.failure;
       }
     },
-    setTimer: (milliseconds, callback) => {
-      const timer = {milliseconds, callback, stopped: false};
-      scene.timers.push(timer);
-      return () => {
-        timer.stopped = true;
-      };
-    },
+    setTimer: timerOf(scene),
     logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
   });
 }
@@ -319,5 +327,64 @@ describe('the container events of the Dev Containers view (card containers-31)',
     watcherOf(scene).start();
     await settled();
     deepStrictEqual([scene.timers.length, scene.rebuilds], [0, 0]);
+  });
+
+  it('#1001: two views watching through the source run one process, and an event rebuilds each view that is started', async () => {
+    const scene = sceneOf();
+    const source = sharedContainerEvents({
+      engine: () => scene.watched,
+      setTimer: timerOf(scene),
+      logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
+    });
+    const rebuilt: string[] = [];
+    const first = source.watch(() => {
+      rebuilt.push('first');
+      return Promise.resolve();
+    });
+    const second = source.watch(() => {
+      rebuilt.push('second');
+      return Promise.resolve();
+    });
+    const idle = source.watch(() => {
+      rebuilt.push('idle');
+      return Promise.resolve();
+    });
+    first.start();
+    second.start();
+    await settled();
+    scene.engine.processes[0]?.print(EVENT);
+    await settled();
+    waiting(scene)[0]?.();
+    await settled();
+    idle.stop();
+    deepStrictEqual(
+      [
+        scene.engine.processes.length,
+        rebuilt.sort(),
+        scene.engine.processes[0]?.killed,
+      ],
+      [1, ['first', 'second'], false],
+    );
+  });
+
+  it('#1001: the process ends when the last started view stops, and not before', async () => {
+    const scene = sceneOf();
+    const source = sharedContainerEvents({
+      engine: () => scene.watched,
+      setTimer: () => () => undefined,
+      logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
+    });
+    const first = source.watch(() => Promise.resolve());
+    const second = source.watch(() => Promise.resolve());
+    first.start();
+    second.start();
+    await settled();
+    first.stop();
+    const afterFirst = scene.engine.processes[0]?.killed;
+    second.stop();
+    deepStrictEqual(
+      [afterFirst, scene.engine.processes[0]?.killed],
+      [false, true],
+    );
   });
 });

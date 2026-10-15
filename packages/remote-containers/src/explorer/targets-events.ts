@@ -142,3 +142,46 @@ export function watchContainerEvents(
     },
   };
 }
+
+/** The events of the window, shared by the views that read the containers: one process however many views watch. */
+export interface ContainerEventsSource {
+  /** A watcher for a view that rebuilds with `rebuild`; the process runs while any watcher of the source is started. */
+  watch(rebuild: () => Promise<unknown>): ContainerEvents;
+}
+
+/** The source over `ports`, whose own `rebuild` is the rebuilds of the started watchers. */
+export function sharedContainerEvents(
+  ports: Omit<ContainerEventsPorts, 'rebuild'>,
+): ContainerEventsSource {
+  const watchers = new Set<{
+    rebuild: () => Promise<unknown>;
+    started: boolean;
+  }>();
+  const events = watchContainerEvents({
+    ...ports,
+    rebuild: () =>
+      Promise.all(
+        [...watchers]
+          .filter(watcher => watcher.started)
+          .map(watcher => watcher.rebuild()),
+      ),
+  });
+  return {
+    watch: rebuild => {
+      const watcher = {rebuild, started: false};
+      watchers.add(watcher);
+      return {
+        start: () => {
+          watcher.started = true;
+          events.start();
+        },
+        stop: () => {
+          watcher.started = false;
+          if (![...watchers].some(each => each.started)) {
+            events.stop();
+          }
+        },
+      };
+    },
+  };
+}

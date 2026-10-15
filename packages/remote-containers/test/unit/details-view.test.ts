@@ -17,7 +17,9 @@ import {
   showDetails,
   showDetailsWhenRegistered,
 } from '../../src/explorer/details-view.ts';
+import {sharedContainerEvents} from '../../src/explorer/targets-events.ts';
 import {contextKeys, views} from '../../src/identifiers.generated.ts';
+import {fakeEngine, type FakeEngine} from './fake-engine.ts';
 import {pendingOf, settled} from './pending.ts';
 
 const RECORDED = readFileSync(
@@ -50,6 +52,8 @@ interface Scene {
   changes: number;
   timers: Array<{milliseconds: number; callback: () => void}>;
   disposed: string[];
+  /** The fake `docker` whose spawns are the events processes. */
+  docker: FakeEngine;
   sink: MemorySink;
 }
 
@@ -69,6 +73,7 @@ function sceneOf(): Scene {
     changes: 0,
     timers: [],
     disposed: [],
+    docker: fakeEngine(),
     sink: new MemorySink(),
   };
 }
@@ -81,7 +86,7 @@ function engineOf(scene: Scene): EngineHost {
       scene.signals.push(options.cancellation);
       return Promise.resolve(scene.answer());
     },
-    spawn: () => Promise.reject(new Error('the view never spawns')),
+    spawn: (argv, options) => scene.docker.spawn(argv, options),
   };
 }
 
@@ -141,6 +146,16 @@ function portsOf(scene: Scene): DetailsViewPorts {
         treeViewOver(scene, viewId, provider),
     },
     held: () => scene.held,
+    events: sharedContainerEvents({
+      engine: () => scene.held?.engine,
+      setTimer: (milliseconds, callback) => {
+        scene.timers.push({milliseconds, callback});
+        return () => {
+          scene.timers.pop();
+        };
+      },
+      logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
+    }),
     setTimer: (milliseconds, callback) => {
       scene.timers.push({milliseconds, callback});
       return () => {
@@ -421,6 +436,26 @@ describe('the Details view (card containers-33)', () => {
     hold.resolve({kind: 'ran', status: 0, stdout: RECORDED, stderr: ''});
     await reading;
     deepStrictEqual([scene.titles, scene.changes], [['c33w'], 1]);
+  });
+
+  it('#1001: the view starts the shared events process while it is visible, an event reads the container again, and hiding the view ends the process', async () => {
+    const scene = sceneOf();
+    scene.held = connectionOf(scene);
+    await shown(scene);
+    scene.visibility[0]?.(true);
+    await settled();
+    const started = scene.docker.processes.length;
+    const before = scene.runs.length;
+    scene.docker.processes[0]?.print('{"Type":"container","Action":"die"}\n');
+    await settled();
+    scene.timers.at(-1)?.callback();
+    await settled();
+    const reread = scene.runs.length - before;
+    scene.visibility[0]?.(false);
+    deepStrictEqual(
+      [started, reread, scene.docker.processes[0]?.killed],
+      [1, 1, true],
+    );
   });
 
   it('F-0903 3.3: a row’s item has its id, its text, its viewItem, and expands when it has rows under it', () => {

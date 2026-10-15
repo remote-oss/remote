@@ -854,32 +854,3 @@ export async function clickButton(name: string, label: string): Promise<void> {
     throw new Error(`window ${name}: ${missing}`);
   }
 }
-
-/**
- * Clicks the twistie of the row labelled `label` in view `viewName` of window `name`, which expands or collapses it; of
- * the rows with that label it takes the one at `position`, counting from 0. It fails naming the labels it found when
- * there is none.
- */
-export async function toggleRow(
-  name: string,
-  viewName: string,
-  label: string,
-  position = 0,
-): Promise<void> {
-  const missing = await evaluate<string | null>(
-    name,
-    `(() => {
-      const pane = ${paneExpression(viewName)};
-      const rows = [...(pane?.querySelectorAll('[role="treeitem"]') ?? [])];
-      const row = rows.filter(each => each.querySelector('.label-name')?.textContent === ${JSON.stringify(label)})[${String(position)}];
-      if (row === undefined) {
-        return 'no row ' + ${JSON.stringify(JSON.stringify(label))} + ' among ' + JSON.stringify(rows.map(each => each.querySelector('.label-name')?.textContent));
-      }
-      row.querySelector('.monaco-tl-twistie').click();
-      return null;
-    })()`,
-  );
-  if (missing !== null) {
-    throw new Error(`window ${name}: ${missing}`);
-  }
-}

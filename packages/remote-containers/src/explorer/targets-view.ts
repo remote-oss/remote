@@ -15,7 +15,7 @@ import {
   localFolderOf,
 } from '../lifecycle/labels.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
-import {watchContainerEvents} from './targets-events.ts';
+import type {ContainerEventsSource} from './targets-events.ts';
 import {
   inspectArguments,
   LIST_ARGUMENTS,
@@ -108,6 +108,8 @@ export interface TargetsViewPorts {
   folders(): readonly string[];
   /** The Docker CLI for a program. */
   engineFor(file: string): EngineHost;
+  /** The Docker events of the window, shared with the other views. */
+  events: ContainerEventsSource;
   /** Whether a file exists on this machine. */
   exists(file: string): Promise<boolean>;
   now(): number;
@@ -161,6 +163,20 @@ function childrenOf(
   return 'rows' in node ? node.rows : node.children;
 }
 
+/** The engine of the connection the window holds, else the one the setting names; none when it names no program. */
+export function engineOfWindow(
+  ports: Pick<TargetsViewPorts, 'dockerPath' | 'folders' | 'engineFor'>,
+  held: HeldConnection | undefined,
+): EngineHost | undefined {
+  if (held !== undefined) {
+    return held.engine;
+  }
+  const executable = executableOf(ports.dockerPath(), ports.folders()[0]);
+  return executable.kind === 'spawn'
+    ? ports.engineFor(executable.file)
+    : undefined;
+}
+
 /** Shows the view when core registered it; otherwise shows nothing and returns undefined. */
 export async function showTargets(
   ports: TargetsViewPorts,
@@ -175,17 +191,6 @@ export async function showTargets(
   let current: TargetsTree | undefined;
   let reading: Promise<TargetsTree> | undefined;
   let visible = false;
-
-  /** The engine of the connection the window holds, else the one the setting names; none when it names no program. */
-  function engineOf(held: HeldConnection | undefined): EngineHost | undefined {
-    if (held !== undefined) {
-      return held.engine;
-    }
-    const executable = executableOf(ports.dockerPath(), ports.folders()[0]);
-    return executable.kind === 'spawn'
-      ? ports.engineFor(executable.file)
-      : undefined;
-  }
 
   /** Says in the log why the containers could not be listed. */
   function unreachable(reason: string): 'unreachable' {
@@ -265,7 +270,7 @@ export async function showTargets(
   /** Reads the engine and the window, builds the next tree and swaps it in. */
   async function build(): Promise<TargetsTree> {
     const held = ports.held();
-    const containers = await listedBy(engineOf(held));
+    const containers = await listedBy(engineOfWindow(ports, held));
     const next = targetsTreeOf({
       containers,
       window: {
@@ -307,13 +312,7 @@ export async function showTargets(
     return next;
   }
 
-  const events = watchContainerEvents({
-    engine: () => engineOf(ports.held()),
-    rebuild: () => rebuild(),
-    setTimer: (milliseconds, callback) =>
-      ports.setTimer(milliseconds, callback),
-    logger,
-  });
+  const events = ports.events.watch(() => rebuild());
 
   function rebuild(): Promise<TargetsTree> {
     reading ??= build().finally(() => {

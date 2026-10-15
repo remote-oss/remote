@@ -15,6 +15,7 @@ import {
   shownContainerOf,
 } from './details-model.ts';
 import {inspectArguments} from './listed-containers.ts';
+import type {ContainerEventsSource} from './targets-events.ts';
 import type {TreeItemSpec} from './targets-view.ts';
 import {whenRegistered} from './when-registered.ts';
 
@@ -51,6 +52,8 @@ export interface DetailsViewPorts {
   held(): HeldConnection | undefined;
   /** Calls the listener when the connection the window holds is made, replaced or given back. */
   onHeldChanged(listener: () => void): () => void;
+  /** The Docker events of the window, shared with the other views. */
+  events: ContainerEventsSource;
   /** Calls `callback` after `milliseconds`; the result stops the wait. */
   setTimer(milliseconds: number, callback: () => void): () => void;
   translate: Translate;
@@ -91,6 +94,7 @@ export async function showDetails(
   const stopping = new AbortController();
   let current: readonly DetailsRow[] = [];
   let reading: Promise<void> | undefined;
+  let visible = false;
 
   /** The container the window holds, read through the connection's engine; none when it can't be read. */
   async function shownBy(held: HeldConnection) {
@@ -130,7 +134,12 @@ export async function showDetails(
     listeners.forEach(listener => {
       listener();
     });
+    if (visible && held !== undefined) {
+      events.start();
+    }
   }
+
+  const events = ports.events.watch(() => read());
 
   function read(): Promise<void> {
     reading ??= build().finally(() => {
@@ -159,9 +168,13 @@ export async function showDetails(
     getChildren: node => Promise.resolve(node?.children ?? current),
     getTreeItem: detailsSpecOf,
   });
-  const visibility = treeView.onDidChangeVisibility(visible => {
-    if (visible) {
+  const visibility = treeView.onDidChangeVisibility(isVisible => {
+    visible = isVisible;
+    if (isVisible) {
+      events.start();
       readLogged();
+    } else {
+      events.stop();
     }
   });
   const unsubscribe = ports.onHeldChanged(readLogged);
@@ -173,6 +186,7 @@ export async function showDetails(
         return;
       }
       stopping.abort();
+      events.stop();
       unsubscribe();
       visibility.dispose();
       treeView.dispose();
