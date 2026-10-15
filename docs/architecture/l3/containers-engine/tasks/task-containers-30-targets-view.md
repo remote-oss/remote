@@ -34,12 +34,14 @@ Modelled on remote-explorer's `view/tree-adapter.ts` (`showTargets`):
   `remote-containers:noContainersWithFolder` and `remote-containers:noContainersWithoutFolder` to whether the
   tree's `welcome` is that key. Add each to `identifiers.json` with setter `extension`, verbatim (tooling-31).
 - **Reads:**
-  - the list through C2 (`EngineHost.run` with `LIST_ARGUMENTS`, then `inspectArguments`), with the engine C10's
-    `toolsOf` makes for the current `dockerPath`. A failed run, or a list `listedContainersOf` can't read, is
-    `'unreachable'`;
+  - the list through C2 (`EngineHost.run` with `LIST_ARGUMENTS`, then `inspectArguments`). **The engine:** while C10
+    holds a connection, the held connection's engine (`heldConnection().engine`), whatever `dockerPath` says now
+    (F-0901 6.21 step 4, AC-45; athena on #965). Otherwise, the engine C10's `toolsOf` makes for the current
+    `dockerPath`. A failed run, or a list `listedContainersOf` can't read, is `'unreachable'`;
   - `window.folderOpen` from `workspace.workspaceFolders`;
-  - `window.connection` from a new C10 accessor, `heldConnection(): {containerId, hostPath, remoteWorkspaceFolder} |
-    undefined`, next to `heldIdentity` in `connector.ts`. It reads `Held` and never derives anything from labels;
+  - `window.connection` from a new C10 accessor, `heldConnection(): {containerId, hostPath, remoteWorkspaceFolder,
+    engine} | undefined`, next to `heldIdentity` in `connector.ts`. It reads `Held`, which already carries the
+    engine, and never derives anything from labels. The model gets the first three fields;
   - `withConfiguration`: for each dev container, a file-exists port decides BR-11 by AC-43's cases. The
     configuration is the `devcontainer.config_file` label when it names an existing file. Otherwise it's the
     folder's `.devcontainer/devcontainer.json`, then `.devcontainer.json`. A missing folder means no configuration.
@@ -98,7 +100,8 @@ under the stand-down rule.
   - two Refreshes during one read make one read;
   - the three `setContext` calls for each welcome key and for none;
   - an unreachable read sets `needsDockerStartOrInstall`.
-- `connector.test.ts`: `heldConnection()` while held, and none before and after.
+- `connector.test.ts`: `heldConnection()` while held, with the held engine, and none before and after.
+- In a dev container window, the list read uses the held engine, also after a `dockerPath` change.
 - `withConfiguration`: AC-43's cases (a)–(d), and a missing folder.
 - The manifest test: the view row, the welcome texts (no `command:` link to an unregistered command), the two
   placements, the title action, `commandPalette` `false`, and the stand-down clause on every welcome and menu

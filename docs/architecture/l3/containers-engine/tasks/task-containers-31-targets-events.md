@@ -10,7 +10,8 @@ display"); containers contracts (C2's `EngineHost.spawn`).
 ## 1. The change (`src/explorer/targets-events.ts`, new; wired in containers-30's adapter)
 
 - **The process:** `docker events --filter type=container --format '{{json .}}'` through C2's `EngineHost.spawn`, with
-  no shell, on the engine for the current `dockerPath`.
+  no shell, on containers-30's engine: the held connection's while C10 holds one, otherwise the one for the current
+  `dockerPath`.
   - It runs only while the view is visible: started on `visible: true`, stopped on `visible: false` and on dispose.
   - It's read line by line. Each line that parses as JSON is one event, and the content isn't matched (ADR-0010
     rule 2: the type filter is Docker's).
@@ -24,9 +25,9 @@ display"); containers contracts (C2's `EngineHost.spawn`).
   - **a local window** stops the events process and rebuilds with the new engine. A missing executable gives
     WELCOME#0 within about 3 s, with no notification (AC-44). It restarts the process on the new engine if that
     starts;
-  - **a dev container window** (C10 holds a connection) keeps its rows, groups and title actions. The rebuild happens
-    as in a local window, but an unreachable answer keeps the previous tree and the welcome keys as they were
-    (AC-45: "the rows, groups and title actions stay, no welcome content appears").
+  - **a dev container window** (C10 holds a connection) changes nothing: the list reads and the events process keep
+    the held connection's engine, so the rows, groups and title actions stay, and a container created afterwards
+    still appears (F-0901 6.21 step 4, AC-45; athena on #965). The new value applies in local windows only.
 
 ## 2. Rows
 
@@ -39,7 +40,8 @@ display"); containers contracts (C2's `EngineHost.spawn`).
 - a line that isn't JSON is ignored;
 - an ended process isn't restarted until the next rebuild;
 - `dockerPath` changed in a local window: process restarted, rebuild, WELCOME#0 for a missing program;
-- the same in a dev container window: the tree and keys unchanged on an unreachable answer;
+- in a dev container window, after a `dockerPath` change to a missing program, a fake event still rebuilds through
+  the held engine, and the events process isn't restarted;
 - no timer-driven rebuild exists (AC-40): advance an hour, no rebuild.
 
 ### 2.2 Acceptance (the `containers` launch)
@@ -48,6 +50,7 @@ display"); containers contracts (C2's `EngineHost.spawn`).
 |---|---|
 | Gate 14 | with the view visible, `docker run -d --label remote-oss.acceptance.run=<id> <image> sleep 600` makes its row appear, and `docker rm -f` makes it go, each within 5 s and with no Refresh (F-0901 AC-56) |
 | AC-44 | in a local folder window showing rows, `dev.containers.dockerPath` set to `<run>/no-such-docker` gives WELCOME#0 within 5 s, with no notification. Restore it in `finally` |
+| AC-45 | in the dev container window, with its view showing rows, set `dev.containers.dockerPath` to `<run>/no-such-docker`, then `docker run -d --label remote-oss.acceptance.run=<id> <image> sleep 600`: its row appears within 5 s, and no welcome content shows. Restore it in `finally` |
 | AC-57 | collapse "Other Containers", run a new plain container: the header stays collapsed (BR-13) |
 
 ## 3. Gates and review
@@ -57,4 +60,3 @@ container events and the dockerPath change (card containers-31, #964)`. Request 
 
 **Open rows (stop and report on #964):**
 1. `docker events` on the pinned engine emits lines that aren't one JSON object each.
-2. A dev container window's rebuild can't tell an unreachable engine from an empty list.
