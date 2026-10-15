@@ -641,6 +641,12 @@ export async function activate(
       now: Date.now,
       setTimer: (milliseconds, callback) =>
         served.preflight.setTimer(milliseconds, callback),
+      onDockerPathChange: listener =>
+        vscode.workspace.onDidChangeConfiguration(event => {
+          if (event.affectsConfiguration(settings.dockerPath.id)) {
+            listener();
+          }
+        }),
       translate,
       logger,
     });

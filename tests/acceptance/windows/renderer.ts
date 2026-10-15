@@ -357,6 +357,32 @@ export async function titleAction(
   );
 }
 
+/** Clicks the twistie of the one row labelled `rowLabel` in view `viewName` of window `name`, which collapses or expands it. */
+export async function toggleRow(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      if (pane === undefined) {
+        return 'no view ' + ${JSON.stringify(viewName)};
+      }
+      const rows = [...pane.querySelectorAll('[role="treeitem"]')].filter(row => row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)});
+      if (rows.length !== 1) {
+        return rows.length + ' rows labelled ' + ${JSON.stringify(JSON.stringify(rowLabel))};
+      }
+      rows[0].querySelector('.monaco-tl-twistie').click();
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}, view ${viewName}: ${missing}`);
+  }
+}
+
 /** What a row of a view shows beyond its text: its icon and the accessible label that carries its tooltip. */
 export interface RowDetails {
   label: string;
