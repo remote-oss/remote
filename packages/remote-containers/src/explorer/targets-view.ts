@@ -22,6 +22,7 @@ import {
   type ListedContainer,
   listedContainersOf,
 } from './listed-containers.ts';
+import {whenRegistered} from './when-registered.ts';
 import {
   type RowIcon,
   type TargetGroup,
@@ -380,68 +381,9 @@ export async function showTargets(
   };
 }
 
-/** How long the registration of the view is waited for between two looks, in milliseconds. */
-export const REGISTRATION_POLL_MILLISECONDS = 1000;
-
-/** How many looks are made before the view is given up: ten minutes, as long as a first connect may take. */
-export const REGISTRATION_POLLS = 600;
-
-/**
- * Shows the view as soon as core has registered it. In a window that is connecting, the package activates before the
- * window has its views, so the view is looked for again every second, until it is there, the polls are used up or the
- * handle is disposed.
- */
+/** Shows the view as soon as core has registered it, looking again every second until it is there. */
 export function showTargetsWhenRegistered(
   ports: TargetsViewPorts,
 ): TargetsView {
-  const state: {
-    shown: TargetsView | undefined;
-    stopped: boolean;
-    cancelWait: (() => void) | undefined;
-  } = {shown: undefined, stopped: false, cancelWait: undefined};
-
-  function report(caught: unknown): void {
-    ports.logger.error(
-      `the Dev Containers view could not be shown: ${caught instanceof Error ? caught.message : String(caught)}`,
-    );
-  }
-
-  function isStopped(): boolean {
-    return state.stopped;
-  }
-
-  async function look(polls: number): Promise<void> {
-    if (isStopped()) {
-      return;
-    }
-    const found = await showTargets(ports);
-    if (found !== undefined) {
-      state.shown = found;
-      if (isStopped()) {
-        found.dispose();
-      }
-      return;
-    }
-    if (polls === 0) {
-      ports.logger.info(
-        'the Dev Containers view is not registered, so it is not shown',
-      );
-      return;
-    }
-    state.cancelWait = ports.setTimer(REGISTRATION_POLL_MILLISECONDS, () => {
-      look(polls - 1).catch(report);
-    });
-  }
-
-  look(REGISTRATION_POLLS).catch(report);
-  return {
-    refresh: async () => {
-      await state.shown?.refresh();
-    },
-    dispose: () => {
-      state.stopped = true;
-      state.cancelWait?.();
-      state.shown?.dispose();
-    },
-  };
+  return whenRegistered(() => showTargets(ports), ports, 'Dev Containers');
 }

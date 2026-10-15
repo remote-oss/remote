@@ -36,6 +36,10 @@
     {
       "id": "remote-containers:noContainersWithoutFolder",
       "setter": "extension"
+    },
+    {
+      "id": "remote-containers:showDetails",
+      "setter": "extension"
     }
   ],
   "infoLineCommands": [],

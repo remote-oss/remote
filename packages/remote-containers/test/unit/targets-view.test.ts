@@ -7,8 +7,6 @@ import type {
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
 import {
-  REGISTRATION_POLL_MILLISECONDS,
-  REGISTRATION_POLLS,
   showTargets,
   showTargetsWhenRegistered,
   specOf,
@@ -18,6 +16,10 @@ import {
   type TargetsViewPorts,
 } from '../../src/explorer/targets-view.ts';
 import {views} from '../../src/identifiers.generated.ts';
+import {
+  REGISTRATION_POLL_MILLISECONDS,
+  REGISTRATION_POLLS,
+} from '../../src/explorer/when-registered.ts';
 import type {TargetRow} from '../../src/explorer/targets-model.ts';
 import {fakeEngine, type FakeEngine} from './fake-engine.ts';
 import {pendingOf, settled} from './pending.ts';

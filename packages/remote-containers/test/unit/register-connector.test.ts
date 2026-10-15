@@ -60,6 +60,7 @@ async function registered(
       return Promise.resolve(options.failure ?? CONNECTED);
     },
     cancel: () => undefined,
+    onHeldChanged: () => () => undefined,
     revealDetails: () => undefined,
     heldIdentity: () => options.identity,
     heldConnection: () => undefined,

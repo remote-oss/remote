@@ -874,6 +874,21 @@ describe('the container connector: cancelling (card containers-08)', () => {
     );
   });
 
+  it('F-0903 AC-8, card containers-33: listeners hear when the connection is made and when it is given back, and not after they stop listening', async () => {
+    const scene = sceneOf();
+    const heard: string[] = [];
+    const stop = scene.connector.onHeldChanged(() => {
+      heard.push(
+        scene.connector.heldConnection() === undefined ? 'none' : 'held',
+      );
+    });
+    await connected(scene);
+    scene.connector.cancel();
+    stop();
+    await connected(scene);
+    deepStrictEqual(heard, ['held', 'none']);
+  });
+
   it('F-0901 6.21 step 4, card containers-30: the held connection names the container, its folders and the engine the connect used, and it is nothing before the connect and after a cancel', async () => {
     const scene = sceneOf();
     const before = scene.connector.heldConnection();

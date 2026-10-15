@@ -62,7 +62,11 @@
       {
         "command": "remote-containers.rebuildContainer",
         "title": "%commands.Rebuildcontainer.title%",
-        "category": "Dev Containers"
+        "category": "Dev Containers",
+        "icon": {
+          "light": "resources/light/tools.svg",
+          "dark": "resources/dark/tools.svg"
+        }
       },
       {
         "command": "remote-containers.rebuildContainerNoCache",
@@ -82,6 +86,15 @@
       {
         "command": "remote-containers.explorerTargetsRefresh",
         "title": "%commands.explorerTargetsRefresh.title%",
+        "category": "Dev Containers",
+        "icon": {
+          "light": "resources/light/refresh.svg",
+          "dark": "resources/dark/refresh.svg"
+        }
+      },
+      {
+        "command": "remote-containers.explorerDetailsRefresh",
+        "title": "%commands.explorerDetailsRefresh.title%",
         "category": "Dev Containers",
         "icon": {
           "light": "resources/light/refresh.svg",
@@ -114,6 +127,10 @@
         {
           "command": "remote-containers.explorerTargetsRefresh",
           "when": "false"
+        },
+        {
+          "command": "remote-containers.explorerDetailsRefresh",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -121,6 +138,16 @@
           "command": "remote-containers.explorerTargetsRefresh",
           "group": "navigation@3",
           "when": "view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.rebuildContainer",
+          "group": "navigation@6",
+          "when": "!hideRebuildCommands && view == detailsContainers && remoteName == dev-container && !remote-containers:standingDown"
+        },
+        {
+          "command": "remote-containers.explorerDetailsRefresh",
+          "group": "navigation@4",
+          "when": "view == detailsContainers && !remote-containers:standingDown"
         }
       ],
       "view/item/context": [
@@ -161,6 +188,16 @@
             "exec",
             "k8s-container",
             "apple-container"
+          ]
+        },
+        {
+          "id": "detailsContainers",
+          "name": "%views.detailsContainers.name%",
+          "group": "details@1",
+          "when": "!hideConnectCommands && remote-containers:showDetails",
+          "remoteName": [
+            "dev-container",
+            "attached-container"
           ]
         }
       ]
