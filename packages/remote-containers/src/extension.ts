@@ -36,6 +36,7 @@ import {
   settings,
   standDown,
 } from './identifiers.generated.ts';
+import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
@@ -423,6 +424,11 @@ export async function activate(
           serverDownloadFolder: configuration.get(
             settings.serverDownloadFolder.id,
           ),
+          cacheVolume: () =>
+            cacheVolumeOf(
+              configuration.inspect(settings.cacheVolume.id)?.globalValue,
+              configuration.inspect(settings.cacheVolume.legacyId)?.globalValue,
+            ),
           defaultExtensions: configuration.inspect(
             settings.defaultExtensions.id,
           )?.globalValue,

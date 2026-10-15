@@ -50,6 +50,11 @@
   ],
   "settingPairs": [
     {
+      "current": "dev.containers.cacheVolume",
+      "legacy": "remote.containers.cacheVolume",
+      "winner": "current"
+    },
+    {
       "current": "dev.containers.defaultExtensions",
       "legacy": "remote.containers.defaultExtensions",
       "winner": "current"

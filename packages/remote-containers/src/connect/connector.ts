@@ -97,6 +97,7 @@ export interface ContainerConnectorDependencies {
     dockerPath: unknown;
     serverDownloadBaseUrl: OverrideValue | undefined;
     serverDownloadFolder: unknown;
+    cacheVolume(): boolean;
     /** The user's value of `dev.containers.defaultExtensions`, `undefined` when unset. */
     defaultExtensions: unknown;
     /** The user's value of the deprecated `remote.containers.defaultExtensions`, `undefined` when unset. */
@@ -570,6 +571,7 @@ export function containerConnectorOf(
         configFile,
         dockerPath,
         logLevel: 'info',
+        cacheVolume: settings.cacheVolume(),
         ...(rebuild === undefined
           ? {}
           : {rebuild: {buildNoCache: rebuild.buildNoCache}}),

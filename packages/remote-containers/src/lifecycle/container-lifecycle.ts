@@ -14,6 +14,8 @@ import {
   decide,
   discoveryArguments,
   idLabels,
+  isLegacy,
+  legacyDiscoveryArguments,
   type ContainerFacts,
 } from './labels.ts';
 
@@ -32,6 +34,8 @@ export interface ContainerRequest {
   logLevel: 'info' | 'debug' | 'trace';
   /** Set when the window asked for a rebuild: the existing container is replaced, whatever its state. */
   rebuild?: {buildNoCache: boolean};
+  /** Whether a container this run creates mounts the `vscode` volume (`dev.containers.cacheVolume`). */
+  cacheVolume: boolean;
 }
 
 /** How the preparation ended. */
@@ -129,18 +133,26 @@ async function discover(
   folder: string,
   cancellation: AbortSignal,
 ): Promise<Discovery> {
-  const listed = await askEngine(
-    engine,
+  const identifiers: string[] = [];
+  for (const query of [
     discoveryArguments(folder),
-    cancellation,
-  );
-  if (isAborted(cancellation)) {
-    return {kind: 'cancelled'};
+    legacyDiscoveryArguments(folder),
+  ]) {
+    const listed = await askEngine(engine, query, cancellation);
+    if (isAborted(cancellation)) {
+      return {kind: 'cancelled'};
+    }
+    if (listed.kind === 'failed') {
+      return {kind: 'discoveryFailed', detail: listed.detail};
+    }
+    for (const identifier of listed.stdout
+      .split('\n')
+      .filter(line => line !== '')) {
+      if (!identifiers.includes(identifier)) {
+        identifiers.push(identifier);
+      }
+    }
   }
-  if (listed.kind === 'failed') {
-    return {kind: 'discoveryFailed', detail: listed.detail};
-  }
-  const identifiers = listed.stdout.split('\n').filter(line => line !== '');
   if (identifiers.length === 0) {
     return {kind: 'found', containers: []};
   }
@@ -289,16 +301,50 @@ export function containerLifecycleOf(dependencies: {
       return decision;
     }
     onStep('startingContainer');
+    const rebuilding = request.rebuild !== undefined;
+    // a rebuild replaces the container with the current labels; a use keeps the labels its tier chose
+    const targetIdLabels = rebuilding
+      ? idLabels(folder, configFile)
+      : decision.kind === 'use'
+        ? decision.idLabels
+        : idLabels(folder, configFile);
+    // a rebuild removes a legacy container the CLI's remove would miss: the CLI only finds the labels it's given
+    for (const container of discovery.containers) {
+      if (
+        rebuilding &&
+        isLegacy(folder, container) &&
+        // a container that is already removing will be gone on its own, and the rm would only fail on it
+        container.status !== 'removing'
+      ) {
+        const removed = await askEngine(
+          engine,
+          ['rm', '--force', container.id],
+          cancellation,
+        );
+        if (isAborted(cancellation)) {
+          return {kind: 'cancelled'};
+        }
+        if (removed.kind === 'failed') {
+          return {
+            kind: 'discoveryFailed',
+            detail: `the legacy container ${container.id.slice(0, IDENTIFIER_LENGTH)} couldn't be removed: ${removed.detail}`,
+          };
+        }
+        logger.info(
+          `rebuilding: removed the legacy container ${container.id.slice(0, IDENTIFIER_LENGTH)}`,
+        );
+      }
+    }
     const target: CliTarget = {
       workspaceFolder: folder,
       configFile,
       dockerPath: request.dockerPath,
-      idLabels: idLabels(folder, configFile),
+      idLabels: targetIdLabels,
       mountWorkspaceGitRoot: true,
-      mounts: [VOLUME_MOUNT],
+      mounts: request.cacheVolume ? [VOLUME_MOUNT] : [],
       logLevel: request.logLevel,
     };
-    if (request.rebuild !== undefined) {
+    if (rebuilding) {
       logger.info(
         `rebuilding: the dev container CLI removes ${discovery.containers.map(container => container.id.slice(0, IDENTIFIER_LENGTH)).join(', ') || 'no container'} first`,
       );
@@ -306,7 +352,7 @@ export function containerLifecycleOf(dependencies: {
     const upResult = await bridge.up(
       target,
       {
-        removeExistingContainer: request.rebuild !== undefined,
+        removeExistingContainer: rebuilding,
         buildNoCache: request.rebuild?.buildNoCache ?? false,
       },
       relayEvent,
@@ -322,7 +368,7 @@ export function containerLifecycleOf(dependencies: {
       return upResult;
     }
     if (
-      request.rebuild === undefined &&
+      !rebuilding &&
       decision.kind === 'use' &&
       decision.containerId !== upResult.containerId
     ) {
