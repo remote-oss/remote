@@ -74,11 +74,8 @@ async function probeViews(
   }
 }
 
-async function probeOne(
-  editor: ProbeApi,
-  proposal: ProposalName,
-  viewIds: readonly string[],
-): Promise<ProposalState> {
+/** The state of a proposal that its own member tells; the others cannot be told from one. */
+function probeOne(editor: ProbeApi, proposal: ProposalName): ProposalState {
   switch (proposal) {
     case 'resolvers':
       return attempt(() => editor.appCommit);
@@ -91,27 +88,44 @@ async function probeOne(
       return attempt(() => {
         editor.onDidWriteTerminalData(() => undefined).dispose();
       });
-    case 'contribViewsRemote':
-      return probeViews(editor, viewIds);
     default:
       return 'unprobeable';
   }
 }
 
+/** The proposals whose grant is read from the editor's API; an extension granted one of them is granted its whole list. */
+const CALL_PROBED: readonly ProposalName[] = ['resolvers', 'tunnels'];
+
 /**
  * Probes each requested proposal, in the order given. Nothing is cached: every call asks the editor again, because a
  * grant can change between activations.
+ *
+ * Every route that enables proposals grants an extension's declared list as one unit, so `contribViewsRemote` is
+ * granted when `resolvers` or `tunnels` is, without reading the commands: in a window that is connecting, the editor
+ * registers the views only after the authority is resolved, which is after the resolver's activation. The commands
+ * are read only for an extension with no granted member of its own to go by.
  */
 export async function probeProposals(
   editor: ProbeApi,
   request: ProbeRequest,
 ): Promise<ProposalProbe[]> {
-  const probes: ProposalProbe[] = [];
-  for (const proposal of request.proposals) {
-    probes.push({
-      proposal,
-      state: await probeOne(editor, proposal, request.viewIds),
-    });
-  }
-  return probes;
+  const probes = request.proposals.map(proposal => ({
+    proposal,
+    state: probeOne(editor, proposal),
+  }));
+  const listGranted = probes.some(
+    probe => CALL_PROBED.includes(probe.proposal) && probe.state === 'granted',
+  );
+  return Promise.all(
+    probes.map(async probe =>
+      probe.proposal === 'contribViewsRemote'
+        ? {
+            proposal: probe.proposal,
+            state: listGranted
+              ? 'granted'
+              : await probeViews(editor, request.viewIds),
+          }
+        : probe,
+    ),
+  );
 }
