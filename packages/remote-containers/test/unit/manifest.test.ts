@@ -35,13 +35,13 @@ function readJson(file: string): Record<string, unknown> {
 
 const MANIFEST = readJson('package.json');
 
-/** The `when` clause of the command's palette entry and menu entry. */
 /** The `when` clause of the in-container rebuild commands. */
 const REBUILD_WHEN =
   '!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown';
 
+/** The `when` clause of the command's palette entry and menu entry. */
 const REOPEN_WHEN =
-  '!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown';
+  '!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
 
 const ENGLISH = {
   description:
@@ -383,7 +383,7 @@ describe('the manifest', () => {
     );
   }
 
-  it('F-0401 AC-5: the palette and the remote indicator list the command with the local clause of the reference', () => {
+  it('F-0401 AC-5: the palette and the remote indicator list the command with the local clause of the reference, which has no workspace-trust term, so Restricted Mode lists it (PRE-7, AC-21)', () => {
     deepStrictEqual(menusOf(['remote-containers.reopenInContainer']), {
       commandPalette: [
         {command: 'remote-containers.reopenInContainer', when: REOPEN_WHEN},

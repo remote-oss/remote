@@ -135,6 +135,16 @@ function surroundings(options: Options): {
       seen.events.push('preflight');
       return preflightOf('window');
     },
+    trust: {
+      isTrusted: () => {
+        seen.events.push('trust isTrusted');
+        return false;
+      },
+      request: () => {
+        seen.events.push('trust request');
+        return Promise.resolve(false);
+      },
+    },
     gate: logFailure => {
       seen.events.push('gate');
       if (options.gateThrows === true) {
@@ -223,6 +233,18 @@ describe('the activation', () => {
         seen.events.filter(event => event === 'preflight'),
       ],
       ['window', ['preflight']],
+    );
+  });
+
+  it('F-0106 AC-8: activation never asks for trust (BR-1), and the served window carries the port it was given', async () => {
+    const {inputs, seen} = surroundings({otherRuns: false});
+    const result = await activateContainers(inputs);
+    deepStrictEqual(
+      [
+        seen.events.filter(event => event.startsWith('trust')),
+        result.kind === 'serving' ? result.served.trust : undefined,
+      ],
+      [[], inputs.trust],
     );
   });
 

@@ -49,6 +49,7 @@ import {
   type TerminalPort,
 } from './surfaces/lifecycle-terminal.ts';
 import {recoveryPortsOf} from './surfaces/recovery-editor.ts';
+import {ensureTrusted} from './trust/trust-gate.ts';
 
 /** The warning of a window where the other Dev Containers extension runs, and its button. */
 const STAND_DOWN_WARNING =
@@ -192,6 +193,11 @@ export async function activate(
       editorVersion: vscode.version,
       editorCommit: profile.commit,
     },
+    trust: {
+      isTrusted: () => vscode.workspace.isTrusted,
+      request: async message =>
+        (await vscode.workspace.requestWorkspaceTrust({message})) === true,
+    },
     gate: logFailure =>
       familySetupPortsOf(vscode, context, {
         displayName: manifest.displayName,
@@ -258,9 +264,15 @@ export async function activate(
             window: {
               remoteName: () => vscode.env.remoteName,
               folders: windowFolders,
-              isTrusted: () => vscode.workspace.isTrusted,
               serializedFile: file => serializedUriOf(vscode.Uri.file(file)),
             },
+            ensureTrusted: () =>
+              ensureTrusted(served.trust, {
+                translate,
+                logger: served.logger,
+                setupAgain: () => served.setupAgain(),
+                commandTitle: 'Reopen in Container',
+              }),
             config: {
               files: configFilesOf(
                 {
