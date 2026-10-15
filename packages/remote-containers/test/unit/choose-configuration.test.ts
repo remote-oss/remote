@@ -31,6 +31,8 @@ interface Scene {
   reading: Promise<ConfigurationResult | CliFailure> | undefined;
   /** The engine check, which a row may hold open. */
   engineCheck: Promise<FirstCheckResult>;
+  /** What the worktree setting is, as the command passes it. */
+  mountGitWorktreeCommonDir: boolean;
   calls: string[];
   rows: unknown[];
   targets: unknown[];
@@ -55,6 +57,7 @@ function sceneOf(contents: Scene['contents']): Scene {
     read: configurationOf('/workspaces/p'),
     reading: undefined,
     engineCheck: Promise.resolve('proceed'),
+    mountGitWorktreeCommonDir: false,
     calls: [],
     rows: [],
     targets: [],
@@ -91,6 +94,7 @@ async function choose(scene: Scene): Promise<ConfigurationChoice> {
     {
       folder: FOLDER,
       dockerPath: DOCKER,
+      mountGitWorktreeCommonDir: scene.mountGitWorktreeCommonDir,
       cancellation: NEVER,
       engineCheck: scene.engineCheck,
     },
@@ -190,6 +194,31 @@ function S113(relative: string): string {
 }
 
 describe('choosing the configuration (card containers-13)', () => {
+  it('F-0411 AC-35: the worktree setting reaches the read of the configuration, whose workspace folder the window opens at', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    scene.mountGitWorktreeCommonDir = true;
+    scene.read = configurationOf('/workspaces/wt-rel/wt');
+    const choice = await choose(scene);
+    deepStrictEqual(
+      [
+        choice,
+        scene.targets.map(
+          read =>
+            (read as [{mountGitWorktreeCommonDir: boolean}, unknown])[0]
+              .mountGitWorktreeCommonDir,
+        ),
+      ],
+      [
+        {
+          kind: 'chosen',
+          configFile: '/w/p/.devcontainer/devcontainer.json',
+          workspaceFolder: '/workspaces/wt-rel/wt',
+        },
+        [true],
+      ],
+    );
+  });
+
   it('F-0301 AC-1: one configuration is chosen with no picker, and the CLI reads it with the target of the folder (BR-4)', async () => {
     const scene = sceneOf({[ONLY]: IMAGE});
     const choice = await choose(scene);
@@ -210,6 +239,7 @@ describe('choosing the configuration (card containers-13)', () => {
               dockerPath: DOCKER,
               idLabels: [],
               mountWorkspaceGitRoot: true,
+              mountGitWorktreeCommonDir: false,
               mounts: [],
               logLevel: 'info',
             },
@@ -459,22 +489,37 @@ describe('choosing the configuration (card containers-13)', () => {
     });
   });
 
-  it('contracts §6: a configuration the CLI cannot read is readFailed with the file and the failure, and a warn line', async () => {
+  it('F-0301 7.E1: a configuration the CLI cannot read shows S181 and opens the file, with a warn line naming the failure', async () => {
     const scene = sceneOf({[ONLY]: IMAGE});
     scene.read = {kind: 'configurationFailed', message: 'bad'};
+    scene.errorAnswer = 'Show Log';
     deepStrictEqual(
       [
         await choose(scene),
+        scene.calls.filter(call =>
+          /^(openPreview|showError|revealLog)/.test(call),
+        ),
         lines(scene).filter(line => line.startsWith('warn')),
       ],
       [
-        {
-          kind: 'readFailed',
-          configFile: `/w/p/${ONLY}`,
-          failure: {kind: 'configurationFailed', message: 'bad'},
-        },
-        ['warn: the configuration could not be read: configurationFailed'],
+        {kind: 'rejected'},
+        [
+          `openPreview ${ONLY}`,
+          `showError ${JSON.stringify(['', S181(ONLY), ['Show Log']])}`,
+          'revealLog',
+        ],
+        ['warn: the configuration could not be read: configurationFailed: bad'],
       ],
+    );
+  });
+
+  it('F-0301 7.E1: a read that fails without a message is logged with its kind', async () => {
+    const scene = sceneOf({[ONLY]: IMAGE});
+    scene.read = {kind: 'noResult', status: 1};
+    await choose(scene);
+    deepStrictEqual(
+      lines(scene).filter(line => line.startsWith('warn')),
+      ['warn: the configuration could not be read: noResult'],
     );
   });
 
@@ -586,21 +631,11 @@ describe('choosing the configuration while the engine is checked (card container
     );
   });
 
-  it('ruling (c): a read that fails is answered readFailed only after the check passes', async () => {
+  it('ruling (c): a read that fails is answered rejected only after the check passes', async () => {
     const scene = sceneOf({[ONLY]: IMAGE});
     scene.read = {kind: 'configurationFailed', message: 'bad'};
     const {during, choice} = await chosenWhileChecking(scene, 'proceed');
-    deepStrictEqual(
-      [during.choice, choice],
-      [
-        undefined,
-        {
-          kind: 'readFailed',
-          configFile: `/w/p/${ONLY}`,
-          failure: {kind: 'configurationFailed', message: 'bad'},
-        },
-      ],
-    );
+    deepStrictEqual([during.choice, choice], [undefined, {kind: 'rejected'}]);
   });
 
   it('ruling (c): with several files the labels are read while the check runs, the picker waits for a passing check, and the CLI read follows the pick', async () => {

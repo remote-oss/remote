@@ -338,6 +338,70 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(scene.prepared[0]?.cacheVolume, true);
   });
 
+  it('F-0411 BR-7: the consistency reaches the container request, the current key over the deprecated one, and unset is cached', async () => {
+    const requests: Array<[unknown, unknown]> = [
+      [undefined, undefined],
+      [undefined, 'delegated'],
+      ['consistent', 'delegated'],
+      ['fast', undefined],
+    ];
+    const consistencies: string[] = [];
+    for (const [current, legacy] of requests) {
+      const scene = sceneOf();
+      scene.workspaceMountConsistency = current;
+      scene.legacyWorkspaceMountConsistency = legacy;
+      await connected(scene);
+      consistencies.push(String(scene.prepared[0]?.workspaceMountConsistency));
+    }
+    deepStrictEqual(consistencies, [
+      'cached',
+      'delegated',
+      'consistent',
+      'fast',
+    ]);
+  });
+
+  it('F-0411 AC-37: the worktree setting reaches the container request and both reads of the configuration, for the boolean and for the string', async () => {
+    const seen: Array<[boolean | undefined, boolean[]]> = [];
+    for (const value of [undefined, false, true, 'true']) {
+      const scene = sceneOf();
+      scene.mountGitWorktreeCommonDir = value;
+      await connected(scene);
+      seen.push([
+        scene.prepared[0]?.mountGitWorktreeCommonDir,
+        scene.configurationReads.map(
+          read => read.target.mountGitWorktreeCommonDir,
+        ),
+      ]);
+    }
+    deepStrictEqual(seen, [
+      [false, [false, false]],
+      [false, [false, false]],
+      [true, [true, true]],
+      [true, [true, true]],
+    ]);
+  });
+
+  it('F-0411 BR-7, BR-11: the settings are read at each connect, so a change between two connects takes effect', async () => {
+    const scene = sceneOf();
+    scene.workspaceMountConsistency = 'cached';
+    scene.mountGitWorktreeCommonDir = false;
+    await connected(scene);
+    scene.workspaceMountConsistency = 'delegated';
+    scene.mountGitWorktreeCommonDir = true;
+    await connected(scene);
+    deepStrictEqual(
+      scene.prepared.map(request => [
+        request.workspaceMountConsistency,
+        request.mountGitWorktreeCommonDir,
+      ]),
+      [
+        ['cached', false],
+        ['delegated', true],
+      ],
+    );
+  });
+
   it('F-0504 BR-2: the name comes from the configuration, read for the container that was prepared', async () => {
     const scene = sceneOf();
     await connected(scene);

@@ -14,11 +14,16 @@ const TARGET: CliTarget = {
   dockerPath: 'docker',
   idLabels: ['a=b'],
   mountWorkspaceGitRoot: true,
+  mountGitWorktreeCommonDir: false,
   mounts: [],
   logLevel: 'info',
 };
 
-const UP_OPTIONS = {removeExistingContainer: false, buildNoCache: false};
+const UP_OPTIONS = {
+  removeExistingContainer: false,
+  buildNoCache: false,
+  workspaceMountConsistency: 'cached',
+};
 
 const UP_LINE =
   '{"outcome":"success","containerId":"c1","remoteUser":"root","remoteWorkspaceFolder":"/workspaces/ws1"}';

@@ -466,9 +466,10 @@ function forwardingLaunch(
  * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
  * proposed API; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
- * `containers`, `containers-standdown`, `containers-no-proposals` and `containers-volume` do the same with Dev
- * Containers installed, the second with a stand-in carrying the other Dev Containers extension's id, the third without
- * the proposed API and the fourth for the rows that clear the `vscode` volume's server folder;
+ * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust` and `containers-volume` do the
+ * same with Dev Containers installed, the second with a stand-in carrying the other Dev Containers extension's id, the
+ * third without the proposed API, the fourth with workspace trust on and core's startup prompt off and the fifth for the
+ * rows that clear the `vscode` volume's server folder;
  * and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
  * with its host setup and its own script.
  */
@@ -637,6 +638,17 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-no-proposals',
       suite: 'containers-no-proposals',
       proposedApi: false,
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-trust',
+      suite: 'containers-trust',
+      workspaceTrust: true,
+      settings: {
+        ...CONTAINERS_LAUNCH.settings,
+        // A folder opens untrusted and silent, so the only trust dialog is the one Reopen asks for.
+        'security.workspace.trust.startupPrompt': 'never',
+      },
     },
     {
       ...CONTAINERS_LAUNCH,

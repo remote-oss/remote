@@ -74,7 +74,7 @@
       "commandPalette": [
         {
           "command": "remote-containers.reopenInContainer",
-          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown"
+          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",
@@ -89,7 +89,7 @@
         {
           "command": "remote-containers.reopenInContainer",
           "group": "remote_30_dev-container_2_actions@8",
-          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown"
+          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",
@@ -145,6 +145,33 @@
           "scope": "application",
           "deprecationMessage": "%setting.Remotecontainersdefaultextensions.deprecation%",
           "markdownDeprecationMessage": "%setting.Remotecontainersdefaultextensions.markdownDeprecation%"
+        },
+        "dev.containers.workspaceMountConsistency": {
+          "type": "string",
+          "default": "cached",
+          "scope": "application",
+          "enum": [
+            "consistent",
+            "cached",
+            "delegated"
+          ],
+          "enumDescriptions": [
+            "%setting.WorkspaceMountConsistency.consistent%",
+            "%setting.WorkspaceMountConsistency.cached%",
+            "%setting.WorkspaceMountConsistency.delegated%"
+          ],
+          "description": "%setting.WorkspaceMountConsistency.description%"
+        },
+        "remote.containers.workspaceMountConsistency": {
+          "scope": "application",
+          "deprecationMessage": "%setting.WorkspaceMountConsistency.deprecationMessage%",
+          "markdownDeprecationMessage": "%setting.WorkspaceMountConsistency.markdownDeprecationMessage%"
+        },
+        "dev.containers.experimentalMountGitWorktreeCommonDir": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "%setting.MountGitWorktreeCommonDir.description%"
         }
       }
     }

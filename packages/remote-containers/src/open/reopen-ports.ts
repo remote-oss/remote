@@ -9,6 +9,7 @@ import type {SerializedUri} from '../authority/payload.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {ConfigurationPorts} from '../config/choose-configuration.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
+import type {TrustOutcome} from '../trust/trust-gate.ts';
 import type {PreReloadProgressPorts} from './pre-reload-progress.ts';
 
 /** What the command reads of the window it runs in, at each call. */
@@ -16,7 +17,6 @@ interface WindowPort {
   /** The name of the remote the window is on; none for a local window. */
   remoteName(): string | undefined;
   folders(): ReadonlyArray<{scheme: string; fsPath: string}>;
-  isTrusted(): boolean;
   /** The editor's URI for a local file, as the payload writes it. */
   serializedFile(file: string): SerializedUri;
 }
@@ -35,8 +35,14 @@ interface EnginePort {
 /** Everything the command needs. */
 export interface ReopenPorts {
   window: WindowPort;
+  /** The trust check of the window's folder, which asks the editor's dialog when the folder isn't trusted yet. */
+  ensureTrusted(): Promise<TrustOutcome>;
   config: Omit<ConfigurationPorts, 'cli' | 'logger'>;
-  settings: {dockerPath(): unknown};
+  settings: {
+    dockerPath(): unknown;
+    /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
+    mountGitWorktreeCommonDir(): unknown;
+  };
   engine: EnginePort;
   /** The dialogs of the first check. */
   dialogs: EngineDialogPort;

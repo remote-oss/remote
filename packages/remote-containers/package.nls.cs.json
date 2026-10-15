@@ -15,5 +15,12 @@
   "setting.Defaultextensions.description": "Configures the list of extensions to always install while creating a container.",
   "setting.Defaultextensions.itemError": "Expected format '${publisher}.${name}'. Example: 'vscode.csharp'.",
   "setting.Remotecontainersdefaultextensions.deprecation": "Use 'dev.containers.defaultExtensions' instead.",
-  "setting.Remotecontainersdefaultextensions.markdownDeprecation": "Use `#dev.containers.defaultExtensions#` instead."
+  "setting.Remotecontainersdefaultextensions.markdownDeprecation": "Use `#dev.containers.defaultExtensions#` instead.",
+  "setting.WorkspaceMountConsistency.description": "The consistency level used for the workspace mount (existing containers must be rebuilt to take effect).",
+  "setting.WorkspaceMountConsistency.consistent": "Perfect consistency.",
+  "setting.WorkspaceMountConsistency.cached": "The host’s view is authoritative.",
+  "setting.WorkspaceMountConsistency.delegated": "The container’s view is authoritative.",
+  "setting.WorkspaceMountConsistency.deprecationMessage": "Use 'dev.containers.workspaceMountConsistency' instead.",
+  "setting.WorkspaceMountConsistency.markdownDeprecationMessage": "Use `#dev.containers.workspaceMountConsistency#` instead.",
+  "setting.MountGitWorktreeCommonDir.description": "Mount the Git worktree common dir for Git operations to work in the container. This requires the worktree to be created with relative paths (`git worktree add --relative-paths`)."
 }

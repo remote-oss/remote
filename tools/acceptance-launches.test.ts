@@ -37,7 +37,7 @@ function hostLaunchLabels(): string[] {
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the four containers launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches and the ports cases in the order of theirs', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -67,6 +67,7 @@ describe('the launches of the VSCodium run', () => {
         'containers',
         'containers-standdown',
         'containers-no-proposals',
+        'containers-trust',
         'containers-volume',
         ...hostLaunchLabels(),
       ],
@@ -172,6 +173,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           undefined,
         ],
+        ['containers-trust', ['remote-oss.remote-containers'], true, undefined],
         [
           'containers-volume',
           ['remote-oss.remote-containers'],
@@ -182,7 +184,12 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('containers-09: the containers launches draw dialogs in the window and download the server from the run’s host; containers and containers-standdown have the other extension’s stand-in, and only containers-no-proposals turns the proposed API off; containers-volume has neither', () => {
+  it('containers-09, containers-12: the containers launches draw dialogs in the window and download the server from the run’s host; containers and containers-standdown have the other extension’s stand-in, only containers-no-proposals turns the proposed API off, containers-volume has neither, and only containers-trust silences core’s startup trust prompt', () => {
+    const shared = {
+      'window.title': '[${rootName}]',
+      'window.dialogStyle': 'custom',
+      'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+    };
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -194,23 +201,42 @@ describe('the launches of the VSCodium run', () => {
           launch.proposedApi,
         ]),
       [
-        'containers',
-        'containers-standdown',
-        'containers-no-proposals',
-        'containers-volume',
-      ].map(label => [
-        label,
-        label,
-        {
-          'window.title': '[${rootName}]',
-          'window.dialogStyle': 'custom',
-          'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
-        },
-        label === 'containers' || label === 'containers-standdown'
-          ? ['ms-vscode-remote.remote-containers']
-          : undefined,
-        label === 'containers-no-proposals' ? false : undefined,
-      ]),
+        [
+          'containers',
+          'containers',
+          shared,
+          ['ms-vscode-remote.remote-containers'],
+          undefined,
+        ],
+        [
+          'containers-standdown',
+          'containers-standdown',
+          shared,
+          ['ms-vscode-remote.remote-containers'],
+          undefined,
+        ],
+        [
+          'containers-no-proposals',
+          'containers-no-proposals',
+          shared,
+          undefined,
+          false,
+        ],
+        [
+          'containers-trust',
+          'containers-trust',
+          {...shared, 'security.workspace.trust.startupPrompt': 'never'},
+          undefined,
+          undefined,
+        ],
+        [
+          'containers-volume',
+          'containers-volume',
+          shared,
+          undefined,
+          undefined,
+        ],
+      ],
     );
   });
 
@@ -221,12 +247,13 @@ describe('the launches of the VSCodium run', () => {
         'containers',
         'containers-standdown',
         'containers-no-proposals',
+        'containers-trust',
         'containers-volume',
       ],
     );
   });
 
-  it('tooling-33: the two trust launches are the only ones with workspace trust on; trust turns core’s startup prompt on, and trust-terminal keeps core’s defaults with the terminal mode', () => {
+  it('tooling-33, containers-12: the two trust launches and containers-trust are the only ones with workspace trust on; trust turns core’s startup prompt on, trust-terminal keeps core’s defaults with the terminal mode, and containers-trust turns the prompt off', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' && launch.workspaceTrust !== undefined
@@ -249,6 +276,16 @@ describe('the launches of the VSCodium run', () => {
             'window.title': '[${rootName}]',
             'remote.SSH.useLocalServer': false,
             'remote.SSH.remotePlatform': {harness: 'linux'},
+          },
+        ],
+        [
+          'containers-trust',
+          true,
+          {
+            'window.title': '[${rootName}]',
+            'window.dialogStyle': 'custom',
+            'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
+            'security.workspace.trust.startupPrompt': 'never',
           },
         ],
       ],
@@ -319,6 +356,7 @@ describe('the launches of the VSCodium run', () => {
         'containers',
         'containers-standdown',
         'containers-no-proposals',
+        'containers-trust',
         'containers-volume',
         ...hostLaunchLabels(),
       ],

@@ -167,6 +167,9 @@
       "path": "tests/acceptance/containers-no-proposals"
     },
     {
+      "path": "tests/acceptance/containers-trust"
+    },
+    {
       "path": "tests/acceptance/containers-volume"
     }
   ]

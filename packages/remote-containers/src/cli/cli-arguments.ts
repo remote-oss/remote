@@ -15,6 +15,8 @@ export interface CliTarget {
   /** An override file the pre-pass wrote, when it changed anything. */
   overrideConfigFile?: string;
   mountWorkspaceGitRoot: boolean;
+  /** Whether the Git worktree's common dir is mounted (`dev.containers.experimentalMountGitWorktreeCommonDir`). */
+  mountGitWorktreeCommonDir: boolean;
   /** `--mount` values for `up`. */
   mounts: readonly string[];
   logLevel: 'info' | 'debug' | 'trace';
@@ -24,6 +26,8 @@ export interface CliTarget {
 export interface UpOptions {
   removeExistingContainer: boolean;
   buildNoCache: boolean;
+  /** The consistency of the workspace mount, as the setting has it; the CLI refuses a value it doesn't know. */
+  workspaceMountConsistency: string;
 }
 
 /** The arguments every subcommand starts with, up to the log format. */
@@ -43,6 +47,9 @@ function commonArguments(subcommand: string, target: CliTarget): string[] {
     ...(target.mountWorkspaceGitRoot
       ? []
       : ['--mount-workspace-git-root=false']),
+    ...(target.mountGitWorktreeCommonDir
+      ? ['--mount-git-worktree-common-dir']
+      : []),
     '--log-level',
     target.logLevel,
     '--log-format',
@@ -56,6 +63,8 @@ export function upArguments(target: CliTarget, options: UpOptions): string[] {
     ...commonArguments('up', target),
     ...target.mounts.flatMap(mount => ['--mount', mount]),
     '--skip-non-blocking-commands',
+    '--workspace-mount-consistency',
+    options.workspaceMountConsistency,
     ...(options.removeExistingContainer ? ['--remove-existing-container'] : []),
     ...(options.buildNoCache ? ['--build-no-cache'] : []),
   ];
@@ -73,14 +82,18 @@ export function runUserCommandsArguments(
   ];
 }
 
-/** Reads the configuration, merged with the container's metadata when a container id is given. */
+/**
+ * Reads the configuration. With a container id it is merged with the container's metadata; without one the merge would
+ * read the image's metadata and pull the image, which the read before a reload must not do.
+ */
 export function readConfigurationArguments(
   target: CliTarget,
   containerId?: string,
 ): string[] {
   return [
     ...commonArguments('read-configuration', target),
-    ...(containerId === undefined ? [] : ['--container-id', containerId]),
-    '--include-merged-configuration',
+    ...(containerId === undefined
+      ? []
+      : ['--container-id', containerId, '--include-merged-configuration']),
   ];
 }
