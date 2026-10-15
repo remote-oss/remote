@@ -37,7 +37,7 @@ function hostLaunchLabels(): string[] {
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the four containers launches and the ports cases in the order of theirs', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches and the ports cases in the order of theirs', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -68,6 +68,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-standdown',
         'containers-no-proposals',
         'containers-trust',
+        'containers-volume',
         ...hostLaunchLabels(),
       ],
     );
@@ -173,11 +174,17 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
         ['containers-trust', ['remote-oss.remote-containers'], true, undefined],
+        [
+          'containers-volume',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
       ],
     );
   });
 
-  it('containers-09, containers-12: the containers launches draw dialogs in the window and download the server from the run’s host; containers and containers-standdown have the other extension’s stand-in, only containers-no-proposals turns the proposed API off, and only containers-trust silences core’s startup trust prompt', () => {
+  it('containers-09, containers-12: the containers launches draw dialogs in the window and download the server from the run’s host; containers and containers-standdown have the other extension’s stand-in, only containers-no-proposals turns the proposed API off, containers-volume has neither, and only containers-trust silences core’s startup trust prompt', () => {
     const shared = {
       'window.title': '[${rootName}]',
       'window.dialogStyle': 'custom',
@@ -222,6 +229,13 @@ describe('the launches of the VSCodium run', () => {
           undefined,
           undefined,
         ],
+        [
+          'containers-volume',
+          'containers-volume',
+          shared,
+          undefined,
+          undefined,
+        ],
       ],
     );
   });
@@ -234,6 +248,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-standdown',
         'containers-no-proposals',
         'containers-trust',
+        'containers-volume',
       ],
     );
   });
@@ -342,6 +357,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-standdown',
         'containers-no-proposals',
         'containers-trust',
+        'containers-volume',
         ...hostLaunchLabels(),
       ],
     );
