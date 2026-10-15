@@ -440,18 +440,16 @@ describe('Reopen in Container', () => {
     deepStrictEqual(files, ['/w/p/bin/docker']);
   });
 
-  it('contracts §6: a CLI failure that has a message opens nothing and is logged with its kind and message', async () => {
+  it('F-0301 7.E1: a CLI failure that has a message opens no window, shows S181 with the file opened, and is logged with its kind and message', async () => {
     const state = setup();
     state.read = {kind: 'buildFailed', message: 'no build'};
     const {lines} = await reopened(state);
     deepStrictEqual(
-      [state.commands, lines],
+      [state.commands, lines, state.shown.length],
       [
         [],
-        [
-          'warn: the configuration could not be read: buildFailed',
-          'warn: Reopen in Container could not read the configuration: buildFailed: no build',
-        ],
+        ['warn: the configuration could not be read: buildFailed: no build'],
+        1,
       ],
     );
   });
@@ -462,7 +460,6 @@ describe('Reopen in Container', () => {
     const {lines} = await reopened(state);
     deepStrictEqual(lines, [
       'warn: the configuration could not be read: noResult',
-      'warn: Reopen in Container could not read the configuration: noResult',
     ]);
   });
 

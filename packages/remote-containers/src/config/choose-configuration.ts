@@ -98,6 +98,13 @@ export interface ConfigurationRequest {
   engineCheck: Promise<FirstCheckResult>;
 }
 
+/** What a CLI failure says in the log: its kind and, when it has one, its message. */
+function failureText(failure: CliFailure): string {
+  return 'message' in failure
+    ? `${failure.kind}: ${failure.message}`
+    : failure.kind;
+}
+
 /** How choosing ended. */
 export type ConfigurationChoice =
   /** A configuration was chosen and read: the file and the folder to open in the container. */
@@ -108,8 +115,6 @@ export type ConfigurationChoice =
   | {kind: 'dismissed'}
   /** A dialog of this module was shown; nothing more is to be shown. */
   | {kind: 'rejected'}
-  /** The CLI couldn't read the chosen configuration. */
-  | {kind: 'readFailed'; configFile: string; failure: CliFailure}
   /** The engine check stopped the flow, and its own dialog has shown. */
   | {kind: 'stopped'};
 
@@ -280,8 +285,14 @@ export async function chooseConfiguration(
     return {kind: 'dismissed'};
   }
   if (read.kind !== 'configuration') {
-    logger.warn(`the configuration could not be read: ${read.kind}`);
-    return {kind: 'readFailed', configFile: candidate.file, failure: read};
+    logger.warn(`the configuration could not be read: ${failureText(read)}`);
+    const opening = surfaces.openPreview(candidate.file);
+    await refuse(
+      '',
+      textOf(translate, CONFIG_TEMPLATES.S181, [candidate.relative]),
+    );
+    await opening;
+    return {kind: 'rejected'};
   }
   if (!read.workspaceFolder.startsWith('/')) {
     await refuse(textOf(translate, CONFIG_TEMPLATES.S411), '');
