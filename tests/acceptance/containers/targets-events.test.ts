@@ -83,7 +83,7 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
     await closeWindow(name);
   });
 
-  it('F-0901 AC-44 (6.21): in a local window a dockerPath that names no program gives the Docker welcome within 5 s, with no notification, and the old one brings the rows back', async () => {
+  it('F-0901 AC-44: in a local window a dockerPath that names no program gives the Docker welcome within 5 s, with no notification, and the old one brings the rows back', async () => {
     const name = await windowWithRows('events-two');
     await setUserSetting(
       'dev.containers.dockerPath',
@@ -119,7 +119,7 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
     await closeWindow(name);
   });
 
-  it('F-0901 AC-45 (6.21 step 4): in a dev container window a dockerPath that names no program changes nothing, and a container started afterwards still gets its row, with no welcome', async () => {
+  it('F-0901 AC-45: in a dev container window a dockerPath that names no program changes nothing, and a container started afterwards still gets its row, with no welcome', async () => {
     const folder = devContainerFolder('events-three');
     const name = await openFolderWindow(folder);
     await reopenInContainer(name);
@@ -143,7 +143,7 @@ describe('the Dev Containers view follows Docker (card containers-31)', function
     await closeWindow(name);
   });
 
-  it('F-0901 AC-57 (BR-13): a header the user collapsed stays collapsed when a new container makes the view rebuild', async () => {
+  it('F-0901 AC-57: a header the user collapsed stays collapsed when a new container makes the view rebuild', async () => {
     const name = await windowWithRows('events-four');
     await toggleRow(name, VIEW, 'Other Containers');
     await runContainer('events-four-c');

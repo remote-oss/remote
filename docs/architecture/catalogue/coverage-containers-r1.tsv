@@ -217,6 +217,22 @@ F-0401.AC-20	todo
 F-0401.AC-21	acceptance	
 F-0401.AC-22	deferred	containers release 1: later (remote engines)
 F-0401.AC-23	unit	
+F-0402.AC-1	acceptance	
+F-0402.AC-2	acceptance	
+F-0402.AC-3	acceptance	
+F-0402.AC-4	acceptance	
+F-0402.AC-5	acceptance	
+F-0402.AC-6	deferred	containers 0.4: workspace files and multi-root windows later
+F-0402.AC-7	deferred	containers 0.4: workspace files and multi-root windows later
+F-0402.AC-8	acceptance	
+F-0402.AC-9	acceptance	
+F-0402.AC-10	deferred	containers 0.4: F-0302 later
+F-0402.AC-11	unit	
+F-0402.AC-12	unit	
+F-0402.AC-13	unit	
+F-0402.AC-14	unit	
+F-0402.AC-15	deferred	containers 0.4: workspace files and multi-root windows later
+F-0402.AC-16	deferred	containers 0.4: Reopen from a Remote-SSH window later
 F-0403.AC-1	todo	
 F-0403.AC-2	todo	
 F-0403.AC-3	todo	

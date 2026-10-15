@@ -5,6 +5,7 @@
   "commands.Reopenincontainer.title": "Reopen in Container",
   "commands.Rebuildcontainer.title": "Rebuild Container",
   "commands.Rebuildcontainerwithoutcache.title": "Rebuild Container Without Cache",
+  "commands.Showreopenincontainernotificationreset.title": "Reset Don't Show Reopen Notification",
   "commands.explorerTargetsRefresh.title": "Refresh",
   "commands.Rebuildandreopenincontainer.title": "Rebuild and Reopen in Container",
   "commands.Rebuildwithoutcacheandreopenincontainer.title": "Rebuild Without Cache and Reopen in Container",

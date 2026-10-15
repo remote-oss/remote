@@ -84,6 +84,11 @@
         "category": "Dev Containers"
       },
       {
+        "command": "remote-containers.showReopenInContainerNotificationReset",
+        "title": "%commands.Showreopenincontainernotificationreset.title%",
+        "category": "Dev Containers"
+      },
+      {
         "command": "remote-containers.explorerTargetsRefresh",
         "title": "%commands.explorerTargetsRefresh.title%",
         "category": "Dev Containers",

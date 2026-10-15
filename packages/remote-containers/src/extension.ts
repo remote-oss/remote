@@ -18,6 +18,7 @@ import {standDownHost} from 'lib-standdown';
 import {activateContainers} from './activation.ts';
 import {serializedUriOf} from './authority/payload.ts';
 import {configFilesOf, configSurfacesOf} from './config/config-ports.ts';
+import {discoverConfigurations} from './config/discovery.ts';
 import {type CliBridge, cliBridgeOf} from './cli/cli-bridge.ts';
 import {cliPathsOf} from './cli/cli-paths.ts';
 import {nodeCliHost} from './cli/node-cli-host.ts';
@@ -42,6 +43,10 @@ import {moveInstallIfLocal} from './extensions/install-if-local.ts';
 import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
 import {rebuildContainer} from './open/rebuild.ts';
+import {
+  offerReopen,
+  resetReopenNotification,
+} from './open/reopen-notification.ts';
 import {reopenHandlersOf} from './open/reopen.ts';
 import {
   type DetailsView,
@@ -245,6 +250,15 @@ export async function activate(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
   let logChannel: vscode.OutputChannel | undefined;
+  const configFiles = configFilesOf(
+    {
+      readDirectory: folder =>
+        vscode.workspace.fs.readDirectory(vscode.Uri.file(folder)),
+      readFile: file => vscode.workspace.fs.readFile(vscode.Uri.file(file)),
+    },
+    vscode.FileType,
+  );
+  const collate = new Intl.Collator(undefined, {sensitivity: 'accent'}).compare;
   let targetsView: TargetsView | undefined;
   let detailsView: DetailsView | undefined;
   function bridgeFor(
@@ -371,15 +385,7 @@ export async function activate(
         intents: context.globalState,
         now: Date.now,
         config: {
-          files: configFilesOf(
-            {
-              readDirectory: folder =>
-                vscode.workspace.fs.readDirectory(vscode.Uri.file(folder)),
-              readFile: file =>
-                vscode.workspace.fs.readFile(vscode.Uri.file(file)),
-            },
-            vscode.FileType,
-          ),
+          files: configFiles,
           surfaces: configSurfacesOf(
             {
               createQuickPick: () => vscode.window.createQuickPick(),
@@ -406,8 +412,7 @@ export async function activate(
             },
             served.logger,
           ),
-          compare: new Intl.Collator(undefined, {sensitivity: 'accent'})
-            .compare,
+          compare: collate,
           translate,
         },
         settings: {
@@ -469,6 +474,10 @@ export async function activate(
         rebuildContainerNoCache: {execute: rebuildHandler(true)},
         explorerTargetsRefresh: {execute: () => targetsView?.refresh()},
         explorerDetailsRefresh: {execute: () => detailsView?.refresh()},
+        showReopenInContainerNotificationReset: {
+          execute: () =>
+            resetReopenNotification(context.globalState, Date.now()),
+        },
       };
     },
   });
@@ -615,6 +624,34 @@ export async function activate(
         logChannel?.show(true);
       },
     });
+    if (served.missing.length === 0) {
+      offerReopen({
+        window: {
+          remote: vscode.env.remoteName !== undefined,
+          workspaceFile: vscode.workspace.workspaceFile !== undefined,
+          folders: (vscode.workspace.workspaceFolders ?? []).map(folder => ({
+            scheme: folder.uri.scheme,
+            fsPath: folder.uri.fsPath,
+          })),
+        },
+        global: context.globalState,
+        workspace: context.workspaceState,
+        hasConfiguration: async folder =>
+          (await discoverConfigurations(folder, configFiles, collate)).length >
+          0,
+        show: (message, buttons) =>
+          vscode.window.showInformationMessage(message, ...buttons),
+        reopen: () =>
+          vscode.commands.executeCommand(commands.reopenInContainer.id),
+        now: Date.now,
+        translate,
+        logger,
+      }).catch((caught: unknown) => {
+        logger.error(
+          `the reopen notification failed: ${caught instanceof Error ? caught.message : String(caught)}`,
+        );
+      });
+    }
     const registered = await registerContainerResolver(
       {
         resolverEditor: resolverEditorOf(vscode, {

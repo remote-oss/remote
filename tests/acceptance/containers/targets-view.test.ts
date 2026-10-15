@@ -102,7 +102,22 @@ describe('the Dev Containers view of the Remote Explorer (card containers-30)', 
         60_000,
       );
       const words = shown?.replace(/\s+/g, ' ').trim();
-      await welcomeLink(name, VIEW, 'reopen the current folder in a container');
+      await waitFor(
+        `the reopen link in window ${name}`,
+        async () => {
+          try {
+            await welcomeLink(
+              name,
+              VIEW,
+              'reopen the current folder in a container',
+            );
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        30_000,
+      );
       await connectedToContainer(name);
       deepStrictEqual(words, WELCOME_WITH_FOLDER);
       await closeWindow(name);

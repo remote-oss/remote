@@ -107,6 +107,8 @@ const ENGLISH = {
   'commands.Rebuildcontainer.title': 'Rebuild Container',
   'commands.Rebuildcontainerwithoutcache.title':
     'Rebuild Container Without Cache',
+  'commands.Showreopenincontainernotificationreset.title':
+    "Reset Don't Show Reopen Notification",
   'commands.explorerTargetsRefresh.title': 'Refresh',
   'views.targetsContainers.name': 'Dev Containers',
   'commands.explorerDetailsRefresh.title': 'Refresh',
@@ -237,6 +239,11 @@ describe('the manifest', () => {
             category: 'Dev Containers',
           },
           ...REBUILD_COMMANDS,
+          {
+            command: 'remote-containers.showReopenInContainerNotificationReset',
+            title: '%commands.Showreopenincontainernotificationreset.title%',
+            category: 'Dev Containers',
+          },
           {
             command: 'remote-containers.explorerTargetsRefresh',
             title: '%commands.explorerTargetsRefresh.title%',
@@ -549,6 +556,35 @@ describe('the manifest', () => {
         },
         'Reopen in Container',
         undefined,
+      ],
+    );
+  });
+
+  it('F-0402 3.1: the reset command is contributed under Dev Containers, with no entry in the palette that hides it', () => {
+    const contributes = MANIFEST.contributes as {
+      commands: Array<{command: string}>;
+      menus: {commandPalette: Array<{command: string}>};
+    };
+    deepStrictEqual(
+      [
+        contributes.commands.find(
+          entry =>
+            entry.command ===
+            'remote-containers.showReopenInContainerNotificationReset',
+        ),
+        contributes.menus.commandPalette.some(
+          entry =>
+            entry.command ===
+            'remote-containers.showReopenInContainerNotificationReset',
+        ),
+      ],
+      [
+        {
+          command: 'remote-containers.showReopenInContainerNotificationReset',
+          title: '%commands.Showreopenincontainernotificationreset.title%',
+          category: 'Dev Containers',
+        },
+        false,
       ],
     );
   });

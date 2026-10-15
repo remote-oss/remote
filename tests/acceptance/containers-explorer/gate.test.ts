@@ -33,7 +33,7 @@ async function rowsOf(name: string, viewName: string): Promise<string[]> {
 describe('Dev Containers beside the Remote Explorer (card containers-30, coexistence row)', function () {
   this.timeout(300_000);
 
-  it('F-0906 BR-3 (coexistence): the Switch Remote dropdown offers Dev Containers and Remotes (Tunnels/SSH), each shows its own view, and no error notification appears in either', async () => {
+  it('coexistence, containers-30 (F-0906 BR-3): the Switch Remote dropdown offers Dev Containers and Remotes (Tunnels/SSH), each shows its own view, and no error notification appears in either', async () => {
     const folder = devContainerFolder('view-both', {name: 'View Both'});
     const name = await openFolderWindow(folder);
     await inWindow(name, 'workbench.view.remote');
