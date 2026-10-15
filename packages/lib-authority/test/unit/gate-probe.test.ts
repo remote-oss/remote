@@ -146,6 +146,60 @@ describe('probing the proposals of the editor (F-1403)', () => {
     deepStrictEqual(editor.reads, ['getCommands']);
   });
 
+  it('F-1403 §4, #996: contribViewsRemote is granted with resolvers, or with tunnels, whatever the commands hold, and the commands are not read', async () => {
+    const outcomes = [];
+    for (const proposals of [
+      ['resolvers', 'contribViewsRemote'],
+      ['contribViewsRemote', 'tunnels'],
+    ] as const) {
+      const editor = new FakeApi({commands: []});
+      const probes = await probeProposals(editor, {
+        proposals,
+        viewIds: ['one'],
+      });
+      outcomes.push([
+        probes.map(probe => [probe.proposal, probe.state]),
+        editor.reads.includes('getCommands'),
+      ]);
+    }
+    deepStrictEqual(outcomes, [
+      [
+        [
+          ['resolvers', 'granted'],
+          ['contribViewsRemote', 'granted'],
+        ],
+        false,
+      ],
+      [
+        [
+          ['contribViewsRemote', 'granted'],
+          ['tunnels', 'granted'],
+        ],
+        false,
+      ],
+    ]);
+  });
+
+  it('F-1403 §4: contribViewsRemote reads the commands when resolvers and tunnels are not granted, or not asked for', async () => {
+    const missing = new FakeApi({
+      guarded: new Set(['resolvers', 'tunnels']),
+      commands: [],
+    });
+    const probes = await probeProposals(missing, {
+      proposals: ['resolvers', 'tunnels', 'contribViewsRemote'],
+      viewIds: ['one'],
+    });
+    const alone = new FakeApi({commands: ['one.focus']});
+    deepStrictEqual(
+      [
+        probes.map(probe => probe.state),
+        missing.reads.includes('getCommands'),
+        await stateOf(alone, 'contribViewsRemote', ['one']),
+      ],
+      [['missing', 'missing', 'missing'], true, 'granted'],
+    );
+  });
+
   it('F-1403: contribViewsRemote cannot be probed without a view to look for', async () => {
     const editor = new FakeApi({commands: ['one.focus']});
     deepStrictEqual(await stateOf(editor, 'contribViewsRemote'), 'unprobeable');
