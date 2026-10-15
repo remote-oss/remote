@@ -38,7 +38,7 @@ async function registered(
     failure?: Failed;
     /** What each connect answers in turn; the last answer is repeated. */
     answers?: Array<Connected | Failed>;
-    /** What the user does with a failure dialog: a button's label, Escape, or leaves it open until `closeDialog`. */
+    /** What the user does with a failure dialog: a button, Escape, or leaves it open until `closeDialog`. */
     dialog?: {button: string} | 'escape' | 'open';
     identity?: {name: string | undefined; context: string | undefined};
     canonical?: (
@@ -130,7 +130,7 @@ async function registered(
           return Promise.resolve(
             options.dialog === 'escape'
               ? undefined
-              : (options.dialog ?? 'Retry'),
+              : (options.dialog?.button ?? 'Retry'),
           );
         },
       }),
