@@ -178,7 +178,13 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
         reopenInContainer(name),
         waitFor(
           `the toast ${PRE_RELOAD_TOAST} before the reload`,
-          async () => (await notifications(name)).includes(PRE_RELOAD_TOAST),
+          async () => {
+            try {
+              return (await notifications(name)).includes(PRE_RELOAD_TOAST);
+            } catch {
+              return false;
+            }
+          },
           30_000,
         ),
       ]);
