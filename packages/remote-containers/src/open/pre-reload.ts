@@ -11,6 +11,9 @@ import {
   type ConfigurationRequest,
   chooseConfiguration,
 } from '../config/choose-configuration.ts';
+import type {Logger} from 'lib-log';
+import type {CliBridge} from '../cli/cli-bridge.ts';
+import {mountGitWorktreeCommonDirOf} from '../connect/mount-settings.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import {
   type PreReloadProgress,
@@ -98,4 +101,40 @@ export async function beforeReload(
     progress.close();
     throw caught;
   }
+}
+
+/** What an open command gives the checks before its reload, besides the first check it chooses. */
+export interface CommandChecksPorts {
+  settings: {mountGitWorktreeCommonDir(): unknown};
+  dialogs: EngineDialogPort;
+  config: Omit<ConfigurationPorts, 'cli' | 'logger'>;
+  bridge: Pick<CliBridge, 'readConfiguration'>;
+  progress: PreReloadProgressPorts;
+  logger: Logger;
+}
+
+/** The checks before a reload of an open command, over `folder`, with the program the engine runs as `dockerPath`. */
+export function commandBeforeReload(
+  ports: CommandChecksPorts,
+  firstCheck: PreReloadPorts['firstCheck'],
+  folder: string,
+  dockerPath: string,
+): ReturnType<typeof beforeReload> {
+  return beforeReload(
+    {
+      firstCheck,
+      dialogs: ports.dialogs,
+      // eslint-disable-next-line id-length -- the choice's dependency is named cli
+      config: {...ports.config, cli: ports.bridge, logger: ports.logger},
+      progress: ports.progress,
+    },
+    {
+      folder,
+      dockerPath,
+      mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
+        ports.settings.mountGitWorktreeCommonDir(),
+      ),
+      cancellation: new AbortController().signal,
+    },
+  );
 }
