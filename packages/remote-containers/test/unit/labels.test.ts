@@ -9,6 +9,8 @@ import {
   isDevContainer,
   legacyDiscoveryArguments,
   legacyIdLabels,
+  configFileOf,
+  localFolderOf,
 } from '../../src/lifecycle/labels.ts';
 
 const FOLDER = '/w/a b';
@@ -364,6 +366,19 @@ describe('how a folder is labelled and its container chosen', () => {
         'devcontainer.local_folder': '/w/new',
       }),
       '/w/new',
+    );
+  });
+
+  it('F-0901 BR-11, card containers-30: the local folder is the current label or the legacy folder, never a repository, and the configuration file is the label that names one', () => {
+    deepStrictEqual(
+      [
+        localFolderOf({'devcontainer.local_folder': '/w/new'}),
+        localFolderOf({'vsch.local.folder': '/w/old'}),
+        localFolderOf({'vsch.local.repository': 'https://example.test/r.git'}),
+        configFileOf({'devcontainer.config_file': '/w/c.json'}),
+        configFileOf({'devcontainer.local_folder': '/w/new'}),
+      ],
+      ['/w/new', '/w/old', undefined, '/w/c.json', undefined],
     );
   });
 });

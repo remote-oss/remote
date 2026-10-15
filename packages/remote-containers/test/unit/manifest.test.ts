@@ -6,6 +6,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
+import {views} from '../../src/identifiers.generated.ts';
 
 const PACKAGE = path.join(import.meta.dirname, '..', '..');
 
@@ -43,6 +44,21 @@ const REBUILD_WHEN =
 const REOPEN_WHEN =
   '!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
 
+const STANDING_DOWN = '!remote-containers:standingDown';
+
+/** The welcome texts of the view as 0.4 contributes them: the markup of a link to an unregistered command is gone. */
+const WELCOME_TEXTS = {
+  'viewsWelcome.targetsContainers.needsDockerStartOrInstall':
+    'Get started with containers by installing Docker or by visiting the help view. [Refresh](command:remote-containers.explorerTargetsRefresh) after installation and startup.',
+  'viewsWelcome.targetsContainers.noContainersWithFolder':
+    "Get started with containers by running one of the Dev Containers commands. You can [reopen the current folder in a container](command:remote-containers.reopenInContainer), or open another folder in a container. Open Folder in Container If you're new to containers and want to try a sample, there are several to choose from.",
+  'viewsWelcome.targetsContainers.noContainersWithoutFolder':
+    "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container. Open Folder in Container If you're new to containers and want to try a sample, there are several to choose from.",
+};
+
+const TARGETS_TITLE_WHEN =
+  'view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown';
+
 const ENGLISH = {
   description:
     'Develop inside a container that carries its own toolchain, so each project brings its environment with it.',
@@ -53,6 +69,9 @@ const ENGLISH = {
   'commands.Rebuildcontainer.title': 'Rebuild Container',
   'commands.Rebuildcontainerwithoutcache.title':
     'Rebuild Container Without Cache',
+  'commands.explorerTargetsRefresh.title': 'Refresh',
+  'views.targetsContainers.name': 'Dev Containers',
+  ...WELCOME_TEXTS,
   'setting.Dockerpath.description':
     'Docker (or Podman or WSLc) executable name or path.',
   'setting.ServerDownloadBaseUrl.description':
@@ -183,6 +202,15 @@ describe('the manifest', () => {
             title: '%commands.Rebuildcontainerwithoutcache.title%',
             category: 'Dev Containers',
           },
+          {
+            command: 'remote-containers.explorerTargetsRefresh',
+            title: '%commands.explorerTargetsRefresh.title%',
+            category: 'Dev Containers',
+            icon: {
+              light: 'resources/light/refresh.svg',
+              dark: 'resources/dark/refresh.svg',
+            },
+          },
         ],
         menus: {
           commandPalette: [
@@ -198,6 +226,29 @@ describe('the manifest', () => {
               command: 'remote-containers.rebuildContainerNoCache',
               when: REBUILD_WHEN,
             },
+            {
+              command: 'remote-containers.explorerTargetsRefresh',
+              when: 'false',
+            },
+          ],
+          'view/title': [
+            {
+              command: 'remote-containers.explorerTargetsRefresh',
+              group: 'navigation@3',
+              when: TARGETS_TITLE_WHEN,
+            },
+          ],
+          'view/item/context': [
+            {
+              command: 'workbench.action.closeFolder',
+              group: '1_folder@1',
+              when: 'view == targetsContainers && viewItem =~ /(^| )activeFolder( |$)/ && !remote-containers:standingDown',
+            },
+            {
+              command: 'remote-containers.rebuildContainer',
+              group: '2_container@1',
+              when: 'view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && !hideRebuildCommands && !remote-containers:standingDown',
+            },
           ],
           'statusBar/remoteIndicator': [
             {
@@ -212,6 +263,42 @@ describe('the manifest', () => {
             },
           ],
         },
+        views: {
+          remote: [
+            {
+              id: 'targetsContainers',
+              name: '%views.targetsContainers.name%',
+              group: 'targets@2',
+              when: '!hideConnectCommands',
+              remoteName: [
+                'dev-container',
+                'attached-container',
+                'exec',
+                'k8s-container',
+                'apple-container',
+              ],
+            },
+          ],
+        },
+        viewsWelcome: [
+          {
+            view: 'targetsContainers',
+            contents:
+              '%viewsWelcome.targetsContainers.needsDockerStartOrInstall%',
+            when: 'remote-containers:needsDockerStartOrInstall && !remote-containers:standingDown',
+          },
+          {
+            view: 'targetsContainers',
+            contents: '%viewsWelcome.targetsContainers.noContainersWithFolder%',
+            when: 'remote-containers:noContainersWithFolder && !remote-containers:standingDown',
+          },
+          {
+            view: 'targetsContainers',
+            contents:
+              '%viewsWelcome.targetsContainers.noContainersWithoutFolder%',
+            when: 'remote-containers:noContainersWithoutFolder && !remote-containers:standingDown',
+          },
+        ],
         configuration: {
           title: '%configuration.title%',
           properties: {
@@ -353,14 +440,18 @@ describe('the manifest', () => {
     ]);
   });
 
-  it('containers-01: the manifest has no browser entry or icon, and contributes the command, its two menus and the one setting', () => {
+  it('containers-01, containers-30: the manifest has no browser entry or icon, and contributes the commands, their menus, the view with its welcome texts and the settings', () => {
     deepStrictEqual(
       [
         'browser' in MANIFEST,
         'icon' in MANIFEST,
         Object.keys(MANIFEST.contributes as object),
       ],
-      [false, false, ['commands', 'menus', 'configuration']],
+      [
+        false,
+        false,
+        ['commands', 'menus', 'views', 'viewsWelcome', 'configuration'],
+      ],
     );
   });
 
@@ -449,10 +540,12 @@ describe('the manifest', () => {
           when: REOPEN_WHEN,
         },
       ],
+      'view/title': [],
+      'view/item/context': [],
     });
   });
 
-  it('F-0405 3.1: both in-container rebuild commands are in the palette, and only the cached one is in the remote indicator', () => {
+  it("F-0405 3.1, F-0901 3.3 #21: both in-container rebuild commands are in the palette, only the cached one is in the remote indicator and in the view's item menu", () => {
     deepStrictEqual(
       menusOf([
         'remote-containers.rebuildContainer',
@@ -473,8 +566,131 @@ describe('the manifest', () => {
             when: REBUILD_WHEN,
           },
         ],
+        'view/title': [],
+        'view/item/context': [
+          {
+            command: 'remote-containers.rebuildContainer',
+            group: '2_container@1',
+            when: 'view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && !hideRebuildCommands && !remote-containers:standingDown',
+          },
+        ],
       },
     );
+  });
+
+  /** The parts of `contributes` the Dev Containers view is made of. */
+  const VIEW_PARTS = MANIFEST.contributes as {
+    commands: Array<{command: string}>;
+    views: Record<string, Array<Record<string, unknown>>>;
+    viewsWelcome: Array<{view: string; contents: string; when: string}>;
+    menus: Record<string, Array<{command: string; when: string}>>;
+  };
+
+  it('F-0906 3.3, containers-30: the view is the one the proposal probe asks for, in the remote container with the reference group, clause and remote names, and no stand-down clause', () => {
+    deepStrictEqual(
+      [
+        views.targetsContainers,
+        Object.keys(VIEW_PARTS.views),
+        VIEW_PARTS.views.remote,
+      ],
+      [
+        'targetsContainers',
+        ['remote'],
+        [
+          {
+            id: 'targetsContainers',
+            name: '%views.targetsContainers.name%',
+            group: 'targets@2',
+            when: '!hideConnectCommands',
+            remoteName: [
+              'dev-container',
+              'attached-container',
+              'exec',
+              'k8s-container',
+              'apple-container',
+            ],
+          },
+        ],
+      ],
+    );
+  });
+
+  it('#960 link rule: every link of a welcome text names a command the package registers, and the words of the links to others stay as plain words', () => {
+    const registered = VIEW_PARTS.commands.map(entry => entry.command);
+    const linked = VIEW_PARTS.viewsWelcome.flatMap(welcome =>
+      [
+        ...String(
+          readJson('package.nls.json')[welcome.contents.replaceAll('%', '')],
+        ).matchAll(/\]\(command:([^)]+)\)/g),
+      ].map(match => String(match[1])),
+    );
+    deepStrictEqual(
+      [
+        linked.filter(command => !registered.includes(command)),
+        linked.sort(),
+        VIEW_PARTS.viewsWelcome.map(welcome => welcome.view),
+      ],
+      [
+        [],
+        [
+          'remote-containers.explorerTargetsRefresh',
+          'remote-containers.reopenInContainer',
+        ],
+        ['targetsContainers', 'targetsContainers', 'targetsContainers'],
+      ],
+    );
+  });
+
+  it('#960 §3: every welcome and every menu entry of the view stands down with the package, and the view itself does not', () => {
+    const clauses = [
+      ...VIEW_PARTS.viewsWelcome.map(welcome => welcome.when),
+      ...(VIEW_PARTS.menus['view/title'] ?? []).map(entry => entry.when),
+      ...(VIEW_PARTS.menus['view/item/context'] ?? []).map(entry => entry.when),
+    ];
+    deepStrictEqual(
+      [
+        clauses.length,
+        clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
+        JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
+      ],
+      [6, true, false],
+    );
+  });
+
+  it('F-0901 3.1, BR-6, BR-7: Refresh is out of the palette, and the view title shows it only with Docker reachable and at least one container', () => {
+    deepStrictEqual(
+      [
+        VIEW_PARTS.menus.commandPalette?.find(
+          entry => entry.command === 'remote-containers.explorerTargetsRefresh',
+        ),
+        VIEW_PARTS.menus['view/title'],
+      ],
+      [
+        {command: 'remote-containers.explorerTargetsRefresh', when: 'false'},
+        [
+          {
+            command: 'remote-containers.explorerTargetsRefresh',
+            group: 'navigation@3',
+            when: TARGETS_TITLE_WHEN,
+          },
+        ],
+      ],
+    );
+  });
+
+  it('F-0901 3.3 #10, #21: Close Workspace is on the active folder row, and Rebuild Container on the window own dev container row, in the groups of the reference', () => {
+    deepStrictEqual(VIEW_PARTS.menus['view/item/context'], [
+      {
+        command: 'workbench.action.closeFolder',
+        group: '1_folder@1',
+        when: 'view == targetsContainers && viewItem =~ /(^| )activeFolder( |$)/ && !remote-containers:standingDown',
+      },
+      {
+        command: 'remote-containers.rebuildContainer',
+        group: '2_container@1',
+        when: 'view == targetsContainers && viewItem =~ /(^| )own( |$)/ && viewItem =~ /(^| )dev( |$)/ && !hideRebuildCommands && !remote-containers:standingDown',
+      },
+    ]);
   });
 
   it('F-1406.5: package.nls.json holds its keys, and every key package.json uses is one of them', () => {
@@ -515,6 +731,15 @@ describe('the manifest', () => {
         {id: 'remote-containers:standingDown', setter: 'extension'},
         {id: 'hideConnectCommands', setter: 'extension'},
         {id: 'hideRebuildCommands', setter: 'extension'},
+        {
+          id: 'remote-containers:needsDockerStartOrInstall',
+          setter: 'extension',
+        },
+        {id: 'remote-containers:noContainersWithFolder', setter: 'extension'},
+        {
+          id: 'remote-containers:noContainersWithoutFolder',
+          setter: 'extension',
+        },
       ],
       infoLineCommands: [],
       runtimeCommands: [

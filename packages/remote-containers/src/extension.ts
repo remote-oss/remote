@@ -35,6 +35,7 @@ import {
   runtimeCommands,
   settings,
   standDown,
+  views,
 } from './identifiers.generated.ts';
 import {cacheVolumeOf} from './lifecycle/cache-volume.ts';
 import {moveInstallIfLocal} from './extensions/install-if-local.ts';
@@ -42,6 +43,12 @@ import {containerLifecycleOf} from './lifecycle/container-lifecycle.ts';
 import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
 import {rebuildContainer} from './open/rebuild.ts';
 import {reopenInContainer} from './open/reopen.ts';
+import {
+  showTargets,
+  type TargetsNode,
+  type TargetsView,
+  type TreeItemSpec,
+} from './explorer/targets-view.ts';
 import {licenceModalOf} from './surfaces/licence-modal.ts';
 import {
   lifecyclePresenterOf,
@@ -85,6 +92,39 @@ function windowFolders(): Array<{scheme: string; fsPath: string}> {
 
 function translate(template: string): string {
   return vscode.l10n.t(template);
+}
+
+/** The editor's tree item for what the view says of a node; the package's own icons are in its `resources`. */
+function treeItemOf(
+  spec: TreeItemSpec,
+  extensionUri: vscode.Uri,
+): vscode.TreeItem {
+  const item = new vscode.TreeItem(
+    spec.label,
+    spec.expanded
+      ? vscode.TreeItemCollapsibleState.Expanded
+      : vscode.TreeItemCollapsibleState.None,
+  );
+  item.id = spec.id;
+  if (spec.description !== undefined) {
+    item.description = spec.description;
+  }
+  if (spec.tooltip !== undefined) {
+    item.tooltip = spec.tooltip;
+  }
+  if (spec.contextValue !== undefined) {
+    item.contextValue = spec.contextValue;
+  }
+  if (spec.icon?.kind === 'theme') {
+    item.iconPath = new vscode.ThemeIcon(spec.icon.id);
+  } else if (spec.icon !== undefined) {
+    const file = spec.icon.file;
+    item.iconPath = {
+      light: vscode.Uri.joinPath(extensionUri, 'resources', 'light', file),
+      dark: vscode.Uri.joinPath(extensionUri, 'resources', 'dark', file),
+    };
+  }
+  return item;
 }
 
 /** The editor's terminals as the lifecycle presenter uses them: a pseudoterminal that is transient and takes focus. */
@@ -155,6 +195,7 @@ export async function activate(
     await readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8'),
   );
   let logChannel: vscode.OutputChannel | undefined;
+  let targetsView: TargetsView | undefined;
   function bridgeFor(
     environment: Readonly<Record<string, string | undefined>>,
     logger: Logger,
@@ -202,7 +243,7 @@ export async function activate(
       familySetupPortsOf(vscode, context, {
         displayName: manifest.displayName,
         proposals: enabledApiProposals,
-        viewIds: [],
+        viewIds: [views.targetsContainers],
         templates: SETUP_TEXT_TEMPLATES,
         translate,
         dataFolderName: () => Promise.resolve(profile.dataFolderName),
@@ -370,6 +411,7 @@ export async function activate(
         },
         rebuildContainer: {execute: rebuildHandler(false)},
         rebuildContainerNoCache: {execute: rebuildHandler(true)},
+        explorerTargetsRefresh: {execute: () => targetsView?.refresh()},
       };
     },
   });
@@ -544,7 +586,63 @@ export async function activate(
         logger,
       },
     );
+    targetsView = await showTargets({
+      editor: {
+        commandIds: () => vscode.commands.getCommands(true),
+        setContext: (key, value) =>
+          vscode.commands.executeCommand('setContext', key, value),
+        createTreeView: (viewId, provider) => {
+          const emitter = new vscode.EventEmitter<undefined>();
+          const subscription = provider.onDidChangeTreeData(() => {
+            emitter.fire(undefined);
+          });
+          const treeView = vscode.window.createTreeView<TargetsNode>(viewId, {
+            treeDataProvider: {
+              onDidChangeTreeData: emitter.event,
+              getChildren: async node => [
+                ...(await provider.getChildren(node)),
+              ],
+              getTreeItem: node =>
+                treeItemOf(provider.getTreeItem(node), context.extensionUri),
+            },
+            showCollapseAll: false,
+          });
+          return {
+            onDidChangeVisibility: listener =>
+              treeView.onDidChangeVisibility(event => {
+                listener(event.visible);
+              }),
+            dispose: () => {
+              treeView.dispose();
+              subscription.dispose();
+              emitter.dispose();
+            },
+          };
+        },
+      },
+      held: () => connector.heldConnection(),
+      dockerPath: () =>
+        vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+      folders: () =>
+        (vscode.workspace.workspaceFolders ?? []).map(
+          folder => folder.uri.fsPath,
+        ),
+      engineFor: file => served.preflight.engineFor(file),
+      exists: file =>
+        Promise.resolve(vscode.workspace.fs.stat(vscode.Uri.file(file))).then(
+          () => true,
+          () => false,
+        ),
+      now: Date.now,
+      translate,
+      logger,
+    });
     context.subscriptions.push(
+      {
+        dispose: () => {
+          targetsView?.dispose();
+        },
+      },
       {
         dispose: () => {
           registered.dispose();

@@ -62,6 +62,7 @@ async function registered(
     cancel: () => undefined,
     revealDetails: () => undefined,
     heldIdentity: () => options.identity,
+    heldConnection: () => undefined,
     canonicalPathOf: options.canonical ?? (() => Promise.resolve(undefined)),
     onPhase: listener => {
       listeners.push(listener);

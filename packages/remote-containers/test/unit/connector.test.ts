@@ -874,6 +874,33 @@ describe('the container connector: cancelling (card containers-08)', () => {
     );
   });
 
+  it('F-0901 6.21 step 4, card containers-30: the held connection names the container, its folders and the engine the connect used, and it is nothing before the connect and after a cancel', async () => {
+    const scene = sceneOf();
+    const before = scene.connector.heldConnection();
+    await connected(scene);
+    const held = scene.connector.heldConnection();
+    await held?.engine.run(
+      ['ps'],
+      {kind: 'none'},
+      {cancellation: new AbortController().signal},
+    );
+    const during = [
+      held?.containerId,
+      held?.hostPath,
+      held?.remoteWorkspaceFolder,
+      scene.engineCalls.at(-1)?.argv,
+    ];
+    scene.connector.cancel();
+    deepStrictEqual(
+      [before, during, scene.connector.heldConnection()],
+      [
+        undefined,
+        ['c1c1c1c1c1c1c1c1', '/work/proj', '/workspaces/proj', ['ps']],
+        undefined,
+      ],
+    );
+  });
+
   it('contracts §2 cancel: a cancel with nothing running and nothing held changes nothing', () => {
     const scene = sceneOf();
     scene.connector.cancel();

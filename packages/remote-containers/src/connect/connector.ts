@@ -76,10 +76,23 @@ const CANONICAL_READ_MILLISECONDS = 30_000;
 /** The authority prefix of a dev container window. */
 const AUTHORITY_PREFIX = 'dev-container+';
 
+/** What the connection the window holds says of itself, for the code that shows the window's own container. */
+export interface HeldConnection {
+  containerId: string;
+  /** The local folder the container shows. */
+  hostPath: string;
+  /** The folder the container shows it at. */
+  remoteWorkspaceFolder: string;
+  /** The engine the connection was made with, whatever `dev.containers.dockerPath` says now. */
+  engine: EngineHost;
+}
+
 /** The connector, with the identity the window's label reads. */
 export interface ContainerConnector extends Connector {
   /** The identity of the connection the window holds; nothing before the first connect. */
   heldIdentity(): WindowIdentity | undefined;
+  /** The connection the window holds; nothing before the first connect, and nothing once it is given back. */
+  heldConnection(): HeldConnection | undefined;
   /** The local path a URI of this window's container folder stands for; nothing otherwise. */
   canonicalPathOf(authority: string, path: string): Promise<string | undefined>;
 }
@@ -764,6 +777,15 @@ export function containerConnectorOf(
       dependencies.revealLog();
     },
     heldIdentity: () => held?.identity,
+    heldConnection: () =>
+      held === undefined
+        ? undefined
+        : {
+            containerId: held.containerId,
+            hostPath: held.hostPath,
+            remoteWorkspaceFolder: held.remoteWorkspaceFolder,
+            engine: held.engine,
+          },
     canonicalPathOf,
     onPhase: listener => phases.subscribe(listener),
     onTransportLost: listener => lost.subscribe(listener),
