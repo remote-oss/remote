@@ -86,14 +86,14 @@ const REOPEN_WHEN =
 
 const STANDING_DOWN = '!remote-containers:standingDown';
 
-/** The welcome texts of the view as 0.4 contributes them: the markup of a link to an unregistered command is gone. */
+/** The welcome texts of the view as 0.4 contributes them: the links to commands the package registers stay, and the other links are gone. */
 const WELCOME_TEXTS = {
   'viewsWelcome.targetsContainers.needsDockerStartOrInstall':
     'Get started with containers by installing Docker or by visiting the help view. [Refresh](command:remote-containers.explorerTargetsRefresh) after installation and startup.',
   'viewsWelcome.targetsContainers.noContainersWithFolder':
-    "Get started with containers by running one of the Dev Containers commands. You can [reopen the current folder in a container](command:remote-containers.reopenInContainer), or open another folder in a container. Open Folder in Container If you're new to containers and want to try a sample, there are several to choose from.",
+    "Get started with containers by running one of the Dev Containers commands. You can [reopen the current folder in a container](command:remote-containers.reopenInContainer), or open another folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
   'viewsWelcome.targetsContainers.noContainersWithoutFolder':
-    "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container. Open Folder in Container If you're new to containers and want to try a sample, there are several to choose from.",
+    "Get started with containers by running one of the Dev Containers commands. You can open an existing folder in a container.\n[Open Folder in Container](command:remote-containers.openFolder)\nIf you're new to containers and want to try a sample, there are several to choose from.",
 };
 
 const TARGETS_TITLE_WHEN =
@@ -820,6 +820,8 @@ describe('the manifest', () => {
         [],
         [
           'remote-containers.explorerTargetsRefresh',
+          'remote-containers.openFolder',
+          'remote-containers.openFolder',
           'remote-containers.reopenInContainer',
         ],
         ['targetsContainers', 'targetsContainers', 'targetsContainers'],
