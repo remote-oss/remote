@@ -147,7 +147,7 @@ describe('the coverage files', () => {
     );
   });
 
-  it('containers release 1: twenty-eight features, F-0416, F-0419, F-0106 and the four views features of #960 among them', () => {
+  it('containers release 1: twenty-nine features, F-0416, F-0419, F-0106 and the four views features of #960 among them', () => {
     deepStrictEqual(
       [
         CONTAINERS_RELEASE_ONE_FEATURES.length,
@@ -161,7 +161,7 @@ describe('the coverage files', () => {
           'F-0906',
         ].every(feature => CONTAINERS_RELEASE_ONE_FEATURES.includes(feature)),
       ],
-      [28, true],
+      [29, true],
     );
   });
 });

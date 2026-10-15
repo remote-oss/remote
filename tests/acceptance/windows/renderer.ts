@@ -554,6 +554,35 @@ export async function notificationCentre(name: string): Promise<string[]> {
   );
 }
 
+/** A link inside a notification's message: its words and the address it opens. */
+export interface NotificationLink {
+  text: string;
+  href: string;
+}
+
+/** The links in the message of the notification of window `name` that starts with `messageStart`, read in the notification centre, which this opens. */
+export async function notificationLinks(
+  name: string,
+  messageStart: string,
+): Promise<NotificationLink[]> {
+  return settled(
+    () => `the notification "${messageStart}" in window ${name}`,
+    async () =>
+      (await evaluate<NotificationLink[] | null>(
+        name,
+        `(() => {
+  const centre = document.querySelector('${OPEN_CENTRE}');
+  if (centre === null) {
+    document.querySelector('${CENTRE_BELL}')?.click();
+    return null;
+  }
+  const item = [...centre.querySelectorAll('.notification-list-item')].find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+  return item === undefined ? null : [...item.querySelectorAll('.notification-list-item-message a')].map(each => ({text: each.textContent ?? '', href: each.getAttribute('href') ?? each.getAttribute('data-href') ?? ''}));
+})()`,
+      )) ?? undefined,
+  );
+}
+
 /**
  * Clicks the button labelled `label` of the notification of window `name` whose message starts with `messageStart`,
  * found in the notification centre, which this opens. It fails naming the notifications or the buttons it found.

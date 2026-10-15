@@ -42,6 +42,7 @@ export const CONTAINERS_RELEASE_ONE_FEATURES: readonly string[] = [
   'F-0201',
   'F-0301',
   'F-0401',
+  'F-0402',
   'F-0403',
   'F-0405',
   'F-0408',

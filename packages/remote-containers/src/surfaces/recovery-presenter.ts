@@ -19,6 +19,10 @@ export const CONTAINERS_DOCUMENTATION =
 export const CONTAINERS_REQUIREMENTS =
   'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md#requirements';
 
+/** The page the "learn more" of the reopen notification opens: the extension's introduction. */
+export const CONTAINERS_INTRODUCTION =
+  'https://github.com/remote-oss/remote/blob/main/packages/remote-containers/README.md';
+
 /** The labels of the buttons of the dialog for a window with no place to download the server from. */
 const SERVER_SOURCE_BUTTONS = {
   openSetting: 'Open Setting',

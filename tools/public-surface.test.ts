@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {checkPublicSurface} from './public-surface.ts';
+import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
 
 describe('public-surface', () => {
@@ -46,6 +47,49 @@ describe('public-surface', () => {
       );
     });
   }
+
+  it('R-31: an aka.ms address in a localisation bundle fails, naming the file and the address', () => {
+    workspace.write(
+      'packages/remote-x/l10n/bundle.l10n.json',
+      '{\n  "learn": "See [more](https://aka.ms/x)."\n}\n',
+    );
+    deepStrictEqual(
+      checkPublicSurface(workspace.root).map(problem =>
+        problem.slice(0, problem.indexOf(' is an address')),
+      ),
+      ["packages/remote-x/l10n/bundle.l10n.json:2: 'https://aka.ms/x'"],
+    );
+  });
+
+  it('R-31: an aka.ms address in package.nls fails too', () => {
+    workspace.write(
+      'packages/remote-x/package.nls.json',
+      '{"learn": "http://aka.ms/devcontainer"}\n',
+    );
+    deepStrictEqual(
+      checkPublicSurface(workspace.root).map(problem =>
+        problem.slice(0, problem.indexOf(' is an address')),
+      ),
+      ["packages/remote-x/package.nls.json:1: 'http://aka.ms/devcontainer'"],
+    );
+  });
+
+  it('R-31: an address of our own passes', () => {
+    workspace.write(
+      'packages/remote-x/l10n/bundle.l10n.json',
+      '{"learn": "https://github.com/remote-oss/remote/blob/main/README.md"}\n',
+    );
+    deepStrictEqual(checkPublicSurface(workspace.root), []);
+  });
+
+  it('R-31: the repository’s shipped files hold no aka.ms address', () => {
+    deepStrictEqual(
+      checkPublicSurface(REPOSITORY_ROOT).filter(problem =>
+        problem.includes('aka.ms'),
+      ),
+      [],
+    );
+  });
 
   it('reports the line of each match', () => {
     workspace.write(
