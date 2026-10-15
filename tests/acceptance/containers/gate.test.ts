@@ -27,6 +27,7 @@ import {
 import {
   activations,
   openFolderWindow,
+  removeContainers,
   setUserSetting,
 } from '../windows/folder-windows.ts';
 
@@ -47,6 +48,51 @@ async function markerOf(containerId: string): Promise<string> {
 async function containerIds(): Promise<string[]> {
   const {stdout} = await execFileAsync('docker', ['ps', '--all', '--quiet']);
   return stdout.split('\n').filter(line => line !== '');
+}
+
+/**
+ * The server's install folder in container `containerId`: the parent of the executable the server's own `node`
+ * runs from. The base image installs no node, so the only `node` under a `bin` folder is the server's.
+ */
+async function serverInstallFolderOf(containerId: string): Promise<string> {
+  const {stdout} = await execFileAsync('docker', [
+    'exec',
+    containerId,
+    'sh',
+    '-c',
+    "find / -maxdepth 7 -type f -name node -path '*/bin/*' 2>/dev/null | head -1",
+  ]);
+  const executable = stdout.trim();
+  if (executable === '') {
+    throw new Error('the container holds no server node');
+  }
+  return executable.split('/').slice(0, -1).join('/');
+}
+
+/** Whether `target` is a symlink in container `containerId`, by the container's own `test`. */
+async function isSymlinkIn(
+  containerId: string,
+  target: string,
+): Promise<boolean> {
+  try {
+    await execFileAsync('docker', ['exec', containerId, 'test', '-L', target]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether `target` is a folder in container `containerId`, by the container's own `test`. */
+async function isFolderIn(
+  containerId: string,
+  target: string,
+): Promise<boolean> {
+  try {
+    await execFileAsync('docker', ['exec', containerId, 'test', '-d', target]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The text the pre-reload progress shows once its link is rendered (S087). */
@@ -303,5 +349,101 @@ describe('Dev Containers release 1 gate rows (card containers-09)', function () 
       },
     );
     await closeWindow(name);
+  });
+
+  it('F-0409 AC-1 (l1): a stopped container labelled vsch.local.folder and vsch.quality=stable is the one a reopen brings up, with no new container', async () => {
+    const folder = devContainerFolder('gate-legacy');
+    let name: string | undefined;
+    try {
+      const {stdout} = await execFileAsync('docker', [
+        'run',
+        '-d',
+        '--label',
+        `vsch.local.folder=${folder}`,
+        '--label',
+        'vsch.quality=stable',
+        variable('HARNESS_DEVCONTAINER_IMAGE'),
+        'sleep',
+        'infinity',
+      ]);
+      const legacyId = stdout.trim();
+      await execFileAsync('docker', ['stop', legacyId]);
+      name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const {stdout: running} = await execFileAsync('docker', [
+        'ps',
+        '-q',
+        '--filter',
+        `label=vsch.local.folder=${folder}`,
+      ]);
+      deepStrictEqual(
+        {
+          running: running.trim(),
+          containers: await devContainersOf(folder),
+          remoteName: (await windowState(name)).remoteName,
+        },
+        {
+          running: legacyId.slice(0, 12),
+          containers: [],
+          remoteName: 'dev-container',
+        },
+      );
+    } finally {
+      if (name) {
+        await closeWindow(name);
+      }
+      await removeContainers(folder);
+      const {stdout: leftovers} = await execFileAsync('docker', [
+        'ps',
+        '--all',
+        '--quiet',
+        '--filter',
+        `label=vsch.local.folder=${folder}`,
+      ]);
+      for (const container of leftovers
+        .split('\n')
+        .filter(line => line !== '')) {
+        await execFileAsync('docker', ['rm', '--force', container]);
+      }
+    }
+  });
+
+  it('F-0419 AC-3 (l2): with dev.containers.cacheVolume false, the new container mounts no vscode volume and its server commit is a real folder', async () => {
+    const folder = devContainerFolder('gate-novolume');
+    await setUserSetting('dev.containers.cacheVolume', false);
+    let name: string | undefined;
+    try {
+      name = await openFolderWindow(folder);
+      await reopenInContainer(name);
+      const [containerId = ''] = await devContainersOf(folder);
+      const inspected = await execFileAsync('docker', [
+        'inspect',
+        '-f',
+        '{{json .Mounts}}',
+        containerId,
+      ]);
+      const mounts = JSON.parse(inspected.stdout) as Array<{
+        Destination?: string;
+      }>;
+      const serverFolder = await serverInstallFolderOf(containerId);
+      deepStrictEqual(
+        {
+          vscodeMounts: mounts.filter(mount => mount.Destination === '/vscode'),
+          commitSymbolic: await isSymlinkIn(containerId, serverFolder),
+          commitFolder: await isFolderIn(containerId, serverFolder),
+        },
+        {
+          vscodeMounts: [],
+          commitSymbolic: false,
+          commitFolder: true,
+        },
+      );
+    } finally {
+      await setUserSetting('dev.containers.cacheVolume', undefined);
+      if (name) {
+        await closeWindow(name);
+      }
+      await removeContainers(folder);
+    }
   });
 });
