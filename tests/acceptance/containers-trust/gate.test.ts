@@ -8,6 +8,7 @@ import {
 } from '../windows/folder-windows.ts';
 import {
   closeWindow,
+  connectedToContainer,
   devContainerFolder,
   devContainersOf,
   isTrusted,
@@ -21,6 +22,7 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  answerFolderDialog,
   dialogOf,
   clickButton,
   dialogText,
@@ -59,6 +61,23 @@ function dockerRecorder(): string {
   return recorder;
 }
 
+/**
+ * The Docker calls the open commands make, from the recorder's file: the engine check's `version` and the CLI's work on
+ * the folder. The Dev Containers view lists the engine's containers on its own, so its calls are not counted.
+ */
+function commandDockerCalls(): string[] {
+  const file = inRun('gate-trust-docker-calls');
+  return existsSync(file)
+    ? readFileSync(file, 'utf8')
+        .split('\n')
+        .filter(
+          line =>
+            line.startsWith('version') ||
+            line.includes('devcontainer.local_folder'),
+        )
+    : [];
+}
+
 /** What has run on the host for `folder`, as a row reads it: the Docker calls, the initialize hook and the containers. */
 async function ranOnHost(folder: string): Promise<{
   dockerCalls: boolean;
@@ -66,7 +85,7 @@ async function ranOnHost(folder: string): Promise<{
   containers: string[];
 }> {
   return {
-    dockerCalls: existsSync(inRun('gate-trust-docker-calls')),
+    dockerCalls: commandDockerCalls().length > 0,
     initialized: existsSync(inRun('gate-trust-initialized')),
     containers: await devContainersOf(folder),
   };
@@ -123,8 +142,7 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       const accepted = {
         remoteName: (await windowState(name)).remoteName,
         initialized: existsSync(inRun('gate-trust-initialized')),
-        dockerCalls:
-          readFileSync(inRun('gate-trust-docker-calls'), 'utf8') !== '',
+        dockerCalls: commandDockerCalls().length > 0,
         containerCount: (await devContainersOf(folder)).length,
       };
       const expectedDeclined = {
@@ -281,5 +299,93 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
       },
     );
     await closeWindow(name);
+  });
+
+  /** Runs Open Folder in Container in window `name`, picks `folder`, and leaves the command running. */
+  async function openFolderFrom(name: string, folder: string): Promise<void> {
+    const running = inWindow(name, 'remote-containers.openFolder');
+    running.catch(() => undefined);
+    await answerFolderDialog(name, folder);
+  }
+
+  it('F-0403 AC-17 (o0): a folder trusted before shows no dialog at any moment from the pick until the window is connected', async () => {
+    const folder = devContainerFolder('open-trusted', {name: 'Open Trusted'});
+    const trusted = await trustedContainerWindow(folder);
+    await closeWindow(trusted);
+    const from = await openFolderWindow(
+      devContainerFolder('open-trusted-from'),
+    );
+    await openFolderFrom(from, folder);
+    const progress = {connected: false};
+    const settledConnect = connectedToContainer('open-trusted').then(() => {
+      progress.connected = true;
+    });
+    const shown: Array<string | undefined> = [];
+    while (!progress.connected) {
+      shown.push(
+        (await dialogOf('open-trusted').catch(() => undefined))?.message,
+      );
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    await settledConnect;
+    deepStrictEqual(
+      shown.filter(message => message !== undefined),
+      [],
+    );
+    await closeWindow('open-trusted');
+  });
+
+  it('F-0403 AC-17 (o5): Open Folder on an untrusted folder switches the window first, then core asks with S265, and trusting goes on to the container', async () => {
+    const folder = devContainerFolder('open-ask', {name: 'Open Ask'});
+    const from = await openFolderWindow(devContainerFolder('open-ask-from'));
+    await openFolderFrom(from, folder);
+    const asked = await waitForDialog('open-ask');
+    const askedText = await dialogText('open-ask');
+    await answerDialog('open-ask', 'Trust Folder & Continue');
+    await connectedToContainer('open-ask');
+    deepStrictEqual(
+      {
+        asked: [asked.message, askedText?.includes(S265)],
+        remoteName: (await windowState('open-ask')).remoteName,
+        containerCount: (await devContainersOf(folder)).length,
+      },
+      {
+        asked: [TRUST_QUESTION, true],
+        remoteName: 'dev-container',
+        containerCount: 1,
+      },
+    );
+    await closeWindow('open-ask');
+  });
+
+  it('F-0403 AC-17 (o6): declining shows S360 with S377 and one OK, then the same window is the local folder, restricted, with no container', async () => {
+    const folder = devContainerFolder('open-decline', {name: 'Open Decline'});
+    const from = await openFolderWindow(
+      devContainerFolder('open-decline-from'),
+    );
+    await openFolderFrom(from, folder);
+    await waitForDialog('open-decline');
+    await answerDialog('open-decline', 'Cancel');
+    const declined = await waitForDialog('open-decline');
+    const declinedText = await dialogText('open-decline');
+    await answerDialog('open-decline', 'OK');
+    await waitFor(
+      'the window to be the local folder again',
+      async () => (await windowState('open-decline')).remoteName === null,
+      60_000,
+    );
+    deepStrictEqual(
+      {
+        declined: [
+          declined.message,
+          declinedText?.includes(S377),
+          declined.buttons,
+        ],
+        trusted: await trustSettled('open-decline', false),
+        containers: await devContainersOf(folder),
+      },
+      {declined: [S360, true, ['OK']], trusted: false, containers: []},
+    );
+    await closeWindow('open-decline');
   });
 });

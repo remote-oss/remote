@@ -3,6 +3,7 @@
   "capabilities.untrustedWorkspaces.description": "Opening a folder in a container requires workspace trust.",
   "configuration.title": "Dev Containers",
   "commands.Reopenincontainer.title": "Reopen in Container",
+  "commands.Openfolder.title": "Open Folder in Container...",
   "commands.Rebuildcontainer.title": "Rebuild Container",
   "commands.Rebuildcontainerwithoutcache.title": "Rebuild Container Without Cache",
   "commands.Showreopenincontainernotificationreset.title": "Reset Don't Show Reopen Notification",

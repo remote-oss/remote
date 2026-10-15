@@ -68,6 +68,14 @@ const REBUILD_COMMANDS = [
 const REBUILD_WHEN =
   '!hideRebuildCommands && remoteName =~ /^dev-container$/ && !remote-containers:standingDown';
 
+/** The `when` clause of Open Folder in Container in the palette: a local window or a dev container window. */
+const OPEN_FOLDER_WHEN =
+  '!hideConnectCommands && remoteName =~ /^(dev-container)?$/ && !remote-containers:standingDown';
+
+/** The `when` clause of its remote indicator item: only a local window with no folder. */
+const OPEN_FOLDER_INDICATOR_WHEN =
+  '!hideConnectCommands && workspaceFolderCount == 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
+
 /** The `when` clause of the rebuild commands of a local window. */
 const REBUILD_REOPEN_WHEN =
   '!hideRebuildCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown';
@@ -104,6 +112,7 @@ const ENGLISH = {
     'Opening a folder in a container requires workspace trust.',
   'configuration.title': 'Dev Containers',
   'commands.Reopenincontainer.title': 'Reopen in Container',
+  'commands.Openfolder.title': 'Open Folder in Container...',
   'commands.Rebuildcontainer.title': 'Rebuild Container',
   'commands.Rebuildcontainerwithoutcache.title':
     'Rebuild Container Without Cache',
@@ -238,6 +247,11 @@ describe('the manifest', () => {
             title: '%commands.Reopenincontainer.title%',
             category: 'Dev Containers',
           },
+          {
+            command: 'remote-containers.openFolder',
+            title: '%commands.Openfolder.title%',
+            category: 'Dev Containers',
+          },
           ...REBUILD_COMMANDS,
           {
             command: 'remote-containers.showReopenInContainerNotificationReset',
@@ -268,6 +282,10 @@ describe('the manifest', () => {
             {
               command: 'remote-containers.reopenInContainer',
               when: REOPEN_WHEN,
+            },
+            {
+              command: 'remote-containers.openFolder',
+              when: OPEN_FOLDER_WHEN,
             },
             {
               command: 'remote-containers.rebuildContainer',
@@ -328,6 +346,11 @@ describe('the manifest', () => {
               command: 'remote-containers.reopenInContainer',
               group: 'remote_30_dev-container_2_actions@8',
               when: REOPEN_WHEN,
+            },
+            {
+              command: 'remote-containers.openFolder',
+              group: 'remote_30_dev-container_2_actions@8',
+              when: OPEN_FOLDER_INDICATOR_WHEN,
             },
             {
               command: 'remote-containers.rebuildContainer',
@@ -685,6 +708,35 @@ describe('the manifest', () => {
           },
         ],
       },
+    );
+  });
+
+  it('F-0403 3.1: Open Folder in Container has its title, the palette clause of release 1’s windows, and the indicator item only in an empty local window', () => {
+    deepStrictEqual(
+      [
+        menusOf(['remote-containers.openFolder']),
+        readJson('package.nls.json')['commands.Openfolder.title'],
+      ],
+      [
+        {
+          commandPalette: [
+            {
+              command: 'remote-containers.openFolder',
+              when: OPEN_FOLDER_WHEN,
+            },
+          ],
+          'statusBar/remoteIndicator': [
+            {
+              command: 'remote-containers.openFolder',
+              group: 'remote_30_dev-container_2_actions@8',
+              when: OPEN_FOLDER_INDICATOR_WHEN,
+            },
+          ],
+          'view/title': [],
+          'view/item/context': [],
+        },
+        'Open Folder in Container...',
+      ],
     );
   });
 

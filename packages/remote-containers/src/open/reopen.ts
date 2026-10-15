@@ -4,13 +4,11 @@
  * the folder the container will show. It never creates or starts a container; the resolve does.
  */
 
-import {encodeAuthority, openRemote} from 'lib-authority';
-import {devContainerPayloadOf} from '../authority/payload.ts';
 import {type Executable, executableOf} from '../engine/executable.ts';
-import {mountGitWorktreeCommonDirOf} from '../connect/mount-settings.ts';
 import {openPathAllowed} from './open-gate.ts';
-import {beforeReload} from './pre-reload.ts';
-import {type RebuildOptions, storeRebuildIntent} from './rebuild-intent.ts';
+import {commandBeforeReload} from './pre-reload.ts';
+import type {RebuildOptions} from './rebuild-intent.ts';
+import {reloadIntoContainer} from './reload.ts';
 import type {ReopenPorts} from './reopen-ports.ts';
 
 /** The title of the command that runs: Reopen in Container, or one of its two rebuild variants. */
@@ -68,22 +66,11 @@ export function reopenHandlersOf(
       ports.settings.dockerPath(),
       folder,
     ) as Extract<Executable, {kind: 'spawn'}>;
-    const {choice, progress} = await beforeReload(
-      {
-        firstCheck: (base, dialogs) => ports.engine.firstCheck(base, dialogs),
-        dialogs: ports.dialogs,
-        // eslint-disable-next-line id-length -- the choice's dependency is named cli
-        config: {...ports.config, cli: ports.bridge, logger},
-        progress: ports.progress,
-      },
-      {
-        folder,
-        dockerPath: executable.file,
-        mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
-          ports.settings.mountGitWorktreeCommonDir(),
-        ),
-        cancellation: new AbortController().signal,
-      },
+    const {choice, progress} = await commandBeforeReload(
+      ports,
+      (base, dialogs) => ports.engine.firstCheck(base, dialogs),
+      folder,
+      executable.file,
     );
     try {
       if (choice.kind === 'noConfiguration') {
@@ -93,42 +80,22 @@ export function reopenHandlersOf(
       if (choice.kind !== 'chosen') {
         return;
       }
-      const context = await ports.engine.currentContext(executable.file);
-      const payload = devContainerPayloadOf({
-        kind: 'folder',
-        hostPath: folder,
-        localDocker: false,
-        ...(context === undefined ? {} : {context}),
-        configFile: window.serializedFile(choice.configFile),
+      await reloadIntoContainer(ports, {
+        title,
+        folder,
+        dockerFile: executable.file,
+        chosen: choice,
+        progress,
+        ...(rebuild === undefined
+          ? {}
+          : {
+              rebuild: {
+                options: rebuild,
+                intents: ports.intents,
+                now: () => ports.now(),
+              },
+            }),
       });
-      if (rebuild !== undefined) {
-        try {
-          await storeRebuildIntent(
-            ports.intents,
-            payload,
-            rebuild,
-            ports.now(),
-          );
-        } catch (error) {
-          logger.warn(
-            `the rebuild intent could not be stored: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          return;
-        }
-      }
-      progress.close();
-      const opened = await openRemote(
-        ports.opener,
-        encodeAuthority({
-          family: 'dev-container',
-          target: {payload},
-          rawHostString: payload,
-        }),
-        {path: choice.workspaceFolder, pathKind: 'folder', target: 'current'},
-      );
-      if (opened.kind === 'rejected') {
-        logger.warn(`${title} was refused: ${opened.reason}`);
-      }
     } finally {
       progress.close();
     }

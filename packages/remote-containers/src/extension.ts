@@ -47,7 +47,9 @@ import {
   offerReopen,
   resetReopenNotification,
 } from './open/reopen-notification.ts';
+import {openFolderInContainer} from './open/open-folder.ts';
 import {reopenHandlersOf} from './open/reopen.ts';
+import type {ReopenPorts} from './open/reopen-ports.ts';
 import {
   type DetailsView,
   showDetailsWhenRegistered,
@@ -364,7 +366,7 @@ export async function activate(
           {buildNoCache},
         );
       }
-      const reopenHandler = reopenHandlersOf({
+      const reopenPorts: ReopenPorts = {
         gate: {
           missing: served.missing,
           setupAgain: () => served.setupAgain(),
@@ -461,9 +463,31 @@ export async function activate(
           addressOf: parts => vscode.Uri.from(parts),
         },
         logger: served.logger,
+      };
+      const reopenHandler = reopenHandlersOf(reopenPorts);
+      const openFolder = openFolderInContainer({
+        ...reopenPorts,
+        window: {
+          ...reopenPorts.window,
+          remoteAuthority: () => vscode.env.remoteAuthority,
+          homeFolder: () => os.homedir(),
+        },
+        pickFolder: async start => {
+          const [picked] =
+            (await vscode.window.showOpenDialog({
+              canSelectFiles: false,
+              canSelectFolders: true,
+              canSelectMany: false,
+              defaultUri: vscode.Uri.file(start),
+            })) ?? [];
+          return picked === undefined
+            ? undefined
+            : {scheme: picked.scheme, fsPath: picked.fsPath};
+        },
       });
       return {
         reopenInContainer: {execute: reopenHandler()},
+        openFolder: {execute: openFolder},
         rebuildAndReopenInContainer: {
           execute: reopenHandler({buildNoCache: false}),
         },

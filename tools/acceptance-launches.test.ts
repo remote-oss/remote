@@ -195,6 +195,7 @@ describe('the launches of the VSCodium run', () => {
     const shared = {
       'window.title': '[${rootName}]',
       'window.dialogStyle': 'custom',
+      'files.simpleDialog.enable': true,
       'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
     };
     deepStrictEqual(
@@ -299,6 +300,7 @@ describe('the launches of the VSCodium run', () => {
           {
             'window.title': '[${rootName}]',
             'window.dialogStyle': 'custom',
+            'files.simpleDialog.enable': true,
             'remote.serverDownloadBaseUrl': '${HARNESS_DOWNLOADS_LOCAL}/ok',
             'security.workspace.trust.startupPrompt': 'never',
           },

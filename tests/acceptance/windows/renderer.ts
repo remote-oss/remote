@@ -883,3 +883,99 @@ export async function clickButton(name: string, label: string): Promise<void> {
     throw new Error(`window ${name}: ${missing}`);
   }
 }
+
+/** The input of the in-window folder dialog (`files.simpleDialog.enable`) in the page, or `null` when none is open. */
+const FOLDER_DIALOG_INPUT =
+  'document.querySelector(\'.quick-input-widget:not([style*="display: none"]) input.input\')';
+
+/** Whether the in-window folder dialog is open in window `name`. */
+export async function folderDialogOpen(name: string): Promise<boolean> {
+  return evaluate<boolean>(name, `${FOLDER_DIALOG_INPUT} !== null`);
+}
+
+/**
+ * Has window `name`'s in-window folder dialog take `key` (`Enter` or `Escape`), with `typed` in its input first when
+ * given. It waits for the dialog to open, and fails when none does.
+ */
+async function keyInFolderDialog(
+  name: string,
+  key: 'Enter' | 'Escape',
+  typed?: string,
+): Promise<void> {
+  await settled(
+    () => `the folder dialog of window ${name}`,
+    async () => ((await folderDialogOpen(name)) ? true : undefined),
+  );
+  await evaluate<null>(
+    name,
+    `(() => {
+      const input = ${FOLDER_DIALOG_INPUT};
+      input.focus();
+      if (${JSON.stringify(typed ?? null)} !== null) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        setter.call(input, ${JSON.stringify(typed ?? '')});
+        input.dispatchEvent(new Event('input', {bubbles: true}));
+      }
+      return null;
+    })()`,
+  );
+  await pressKey(await pageOf(name), name, key);
+}
+
+/** Presses `key` in the page at protocol address `address`, as the keyboard does, with its key down and up. */
+async function pressKey(
+  address: string,
+  owner: string,
+  key: 'Enter' | 'Escape',
+): Promise<void> {
+  const keyCode = key === 'Enter' ? 13 : 27;
+  const socket = new WebSocket(address);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      socket.addEventListener('open', () => {
+        resolve();
+      });
+      socket.addEventListener('error', () => {
+        reject(new Error(`no protocol connection to window ${owner}`));
+      });
+    });
+    for (const [index, type] of ['keyDown', 'keyUp'].entries()) {
+      const answered = new Promise<void>(resolve => {
+        socket.addEventListener('message', function listener() {
+          socket.removeEventListener('message', listener);
+          resolve();
+        });
+      });
+      socket.send(
+        JSON.stringify({
+          id: index + 1,
+          method: 'Input.dispatchKeyEvent',
+          params: {
+            type,
+            key,
+            code: key,
+            windowsVirtualKeyCode: keyCode,
+            nativeVirtualKeyCode: keyCode,
+            ...(key === 'Enter' && type === 'keyDown' ? {text: '\r'} : {}),
+          },
+        }),
+      );
+      await answered;
+    }
+  } finally {
+    socket.close();
+  }
+}
+
+/** Types `folder` into window `name`'s folder dialog and confirms it, as Enter does with no item focused. */
+export function answerFolderDialog(
+  name: string,
+  folder: string,
+): Promise<void> {
+  return keyInFolderDialog(name, 'Enter', folder);
+}
+
+/** Closes window `name`'s folder dialog with Escape. */
+export function cancelFolderDialog(name: string): Promise<void> {
+  return keyInFolderDialog(name, 'Escape');
+}
