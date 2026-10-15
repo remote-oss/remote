@@ -6,7 +6,6 @@
  */
 
 import {
-  type FailurePresenter,
   type LabelFormatterHost,
   type Registration,
   registerAuthorityLabel,
@@ -34,7 +33,7 @@ export interface ConnectorRegistrationHost {
   resolverEditor: ResolverEditor;
   labels: LabelFormatterHost;
   commands: CommandHost;
-  presenter: RecoveryPorts;
+  presenter: Omit<RecoveryPorts, 'disconnected'>;
   translate: Translate;
 }
 
@@ -62,11 +61,6 @@ export async function registerContainerResolver(
   let label: {dispose(): void} | undefined;
   let disposed = false;
   let dialogs = 0;
-  const dialogPresenter = recoveryPresenterOf(
-    host.presenter,
-    () => currentTarget(),
-    translate,
-  );
   /** The label with no name, for a window that is disconnected and has none yet; never while a dialog is open. */
   function registerUnnamedLabel(): void {
     const target = handle?.currentConnection()?.decodedTarget;
@@ -79,6 +73,11 @@ export async function registerContainerResolver(
       workspaceSuffixOf(undefined, translate),
     );
   }
+  const dialogPresenter = recoveryPresenterOf(
+    {...host.presenter, disconnected: registerUnnamedLabel},
+    () => currentTarget(),
+    translate,
+  );
   const registration = await registerResolver(
     host.resolverEditor,
     {
@@ -87,16 +86,11 @@ export async function registerContainerResolver(
       presenter: {
         present: async failed => {
           dialogs += 1;
-          let decided: Awaited<ReturnType<FailurePresenter['present']>>;
           try {
-            decided = await dialogPresenter.present(failed);
+            return await dialogPresenter.present(failed);
           } finally {
             dialogs -= 1;
           }
-          if (decided !== 'reload') {
-            registerUnnamedLabel();
-          }
-          return decided;
         },
       },
       cancellable: false,

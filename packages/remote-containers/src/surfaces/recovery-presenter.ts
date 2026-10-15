@@ -64,6 +64,8 @@ export interface RecoveryPorts {
   openSetting(settingId: string): PromiseLike<unknown>;
   /** Runs `task` once the current call stack has unwound. */
   later(task: () => void): void;
+  /** Tells that the dialog ended in More Actions..., so the window stays disconnected; Retry and Edit Locally don't. */
+  disconnected(): void;
   logger: Logger;
 }
 
@@ -146,8 +148,10 @@ export function recoveryPresenterOf(
         await editLocally(button.folder);
       } else if (button?.action === 'learnMore') {
         await ports.openExternal(CONTAINERS_REQUIREMENTS);
+        ports.disconnected();
         ports.later(() => void showQuickPick());
       } else {
+        ports.disconnected();
         ports.later(() => void showQuickPick());
       }
       return 'handled';

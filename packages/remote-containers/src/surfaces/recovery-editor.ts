@@ -32,7 +32,7 @@ export interface RecoveryEditor<Address> {
 export function recoveryPortsOf<Address>(
   editor: RecoveryEditor<Address>,
   own: Pick<RecoveryPorts, 'keepEdit' | 'logger'>,
-): RecoveryPorts {
+): Omit<RecoveryPorts, 'disconnected'> {
   return {
     ...own,
     showError: async (message, detail, buttons) =>

@@ -170,14 +170,32 @@ async function registered(
   };
 }
 
+/** The authority of a window whose folder is known, so the dialog offers Edit. */
+const FOLDER_PAYLOAD = devContainerPayloadOf({
+  kind: 'folder',
+  hostPath: '/w',
+  localDocker: false,
+  configFile: {
+    $mid: 1,
+    path: '/w/.devcontainer/devcontainer.json',
+    scheme: 'file',
+  },
+});
+const FOLDER_AUTHORITY = encodeAuthority({
+  family: 'dev-container',
+  target: {payload: FOLDER_PAYLOAD},
+  rawHostString: FOLDER_PAYLOAD,
+});
+
 /** Resolves the window's authority as attempt `attempt` and waits for it to settle, whatever its end. */
 async function settledResolve(
   seen: Awaited<ReturnType<typeof registered>>,
   attempt: number,
+  authority = AUTHORITY,
 ): Promise<void> {
   await seen.recording
     .registered()
-    ?.resolve(AUTHORITY, {resolveAttempt: attempt})
+    ?.resolve(authority, {resolveAttempt: attempt})
     .catch(() => undefined);
 }
 
@@ -319,27 +337,10 @@ describe('the registration of the container connector (card containers-08)', () 
   });
 
   it('F-0410 AC-1: a failed connect shows the dialog with Edit for the folder of the window’s authority', async () => {
-    const payload = devContainerPayloadOf({
-      kind: 'folder',
-      hostPath: '/w',
-      localDocker: false,
-      configFile: {
-        $mid: 1,
-        path: '/w/.devcontainer/devcontainer.json',
-        scheme: 'file',
-      },
-    });
     const seen = await registered({failure: containerSetupFailed()});
     await seen.recording
       .registered()
-      ?.resolve(
-        encodeAuthority({
-          family: 'dev-container',
-          target: {payload},
-          rawHostString: payload,
-        }),
-        {resolveAttempt: 1},
-      )
+      ?.resolve(FOLDER_AUTHORITY, {resolveAttempt: 1})
       .catch(() => undefined);
     deepStrictEqual(seen.shown, [
       ['Retry', 'Edit devcontainer.json Locally', 'More Actions...'],
@@ -399,6 +400,18 @@ describe('the registration of the container connector (card containers-08)', () 
       dialog: {button: 'Retry'},
     });
     await settledResolve(seen, 1);
+    deepStrictEqual(seen.formatters, []);
+  });
+
+  it('F-0410 5.0 step 4: Edit Locally leaves the authority, so no label is registered', async () => {
+    const seen = await registered({
+      failure: containerSetupFailed(),
+      dialog: 'open',
+    });
+    const running = settledResolve(seen, 1, FOLDER_AUTHORITY);
+    await new Promise(resolve => setImmediate(resolve));
+    seen.closeDialog('Edit devcontainer.json Locally');
+    await running;
     deepStrictEqual(seen.formatters, []);
   });
 

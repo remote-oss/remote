@@ -42,6 +42,7 @@ interface Script {
 /** A presenter over recording ports; `later` queues its tasks until `flush` runs them. */
 function presenting(script: Script = {}) {
   const calls: string[] = [];
+  const order: string[] = [];
   const queued: Array<() => void> = [];
   const errors = [...(script.errors ?? [])];
   const picks = [...(script.picks ?? [])];
@@ -98,6 +99,9 @@ function presenting(script: Script = {}) {
         calls.push('later');
         queued.push(task);
       },
+      disconnected: () => {
+        order.push(`disconnected after ${String(calls.length)} calls`);
+      },
       logger: createLogger(sink, {minimumLevel: () => 'info'}),
     },
     () => ('target' in script ? script.target : TARGET),
@@ -110,7 +114,7 @@ function presenting(script: Script = {}) {
       await new Promise(resolve => setImmediate(resolve));
     }
   }
-  return {presenter, calls, flush, sink};
+  return {presenter, calls, order, flush, sink};
 }
 
 async function present(failed: Failed, script: Script = {}) {
@@ -243,6 +247,42 @@ describe('the failure presenter C8 (card containers-11)', () => {
       [beforeFlush, seen.calls[2]?.startsWith('pick ')],
       [['handled', 2, 'later'], true],
     );
+  });
+
+  it('F-0410 5.0 step 4: More Actions... and Escape tell the window it is disconnected once, before the quick pick is queued', async () => {
+    const button = await present(containerSetupFailed(), {
+      errors: ['More Actions...'],
+    });
+    const escape = await present(containerSetupFailed(), {
+      errors: [undefined],
+    });
+    deepStrictEqual(
+      [button.order, button.calls, escape.order],
+      [
+        ['disconnected after 1 calls'],
+        [
+          `showError |An error occurred setting up the container.|Retry,${EDIT},More Actions... (close)`,
+          'later',
+        ],
+        ['disconnected after 1 calls'],
+      ],
+    );
+  });
+
+  it('F-0503 7.E1: Learn More tells the window it is disconnected once, after the requirements page opens', async () => {
+    const seen = await present(requirementsNotMet('Error: Missing GLIBC'), {
+      errors: ['Learn More'],
+    });
+    deepStrictEqual(seen.order, ['disconnected after 2 calls']);
+  });
+
+  it('F-0410 5.0 step 4: Retry, Edit Locally and the window with no server source never tell the window it is disconnected', async () => {
+    const retry = await present(containerSetupFailed(), {errors: ['Retry']});
+    const edit = await present(containerSetupFailed(), {errors: [EDIT]});
+    const source = await present(noServerSource('VSCodium'), {
+      errors: ['Cancel'],
+    });
+    deepStrictEqual([retry.order, edit.order, source.order], [[], [], []]);
   });
 
   it('F-0410 5.0 step 2: only More Actions... is the close affordance, in a requirements dialog too, so the editor adds no Cancel', async () => {
