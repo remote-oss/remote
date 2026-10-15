@@ -58,6 +58,11 @@
       "current": "dev.containers.defaultExtensions",
       "legacy": "remote.containers.defaultExtensions",
       "winner": "current"
+    },
+    {
+      "current": "dev.containers.workspaceMountConsistency",
+      "legacy": "remote.containers.workspaceMountConsistency",
+      "winner": "current"
     }
   ],
   "ungated": [],

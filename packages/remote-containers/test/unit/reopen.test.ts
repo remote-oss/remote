@@ -6,6 +6,7 @@ import type {CliFailure, ConfigurationResult} from '../../src/cli/cli-lines.ts';
 import {reopenInContainer} from '../../src/open/reopen.ts';
 import type {PickerAnswer} from '../../src/config/choose-configuration.ts';
 import type {ReopenPorts} from '../../src/open/reopen-ports.ts';
+import type {TrustOutcome} from '../../src/trust/trust-gate.ts';
 import {pendingOf, settled} from './pending.ts';
 
 const FOLDER = '/w/p';
@@ -35,9 +36,12 @@ interface Setup {
   contents: Record<string, string>;
   remoteName: string | undefined;
   folders: Array<{scheme: string; fsPath: string}>;
-  trusted: boolean;
+  trust: TrustOutcome;
+  waitOnTrust: Promise<void>;
   rejects: string | undefined;
   dockerPath: unknown;
+  /** What the worktree setting's user value is. */
+  mountGitWorktreeCommonDir: unknown;
   waitOnCheck: Promise<void>;
   targets: unknown[];
   /** The order of the progress and the open, as far as the rows on them look. */
@@ -60,9 +64,11 @@ function setup(): Setup {
     contents: {},
     remoteName: undefined,
     folders: [{scheme: 'file', fsPath: FOLDER}],
-    trusted: true,
+    trust: 'trusted',
+    waitOnTrust: Promise.resolve(),
     rejects: undefined,
     dockerPath: 'docker',
+    mountGitWorktreeCommonDir: undefined,
     waitOnCheck: Promise.resolve(),
     targets: [],
     order: [],
@@ -77,7 +83,6 @@ function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
     window: {
       remoteName: () => state.remoteName,
       folders: () => state.folders,
-      isTrusted: () => state.trusted,
       serializedFile: file => ({
         $mid: 1,
         fsPath: file,
@@ -85,6 +90,11 @@ function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
         path: file,
         scheme: 'file',
       }),
+    },
+    ensureTrusted: async () => {
+      state.calls.push('ensureTrusted');
+      await state.waitOnTrust;
+      return state.trust;
     },
     config: {
       files: {
@@ -131,7 +141,10 @@ function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
       compare: (left, right) => left.localeCompare(right, 'en'),
       translate: template => template,
     },
-    settings: {dockerPath: () => state.dockerPath},
+    settings: {
+      dockerPath: () => state.dockerPath,
+      mountGitWorktreeCommonDir: () => state.mountGitWorktreeCommonDir,
+    },
     engine: {
       firstCheck: async base => {
         state.calls.push(`firstCheck ${String(base)}`);
@@ -218,8 +231,30 @@ async function reopenedSlowly(state: Setup): Promise<string[]> {
   return state.order;
 }
 
+/**
+ * Calls the command, calls it again while the first call is held on `hold`, lets the first end, and calls it a third
+ * time; gives the calls the ports saw while the first was held, and the log.
+ */
+async function reentered(
+  state: Setup,
+  hold: 'waitOnCheck' | 'waitOnTrust',
+): Promise<{during: string[]; lines: string[]}> {
+  const release = pendingOf<undefined>();
+  state[hold] = release.promise;
+  const {ports, sink} = portsOf(state);
+  const handler = reopenInContainer(ports);
+  const first = handler();
+  await handler();
+  await settled();
+  const during = [...state.calls];
+  release.resolve(undefined);
+  await first;
+  await handler();
+  return {during, lines: linesOf(sink)};
+}
+
 describe('Reopen in Container', () => {
-  it('F-0401 BR-1: a local trusted window reloads on the dev-container authority of its folder, in the order of the flow', async () => {
+  it('F-0401 BR-1: a local window reloads on the dev-container authority of its folder, in the order of the flow', async () => {
     const state = setup();
     await reopened(state);
     const authority = (
@@ -240,7 +275,12 @@ describe('Reopen in Container', () => {
         state.targets,
       ],
       [
-        ['firstCheck /w/p', 'readConfiguration /w/p', 'currentContext'],
+        [
+          'ensureTrusted',
+          'firstCheck /w/p',
+          'readConfiguration /w/p',
+          'currentContext',
+        ],
         ['vscode.openFolder'],
         true,
         '/workspaces/p',
@@ -254,12 +294,30 @@ describe('Reopen in Container', () => {
             dockerPath: 'docker',
             idLabels: [],
             mountWorkspaceGitRoot: true,
+            mountGitWorktreeCommonDir: false,
             mounts: [],
             logLevel: 'info',
           },
         ],
       ],
     );
+  });
+
+  it('F-0411 AC-35, AC-37: the worktree setting, as the boolean or as the string, reaches the read the window\u2019s folder comes from', async () => {
+    const reads: unknown[] = [];
+    for (const value of [undefined, true, 'true', 'false']) {
+      const state = setup();
+      state.mountGitWorktreeCommonDir = value;
+      await reopened(state);
+      reads.push(
+        state.targets.map(
+          target =>
+            (target as {mountGitWorktreeCommonDir: boolean})
+              .mountGitWorktreeCommonDir,
+        ),
+      );
+    }
+    deepStrictEqual(reads, [[false], [true], [true], [false]]);
   });
 
   it('F-0501 BR-2a: a Docker context other than the default is in the payload', async () => {
@@ -308,20 +366,26 @@ describe('Reopen in Container', () => {
     );
   });
 
-  it('F-0401 PRE-7: an untrusted window does nothing and opens nothing, until the trust request is built', async () => {
+  it('F-0106 AC-7, F-0401 AC-21: a declined trust request and an unavailable one stop before the engine check, the read and the open (6.4)', async () => {
+    const seen = [];
+    for (const trust of ['declined', 'unavailable'] as const) {
+      const state = setup();
+      state.trust = trust;
+      await reopened(state);
+      seen.push([state.calls, state.commands]);
+    }
+    deepStrictEqual(seen, [
+      [['ensureTrusted'], []],
+      [['ensureTrusted'], []],
+    ]);
+  });
+
+  it('F-0106 AC-1: a folder with no configuration asks for trust first, and a declined request shows nothing', async () => {
     const state = setup();
-    state.trusted = false;
-    const {lines} = await reopened(state);
-    deepStrictEqual(
-      [state.calls, state.commands, lines],
-      [
-        [],
-        [],
-        [
-          "info: the folder isn't trusted; Reopen in Container needs workspace trust",
-        ],
-      ],
-    );
+    state.existing = [];
+    state.trust = 'declined';
+    await reopened(state);
+    deepStrictEqual([state.calls, state.shown], [['ensureTrusted'], []]);
   });
 
   it('F-0201 5.0, ruling (c): a first check that stopped ends the command with no reload and no lookup of the Docker context', async () => {
@@ -330,7 +394,7 @@ describe('Reopen in Container', () => {
     await reopened(state);
     deepStrictEqual(
       [state.calls, state.commands],
-      [['firstCheck /w/p', 'readConfiguration /w/p'], []],
+      [['ensureTrusted', 'firstCheck /w/p', 'readConfiguration /w/p'], []],
     );
   });
 
@@ -440,18 +504,16 @@ describe('Reopen in Container', () => {
     deepStrictEqual(files, ['/w/p/bin/docker']);
   });
 
-  it('contracts §6: a CLI failure that has a message opens nothing and is logged with its kind and message', async () => {
+  it('F-0301 7.E1: a CLI failure that has a message opens no window, shows S181 with the file opened, and is logged with its kind and message', async () => {
     const state = setup();
     state.read = {kind: 'buildFailed', message: 'no build'};
     const {lines} = await reopened(state);
     deepStrictEqual(
-      [state.commands, lines],
+      [state.commands, lines, state.shown.length],
       [
         [],
-        [
-          'warn: the configuration could not be read: buildFailed',
-          'warn: Reopen in Container could not read the configuration: buildFailed: no build',
-        ],
+        ['warn: the configuration could not be read: buildFailed: no build'],
+        1,
       ],
     );
   });
@@ -462,7 +524,6 @@ describe('Reopen in Container', () => {
     const {lines} = await reopened(state);
     deepStrictEqual(lines, [
       'warn: the configuration could not be read: noResult',
-      'warn: Reopen in Container could not read the configuration: noResult',
     ]);
   });
 
@@ -482,31 +543,35 @@ describe('Reopen in Container', () => {
 
   it('F-0401 BR-7a: a call while another waits on the first check returns at once, and a call after the first ends runs again', async () => {
     const state = setup();
-    const release: Array<() => void> = [];
-    state.waitOnCheck = new Promise<void>(resolve => {
-      release.push(resolve);
-    });
-    const {ports, sink} = portsOf(state);
-    const handler = reopenInContainer(ports);
-    const first = handler();
-    await handler();
-    await settled();
-    const during = [...state.calls];
-    release.forEach(each => {
-      each();
-    });
-    await first;
-    await handler();
+    const {during, lines} = await reentered(state, 'waitOnCheck');
     deepStrictEqual(
       [
         during,
-        linesOf(sink).filter(line => line.includes('already running')),
+        lines.filter(line => line.includes('already running')),
         state.commands.length,
       ],
       [
-        ['firstCheck /w/p', 'readConfiguration /w/p'],
+        ['ensureTrusted', 'firstCheck /w/p', 'readConfiguration /w/p'],
         ['info: Reopen in Container is already running'],
         2,
+      ],
+    );
+  });
+
+  it('F-0401 BR-7a: a call while the trust request is open calls nothing, and after a decline a third call asks again', async () => {
+    const state = setup();
+    state.trust = 'declined';
+    const {during, lines} = await reentered(state, 'waitOnTrust');
+    deepStrictEqual(
+      [
+        during,
+        state.calls,
+        lines.filter(line => line.includes('already running')),
+      ],
+      [
+        ['ensureTrusted'],
+        ['ensureTrusted', 'ensureTrusted'],
+        ['info: Reopen in Container is already running'],
       ],
     );
   });

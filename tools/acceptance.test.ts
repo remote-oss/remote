@@ -352,6 +352,7 @@ const LAUNCH_ORDER = [
   'containers',
   'containers-standdown',
   'containers-no-proposals',
+  'containers-trust',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -900,6 +901,7 @@ describe('acceptance', () => {
             'containers',
             'containers-standdown',
             'containers-no-proposals',
+            'containers-trust',
           ].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: [

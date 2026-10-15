@@ -151,6 +151,7 @@ function portsOf(scene: Scene): PreReloadPorts {
 const REQUEST = {
   folder: FOLDER,
   dockerPath: '/usr/bin/docker',
+  mountGitWorktreeCommonDir: false,
   cancellation: new AbortController().signal,
 };
 

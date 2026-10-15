@@ -66,10 +66,15 @@ describe('the contract rows of the CLI bridge (card containers-04)', () => {
         dockerPath: 'docker',
         idLabels: [],
         mountWorkspaceGitRoot: true,
+        mountGitWorktreeCommonDir: false,
         mounts: [],
         logLevel: 'info',
       },
-      {removeExistingContainer: false, buildNoCache: false},
+      {
+        removeExistingContainer: false,
+        buildNoCache: false,
+        workspaceMountConsistency: 'cached',
+      },
       () => undefined,
       new AbortController().signal,
     );

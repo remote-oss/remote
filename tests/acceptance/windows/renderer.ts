@@ -533,6 +533,16 @@ export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
   );
 }
 
+/** The whole text of the dialog open in window `name`, the markdown details included, or `undefined` when none is. */
+export async function dialogText(name: string): Promise<string | undefined> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `document.querySelector('${DIALOG_BOX}')?.textContent ?? null`,
+    )) ?? undefined
+  );
+}
+
 /** Waits until window `name` shows a dialog and returns it; it fails naming the window and every page's open dialog. */
 export async function waitForDialog(
   name: string,
