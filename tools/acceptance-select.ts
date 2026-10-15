@@ -48,7 +48,11 @@ function reachedBy(
       .filter(launch => extensionsOfLaunch(launch).includes(extension))
       .map(launch => launch.label);
   }
-  const folder = /^tests\/acceptance\/([^/]+)\//.exec(changed)?.[1];
+  // only a suite's own tests map to it: other files in a suite folder can be the harness several suites import
+  // (tests/acceptance/windows/renderer.ts), so they reach every launch
+  const folder = /^tests\/acceptance\/([^/]+)\/.*\.test\.ts$/.exec(
+    changed,
+  )?.[1];
   const bySuite = launches.filter(launch => launch.suite === folder);
   return folder !== undefined && bySuite.length > 0
     ? bySuite.map(launch => launch.label)

@@ -17,6 +17,7 @@ const LAUNCHES: Launch[] = [
     withExtensions: ['remote-oss.remote-explorer'],
   },
   {label: 'trust-one', kind: 'plain', suite: 'suite-trust'},
+  {label: 'windows', kind: 'plain', suite: 'windows'},
   {
     label: 'containers-one',
     kind: 'plain',
@@ -51,10 +52,29 @@ describe('acceptance-select', () => {
     ]);
   });
 
-  it('a suite folder of a launch reaches the launches of that suite', () => {
+  it("a suite's own test reaches the launches of that suite", () => {
     deepStrictEqual(labelsFor('tests/acceptance/suite-trust/x.test.ts'), [
       'trust-one',
     ]);
+  });
+
+  it('a containers test change reaches the containers launches only', () => {
+    deepStrictEqual(
+      labelsFor('tests/acceptance/suite-containers/gate/rows.test.ts'),
+      ['containers-one', 'containers-two'],
+    );
+  });
+
+  it('a helper in a suite folder (the shared windows harness) reaches every launch', () => {
+    deepStrictEqual(labelsFor('tests/acceptance/windows/renderer.ts'), EVERY);
+  });
+
+  it('the reason names the helper that selected every launch', () => {
+    deepStrictEqual(
+      selectLaunches(['tests/acceptance/windows/renderer.ts'], LAUNCHES)
+        .reasons,
+      EVERY.map(label => `${label}: tests/acceptance/windows/renderer.ts`),
+    );
   });
 
   it('documentation and unit tests reach no launch', () => {
