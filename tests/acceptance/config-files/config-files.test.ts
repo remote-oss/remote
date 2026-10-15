@@ -726,6 +726,9 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     await openWindow('cfghost', 'c11');
     await connectedWithin('c11', 60_000);
     await endWindow('c11');
+    console.log(
+      `DEBUG1004 ${String(mark)} ${String(connectionLog().length)} ${JSON.stringify(connectionLog().slice(-60))}`,
+    );
     deepStrictEqual(
       connectionLog()
         .slice(mark)
@@ -762,6 +765,9 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     const mark = connectionLog().length;
     const {dialog} = await failingWindow('cfghost', 'c5');
     await endWindow('c5');
+    console.log(
+      `DEBUG1004 ${String(mark)} ${String(connectionLog().length)} ${JSON.stringify(connectionLog().slice(-60))}`,
+    );
     deepStrictEqual(
       [
         dialog.question,
@@ -779,6 +785,9 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     const mark = connectionLog().length;
     const {dialog} = await failingWindow('cfghost', 'c6');
     await endWindow('c6');
+    console.log(
+      `DEBUG1004 ${String(mark)} ${String(connectionLog().length)} ${JSON.stringify(connectionLog().slice(-60))}`,
+    );
     deepStrictEqual(
       [
         dialog.question,
@@ -798,6 +807,9 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     await openWindow('cfghost', 'c7');
     await connectedWithin('c7', 60_000);
     await endWindow('c7');
+    console.log(
+      `DEBUG1004 ${String(mark)} ${String(connectionLog().length)} ${JSON.stringify(connectionLog().slice(-60))}`,
+    );
     deepStrictEqual(
       connectionLog()
         .slice(mark)
@@ -858,6 +870,9 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     await openWindow('cfghost', 'c19');
     await connectedWithin('c19', 60_000);
     await endWindow('c19');
+    console.log(
+      `DEBUG1004 ${String(mark)} ${String(connectionLog().length)} ${JSON.stringify(connectionLog().slice(-60))}`,
+    );
     deepStrictEqual(
       connectionLog()
         .slice(mark)
