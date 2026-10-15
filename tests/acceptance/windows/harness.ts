@@ -491,10 +491,21 @@ export async function reloadWindow(name: string): Promise<void> {
  * answer, as with `reloadWindow`. A row whose window never reaches its folder (a dialog instead) waits from here.
  */
 export async function reopenStarted(name: string): Promise<void> {
+  await reloadingCommand(name, 'remote-containers.reopenInContainer');
+}
+
+/**
+ * Runs `command` in window `name`, a command that reloads the window, and resolves on the window's next `activated`.
+ * The command isn't awaited: the reload ends the extension host before it can answer.
+ */
+export async function reloadingCommand(
+  name: string,
+  command: string,
+): Promise<void> {
   const before = countOf(name, 'activated');
-  send(name, 'remote-containers.reopenInContainer', []);
+  send(name, command, []);
   await waitUntil(
-    `window ${name} to activate in its container`,
+    `window ${name} to activate again after ${command}`,
     () => countOf(name, 'activated') > before,
   );
 }

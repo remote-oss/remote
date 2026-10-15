@@ -7,12 +7,26 @@ import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
+  reloadingCommand,
+  reloadWindow,
   reopenInContainer,
   variable,
+  waitFor,
   windowState,
 } from '../windows/harness.ts';
-import {dialogOf, type ShownDialog} from '../windows/renderer.ts';
-import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
+import {
+  answerDialog,
+  dialogOf,
+  type ShownDialog,
+  statusItem,
+  waitForDialog,
+  waitForQuickPick,
+} from '../windows/renderer.ts';
+import {
+  openFolderWindow,
+  removeContainers,
+  setUserSetting,
+} from '../windows/folder-windows.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -68,6 +82,57 @@ async function containerLeftBy(folder: string): Promise<string> {
   const containerId = await containerOf(folder);
   await closeWindow(name);
   return containerId;
+}
+
+/** F-0410's dialog details for a generic failure and for a missing docker, as `failure-strings.ts` has them. */
+const S034 = 'An error occurred setting up the container.';
+const S339 =
+  "The 'docker' command was not found. Make sure Docker is installed.";
+
+/** F-0410's three buttons, sorted. */
+const RECOVERY_BUTTONS = [
+  'Edit devcontainer.json Locally',
+  'More Actions...',
+  'Retry',
+];
+
+/** The dialog of a failed connect takes the build or the second check, after the reload. */
+const DIALOG_MILLISECONDS = 180_000;
+
+/** A dialog's buttons, sorted, without the Cancel core adds until C8 marks its close affordance (containers-35). */
+function recoveryButtonsOf(dialog: ShownDialog): string[] {
+  return dialog.buttons.filter(button => button !== 'Cancel').sort();
+}
+
+/** Whether container `containerId` mounts something at `/vscode`, the cache volume (F-0419). */
+async function vscodeMounted(containerId: string): Promise<boolean> {
+  const {stdout} = await execFileAsync('docker', [
+    'inspect',
+    '-f',
+    '{{json .Mounts}}',
+    containerId,
+  ]);
+  return (JSON.parse(stdout) as Array<{Destination: string}>).some(
+    mount => mount.Destination === '/vscode',
+  );
+}
+
+/**
+ * Runs `command`, a rebuild, in the connected window `name` with `dev.containers.dockerPath` naming no program, and
+ * gives the dialog that shows after the reload and the remote indicator's text while it shows.
+ */
+async function rebuiltWithoutDocker(
+  name: string,
+  command: string,
+): Promise<{dialog: ShownDialog; indicator: string}> {
+  await setUserSetting('dev.containers.dockerPath', '/nonexistent/docker');
+  try {
+    await reloadingCommand(name, command);
+    const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
+    return {dialog, indicator: (await statusItem(name, 'status.host')).text};
+  } finally {
+    await setUserSetting('dev.containers.dockerPath', undefined);
+  }
 }
 
 describe('the remaining Dev Containers gate rows (card containers-19)', function () {
@@ -222,6 +287,139 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       for (const folder of folders) {
         await removeContainers(folder);
       }
+    }
+  });
+  it('F-0405 AC-25 (b25): a rebuild whose Dockerfile fails shows F-0410’s dialog, leaves no container, and More Actions... offers its four items', async () => {
+    const folder = devContainerFolder('rebuild-fails', {
+      image: undefined,
+      build: {dockerfile: 'Dockerfile'},
+    });
+    const dockerfile = path.join(folder, '.devcontainer', 'Dockerfile');
+    const from = `FROM ${variable('HARNESS_DEVCONTAINER_IMAGE')}\n`;
+    writeFileSync(dockerfile, from);
+    try {
+      const name = await reopened(folder);
+      writeFileSync(dockerfile, `${from}RUN false\n`);
+      await reloadingCommand(name, 'remote-containers.rebuildContainer');
+      const dialog = await waitForDialog(name, DIALOG_MILLISECONDS);
+      const containers = await devContainersOf(folder);
+      await answerDialog(name, 'More Actions...');
+      const pick = await waitForQuickPick(name, 30_000);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          details: dialog.details,
+          buttons: recoveryButtonsOf(dialog),
+          containers,
+          items: pick.items,
+        },
+        {
+          details: S034,
+          buttons: RECOVERY_BUTTONS,
+          containers: [],
+          items: [
+            'Reload Window',
+            'Edit devcontainer.json Locally',
+            'Open Recent...',
+            'Open Documentation',
+          ],
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0405 AC-26 (b26): a rebuild with a docker that does not exist shows S339 with F-0410’s buttons, and the container keeps its id, a recorded deviation (athena on #939, remote-oss/remote-containers#123)', async () => {
+    const folder = devContainerFolder('rebuild-docker');
+    try {
+      const name = await reopened(folder);
+      const kept = await containerOf(folder);
+      const {dialog} = await rebuiltWithoutDocker(
+        name,
+        'remote-containers.rebuildContainer',
+      );
+      const containers = await devContainersOf(folder);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          details: dialog.details,
+          buttons: recoveryButtonsOf(dialog),
+          containers,
+        },
+        {details: S339, buttons: RECOVERY_BUTTONS, containers: [kept]},
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0201 AC-50 (b50): Rebuild Without Cache with a docker that does not exist shows S339 while the indicator says Opening Remote..., and the container keeps its id', async () => {
+    const folder = devContainerFolder('rebuild-docker-nocache');
+    try {
+      const name = await reopened(folder);
+      const kept = await containerOf(folder);
+      const {dialog, indicator} = await rebuiltWithoutDocker(
+        name,
+        'remote-containers.rebuildContainerNoCache',
+      );
+      const containers = await devContainersOf(folder);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          details: dialog.details,
+          buttons: recoveryButtonsOf(dialog),
+          indicator,
+          containers,
+        },
+        {
+          details: S339,
+          buttons: RECOVERY_BUTTONS,
+          indicator: 'Opening Remote...',
+          containers: [kept],
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0419 AC-9 (v9): with cacheVolume turned off, a reload keeps the mounted container, and a rebuild makes a new one without the vscode volume', async () => {
+    const folder = devContainerFolder('cache-toggle');
+    await setUserSetting('dev.containers.cacheVolume', true);
+    try {
+      const name = await reopened(folder);
+      const first = await containerOf(folder);
+      const mountedFirst = await vscodeMounted(first);
+      await setUserSetting('dev.containers.cacheVolume', false);
+      await reloadWindow(name);
+      const afterReload = await devContainersOf(folder);
+      const mountedAfterReload = await vscodeMounted(first);
+      await reloadingCommand(name, 'remote-containers.rebuildContainer');
+      let rebuilt = '';
+      await waitFor(
+        'the rebuild to make a new container',
+        async () => {
+          const containerIds = await devContainersOf(folder);
+          rebuilt = containerIds.find(each => each !== first) ?? '';
+          return rebuilt !== '' && containerIds.length === 1;
+        },
+        DIALOG_MILLISECONDS,
+      );
+      const mountedRebuilt = await vscodeMounted(rebuilt);
+      await closeWindow(name);
+      deepStrictEqual(
+        {mountedFirst, afterReload, mountedAfterReload, mountedRebuilt},
+        {
+          mountedFirst: true,
+          afterReload: [first],
+          mountedAfterReload: true,
+          mountedRebuilt: false,
+        },
+      );
+    } finally {
+      await setUserSetting('dev.containers.cacheVolume', undefined);
+      await removeContainers(folder);
     }
   });
 });
