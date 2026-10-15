@@ -45,7 +45,8 @@ function setup(
   } = {},
 ) {
   const calls: string[][] = [];
-  const stdinOf: Array<((write: (data: string) => void) => void) | undefined> = [];
+  const stdinOf: Array<((write: (data: string) => void) => void) | undefined> =
+    [];
   const written: string[] = [];
   const removed: string[] = [];
   const sink = new MemorySink();
@@ -112,7 +113,9 @@ describe('the CLI bridge (card containers-04)', () => {
   });
 
   it('F-0415 7.E6: up, run-user-commands and read-configuration hand their onStdin to the host', async () => {
-    const {bridge, stdinOf} = setup(ending('{"outcome":"success","result":"done"}'));
+    const {bridge, stdinOf} = setup(
+      ending('{"outcome":"success","result":"done"}'),
+    );
     function onStdin(): void {
       void 0;
     }
@@ -120,12 +123,15 @@ describe('the CLI bridge (card containers-04)', () => {
       bridge.up(TARGET, UP_OPTIONS, () => undefined, NEVER, onStdin),
       bridge.runUserCommands(TARGET, 'c1', () => undefined, NEVER, onStdin),
     ]);
-    await bridge.readConfiguration(TARGET, 'c1', () => undefined, NEVER, onStdin);
+    await bridge.readConfiguration(
+      TARGET,
+      'c1',
+      () => undefined,
+      NEVER,
+      onStdin,
+    );
     deepStrictEqual(
-      [
-        stdinOf.length,
-        stdinOf.every(each => each === onStdin),
-      ],
+      [stdinOf.length, stdinOf.every(each => each === onStdin)],
       [3, true],
     );
   });

@@ -1048,7 +1048,7 @@ export function cancelFolderDialog(name: string): Promise<void> {
 }
 
 /** The page's terminal text rows: the one terminal of the launches these helpers serve, xterm's visible rows. */
-const TERMINAL_ROWS = 'document.querySelector(\'.xterm-rows\')';
+const TERMINAL_ROWS = "document.querySelector('.xterm-rows')";
 
 /** Whether window `name` has a terminal on its page. */
 async function terminalPresent(name: string): Promise<boolean> {

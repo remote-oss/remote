@@ -10,10 +10,7 @@ import {
   variable,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
-import {
-  answerFolderDialog,
-  typeInTerminal,
-} from '../windows/renderer.ts';
+import {answerFolderDialog, typeInTerminal} from '../windows/renderer.ts';
 
 /** Resolves once `check` gives, every 500 ms, for up to `milliseconds`; a refusal at the end is thrown. */
 async function until(
@@ -36,7 +33,7 @@ async function until(
 describe('the input of the "Configuring..." terminal (issue #124)', function () {
   this.timeout(600_000);
 
-  it('F-0415 AC-36 (7.E6): the keys typed in the terminal reach the initializeCommand, which reads its answer', async () => {
+  it('F-0415 AC-36 (initcmd-input): the keys typed in the terminal reach the initializeCommand, which reads its answer', async () => {
     const answerFile = path.join(
       variable('HARNESS_RUN_FOLDER'),
       'initcmd-answer.txt',
@@ -56,8 +53,9 @@ describe('the input of the "Configuring..." terminal (issue #124)', function () 
     // with a Start line as long as the command: in the launch's small terminal the line wraps past the viewport,
     // so the row waits for the command's own process in the host's process list, which appears as the run starts.
     await until('the initializeCommand to run on the host', () =>
-      spawnSync('ps', ['-eo', 'args'], {encoding: 'utf8'})
-        .stdout.includes(`printf 'initcmd answer? ' && read -r a`),
+      spawnSync('ps', ['-eo', 'args'], {encoding: 'utf8'}).stdout.includes(
+        `printf 'initcmd answer? ' && read -r a`,
+      ),
     );
     await typeInTerminal(window, 'Y\n');
     await until('the initializeCommand to write its answer', () =>

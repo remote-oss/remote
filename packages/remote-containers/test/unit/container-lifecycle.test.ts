@@ -377,7 +377,10 @@ describe('containerLifecycleOf', () => {
       {
         steps: result.steps,
         outcome: result.outcome,
-        ups: result.bridge.ups.map(up => ({target: up.target, options: up.options})),
+        ups: result.bridge.ups.map(up => ({
+          target: up.target,
+          options: up.options,
+        })),
         runs: result.bridge.runs.map(run => run.containerId),
         lines: result.lines,
       },
@@ -1196,10 +1199,7 @@ describe('containerLifecycleOf', () => {
         (await prepared(scriptedEngine(EMPTY_LISTING), bridge)).presented,
       );
     }
-    deepStrictEqual(
-      results,
-      [['attach-stdin', 'ended'], ['attach-stdin']],
-    );
+    deepStrictEqual(results, [['attach-stdin', 'ended'], ['attach-stdin']]);
   });
 
   it('F-0415 AC-41: a cancel or another failure of up never ends the run', async () => {
@@ -1245,17 +1245,14 @@ describe('containerLifecycleOf', () => {
     await prepareAgain();
     settleFirst({kind: 'cancelled'});
     await settle();
-    deepStrictEqual(
-      calls,
-      [
-        'attach-stdin',
-        'started',
-        'attach-stdin',
-        'attach-stdin',
-        'started',
-        'attach-stdin',
-      ],
-    );
+    deepStrictEqual(calls, [
+      'attach-stdin',
+      'started',
+      'attach-stdin',
+      'attach-stdin',
+      'started',
+      'attach-stdin',
+    ]);
   });
 
   it('F-0415 AC-35: runStart is the clock at the start of prepare, in up and in the background', async () => {
@@ -1288,10 +1285,12 @@ describe('containerLifecycleOf', () => {
     );
     await settle();
     lifecycle.stopBackground();
-    deepStrictEqual(
-      calls,
-      ['attach-stdin', 'started', 'attach-stdin', 'ended'],
-    );
+    deepStrictEqual(calls, [
+      'attach-stdin',
+      'started',
+      'attach-stdin',
+      'ended',
+    ]);
   });
 
   it('F-0415 5.0 step 10: a stopped run that settles while a new prepare runs does not end the new run', async () => {
@@ -1311,17 +1310,14 @@ describe('containerLifecycleOf', () => {
     await settle();
     held.answer?.(UP);
     await second;
-    deepStrictEqual(
-      calls,
-      [
-        'attach-stdin',
-        'started',
-        'attach-stdin',
-        'ended',
-        'started',
-        'attach-stdin',
-      ],
-    );
+    deepStrictEqual(calls, [
+      'attach-stdin',
+      'started',
+      'attach-stdin',
+      'ended',
+      'started',
+      'attach-stdin',
+    ]);
   });
 
   it('F-0415 7.E6: up and run-user-commands hand their CLI stdin to the presenter, by its attachStdin', async () => {

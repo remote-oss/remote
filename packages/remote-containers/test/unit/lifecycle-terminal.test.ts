@@ -93,6 +93,15 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
     );
   });
 
+  /** A scene whose run has emitted the raw line `a\n` and captures every key its stdin writer would get. */
+  function stdinScene() {
+    const scene = sceneOf();
+    const delivered: string[] = [];
+    scene.presenter.output(eventOf('raw', 'a\n'), 0);
+    scene.attach(data => delivered.push(data));
+    return {scene, delivered};
+  }
+
   it('F-0415 AC-35: a start opens it too', () => {
     const scene = sceneOf();
     scene.presenter.output(eventOf('start', 'Run: x'), 40);
@@ -103,19 +112,13 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
   });
 
   it('F-0415 7.E6: a key of a run is echoed when printable and goes to the CLI stdin of the run', () => {
-    const scene = sceneOf();
-    const delivered: string[] = [];
-    scene.presenter.output(eventOf('raw', 'a\n'), 0);
-    scene.attach(data => delivered.push(data));
+    const {scene, delivered} = stdinScene();
     scene.typed('a');
     scene.typed('\u0003');
     deepStrictEqual(
       [scene.record.slice(1), delivered],
       [
-        [
-          `write ${JSON.stringify('a\r\n')}`,
-          `write ${JSON.stringify('a')}`,
-        ],
+        [`write ${JSON.stringify('a\r\n')}`, `write ${JSON.stringify('a')}`],
         ['a', '\u0003'],
       ],
     );
@@ -134,10 +137,7 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
   });
 
   it('F-0415 7.E6, AC-33: after the run has ended, a key closes the terminal and goes nowhere', () => {
-    const scene = sceneOf();
-    const delivered: string[] = [];
-    scene.presenter.output(eventOf('raw', 'a\n'), 0);
-    scene.attach(data => delivered.push(data));
+    const {scene, delivered} = stdinScene();
     scene.presenter.ended();
     scene.typed('x');
     deepStrictEqual(
