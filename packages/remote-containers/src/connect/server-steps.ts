@@ -197,6 +197,7 @@ function parametersOf(
       filePrefix: `remote-lock.${request.remoteUser}`,
     },
     environmentSetup: '',
+    installUmask: CONTAINERS_POLICY.installUmask,
     cleanup: CONTAINERS_POLICY.cleanup,
     start: {
       bindHost: '127.0.0.1',

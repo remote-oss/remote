@@ -9,6 +9,7 @@ const FIELD_NAMES: string[] = [
   'requirementsCheck',
   'allowedExtraStartOptions',
   'extensionEntries',
+  'installUmask',
   'cleanup',
   'installMode',
   'prefetch',
@@ -31,6 +32,8 @@ const KNOWN_EXTENSION_ENTRIES = new Set<string>([
   'identifiersOnly',
   'asWritten',
 ]);
+
+const KNOWN_INSTALL_UMASKS = new Set<string>(['inherit', '022']);
 
 const KNOWN_VERIFICATIONS = new Set<string>([
   'headerHash',
@@ -64,6 +67,7 @@ export function validatePolicyRecord(
     verification: readonly string[];
     allowedExtraStartOptions: readonly string[];
     extensionEntries: string;
+    installUmask: string;
     cleanup: {kind: string; count: number};
     prefetch: {
       kind: string;
@@ -123,6 +127,9 @@ export function validatePolicyRecord(
   });
   if (!KNOWN_EXTENSION_ENTRIES.has(asData.extensionEntries)) {
     problem('extensionEntries', 'invalid value');
+  }
+  if (!KNOWN_INSTALL_UMASKS.has(asData.installUmask)) {
+    problem('installUmask', 'invalid value');
   }
   const prefetch = asData.prefetch;
   if (prefetch.kind === 'onProductUpdate') {

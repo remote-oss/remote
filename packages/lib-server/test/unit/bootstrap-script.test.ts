@@ -13,6 +13,7 @@ import {
   readlinkSync,
   readFileSync,
   rmSync,
+  statSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -378,6 +379,42 @@ describe('the POSIX bootstrap script', () => {
       deepStrictEqual(
         existsSync(path.join(installFolder(host), 'bin', 'launcher')),
         true,
+      );
+    });
+
+    it('F-0419 AC-37: with installUmask 022, an install given umask 000 makes its folder 0755', () => {
+      runScript(
+        host,
+        single('install'),
+        {...parametersFor(), installUmask: '022'},
+        {rewriteScript: text => `umask 000\n${text}`},
+      );
+      deepStrictEqual(statSync(installFolder(host)).mode & 0o777, 0o755);
+    });
+
+    it('transport contracts 5.0: with installUmask inherit, the install keeps the umask it is given', () => {
+      runScript(
+        host,
+        single('install'),
+        {...parametersFor(), installUmask: 'inherit'},
+        {rewriteScript: text => `umask 000\n${text}`},
+      );
+      deepStrictEqual(statSync(installFolder(host)).mode & 0o777, 0o777);
+    });
+
+    it('transport contracts 5.0: the parameter block holds the umask, and the script sets it', () => {
+      const script = scriptFor(single('probe'), 'posixShell', {
+        ...parametersFor(),
+        installUmask: '022',
+      });
+      deepStrictEqual(
+        [
+          script.includes("INSTALL_UMASK='022'"),
+          script.includes(
+            '[ "$INSTALL_UMASK" = inherit ] || umask "$INSTALL_UMASK"',
+          ),
+        ],
+        [true, true],
       );
     });
 

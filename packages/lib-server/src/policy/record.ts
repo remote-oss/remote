@@ -17,6 +17,9 @@ export type RequirementsCheck =
 /** Whether a default extension entry reaches the server as written, or only when it is a `publisher.name` identifier. */
 export type ExtensionEntries = 'identifiersOnly' | 'asWritten';
 
+/** The umask the install and start scripts run under: the one the host gives them, or 022. */
+export type InstallUmask = 'inherit' | '022';
+
 /** An extra start option the record allows the extension to add. */
 export type ExtraStartOption = 'fileWatcherPolling' | 'useHostProxy';
 
@@ -49,6 +52,7 @@ export interface ServerPolicyRecord {
   requirementsCheck: RequirementsCheck;
   allowedExtraStartOptions: readonly ExtraStartOption[];
   extensionEntries: ExtensionEntries;
+  installUmask: InstallUmask;
   cleanup: Cleanup;
   installMode: InstallMode;
   prefetch: Prefetch;
