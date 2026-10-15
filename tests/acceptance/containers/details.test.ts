@@ -54,7 +54,6 @@ describe('the Details (Containers) view (card containers-33)', function () {
     await toggleRow(name, title, 'Volume mount');
     const mounts = await rows();
     const before = [await devContainersOf(folder), await dockerVolumes()];
-    const notified = await notificationCentre(name);
     await inWindow(name, 'remote-containers.explorerDetailsRefresh');
     await new Promise(resolve => setTimeout(resolve, 2000));
     deepStrictEqual(
@@ -82,7 +81,7 @@ describe('the Details (Containers) view (card containers-33)', function () {
           `3 Destination: /workspaces/${title}`,
         ],
         mounts,
-        notified,
+        [],
         before,
       ],
     );
