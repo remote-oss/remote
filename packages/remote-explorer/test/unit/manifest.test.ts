@@ -330,6 +330,12 @@ describe('the manifest of the Remote Explorer package', () => {
           kind: 'push',
         },
         {
+          id: 'remote-internal.sshHostsChanged',
+          role: 'served',
+          kind: 'push',
+          activates: false,
+        },
+        {
           id: 'remote-internal.getActiveSshRemote',
           role: 'called',
           kind: 'query',

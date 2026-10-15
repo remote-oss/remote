@@ -25,6 +25,14 @@
       "decision": "explorer brief 2026-10-13: increment 2"
     },
     {
+      "package": "remote-explorer",
+      "kind": "internalCommands",
+      "key": "sshHostsChanged",
+      "card": "#745",
+      "slice": "0.3 explorer increment 2",
+      "decision": "explorer brief 2026-10-13: increment 2"
+    },
+    {
       "package": "remote-ssh",
       "kind": "internalCommands",
       "key": "getSshFoldersHistory",
