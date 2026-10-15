@@ -988,18 +988,28 @@ async function pressStroke(
   }
 }
 
+/** The protocol virtual key codes of the keys the helpers press. */
+const VIRTUAL_KEY_CODES: Record<
+  'Enter' | 'Escape' | 'Backspace' | 'Delete',
+  number
+> = {
+  Enter: 13,
+  Escape: 27,
+  Backspace: 8,
+  Delete: 46,
+};
+
 /** Presses `key` in the page at protocol address `address`, as the keyboard does, with its key down and up. */
 async function pressKey(
   address: string,
   owner: string,
-  key: 'Enter' | 'Escape',
+  key: keyof typeof VIRTUAL_KEY_CODES,
 ): Promise<void> {
-  const virtualKeyCode = key === 'Enter' ? 13 : 27;
   await pressStroke(address, owner, {
     key,
     code: key,
-    windowsVirtualKeyCode: virtualKeyCode,
-    nativeVirtualKeyCode: virtualKeyCode,
+    windowsVirtualKeyCode: VIRTUAL_KEY_CODES[key],
+    nativeVirtualKeyCode: VIRTUAL_KEY_CODES[key],
     ...(key === 'Enter' ? {text: '\r'} : {}),
   });
 }
@@ -1057,7 +1067,8 @@ async function terminalPresent(name: string): Promise<boolean> {
 
 /**
  * Types `text` into window `name`, as the keyboard does, wherever its page has focus: a character at a time, `Enter`
- * for every newline. The callers arrange the focus, which a terminal takes when it opens.
+ * for a newline, `Backspace` for a DEL, and `Delete` for an ESC (the delete key's stroke begins with it). The callers
+ * arrange the focus, which a terminal takes when it opens.
  */
 export async function typeInTerminal(
   name: string,
@@ -1071,6 +1082,10 @@ export async function typeInTerminal(
   for (const character of text) {
     if (character === '\n') {
       await pressKey(address, name, 'Enter');
+    } else if (character === '\x7f') {
+      await pressKey(address, name, 'Backspace');
+    } else if (character === '\x1b') {
+      await pressKey(address, name, 'Delete');
     } else {
       await pressCharacter(address, name, character);
     }

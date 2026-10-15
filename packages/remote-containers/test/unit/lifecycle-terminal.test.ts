@@ -111,7 +111,92 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
     ]);
   });
 
-  it('F-0415 7.E6: a key of a run is echoed when printable and goes to the CLI stdin of the run', () => {
+  it('F-0415 7.E6: the printable keys of a run are echoed and held in the run line, which the child has not seen yet', () => {
+    const {scene, delivered} = stdinScene();
+    scene.typed('a');
+    scene.typed('b');
+    deepStrictEqual(
+      [scene.record.slice(1), delivered],
+      [
+        [
+          `write ${JSON.stringify('a\r\n')}`,
+          `write ${JSON.stringify('a')}`,
+          `write ${JSON.stringify('b')}`,
+        ],
+        [],
+      ],
+    );
+  });
+
+  it('F-0415 7.E6: Enter hands the run line, with its CR, to the run stdin, and the terminal shows the newline', () => {
+    const {scene, delivered} = stdinScene();
+    scene.typed('ab\r');
+    deepStrictEqual(delivered, ['ab\r']);
+    deepStrictEqual(scene.record.slice(1), [
+      `write ${JSON.stringify('a\r\n')}`,
+      `write ${JSON.stringify('a')}`,
+      `write ${JSON.stringify('b')}`,
+      `write ${JSON.stringify('\r\n')}`,
+    ]);
+  });
+
+  it('F-0415 7.E6: a backspace pops the run line and redisplay-erases its echo', () => {
+    const {scene, delivered} = stdinScene();
+    scene.typed('a');
+    scene.typed('b');
+    scene.typed('\x7f');
+    scene.typed('\r');
+    deepStrictEqual(
+      [scene.record.slice(1), delivered],
+      [
+        [
+          `write ${JSON.stringify('a\r\n')}`,
+          `write ${JSON.stringify('a')}`,
+          `write ${JSON.stringify('b')}`,
+          `write ${JSON.stringify('\u0008 \u0008')}`,
+          `write ${JSON.stringify('\r\n')}`,
+        ],
+        ['a\r'],
+      ],
+    );
+  });
+
+  it('F-0415 7.E6: a backspace on the empty run line redisplay-erases nothing and sends an empty line', () => {
+    const {scene, delivered} = stdinScene();
+    scene.typed('\x7f');
+    scene.typed('\r');
+    deepStrictEqual(
+      [scene.record, delivered],
+      [
+        [
+          'open Configuring...',
+          `write ${JSON.stringify('a\r\n')}`,
+          `write ${JSON.stringify('\r\n')}`,
+        ],
+        ['\r'],
+      ],
+    );
+  });
+
+  it('F-0415 7.E6: a forward delete sequence is swallowed, and its line still ends on Enter', () => {
+    const {scene, delivered} = stdinScene();
+    scene.typed('a');
+    scene.typed('\u001b[3~');
+    scene.typed('\r');
+    deepStrictEqual(
+      [scene.record.slice(1), delivered],
+      [
+        [
+          `write ${JSON.stringify('a\r\n')}`,
+          `write ${JSON.stringify('a')}`,
+          `write ${JSON.stringify('\r\n')}`,
+        ],
+        ['a\r'],
+      ],
+    );
+  });
+
+  it('F-0415 7.E6: a control key of a run, the Ctrl+C among them, goes raw to the run stdin at once', () => {
     const {scene, delivered} = stdinScene();
     scene.typed('a');
     scene.typed('\u0003');
@@ -119,11 +204,10 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
       [scene.record.slice(1), delivered],
       [
         [`write ${JSON.stringify('a\r\n')}`, `write ${JSON.stringify('a')}`],
-        ['a', '\u0003'],
+        ['\u0003'],
       ],
     );
   });
-
   it('F-0415 7.E6: a key with no run stdin is echoed and goes nowhere', () => {
     const scene = sceneOf();
     scene.presenter.output(eventOf('raw', 'a\n'), 0);
@@ -156,7 +240,7 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
     scene.presenter.backgroundStarted();
     scene.presenter.output(eventOf('raw', 'two\n'), 0);
     scene.attach(data => second.push(data));
-    scene.typed('y', 1);
+    scene.typed('y\r', 1);
     scene.typed('z', 0);
     deepStrictEqual(
       [
@@ -166,8 +250,12 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
         ),
       ],
       [
-        [[], ['y']],
-        [`write ${JSON.stringify('y')}`, 'close'],
+        [[], ['y\r']],
+        [
+          `write ${JSON.stringify('y')}`,
+          `write ${JSON.stringify('\r\n')}`,
+          'close',
+        ],
       ],
     );
   });

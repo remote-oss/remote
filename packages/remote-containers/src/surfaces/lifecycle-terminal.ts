@@ -51,6 +51,8 @@ interface Run {
   finished: boolean;
   /** The writer for the run's CLI stdin, when the run has one; a key typed in the run's terminal goes to it. */
   stdin: ((data: string) => void) | undefined;
+  /** The line the run's terminal is typing; Enter ends it and hands it, with its CR, to the run's stdin. */
+  line: string;
 }
 
 function newRun(): Run {
@@ -62,6 +64,7 @@ function newRun(): Run {
     hideProgress: undefined,
     finished: false,
     stdin: undefined,
+    line: '',
   };
 }
 
@@ -90,15 +93,56 @@ export function lifecyclePresenterOf(
           own.open = undefined;
           return;
         }
-        // A key of the run: the CLI's child reads its input from a pipe that does not echo, so the terminal echoes
-        // the printable keys, and the keys go to the run's CLI stdin, when the run has one.
+        // A key of the run. The CLI's child reads its input from a pipe that neither echoes nor edits, so the
+        // terminal takes the TTY driver's line jobs: it echoes the printable keys, it edits the run's line on
+        // backspace, and it hands the child the line as a whole when Enter ends it.
+        let afterEscape = false;
+        let inSequence = false;
         for (const character of data) {
           const code = character.codePointAt(0);
-          if (code !== undefined && code >= 0x20 && code !== 0x7f) {
-            own.open?.write(character);
+          if (code === undefined) {
+            continue;
           }
+          if (afterEscape) {
+            // The byte after an ESC opens a key sequence: its bytes go to the sequence's final byte.
+            afterEscape = false;
+            inSequence = true;
+            continue;
+          }
+          if (inSequence) {
+            // The rest of a key sequence, to its final byte.
+            if (code >= 0x40 && code <= 0x7e) {
+              inSequence = false;
+            }
+            continue;
+          }
+          if (code === 0x1b) {
+            // The start of a key sequence (the delete and the arrow keys): not the child's line input.
+            afterEscape = true;
+            continue;
+          }
+          if (code === 0x0d || code === 0x0a) {
+            own.open?.write('\r\n');
+            own.stdin?.(`${own.line}\r`);
+            own.line = '';
+            continue;
+          }
+          if (code === 0x7f || code === 0x08) {
+            // Backspace: the last character of the line comes off it, and its echo goes with it.
+            if (own.line.length > 0) {
+              own.line = own.line.slice(0, -1);
+              own.open?.write('\u0008 \u0008');
+            }
+            continue;
+          }
+          if (code >= 0x20) {
+            own.open?.write(character);
+            own.line += character;
+            continue;
+          }
+          // A control key of its own (a Ctrl+C of the run) reaches the child raw, as a pipe has no line discipline.
+          own.stdin?.(character);
         }
-        own.stdin?.(data);
       },
       () => {
         own.open = undefined;
