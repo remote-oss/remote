@@ -490,7 +490,7 @@ export async function reloadWindow(name: string): Promise<void> {
  * reload, before the connect is done. The command isn't awaited: the reload ends the extension host before it can
  * answer, as with `reloadWindow`. A row whose window never reaches its folder (a dialog instead) waits from here.
  */
-export async function reopenStarted(name: string): Promise<void> {
+async function reopenStarted(name: string): Promise<void> {
   const before = countOf(name, 'activated');
   send(name, 'remote-containers.reopenInContainer', []);
   await waitUntil(

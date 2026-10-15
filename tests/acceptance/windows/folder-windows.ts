@@ -1,21 +1,11 @@
 /**
- * @fileoverview What the Dev Containers rows share: a local window opened on a folder, a user setting changed and read
- * back, and the containers of a folder removed.
+ * @fileoverview What the Dev Containers rows share: a local window opened on a folder, and a user setting changed and
+ * read back.
  */
 
-import {execFile} from 'node:child_process';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {promisify} from 'node:util';
-import {
-  devContainersOf,
-  inWindow,
-  settingIn,
-  waitFor,
-  windowEvents,
-} from './harness.ts';
-
-const execFileAsync = promisify(execFile);
+import {inWindow, settingIn, waitFor, windowEvents} from './harness.ts';
 
 /** How many times window `name` has activated its agent. */
 export function activations(name: string): number {
@@ -52,12 +42,4 @@ export async function setUserSetting(
       JSON.stringify(value ?? null),
     30_000,
   );
-}
-
-/** Removes every container of the run made for `folder`. */
-export async function removeContainers(folder: string): Promise<void> {
-  const containerIds = await devContainersOf(folder);
-  if (containerIds.length > 0) {
-    await execFileAsync('docker', ['rm', '-f', ...containerIds]);
-  }
 }
