@@ -357,6 +357,121 @@ export async function titleAction(
   );
 }
 
+/** What a row of a view shows beyond its text: its icon and the accessible label that carries its tooltip. */
+export interface RowDetails {
+  label: string;
+  description: string;
+  /** The tooltip core gives a screen reader: the row's label, description and state. */
+  ariaLabel: string;
+  /** The codicon of the row (`vm-running`), or the file name of its own icon (`vm-active.svg`). */
+  icon: string;
+}
+
+/** The rows of view `viewName` in window `name` with their icons and accessible labels; `undefined` when no pane has the view. */
+export async function rowDetails(
+  name: string,
+  viewName: string,
+): Promise<RowDetails[] | undefined> {
+  return (
+    (await evaluate<RowDetails[] | null>(
+      name,
+      `(() => {
+      const pane = ${paneExpression(viewName)};
+      if (pane === undefined) {
+        return null;
+      }
+      return [...pane.querySelectorAll('[role="treeitem"]')].map(row => {
+        const icon = row.querySelector('.custom-view-tree-node-item-icon');
+        const image = icon?.style.backgroundImage.match(/([^/]+\\.svg)/)?.[1];
+        const codicon = [...(icon?.classList ?? [])].find(each => each.startsWith('codicon-') && each !== 'codicon-colored');
+        return {
+          label: row.querySelector('.label-name')?.textContent ?? '',
+          description: row.querySelector('.label-description')?.textContent ?? '',
+          ariaLabel: row.getAttribute('aria-label') ?? '',
+          icon: image ?? codicon?.slice('codicon-'.length) ?? '',
+        };
+      });
+    })()`,
+    )) ?? undefined
+  );
+}
+
+/** The welcome text view `viewName` shows in window `name`, with its links as their words; `undefined` when it shows none. */
+export async function welcomeText(
+  name: string,
+  viewName: string,
+): Promise<string | undefined> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `(() => {
+      const pane = ${paneExpression(viewName)};
+      return pane?.querySelector('.welcome-view-content')?.textContent ?? null;
+    })()`,
+    )) ?? undefined
+  );
+}
+
+/** Clicks the link of the welcome text of view `viewName` whose words are `linkText`; it fails naming what it did not find. */
+export async function welcomeLink(
+  name: string,
+  viewName: string,
+  linkText: string,
+): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const pane = ${paneExpression(viewName)};
+      if (pane === undefined) {
+        return 'no view ' + ${JSON.stringify(viewName)};
+      }
+      const links = [...pane.querySelectorAll('.welcome-view-content a')];
+      const link = links.find(each => each.textContent === ${JSON.stringify(linkText)});
+      if (link === undefined) {
+        return 'no link ' + ${JSON.stringify(JSON.stringify(linkText))} + ' among ' + JSON.stringify(links.map(each => each.textContent));
+      }
+      link.click();
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}, view ${viewName}: ${missing}`);
+  }
+}
+
+/** The options of the Remote Explorer's "Switch Remote" dropdown of window `name`, in order. */
+export async function remoteExplorerOptions(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `[...document.querySelectorAll('select[aria-label="Switch Remote"] option')].map(each => each.textContent ?? '')`,
+  );
+}
+
+/** Chooses `option` in the "Switch Remote" dropdown of window `name`, as a user's choice. */
+export async function selectRemote(
+  name: string,
+  option: string,
+): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const select = document.querySelector('select[aria-label="Switch Remote"]');
+      if (select === null) {
+        return 'no Switch Remote dropdown';
+      }
+      select.value = ${JSON.stringify(option)};
+      if (select.value !== ${JSON.stringify(option)}) {
+        return 'no option ' + ${JSON.stringify(JSON.stringify(option))};
+      }
+      select.dispatchEvent(new Event('change', {bubbles: true}));
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
+}
+
 /** The box of core's open dialog, and its buttons inside it ([oss] `src/vs/base/browser/ui/dialog/dialog.ts`). */
 const DIALOG_BOX = '.monaco-dialog-box';
 

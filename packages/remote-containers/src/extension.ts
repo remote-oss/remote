@@ -44,7 +44,7 @@ import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
 import {rebuildContainer} from './open/rebuild.ts';
 import {reopenInContainer} from './open/reopen.ts';
 import {
-  showTargets,
+  showTargetsWhenRegistered,
   type TargetsNode,
   type TargetsView,
   type TreeItemSpec,
@@ -591,7 +591,7 @@ export async function activate(
         logger,
       },
     );
-    targetsView = await showTargets({
+    targetsView = showTargetsWhenRegistered({
       editor: {
         commandIds: () => vscode.commands.getCommands(true),
         setContext: (key, value) =>
@@ -639,6 +639,8 @@ export async function activate(
           () => false,
         ),
       now: Date.now,
+      setTimer: (milliseconds, callback) =>
+        served.preflight.setTimer(milliseconds, callback),
       translate,
       logger,
     });

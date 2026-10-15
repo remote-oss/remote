@@ -171,6 +171,9 @@
     },
     {
       "path": "tests/acceptance/containers-volume"
+    },
+    {
+      "path": "tests/acceptance/containers-explorer"
     }
   ]
 }

@@ -519,6 +519,14 @@ export async function reopenInContainer(
   milliseconds = 300_000,
 ): Promise<void> {
   await reopenStarted(name);
+  await connectedToContainer(name, milliseconds);
+}
+
+/** Resolves once window `name` is connected to its container: it reads its workspace folder through the container's file system. */
+export async function connectedToContainer(
+  name: string,
+  milliseconds = 300_000,
+): Promise<void> {
   await waitFor(
     `window ${name} to connect to its container`,
     async () => {
