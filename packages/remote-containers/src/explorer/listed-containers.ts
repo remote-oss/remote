@@ -39,7 +39,7 @@ export function inspectArguments(containerIds: readonly string[]): string[] {
 }
 
 /** An object's own property as a record, or none for anything else. */
-function recordOf(value: unknown): Record<string, unknown> | undefined {
+export function recordOf(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
@@ -55,7 +55,7 @@ function timeOf(value: unknown): number | undefined {
 }
 
 /** The labels whose values are text; none for a container with no labels. */
-function labelsOf(value: unknown): Record<string, string> {
+export function labelsOf(value: unknown): Record<string, string> {
   return Object.fromEntries(
     Object.entries(recordOf(value) ?? {}).filter(
       (entry): entry is [string, string] => typeof entry[1] === 'string',

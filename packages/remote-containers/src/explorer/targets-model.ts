@@ -91,7 +91,7 @@ const STATE_TOKENS: readonly string[] = [
 const LABEL_COLLATOR = new Intl.Collator('en');
 
 /** The last segment of a folder label's value with its trailing slashes dropped (BR-3 on a Linux UI); the value when nothing is left. */
-function folderNameOf(value: string): string {
+export function folderNameOf(value: string): string {
   const trimmed = value.replace(/\/+$/, '');
   return trimmed.slice(trimmed.lastIndexOf('/') + 1) || value;
 }

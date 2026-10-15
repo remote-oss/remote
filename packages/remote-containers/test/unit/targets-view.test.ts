@@ -6,9 +6,9 @@ import type {
   EngineHost,
   EngineRunOutcome,
 } from '../../src/engine/engine-host.ts';
+import {sharedContainerEvents} from '../../src/explorer/targets-events.ts';
 import {
-  REGISTRATION_POLL_MILLISECONDS,
-  REGISTRATION_POLLS,
+  engineOfWindow,
   showTargets,
   showTargetsWhenRegistered,
   specOf,
@@ -18,6 +18,10 @@ import {
   type TargetsViewPorts,
 } from '../../src/explorer/targets-view.ts';
 import {views} from '../../src/identifiers.generated.ts';
+import {
+  REGISTRATION_POLL_MILLISECONDS,
+  REGISTRATION_POLLS,
+} from '../../src/explorer/when-registered.ts';
 import type {TargetRow} from '../../src/explorer/targets-model.ts';
 import {fakeEngine, type FakeEngine} from './fake-engine.ts';
 import {pendingOf, settled} from './pending.ts';
@@ -161,7 +165,7 @@ function engineOf(scene: Scene, name: string): EngineHost {
 }
 
 function portsOf(scene: Scene): TargetsViewPorts {
-  return {
+  const ports: Omit<TargetsViewPorts, 'events'> = {
     editor: {
       commandIds: () =>
         scene.commandFailure === undefined
@@ -220,6 +224,14 @@ function portsOf(scene: Scene): TargetsViewPorts {
     },
     translate: template => template,
     logger: createLogger(scene.sink, {minimumLevel: () => 'info'}),
+  };
+  return {
+    ...ports,
+    events: sharedContainerEvents({
+      engine: () => engineOfWindow(ports, scene.held),
+      setTimer: ports.setTimer,
+      logger: ports.logger,
+    }),
   };
 }
 

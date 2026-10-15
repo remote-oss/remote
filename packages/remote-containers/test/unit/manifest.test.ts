@@ -42,6 +42,10 @@ const REBUILD_COMMANDS = [
     command: 'remote-containers.rebuildContainer',
     title: '%commands.Rebuildcontainer.title%',
     category: 'Dev Containers',
+    icon: {
+      light: 'resources/light/tools.svg',
+      dark: 'resources/dark/tools.svg',
+    },
   },
   {
     command: 'remote-containers.rebuildContainerNoCache',
@@ -87,6 +91,12 @@ const WELCOME_TEXTS = {
 const TARGETS_TITLE_WHEN =
   'view == targetsContainers && !remote-containers:needsDockerStartOrInstall && !remote-containers:noContainersWithFolder && !remote-containers:noContainersWithoutFolder && !remote-containers:standingDown';
 
+const DETAILS_TITLE_WHEN =
+  'view == detailsContainers && !remote-containers:standingDown';
+
+const DETAILS_REBUILD_WHEN =
+  '!hideRebuildCommands && view == detailsContainers && remoteName == dev-container && !remote-containers:standingDown';
+
 const ENGLISH = {
   description:
     'Develop inside a container that carries its own toolchain, so each project brings its environment with it.',
@@ -99,6 +109,8 @@ const ENGLISH = {
     'Rebuild Container Without Cache',
   'commands.explorerTargetsRefresh.title': 'Refresh',
   'views.targetsContainers.name': 'Dev Containers',
+  'commands.explorerDetailsRefresh.title': 'Refresh',
+  'views.detailsContainers.name': 'Details (Containers)',
   ...WELCOME_TEXTS,
   'commands.Rebuildandreopenincontainer.title':
     'Rebuild and Reopen in Container',
@@ -234,6 +246,15 @@ describe('the manifest', () => {
               dark: 'resources/dark/refresh.svg',
             },
           },
+          {
+            command: 'remote-containers.explorerDetailsRefresh',
+            title: '%commands.explorerDetailsRefresh.title%',
+            category: 'Dev Containers',
+            icon: {
+              light: 'resources/light/refresh.svg',
+              dark: 'resources/dark/refresh.svg',
+            },
+          },
         ],
         menus: {
           commandPalette: [
@@ -261,12 +282,26 @@ describe('the manifest', () => {
               command: 'remote-containers.explorerTargetsRefresh',
               when: 'false',
             },
+            {
+              command: 'remote-containers.explorerDetailsRefresh',
+              when: 'false',
+            },
           ],
           'view/title': [
             {
               command: 'remote-containers.explorerTargetsRefresh',
               group: 'navigation@3',
               when: TARGETS_TITLE_WHEN,
+            },
+            {
+              command: 'remote-containers.rebuildContainer',
+              group: 'navigation@6',
+              when: DETAILS_REBUILD_WHEN,
+            },
+            {
+              command: 'remote-containers.explorerDetailsRefresh',
+              group: 'navigation@4',
+              when: DETAILS_TITLE_WHEN,
             },
           ],
           'view/item/context': [
@@ -308,6 +343,13 @@ describe('the manifest', () => {
                 'k8s-container',
                 'apple-container',
               ],
+            },
+            {
+              id: 'detailsContainers',
+              name: '%views.detailsContainers.name%',
+              group: 'details@1',
+              when: '!hideConnectCommands && remote-containers:showDetails',
+              remoteName: ['dev-container', 'attached-container'],
             },
           ],
         },
@@ -592,7 +634,13 @@ describe('the manifest', () => {
             when: REBUILD_WHEN,
           },
         ],
-        'view/title': [],
+        'view/title': [
+          {
+            command: 'remote-containers.rebuildContainer',
+            group: 'navigation@6',
+            when: DETAILS_REBUILD_WHEN,
+          },
+        ],
         'view/item/context': [
           {
             command: 'remote-containers.rebuildContainer',
@@ -641,7 +689,7 @@ describe('the manifest', () => {
       [
         views.targetsContainers,
         Object.keys(VIEW_PARTS.views),
-        VIEW_PARTS.views.remote,
+        VIEW_PARTS.views.remote?.slice(0, 1),
       ],
       [
         'targetsContainers',
@@ -703,7 +751,7 @@ describe('the manifest', () => {
         clauses.every(clause => clause.endsWith(` && ${STANDING_DOWN}`)),
         JSON.stringify(VIEW_PARTS.views).includes('standingDown'),
       ],
-      [6, true, false],
+      [8, true, false],
     );
   });
 
@@ -713,7 +761,7 @@ describe('the manifest', () => {
         VIEW_PARTS.menus.commandPalette?.find(
           entry => entry.command === 'remote-containers.explorerTargetsRefresh',
         ),
-        VIEW_PARTS.menus['view/title'],
+        VIEW_PARTS.menus['view/title']?.slice(0, 1),
       ],
       [
         {command: 'remote-containers.explorerTargetsRefresh', when: 'false'},
@@ -724,6 +772,44 @@ describe('the manifest', () => {
             when: TARGETS_TITLE_WHEN,
           },
         ],
+      ],
+    );
+  });
+
+  it('F-0903 3.3: the Details view is in the remote container with the reference group, clause and remote names and no stand-down clause, its Refresh is out of the palette, and the toolbar has Rebuild then Refresh with the stand-down clause', () => {
+    deepStrictEqual(
+      [
+        views.detailsContainers,
+        VIEW_PARTS.views.remote?.[1],
+        VIEW_PARTS.menus.commandPalette?.find(
+          entry => entry.command === 'remote-containers.explorerDetailsRefresh',
+        ),
+        VIEW_PARTS.menus['view/title']?.slice(1),
+        ENGLISH['views.detailsContainers.name'],
+      ],
+      [
+        'detailsContainers',
+        {
+          id: 'detailsContainers',
+          name: '%views.detailsContainers.name%',
+          group: 'details@1',
+          when: '!hideConnectCommands && remote-containers:showDetails',
+          remoteName: ['dev-container', 'attached-container'],
+        },
+        {command: 'remote-containers.explorerDetailsRefresh', when: 'false'},
+        [
+          {
+            command: 'remote-containers.rebuildContainer',
+            group: 'navigation@6',
+            when: DETAILS_REBUILD_WHEN,
+          },
+          {
+            command: 'remote-containers.explorerDetailsRefresh',
+            group: 'navigation@4',
+            when: DETAILS_TITLE_WHEN,
+          },
+        ],
+        'Details (Containers)',
       ],
     );
   });
@@ -790,6 +876,7 @@ describe('the manifest', () => {
           id: 'remote-containers:noContainersWithoutFolder',
           setter: 'extension',
         },
+        {id: 'remote-containers:showDetails', setter: 'extension'},
       ],
       infoLineCommands: [],
       runtimeCommands: [

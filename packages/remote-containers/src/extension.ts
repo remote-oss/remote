@@ -44,8 +44,13 @@ import {openPendingEdit, storePendingEdit} from './open/pending-edit.ts';
 import {rebuildContainer} from './open/rebuild.ts';
 import {reopenHandlersOf} from './open/reopen.ts';
 import {
+  type DetailsView,
+  showDetailsWhenRegistered,
+} from './explorer/details-view.ts';
+import {sharedContainerEvents} from './explorer/targets-events.ts';
+import {
+  engineOfWindow,
   showTargetsWhenRegistered,
-  type TargetsNode,
   type TargetsView,
   type TreeItemSpec,
 } from './explorer/targets-view.ts';
@@ -92,6 +97,51 @@ function windowFolders(): Array<{scheme: string; fsPath: string}> {
 
 function translate(template: string): string {
   return vscode.l10n.t(template);
+}
+
+/** What the editor asks of a tree whose nodes are `Node`. */
+interface TreeProvider<Node> {
+  onDidChangeTreeData(listener: () => void): {dispose(): void};
+  getChildren(node: Node | undefined): Promise<readonly Node[]>;
+  getTreeItem(node: Node): TreeItemSpec;
+}
+
+/**
+ * The tree view of the editor for `provider`, with each node's item made from what the provider says of it. Its title
+ * is set through a cast, since exact optional types do not let a plain assignment give back the registered name with
+ * none.
+ */
+function treeViewOf<Node>(
+  viewId: string,
+  provider: TreeProvider<Node>,
+  extensionUri: vscode.Uri,
+) {
+  const emitter = new vscode.EventEmitter<undefined>();
+  const subscription = provider.onDidChangeTreeData(() => {
+    emitter.fire(undefined);
+  });
+  const treeView = vscode.window.createTreeView<Node>(viewId, {
+    treeDataProvider: {
+      onDidChangeTreeData: emitter.event,
+      getChildren: async node => [...(await provider.getChildren(node))],
+      getTreeItem: node => treeItemOf(provider.getTreeItem(node), extensionUri),
+    },
+    showCollapseAll: false,
+  });
+  return {
+    onDidChangeVisibility: (listener: (visible: boolean) => void) =>
+      treeView.onDidChangeVisibility(event => {
+        listener(event.visible);
+      }),
+    setTitle: (title: string | undefined) => {
+      (treeView as {title: string | undefined}).title = title;
+    },
+    dispose: () => {
+      treeView.dispose();
+      subscription.dispose();
+      emitter.dispose();
+    },
+  };
 }
 
 /** The editor's tree item for what the view says of a node; the package's own icons are in its `resources`. */
@@ -196,6 +246,7 @@ export async function activate(
   );
   let logChannel: vscode.OutputChannel | undefined;
   let targetsView: TargetsView | undefined;
+  let detailsView: DetailsView | undefined;
   function bridgeFor(
     environment: Readonly<Record<string, string | undefined>>,
     logger: Logger,
@@ -417,6 +468,7 @@ export async function activate(
         rebuildContainer: {execute: rebuildHandler(false)},
         rebuildContainerNoCache: {execute: rebuildHandler(true)},
         explorerTargetsRefresh: {execute: () => targetsView?.refresh()},
+        explorerDetailsRefresh: {execute: () => detailsView?.refresh()},
       };
     },
   });
@@ -591,48 +643,33 @@ export async function activate(
         logger,
       },
     );
-    targetsView = showTargetsWhenRegistered({
-      editor: {
-        commandIds: () => vscode.commands.getCommands(true),
-        setContext: (key, value) =>
-          vscode.commands.executeCommand('setContext', key, value),
-        createTreeView: (viewId, provider) => {
-          const emitter = new vscode.EventEmitter<undefined>();
-          const subscription = provider.onDidChangeTreeData(() => {
-            emitter.fire(undefined);
-          });
-          const treeView = vscode.window.createTreeView<TargetsNode>(viewId, {
-            treeDataProvider: {
-              onDidChangeTreeData: emitter.event,
-              getChildren: async node => [
-                ...(await provider.getChildren(node)),
-              ],
-              getTreeItem: node =>
-                treeItemOf(provider.getTreeItem(node), context.extensionUri),
-            },
-            showCollapseAll: false,
-          });
-          return {
-            onDidChangeVisibility: listener =>
-              treeView.onDidChangeVisibility(event => {
-                listener(event.visible);
-              }),
-            dispose: () => {
-              treeView.dispose();
-              subscription.dispose();
-              emitter.dispose();
-            },
-          };
-        },
-      },
-      held: () => connector.heldConnection(),
+    const explorerEditor = {
+      commandIds: () => vscode.commands.getCommands(true),
+      setContext: (key: string, value: boolean) =>
+        vscode.commands.executeCommand('setContext', key, value),
+      createTreeView: <Node>(viewId: string, provider: TreeProvider<Node>) =>
+        treeViewOf(viewId, provider, context.extensionUri),
+    };
+    const windowEngine = {
       dockerPath: () =>
         vscode.workspace.getConfiguration().get(settings.dockerPath.id),
       folders: () =>
         (vscode.workspace.workspaceFolders ?? []).map(
           folder => folder.uri.fsPath,
         ),
-      engineFor: file => served.preflight.engineFor(file),
+      engineFor: (file: string) => served.preflight.engineFor(file),
+    };
+    const containerEvents = sharedContainerEvents({
+      engine: () => engineOfWindow(windowEngine, connector.heldConnection()),
+      setTimer: (milliseconds, callback) =>
+        served.preflight.setTimer(milliseconds, callback),
+      logger,
+    });
+    targetsView = showTargetsWhenRegistered({
+      editor: explorerEditor,
+      held: () => connector.heldConnection(),
+      ...windowEngine,
+      events: containerEvents,
       exists: file =>
         Promise.resolve(vscode.workspace.fs.stat(vscode.Uri.file(file))).then(
           () => true,
@@ -650,10 +687,25 @@ export async function activate(
       translate,
       logger,
     });
+    detailsView = showDetailsWhenRegistered({
+      editor: explorerEditor,
+      held: () => connector.heldConnection(),
+      onHeldChanged: listener => connector.onHeldChanged(listener),
+      events: containerEvents,
+      setTimer: (milliseconds, callback) =>
+        served.preflight.setTimer(milliseconds, callback),
+      translate,
+      logger,
+    });
     context.subscriptions.push(
       {
         dispose: () => {
           targetsView?.dispose();
+        },
+      },
+      {
+        dispose: () => {
+          detailsView?.dispose();
         },
       },
       {

@@ -93,6 +93,8 @@ export interface ContainerConnector extends Connector {
   heldIdentity(): WindowIdentity | undefined;
   /** The connection the window holds; nothing before the first connect, and nothing once it is given back. */
   heldConnection(): HeldConnection | undefined;
+  /** Calls the listener when the connection the window holds is made or given back; gives the way to stop listening. */
+  onHeldChanged(listener: () => void): () => void;
   /** The local path a URI of this window's container folder stands for; nothing otherwise. */
   canonicalPathOf(authority: string, path: string): Promise<string | undefined>;
 }
@@ -275,6 +277,7 @@ export function containerConnectorOf(
   const phases = subscribers<[ConnectPhase]>();
   const lost = subscribers<[]>();
   const closed = subscribers<[]>();
+  const heldChanges = subscribers<[]>();
   let running: AbortController | undefined;
   let lifecycle: ContainerLifecycle | undefined;
   let held: Held | undefined;
@@ -286,7 +289,10 @@ export function containerConnectorOf(
   function releaseHeld(): void {
     const current = held;
     held = undefined;
-    current?.relay.close();
+    if (current !== undefined) {
+      current.relay.close();
+      heldChanges.tell();
+    }
   }
 
   /** Tells whether the transport of `connection` is still good, after one of its relayed connections ended. */
@@ -724,6 +730,7 @@ export function containerConnectorOf(
     };
     const connection = held;
     owner.connection = connection;
+    heldChanges.tell();
     relay.onClosed(() => {
       if (held === connection) {
         lost.tell();
@@ -787,6 +794,7 @@ export function containerConnectorOf(
             engine: held.engine,
           },
     canonicalPathOf,
+    onHeldChanged: listener => heldChanges.subscribe(listener),
     onPhase: listener => phases.subscribe(listener),
     onTransportLost: listener => lost.subscribe(listener),
     onTransportClosed: listener => closed.subscribe(listener),

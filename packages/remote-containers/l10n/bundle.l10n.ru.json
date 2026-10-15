@@ -71,5 +71,15 @@
   "{0} seconds": "{0} seconds",
   "{0} second": "{0} second",
   "{0} years": "{0} years",
-  "{0} year": "{0} year"
+  "{0} year": "{0} year",
+  "Attributes": "Attributes",
+  "Bind mount": "Bind mount",
+  "Configuration": "Configuration",
+  "Destination": "Destination",
+  "Image": "Image",
+  "Mounts": "Mounts",
+  "Name": "Name",
+  "Source": "Source",
+  "Volume": "Volume",
+  "Volume mount": "Volume mount"
 }
