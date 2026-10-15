@@ -64,6 +64,11 @@ export interface LifecyclePresenter {
   backgroundStarted(): void;
   /** The run has ended: the progress entry hides, and an open terminal writes its last line and closes on the next key. */
   ended(): void;
+  /**
+   * A CLI run has started with its stdin; the run's terminal takes the writer, so the keys typed in it reach the
+   * CLI and, from it, a lifecycle command's input.
+   */
+  attachStdin(write: (data: string) => void): void;
 }
 
 /** Finds or creates the container of a folder. */
@@ -267,7 +272,14 @@ export function containerLifecycleOf(dependencies: {
     stage = 'running';
     presenter.backgroundStarted();
     void bridge
-      .runUserCommands(target, containerId, onCliEvent, own.signal)
+      .runUserCommands(
+        target,
+        containerId,
+        onCliEvent,
+        own.signal,
+        // eslint-disable-next-line @typescript-eslint/unbound-method -- the presenter's method holds no this
+        presenter.attachStdin,
+      )
       .then(result => {
         if (background === own && !own.signal.aborted) {
           end();
@@ -363,6 +375,8 @@ export function containerLifecycleOf(dependencies: {
       },
       relayEvent,
       cancellation,
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- the presenter's method holds no this
+      presenter.attachStdin,
     );
     if (upResult.kind !== 'up') {
       if (

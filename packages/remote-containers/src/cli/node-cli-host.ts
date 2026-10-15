@@ -40,14 +40,19 @@ export function nodeCliHost(
 
   return {
     // eslint-disable-next-line id-length -- the port's method is named run
-    run: async (cliArguments, onLine, cancellation): Promise<CliRun> => {
+    run: async (
+      cliArguments: readonly string[],
+      onLine: (line: CliLine) => void,
+      cancellation: AbortSignal,
+      onStdin?: (write: (data: string) => void) => void,
+    ): Promise<CliRun> => {
       const spawned = await ports.spawn(
         paths.node,
         ['--require', paths.preload, paths.entry, ...cliArguments],
         {
           shell: false,
           detached: true,
-          stdio: ['ignore', 'pipe', 'pipe'],
+          stdio: ['pipe', 'pipe', 'pipe'],
           env: {...editorEnvironment, ELECTRON_RUN_AS_NODE: '1'},
         },
       );
@@ -55,6 +60,23 @@ export function nodeCliHost(
         return {kind: 'spawnFailed', message: spawned.message};
       }
       const {process} = spawned;
+      if (onStdin !== undefined) {
+        // The CLI's stdin is a pipe, not a TTY: it does not turn an Enter's CR into the LF a reading shell waits
+        // for, so the host does what the TTY driver would.
+        function deliver(data: string): void {
+          const stdin = process.stdin;
+          if (stdin.destroyed) {
+            return;
+          }
+          try {
+            stdin.write(data.replace(/\r/gu, '\n'));
+          } catch {
+            // The CLI ended between the check and the write: nothing to deliver.
+          }
+        }
+        process.stdin.on('error', () => undefined);
+        onStdin(deliver);
+      }
       let result: string | undefined;
       function lineOf(
         stream: CliLine['stream'],

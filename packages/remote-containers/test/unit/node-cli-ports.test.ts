@@ -4,7 +4,7 @@ import {systemCliPorts} from '../../src/cli/node-cli-ports.ts';
 const OPTIONS: Parameters<typeof systemCliPorts.spawn>[2] = {
   shell: false,
   detached: true,
-  stdio: ['ignore', 'pipe', 'pipe'],
+  stdio: ['pipe', 'pipe', 'pipe'],
   env: process.env,
 };
 

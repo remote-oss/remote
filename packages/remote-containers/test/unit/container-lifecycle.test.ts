@@ -151,8 +151,16 @@ function scriptedEngine(
 }
 
 interface FakeBridge extends CliBridge {
-  ups: Array<{target: CliTarget; options: UpOptions}>;
-  runs: Array<{containerId: string; signal: AbortSignal}>;
+  ups: Array<{
+    target: CliTarget;
+    options: UpOptions;
+    stdin: ((write: (data: string) => void) => void) | undefined;
+  }>;
+  runs: Array<{
+    containerId: string;
+    signal: AbortSignal;
+    stdin: ((write: (data: string) => void) => void) | undefined;
+  }>;
   upResult: UpResult;
   runResult: Promise<RunUserCommandsResult>;
   /** The events `up` and `run-user-commands` print, before they answer. */
@@ -168,13 +176,15 @@ function fakeBridge(): FakeBridge {
     runResult: Promise.resolve({kind: 'done'}),
     upEvents: [],
     runEvents: [],
-    up: (target, options, onEvent) => {
-      bridge.ups.push({target, options});
+    up: (target, options, onEvent, signal, onStdin) => {
+      bridge.ups.push({target, options, stdin: onStdin});
+      onStdin?.(() => undefined);
       bridge.upEvents.forEach(onEvent);
       return Promise.resolve(bridge.upResult);
     },
-    runUserCommands: (target, containerId, onEvent, signal) => {
-      bridge.runs.push({containerId, signal});
+    runUserCommands: (target, containerId, onEvent, signal, onStdin) => {
+      bridge.runs.push({containerId, signal, stdin: onStdin});
+      onStdin?.(() => undefined);
       bridge.runEvents.forEach(onEvent);
       return bridge.runResult;
     },
@@ -194,11 +204,14 @@ async function settle(): Promise<void> {
 /** A presenter that records what it is told, in order. */
 function recordingPresenter(): {
   calls: string[];
+  writers: Array<(data: string) => void>;
   presenter: LifecyclePresenter;
 } {
   const calls: string[] = [];
+  const writers: Array<(data: string) => void> = [];
   return {
     calls,
+    writers,
     presenter: {
       output: (event, runStart) => {
         calls.push(
@@ -211,6 +224,10 @@ function recordingPresenter(): {
       ended: () => {
         calls.push('ended');
       },
+      attachStdin: write => {
+        calls.push('attach-stdin');
+        writers.push(write);
+      },
     },
   };
 }
@@ -221,11 +238,13 @@ function lifecycleOver(
   clock: () => number = () => 0,
 ): {
   calls: string[];
+  presenter: LifecyclePresenter;
   lifecycle: ReturnType<typeof containerLifecycleOf>;
 } {
   const {calls, presenter} = recordingPresenter();
   return {
     calls,
+    presenter,
     lifecycle: containerLifecycleOf({
       engine: scriptedEngine(EMPTY_LISTING),
       cli: bridge,
@@ -358,7 +377,10 @@ describe('containerLifecycleOf', () => {
       {
         steps: result.steps,
         outcome: result.outcome,
-        ups: result.bridge.ups,
+        ups: result.bridge.ups.map(up => ({
+          target: up.target,
+          options: up.options,
+        })),
         runs: result.bridge.runs.map(run => run.containerId),
         lines: result.lines,
       },
@@ -1129,7 +1151,7 @@ describe('containerLifecycleOf', () => {
     ];
     const result = await prepared(scriptedEngine(EMPTY_LISTING), bridge);
     deepStrictEqual(
-      [result.presented.slice(0, 1), result.events.length],
+      [result.presented.slice(1, 2), result.events.length],
       [['output raw on-create from 5000'], 2],
     );
   });
@@ -1139,7 +1161,9 @@ describe('containerLifecycleOf', () => {
     bridge.runEvents = [lifecycleEvent('raw', 'post-create', 'postCreate')];
     const result = await prepared(scriptedEngine(EMPTY_LISTING), bridge);
     deepStrictEqual(result.presented, [
+      'attach-stdin',
       'started',
+      'attach-stdin',
       'output raw post-create from 5000',
       'ended',
     ]);
@@ -1156,7 +1180,7 @@ describe('containerLifecycleOf', () => {
     });
     deepStrictEqual(
       (await prepared(scriptedEngine(EMPTY_LISTING), bridge)).presented,
-      ['started', 'ended'],
+      ['attach-stdin', 'started', 'attach-stdin', 'ended'],
     );
   });
 
@@ -1175,7 +1199,7 @@ describe('containerLifecycleOf', () => {
         (await prepared(scriptedEngine(EMPTY_LISTING), bridge)).presented,
       );
     }
-    deepStrictEqual(results, [['ended'], []]);
+    deepStrictEqual(results, [['attach-stdin', 'ended'], ['attach-stdin']]);
   });
 
   it('F-0415 AC-41: a cancel or another failure of up never ends the run', async () => {
@@ -1190,7 +1214,7 @@ describe('containerLifecycleOf', () => {
         (await prepared(scriptedEngine(EMPTY_LISTING), bridge)).presented,
       );
     }
-    deepStrictEqual(results, [[], []]);
+    deepStrictEqual(results, [['attach-stdin'], ['attach-stdin']]);
   });
 
   it('F-0415 AC-38: a window torn down while the commands run ends the run once; before it started, nothing', async () => {
@@ -1207,7 +1231,10 @@ describe('containerLifecycleOf', () => {
     );
     lifecycle.stopBackground();
     lifecycle.stopBackground();
-    deepStrictEqual([before, calls], [[], ['started', 'ended']]);
+    deepStrictEqual(
+      [before, calls],
+      [[], ['attach-stdin', 'started', 'attach-stdin', 'ended']],
+    );
   });
 
   it('F-0415 AC-38: a run that a second prepare replaced does not end the second one when it settles', async () => {
@@ -1218,7 +1245,14 @@ describe('containerLifecycleOf', () => {
     await prepareAgain();
     settleFirst({kind: 'cancelled'});
     await settle();
-    deepStrictEqual(calls, ['started', 'started']);
+    deepStrictEqual(calls, [
+      'attach-stdin',
+      'started',
+      'attach-stdin',
+      'attach-stdin',
+      'started',
+      'attach-stdin',
+    ]);
   });
 
   it('F-0415 AC-35: runStart is the clock at the start of prepare, in up and in the background', async () => {
@@ -1251,7 +1285,12 @@ describe('containerLifecycleOf', () => {
     );
     await settle();
     lifecycle.stopBackground();
-    deepStrictEqual(calls, ['started', 'ended']);
+    deepStrictEqual(calls, [
+      'attach-stdin',
+      'started',
+      'attach-stdin',
+      'ended',
+    ]);
   });
 
   it('F-0415 5.0 step 10: a stopped run that settles while a new prepare runs does not end the new run', async () => {
@@ -1271,6 +1310,34 @@ describe('containerLifecycleOf', () => {
     await settle();
     held.answer?.(UP);
     await second;
-    deepStrictEqual(calls, ['started', 'ended', 'started']);
+    deepStrictEqual(calls, [
+      'attach-stdin',
+      'started',
+      'attach-stdin',
+      'ended',
+      'started',
+      'attach-stdin',
+    ]);
+  });
+
+  it('F-0415 7.E6: up and run-user-commands hand their CLI stdin to the presenter, by its attachStdin', async () => {
+    const bridge = fakeBridge();
+    const {calls, presenter, lifecycle} = lifecycleOver(bridge);
+    const outcome = await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    await settle();
+    deepStrictEqual(
+      [
+        outcome.kind,
+        bridge.ups[0]?.stdin === presenter.attachStdin,
+        bridge.runs[0]?.stdin === presenter.attachStdin,
+        calls.filter(call => call === 'attach-stdin'),
+      ],
+      ['ready', true, true, ['attach-stdin', 'attach-stdin']],
+    );
   });
 });
