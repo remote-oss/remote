@@ -21,6 +21,7 @@ const PARAMETERS: ScriptParameters = {
     filePrefix: 'boot-lock.user',
   },
   environmentSetup: '',
+  installUmask: 'inherit',
   cleanup: {kind: 'keepNewest', count: 5},
   start: {
     bindHost: '127.0.0.1',

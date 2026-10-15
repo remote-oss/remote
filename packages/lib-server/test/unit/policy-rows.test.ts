@@ -55,6 +55,18 @@ describe('policy rows (card server-01 table)', () => {
     );
   });
 
+  it('transport contracts 5.0: the SSH and WSL policies keep the umask they are given, and the SSH policy of a mode too', () => {
+    deepStrictEqual(
+      [
+        SSH_POLICY.installUmask,
+        sshPolicyFor('off').installUmask,
+        wslPolicy({scriptLessStartup: false, environmentSetupPath: undefined})
+          .installUmask,
+      ],
+      ['inherit', 'inherit', 'inherit'],
+    );
+  });
+
   it('SSH_POLICY.cleanup -> {kind: keepNewest, count: 5}', () => {
     deepStrictEqual(SSH_POLICY.cleanup, {kind: 'keepNewest', count: 5});
   });
@@ -103,6 +115,7 @@ describe('the SSH policy of a download mode (card connect-38)', () => {
     ['requirementsCheck', 'bundledHelper'],
     ['allowedExtraStartOptions', ['useHostProxy']],
     ['extensionEntries', 'asWritten'],
+    ['installUmask', '022'],
     ['cleanup', {kind: 'onlyCurrentKeepLeftovers'}],
     ['installMode', 'singleScript'],
     ['prefetch', {kind: 'none'}],

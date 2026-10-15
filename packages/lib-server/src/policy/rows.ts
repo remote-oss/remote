@@ -24,6 +24,7 @@ export const SSH_POLICY: ServerPolicyRecord = frozen({
   requirementsCheck: 'serverBundled',
   allowedExtraStartOptions: [],
   extensionEntries: 'identifiersOnly',
+  installUmask: 'inherit',
   cleanup: {kind: 'keepNewest', count: 5},
   installMode: 'singleScript',
   prefetch: {kind: 'none'},
@@ -52,6 +53,7 @@ export const CONTAINERS_POLICY: ServerPolicyRecord = frozen({
   requirementsCheck: 'bundledHelper',
   allowedExtraStartOptions: ['useHostProxy'],
   extensionEntries: 'asWritten',
+  installUmask: '022',
   cleanup: {kind: 'onlyCurrentKeepLeftovers'},
   installMode: 'singleScript',
   prefetch: {kind: 'none'},
@@ -77,6 +79,7 @@ export function wslPolicy(input: {
     requirementsCheck: 'serverBundledPlusAlpineProbe',
     allowedExtraStartOptions: ['fileWatcherPolling'],
     extensionEntries: 'identifiersOnly',
+    installUmask: 'inherit',
     cleanup: scriptLess
       ? {kind: 'onlyCurrentRemoveLeftovers'}
       : {kind: 'onlyCurrentKeepLeftovers'},

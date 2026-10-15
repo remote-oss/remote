@@ -326,6 +326,24 @@ function treesOf(channel: RecordingChannel): string[] {
 }
 
 describe('the server steps of a connect (card containers-08)', () => {
+  it('transport contracts 5.0: every script of a connect sets umask 022 (F-0419 AC-37)', async () => {
+    const channel = channelOf();
+    await runSteps(channel);
+    const scripts = scriptsOf(channel);
+    const bootstrap = scripts.filter(script =>
+      script.includes('INSTALL_TREE='),
+    );
+    const relay = scripts.filter(script => !script.includes('INSTALL_TREE='));
+    deepStrictEqual(
+      [
+        bootstrap.length > 0 &&
+          bootstrap.every(script => script.includes("INSTALL_UMASK='022'")),
+        relay.length > 0 && relay.every(script => script.includes('umask 022')),
+      ],
+      [true, true],
+    );
+  });
+
   it('F-0503 5.0: a fresh install downloads, installs, starts and gives the port, the token and the paths', async () => {
     const channel = channelOf();
     const {result, seen} = await runSteps(channel);

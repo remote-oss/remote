@@ -100,7 +100,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
     await clearVolume();
   });
 
-  it('contracts §5.2 (v1): a non-root remote user connects on a fresh volume; the shared folders are root 0777 and the commit folder is the user’s', async () => {
+  it('F-0419 AC-37 (v1): a non-root remote user connects on a fresh volume (contracts §5.2); the shared folders are root 0777 and the commit folder is the user’s 0755', async () => {
     await clearVolume();
     const folder = devContainerFolder('volume-user', {
       name: 'Volume User',
@@ -122,6 +122,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
         names: folders.slice(0, 2).map(line => line.split(' ')[2]),
         depths: folders.map(line => line.split(' ')[2]?.split('/').length),
         commitOwner: folders[3]?.split(' ')[0],
+        commitMode: folders[3]?.split(' ')[1],
       },
       {
         remoteName: 'dev-container',
@@ -134,6 +135,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
         names: [serverFolder, `${serverFolder}/bin`],
         depths: [3, 4, 5, 6],
         commitOwner: 'node',
+        commitMode: '755',
       },
     );
     await closeWindow(name);

@@ -5,7 +5,7 @@
  */
 
 import type {Interpreter} from 'lib-host';
-import type {Cleanup} from '../policy/record.ts';
+import type {Cleanup, InstallUmask} from '../policy/record.ts';
 import {
   BUSYBOX_FUNCTIONS,
   CLI_FUNCTIONS,
@@ -133,6 +133,8 @@ export interface ScriptParameters {
   };
   /** A host path to source before an install or a start; empty for none. */
   environmentSetup: string;
+  /** The umask the install and start scripts apply, or the umask they inherit. */
+  installUmask: InstallUmask;
   cleanup: Cleanup;
   start: StartParameters;
   /** The CLI's place, for the steps `installCli` and `startCli`; absent for every other step. */
@@ -180,6 +182,7 @@ function parameterBlock(parameters: ScriptParameters): string[] {
     assignment('LOCK_IN_TEMPORARY', yesNo(parameters.lock.inTemporaryFolder)),
     assignment('LOCK_PREFIX', parameters.lock.filePrefix),
     assignment('ENVIRONMENT_SETUP', parameters.environmentSetup),
+    assignment('INSTALL_UMASK', parameters.installUmask),
     assignment('CLEANUP_KIND', cleanupKind(parameters.cleanup)),
     assignment('KEEP_COUNT', keepCount(parameters.cleanup)),
     assignment('BIND_HOST', start.bindHost),
@@ -863,6 +866,8 @@ function posixScript(
   return [
     ...GUARD,
     ...parameterBlock(parameters),
+    // The install and start scripts set the policy's umask; the token and log files keep their own.
+    '[ "$INSTALL_UMASK" = inherit ] || umask "$INSTALL_UMASK"',
     ...FUNCTION_GROUPS[request.step].flat(),
     ...treeGroups(request, parameters).flat(),
     ...body,
