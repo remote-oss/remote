@@ -8,6 +8,7 @@ const FOLDER_LABEL = 'devcontainer.local_folder';
 const CONFIG_LABEL = 'devcontainer.config_file';
 const LEGACY_FOLDER_LABEL = 'vsch.local.folder';
 const LEGACY_QUALITY_LABEL = 'vsch.quality';
+const LEGACY_REPOSITORY_LABEL = 'vsch.local.repository';
 
 /** What discovery knows of one container. */
 export interface ContainerFacts {
@@ -28,6 +29,27 @@ export type Decision =
       idLabels: string[];
     }
   | {kind: 'unusable'; containerId: string; status: string};
+
+/**
+ * The folder, or the repository, a container was made for, from the first of its folder labels the container carries: the
+ * current one, then the legacy ones. None for a container made for no folder.
+ */
+export function devContainerFolderOf(
+  labels: Readonly<Record<string, string>>,
+): string | undefined {
+  return (
+    labels[FOLDER_LABEL] ??
+    labels[LEGACY_FOLDER_LABEL] ??
+    labels[LEGACY_REPOSITORY_LABEL]
+  );
+}
+
+/** Whether the labels make the container a dev container: it carries one of the folder labels. */
+export function isDevContainer(
+  labels: Readonly<Record<string, string>>,
+): boolean {
+  return devContainerFolderOf(labels) !== undefined;
+}
 
 /** The two labels that identify the container of a folder and a configuration file, in the order the CLI is given them. */
 export function idLabels(folder: string, configFile: string): string[] {
