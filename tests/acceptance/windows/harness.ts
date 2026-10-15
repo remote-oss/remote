@@ -490,7 +490,7 @@ export async function reloadWindow(name: string): Promise<void> {
  * reload, before the connect is done. The command isn't awaited: the reload ends the extension host before it can
  * answer, as with `reloadWindow`. A row whose window never reaches its folder (a dialog instead) waits from here.
  */
-async function reopenStarted(name: string): Promise<void> {
+export async function reopenStarted(name: string): Promise<void> {
   const before = countOf(name, 'activated');
   send(name, 'remote-containers.reopenInContainer', []);
   await waitUntil(
@@ -522,6 +522,16 @@ export async function reopenInContainer(
   );
 }
 
+/** The `docker run` arguments that label a dev container of the run, so that the run's clean-up removes it. */
+export function runLabelArguments(): string[] {
+  return [
+    '--label',
+    `remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
+    '--label',
+    'remote-oss.acceptance.devcontainer=1',
+  ];
+}
+
 /**
  * Writes the folder `<run>/<name>` with a dev container configuration on the run's image, labelled so the run's
  * clean-up removes its container, and returns the folder's path. `configuration` is merged over the defaults.
@@ -536,12 +546,7 @@ export function devContainerFolder(
     path.join(folder, '.devcontainer', 'devcontainer.json'),
     JSON.stringify({
       image: variable('HARNESS_DEVCONTAINER_IMAGE'),
-      runArgs: [
-        '--label',
-        `remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
-        '--label',
-        'remote-oss.acceptance.devcontainer=1',
-      ],
+      runArgs: runLabelArguments(),
       ...configuration,
     }),
   );
