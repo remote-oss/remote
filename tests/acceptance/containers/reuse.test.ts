@@ -12,7 +12,7 @@ import {
   windowState,
 } from '../windows/harness.ts';
 import {dialogOf, type ShownDialog} from '../windows/renderer.ts';
-import {openFolderWindow, removeContainers} from './folder-windows.ts';
+import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 
 const execFileAsync = promisify(execFile);
 
