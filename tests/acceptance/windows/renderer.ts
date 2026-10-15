@@ -587,3 +587,81 @@ export async function answerDialog(name: string, label: string): Promise<void> {
     throw new Error(`window ${name}: ${missing}`);
   }
 }
+
+/**
+ * The lines of the detail of the dialog open in window `name`, as the dialog draws them: core renders a line break of
+ * the detail as an element, which the detail's `textContent` leaves out. Empty when no dialog is open.
+ */
+export async function dialogDetailLines(name: string): Promise<string[]> {
+  return evaluate<string[]>(
+    name,
+    `(() => {
+  const detail = document.querySelector('${DIALOG_BOX} .dialog-message-detail');
+  return detail === null ? [] : detail.innerText.split('\\n');
+})()`,
+  );
+}
+
+/**
+ * The label of the dialog's primary button in window `name`, the one the custom dialog draws without the secondary
+ * style and activates on Enter; `undefined` when no dialog is open or no one button is primary.
+ */
+export async function primaryButtonOf(
+  name: string,
+): Promise<string | undefined> {
+  return (
+    (await evaluate<string | null>(
+      name,
+      `(() => {
+  const box = document.querySelector('${DIALOG_BOX}');
+  const primary = [...(box?.querySelectorAll('${DIALOG_BUTTONS}') ?? [])].filter(button => !button.classList.contains('secondary'));
+  return primary.length === 1 ? (primary[0].textContent ?? '') : null;
+})()`,
+    )) ?? undefined
+  );
+}
+
+/** The quick pick the window shows ([oss] `src/vs/platform/quickinput/browser/`): its widget, its input and its rows. */
+const QUICK_WIDGET = '.quick-input-widget';
+
+/** What a quick pick shows: the input's placeholder, and the label of each row in order. */
+export interface ShownQuickPick {
+  placeholder: string;
+  items: string[];
+}
+
+const QUICK_PICK_EXPRESSION = `(() => {
+  const widget = document.querySelector('${QUICK_WIDGET}');
+  if (widget === null || widget.style.display === 'none') {
+    return null;
+  }
+  return {
+    placeholder: widget.querySelector('.quick-input-box input')?.getAttribute('placeholder') ?? '',
+    items: [...widget.querySelectorAll('.quick-input-list .monaco-list-row')].map(row => row.querySelector('.label-name')?.textContent ?? ''),
+  };
+})()`;
+
+/** The quick pick open in window `name`, or `undefined` when none is. */
+async function quickPickOf(name: string): Promise<ShownQuickPick | undefined> {
+  return (
+    (await evaluate<ShownQuickPick | null>(name, QUICK_PICK_EXPRESSION)) ??
+    undefined
+  );
+}
+
+/** Waits until window `name` shows a quick pick and returns it. */
+export async function waitForQuickPick(
+  name: string,
+  milliseconds = WAIT_MILLISECONDS,
+): Promise<ShownQuickPick> {
+  return settled(
+    () => `a quick pick in window ${name}`,
+    async () => {
+      const shown = await quickPickOf(name);
+      return shown === undefined || shown.items.length === 0
+        ? undefined
+        : shown;
+    },
+    milliseconds,
+  );
+}
