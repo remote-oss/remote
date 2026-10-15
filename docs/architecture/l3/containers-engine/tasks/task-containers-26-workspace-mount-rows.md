@@ -8,9 +8,10 @@ changes. If a row fails on product behaviour, stop and report it on #954 (§5). 
 expected values.
 
 **Builds after:**
-- the harness PR #956 (`reopenStarted`, the read-only connect probe in
-  `reopenInContainer`, `pageOf` by name, and `tests/acceptance/windows/folder-windows.ts`);
-- part B only: containers-11 (#947, F-0410's dialog).
+- the harness PR #956 (the read-only connect probe in `reopenInContainer`, `pageOf` by name, and
+  `tests/acceptance/windows/folder-windows.ts`);
+- #957 (containers-19 part 1), which adds `removeContainers` to `windows/folder-windows.ts`;
+- part B only: containers-11 (#947, F-0410's dialog), on main now.
 
 Sources: F-0411 (remote-oss/remote-containers#33), 5.0, 6.1–6.5, 6.9, 6.10, 7.E2, 7.E4, 7.E6, 7.E7, 9, BR-2–BR-6,
 BR-8. The other in-cut ACs of F-0411 (AC-8, 9, 10, 14, 19, 28, 35–38) need two settings the package doesn't have yet,
@@ -22,8 +23,9 @@ New file `tests/acceptance/containers/workspace-mount.test.ts`, `describe('F-041
 containers-26)')`, `this.timeout(900_000)`.
 
 Use these, and write nothing that duplicates them:
-- `windows/harness.ts`: `devContainerFolder`, `devContainersOf`, `reopenInContainer`, `reopenStarted`,
-  `closeWindow`, `inWindow`, `windowState`, `variable`, `waitFor`;
+- `windows/harness.ts`: `devContainerFolder`, `devContainersOf`, `reopenInContainer`, `closeWindow`, `inWindow`,
+  `windowState`, `variable`, `waitFor`, and `reopenStarted`: it's internal to `harness.ts` in #956, so this card
+  exports it (add `export`, nothing else);
 - `windows/renderer.ts`: `waitForDialog`, `answerDialog`, `dialogOf`, `windowTitle`;
 - `windows/folder-windows.ts`: `openFolderWindow`, `removeContainers`, `activations`.
 
