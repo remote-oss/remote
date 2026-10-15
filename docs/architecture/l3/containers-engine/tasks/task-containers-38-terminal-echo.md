@@ -2,39 +2,40 @@
 
 Issue: #TBD (release 1). Milestone 0.4. Size: M. Builder: `task:claude`.
 
-**Design:** athena's ruling on the in-container double-echo follow-up of the #1019 review (decision record in the
-`remote-oss/remote-containers#124` area; F-0415 7.E6 and AC-36). The run's input mode goes through the stdin
-contract; the presenter echoes only the runs that don't echo.
+**Design:** athena's ruling on the in-container double-echo follow-up of the #1019 review (the ruling and its
+corrections in the `remote-oss/remote-containers#124` area; F-0415 7.E6 and AC-36). The run's input mode goes
+through the stdin contract; the presenter echoes only the runs that don't echo.
 
-## 1. The defect and the run's input mode
+## 1. The echo rule and the runs' input mode
 
 Per run, exactly one echo of a typed key is correct (F-0415 7.E6): either the run's reader echoes the input back
 into the run's own output and the presenter must not, or nothing does and the presenter must. The presenter
-currently always does its own, so any run whose reader also self-echoes shows the key twice.
+currently always does its own, unconditionally.
 
-The mode is a fact of the pinned CLI version (`@devcontainers/cli` 0.89.0, `[devcontainers-cli]`), measured against
-its dist: the CLI's package.json holds no dependencies, `node-pty` is nowhere in the package tree (zero hits in
-`pnpm-lock.yaml`), and its `loadNativeModule` is a plain `require` — so neither of the CLI's pty paths can load a
-PTY, and both resolve to their plain-exec fallbacks:
+The mode of each run is a fact of the pinned CLI version (`@devcontainers/cli` 0.89.0, `[devcontainers-cli]`),
+measured against its dist: the CLI's package.json holds no dependencies, `node-pty` is nowhere in the package
+tree (zero hits in `pnpm-lock.yaml`), and its `loadNativeModule` is a plain `require` — so neither of the CLI's
+pty paths can load a PTY, and both resolve to their plain-exec fallbacks:
 
 - **Host-side runs (the `up` operation):** `initializeCommand` and the host-side `updateContentCommand` take the
   CLI's `ptyExec` path, which without `node-pty` is a plain `exec` whose stdin is the CLI's own stdin — a pipe in
-  this extension's spawn. No TTY line discipline, no echo of its own; the presenter's echo is the only echo.
-  The run's mode is `plain`.
+  this extension's spawn. No TTY line discipline, no echo of its own.
 - **In-container runs (the `run-user-commands` operation):** the five hooks (`onCreateCommand`,
-  `updateContentCommand`, `postCreateCommand`, `postStartCommand`, `postAttachCommand`) take the `pty: true` path,
-  which without `node-pty` is a plain `docker exec -i` — the CLI's `exec` factory adds `-t` only when the CLI's
-  own stdin is a TTY, and this extension's spawn pipes it. The command's stdin in the container is therefore a
-  pipe: no TTY driver, no echo of its own either. The run's mode is `echoed` — the mode that a run with a
-  self-echoing reader takes, and the mode the in-container run has once a CLI bundles `node-pty` (the `pty: true`
-  path then allocates a TTY for the command and its line discipline echoes the typed input back into the run's
-  output). In the pinned CLI the `echoed` mode means the typed key is forwarded to the command without an echo;
-  that is the actual behaviour the acceptance row pins, and the 7.E6 gap it leaves (in-container input has no
-  echo in the pinned CLI) is reported on the issue, not hidden.
+  `updateContentCommand`, `postCreateCommand`, `postStartCommand`, `postAttachCommand`) take the `pty: true`
+  path, which without `node-pty` is a plain `docker exec -i` — the CLI's `exec` factory adds `-t` only when the
+  CLI's own stdin is a TTY, and this extension's spawn pipes it. The command's stdin in the container is
+  therefore a pipe: no TTY driver, no echo of its own either.
 
-The mode is per operation in release 1: the two operations serve runs whose readers can't be told apart from
-inside the operation, and a per command or per hook mode would be a CLI change. `readConfiguration` runs no
-interactive commands and gets no `onStdin`.
+So in the pinned CLI neither run self-echoes, and the presenter's echo is the only echo in both: the release-1
+mode values are `plain` for both operations, and the spec is met for every lifecycle command — AC-36's typing
+half is written against `postCreateCommand`, the in-container case.
+
+Why the echo becomes contractual instead of staying unconditional: the presentation is a fact of the CLI
+version, not of the operations. A CLI that bundles `node-pty` gives both operations' runs a TTY — the host-side
+run's `ptyExec` path allocates one for the child, and the in-container run's `pty: true` path allocates one in
+the container — and the presenter's unconditional echo becomes a double echo (3.3). The mode therefore travels
+through the stdin contract and is set per operation at the lifecycle's wiring: the flip is a one-line change with
+the `echoed` branch already tested. `readConfiguration` runs no interactive commands and gets no `onStdin`.
 
 ## 2. The change
 
@@ -122,10 +123,9 @@ data => {
 and `attachStdin: (write, presentation) => { current().stdin = write; current().presentation = presentation; }`.
 
 `container-lifecycle.ts`, the lifecycle's own wiring: `bridge.up` is handed
-`presenter.attachStdin, 'plain'` (the host-side run's own echo is the only echo), and `bridge.runUserCommands`
-`presenter.attachStdin, 'echoed'` (the in-container run's reader is the one that echoes, once it has a TTY; in
-the pinned CLI the key is forwarded without an echo — the row's job). No other call to the bridge gives an
-`onStdin`.
+`presenter.attachStdin, 'plain'`, and `bridge.runUserCommands` `presenter.attachStdin, 'plain'` — in the pinned
+CLI both runs' readers are pipes with no echo of their own, so the presenter's echo is the only one in both
+(1). No other call to the bridge gives an `onStdin`.
 
 ## 3. Rows
 
@@ -146,7 +146,7 @@ the pinned CLI the key is forwarded without an echo — the row's job). No other
   host (a row per method), alongside the existing `onStdin` rows.
 - `cli-contract.test.ts`, `connector.fixture.ts`, `container-lifecycle.test.ts` and `node-cli-ports.test.ts`: the
   fakes and fixtures gain the two-argument `onStdin`; a contract row asserts the lifecycle hands `'plain'` to
-  `up` and `'echoed'` to `runUserCommands`, and that `readConfiguration` hands neither an `onStdin` nor a
+  `up` and `'plain'` to `runUserCommands`, and that `readConfiguration` hands neither an `onStdin` nor a
   presentation.
 
 ### 3.2 Acceptance (`tests/acceptance/containers/initialize-input.test.ts`, or a sibling `lifecycle-echo.test.ts`
@@ -155,15 +155,17 @@ if the file gets too wide)
 | # | Row |
 |---|---|
 | 7.E6 | **The host-side echo stands alone.** A devcontainer whose `initializeCommand` prints a prompt and `read`s an answer (the existing row's form); the launch types `Y` + Enter into the "Configuring..." terminal, and asserts the terminal text holds the typed `Y` exactly once — the run is `plain`, and in the pinned CLI the host-side run's reader is a pipe with no echo of its own — and the answer reached the command. The existing row's assertions stay. |
-| 7.E6, the gap | **The in-container input arrives without an echo in the pinned CLI.** A devcontainer whose `postCreateCommand` prints a prompt and `read`s an answer into a file in the workspace; the launch types `Y` + Enter into the "Configuring..." terminal during the background run, and asserts the file holds the answer (the input arrived) and the terminal holds no text of the typed `Y`: the run is `echoed`, and in the pinned CLI the in-container run's reader is a `docker exec -i` pipe with no echo of its own, so the key is forwarded, not echoed. The row's comments report the 7.E6 gap (in-container input has no echo in the pinned CLI) on the issue, and the run's mode is re-verified when the CLI changes (3.3). |
+| 7.E6 | **The in-container echo stands alone.** A devcontainer whose `postCreateCommand` prints a prompt and `read`s an answer into a file in the workspace; the launch types `Y` + Enter into the "Configuring..." terminal during the background run, and asserts the terminal text holds the typed `Y` exactly once — the run is `plain`, and in the pinned CLI the in-container run's reader is a `docker exec -i` pipe with no echo of its own — and the file holds the answer. This is AC-36's typing half, written against `postCreateCommand`; the row does not reach the AC-36 Ctrl+C half, as the catalog defers. |
 
 ### 3.3 The mapping is a fact of the pinned CLI version
 
-The mode of each operation is measured against `@devcontainers/cli` 0.89.0. If a future CLI bundles `node-pty`,
-the host-side runs start self-echoing (the `ptyExec` path allocates a PTY for the child and its line discipline
-echoes the typed input), and `'plain'` for `up` becomes a double echo: the bump re-verifies `up`'s mode before
-it lands. The in-container run is the other way around: it then takes the `pty: true` path with a TTY for the
-command, and `'echoed'` is the mode that keeps its echo single.
+The release-1 mode values follow the pinned CLI's actual presentation: `plain` for both operations, measured in
+1. If a future CLI's presentation changes, the modes flip at the lifecycle's wiring, one operation at a time,
+before the bump lands: a CLI that bundles `node-pty` gives the host-side runs a TTY (the `ptyExec` path's line
+discipline echoes the typed input), so `up`'s mode becomes `echoed`; the in-container runs take the `pty: true`
+path with a TTY for the command (a `docker exec -it`, whose TTY driver echoes), so `runUserCommands`' mode
+becomes `echoed` too. The `echoed` member and the presenter's branch for it ship in this card and are tested,
+so the flip is the wiring line. No mode flip lands without the re-verification.
 
 ## 4. Gates and review
 
