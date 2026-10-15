@@ -118,6 +118,7 @@ export function scriptParametersFor(input: ParameterInput): ScriptParameters {
       filePrefix: `remote-lock.${input.remoteUser}`,
     },
     environmentSetup: policy.environmentSetup ?? '',
+    installUmask: policy.installUmask,
     cleanup: policy.cleanup,
     start: {
       bindHost: options.bindHost,

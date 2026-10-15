@@ -168,13 +168,13 @@ describe('the script parameters', () => {
   });
 
   it('put the policy and the start options where the scripts read them', () => {
-    const {environmentSetup, cleanup, start} = scriptParametersFor(
-      input(settingsOf()),
-    );
+    const {environmentSetup, installUmask, cleanup, start} =
+      scriptParametersFor(input(settingsOf()));
     deepStrictEqual(
-      {environmentSetup, cleanup, start},
+      {environmentSetup, installUmask, cleanup, start},
       {
         environmentSetup: '',
+        installUmask: SSH_POLICY.installUmask,
         cleanup: SSH_POLICY.cleanup,
         start: {
           bindHost: '127.0.0.1',

@@ -29,6 +29,9 @@ export type Cleanup =
 /** How the install script is shaped: one script that does it all, or one per step. */
 export type InstallMode = 'singleScript' | 'stepwise';
 
+/** The umask the install and start scripts apply, or the umask they inherit from the shell. */
+export type InstallUmask = 'inherit' | '022';
+
 /** When the archive for the next product update is fetched in the background, or never. */
 export type Prefetch =
   | {kind: 'none'}
@@ -49,6 +52,7 @@ export interface ServerPolicyRecord {
   requirementsCheck: RequirementsCheck;
   allowedExtraStartOptions: readonly ExtraStartOption[];
   extensionEntries: ExtensionEntries;
+  installUmask: InstallUmask;
   cleanup: Cleanup;
   installMode: InstallMode;
   prefetch: Prefetch;

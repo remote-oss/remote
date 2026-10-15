@@ -179,6 +179,17 @@ describe('policy record (card server-01 table)', () => {
     deepStrictEqual(validatePolicyRecord(candidate), {record: candidate});
   });
 
+  it('installUmask: "077" -> problem path installUmask', () => {
+    deepStrictEqual(validatePolicyRecord(recordWith({installUmask: '077'})), {
+      problems: [{path: 'installUmask', problem: 'invalid value'}],
+    });
+  });
+
+  it('installUmask: 022 -> {record}', () => {
+    const candidate = recordWith({installUmask: '022'});
+    deepStrictEqual(validatePolicyRecord(candidate), {record: candidate});
+  });
+
   it('prefetch onProductUpdate feedCheckIntervalMilliseconds 0 -> problem path prefetch.feedCheckIntervalMilliseconds', () => {
     deepStrictEqual(
       validatePolicyRecord(
