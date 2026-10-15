@@ -180,7 +180,7 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
         ...TARGET,
         mountWorkspaceGitRoot: false,
         mountGitWorktreeCommonDir: true,
-      }).slice(-7, -3),
+      }).slice(-6, -2),
       [
         '--mount-workspace-git-root=false',
         '--mount-git-worktree-common-dir',
