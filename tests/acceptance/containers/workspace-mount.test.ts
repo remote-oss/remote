@@ -711,9 +711,7 @@ describe('F-0411 workspace mount and folder (card containers-26)', function () {
     }
   });
 
-  // Open row on #954: the rendered F-0410 dialog carries the editor's own Cancel button beside the dialog's three;
-  // the row waits for the ruling before it is an acceptance row.
-  it.skip("F-0411 AC-18 (w12): a bind workspaceMount whose source does not exist makes no container and shows F-0410's dialog", async () => {
+  it("F-0411 AC-18 (w12): a bind workspaceMount whose source does not exist makes no container and shows F-0410's dialog", async () => {
     const folder = devContainerFolder('c26-missing-source', {
       workspaceMount:
         'source=${localWorkspaceFolder}/nowhere,target=/workspaces/x,type=bind',
@@ -754,9 +752,7 @@ describe('F-0411 workspace mount and folder (card containers-26)', function () {
     }
   });
 
-  // Open row on #954: like w12, the rendered dialog carries the editor's own Cancel button; the row waits for the
-  // ruling before it is an acceptance row.
-  it.skip('F-0411 AC-40 (w13): a bind without source and a volume name Docker refuses make no container and no volume', async () => {
+  it('F-0411 AC-40 (w13): a bind without source and a volume name Docker refuses make no container and no volume', async () => {
     const noSource = devContainerFolder('c26-no-source', {
       workspaceMount: 'target=/workspaces/x,type=bind',
       workspaceFolder: '/workspaces/x',
