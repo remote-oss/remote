@@ -241,9 +241,9 @@ export async function activate(
                 vscode.workspace.getConfiguration().get(settings.dockerPath.id),
             },
             engine: {
-              firstCheck: base =>
+              firstCheck: (base, dialogs) =>
                 firstCheck(
-                  served.preflight,
+                  {...served.preflight, dialogs},
                   base,
                   new AbortController().signal,
                 ),
@@ -253,6 +253,22 @@ export async function activate(
                   firstFolder(),
                   new AbortController().signal,
                 ),
+            },
+            dialogs: served.preflight.dialogs,
+            progress: {
+              showProgress: (title, until) => {
+                void vscode.window.withProgress(
+                  {
+                    location: vscode.ProgressLocation.Notification,
+                    title,
+                    cancellable: false,
+                  },
+                  () => until,
+                );
+              },
+              setTimer: (milliseconds, callback) =>
+                served.preflight.setTimer(milliseconds, callback),
+              translate,
             },
             bridge: bridgeFor(process.env, served.logger),
             opener: {

@@ -6,10 +6,14 @@
 
 import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
-import type {CliEvent, CliFailure} from '../cli/cli-lines.ts';
+import type {
+  CliEvent,
+  CliFailure,
+  ConfigurationResult,
+} from '../cli/cli-lines.ts';
 import {ENGINE_TEMPLATES, type Translate} from '../surfaces/engine-dialogs.ts';
 import {filled} from '../surfaces/filled.ts';
-import type {EngineDialogPort} from '../engine/preflight.ts';
+import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
 import {
   decodeConfiguration,
   hasContainerSource,
@@ -86,6 +90,12 @@ export interface ConfigurationRequest {
   /** The Docker executable. */
   dockerPath: string;
   cancellation: AbortSignal;
+  /**
+   * C2's first check, already running. Every surface and every answer of `chooseConfiguration` waits for it; when it
+   * ends `stopped`, nothing more is shown and the answer is `stopped`. The work (discovery, reads, the CLI) doesn't
+   * wait.
+   */
+  engineCheck: Promise<FirstCheckResult>;
 }
 
 /** How choosing ended. */
@@ -99,7 +109,9 @@ export type ConfigurationChoice =
   /** A dialog of this module was shown; nothing more is to be shown. */
   | {kind: 'rejected'}
   /** The CLI couldn't read the chosen configuration. */
-  | {kind: 'readFailed'; configFile: string; failure: CliFailure};
+  | {kind: 'readFailed'; configFile: string; failure: CliFailure}
+  /** The engine check stopped the flow, and its own dialog has shown. */
+  | {kind: 'stopped'};
 
 /** The text of a template with its values, translated. */
 function textOf(
@@ -118,6 +130,12 @@ export async function chooseConfiguration(
   const {files, surfaces, translate, logger} = ports;
   const {folder} = request;
   const showLog = textOf(translate, ENGINE_TEMPLATES.S324);
+  const stopped: ConfigurationChoice = {kind: 'stopped'};
+
+  /** Whether the engine check lets the flow go on; waits for it. */
+  async function engineAllows(): Promise<boolean> {
+    return (await request.engineCheck) === 'proceed';
+  }
 
   /** Shows an error dialog with Show Log, and reveals the log when that is what the user chose. */
   async function refuse(message: string, detail: string): Promise<void> {
@@ -127,7 +145,51 @@ export async function chooseConfiguration(
     }
   }
 
-  /** The candidate the user picks among `candidates`, or why none was. */
+  /**
+   * The CLI's read of the candidate, started now. A rejection waits in the promise until it is awaited, so it is never
+   * unhandled meanwhile.
+   */
+  function startRead(
+    candidate: Candidate,
+  ): Promise<ConfigurationResult | CliFailure> {
+    const reading = ports.cli.readConfiguration(
+      {
+        workspaceFolder: folder,
+        configFile: candidate.file,
+        dockerPath: request.dockerPath,
+        idLabels: [],
+        mountWorkspaceGitRoot: true,
+        mounts: [],
+        logLevel: 'info',
+      },
+      undefined,
+      (event: CliEvent) => {
+        logger.debug(event.kind === 'log' ? event.text : event.name);
+      },
+      request.cancellation,
+    );
+    reading.catch(() => undefined);
+    return reading;
+  }
+
+  /** Logs how a read that nobody waits for any more ended: the kind of its result, or the message of its rejection. */
+  function logDropped(
+    reading: Promise<ConfigurationResult | CliFailure>,
+  ): void {
+    void reading
+      .then(
+        result => result.kind,
+        (caught: unknown) =>
+          caught instanceof Error ? caught.message : String(caught),
+      )
+      .then(ended => {
+        logger.info(
+          `the configuration was read while the engine check failed: ${ended}`,
+        );
+      });
+  }
+
+  /** The candidate the user picks among `candidates`; none when the check stopped or the user ended it. */
   async function picked(
     candidates: readonly Candidate[],
   ): Promise<Candidate | undefined> {
@@ -144,6 +206,9 @@ export async function chooseConfiguration(
         };
       }),
     );
+    if (!(await engineAllows())) {
+      return undefined;
+    }
     const answer = await surfaces.pick(
       rows,
       textOf(translate, CONFIG_TEMPLATES.S303),
@@ -164,6 +229,9 @@ export async function chooseConfiguration(
   const candidates = await discoverConfigurations(folder, files, ports.compare);
   if (candidates.length === 0) {
     logger.info(`no dev container configuration in ${folder}`);
+    if (!(await engineAllows())) {
+      return stopped;
+    }
     surfaces.showInformation(
       textOf(translate, CONFIG_TEMPLATES.noConfiguration),
     );
@@ -172,13 +240,23 @@ export async function chooseConfiguration(
   const candidate =
     candidates.length === 1 ? candidates[0] : await picked(candidates);
   if (candidate === undefined) {
-    return {kind: 'dismissed'};
+    return (await engineAllows()) ? {kind: 'dismissed'} : stopped;
   }
   const bytes = await files.read(candidate.file);
   const parsed =
     bytes === 'unreadable'
       ? undefined
       : parseConfiguration(decodeConfiguration(bytes));
+  const reading =
+    parsed !== undefined && hasContainerSource(parsed)
+      ? startRead(candidate)
+      : undefined;
+  if (!(await engineAllows())) {
+    if (reading !== undefined) {
+      logDropped(reading);
+    }
+    return stopped;
+  }
   if (parsed === undefined) {
     const opening = surfaces.openPreview(candidate.file);
     await refuse(
@@ -188,7 +266,7 @@ export async function chooseConfiguration(
     await opening;
     return {kind: 'rejected'};
   }
-  if (!hasContainerSource(parsed)) {
+  if (reading === undefined) {
     await surfaces.showWarning(
       '',
       textOf(translate, CONFIG_TEMPLATES.S113, [candidate.relative]),
@@ -197,22 +275,7 @@ export async function chooseConfiguration(
     await surfaces.openPreview(candidate.file);
     return {kind: 'rejected'};
   }
-  const read = await ports.cli.readConfiguration(
-    {
-      workspaceFolder: folder,
-      configFile: candidate.file,
-      dockerPath: request.dockerPath,
-      idLabels: [],
-      mountWorkspaceGitRoot: true,
-      mounts: [],
-      logLevel: 'info',
-    },
-    undefined,
-    (event: CliEvent) => {
-      logger.debug(event.kind === 'log' ? event.text : event.name);
-    },
-    request.cancellation,
-  );
+  const read = await reading;
   if (read.kind === 'cancelled') {
     return {kind: 'dismissed'};
   }

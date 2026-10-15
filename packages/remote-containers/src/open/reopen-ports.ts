@@ -8,6 +8,8 @@ import type {Logger} from 'lib-log';
 import type {SerializedUri} from '../authority/payload.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
 import type {ConfigurationPorts} from '../config/choose-configuration.ts';
+import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
+import type {PreReloadProgressPorts} from './pre-reload-progress.ts';
 
 /** What the command reads of the window it runs in, at each call. */
 interface WindowPort {
@@ -21,8 +23,11 @@ interface WindowPort {
 
 /** The Docker checks, over the package's engine. */
 interface EnginePort {
-  /** The first check, with its own dialogs. */
-  firstCheck(base: string | undefined): Promise<'proceed' | 'stopped'>;
+  /** The first check, with the given dialogs. */
+  firstCheck(
+    base: string | undefined,
+    dialogs: EngineDialogPort,
+  ): Promise<FirstCheckResult>;
   /** The name of the current Docker context; none for the default one. */
   currentContext(dockerFile: string): Promise<string | undefined>;
 }
@@ -33,6 +38,10 @@ export interface ReopenPorts {
   config: Omit<ConfigurationPorts, 'cli' | 'logger'>;
   settings: {dockerPath(): unknown};
   engine: EnginePort;
+  /** The dialogs of the first check. */
+  dialogs: EngineDialogPort;
+  /** The progress that shows while the checks before the reload take long. */
+  progress: PreReloadProgressPorts;
   bridge: Pick<CliBridge, 'readConfiguration'>;
   opener: OpenerHost;
   logger: Logger;
