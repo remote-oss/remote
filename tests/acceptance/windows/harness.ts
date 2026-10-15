@@ -511,14 +511,16 @@ export async function reloadingCommand(
 }
 
 /**
- * Runs Reopen in Container in window `name` and resolves once the window is connected to its container: the window
- * reads its workspace folder through the container's file system, which it can't before the connect is done.
+ * Runs the command in window `name`, Reopen in Container unless `command` says another, and resolves once the window
+ * is connected to its container: the window reads its workspace folder through the container's file system, which it
+ * can't before the connect is done.
  */
 export async function reopenInContainer(
   name: string,
   milliseconds = 300_000,
+  command = 'remote-containers.reopenInContainer',
 ): Promise<void> {
-  await reopenStarted(name);
+  await reloadingCommand(name, command);
   await connectedToContainer(name, milliseconds);
 }
 
