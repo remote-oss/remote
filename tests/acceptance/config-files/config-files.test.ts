@@ -20,6 +20,7 @@ import {
 } from 'node:fs';
 import {userInfo} from 'node:os';
 import path from 'node:path';
+import {redact} from 'lib-log';
 import {invocationNotesOf} from '../../../tools/acceptance-clients.ts';
 import {
   appendScript,
@@ -411,6 +412,14 @@ function treeOf(folder: string): TreeEntry[] {
   return entries.sort((first, second) => (first.name < second.name ? -1 : 1));
 }
 
+/**
+ * `text` as the log has it: the logger masks a run of 32 or more word characters, which a CI run's folder name is
+ * (`acceptance-<run>-<attempt>-<job>-<suffix>`), so a path under it is logged with that folder as `[redacted]`.
+ */
+function logged(text: string): string {
+  return redact(text, []);
+}
+
 describe('the configuration-file rows of F-2201 (card coverage-20, #142)', function () {
   this.timeout(300_000);
 
@@ -729,7 +738,7 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     deepStrictEqual(
       connectionLog()
         .slice(mark)
-        .includes(`SSH configuration file in use: ${CFG_A}`),
+        .includes(logged(`SSH configuration file in use: ${CFG_A}`)),
       true,
     );
   });
@@ -767,7 +776,7 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
         dialog.question,
         connectionLog()
           .slice(mark)
-          .some(line => line.includes(CFG_D) && /line \d+/.test(line)),
+          .some(line => line.includes(logged(CFG_D)) && /line \d+/.test(line)),
       ],
       ['Could not establish connection to "cfghost".', true],
     );
@@ -784,7 +793,7 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
         dialog.question,
         connectionLog()
           .slice(mark)
-          .some(line => line.includes(CFG_D)),
+          .some(line => line.includes(logged(CFG_D))),
       ],
       ['Could not establish connection to "cfghost".', true],
     );
@@ -801,7 +810,7 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     deepStrictEqual(
       connectionLog()
         .slice(mark)
-        .includes(`SSH configuration file in use: ${CFG_F}`),
+        .includes(logged(`SSH configuration file in use: ${CFG_F}`)),
       true,
     );
   });
@@ -861,7 +870,7 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
     deepStrictEqual(
       connectionLog()
         .slice(mark)
-        .includes(`SSH configuration file in use: ${CFG_CRLF}`),
+        .includes(logged(`SSH configuration file in use: ${CFG_CRLF}`)),
       true,
     );
   });
