@@ -14,6 +14,9 @@ export type Verification = 'headerHash' | 'lengthOnly' | 'none';
 export type RequirementsCheck =
   'none' | 'serverBundled' | 'serverBundledPlusAlpineProbe' | 'bundledHelper';
 
+/** Whether a default extension entry reaches the server as written, or only when it is a `publisher.name` identifier. */
+export type ExtensionEntries = 'identifiersOnly' | 'asWritten';
+
 /** An extra start option the record allows the extension to add. */
 export type ExtraStartOption = 'fileWatcherPolling' | 'useHostProxy';
 
@@ -45,6 +48,7 @@ export interface ServerPolicyRecord {
   environmentSetup: string | undefined;
   requirementsCheck: RequirementsCheck;
   allowedExtraStartOptions: readonly ExtraStartOption[];
+  extensionEntries: ExtensionEntries;
   cleanup: Cleanup;
   installMode: InstallMode;
   prefetch: Prefetch;

@@ -44,5 +44,8 @@
   "Cancelled container configuration selection.": "Cancelled container configuration selection.",
   "No dev container configuration was found in this folder. Add a .devcontainer/devcontainer.json file, then run the command again.": "No dev container configuration was found in this folder. Add a .devcontainer/devcontainer.json file, then run the command again.",
   "Main": "Main",
-  "Project Root": "Project Root"
+  "Project Root": "Project Root",
+  "Configuring...": "Configuring...",
+  "Configuring Dev Container (show log)": "Configuring Dev Container (show log)",
+  "Done. Press any key to close the terminal.": "Done. Press any key to close the terminal."
 }

@@ -122,7 +122,14 @@ export interface Scene {
   outcome: ContainerOutcome | (() => Promise<ContainerOutcome>);
   steps: ContainerStep[];
   cliEvents: CliEvent[];
-  configuration: Awaited<ReturnType<CliBridge['readConfiguration']>>;
+  /** What the configuration read answers; a function to hold it or to change it from one read to the next. */
+  configuration:
+    | Awaited<ReturnType<CliBridge['readConfiguration']>>
+    | (() => ReturnType<CliBridge['readConfiguration']>);
+  /** The delay of each timer set, in order. */
+  timerDelays: number[];
+  /** The callbacks of the timers still pending. */
+  timers: Array<() => void>;
   server: ServerResult | (() => Promise<ServerResult>);
   phasesOfServer: Array<'installing' | 'startingServer'>;
   relayOutcome: 'open' | Failed;
@@ -130,6 +137,9 @@ export interface Scene {
   /** What the settings' `inspect` answers for the two `cacheVolume` settings; nothing, when the scene leaves it absent. */
   cacheVolumeInspect:
     {globalValue?: unknown; workspaceValue?: unknown} | undefined;
+  /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
+  defaultExtensions: unknown;
+  deprecatedDefaultExtensions: unknown;
   /** The exit statuses of the next `kill -0` runs. */
   killStatuses: number[];
   /** What the runs over the channel were given on their input, as text. */
@@ -205,9 +215,13 @@ export function sceneOf(
     relayOutcome: 'open',
     dockerPath: 'docker',
     cacheVolumeInspect: undefined,
+    defaultExtensions: undefined,
+    deprecatedDefaultExtensions: undefined,
     killStatuses: [],
     killScripts: [],
     relayGate: undefined,
+    timerDelays: [],
+    timers: [],
     ...overrides,
   };
   const kills = fakeEngine(
@@ -288,7 +302,9 @@ export function sceneOf(
       for (const event of scene.cliEvents) {
         onEvent(event);
       }
-      return Promise.resolve(scene.configuration);
+      return typeof scene.configuration === 'function'
+        ? scene.configuration()
+        : Promise.resolve(scene.configuration);
     },
   };
   const lifecycle: ContainerLifecycle = {
@@ -318,6 +334,11 @@ export function sceneOf(
       return bridge;
     },
     lifecycleFor: () => lifecycle,
+    lifecyclePresenter: {
+      output: () => undefined,
+      backgroundStarted: () => undefined,
+      ended: () => undefined,
+    },
     settings: () => ({
       dockerPath: scene.dockerPath,
       serverDownloadBaseUrl: undefined,
@@ -327,12 +348,20 @@ export function sceneOf(
           scene.cacheVolumeInspect?.globalValue,
           scene.cacheVolumeInspect?.globalValue,
         ),
+      defaultExtensions: scene.defaultExtensions,
+      deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,
     }),
     preflight: {
       logger: createLogger(sink, {minimumLevel: () => 'debug'}),
       searchPath: () => '/usr/bin',
       clock: () => 0,
-      setTimer: () => () => undefined,
+      setTimer: (milliseconds, callback) => {
+        scene.timerDelays.push(milliseconds);
+        scene.timers.push(callback);
+        return () => {
+          scene.timers = scene.timers.filter(each => each !== callback);
+        };
+      },
       translate: template => template,
       dialogs: silentDialogs(),
     },

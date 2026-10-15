@@ -316,7 +316,17 @@ describe('the CLI bridge (card containers-04)', () => {
     deepStrictEqual(
       [events, outcome],
       [
-        [{kind: 'log', level: 3, text: noise, channel: undefined}],
+        [
+          {
+            kind: 'log',
+            level: 3,
+            text: noise,
+            channel: undefined,
+            type: 'text',
+            timestamp: undefined,
+            startTimestamp: undefined,
+          },
+        ],
         {kind: 'noResult', status: 0},
       ],
     );

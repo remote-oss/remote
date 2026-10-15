@@ -19,6 +19,7 @@ import {
   type ContainerOutcome,
   type ContainerRequest,
   type ContainerStep,
+  type LifecyclePresenter,
 } from '../../src/lifecycle/container-lifecycle.ts';
 import {
   discoveryArguments,
@@ -152,6 +153,9 @@ interface FakeBridge extends CliBridge {
   runs: Array<{containerId: string; signal: AbortSignal}>;
   upResult: UpResult;
   runResult: Promise<RunUserCommandsResult>;
+  /** The events `up` and `run-user-commands` print, before they answer. */
+  upEvents: CliEvent[];
+  runEvents: CliEvent[];
 }
 
 function fakeBridge(): FakeBridge {
@@ -160,12 +164,16 @@ function fakeBridge(): FakeBridge {
     runs: [],
     upResult: UP,
     runResult: Promise.resolve({kind: 'done'}),
-    up: (target, options) => {
+    upEvents: [],
+    runEvents: [],
+    up: (target, options, onEvent) => {
       bridge.ups.push({target, options});
+      bridge.upEvents.forEach(onEvent);
       return Promise.resolve(bridge.upResult);
     },
     runUserCommands: (target, containerId, onEvent, signal) => {
       bridge.runs.push({containerId, signal});
+      bridge.runEvents.forEach(onEvent);
       return bridge.runResult;
     },
     readConfiguration: () => Promise.reject(new Error('never read')),
@@ -179,6 +187,97 @@ async function settle(): Promise<void> {
   await new Promise<void>(resolve => {
     setImmediate(resolve);
   });
+}
+
+/** A presenter that records what it is told, in order. */
+function recordingPresenter(): {
+  calls: string[];
+  presenter: LifecyclePresenter;
+} {
+  const calls: string[] = [];
+  return {
+    calls,
+    presenter: {
+      output: (event, runStart) => {
+        calls.push(
+          `output ${event.type} ${event.text.trim()} from ${String(runStart)}`,
+        );
+      },
+      backgroundStarted: () => {
+        calls.push('started');
+      },
+      ended: () => {
+        calls.push('ended');
+      },
+    },
+  };
+}
+
+/** A lifecycle over the scripted engine with an empty listing and `clock`, and the calls its presenter gets. */
+function lifecycleOver(
+  bridge: CliBridge,
+  clock: () => number = () => 0,
+): {
+  calls: string[];
+  lifecycle: ReturnType<typeof containerLifecycleOf>;
+} {
+  const {calls, presenter} = recordingPresenter();
+  return {
+    calls,
+    lifecycle: containerLifecycleOf({
+      engine: scriptedEngine(EMPTY_LISTING),
+      cli: bridge,
+      logger: createLogger(undefined, {minimumLevel: () => 'info'}),
+      presenter,
+      clock,
+    }),
+  };
+}
+
+/** A lifecycle over `bridge` after one `prepare` whose background run waits for `settleFirst`. */
+async function preparedWithHeldRun(bridge: FakeBridge): Promise<{
+  calls: string[];
+  lifecycle: ReturnType<typeof containerLifecycleOf>;
+  settleFirst: (result: RunUserCommandsResult) => void;
+  prepareAgain: () => Promise<ContainerOutcome>;
+}> {
+  const first: {settle?: (result: RunUserCommandsResult) => void} = {};
+  bridge.runResult = new Promise(resolve => {
+    first.settle = resolve;
+  });
+  const {calls, lifecycle} = lifecycleOver(bridge);
+  async function prepareAgain(): Promise<ContainerOutcome> {
+    return lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+  }
+  await prepareAgain();
+  return {
+    calls,
+    lifecycle,
+    settleFirst: result => first.settle?.(result),
+    prepareAgain,
+  };
+}
+
+/** A raw or start event of the `postCreate` channel, or of no channel. */
+function lifecycleEvent(
+  type: 'raw' | 'start' | 'stop',
+  text: string,
+  channel: string | undefined,
+): CliEvent {
+  return {
+    kind: 'log',
+    level: 3,
+    text,
+    channel,
+    type,
+    timestamp: 1000,
+    startTimestamp: undefined,
+  };
 }
 
 /** Runs one `prepare`, giving the steps, the outcome, the log lines and the bridge. */
@@ -213,12 +312,16 @@ async function prepared(
   lines: string[];
   bridge: FakeBridge;
   events: CliEvent[];
+  presented: string[];
 }> {
   const sink = new MemorySink();
+  const {calls, presenter} = recordingPresenter();
   const lifecycle = containerLifecycleOf({
     engine,
     cli: bridge,
     logger: createLogger(sink, {minimumLevel: () => 'info'}),
+    presenter,
+    clock: () => 5000,
   });
   const steps: ContainerStep[] = [];
   const events: CliEvent[] = [];
@@ -235,6 +338,7 @@ async function prepared(
     lines: sink.lines.map(line => `${line.level}: ${line.message}`),
     bridge,
     events,
+    presented: calls,
   };
 }
 
@@ -697,11 +801,7 @@ describe('containerLifecycleOf', () => {
   it('stopBackground aborts the signal the bridge got, and a second prepare aborts the first run', async () => {
     const bridge = fakeBridge();
     bridge.runResult = new Promise(() => undefined);
-    const lifecycle = containerLifecycleOf({
-      engine: scriptedEngine(EMPTY_LISTING),
-      cli: bridge,
-      logger: createLogger(undefined, {minimumLevel: () => 'info'}),
-    });
+    const {lifecycle} = lifecycleOver(bridge);
     const signal = new AbortController().signal;
     lifecycle.stopBackground();
     await lifecycle.prepare(
@@ -962,5 +1062,157 @@ describe('containerLifecycleOf', () => {
       ],
       ['ready', []],
     );
+  });
+  it('F-0415 BR-8: only channel postCreate reaches the presenter, and the log keeps every event', async () => {
+    const bridge = fakeBridge();
+    bridge.upEvents = [
+      lifecycleEvent('start', 'Run: docker x', undefined),
+      lifecycleEvent('raw', 'on-create', 'postCreate'),
+    ];
+    const result = await prepared(scriptedEngine(EMPTY_LISTING), bridge);
+    deepStrictEqual(
+      [result.presented.slice(0, 1), result.events.length],
+      [['output raw on-create from 5000'], 2],
+    );
+  });
+
+  it('F-0415 AC-6: the progress starts before run-user-commands and the run ends when it settles, after its output', async () => {
+    const bridge = fakeBridge();
+    bridge.runEvents = [lifecycleEvent('raw', 'post-create', 'postCreate')];
+    const result = await prepared(scriptedEngine(EMPTY_LISTING), bridge);
+    deepStrictEqual(result.presented, [
+      'started',
+      'output raw post-create from 5000',
+      'ended',
+    ]);
+  });
+
+  it('F-0415 AC-6: a failed run-user-commands ends the run too', async () => {
+    const bridge = fakeBridge();
+    bridge.runResult = Promise.resolve({
+      kind: 'lifecycleFailed',
+      hook: 'postCreateCommand',
+      part: undefined,
+      message: '',
+      containerId: NEW,
+    });
+    deepStrictEqual(
+      (await prepared(scriptedEngine(EMPTY_LISTING), bridge)).presented,
+      ['started', 'ended'],
+    );
+  });
+
+  it('F-0415 AC-41: a failure of onCreateCommand in up ends the run, and one of initializeCommand does not', async () => {
+    const results = [];
+    for (const hook of ['onCreateCommand', 'initializeCommand']) {
+      const bridge = fakeBridge();
+      bridge.upResult = {
+        kind: 'lifecycleFailed',
+        hook,
+        part: undefined,
+        message: '',
+        containerId: undefined,
+      };
+      results.push(
+        (await prepared(scriptedEngine(EMPTY_LISTING), bridge)).presented,
+      );
+    }
+    deepStrictEqual(results, [['ended'], []]);
+  });
+
+  it('F-0415 AC-41: a cancel or another failure of up never ends the run', async () => {
+    const results = [];
+    for (const failure of [
+      {kind: 'cancelled'},
+      {kind: 'buildFailed', message: 'no'},
+    ] as const) {
+      const bridge = fakeBridge();
+      bridge.upResult = failure;
+      results.push(
+        (await prepared(scriptedEngine(EMPTY_LISTING), bridge)).presented,
+      );
+    }
+    deepStrictEqual(results, [[], []]);
+  });
+
+  it('F-0415 AC-38: a window torn down while the commands run ends the run once; before it started, nothing', async () => {
+    const bridge = fakeBridge();
+    bridge.runResult = new Promise(() => undefined);
+    const {calls, lifecycle} = lifecycleOver(bridge);
+    lifecycle.stopBackground();
+    const before = [...calls];
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    lifecycle.stopBackground();
+    lifecycle.stopBackground();
+    deepStrictEqual([before, calls], [[], ['started', 'ended']]);
+  });
+
+  it('F-0415 AC-38: a run that a second prepare replaced does not end the second one when it settles', async () => {
+    const bridge = fakeBridge();
+    const {calls, settleFirst, prepareAgain} =
+      await preparedWithHeldRun(bridge);
+    bridge.runResult = new Promise(() => undefined);
+    await prepareAgain();
+    settleFirst({kind: 'cancelled'});
+    await settle();
+    deepStrictEqual(calls, ['started', 'started']);
+  });
+
+  it('F-0415 AC-35: runStart is the clock at the start of prepare, in up and in the background', async () => {
+    const bridge = fakeBridge();
+    bridge.upEvents = [lifecycleEvent('raw', 'on-create', 'postCreate')];
+    bridge.runEvents = [lifecycleEvent('raw', 'post-create', 'postCreate')];
+    let now = 0;
+    const {calls, lifecycle} = lifecycleOver(bridge, () => (now += 1000));
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    await settle();
+    deepStrictEqual(
+      calls.filter(call => call.startsWith('output')),
+      ['output raw on-create from 1000', 'output raw post-create from 1000'],
+    );
+  });
+
+  it('F-0415 7.E6: a window torn down after the run ended adds no second end', async () => {
+    const bridge = fakeBridge();
+    const {calls, lifecycle} = lifecycleOver(bridge);
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    await settle();
+    lifecycle.stopBackground();
+    deepStrictEqual(calls, ['started', 'ended']);
+  });
+
+  it('F-0415 5.0 step 10: a stopped run that settles while a new prepare runs does not end the new run', async () => {
+    const bridge = fakeBridge();
+    const {calls, lifecycle, settleFirst, prepareAgain} =
+      await preparedWithHeldRun(bridge);
+    lifecycle.stopBackground();
+    const held: {answer?: (result: UpResult) => void} = {};
+    bridge.up = () =>
+      new Promise(resolve => {
+        held.answer = resolve;
+      });
+    bridge.runResult = new Promise(() => undefined);
+    const second = prepareAgain();
+    await settle();
+    settleFirst({kind: 'cancelled'});
+    await settle();
+    held.answer?.(UP);
+    await second;
+    deepStrictEqual(calls, ['started', 'ended', 'started']);
   });
 });

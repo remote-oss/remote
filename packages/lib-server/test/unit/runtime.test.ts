@@ -100,12 +100,13 @@ async function start(
   allowed: ReadonlyArray<'fileWatcherPolling' | 'useHostProxy'> = [],
   loop?: HostLockLoop,
   requirementsCheck: 'serverBundled' | 'bundledHelper' = 'serverBundled',
+  extensionEntries: 'identifiersOnly' | 'asWritten' = 'identifiersOnly',
 ): Promise<StartOutcome> {
   return startOrReuse(
     channel,
     parametersFor(),
     {...OPTIONS, ...options},
-    {allowedExtraStartOptions: allowed, requirementsCheck},
+    {allowedExtraStartOptions: allowed, extensionEntries, requirementsCheck},
     dependencies(loop),
     NEVER_CANCELLED,
   );
@@ -728,6 +729,37 @@ describe('startOrReuse (V7), what is asked of the host', () => {
     );
   });
 
+  it('F-0505 BR-2, BR-4, BR-7: under asWritten every entry reaches the script as written, in order', async () => {
+    const channel = recording(STARTED);
+    await start(
+      channel,
+      {defaultExtensions: ['x.y@3.0.1', 'c.three@prerelease', 'not-an-id']},
+      [],
+      undefined,
+      'serverBundled',
+      'asWritten',
+    );
+    const script = scriptOf(channel);
+    deepStrictEqual(
+      [
+        script.indexOf("'--install-extension' 'x.y@3.0.1'") <
+          script.indexOf("'--install-extension' 'c.three@prerelease'"),
+        script.indexOf("'--install-extension' 'c.three@prerelease'") <
+          script.indexOf("'--install-extension' 'not-an-id'"),
+        script.includes("'--install-extension' 'x.y@3.0.1'"),
+      ],
+      [true, true, true],
+    );
+  });
+
+  it('F-0505 BR-7: under identifiersOnly the same entries are still dropped', async () => {
+    const channel = recording(STARTED);
+    await start(channel, {
+      defaultExtensions: ['x.y@3.0.1', 'c.three@prerelease', 'not-an-id'],
+    });
+    deepStrictEqual(scriptOf(channel).includes('--install-extension'), false);
+  });
+
   it('F-2506.BR-2: an entry of the wrong shape never reaches the script', async () => {
     const channel = recording(STARTED);
     await start(channel, {defaultExtensions: ['bad']});
@@ -737,13 +769,18 @@ describe('startOrReuse (V7), what is asked of the host', () => {
   /** The log messages of a start with the given default extension entries. */
   async function messagesLoggedFor(
     defaultExtensions: readonly string[],
+    extensionEntries: 'identifiersOnly' | 'asWritten' = 'identifiersOnly',
   ): Promise<string[]> {
     const sink = new MemorySink();
     await startOrReuse(
       recording(STARTED),
       parametersFor(),
       {...OPTIONS, defaultExtensions},
-      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
+      {
+        allowedExtraStartOptions: [],
+        extensionEntries,
+        requirementsCheck: 'serverBundled',
+      },
       {
         lockLoop: runOnce,
         logger: createLogger(sink, {minimumLevel: () => 'info'}),
@@ -760,6 +797,13 @@ describe('startOrReuse (V7), what is asked of the host', () => {
     ]);
   });
 
+  it('F-0505 BR-7: under asWritten each entry is logged as kept, and none as dropped', async () => {
+    deepStrictEqual(
+      await messagesLoggedFor(['x.y@3', 'not-an-id'], 'asWritten'),
+      ['default extension: x.y@3', 'default extension: not-an-id'],
+    );
+  });
+
   it('R-79: the lock loop gets the cancellation of the start', async () => {
     const controller = new AbortController();
     let received: AbortSignal | undefined;
@@ -774,7 +818,11 @@ describe('startOrReuse (V7), what is asked of the host', () => {
       recording(STARTED),
       parametersFor(),
       OPTIONS,
-      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
+      {
+        allowedExtraStartOptions: [],
+        extensionEntries: 'identifiersOnly',
+        requirementsCheck: 'serverBundled',
+      },
       {
         lockLoop: remembering,
         logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
@@ -879,7 +927,11 @@ describe('startOrReuse (V7) over a real shell', () => {
       shellChannel(host),
       parametersFor(),
       OPTIONS,
-      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
+      {
+        allowedExtraStartOptions: [],
+        extensionEntries: 'identifiersOnly',
+        requirementsCheck: 'serverBundled',
+      },
       dependencies(),
       NEVER_CANCELLED,
     );
@@ -894,7 +946,11 @@ describe('startOrReuse (V7) over a real shell', () => {
       shellChannel(host),
       parametersFor(),
       {...OPTIONS, socketMode: true},
-      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
+      {
+        allowedExtraStartOptions: [],
+        extensionEntries: 'identifiersOnly',
+        requirementsCheck: 'serverBundled',
+      },
       dependencies(),
       NEVER_CANCELLED,
     );
@@ -911,7 +967,11 @@ describe('startOrReuse (V7) over a real shell', () => {
         shellChannel(host),
         parametersFor(),
         OPTIONS,
-        {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
+        {
+          allowedExtraStartOptions: [],
+          extensionEntries: 'identifiersOnly',
+          requirementsCheck: 'serverBundled',
+        },
         dependencies(),
         NEVER_CANCELLED,
       );

@@ -30,7 +30,13 @@ import {
   type ContainerLifecycle,
   type ContainerOutcome,
   type ContainerStep,
+  type LifecyclePresenter,
 } from '../lifecycle/container-lifecycle.ts';
+import {
+  configurationEntries,
+  effectiveExtensions,
+  settingEntries,
+} from '../extensions/extension-list.ts';
 import {idLabels} from '../lifecycle/labels.ts';
 import {takeRebuildIntent} from '../open/rebuild-intent.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
@@ -60,10 +66,18 @@ const CLI_ERROR_LEVEL = 5;
 /** How many characters of a container's identifier the log shows. */
 const IDENTIFIER_LENGTH = 12;
 
+/** How long a canonical request waits for the configuration read, in milliseconds (windows contracts §3.2). */
+const CANONICAL_READ_MILLISECONDS = 30_000;
+
+/** The authority prefix of a dev container window. */
+const AUTHORITY_PREFIX = 'dev-container+';
+
 /** The connector, with the identity the window's label reads. */
 export interface ContainerConnector extends Connector {
   /** The identity of the connection the window holds; nothing before the first connect. */
   heldIdentity(): WindowIdentity | undefined;
+  /** The local path a URI of this window's container folder stands for; nothing otherwise. */
+  canonicalPathOf(authority: string, path: string): Promise<string | undefined>;
 }
 
 /** What the connector is made from. */
@@ -73,13 +87,21 @@ export interface ContainerConnectorDependencies {
   /** The CLI bridge for the environment its processes get. */
   cliFor(environment: Readonly<Record<string, string | undefined>>): CliBridge;
   /** The container lifecycle over an engine and a CLI. */
-  lifecycleFor(engine: EngineHost, cli: CliBridge): ContainerLifecycle;
+  lifecycleFor(
+    engine: EngineHost,
+    cli: CliBridge,
+    presenter: LifecyclePresenter,
+  ): ContainerLifecycle;
   /** The settings this connector reads, at every connect. */
   settings(): {
     dockerPath: unknown;
     serverDownloadBaseUrl: OverrideValue | undefined;
     serverDownloadFolder: unknown;
     cacheVolume(): boolean;
+    /** The user's value of `dev.containers.defaultExtensions`, `undefined` when unset. */
+    defaultExtensions: unknown;
+    /** The user's value of the deprecated `remote.containers.defaultExtensions`, `undefined` when unset. */
+    deprecatedDefaultExtensions: unknown;
   };
   /** What the second check needs besides the engine and the program. */
   preflight: Omit<PreflightDependencies, 'engineFor' | 'dockerPath'>;
@@ -96,6 +118,8 @@ export interface ContainerConnectorDependencies {
   openRelay(
     request: RelayRequest,
   ): Promise<OpenRelay | {kind: 'failed'; failure: Failed}>;
+  /** What shows the lifecycle commands' terminal and progress. */
+  lifecyclePresenter: LifecyclePresenter;
   /** The extension's own store, where a rebuild command left its intent. */
   intents: IntentMemento;
   clock: () => number;
@@ -128,8 +152,37 @@ function subscribers<Arguments extends unknown[]>(): {
   };
 }
 
+/** The local path of `path` when it is `root` or under it, `root` standing for `hostPath`; nothing otherwise. */
+function mappedPath(
+  root: string,
+  hostPath: string,
+  path: string,
+): string | undefined {
+  if (path === root) {
+    return hostPath;
+  }
+  return path.startsWith(`${root}/`)
+    ? hostPath + path.slice(root.length)
+    : undefined;
+}
+
+/** The settings, the program, the engine and the CLI of one folder. */
+interface Tools {
+  settings: ReturnType<ContainerConnectorDependencies['settings']>;
+  dockerPath: string;
+  configFile: string;
+  engine: EngineHost;
+  bridge: CliBridge;
+}
+
 /** The connection the window holds. */
 interface Held {
+  /** The authority's payload the connection was made for. */
+  payload: string;
+  /** The local folder the container shows. */
+  hostPath: string;
+  /** The folder the container shows it at, from the CLI's result (ADR-0009). */
+  remoteWorkspaceFolder: string;
   containerId: string;
   startedAt: string;
   engine: EngineHost;
@@ -203,6 +256,8 @@ export function containerConnectorOf(
   let lifecycle: ContainerLifecycle | undefined;
   let held: Held | undefined;
   let checking = false;
+  /** The folder each payload's container shows, read once per payload for the canonical requests (windows contracts §3.2). */
+  const reads = new Map<string, Promise<string | undefined>>();
 
   /** Gives back the connection the window holds, and stops hearing its relay. */
   function releaseHeld(): void {
@@ -321,6 +376,26 @@ export function containerConnectorOf(
     };
   }
 
+  /** The extensions a new container's server installs, logged; the ones of the configuration, then the setting's. */
+  function newContainerExtensions(
+    mergedConfiguration: Record<string, unknown> | undefined,
+    settings: ReturnType<ContainerConnectorDependencies['settings']>,
+  ): string[] {
+    const list = effectiveExtensions([
+      ...configurationEntries(mergedConfiguration),
+      ...settingEntries(
+        settings.defaultExtensions,
+        settings.deprecatedDefaultExtensions,
+      ),
+    ]);
+    logger.info(
+      list.length === 0
+        ? 'no extensions to install'
+        : `extensions to install in the new container: ${list.join(', ')}`,
+    );
+    return list;
+  }
+
   /** The rebuild the window asked for before its reload, taken once on the first attempt of a connect. */
   async function takenRebuild(
     input: ConnectInput,
@@ -348,30 +423,126 @@ export function containerConnectorOf(
     }
   }
 
-  async function connectFresh(
-    folder: DevContainerFolder,
-    controller: AbortController,
-    input: ConnectInput,
-  ): Promise<Connected | Failed> {
-    const cancellation = controller.signal;
+  /** The settings, the program, the engine and the CLI a connect or a read of `folder` uses, made the same way for both. */
+  function toolsOf(folder: DevContainerFolder): Tools {
     const settings = dependencies.settings();
     const dockerPath =
       typeof settings.dockerPath === 'string' && settings.dockerPath !== ''
         ? settings.dockerPath
         : 'docker';
-    const configFile = folder.configFile.fsPath ?? folder.configFile.path;
     const file = executableOf(settings.dockerPath, undefined);
     const written = file.kind === 'spawn' ? file.file : dockerPath;
     const unwrapped = dependencies.engineFor(written);
-    const engine =
-      folder.context === undefined
-        ? unwrapped
-        : withContext(unwrapped, folder.context);
-    const bridge = dependencies.cliFor(
-      folder.context === undefined
-        ? dependencies.editorEnvironment
-        : {...dependencies.editorEnvironment, DOCKER_CONTEXT: folder.context},
-    );
+    return {
+      settings,
+      dockerPath,
+      configFile: folder.configFile.fsPath ?? folder.configFile.path,
+      engine:
+        folder.context === undefined
+          ? unwrapped
+          : withContext(unwrapped, folder.context),
+      bridge: dependencies.cliFor(
+        folder.context === undefined
+          ? dependencies.editorEnvironment
+          : {...dependencies.editorEnvironment, DOCKER_CONTEXT: folder.context},
+      ),
+    };
+  }
+
+  /**
+   * The workspace folder of `payload`'s configuration, read without a container by the first that asks, a canonical
+   * request or the connect's start. It runs no repository code. A failed read is dropped, so the next request reads
+   * again.
+   */
+  function readOf(
+    payload: string,
+    folder: DevContainerFolder,
+    tools?: Tools,
+  ): Promise<string | undefined> {
+    const kept = reads.get(payload);
+    if (kept !== undefined) {
+      return kept;
+    }
+    const {bridge, configFile, dockerPath} = tools ?? toolsOf(folder);
+    const reading = bridge
+      .readConfiguration(
+        cliTargetOf(folder, configFile, dockerPath),
+        undefined,
+        () => undefined,
+        new AbortController().signal,
+      )
+      .then(result => {
+        if (result.kind !== 'configuration') {
+          reads.delete(payload);
+          logger.warn(
+            `the configuration of ${folder.hostPath} could not be read: ${result.kind}`,
+          );
+          return undefined;
+        }
+        return result.workspaceFolder;
+      });
+    reads.set(payload, reading);
+    return reading;
+  }
+
+  /** The read of `payload`, or nothing once the canonical request has waited its longest. */
+  function readWithinCap(
+    payload: string,
+    folder: DevContainerFolder,
+  ): Promise<string | undefined> {
+    return new Promise(resolve => {
+      const stop = dependencies.preflight.setTimer(
+        CANONICAL_READ_MILLISECONDS,
+        () => {
+          resolve(undefined);
+        },
+      );
+      void readOf(payload, folder).then(read => {
+        stop();
+        resolve(read);
+      });
+    });
+  }
+
+  /** The local path of `path` in the window of `authority`, which core keys the window's trust on. */
+  async function canonicalPathOf(
+    authority: string,
+    path: string,
+  ): Promise<string | undefined> {
+    if (!authority.startsWith(AUTHORITY_PREFIX)) {
+      return undefined;
+    }
+    const payload = authority.slice(AUTHORITY_PREFIX.length);
+    const decoded = devContainerTargetOf(payload);
+    if ('malformed' in decoded || decoded.kind === 'legacy') {
+      return undefined;
+    }
+    const connection = held?.payload === payload ? held : undefined;
+    const read =
+      connection === undefined
+        ? await readWithinCap(payload, decoded)
+        : undefined;
+    const root = connection?.remoteWorkspaceFolder ?? read;
+    const local =
+      root === undefined ? undefined : mappedPath(root, decoded.hostPath, path);
+    if (local !== undefined) {
+      logger.debug(
+        `the canonical path of ${path} is ${local} (from ${connection === undefined ? 'the configuration read' : 'the connection'})`,
+      );
+    }
+    return local;
+  }
+
+  async function connectFresh(
+    payload: string,
+    folder: DevContainerFolder,
+    controller: AbortController,
+    input: ConnectInput,
+  ): Promise<Connected | Failed> {
+    const cancellation = controller.signal;
+    const tools = toolsOf(folder);
+    const {settings, dockerPath, configFile, engine, bridge} = tools;
+    void readOf(payload, folder, tools);
     phases.tell({name: 'initializing'});
     const checked = await secondCheck(
       {
@@ -385,7 +556,11 @@ export function containerConnectorOf(
     if (checked.kind === 'failed') {
       return engineCheckFailed(checked.detail);
     }
-    lifecycle = dependencies.lifecycleFor(engine, bridge);
+    lifecycle = dependencies.lifecycleFor(
+      engine,
+      bridge,
+      dependencies.lifecyclePresenter,
+    );
     const rebuild = await takenRebuild(input);
     const prepared = await lifecycle.prepare(
       {
@@ -419,6 +594,14 @@ export function containerConnectorOf(
       logCliEvent,
       cancellation,
     );
+    const defaultExtensions = prepared.created
+      ? newContainerExtensions(
+          configuration.kind === 'configuration'
+            ? configuration.mergedConfiguration
+            : undefined,
+          settings,
+        )
+      : [];
     let name: string | undefined;
     if (configuration.kind === 'configuration') {
       const written = configuration.configuration.name;
@@ -439,6 +622,7 @@ export function containerConnectorOf(
         rootChannel: execChannelOf(engine, prepared.containerId, 'root'),
         remoteUser: prepared.remoteUser,
         volumeMounted: prepared.volumeMounted,
+        defaultExtensions,
         onPhase: phase => {
           phases.tell({name: phase});
         },
@@ -488,6 +672,9 @@ export function containerConnectorOf(
       trusted: false,
     };
     held = {
+      payload,
+      hostPath: folder.hostPath,
+      remoteWorkspaceFolder: prepared.remoteWorkspaceFolder,
       containerId: prepared.containerId,
       startedAt:
         started === 'missing' || started === 'unreachable'
@@ -529,7 +716,12 @@ export function containerConnectorOf(
         if ('malformed' in decoded || decoded.kind === 'legacy') {
           return malformedAuthority();
         }
-        const result = await connectFresh(decoded, controller, input);
+        const result = await connectFresh(
+          target.payload,
+          decoded,
+          controller,
+          input,
+        );
         return result;
       } finally {
         logger.info(
@@ -550,6 +742,7 @@ export function containerConnectorOf(
       dependencies.revealLog();
     },
     heldIdentity: () => held?.identity,
+    canonicalPathOf,
     onPhase: listener => phases.subscribe(listener),
     onTransportLost: listener => lost.subscribe(listener),
     onTransportClosed: listener => closed.subscribe(listener),

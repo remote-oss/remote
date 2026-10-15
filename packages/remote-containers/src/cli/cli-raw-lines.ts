@@ -35,15 +35,17 @@ export function rawHoldOf(): RawHold {
   return {
     push: chunk => {
       const key = keyOf(chunk.channel);
-      const text = (tails.get(key)?.text ?? '') + chunk.text;
+      const held = tails.get(key);
+      const text = (held?.text ?? '') + chunk.text;
       const lineEnd = text.lastIndexOf('\n');
       const rest = text.slice(lineEnd + 1);
+      const first = held ?? chunk;
       if (rest === '') {
         tails.delete(key);
       } else {
-        tails.set(key, {...chunk, text: rest});
+        tails.set(key, {...(lineEnd < 0 ? first : chunk), text: rest});
       }
-      return lineEnd < 0 ? [] : [{...chunk, text: text.slice(0, lineEnd + 1)}];
+      return lineEnd < 0 ? [] : [{...first, text: text.slice(0, lineEnd + 1)}];
     },
     release,
     releaseAll: () =>

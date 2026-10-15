@@ -75,7 +75,11 @@ describe('F-2409 the start of the server', function () {
       host.channel,
       parameters,
       {...OPTIONS, ...changes},
-      {allowedExtraStartOptions: [], requirementsCheck: 'serverBundled'},
+      {
+        allowedExtraStartOptions: [],
+        extensionEntries: 'identifiersOnly',
+        requirementsCheck: 'serverBundled',
+      },
       {lockLoop: lockLoop(), logger: SILENT},
       new AbortController().signal,
     );

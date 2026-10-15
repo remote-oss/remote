@@ -71,6 +71,8 @@ export interface AgentEvent {
   visibleOutputChannel?: string | null;
   /** The names of the window's terminals, hidden ones included, as a `state` event saw them. */
   terminals?: string[];
+  /** The file of the window's active text editor, or null, as a `state` event saw it. */
+  activeEditor?: string | null;
 }
 
 /** One line of the record the extensions append to. */
@@ -483,6 +485,68 @@ export async function reloadWindow(name: string): Promise<void> {
   );
 }
 
+/**
+ * Runs Reopen in Container in window `name` and resolves on the window's next `activated`. The command isn't awaited:
+ * the reload ends the extension host before it can answer, as with `reloadWindow`.
+ */
+export async function reopenInContainer(name: string): Promise<void> {
+  const before = countOf(name, 'activated');
+  send(name, 'remote-containers.reopenInContainer', []);
+  await waitUntil(
+    `window ${name} to activate in its container`,
+    () => countOf(name, 'activated') > before,
+  );
+}
+
+/**
+ * Writes the folder `<run>/<name>` with a dev container configuration on the run's image, labelled so the run's
+ * clean-up removes its container, and returns the folder's path. `configuration` is merged over the defaults.
+ */
+export function devContainerFolder(
+  name: string,
+  configuration: Readonly<Record<string, unknown>> = {},
+): string {
+  const folder = path.join(variable('HARNESS_RUN_FOLDER'), name);
+  mkdirSync(path.join(folder, '.devcontainer'), {recursive: true});
+  writeFileSync(
+    path.join(folder, '.devcontainer', 'devcontainer.json'),
+    JSON.stringify({
+      image: variable('HARNESS_DEVCONTAINER_IMAGE'),
+      runArgs: [
+        '--label',
+        `remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
+        '--label',
+        'remote-oss.acceptance.devcontainer=1',
+      ],
+      ...configuration,
+    }),
+  );
+  return folder;
+}
+
+/** The ids of the run's containers made for `folder`, by the label the dev container CLI gives them. */
+export async function devContainersOf(folder: string): Promise<string[]> {
+  const {stdout} = await execFileAsync('docker', [
+    'ps',
+    '--all',
+    '--quiet',
+    '--filter',
+    `label=devcontainer.local_folder=${folder}`,
+    '--filter',
+    `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
+  ]);
+  return stdout.split('\n').filter(line => line !== '');
+}
+
+/** The names of the engine's volumes, sorted. */
+export async function dockerVolumes(): Promise<string[]> {
+  const {stdout} = await execFileAsync('docker', ['volume', 'ls', '--quiet']);
+  return stdout
+    .split('\n')
+    .filter(line => line !== '')
+    .sort();
+}
+
 /** Closes window `name` and resolves once its agent has deactivated. */
 export async function closeWindow(name: string): Promise<void> {
   const before = countOf(name, 'deactivated');
@@ -598,6 +662,11 @@ export function withoutActivity(state: {
     remoteAuthority: state.remoteAuthority,
     folders: state.folders,
   };
+}
+
+/** The file of window `name`'s active text editor as it reports now, or `null` when it has none. */
+export async function activeEditorOf(name: string): Promise<string | null> {
+  return (await reportedState(name))?.activeEditor ?? null;
 }
 
 /** Whether window `name`'s workspace is trusted, as it reports now; it does not wait for the window's connect. */

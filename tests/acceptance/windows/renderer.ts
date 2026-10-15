@@ -389,6 +389,119 @@ export async function notificationCentre(name: string): Promise<string[]> {
   );
 }
 
+/**
+ * Clicks the button labelled `label` of the notification of window `name` whose message starts with `messageStart`,
+ * found in the notification centre, which this opens. It fails naming the notifications or the buttons it found.
+ */
+export async function answerNotification(
+  name: string,
+  messageStart: string,
+  label: string,
+): Promise<void> {
+  let found = '';
+  await settled(
+    () =>
+      `the notification "${messageStart}" with "${label}" in window ${name} (${found})`,
+    async () => {
+      found = await evaluate<string>(
+        name,
+        `(() => {
+  const centre = document.querySelector('${OPEN_CENTRE}');
+  if (centre === null) {
+    document.querySelector('${CENTRE_BELL}')?.click();
+    return 'the centre is closed';
+  }
+  const items = [...centre.querySelectorAll('.notification-list-item')];
+  const item = items.find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+  if (item === undefined) {
+    return 'notifications: ' + JSON.stringify(items.map(each => each.querySelector('.notification-list-item-message')?.textContent));
+  }
+  const buttons = [...item.querySelectorAll('.monaco-button')];
+  const button = buttons.find(each => each.textContent === ${JSON.stringify(label)});
+  if (button === undefined) {
+    return 'buttons: ' + JSON.stringify(buttons.map(each => each.textContent));
+  }
+  button.click();
+  return 'clicked';
+})()`,
+      );
+      return found === 'clicked' ? true : undefined;
+    },
+  );
+}
+
+/** The labels of the buttons of window `name`'s notification whose message starts with `messageStart`, from the centre. */
+export async function notificationButtons(
+  name: string,
+  messageStart: string,
+): Promise<string[]> {
+  return settled(
+    () => `the notification "${messageStart}" in window ${name}`,
+    async () =>
+      (await evaluate<string[] | null>(
+        name,
+        `(() => {
+  const centre = document.querySelector('${OPEN_CENTRE}');
+  if (centre === null) {
+    document.querySelector('${CENTRE_BELL}')?.click();
+    return null;
+  }
+  const item = [...centre.querySelectorAll('.notification-list-item')].find(each => (each.querySelector('.notification-list-item-message')?.textContent ?? '').startsWith(${JSON.stringify(messageStart)}));
+  return item === undefined ? null : [...item.querySelectorAll('.monaco-button')].map(each => each.textContent ?? '');
+})()`,
+      )) ?? undefined,
+  );
+}
+
+/** Window `name`'s title, as its page has it. */
+export async function windowTitle(name: string): Promise<string> {
+  return evaluate<string>(name, 'document.title');
+}
+
+/** What a status bar item shows: its visible label, its accessible label, and the text of its hover. */
+export interface StatusItem {
+  text: string;
+  ariaLabel: string;
+  hover: string;
+}
+
+/**
+ * The status bar item of window `name` whose DOM id is `itemId` (core's remote indicator is `status.host`). The hover
+ * is read by moving the pointer onto the item and back off, with its non-breaking spaces read as spaces. It fails
+ * naming the window and the item when there's none.
+ */
+export async function statusItem(
+  name: string,
+  itemId: string,
+): Promise<StatusItem> {
+  const found = await evaluate<StatusItem | null>(
+    name,
+    `(async () => {
+  const item = document.getElementById(${JSON.stringify(itemId)});
+  if (item === null) {
+    return null;
+  }
+  const link = item.querySelector('a') ?? item;
+  const text = (link.textContent ?? '').trim();
+  const ariaLabel = link.getAttribute('aria-label') ?? item.getAttribute('aria-label') ?? '';
+  link.dispatchEvent(new MouseEvent('mouseenter', {bubbles: true}));
+  link.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+  let hover = '';
+  for (let tries = 0; tries < 20 && hover === ''; tries += 1) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    hover = (document.querySelector('.workbench-hover, .monaco-hover')?.textContent ?? '').replaceAll('\u00a0', ' ').trim();
+  }
+  link.dispatchEvent(new MouseEvent('mouseleave', {bubbles: true}));
+  link.dispatchEvent(new MouseEvent('mouseout', {bubbles: true}));
+  return {text, ariaLabel, hover};
+})()`,
+  );
+  if (found === null) {
+    throw new Error(`window ${name} has no status bar item ${itemId}`);
+  }
+  return found;
+}
+
 /** The dialog open in window `name`, or `undefined` when none is. */
 export async function dialogOf(name: string): Promise<ShownDialog | undefined> {
   return (

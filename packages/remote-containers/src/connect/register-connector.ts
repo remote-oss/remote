@@ -12,6 +12,7 @@ import {
   type ResolverEditor,
 } from 'lib-authority';
 import type {CommandHost} from 'lib-identifiers';
+import type {Logger} from 'lib-log';
 import {runtimeCommands} from '../identifiers.generated.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import type {ContainerConnector} from './connector.ts';
@@ -33,6 +34,8 @@ export interface ConnectorServed {
   /** Whether the editor grants the resolvers proposal. */
   resolversGranted: boolean;
   revealLog(): void;
+  /** The extension's log, for a canonical mapping that failed. */
+  logger: Logger;
 }
 
 /** Registers the resolver, the label and the log command. */
@@ -52,6 +55,12 @@ export async function registerContainerResolver(
       allowsTrust: false,
       titleOf: phase => phaseTitleOf(phase, translate),
       startTitle: () => startTitleOf(translate),
+      canonical: {
+        pathOf: uri => connector.canonicalPathOf(uri.authority, uri.path),
+        warn: message => {
+          served.logger.warn(message);
+        },
+      },
     },
     {
       guard: () => Promise.resolve('serving'),

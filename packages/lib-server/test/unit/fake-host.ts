@@ -123,6 +123,7 @@ const LAUNCHER = [
   '  exit 0',
   'fi',
   'echo "$*" >"$SERVER_ARGUMENTS"',
+  'printf \'%s\\n\' "$@" >"$SERVER_ARGUMENTS.lines"',
   'echo started >>"$SERVER_STARTS"',
   '[ -z "$SERVER_LOG_BEFORE" ] || printf \'%s\\n\' "$SERVER_LOG_BEFORE"',
   '[ -z "$SERVER_EXIT" ] || exit "$SERVER_EXIT"',
