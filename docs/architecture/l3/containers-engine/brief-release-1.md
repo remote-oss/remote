@@ -64,6 +64,14 @@ And one more, moved in from increment 2 by the user (2026-10-14, after their fir
   dismissed, shows S186/S426 with "Reopen in Container" and "Don't Show Again...", on containers-11's
   `onStartupFinished` activation. It's the first thing a user meets, and without it a configured folder looks broken.
 
+And the Remote Explorer views, moved in from "Later" by the user (2026-10-15, through hermes; ruled on remote#960):
+- **Slice A:** F-0906's registration of `targetsContainers` and F-0901, for what the local engine produces.
+- **Slice B:** F-0902's open, start, stop, remove, inspect and log actions, after F-0902's review.
+- **Slice C:** F-0903, the Details view.
+
+F-0904 (Dev Volumes), F-0905 (Clean Up) and F-0902's attach and recent-folder actions stay "Later". Component C15
+(`components.md`).
+
 ### Increment 2
 
 The order is the PM's:
@@ -78,8 +86,9 @@ The order is the PM's:
 
 ### Later
 
-Compose (F-0413), attach (F-06xx), volumes and Clone in Volume (F-07xx), the Remote Explorer views (F-09xx),
-personalization and relays (F-10xx), SSH- and tunnel-hosted engines (F-1302), Windows, WSL and macOS.
+Compose (F-0413), attach (F-06xx), volumes and Clone in Volume (F-07xx), the Dev Volumes view and Clean Up (F-0904,
+F-0905), F-0902's attach and recent-folder actions, personalization and relays (F-10xx), SSH- and tunnel-hosted engines
+(F-1302), Windows, WSL and macOS.
 
 ### Two P0 deferrals the PM may object to
 
@@ -138,7 +147,18 @@ reviewed yet.
 8. **The manifest contributes only what release 1 handles** (D-86's principle, enforced by tooling-31's check): the
    `dev-container` activation event and `onStartupFinished` (amended 2026-10-14 on #892: F-0410's Edit Locally opens
    the configuration in the new local window, so the extension must be active there), release 1's commands and
-   settings, and no views. Every AC that counts the full
+   settings, and only the views 0.4 builds (amended 2026-10-15 on #960, replacing "no views"):
+   - `targetsContainers` and `detailsContainers` each enter the manifest in the card that registers the view's tree
+     data provider. `devVolumes` isn't contributed;
+   - welcome and menu entries exist only for registered commands. A welcome link to a command 0.4 doesn't register is
+     contributed as its plain words, in every locale;
+   - every `viewsWelcome`, `view/title` and `view/item/context` entry carries `&& !remote-containers:standingDown`
+     (F-1406 §5). The `views` entries keep the reference's `when` verbatim (F-1406 §3: the reference wins a duplicate
+     view id);
+   - an AC that needs a view, command or family 0.4 doesn't build is `deferred` with the reason
+     `containers 0.4: <F-xxxx or component> later`.
+
+   Every AC that counts the full
    contribution set is `deferred` with the reason "containers release 1: the full contribution set comes with later
    increments":
    - F-0101 AC-1, 2, 6, 13 and 14;
@@ -154,6 +174,10 @@ reviewed yet.
    use it) probes at every activation and caches no success (F-1403 §6). A missing `resolvers` or `workspaceTrust` holds
    back the open path: the resolver and the trust prompt. Every command stays registered and answers with the gate's
    setup notice, as for remote-ssh (windows contracts §3.2).
+   - **`contribViewsRemote` (amended 2026-10-15 on #960):** the gate's `viewIds` is `[targetsContainers]`, so the view's
+     focus command is the probe (F-0906 §16). A missing grant joins the same setup notice. It holds back only C15's
+     tree views, which are created only when `<viewId>.focus` exists, so core's "No view is registered" error never
+     shows (F-0906 AC-16).
 10. **Engine (C2).**
     - The Docker CLI only, through `dockerPath` (and `dockerComposePath` unused in release 1), with the editor's
       environment as it is, including `DOCKER_HOST` and the current context.
@@ -213,6 +237,23 @@ release 1:
 11. In an untrusted folder, Reopen asks for trust before anything runs on the host (F-0106 BR-2; §2, "One more is in").
 12. The extensions listed in the config are installed in the container (F-0505). The card designs this row's source
     (a local VSIX or the run's gallery).
+
+The Remote Explorer rows (0.4, remote#960). Each comes with its slice's card:
+13. (A) With the proposals, the Remote Explorer shows "Dev Containers". Row 1's container is a row in the "Dev
+    Containers" group, labelled with the folder's name. A plain `docker run` container is under "Other Containers"
+    (F-0906, F-0901).
+14. (A) A container started, then removed, from the CLI appears in the view and leaves it, without Refresh (F-0901).
+15. (A) With no container and a folder open, the view shows WELCOME#2, and its reopen link starts Reopen (F-0901).
+16. (A) In the dev container window, its own row is Connected and shows the window's folder (F-0901).
+17. (A) Without `contribViewsRemote`, the Remote Explorer has no Dev Containers content and no error shows. The setup
+    notice names Dev Containers (F-0906 AC-16, F-0101 BR-9).
+18. (B) "Open in Container in New Window" on a dev container's row opens a window connected to the same container id.
+    Stop Container asks first, and the row then shows Exited (F-0902). This row gates 0.4 only once F-0902 is reviewed.
+19. (C) In the dev container window, "Details (Containers)" is titled with the folder's name and shows the container's
+    name, image, configuration file and workspace mount (F-0903).
+
+Slice A also carries a coexistence row: with remote-explorer installed too, the "Switch Remote" dropdown offers both
+"Remotes" and "Dev Containers", each shows its own view, and nothing fails.
 
 Besides these rows:
 - **Coverage:** `check-coverage` must be green with the containers tags.

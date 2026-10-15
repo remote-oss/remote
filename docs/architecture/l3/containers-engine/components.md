@@ -22,10 +22,12 @@ C2 (the engine CLI).
 | C8 recovery | classifies a setup failure into F-0410's dialog variants (S018, S019, S034, S420) with Retry, Edit and More Actions... | F-0410 (the dialog only) | lib-authority's `FailurePresenter` |
 | C10 container-connector | the `Connector` behind lib-authority's resolver host for `dev-container`: runs C2's checks, C7, the server install and start over C11 through lib-server, the host listener and relay; maps every failure to `Failed` | F-0502, F-0503 (with lib-server), F-0504's facts, F-0505's install list | lib-authority, lib-server, lib-forwarding (the host listener), C2, C7, C11 |
 | C11 exec-channel | a lib-host `HostChannel` over `docker exec -i`; the per-connection exec relay into the container's loopback | none of its own (contributes to F-0502, F-0503) | C2 |
+| C15 explorer-data (0.4, remote#960) | the "Dev Containers" view (`targetsContainers`) and the "Details (Containers)" view (`detailsContainers`) in core's `remote` view container: a pure model from the containers' facts, the window's facts and the time to the tree; the tree adapter, created only when `<viewId>.focus` exists; the rebuild on Refresh, on coalesced Docker container events (only while the view is visible) and on becoming visible, never on a timer; the row actions of F-0902 that 0.4 builds | F-0906 (registration of those two views), F-0901, F-0902 (open, start, stop, remove, inspect, log, show details), F-0903 | C2 (`run`, and `spawn` for `docker events`), C7's `lifecycle/labels.ts` (exported, never copied), C10's connection facts for the window's own container, C6 and C5 for the open actions, lib-authority's opener; no `lib-companion` (F-1404) |
 
-C9 (shutdown), C12 (attach), C13 (volumes), C14 (authoring), C15 (explorer data), C16 (personalization), C17 (ports),
-C18 (diagnostics) and C19 (remote engines) aren't built in release 1. The brief's increment 2 and "Later" lists say
-when.
+C9 (shutdown), C12 (attach), C13 (volumes), C14 (authoring), C16 (personalization), C17 (ports), C18 (diagnostics) and
+C19 (remote engines) aren't built in release 1. The brief's increment 2 and "Later" lists say when. C15 is built for
+0.4 without F-0904 (Dev Volumes, with C13), F-0905 (Clean Up) and F-0902's attach and recent-folder actions (with C12).
+C15 spawns nothing itself: its `docker events` process is C2's.
 
 ## 2. Boundaries
 
