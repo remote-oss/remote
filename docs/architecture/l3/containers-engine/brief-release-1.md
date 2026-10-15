@@ -174,10 +174,17 @@ reviewed yet.
    use it) probes at every activation and caches no success (F-1403 §6). A missing `resolvers` or `workspaceTrust` holds
    back the open path: the resolver and the trust prompt. Every command stays registered and answers with the gate's
    setup notice, as for remote-ssh (windows contracts §3.2).
-   - **`contribViewsRemote` (amended 2026-10-15 on #960):** the gate's `viewIds` is `[targetsContainers]`, so the view's
-     focus command is the probe (F-0906 §16). A missing grant joins the same setup notice. It holds back only C15's
-     tree views, which are created only when `<viewId>.focus` exists, so core's "No view is registered" error never
-     shows (F-0906 AC-16).
+   - **`contribViewsRemote` (amended 2026-10-15 on #960, and on #996):** it holds back only C15's tree views, which are
+     created only when `<viewId>.focus` exists, so core's "No view is registered" error never shows (F-0906 AC-16).
+     - **How it's probed:** the grant is read from `resolvers` or `tunnels` when either is granted, because an
+       enablement route grants the declared list as one unit (F-1403 §4). The focus command is read only for an
+       extension with neither, which is remote-explorer's case.
+     - **Why not the focus command here:** in a connecting window, core registers the views only after the authority
+       is resolved, after the resolver's activation (#996).
+     - **Residual (accepted, as F-0101 BR-9 point 1 accepts it for `contribRemoteHelp`):** a per-proposal curated grant
+       that omits only `contribViewsRemote` gives no notice, and the views are just absent.
+     - **Tree creation:** C15 waits for the views to be registered by looking for `<viewId>.focus` every second
+       (bounded), with one helper for both views (#995).
 10. **Engine (C2).**
     - The Docker CLI only, through `dockerPath` (and `dockerComposePath` unused in release 1), with the editor's
       environment as it is, including `DOCKER_HOST` and the current context.
