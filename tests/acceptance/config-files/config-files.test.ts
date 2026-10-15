@@ -18,6 +18,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import {execSync} from 'node:child_process';
 import {userInfo} from 'node:os';
 import path from 'node:path';
 import {invocationNotesOf} from '../../../tools/acceptance-clients.ts';
@@ -425,6 +426,26 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
 
   before(async function () {
     this.timeout(120_000);
+    try {
+      const env: string[] = ['--- diag env (before) ---'];
+      env.push('ssh -V: ' + String(execSync('/usr/bin/ssh -V 2>&1').trim()));
+      env.push('uname: ' + String(execSync('uname -a').trim()));
+      env.push('account home: ' + userInfo().homedir);
+      env.push('system file head: ' + readFileSync(SYSTEM_FILE, 'utf8').split('\n').slice(0, 6).join(' | '));
+      for (const name of [
+        'REMOTE_OSS_ACCEPTANCE',
+        'REMOTE_OSS_ACCEPTANCE_LOG',
+        'HARNESS_RUN_FOLDER',
+        'HARNESS_SSH_CONFIG',
+      ]) {
+        env.push(name + '=' + String(process.env[name]));
+      }
+      env.push('log file exists: ' + String(existsSync(variable('REMOTE_OSS_ACCEPTANCE_LOG'))));
+      env.push('--- diag env end ---');
+      console.log(env.join('\n'));
+    } catch (err) {
+      console.log('diag env failed: ' + String(err));
+    }
     rmSync(HOME_FOLDER, {recursive: true, force: true});
     mkdirSync(HOME_FOLDER, {recursive: true});
     mkdirSync(path.dirname(USER_FILE), {recursive: true});
@@ -438,6 +459,13 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
 
   after(async function () {
     this.timeout(120_000);
+    try {
+      const logFile = variable('REMOTE_OSS_ACCEPTANCE_LOG');
+      const raw = existsSync(logFile) ? readFileSync(logFile, 'utf8') : '(log file missing)';
+      console.log('--- diag full log at end (' + String(raw.length) + ' chars) ---\n' + raw + '\n--- diag full log end ---');
+    } catch (err) {
+      console.log('diag full log failed: ' + String(err));
+    }
     for (const window of [
       'c1',
       'c2',
@@ -463,6 +491,70 @@ describe('the configuration-file rows of F-2201 (card coverage-20, #142)', funct
       }
     }
     await noHelperWithin(60_000);
+  });
+
+  it('DIAG (#1004): the environment and the raw log of one connect', async () => {
+    const {execSync} = await import('node:child_process');
+    const diag: string[] = ['--- diag env ---'];
+    try {
+      diag.push('ssh -V: ' + String(execSync('/usr/bin/ssh -V 2>&1', {encoding: 'utf8'}).trim()));
+    } catch (e) {
+      diag.push('ssh -V failed: ' + String(e));
+    }
+    try {
+      diag.push('uname: ' + String(execSync('uname -a', {encoding: 'utf8'}).trim()));
+    } catch (e) {
+      diag.push('uname failed: ' + String(e));
+    }
+    diag.push('HOME=' + String(process.env.HOME) + ' account=' + userInfo().homedir);
+    diag.push('system file head: ' + readFileSync(SYSTEM_FILE, 'utf8').split('\n').slice(0, 4).join(' | '));
+    writeFileSync(CFG_A, hostBlock('cfghost'));
+    await configFileSetting(CFG_A);
+    const rawFile = variable('REMOTE_OSS_ACCEPTANCE_LOG');
+    const mark = readFileSync(rawFile, 'utf8').length;
+    await openWindow('cfghost', 'cdiag');
+    let connected = true;
+    try {
+      await connectedWithin('cdiag', 60_000);
+    } catch (e) {
+      connected = false;
+      diag.push('connect failed: ' + String(e));
+    }
+    await endWindow('cdiag');
+    diag.push('--- raw log of the connect (connected=' + String(connected) + ') ---');
+    diag.push(readFileSync(rawFile, 'utf8').slice(mark));
+    diag.push('--- ssh invocations of the connect ---');
+    diag.push(readFileSync(invocationNotesOf(variable('HARNESS_RUN_FOLDER')), 'utf8'));
+    diag.push('--- diag end ---');
+    console.log(diag.join('\n'));
+  });
+
+  it('DIAG (#1004): the environment and the raw log of one connect', async () => {
+    this.timeout(180_000);
+    const logFile = variable('REMOTE_OSS_ACCEPTANCE_LOG');
+    const readRaw = (): string => (existsSync(logFile) ? readFileSync(logFile, 'utf8') : '(log file missing)');
+    writeFileSync(CFG_A, hostBlock('cfghost'));
+    await configFileSetting(CFG_A);
+    const mark = readRaw().length;
+    let connected = true;
+    try {
+      await openWindow('cfghost', 'cdiag');
+      await connectedWithin('cdiag', 60_000);
+    } catch (err) {
+      connected = false;
+    }
+    try {
+      await endWindow('cdiag');
+    } catch (err) {
+      console.log('DIAG: endWindow failed: ' + String(err));
+    }
+    console.log(
+      'DIAG cdiag connected=' +
+        String(connected) +
+        '\n--- raw log of the cdiag connect ---\n' +
+        readRaw().slice(mark) +
+        '\n--- diag end cdiag ---',
+    );
   });
 
   it('F-2201 AC-3: with no user file, the pick lists the system hosts and no message appears', async () => {
