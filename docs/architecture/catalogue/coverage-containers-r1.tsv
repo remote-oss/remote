@@ -400,18 +400,18 @@ F-0411.AC-4	acceptance
 F-0411.AC-5	acceptance	
 F-0411.AC-6	acceptance	
 F-0411.AC-7	acceptance	
-F-0411.AC-8	todo	
-F-0411.AC-9	todo	
-F-0411.AC-10	todo	
+F-0411.AC-8	acceptance	
+F-0411.AC-9	acceptance	
+F-0411.AC-10	acceptance	
 F-0411.AC-11	deferred	containers release 1: later (Compose)
 F-0411.AC-12	acceptance	
 F-0411.AC-13	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0411.AC-14	todo	
+F-0411.AC-14	acceptance	
 F-0411.AC-15	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0411.AC-16	acceptance	
 F-0411.AC-17	deferred	containers release 1: later (Compose)
 F-0411.AC-18	todo	
-F-0411.AC-19	todo	
+F-0411.AC-19	acceptance	
 F-0411.AC-20	deferred	containers release 1: later (remote engines)
 F-0411.AC-21	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0411.AC-22	deferred	containers release 1: later (Windows, WSL and macOS)
@@ -420,17 +420,17 @@ F-0411.AC-24	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0411.AC-25	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0411.AC-26	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0411.AC-27	deferred	containers release 1: later (Compose)
-F-0411.AC-28	todo	
+F-0411.AC-28	acceptance	
 F-0411.AC-29	deferred	containers release 1: later (Compose)
 F-0411.AC-30	acceptance	
 F-0411.AC-31	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0411.AC-32	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0411.AC-33	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0411.AC-34	deferred	containers release 1: later (Windows, WSL and macOS)
-F-0411.AC-35	todo	
-F-0411.AC-36	todo	
-F-0411.AC-37	todo	
-F-0411.AC-38	todo	
+F-0411.AC-35	acceptance	
+F-0411.AC-36	acceptance	
+F-0411.AC-37	acceptance	
+F-0411.AC-38	acceptance	
 F-0411.AC-39	deferred	containers release 1: later (Compose)
 F-0411.AC-40	todo	
 F-0411.AC-41	todo	
