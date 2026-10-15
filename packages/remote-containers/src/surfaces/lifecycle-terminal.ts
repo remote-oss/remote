@@ -19,6 +19,8 @@ const LIFECYCLE_TEMPLATES = {
 const BOLD = '\u001b[1m';
 const RESET = '\u001b[0m';
 
+const ESCAPE = '\u001b';
+
 /** A terminal the editor shows. */
 interface OpenTerminal {
   write(text: string): void;
@@ -53,6 +55,10 @@ interface Run {
   stdin: ((data: string) => void) | undefined;
   /** The line the run's terminal is typing; Enter ends it and hands it, with its CR, to the run's stdin. */
   line: string;
+  /** An Escape the run saw alone, whose next byte will say whether it opens a key sequence. */
+  pendingEscape: boolean;
+  /** The run is inside a key sequence (an Escape and its opener); its bytes are not the line's. */
+  inSequence: boolean;
 }
 
 function newRun(): Run {
@@ -65,6 +71,8 @@ function newRun(): Run {
     finished: false,
     stdin: undefined,
     line: '',
+    pendingEscape: false,
+    inSequence: false,
   };
 }
 
@@ -94,31 +102,35 @@ export function lifecyclePresenterOf(
           return;
         }
         // A key of the run. The CLI's child reads its input from a pipe that neither echoes nor edits, so the
-        // terminal takes the TTY driver's line jobs: it echoes the printable keys, it edits the run's line on
-        // backspace, and it hands the child the line as a whole when Enter ends it.
-        let afterEscape = false;
-        let inSequence = false;
+        // terminal takes the TTY driver's line jobs: it echoes the printable keys and the tab, it edits the
+        // run's line on backspace, and it hands the child the line as a whole when Enter ends it. An Escape is
+        // the child's own key until a '[' or an 'O' follows it and opens a key sequence, whose bytes are the
+        // driver's.
         for (const character of data) {
           const code = character.codePointAt(0);
           if (code === undefined) {
             continue;
           }
-          if (afterEscape) {
-            // The byte after an ESC opens a key sequence: its bytes go to the sequence's final byte.
-            afterEscape = false;
-            inSequence = true;
-            continue;
-          }
-          if (inSequence) {
+          if (own.inSequence) {
             // The rest of a key sequence, to its final byte.
             if (code >= 0x40 && code <= 0x7e) {
-              inSequence = false;
+              own.inSequence = false;
             }
             continue;
           }
+          if (own.pendingEscape) {
+            // The byte after an Escape: a '[' or an 'O' opens a key sequence, otherwise the Escape was lone and
+            // goes raw, and this byte is read as its own.
+            own.pendingEscape = false;
+            if (code === 0x5b || code === 0x4f) {
+              own.inSequence = true;
+              continue;
+            }
+            own.stdin?.(ESCAPE);
+          }
           if (code === 0x1b) {
-            // The start of a key sequence (the delete and the arrow keys): not the child's line input.
-            afterEscape = true;
+            // An Escape that may open a key sequence: its next byte says whether it does.
+            own.pendingEscape = true;
             continue;
           }
           if (code === 0x0d || code === 0x0a) {
@@ -130,12 +142,17 @@ export function lifecyclePresenterOf(
           if (code === 0x7f || code === 0x08) {
             // Backspace: the last character of the line comes off it, and its echo goes with it.
             if (own.line.length > 0) {
-              own.line = own.line.slice(0, -1);
+              // A code unit past 0xdc00 is a low surrogate, and so only ever closes an astral character.
+              const lastUnit = own.line.charCodeAt(own.line.length - 1);
+              own.line = own.line.slice(
+                0,
+                own.line.length - (lastUnit >= 0xdc00 ? 2 : 1),
+              );
               own.open?.write('\u0008 \u0008');
             }
             continue;
           }
-          if (code >= 0x20) {
+          if (code >= 0x20 || code === 0x09) {
             own.open?.write(character);
             own.line += character;
             continue;

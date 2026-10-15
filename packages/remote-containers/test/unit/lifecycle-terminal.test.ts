@@ -131,13 +131,88 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
   it('F-0415 7.E6: Enter hands the run line, with its CR, to the run stdin, and the terminal shows the newline', () => {
     const {scene, delivered} = stdinScene();
     scene.typed('ab\r');
-    deepStrictEqual(delivered, ['ab\r']);
-    deepStrictEqual(scene.record.slice(1), [
-      `write ${JSON.stringify('a\r\n')}`,
-      `write ${JSON.stringify('a')}`,
-      `write ${JSON.stringify('b')}`,
-      `write ${JSON.stringify('\r\n')}`,
-    ]);
+    deepStrictEqual(
+      [delivered, scene.record.slice(1)],
+      [
+        ['ab\r'],
+        [
+          `write ${JSON.stringify('a\r\n')}`,
+          `write ${JSON.stringify('a')}`,
+          `write ${JSON.stringify('b')}`,
+          `write ${JSON.stringify('\r\n')}`,
+        ],
+      ],
+    );
+  });
+
+  it('F-0415 7.E6: a tab is echoed and held like a printable key, and reaches the child in the line', () => {
+    const {scene, delivered} = stdinScene();
+    scene.typed('a');
+    scene.typed('\t');
+    scene.typed('\r');
+    deepStrictEqual(
+      [delivered, scene.record.slice(1)],
+      [
+        ['a\t\r'],
+        [
+          `write ${JSON.stringify('a\r\n')}`,
+          `write ${JSON.stringify('a')}`,
+          `write ${JSON.stringify('\t')}`,
+          `write ${JSON.stringify('\r\n')}`,
+        ],
+      ],
+    );
+  });
+
+  it('F-0415 7.E6: a backspace pops a whole character, not a code unit of an astral character', () => {
+    const {scene, delivered} = stdinScene();
+    scene.typed('a\u{1F600}');
+    scene.typed('\x7f');
+    scene.typed('\r');
+    deepStrictEqual(
+      [delivered, scene.record.slice(1)],
+      [
+        ['a\r'],
+        [
+          `write ${JSON.stringify('a\r\n')}`,
+          `write ${JSON.stringify('a')}`,
+          `write ${JSON.stringify('\u{1F600}')}`,
+          `write ${JSON.stringify('\u0008 \u0008')}`,
+          `write ${JSON.stringify('\r\n')}`,
+        ],
+      ],
+    );
+  });
+
+  it('F-0415 7.E6: a lone Escape goes raw, and the Enter after it still ends the run line', () => {
+    const {scene, delivered} = stdinScene();
+    scene.typed('a');
+    scene.typed('\x1b');
+    scene.typed('\r');
+    deepStrictEqual(
+      [delivered, scene.record.slice(1)],
+      [
+        ['\x1b', 'a\r'],
+        [
+          `write ${JSON.stringify('a\r\n')}`,
+          `write ${JSON.stringify('a')}`,
+          `write ${JSON.stringify('\r\n')}`,
+        ],
+      ],
+    );
+  });
+
+  it('F-0415 7.E6: a lone Escape loses no letter that follows it', () => {
+    const {scene, delivered} = stdinScene();
+    scene.typed('\x1b');
+    scene.typed('b');
+    deepStrictEqual(
+      [delivered, scene.record.slice(1)],
+      [
+        ['\x1b'],
+        [`write ${JSON.stringify('a\r\n')}`, `write ${JSON.stringify('b')}`],
+      ],
+    );
   });
 
   it('F-0415 7.E6: a backspace pops the run line and redisplay-erases its echo', () => {
