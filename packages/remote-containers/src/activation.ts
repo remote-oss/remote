@@ -20,6 +20,7 @@ import {
 } from 'lib-log';
 import {standDownIfPresent, type StandDownHost} from 'lib-standdown';
 import type {PreflightDependencies} from './engine/preflight.ts';
+import type {TrustPort} from './trust/trust-gate.ts';
 
 /** The part of the package's identifier table that activation uses. */
 export interface ContainersTable<
@@ -49,6 +50,8 @@ interface ServedWindow {
   readonly preflight: PreflightDependencies;
   /** The proposals the activation's probe found missing, as the setup's decision names them. */
   readonly missing: readonly string[];
+  /** What the open commands read and ask of the editor's workspace trust; activation never calls it. */
+  readonly trust: TrustPort;
   /** Runs the setup again after a use that needs a proposal failed; it never stores a success it did not probe. */
   setupAgain(): Promise<SetupRun>;
 }
@@ -67,6 +70,8 @@ export interface ContainersActivationInputs<
   banner: BannerFacts;
   /** The surroundings of the Docker CLI checks, made once the log is open. */
   preflight(logger: Logger): PreflightDependencies;
+  /** The editor's workspace trust, which the open commands ask. */
+  trust: TrustPort;
   /** The ports of the proposed-API setup, made once the log is open; `logFailure` writes to it. */
   gate(logFailure: (message: string) => void): SetupPorts;
   /** The handler of every command of the table, made once the window serves. */
@@ -128,6 +133,7 @@ export async function activateContainers<
       logger,
       preflight: inputs.preflight(logger),
       missing,
+      trust: inputs.trust,
       setupAgain: () => runSetup(ports, false),
     };
     const registration = registerCommands(

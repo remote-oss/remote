@@ -1,6 +1,6 @@
 /**
- * @fileoverview The Reopen in Container command for a local window with one folder: it checks the engine and has a
- * configuration chosen and read, both before the reload, and reloads the same window on a dev-container authority at
+ * @fileoverview The Reopen in Container command for a local window with one folder: it checks the folder's trust and the
+ * engine and has a configuration chosen and read, all before the reload, and reloads the same window on a dev-container authority at
  * the folder the container will show. It never creates or starts a container; the resolve does.
  */
 
@@ -23,7 +23,7 @@ export function reopenInContainer(ports: ReopenPorts): () => Promise<void> {
   const {window, logger} = ports;
   let running = false;
 
-  /** The folder to reopen when this window is a local one with a single trusted `file` folder. */
+  /** The folder to reopen when this window is a local one with a single `file` folder. */
   function folderToReopen(): string | undefined {
     const folders = window.folders();
     const [only] = folders;
@@ -35,18 +35,12 @@ export function reopenInContainer(ports: ReopenPorts): () => Promise<void> {
       logger.info('Reopen in Container does nothing in this window');
       return undefined;
     }
-    if (!window.isTrusted()) {
-      logger.info(
-        "the folder isn't trusted; Reopen in Container needs workspace trust",
-      );
-      return undefined;
-    }
     return only.fsPath;
   }
 
   async function attempt(): Promise<void> {
     const folder = folderToReopen();
-    if (folder === undefined) {
+    if (folder === undefined || (await ports.ensureTrusted()) !== 'trusted') {
       return;
     }
     // With the folder as base, the setting always names a program.

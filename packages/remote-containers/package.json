@@ -74,7 +74,7 @@
       "commandPalette": [
         {
           "command": "remote-containers.reopenInContainer",
-          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown"
+          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",
@@ -89,7 +89,7 @@
         {
           "command": "remote-containers.reopenInContainer",
           "group": "remote_30_dev-container_2_actions@8",
-          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && isWorkspaceTrusted && !remote-containers:standingDown"
+          "when": "!hideConnectCommands && workspaceFolderCount != 0 && !remoteName && !virtualWorkspace && !remote-containers:standingDown"
         },
         {
           "command": "remote-containers.rebuildContainer",

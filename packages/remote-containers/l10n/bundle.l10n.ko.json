@@ -57,5 +57,6 @@
   "Open Recent...": "Open Recent...",
   "Pick an action to help resolve the problem.": "Pick an action to help resolve the problem.",
   "Reload Window": "Reload Window",
-  "Retry": "Retry"
+  "Retry": "Retry",
+  "Opening a folder in a Dev Container may execute arbitrary code both inside and outside the container.": "Opening a folder in a Dev Container may execute arbitrary code both inside and outside the container."
 }
