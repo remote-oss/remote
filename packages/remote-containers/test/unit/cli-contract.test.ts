@@ -31,6 +31,7 @@ describe('the contract rows of the CLI bridge (card containers-04)', () => {
           kind: 'spawned',
           process: {
             processId: 1,
+            stdin: new PassThrough(),
             stdout,
             stderr: new PassThrough().end(),
             exited: Promise.resolve(0),

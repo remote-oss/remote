@@ -359,6 +359,7 @@ export function sceneOf(
       output: () => undefined,
       backgroundStarted: () => undefined,
       ended: () => undefined,
+      attachStdin: () => undefined,
     },
     settings: () => ({
       dockerPath: scene.dockerPath,

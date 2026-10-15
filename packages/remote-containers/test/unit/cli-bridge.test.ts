@@ -32,6 +32,7 @@ type Script = (
   cliArguments: readonly string[],
   onLine: (line: CliLine) => void,
   cancellation: AbortSignal,
+  onStdin?: (write: (data: string) => void) => void,
 ) => Promise<CliRun>;
 
 /** A bridge over a scripted host, a config file with `configText`, and a recording override store. */
@@ -44,14 +45,16 @@ function setup(
   } = {},
 ) {
   const calls: string[][] = [];
+  const stdinOf: Array<((write: (data: string) => void) => void) | undefined> = [];
   const written: string[] = [];
   const removed: string[] = [];
   const sink = new MemorySink();
   const host: CliHost = {
     // eslint-disable-next-line id-length -- the port's method is named run
-    run: (cliArguments, onLine, cancellation) => {
+    run: (cliArguments, onLine, cancellation, onStdin) => {
+      stdinOf.push(onStdin);
       calls.push([...cliArguments]);
-      return script(cliArguments, onLine, cancellation);
+      return script(cliArguments, onLine, cancellation, onStdin);
     },
   };
   const overrides: OverrideStore = {
@@ -78,7 +81,7 @@ function setup(
     options.environment ?? {},
     createLogger(sink, {minimumLevel: () => 'info'}),
   );
-  return {bridge, calls, written, removed, sink};
+  return {bridge, calls, stdinOf, written, removed, sink};
 }
 
 /** A script that ends with `result` and `status`. */
@@ -105,6 +108,25 @@ describe('the CLI bridge (card containers-04)', () => {
     deepStrictEqual(
       [written, calls[0]?.includes('--override-config')],
       [[], false],
+    );
+  });
+
+  it('F-0415 7.E6: up, run-user-commands and read-configuration hand their onStdin to the host', async () => {
+    const {bridge, stdinOf} = setup(ending('{"outcome":"success","result":"done"}'));
+    function onStdin(): void {
+      void 0;
+    }
+    await Promise.all([
+      bridge.up(TARGET, UP_OPTIONS, () => undefined, NEVER, onStdin),
+      bridge.runUserCommands(TARGET, 'c1', () => undefined, NEVER, onStdin),
+    ]);
+    await bridge.readConfiguration(TARGET, 'c1', () => undefined, NEVER, onStdin);
+    deepStrictEqual(
+      [
+        stdinOf.length,
+        stdinOf.every(each => each === onStdin),
+      ],
+      [3, true],
     );
   });
 

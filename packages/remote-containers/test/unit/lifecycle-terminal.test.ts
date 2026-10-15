@@ -35,12 +35,17 @@ function sceneOf(translate = (template: string) => template) {
       return () => record.push('hide');
     },
   };
+  const presenter = lifecyclePresenterOf(terminal, progress, translate);
   return {
     record,
-    presenter: lifecyclePresenterOf(terminal, progress, translate),
+    presenter,
     typed: (data: string, index = inputs.length - 1) =>
       inputs.at(index)?.(data),
     userCloses: (index = closers.length - 1) => closers.at(index)?.(),
+    /** Hands the writer for the run's CLI stdin to the presenter, as a CLI run does. */
+    attach: (write: (data: string) => void) => {
+      presenter.attachStdin(write);
+    },
   };
 }
 
@@ -97,13 +102,74 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
     ]);
   });
 
-  it('F-0415 7.E6 (release 1): Ctrl+C and other keys are ignored while the commands run', () => {
+  it('F-0415 7.E6: a key of a run is echoed when printable and goes to the CLI stdin of the run', () => {
+    const scene = sceneOf();
+    const delivered: string[] = [];
+    scene.presenter.output(eventOf('raw', 'a\n'), 0);
+    scene.attach(data => delivered.push(data));
+    scene.typed('a');
+    scene.typed('\u0003');
+    deepStrictEqual(
+      [scene.record.slice(1), delivered],
+      [
+        [
+          `write ${JSON.stringify('a\r\n')}`,
+          `write ${JSON.stringify('a')}`,
+        ],
+        ['a', '\u0003'],
+      ],
+    );
+  });
+
+  it('F-0415 7.E6: a key with no run stdin is echoed and goes nowhere', () => {
     const scene = sceneOf();
     scene.presenter.output(eventOf('raw', 'a\n'), 0);
-    const before = scene.record.length;
-    scene.typed('\u0003');
     scene.typed('a');
-    deepStrictEqual(scene.record.length, before);
+    scene.typed('\u0003');
+    deepStrictEqual(scene.record, [
+      'open Configuring...',
+      `write ${JSON.stringify('a\r\n')}`,
+      `write ${JSON.stringify('a')}`,
+    ]);
+  });
+
+  it('F-0415 7.E6, AC-33: after the run has ended, a key closes the terminal and goes nowhere', () => {
+    const scene = sceneOf();
+    const delivered: string[] = [];
+    scene.presenter.output(eventOf('raw', 'a\n'), 0);
+    scene.attach(data => delivered.push(data));
+    scene.presenter.ended();
+    scene.typed('x');
+    deepStrictEqual(
+      [scene.record.slice(2), delivered],
+      [[`write ${JSON.stringify(S153)}`, 'close'], []],
+    );
+  });
+
+  it('F-0415 7.E6: a run after an ended run gets its own stdin, and a key of the old terminal closes it alone', () => {
+    const scene = sceneOf();
+    const first: string[] = [];
+    const second: string[] = [];
+    scene.presenter.output(eventOf('raw', 'one\n'), 0);
+    scene.attach(data => first.push(data));
+    scene.presenter.ended();
+    scene.presenter.backgroundStarted();
+    scene.presenter.output(eventOf('raw', 'two\n'), 0);
+    scene.attach(data => second.push(data));
+    scene.typed('y', 1);
+    scene.typed('z', 0);
+    deepStrictEqual(
+      [
+        [first, second],
+        scene.record.slice(
+          scene.record.indexOf(`write ${JSON.stringify('two\r\n')}`) + 1,
+        ),
+      ],
+      [
+        [[], ['y']],
+        [`write ${JSON.stringify('y')}`, 'close'],
+      ],
+    );
   });
 
   it('F-0415 AC-33: the end writes S153 in bold, and the next key closes the terminal', () => {
@@ -173,6 +239,8 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
           'show Configuring Dev Container (show log)',
           'open Configuring...',
           `write ${JSON.stringify('two\r\n')}`,
+          // A key of the unfinished run is echoed (F-0415 7.E6).
+          `write ${JSON.stringify('x')}`,
         ],
         ['close'],
       ],

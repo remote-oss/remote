@@ -37,6 +37,9 @@ const COLOUR_CODES = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 /** How long the CLI may keep running after its result line before it is ended. */
 const GUARD_MILLISECONDS = 30_000;
 
+/** The writer for a CLI run's stdin: the keys of the "Configuring..." terminal go through it to a command's input. */
+type StdinOf = (write: (data: string) => void) => void;
+
 /** What the components call. */
 export interface CliBridge {
   up(
@@ -44,18 +47,21 @@ export interface CliBridge {
     options: UpOptions,
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
+    onStdin?: StdinOf,
   ): Promise<UpResult>;
   runUserCommands(
     target: CliTarget,
     containerId: string,
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
+    onStdin?: StdinOf,
   ): Promise<RunUserCommandsResult>;
   readConfiguration(
     target: CliTarget,
     containerId: string | undefined,
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
+    onStdin?: StdinOf,
   ): Promise<ConfigurationResult | CliFailure>;
 }
 
@@ -138,6 +144,7 @@ export function cliBridgeOf(
     ) => Result,
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
+    onStdin?: StdinOf,
   ): Promise<Result | CliFailure> {
     const configText = await files.readText(target.configFile).catch(() => '');
     const secrets = referencedSecrets(configText, editorEnvironment);
@@ -199,6 +206,7 @@ export function cliBridgeOf(
             deliver(read.event);
           },
           own.signal,
+          onStdin,
         );
         rawHold.releaseAll().forEach(deliver);
         if (finished.kind === 'spawnFailed') {
@@ -231,23 +239,25 @@ export function cliBridgeOf(
 
   return {
     // eslint-disable-next-line id-length -- the bridge's method is named up
-    up: (target, options, onEvent, cancellation) =>
+    up: (target, options, onEvent, cancellation, onStdin) =>
       drive(
         target,
         prepared => upArguments(prepared, options),
         readUpResult,
         onEvent,
         cancellation,
+        onStdin,
       ),
-    runUserCommands: (target, containerId, onEvent, cancellation) =>
+    runUserCommands: (target, containerId, onEvent, cancellation, onStdin) =>
       drive(
         target,
         prepared => runUserCommandsArguments(prepared, containerId),
         readRunUserCommandsResult,
         onEvent,
         cancellation,
+        onStdin,
       ),
-    readConfiguration: (target, containerId, onEvent, cancellation) =>
+    readConfiguration: (target, containerId, onEvent, cancellation, onStdin) =>
       drive(
         target,
         prepared => readConfigurationArguments(prepared, containerId),
@@ -255,6 +265,7 @@ export function cliBridgeOf(
           readConfigurationResult(result, lastError),
         onEvent,
         cancellation,
+        onStdin,
       ),
   };
 }

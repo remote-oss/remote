@@ -936,13 +936,21 @@ async function keyInFolderDialog(
   await pressKey(await pageOf(name), name, key);
 }
 
-/** Presses `key` in the page at protocol address `address`, as the keyboard does, with its key down and up. */
-async function pressKey(
+/** One key as the protocol's `Input.dispatchKeyEvent` takes it; `text` is what its key down inserts, when the key types one. */
+interface KeyStroke {
+  key: string;
+  code: string;
+  windowsVirtualKeyCode: number;
+  nativeVirtualKeyCode: number;
+  text?: string;
+}
+
+/** Presses the `stroke` in the page at protocol address `address`, as the keyboard does, with its key down and up. */
+async function pressStroke(
   address: string,
   owner: string,
-  key: 'Enter' | 'Escape',
+  stroke: KeyStroke,
 ): Promise<void> {
-  const keyCode = key === 'Enter' ? 13 : 27;
   const socket = new WebSocket(address);
   try {
     await new Promise<void>((resolve, reject) => {
@@ -966,11 +974,10 @@ async function pressKey(
           method: 'Input.dispatchKeyEvent',
           params: {
             type,
-            key,
-            code: key,
-            windowsVirtualKeyCode: keyCode,
-            nativeVirtualKeyCode: keyCode,
-            ...(key === 'Enter' && type === 'keyDown' ? {text: '\r'} : {}),
+            ...stroke,
+            ...(type === 'keyDown' && stroke.text !== undefined
+              ? {text: stroke.text}
+              : {}),
           },
         }),
       );
@@ -979,6 +986,52 @@ async function pressKey(
   } finally {
     socket.close();
   }
+}
+
+/** Presses `key` in the page at protocol address `address`, as the keyboard does, with its key down and up. */
+async function pressKey(
+  address: string,
+  owner: string,
+  key: 'Enter' | 'Escape',
+): Promise<void> {
+  const virtualKeyCode = key === 'Enter' ? 13 : 27;
+  await pressStroke(address, owner, {
+    key,
+    code: key,
+    windowsVirtualKeyCode: virtualKeyCode,
+    nativeVirtualKeyCode: virtualKeyCode,
+    ...(key === 'Enter' ? {text: '\r'} : {}),
+  });
+}
+
+/** The key that types the printable `character`, as the protocol takes it. */
+function characterStroke(character: string): KeyStroke {
+  const upper = character.toUpperCase();
+  const virtualKeyCode =
+    (upper >= 'A' && upper <= 'Z') || (character >= '0' && character <= '9')
+      ? upper.charCodeAt(0)
+      : 0;
+  return {
+    key: character,
+    code:
+      upper >= 'A' && upper <= 'Z'
+        ? `Key${upper}`
+        : character >= '0' && character <= '9'
+          ? `Digit${character}`
+          : character,
+    windowsVirtualKeyCode: virtualKeyCode,
+    nativeVirtualKeyCode: virtualKeyCode,
+    text: character,
+  };
+}
+
+/** Presses the printable `character` in the page at protocol address `address`, as the keyboard does. */
+async function pressCharacter(
+  address: string,
+  owner: string,
+  character: string,
+): Promise<void> {
+  await pressStroke(address, owner, characterStroke(character));
 }
 
 /** Types `folder` into window `name`'s folder dialog and confirms it, as Enter does with no item focused. */
@@ -992,4 +1045,34 @@ export function answerFolderDialog(
 /** Closes window `name`'s folder dialog with Escape. */
 export function cancelFolderDialog(name: string): Promise<void> {
   return keyInFolderDialog(name, 'Escape');
+}
+
+/** The page's terminal text rows: the one terminal of the launches these helpers serve, xterm's visible rows. */
+const TERMINAL_ROWS = 'document.querySelector(\'.xterm-rows\')';
+
+/** Whether window `name` has a terminal on its page. */
+async function terminalPresent(name: string): Promise<boolean> {
+  return evaluate<boolean>(name, `${TERMINAL_ROWS} !== null`);
+}
+
+/**
+ * Types `text` into window `name`, as the keyboard does, wherever its page has focus: a character at a time, `Enter`
+ * for every newline. The callers arrange the focus, which a terminal takes when it opens.
+ */
+export async function typeInTerminal(
+  name: string,
+  text: string,
+): Promise<void> {
+  await settled(
+    () => `the terminal of window ${name}`,
+    async () => ((await terminalPresent(name)) ? true : undefined),
+  );
+  const address = await pageOf(name);
+  for (const character of text) {
+    if (character === '\n') {
+      await pressKey(address, name, 'Enter');
+    } else {
+      await pressCharacter(address, name, character);
+    }
+  }
 }

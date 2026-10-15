@@ -49,6 +49,8 @@ interface Run {
   background: boolean;
   hideProgress: (() => void) | undefined;
   finished: boolean;
+  /** The writer for the run's CLI stdin, when the run has one; a key typed in the run's terminal goes to it. */
+  stdin: ((data: string) => void) | undefined;
 }
 
 function newRun(): Run {
@@ -59,6 +61,7 @@ function newRun(): Run {
     background: false,
     hideProgress: undefined,
     finished: false,
+    stdin: undefined,
   };
 }
 
@@ -81,11 +84,21 @@ export function lifecyclePresenterOf(
   function opened(own: Run): OpenTerminal {
     own.open ??= terminal.open(
       translate(LIFECYCLE_TEMPLATES.S086),
-      () => {
+      data => {
         if (own.finished) {
           own.open?.close();
           own.open = undefined;
+          return;
         }
+        // A key of the run: the CLI's child reads its input from a pipe that does not echo, so the terminal echoes
+        // the printable keys, and the keys go to the run's CLI stdin, when the run has one.
+        for (const character of data) {
+          const code = character.codePointAt(0);
+          if (code !== undefined && code >= 0x20 && code !== 0x7f) {
+            own.open?.write(character);
+          }
+        }
+        own.stdin?.(data);
       },
       () => {
         own.open = undefined;
@@ -131,6 +144,9 @@ export function lifecyclePresenterOf(
       own.open?.write(
         `\r\n${BOLD}${translate(LIFECYCLE_TEMPLATES.S153)}${RESET}`,
       );
+    },
+    attachStdin: write => {
+      current().stdin = write;
     },
   };
 }

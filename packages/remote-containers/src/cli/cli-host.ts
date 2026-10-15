@@ -18,11 +18,13 @@ export type CliRun =
 export interface CliHost {
   /**
    * Runs the CLI with `cliArguments`. An abort ends the CLI and its children, and the run then ends with status
-   * null. `result` is the first line of stdout, when there was one.
+   * null. `result` is the first line of stdout, when there was one. `onStdin`, when given, gets the writer for the
+   * CLI's stdin once the CLI has started, which the lifecycle commands' input goes through.
    */
   run(
     cliArguments: readonly string[],
     onLine: (line: CliLine) => void,
     cancellation: AbortSignal,
+    onStdin?: (write: (data: string) => void) => void,
   ): Promise<CliRun>;
 }

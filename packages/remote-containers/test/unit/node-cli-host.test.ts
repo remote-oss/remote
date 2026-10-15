@@ -20,8 +20,11 @@ interface Fake {
     options: unknown;
   }>;
   signals: Array<[number, string]>;
+  /** What a test wrote to the process's stdin. */
+  stdin: PassThrough;
   stdout: PassThrough;
   stderr: PassThrough;
+  stdinWrote: string[];
   /** Ends the process with `status`. */
   exit(status: number | null): void;
 }
@@ -32,8 +35,11 @@ function fakeSystem(
     gone?: boolean;
   } = {},
 ): Fake {
+  const stdin = new PassThrough();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
+  const stdinWrote: string[] = [];
+  stdin.on('data', (chunk: Buffer) => stdinWrote.push(chunk.toString()));
   const ends: Array<(status: number | null) => void> = [];
   const exited = new Promise<number | null>(resolve => {
     ends.push(resolve);
@@ -43,8 +49,10 @@ function fakeSystem(
   return {
     spawns,
     signals,
+    stdin,
     stdout,
     stderr,
+    stdinWrote,
     exit: status => {
       stdout.end();
       stderr.end();
@@ -57,7 +65,7 @@ function fakeSystem(
           options.failure === undefined
             ? {
                 kind: 'spawned',
-                process: {processId: 4242, stdout, stderr, exited},
+                process: {processId: 4242, stdin, stdout, stderr, exited},
               }
             : {kind: 'failed', message: options.failure},
         );
@@ -96,7 +104,7 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
         options: {
           shell: false,
           detached: true,
-          stdio: ['ignore', 'pipe', 'pipe'],
+          stdio: ['pipe', 'pipe', 'pipe'],
           env: {HOME: '/home/u', ELECTRON_RUN_AS_NODE: '1'},
         },
       },
@@ -238,5 +246,58 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
       ),
       {kind: 'spawnFailed', message: 'spawn ENOENT'},
     );
+  });
+
+  it('F-0415 7.E6: onStdin gets a writer that delivers to the stdin of the CLI, an Enter as LF', async () => {
+    const fake = fakeSystem();
+    let writer: ((data: string) => void) | undefined;
+    const running = nodeCliHost(PATHS, {}, fake.ports).run(
+      [],
+      () => undefined,
+      new AbortController().signal,
+      write => {
+        writer = write;
+      },
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    writer?.('yes\r\n');
+    await new Promise(resolve => setImmediate(resolve));
+    fake.exit(0);
+    deepStrictEqual([await running, fake.stdinWrote], [
+      {kind: 'ran', result: undefined, status: 0},
+      ['yes\n\n'],
+    ]);
+  });
+
+  it('F-0415 7.E6: a run without onStdin never touches the stdin of the CLI', async () => {
+    const fake = fakeSystem();
+    const running = nodeCliHost(PATHS, {}, fake.ports).run(
+      [],
+      () => undefined,
+      new AbortController().signal,
+    );
+    fake.exit(0);
+    deepStrictEqual([await running, fake.stdinWrote], [
+      {kind: 'ran', result: undefined, status: 0},
+      [],
+    ]);
+  });
+
+  it('F-0415 7.E6: a write after the CLI has ended is dropped, without an error', async () => {
+    const fake = fakeSystem();
+    let writer: ((data: string) => void) | undefined;
+    const running = nodeCliHost(PATHS, {}, fake.ports).run(
+      [],
+      () => undefined,
+      new AbortController().signal,
+      write => {
+        writer = write;
+      },
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    fake.stdin.destroy();
+    fake.exit(0);
+    writer?.('late\r\n');
+    deepStrictEqual(await running, {kind: 'ran', result: undefined, status: 0});
   });
 });

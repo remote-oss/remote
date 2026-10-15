@@ -4,10 +4,13 @@
  */
 
 import {spawn} from 'node:child_process';
+import type {Writable} from 'node:stream';
 
 /** A process that started, with its streams and its end. */
 export interface SpawnedCli {
   processId: number | undefined;
+  /** The process's stdin: the CLI's keys go to it, and it gives them to a lifecycle command. */
+  stdin: Writable;
   stdout: NodeJS.ReadableStream;
   stderr: NodeJS.ReadableStream;
   /** Settles once, with the exit status, or null after a signal. */
@@ -26,7 +29,7 @@ export interface NodeCliPorts {
     options: {
       shell: false;
       detached: true;
-      stdio: ['ignore', 'pipe', 'pipe'];
+      stdio: ['pipe', 'pipe', 'pipe'];
       env: Readonly<Record<string, string | undefined>>;
     },
   ): Promise<CliSpawn>;
@@ -47,6 +50,7 @@ export const systemCliPorts: NodeCliPorts = {
           kind: 'spawned',
           process: {
             processId: child.pid,
+            stdin: child.stdin,
             stdout: child.stdout,
             stderr: child.stderr,
             exited: new Promise(done => {
