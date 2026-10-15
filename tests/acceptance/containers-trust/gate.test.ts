@@ -11,6 +11,7 @@ import {
   devContainerFolder,
   devContainersOf,
   isTrusted,
+  reloadWindow,
   reopenInContainer,
   inWindow,
   trustSettled,
@@ -21,8 +22,11 @@ import {
 import {
   answerDialog,
   dialogOf,
+  clickButton,
   dialogText,
+  hasStatusItem,
   notifications,
+  pageText,
   waitForDialog,
   windowTitle,
 } from '../windows/renderer.ts';
@@ -197,5 +201,52 @@ describe('Dev Containers trust gate rows (card containers-12)', function () {
     } finally {
       await setUserSetting('dev.containers.dockerPath', undefined);
     }
+  });
+
+  /** Reopens `folder` in a container from an untrusted window and trusts it in core's dialog; the window is connected. */
+  async function trustedContainerWindow(folder: string): Promise<string> {
+    const name = await openFolderWindow(folder);
+    const reopened = reopenInContainer(name);
+    await waitForDialog(name);
+    await answerDialog(name, 'Trust Folder & Continue');
+    await reopened;
+    return name;
+  }
+
+  it('containers-22 (t1) F-0106 6.11: after a trusted Reopen, the connected window is trusted by the local folder’s entry and shows no Restricted Mode item', async () => {
+    const folder = devContainerFolder('gate-trust-held', {name: 'Trust Held'});
+    const name = await trustedContainerWindow(folder);
+    deepStrictEqual(
+      {
+        remoteName: (await windowState(name)).remoteName,
+        trusted: await trustSettled(name, true),
+        restrictedItem: await hasStatusItem(name, 'status.workspaceTrust'),
+      },
+      {remoteName: 'dev-container', trusted: true, restrictedItem: false},
+    );
+    await closeWindow(name);
+  });
+
+  it('F-0106 AC-39 (t2): trust is not forced in the connected window, and untrusting the local folder makes the next reload restricted', async () => {
+    const folder = devContainerFolder('gate-trust-manage', {
+      name: 'Trust Manage',
+    });
+    const name = await trustedContainerWindow(folder);
+    await inWindow(name, 'workbench.trust.manage');
+    await waitFor(
+      'the trust editor of the connected window',
+      async () => (await pageText(name)).includes('You trust this folder'),
+      30_000,
+    );
+    await clickButton(name, "Don't Trust");
+    await reloadWindow(name);
+    deepStrictEqual(
+      {
+        remoteName: (await windowState(name)).remoteName,
+        trusted: await trustSettled(name, false),
+      },
+      {remoteName: 'dev-container', trusted: false},
+    );
+    await closeWindow(name);
   });
 });
