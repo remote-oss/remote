@@ -772,7 +772,7 @@ F-0504.AC-29	unit
 F-0504.AC-30	unit	
 F-0504.AC-31	todo	
 F-0504.AC-32	todo	
-F-0505.AC-1	todo	
+F-0505.AC-1	acceptance	
 F-0505.AC-2	todo	
 F-0505.AC-3	todo	
 F-0505.AC-4	unit	
@@ -783,7 +783,7 @@ F-0505.AC-8	todo
 F-0505.AC-9	todo	
 F-0505.AC-10	unit	
 F-0505.AC-11	todo	
-F-0505.AC-12	todo	
+F-0505.AC-12	acceptance	
 F-0505.AC-13	todo	
 F-0505.AC-14	unit	
 F-0505.AC-15	todo	
@@ -804,7 +804,7 @@ F-0505.AC-30	unit
 F-0505.AC-31	unit	
 F-0505.AC-32	unit	
 F-0505.AC-33	core	core: the Extensions view
-F-0505.AC-34	todo	
+F-0505.AC-34	acceptance	
 F-0505.AC-35	core	core: the Extensions view and the disabled-extension hover
 F-0505.AC-36	deferred	containers release 1: later (Compose, volumes and the Kubernetes family)
 F-0505.AC-37	deferred	containers release 1: later (Windows, WSL and macOS)
