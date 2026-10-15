@@ -30,7 +30,7 @@ async function until(
   }
 }
 
-describe('the input of the "Configuring..." terminal (issue #124)', function () {
+describe('the input of the "Configuring..." terminal (remote-oss/remote-containers#124)', function () {
   this.timeout(600_000);
 
   it('F-0415 AC-36 (initcmd-input): the keys typed in the terminal reach the initializeCommand, which reads its answer', async () => {
