@@ -267,6 +267,13 @@ export function activate(context: vscode.ExtensionContext): void {
         );
       },
     ),
+    vscode.commands.registerCommand('acceptance.agent.statFolder', async () => {
+      const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+      if (folder === undefined) {
+        throw new Error('the window has no folder');
+      }
+      await vscode.workspace.fs.stat(folder);
+    }),
   );
   let busy = false;
   const timer = setInterval(() => {

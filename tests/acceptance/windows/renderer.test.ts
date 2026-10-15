@@ -1,5 +1,34 @@
 import {deepStrictEqual, strictEqual, throws} from 'node:assert';
-import {pageTitleFor} from './renderer.ts';
+import {pageTitleByName, pageTitleFor} from './renderer.ts';
+
+describe('pageTitleByName', () => {
+  it('containers-19: a folder window finds its page by its name, with or without the remote part of the title', () => {
+    deepStrictEqual(
+      [
+        pageTitleByName('gate-docker', ['[gate-docker]', '[]']),
+        pageTitleByName('reuse-same', [
+          '[reuse-same [Dev Container: Reuse]]',
+          '[reuse-same-2]',
+        ]),
+      ],
+      ['[gate-docker]', '[reuse-same [Dev Container: Reuse]]'],
+    );
+  });
+
+  it('containers-19: the local window is the empty brackets', () => {
+    strictEqual(pageTitleByName('local', ['[]SSH: harness', '[]']), '[]');
+  });
+
+  it('containers-19: no title, or two, that fit the name give none', () => {
+    deepStrictEqual(
+      [
+        pageTitleByName('empty-1', ['[]', '[x1]']),
+        pageTitleByName('local', ['[]', '[]']),
+      ],
+      [undefined, undefined],
+    );
+  });
+});
 
 describe('pageTitleFor', () => {
   it('coverage-25a: a folder window finds its page by the folder name in brackets', () => {

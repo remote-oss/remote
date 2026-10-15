@@ -11,12 +11,8 @@ import {
   dockerVolumes,
   extensionPresent,
   inWindow,
-  openFolderWindow,
   reopenInContainer,
-  settingIn,
   variable,
-  waitFor,
-  windowEvents,
   windowState,
 } from '../windows/harness.ts';
 import {
@@ -26,28 +22,13 @@ import {
   waitForDialog,
   windowTitle,
 } from '../windows/renderer.ts';
+import {
+  activations,
+  openFolderWindow,
+  setUserSetting,
+} from '../windows/folder-windows.ts';
 
 const execFileAsync = promisify(execFile);
-
-/** How many times window `name` has activated its agent. */
-function activations(name: string): number {
-  return windowEvents(name).filter(each => each.event === 'activated').length;
-}
-
-/** Sets a user setting from the local window and waits until the local window reads it back. */
-async function setUserSetting(
-  settingId: string,
-  value: unknown,
-): Promise<void> {
-  await inWindow('local', 'acceptance.agent.updateSetting', settingId, value);
-  await waitFor(
-    `${settingId} to read back as ${JSON.stringify(value)}`,
-    async () =>
-      JSON.stringify((await settingIn('local', settingId)) ?? null) ===
-      JSON.stringify(value ?? null),
-    30_000,
-  );
-}
 
 describe('Dev Containers release 1 gate rows (card containers-09)', function () {
   this.timeout(600_000);
