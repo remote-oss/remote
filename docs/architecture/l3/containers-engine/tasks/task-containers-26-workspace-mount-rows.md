@@ -9,7 +9,7 @@ expected values.
 
 **Builds after:**
 - the harness PR #956 (`reopenStarted`, the read-only connect probe in
-  `reopenInContainer`, `pageOf` by name, and `tests/acceptance/containers/folder-windows.ts`);
+  `reopenInContainer`, `pageOf` by name, and `tests/acceptance/windows/folder-windows.ts`);
 - part B only: containers-11 (#947, F-0410's dialog).
 
 Sources: F-0411 (remote-oss/remote-containers#33), 5.0, 6.1–6.5, 6.9, 6.10, 7.E2, 7.E4, 7.E6, 7.E7, 9, BR-2–BR-6,
@@ -25,7 +25,7 @@ Use these, and write nothing that duplicates them:
 - `windows/harness.ts`: `devContainerFolder`, `devContainersOf`, `reopenInContainer`, `reopenStarted`,
   `closeWindow`, `inWindow`, `windowState`, `variable`, `waitFor`;
 - `windows/renderer.ts`: `waitForDialog`, `answerDialog`, `dialogOf`, `windowTitle`;
-- `containers/folder-windows.ts`: `openFolderWindow`, `removeContainers`, `activations`.
+- `windows/folder-windows.ts`: `openFolderWindow`, `removeContainers`, `activations`.
 
 Add these private helpers in the new file:
 
