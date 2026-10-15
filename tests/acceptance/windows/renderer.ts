@@ -384,7 +384,7 @@ export async function toggleRow(
 }
 
 /** The lines the visible terminal of window `name` shows now, without the empty ones at the end. */
-export async function terminalText(name: string): Promise<string[]> {
+async function terminalText(name: string): Promise<string[]> {
   const rows = await evaluate<string[]>(
     name,
     `[...document.querySelectorAll('.xterm-rows')].filter(each => each.offsetParent !== null).flatMap(each => each.innerText.split('\\n'))`,
