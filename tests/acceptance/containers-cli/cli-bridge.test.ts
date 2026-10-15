@@ -132,6 +132,7 @@ describe('the dev container CLI through the bridge, on local Docker (card contai
         RUN_LABEL,
       ],
       mountWorkspaceGitRoot: true,
+      mountGitWorktreeCommonDir: false,
       mounts: [],
       logLevel: 'info',
     };
@@ -164,7 +165,11 @@ describe('the dev container CLI through the bridge, on local Docker (card contai
 
   let containerId = '';
   const never = new AbortController().signal;
-  const options = {removeExistingContainer: false, buildNoCache: false};
+  const options = {
+    removeExistingContainer: false,
+    buildNoCache: false,
+    workspaceMountConsistency: 'cached',
+  };
 
   it('C3: up creates the container, as root, with the workspace under /workspaces', async () => {
     const result = await bridge().up(target(), options, () => undefined, never);

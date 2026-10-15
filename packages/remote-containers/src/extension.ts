@@ -323,6 +323,11 @@ export async function activate(
             settings: {
               dockerPath: () =>
                 vscode.workspace.getConfiguration().get(settings.dockerPath.id),
+              mountGitWorktreeCommonDir: () =>
+                vscode.workspace
+                  .getConfiguration()
+                  .inspect(settings.experimentalMountGitWorktreeCommonDir.id)
+                  ?.globalValue,
             },
             engine: {
               firstCheck: (base, dialogs) =>
@@ -457,6 +462,15 @@ export async function activate(
               configuration.inspect(settings.cacheVolume.id)?.globalValue,
               configuration.inspect(settings.cacheVolume.legacyId)?.globalValue,
             ),
+          workspaceMountConsistency: configuration.inspect(
+            settings.workspaceMountConsistency.id,
+          )?.globalValue,
+          legacyWorkspaceMountConsistency: configuration.inspect(
+            settings.workspaceMountConsistency.legacyId,
+          )?.globalValue,
+          mountGitWorktreeCommonDir: configuration.inspect(
+            settings.experimentalMountGitWorktreeCommonDir.id,
+          )?.globalValue,
           defaultExtensions: configuration.inspect(
             settings.defaultExtensions.id,
           )?.globalValue,

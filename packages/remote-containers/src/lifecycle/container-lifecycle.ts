@@ -36,6 +36,10 @@ export interface ContainerRequest {
   rebuild?: {buildNoCache: boolean};
   /** Whether a container this run creates mounts the `vscode` volume (`dev.containers.cacheVolume`). */
   cacheVolume: boolean;
+  /** The consistency of the workspace mount (`dev.containers.workspaceMountConsistency`), as written. */
+  workspaceMountConsistency: string;
+  /** Whether the Git worktree's common dir is mounted (`dev.containers.experimentalMountGitWorktreeCommonDir`). */
+  mountGitWorktreeCommonDir: boolean;
 }
 
 /** How the preparation ended. */
@@ -341,6 +345,7 @@ export function containerLifecycleOf(dependencies: {
       dockerPath: request.dockerPath,
       idLabels: targetIdLabels,
       mountWorkspaceGitRoot: true,
+      mountGitWorktreeCommonDir: request.mountGitWorktreeCommonDir,
       mounts: request.cacheVolume ? [VOLUME_MOUNT] : [],
       logLevel: request.logLevel,
     };
@@ -354,6 +359,7 @@ export function containerLifecycleOf(dependencies: {
       {
         removeExistingContainer: rebuilding,
         buildNoCache: request.rebuild?.buildNoCache ?? false,
+        workspaceMountConsistency: request.workspaceMountConsistency,
       },
       relayEvent,
       cancellation,

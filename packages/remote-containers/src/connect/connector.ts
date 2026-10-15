@@ -52,6 +52,10 @@ import {
   transportLost,
 } from './failures.ts';
 import type {OpenRelay, RelayRequest} from './host-relay.ts';
+import {
+  mountGitWorktreeCommonDirOf,
+  workspaceMountConsistencyOf,
+} from './mount-settings.ts';
 import {reconnectionOutcomeOf, type ContainerState} from './reconnection.ts';
 import type {
   ServerRequest,
@@ -98,6 +102,12 @@ export interface ContainerConnectorDependencies {
     serverDownloadBaseUrl: OverrideValue | undefined;
     serverDownloadFolder: unknown;
     cacheVolume(): boolean;
+    /** The user's value of `dev.containers.workspaceMountConsistency`, `undefined` when unset. */
+    workspaceMountConsistency: unknown;
+    /** The user's value of the deprecated `remote.containers.workspaceMountConsistency`, `undefined` when unset. */
+    legacyWorkspaceMountConsistency: unknown;
+    /** The user's value of `dev.containers.experimentalMountGitWorktreeCommonDir`, `undefined` when unset. */
+    mountGitWorktreeCommonDir: unknown;
     /** The user's value of `dev.containers.defaultExtensions`, `undefined` when unset. */
     defaultExtensions: unknown;
     /** The user's value of the deprecated `remote.containers.defaultExtensions`, `undefined` when unset. */
@@ -365,15 +375,17 @@ export function containerConnectorOf(
   /** What the CLI is told to read the configuration of the container's folder. */
   function cliTargetOf(
     folder: DevContainerFolder,
-    configFile: string,
-    dockerPath: string,
+    tools: Pick<Tools, 'configFile' | 'dockerPath' | 'settings'>,
   ): CliTarget {
     return {
       workspaceFolder: folder.hostPath,
-      configFile,
-      dockerPath,
-      idLabels: idLabels(folder.hostPath, configFile),
+      configFile: tools.configFile,
+      dockerPath: tools.dockerPath,
+      idLabels: idLabels(folder.hostPath, tools.configFile),
       mountWorkspaceGitRoot: true,
+      mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
+        tools.settings.mountGitWorktreeCommonDir,
+      ),
       mounts: [],
       logLevel: 'info',
     };
@@ -466,10 +478,10 @@ export function containerConnectorOf(
     if (kept !== undefined) {
       return kept;
     }
-    const {bridge, configFile, dockerPath} = tools ?? toolsOf(folder);
-    const reading = bridge
+    const readTools = tools ?? toolsOf(folder);
+    const reading = readTools.bridge
       .readConfiguration(
-        cliTargetOf(folder, configFile, dockerPath),
+        cliTargetOf(folder, readTools),
         undefined,
         () => undefined,
         new AbortController().signal,
@@ -572,6 +584,13 @@ export function containerConnectorOf(
         dockerPath,
         logLevel: 'info',
         cacheVolume: settings.cacheVolume(),
+        workspaceMountConsistency: workspaceMountConsistencyOf(
+          settings.workspaceMountConsistency,
+          settings.legacyWorkspaceMountConsistency,
+        ),
+        mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
+          settings.mountGitWorktreeCommonDir,
+        ),
         ...(rebuild === undefined
           ? {}
           : {rebuild: {buildNoCache: rebuild.buildNoCache}}),
@@ -592,7 +611,7 @@ export function containerConnectorOf(
       `container ${shortId(prepared.containerId)} was ${prepared.created ? 'newly started' : 'already running'}`,
     );
     const configuration = await bridge.readConfiguration(
-      cliTargetOf(folder, configFile, dockerPath),
+      cliTargetOf(folder, tools),
       prepared.containerId,
       logCliEvent,
       cancellation,

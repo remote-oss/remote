@@ -89,6 +89,8 @@ export interface ConfigurationRequest {
   folder: string;
   /** The Docker executable. */
   dockerPath: string;
+  /** Whether the Git worktree's common dir is mounted, which moves the folder the window opens at (BR-12). */
+  mountGitWorktreeCommonDir: boolean;
   cancellation: AbortSignal;
   /**
    * C2's first check, already running. Every surface and every answer of `chooseConfiguration` waits for it; when it
@@ -159,6 +161,7 @@ export async function chooseConfiguration(
         dockerPath: request.dockerPath,
         idLabels: [],
         mountWorkspaceGitRoot: true,
+        mountGitWorktreeCommonDir: request.mountGitWorktreeCommonDir,
         mounts: [],
         logLevel: 'info',
       },

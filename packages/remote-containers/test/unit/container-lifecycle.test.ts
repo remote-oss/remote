@@ -40,6 +40,8 @@ const REQUEST: ContainerRequest = {
   dockerPath: 'docker',
   logLevel: 'info',
   cacheVolume: true,
+  workspaceMountConsistency: 'cached',
+  mountGitWorktreeCommonDir: false,
 };
 const UP: UpResult = {
   kind: 'up',
@@ -378,10 +380,15 @@ describe('containerLifecycleOf', () => {
               dockerPath: 'docker',
               idLabels: idLabels(FOLDER, CONFIG),
               mountWorkspaceGitRoot: true,
+              mountGitWorktreeCommonDir: false,
               mounts: ['type=volume,source=vscode,target=/vscode'],
               logLevel: 'info',
             },
-            options: {removeExistingContainer: false, buildNoCache: false},
+            options: {
+              removeExistingContainer: false,
+              buildNoCache: false,
+              workspaceMountConsistency: 'cached',
+            },
           },
         ],
         runs: [NEW],
@@ -599,7 +606,13 @@ describe('containerLifecycleOf', () => {
         result.lines,
       ],
       [
-        [{removeExistingContainer: true, buildNoCache: false}],
+        [
+          {
+            removeExistingContainer: true,
+            buildNoCache: false,
+            workspaceMountConsistency: 'cached',
+          },
+        ],
         true,
         [
           'info: rebuilding: the dev container CLI removes aaaaaaaaaaaa first',
@@ -619,7 +632,13 @@ describe('containerLifecycleOf', () => {
     deepStrictEqual(
       [result.bridge.ups.map(each => each.options), result.lines[0]],
       [
-        [{removeExistingContainer: true, buildNoCache: true}],
+        [
+          {
+            removeExistingContainer: true,
+            buildNoCache: true,
+            workspaceMountConsistency: 'cached',
+          },
+        ],
         'info: rebuilding: the dev container CLI removes no container first',
       ],
     );
@@ -900,6 +919,45 @@ describe('containerLifecycleOf', () => {
         },
         idLabels: legacyIdLabels(FOLDER),
       },
+    );
+  });
+
+  it('F-0411 3.2: the worktree setting and the consistency of the request reach the up of a new container, with the target of its reads', async () => {
+    const results = [];
+    for (const request of [
+      REQUEST,
+      {
+        ...REQUEST,
+        workspaceMountConsistency: 'delegated',
+        mountGitWorktreeCommonDir: true,
+      },
+    ]) {
+      const result = await prepared(
+        scriptedEngine(EMPTY_LISTING),
+        fakeBridge(),
+        new AbortController().signal,
+        request,
+      );
+      results.push(
+        result.bridge.ups.map(up => [
+          up.target.mountGitWorktreeCommonDir,
+          up.options.workspaceMountConsistency,
+        ]),
+      );
+    }
+    deepStrictEqual(results, [[[false, 'cached']], [[true, 'delegated']]]);
+  });
+
+  it('F-0411 7.E5: a consistency outside the enum reaches the CLI as written', async () => {
+    const result = await prepared(
+      scriptedEngine(EMPTY_LISTING),
+      fakeBridge(),
+      new AbortController().signal,
+      {...REQUEST, workspaceMountConsistency: 'fast'},
+    );
+    deepStrictEqual(
+      result.bridge.ups.map(up => up.options.workspaceMountConsistency),
+      ['fast'],
     );
   });
 

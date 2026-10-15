@@ -16,11 +16,16 @@ const TARGET: CliTarget = {
     'devcontainer.config_file=/work/ws1/.devcontainer/devcontainer.json',
   ],
   mountWorkspaceGitRoot: true,
+  mountGitWorktreeCommonDir: false,
   mounts: [],
   logLevel: 'info',
 };
 
-const PLAIN: UpOptions = {removeExistingContainer: false, buildNoCache: false};
+const PLAIN: UpOptions = {
+  removeExistingContainer: false,
+  buildNoCache: false,
+  workspaceMountConsistency: 'cached',
+};
 
 const COMMON = [
   '--workspace-folder',
@@ -45,17 +50,22 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
       'up',
       ...COMMON,
       '--skip-non-blocking-commands',
+      '--workspace-mount-consistency',
+      'cached',
     ]);
   });
 
-  it('C3: removing the existing container and building without the cache add their flags after the skip flag', () => {
+  it('C3: removing the existing container and building without the cache add their flags after the consistency', () => {
     deepStrictEqual(
       upArguments(TARGET, {
+        ...PLAIN,
         removeExistingContainer: true,
         buildNoCache: true,
-      }).slice(-3),
+      }).slice(-5),
       [
         '--skip-non-blocking-commands',
+        '--workspace-mount-consistency',
+        'cached',
         '--remove-existing-container',
         '--build-no-cache',
       ],
@@ -140,9 +150,76 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
     );
   });
 
+  it('F-0411 3.2: the worktree flag is in all three subcommands when the setting is on, and in none when it is off', () => {
+    function flagsIn(mountGitWorktreeCommonDir: boolean): string[][] {
+      const target = {...TARGET, mountGitWorktreeCommonDir};
+      return [
+        upArguments(target, PLAIN),
+        runUserCommandsArguments(target, 'abc'),
+        readConfigurationArguments(target),
+      ].map(list =>
+        list.filter(argument => argument === '--mount-git-worktree-common-dir'),
+      );
+    }
+    deepStrictEqual(
+      [flagsIn(true), flagsIn(false)],
+      [
+        [
+          ['--mount-git-worktree-common-dir'],
+          ['--mount-git-worktree-common-dir'],
+          ['--mount-git-worktree-common-dir'],
+        ],
+        [[], [], []],
+      ],
+    );
+  });
+
+  it('F-0411 3.2: the worktree flag comes right after the git-root flag\u2019s place, before the log level', () => {
+    deepStrictEqual(
+      readConfigurationArguments({
+        ...TARGET,
+        mountWorkspaceGitRoot: false,
+        mountGitWorktreeCommonDir: true,
+      }).slice(-7, -3),
+      [
+        '--mount-workspace-git-root=false',
+        '--mount-git-worktree-common-dir',
+        '--log-level',
+        'info',
+      ],
+    );
+  });
+
+  it('F-0411 BR-7, 7.E5: the consistency is in up only, with its value as written', () => {
+    deepStrictEqual(
+      [
+        ...['consistent', 'delegated', 'fast'].map(workspaceMountConsistency =>
+          upArguments(TARGET, {...PLAIN, workspaceMountConsistency}).slice(-2),
+        ),
+        runUserCommandsArguments(TARGET, 'abc').includes(
+          '--workspace-mount-consistency',
+        ),
+        readConfigurationArguments(TARGET, 'abc').includes(
+          '--workspace-mount-consistency',
+        ),
+      ],
+      [
+        ['--workspace-mount-consistency', 'consistent'],
+        ['--workspace-mount-consistency', 'delegated'],
+        ['--workspace-mount-consistency', 'fast'],
+        false,
+        false,
+      ],
+    );
+  });
+
   it('C3: no builder emits --remote-env or --secrets-file', () => {
     const lists = [
-      upArguments(TARGET, {removeExistingContainer: true, buildNoCache: true}),
+      upArguments(TARGET, {
+        ...PLAIN,
+        removeExistingContainer: true,
+        buildNoCache: true,
+      }),
       runUserCommandsArguments(TARGET, 'abc'),
       readConfigurationArguments(TARGET, 'abc'),
     ];

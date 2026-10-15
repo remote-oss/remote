@@ -40,6 +40,8 @@ interface Setup {
   waitOnTrust: Promise<void>;
   rejects: string | undefined;
   dockerPath: unknown;
+  /** What the worktree setting's user value is. */
+  mountGitWorktreeCommonDir: unknown;
   waitOnCheck: Promise<void>;
   targets: unknown[];
   /** The order of the progress and the open, as far as the rows on them look. */
@@ -66,6 +68,7 @@ function setup(): Setup {
     waitOnTrust: Promise.resolve(),
     rejects: undefined,
     dockerPath: 'docker',
+    mountGitWorktreeCommonDir: undefined,
     waitOnCheck: Promise.resolve(),
     targets: [],
     order: [],
@@ -138,7 +141,10 @@ function portsOf(state: Setup): {ports: ReopenPorts; sink: MemorySink} {
       compare: (left, right) => left.localeCompare(right, 'en'),
       translate: template => template,
     },
-    settings: {dockerPath: () => state.dockerPath},
+    settings: {
+      dockerPath: () => state.dockerPath,
+      mountGitWorktreeCommonDir: () => state.mountGitWorktreeCommonDir,
+    },
     engine: {
       firstCheck: async base => {
         state.calls.push(`firstCheck ${String(base)}`);
@@ -288,12 +294,30 @@ describe('Reopen in Container', () => {
             dockerPath: 'docker',
             idLabels: [],
             mountWorkspaceGitRoot: true,
+            mountGitWorktreeCommonDir: false,
             mounts: [],
             logLevel: 'info',
           },
         ],
       ],
     );
+  });
+
+  it('F-0411 AC-35, AC-37: the worktree setting, as the boolean or as the string, reaches the read the window\u2019s folder comes from', async () => {
+    const reads: unknown[] = [];
+    for (const value of [undefined, true, 'true', 'false']) {
+      const state = setup();
+      state.mountGitWorktreeCommonDir = value;
+      await reopened(state);
+      reads.push(
+        state.targets.map(
+          target =>
+            (target as {mountGitWorktreeCommonDir: boolean})
+              .mountGitWorktreeCommonDir,
+        ),
+      );
+    }
+    deepStrictEqual(reads, [[false], [true], [true], [false]]);
   });
 
   it('F-0501 BR-2a: a Docker context other than the default is in the payload', async () => {

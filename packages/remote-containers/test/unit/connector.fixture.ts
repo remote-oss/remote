@@ -137,6 +137,10 @@ export interface Scene {
   /** What the settings' `inspect` answers for the two `cacheVolume` settings; nothing, when the scene leaves it absent. */
   cacheVolumeInspect:
     {globalValue?: unknown; workspaceValue?: unknown} | undefined;
+  /** The user's values of the workspace mount's consistency, of its deprecated twin and of the worktree setting. */
+  workspaceMountConsistency: unknown;
+  legacyWorkspaceMountConsistency: unknown;
+  mountGitWorktreeCommonDir: unknown;
   /** The user's values of the setting for the extensions of a new container, and of its deprecated twin. */
   defaultExtensions: unknown;
   deprecatedDefaultExtensions: unknown;
@@ -215,6 +219,9 @@ export function sceneOf(
     relayOutcome: 'open',
     dockerPath: 'docker',
     cacheVolumeInspect: undefined,
+    workspaceMountConsistency: undefined,
+    legacyWorkspaceMountConsistency: undefined,
+    mountGitWorktreeCommonDir: undefined,
     defaultExtensions: undefined,
     deprecatedDefaultExtensions: undefined,
     killStatuses: [],
@@ -348,6 +355,9 @@ export function sceneOf(
           scene.cacheVolumeInspect?.globalValue,
           scene.cacheVolumeInspect?.globalValue,
         ),
+      workspaceMountConsistency: scene.workspaceMountConsistency,
+      legacyWorkspaceMountConsistency: scene.legacyWorkspaceMountConsistency,
+      mountGitWorktreeCommonDir: scene.mountGitWorktreeCommonDir,
       defaultExtensions: scene.defaultExtensions,
       deprecatedDefaultExtensions: scene.deprecatedDefaultExtensions,
     }),
