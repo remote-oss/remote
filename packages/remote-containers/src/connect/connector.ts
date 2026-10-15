@@ -40,6 +40,12 @@ import {
 import {idLabels} from '../lifecycle/labels.ts';
 import {takeRebuildIntent} from '../open/rebuild-intent.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
+import {
+  ensureTrusted,
+  TRUST_TEMPLATES,
+  type TrustNeeds,
+  type TrustPort,
+} from '../trust/trust-gate.ts';
 import {withContext} from './context-engine.ts';
 import {
   cancelled,
@@ -50,6 +56,7 @@ import {
   malformedAuthority,
   remoteEngine,
   transportLost,
+  trustDeclined,
 } from './failures.ts';
 import type {OpenRelay, RelayRequest} from './host-relay.ts';
 import {
@@ -147,6 +154,13 @@ export interface ContainerConnectorDependencies {
   lifecyclePresenter: LifecyclePresenter;
   /** The extension's own store, where a rebuild command left its intent. */
   intents: IntentMemento;
+  /** The editor's workspace trust, which the connect asks before anything runs for the folder. */
+  trust: TrustPort;
+  trustNeeds: Omit<TrustNeeds, 'commandTitle'>;
+  /** Shows the modal that says the folder is not trusted, with `detail` under it and one OK button; settles when it closes. */
+  showDeclined(message: string, detail: string): Promise<void>;
+  /** Opens `hostPath` as a local folder in this window. */
+  reopenLocally(hostPath: string): Promise<void>;
   clock: () => number;
   logger: Logger;
   revealLog(): void;
@@ -523,6 +537,7 @@ export function containerConnectorOf(
   function readWithinCap(
     payload: string,
     folder: DevContainerFolder,
+    tools?: Tools,
   ): Promise<string | undefined> {
     return new Promise(resolve => {
       const stop = dependencies.preflight.setTimer(
@@ -531,7 +546,7 @@ export function containerConnectorOf(
           resolve(undefined);
         },
       );
-      void readOf(payload, folder).then(read => {
+      void readOf(payload, folder, tools).then(read => {
         stop();
         resolve(read);
       });
@@ -567,6 +582,34 @@ export function containerConnectorOf(
     return local;
   }
 
+  /**
+   * Whether the folder is trusted, asking the editor when it isn't yet. A folder that stays untrusted is opened as a
+   * local folder in this window, with the modal that says why when the user declined.
+   */
+  async function trustedFolder(
+    folder: DevContainerFolder,
+    cancellation: AbortSignal,
+  ): Promise<boolean> {
+    const {trustNeeds, trust} = dependencies;
+    const outcome = await ensureTrusted(trust, {
+      ...trustNeeds,
+      commandTitle: 'the connect',
+    });
+    if (outcome === 'trusted') {
+      return true;
+    }
+    if (!isAborted(cancellation)) {
+      if (outcome === 'declined') {
+        await dependencies.showDeclined(
+          trustNeeds.translate(TRUST_TEMPLATES.S360),
+          trustNeeds.translate(TRUST_TEMPLATES.S377),
+        );
+      }
+      await dependencies.reopenLocally(folder.hostPath);
+    }
+    return false;
+  }
+
   async function connectFresh(
     payload: string,
     folder: DevContainerFolder,
@@ -576,7 +619,10 @@ export function containerConnectorOf(
     const cancellation = controller.signal;
     const tools = toolsOf(folder);
     const {settings, dockerPath, configFile, engine, bridge} = tools;
-    void readOf(payload, folder, tools);
+    await readWithinCap(payload, folder, tools);
+    if (!(await trustedFolder(folder, cancellation))) {
+      return trustDeclined();
+    }
     phases.tell({name: 'initializing'});
     const checked = await secondCheck(
       {

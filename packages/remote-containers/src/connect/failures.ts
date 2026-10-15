@@ -100,6 +100,11 @@ export function relayFailed(): Failed {
   return failure('relayFailed', {}, GENERIC);
 }
 
+/** The folder is not trusted: the window opens it as a local folder, and the editor is told nothing. */
+export function trustDeclined(): Failed {
+  return failure('trustDeclined', {silent: true});
+}
+
 /** The connect was cancelled; the editor is told nothing. */
 export function cancelled(): Failed {
   return failure('cancelled', {silent: true});
