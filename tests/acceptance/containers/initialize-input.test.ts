@@ -95,9 +95,7 @@ async function prompted(
  * A `plain` run's reader is a pipe that neither echoes nor edits, so the terminal is the only echo; a run whose reader
  * echoes (a TTY) must not be echoed again, or the `Y` would stand twice.
  */
-async function theTypedKeyStandsAlone(
-  window: string,
-): Promise<boolean> {
+async function theTypedKeyStandsAlone(window: string): Promise<boolean> {
   const before = await terminalText(window);
   await typeInTerminal(window, 'Y');
   const after = await terminalText(window);
