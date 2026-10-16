@@ -160,8 +160,8 @@ if the file gets too wide)
 ### 3.3 The mapping is a fact of the pinned CLI version
 
 Since ADR-0011 (card containers-39) the mode isn't wired per operation: C3 reads it per run from the preload's
-marker. On Linux both operations are `echoed` when the editor's `node-pty` loaded, `plain` otherwise and on every
-other platform. The 7.E6 rows assert one echo per typed key in both modes.
+marker. On Linux and macOS (ADR-0012) both operations are `echoed` when the editor's `node-pty` loaded, `plain`
+otherwise and on every other platform. The 7.E6 rows assert one echo per typed key in both modes.
 
 ## 4. Gates and review
 
