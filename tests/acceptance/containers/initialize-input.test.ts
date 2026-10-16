@@ -10,7 +10,12 @@ import {
   variable,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
-import {answerFolderDialog, typeInTerminal} from '../windows/renderer.ts';
+import {
+  answerFolderDialog,
+  focusTerminal,
+  terminalText,
+  typeInTerminal,
+} from '../windows/renderer.ts';
 
 /** Resolves once `check` gives, every 500 ms, for up to `milliseconds`; a refusal at the end is thrown. */
 async function until(
@@ -28,6 +33,31 @@ async function until(
     }
     await new Promise(resolve => setTimeout(resolve, 500));
   }
+}
+
+/** Resolves once window `name`'s active terminal holds `needle`, for up to `milliseconds`. */
+async function untilText(
+  name: string,
+  needle: string,
+  milliseconds = 120_000,
+): Promise<void> {
+  const deadline = Date.now() + milliseconds;
+  for (;;) {
+    if ((await terminalText(name)).includes(needle)) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `timed out waiting for the terminal of ${name} to hold ${needle}`,
+      );
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+}
+
+/** How many times `needle` occurs in `text`. */
+function countOf(text: string, needle: string): number {
+  return text.split(needle).length - 1;
 }
 
 /**
@@ -60,16 +90,40 @@ async function prompted(
   return {window, answer};
 }
 
+/**
+ * The echo each row asserts: the terminal, read before and after the row types a `Y`, gains exactly one `Y` from it.
+ * A `plain` run's reader is a pipe that neither echoes nor edits, so the terminal is the only echo; a run whose reader
+ * echoes (a TTY) must not be echoed again, or the `Y` would stand twice.
+ */
+async function theTypedKeyStandsAlone(
+  window: string,
+): Promise<boolean> {
+  const before = await terminalText(window);
+  await typeInTerminal(window, 'Y');
+  const after = await terminalText(window);
+  await typeInTerminal(window, '\n');
+  return countOf(after, 'Y') - countOf(before, 'Y') === 1;
+}
+
 describe('the input of the "Configuring..." terminal', function () {
   this.timeout(600_000);
 
-  it('F-0415 AC-36 (initcmd-input): the keys typed in the terminal reach the initializeCommand, which reads its answer (remote-oss/remote-containers#124)', async () => {
+  it('F-0415 AC-36 (initcmd-input): the keys typed in the terminal reach the host-side initializeCommand, and each is echoed once (remote-oss/remote-containers#124)', async () => {
     const {window, answer} = await prompted('initcmd', 'initcmd-answer.txt');
-    await typeInTerminal(window, 'Y\n');
+    const echoedOnce = await theTypedKeyStandsAlone(window);
     await until('the initializeCommand to write its answer', () =>
       existsSync(answer),
     );
-    deepStrictEqual(readFileSync(answer, 'utf8'), 'answered: Y\n');
+    deepStrictEqual(
+      {
+        theTypedKeyStandsAlone: echoedOnce,
+        theAnswerReachedTheCommand: readFileSync(answer, 'utf8'),
+      },
+      {
+        theTypedKeyStandsAlone: true,
+        theAnswerReachedTheCommand: 'answered: Y\n',
+      },
+    );
     await connectedToContainer('initcmd');
     await closeWindow('initcmd');
   });
@@ -83,5 +137,43 @@ describe('the input of the "Configuring..." terminal', function () {
     deepStrictEqual(readFileSync(answer, 'utf8'), 'answered: a\n');
     await connectedToContainer('lineedit');
     await closeWindow('lineedit');
+  });
+
+  it('F-0415 AC-36 (postcreate-echo): the keys typed in the terminal reach the in-container postCreateCommand, and each is echoed once (remote-oss/remote-containers#124)', async () => {
+    const answer = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'postecho',
+      'answer.txt',
+    );
+    const command = [
+      `printf 'postecho answer? '`,
+      `read -r a`,
+      `printf 'answered: %s\\n' "$a" > /workspaces/postecho/answer.txt`,
+    ].join(' && ');
+    const folder = devContainerFolder('postecho', {
+      postCreateCommand: command,
+    });
+    const window = await openFolderWindow(folder);
+    const opening = inWindow(window, 'remote-containers.openFolder');
+    opening.catch(() => undefined);
+    await answerFolderDialog(window, folder);
+    await untilText(window, 'postecho answer? ');
+    await focusTerminal(window);
+    const echoedOnce = await theTypedKeyStandsAlone(window);
+    await until('the postCreateCommand to write its answer', () =>
+      existsSync(answer),
+    );
+    deepStrictEqual(
+      {
+        theTypedKeyStandsAlone: echoedOnce,
+        theAnswerReachedTheCommand: readFileSync(answer, 'utf8'),
+      },
+      {
+        theTypedKeyStandsAlone: true,
+        theAnswerReachedTheCommand: 'answered: Y\n',
+      },
+    );
+    await connectedToContainer('postecho');
+    await closeWindow('postecho');
   });
 });

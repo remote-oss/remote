@@ -1066,6 +1066,54 @@ async function terminalPresent(name: string): Promise<boolean> {
 }
 
 /**
+ * The visible text of window `name`'s active terminal, scrolled to its bottom so the cursor's row is in view. xterm
+ * renders only the viewport into its rows, so a read at the top misses the prompt the input rows type into; the launch's
+ * active terminal is the last of the page's, and its cursor's row is the last once its viewport is scrolled down.
+ */
+export async function terminalText(name: string): Promise<string> {
+  await evaluate<string>(
+    name,
+    `(() => {
+      const viewports = document.querySelectorAll('.xterm-viewport');
+      const viewport = viewports[viewports.length - 1];
+      if (viewport !== undefined) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+      return 'scrolled';
+    })()`,
+  );
+  await new Promise(resolve => setTimeout(resolve, POLL_MILLISECONDS));
+  return evaluate<string>(
+    name,
+    `(() => {
+      const rows = document.querySelectorAll('.xterm-rows');
+      const target = rows[rows.length - 1];
+      return target?.innerText ?? '';
+    })()`,
+  );
+}
+
+/**
+ * Gives window `name`'s active terminal the keyboard focus, as a click on it does: once a connect ends, its window's
+ * editor holds the focus, and the input rows type into whatever has it.
+ */
+export async function focusTerminal(name: string): Promise<void> {
+  await evaluate<string>(
+    name,
+    `(() => {
+      const terms = document.querySelectorAll('.xterm');
+      const term = terms[terms.length - 1];
+      if (term === undefined) {
+        return 'no-terminal';
+      }
+      const input = term.querySelector('.xterm-helper-textarea');
+      (input ?? term).focus();
+      return 'focused';
+    })()`,
+  );
+}
+
+/**
  * Types `text` into window `name`, as the keyboard does, wherever its page has focus: a character at a time, `Enter`
  * for a newline, `Backspace` for a DEL, and `Delete` for an ESC (the delete key's stroke begins with it). The callers
  * arrange the focus, which a terminal takes when it opens.
