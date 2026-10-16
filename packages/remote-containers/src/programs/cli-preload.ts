@@ -12,8 +12,8 @@ import path from 'node:path';
 /** The marker line's name (ADR-0010 rule 1: a new family starts with `remote-oss-`). */
 const MARKER = 'remote-oss-cli-preload';
 
-/** The platforms whose acceptance rows have run with a pty (ADR-0011 decision 6). */
-const PTY_PLATFORMS = new Set(['linux']);
+/** The platforms measured with a pty (ADR-0011 decision 6): Linux by its acceptance rows, macOS by a probe run. */
+const PTY_PLATFORMS = new Set(['linux', 'darwin']);
 
 delete process.env.ELECTRON_RUN_AS_NODE;
 /** Where the editor keeps `node-pty`: handed by the host, and removed so no child of the CLI sees it. */

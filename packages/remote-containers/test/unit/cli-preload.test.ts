@@ -81,6 +81,9 @@ function underPreload(
   };
 }
 
+/** The platforms the preload gives a pty on; elsewhere the rows that need one are skipped. */
+const PTY_PLATFORMS: readonly string[] = ['linux', 'darwin'];
+
 const LOADED_FROM_EDITOR = {
   marker: 'remote-oss-cli-preload',
   nodePty: {loaded: true, from: 'editor'},
@@ -105,7 +108,7 @@ describe('the CLI preload (card containers-04)', () => {
   });
 
   it('ADR-0011: with the editor folder present, the CLI process resolves node-pty, and the marker says loaded from editor', function () {
-    if (process.platform !== 'linux') {
+    if (!PTY_PLATFORMS.includes(process.platform)) {
       this.skip();
     }
     withScene(scene => {
@@ -123,7 +126,7 @@ describe('the CLI preload (card containers-04)', () => {
   });
 
   it("ADR-0011: a child of the CLI sees neither REMOTE_OSS_EDITOR_MODULES nor a new NODE_PATH, and a NODE_PATH of the user's stays", function () {
-    if (process.platform !== 'linux') {
+    if (!PTY_PLATFORMS.includes(process.platform)) {
       this.skip();
     }
     withScene(scene => {
@@ -148,7 +151,7 @@ describe('the CLI preload (card containers-04)', () => {
   });
 
   it("ADR-0011: a NODE_PATH of the user's that holds node-pty is the copy the default resolution takes, and the marker says from default", function () {
-    if (process.platform !== 'linux') {
+    if (!PTY_PLATFORMS.includes(process.platform)) {
       this.skip();
     }
     withScene(scene => {
