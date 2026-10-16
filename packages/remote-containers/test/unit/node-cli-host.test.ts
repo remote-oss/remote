@@ -269,11 +269,11 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
 
   /**
    * A run over `fake` that captures the stdin writer the host offers and the presentation it hands with it, and the
-   * CLI lines it tells; the preload's marker line, `loaded` or not, comes first on stderr.
+   * CLI lines it tells; `stderr` is written first, which the preload's marker line usually begins.
    */
   function capturingRun(
     fake: Fake,
-    loaded = false,
+    stderr: string,
   ): {
     running: Promise<CliRun>;
     writer: () => ((data: string) => void) | undefined;
@@ -292,13 +292,13 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
         presentations.push(presentation);
       },
     );
-    fake.stderr.write(markerLine(loaded));
+    fake.stderr.write(stderr);
     return {running, writer: () => writer, presentations, lines};
   }
 
   it('F-0415 7.E6: onStdin gets a writer that delivers to the stdin of the CLI, an Enter as LF', async () => {
     const fake = fakeSystem();
-    const {running, writer} = capturingRun(fake);
+    const {running, writer} = capturingRun(fake, markerLine(false));
     await new Promise(resolve => setImmediate(resolve));
     writer()?.('yes\r\n');
     await new Promise(resolve => setImmediate(resolve));
@@ -321,7 +321,7 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
 
   it('F-0415 7.E6: a write after the CLI has ended is dropped, without an error', async () => {
     const fake = fakeSystem();
-    const {running, writer} = capturingRun(fake);
+    const {running, writer} = capturingRun(fake, markerLine(false));
     await new Promise(resolve => setImmediate(resolve));
     fake.stdin.destroy();
     fake.exit(0);
@@ -331,7 +331,10 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
 
   it('ADR-0011: the marker line sets echoed, and is not told as a CLI line', async () => {
     const fake = fakeSystem();
-    const {running, presentations, lines} = capturingRun(fake, true);
+    const {running, presentations, lines} = capturingRun(
+      fake,
+      markerLine(true),
+    );
     fake.stderr.write('{"type":"text","level":2,"text":"hi"}\n');
     await new Promise(resolve => setImmediate(resolve));
     fake.exit(0);
@@ -347,29 +350,19 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
 
   it('ADR-0011: a marker that says not loaded gives plain', async () => {
     const fake = fakeSystem();
-    const {running, presentations} = capturingRun(fake, false);
+    const {running, presentations} = capturingRun(fake, markerLine(false));
     await new Promise(resolve => setImmediate(resolve));
     fake.exit(0);
     await running;
     deepStrictEqual(presentations, ['plain']);
   });
 
-  /** A run over `fake` whose stderr is `text` and no marker; it gives the presentations handed and the lines told. */
+  /** A run over `fake` whose stderr is `text` and no marker; the host offers no writer until the run has ended. */
   async function markerlessRun(
     fake: Fake,
     text: string,
   ): Promise<{presentations: StdinPresentation[]; lines: CliLine[]}> {
-    const presentations: StdinPresentation[] = [];
-    const lines: CliLine[] = [];
-    const running = nodeCliHost(PATHS, {}, fake.ports).run(
-      [],
-      line => lines.push(line),
-      new AbortController().signal,
-      (write, presentation) => {
-        presentations.push(presentation);
-      },
-    );
-    fake.stderr.write(text);
+    const {running, presentations, lines} = capturingRun(fake, text);
     await new Promise(resolve => setImmediate(resolve));
     const before = [...presentations];
     fake.exit(0);
@@ -436,7 +429,7 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
 
   it("ADR-0011: an echoed run's CR reaches the CLI's stdin as typed", async () => {
     const fake = fakeSystem();
-    const {running, writer} = capturingRun(fake, true);
+    const {running, writer} = capturingRun(fake, markerLine(true));
     await new Promise(resolve => setImmediate(resolve));
     writer()?.('yes\r');
     await new Promise(resolve => setImmediate(resolve));

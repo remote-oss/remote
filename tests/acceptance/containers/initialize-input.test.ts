@@ -7,6 +7,7 @@ import {
   connectedToContainer,
   devContainerFolder,
   inWindow,
+  terminalBuffer,
   variable,
 } from '../windows/harness.ts';
 import {openFolderWindow} from '../windows/folder-windows.ts';
@@ -282,10 +283,10 @@ describe('the input of the "Configuring..." terminal', function () {
     await closeWindow('posthidden');
   });
 
-  it("F-0415 AC-36, ADR-0011 (read-p-prompt): bash's read -p shows its prompt before the answer is typed, in the container", async () => {
+  it("F-0415 AC-36, ADR-0011 (read-p-prompt): the shell's read -p shows its prompt before the answer is typed, in the container", async () => {
     const {host, container} = answerOf('readp');
     const window = await openedWith('readp', {
-      postCreateCommand: `bash -c 'read -p "RP> " a && printf "answered: %s\\n" "$a" > ${container}'`,
+      postCreateCommand: `read -p "RP> " a && printf "answered: %s\\n" "$a" > ${container}`,
     });
     await untilText(window, 'RP> ');
     await focusTerminal(window);
@@ -313,19 +314,30 @@ describe('the input of the "Configuring..." terminal', function () {
 
   it('F-0415 AC-36, 7.E6 (ctrl-c): Ctrl+C stops the running postCreateCommand, the interrupted line shows, and postStartCommand still runs', async () => {
     const window = await openedWith('ctrlc', {
-      postCreateCommand: `sh -c 'echo CTRLC-WAITING; sleep 40; echo CTRLC-DONE'`,
+      postCreateCommand: `sh -c 'word=CTRLC; echo "$word"-WAITING; sleep 40; echo "$word"-DONE'`,
       postStartCommand: 'echo POSTSTART-RAN',
     });
     await untilText(window, 'CTRLC-WAITING');
     await focusTerminal(window);
     await pressControlC(window);
-    await untilText(
-      window,
-      'postCreateCommand from devcontainer.json interrupted.',
-      10_000,
+    const interrupted = 'postCreateCommand from devcontainer.json interrupted.';
+    const deadline = Date.now() + 10_000;
+    let buffer = await terminalBuffer(window);
+    while (
+      !(buffer.includes(interrupted) && buffer.includes('POSTSTART-RAN')) &&
+      Date.now() < deadline
+    ) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      buffer = await terminalBuffer(window);
+    }
+    deepStrictEqual(
+      {
+        interruptedShows: buffer.includes(interrupted),
+        postStartRan: buffer.includes('POSTSTART-RAN'),
+        theCommandFinished: buffer.includes('CTRLC-DONE'),
+      },
+      {interruptedShows: true, postStartRan: true, theCommandFinished: false},
     );
-    await untilText(window, 'POSTSTART-RAN', 10_000);
-    deepStrictEqual((await terminalText(window)).includes('CTRLC-DONE'), false);
     await connectedToContainer('ctrlc');
     await closeWindow('ctrlc');
   });

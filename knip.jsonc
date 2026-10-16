@@ -107,5 +107,7 @@
     "@vscode/vsce",
     // tools/build.ts copies its files into the VSIX; nothing imports it.
     "@devcontainers/cli",
+    // The CLI preload loads the editor's own copy at run time (ADR-0011); the VSIX does not ship it.
+    "node-pty",
   ],
 }
