@@ -3,6 +3,7 @@ import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {CliBridge} from '../../src/cli/cli-bridge.ts';
+import type {StdinOf, StdinPresentation} from '../../src/cli/cli-host.ts';
 import type {CliTarget, UpOptions} from '../../src/cli/cli-arguments.ts';
 import type {
   CliEvent,
@@ -154,12 +155,14 @@ interface FakeBridge extends CliBridge {
   ups: Array<{
     target: CliTarget;
     options: UpOptions;
-    stdin: ((write: (data: string) => void) => void) | undefined;
+    stdin: StdinOf | undefined;
+    presentation: StdinPresentation | undefined;
   }>;
   runs: Array<{
     containerId: string;
     signal: AbortSignal;
-    stdin: ((write: (data: string) => void) => void) | undefined;
+    stdin: StdinOf | undefined;
+    presentation: StdinPresentation | undefined;
   }>;
   upResult: UpResult;
   runResult: Promise<RunUserCommandsResult>;
@@ -176,15 +179,22 @@ function fakeBridge(): FakeBridge {
     runResult: Promise.resolve({kind: 'done'}),
     upEvents: [],
     runEvents: [],
-    up: (target, options, onEvent, signal, onStdin) => {
-      bridge.ups.push({target, options, stdin: onStdin});
-      onStdin?.(() => undefined);
+    up: (target, options, onEvent, signal, onStdin, presentation) => {
+      bridge.ups.push({target, options, stdin: onStdin, presentation});
+      onStdin?.(() => undefined, 'plain');
       bridge.upEvents.forEach(onEvent);
       return Promise.resolve(bridge.upResult);
     },
-    runUserCommands: (target, containerId, onEvent, signal, onStdin) => {
-      bridge.runs.push({containerId, signal, stdin: onStdin});
-      onStdin?.(() => undefined);
+    runUserCommands: (
+      target,
+      containerId,
+      onEvent,
+      signal,
+      onStdin,
+      presentation,
+    ) => {
+      bridge.runs.push({containerId, signal, stdin: onStdin, presentation});
+      onStdin?.(() => undefined, 'plain');
       bridge.runEvents.forEach(onEvent);
       return bridge.runResult;
     },
@@ -1335,9 +1345,11 @@ describe('containerLifecycleOf', () => {
         outcome.kind,
         bridge.ups[0]?.stdin === presenter.attachStdin,
         bridge.runs[0]?.stdin === presenter.attachStdin,
+        bridge.ups[0]?.presentation,
+        bridge.runs[0]?.presentation,
         calls.filter(call => call === 'attach-stdin'),
       ],
-      ['ready', true, true, ['attach-stdin', 'attach-stdin']],
+      ['ready', true, true, 'plain', 'plain', ['attach-stdin', 'attach-stdin']],
     );
   });
 });

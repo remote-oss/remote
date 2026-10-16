@@ -14,17 +14,31 @@ export type CliRun =
   | {kind: 'ran'; result: string | undefined; status: number | null}
   | {kind: 'spawnFailed'; message: string};
 
+/**
+ * How a run's input is presented to its reader: a reader whose line discipline echoes the typed input back into the
+ * run's own output (`echoed`), or nothing that does and the surface echoes the printable keys itself (`plain`).
+ */
+export type StdinPresentation = 'echoed' | 'plain';
+
+/** The writer for a run's stdin, with the run's input presentation. */
+export type StdinOf = (
+  write: (data: string) => void,
+  presentation: StdinPresentation,
+) => void;
+
 /** The dev container CLI as a program. */
 export interface CliHost {
   /**
    * Runs the CLI with `cliArguments`. An abort ends the CLI and its children, and the run then ends with status
    * null. `result` is the first line of stdout, when there was one. `onStdin`, when given, gets the writer for the
-   * CLI's stdin once the CLI has started, which the lifecycle commands' input goes through.
+   * CLI's stdin once the CLI has started, with the run's input presentation (`presentation`, default `plain`),
+   * which the surface uses to decide whether to echo the typed input itself.
    */
   run(
     cliArguments: readonly string[],
     onLine: (line: CliLine) => void,
     cancellation: AbortSignal,
-    onStdin?: (write: (data: string) => void) => void,
+    onStdin?: StdinOf,
+    presentation?: StdinPresentation,
   ): Promise<CliRun>;
 }

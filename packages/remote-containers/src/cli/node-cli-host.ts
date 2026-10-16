@@ -4,7 +4,13 @@
  */
 
 import {lineSplitter} from '../line-splitter.ts';
-import type {CliHost, CliLine, CliRun} from './cli-host.ts';
+import type {
+  CliHost,
+  CliLine,
+  CliRun,
+  StdinOf,
+  StdinPresentation,
+} from './cli-host.ts';
 import type {CliPaths} from './cli-paths.ts';
 import type {NodeCliPorts, SpawnedCli} from './node-cli-ports.ts';
 
@@ -44,7 +50,8 @@ export function nodeCliHost(
       cliArguments: readonly string[],
       onLine: (line: CliLine) => void,
       cancellation: AbortSignal,
-      onStdin?: (write: (data: string) => void) => void,
+      onStdin?: StdinOf,
+      presentation?: StdinPresentation,
     ): Promise<CliRun> => {
       const spawned = await ports.spawn(
         paths.node,
@@ -75,7 +82,7 @@ export function nodeCliHost(
           }
         }
         process.stdin.on('error', () => undefined);
-        onStdin(deliver);
+        onStdin(deliver, presentation ?? 'plain');
       }
       let result: string | undefined;
       function lineOf(

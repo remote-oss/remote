@@ -6,6 +6,7 @@
 
 import type {Logger} from 'lib-log';
 import type {CliBridge} from '../cli/cli-bridge.ts';
+import type {StdinPresentation} from '../cli/cli-host.ts';
 import type {CliTarget} from '../cli/cli-arguments.ts';
 import type {CliEvent, CliFailure} from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
@@ -65,10 +66,13 @@ export interface LifecyclePresenter {
   /** The run has ended: the progress entry hides, and an open terminal writes its last line and closes on the next key. */
   ended(): void;
   /**
-   * A CLI run has started with its stdin; the run's terminal takes the writer, so the keys typed in it reach the
-   * CLI and, from it, a lifecycle command's input.
+   * A CLI run has started with its stdin; the run's terminal takes the writer and the run's input presentation,
+   * which decides whether it echoes the typed keys itself or lets the run's own echo stand.
    */
-  attachStdin(write: (data: string) => void): void;
+  attachStdin(
+    write: (data: string) => void,
+    presentation: StdinPresentation,
+  ): void;
 }
 
 /** Finds or creates the container of a folder. */
@@ -279,6 +283,7 @@ export function containerLifecycleOf(dependencies: {
         own.signal,
         // eslint-disable-next-line @typescript-eslint/unbound-method -- the presenter's method holds no this
         presenter.attachStdin,
+        'plain',
       )
       .then(result => {
         if (background === own && !own.signal.aborted) {
@@ -377,6 +382,7 @@ export function containerLifecycleOf(dependencies: {
       cancellation,
       // eslint-disable-next-line @typescript-eslint/unbound-method -- the presenter's method holds no this
       presenter.attachStdin,
+      'plain',
     );
     if (upResult.kind !== 'up') {
       if (

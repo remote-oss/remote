@@ -4,7 +4,13 @@ import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {CliTarget} from '../../src/cli/cli-arguments.ts';
 import {cliBridgeOf} from '../../src/cli/cli-bridge.ts';
-import type {CliHost, CliLine, CliRun} from '../../src/cli/cli-host.ts';
+import type {
+  CliHost,
+  CliLine,
+  CliRun,
+  StdinOf,
+  StdinPresentation,
+} from '../../src/cli/cli-host.ts';
 import type {CliEvent} from '../../src/cli/cli-lines.ts';
 import type {OverrideStore} from '../../src/cli/override-files.ts';
 
@@ -32,7 +38,8 @@ type Script = (
   cliArguments: readonly string[],
   onLine: (line: CliLine) => void,
   cancellation: AbortSignal,
-  onStdin?: (write: (data: string) => void) => void,
+  onStdin?: StdinOf,
+  presentation?: StdinPresentation,
 ) => Promise<CliRun>;
 
 /** A bridge over a scripted host, a config file with `configText`, and a recording override store. */
@@ -45,17 +52,18 @@ function setup(
   } = {},
 ) {
   const calls: string[][] = [];
-  const stdinOf: Array<((write: (data: string) => void) => void) | undefined> =
-    [];
+  const stdinOf: Array<StdinOf | undefined> = [];
+  const presentationOf: Array<StdinPresentation | undefined> = [];
   const written: string[] = [];
   const removed: string[] = [];
   const sink = new MemorySink();
   const host: CliHost = {
     // eslint-disable-next-line id-length -- the port's method is named run
-    run: (cliArguments, onLine, cancellation, onStdin) => {
+    run: (cliArguments, onLine, cancellation, onStdin, presentation) => {
       stdinOf.push(onStdin);
+      presentationOf.push(presentation);
       calls.push([...cliArguments]);
-      return script(cliArguments, onLine, cancellation, onStdin);
+      return script(cliArguments, onLine, cancellation, onStdin, presentation);
     },
   };
   const overrides: OverrideStore = {
@@ -82,7 +90,7 @@ function setup(
     options.environment ?? {},
     createLogger(sink, {minimumLevel: () => 'info'}),
   );
-  return {bridge, calls, stdinOf, written, removed, sink};
+  return {bridge, calls, stdinOf, presentationOf, written, removed, sink};
 }
 
 /** A script that ends with `result` and `status`. */
@@ -134,6 +142,37 @@ describe('the CLI bridge (card containers-04)', () => {
       [stdinOf.length, stdinOf.every(each => each === onStdin)],
       [3, true],
     );
+  });
+
+  it('F-0415 7.E6: up, run-user-commands and read-configuration hand their presentation to the host', async () => {
+    const {bridge, presentationOf} = setup(
+      ending('{"outcome":"success","result":"done"}'),
+    );
+    await bridge.up(
+      TARGET,
+      UP_OPTIONS,
+      () => undefined,
+      NEVER,
+      undefined,
+      'plain',
+    );
+    await bridge.runUserCommands(
+      TARGET,
+      'c1',
+      () => undefined,
+      NEVER,
+      undefined,
+      'echoed',
+    );
+    await bridge.readConfiguration(
+      TARGET,
+      'c1',
+      () => undefined,
+      NEVER,
+      undefined,
+      'plain',
+    );
+    deepStrictEqual(presentationOf, ['plain', 'echoed', 'plain']);
   });
 
   it('C3: a run whose pre-pass changes something writes the override file, passes it, and removes it after success', async () => {

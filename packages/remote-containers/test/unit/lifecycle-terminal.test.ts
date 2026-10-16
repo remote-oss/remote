@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import type {StdinPresentation} from '../../src/cli/cli-host.ts';
 import type {CliEvent} from '../../src/cli/cli-lines.ts';
 import {
   lifecyclePresenterOf,
@@ -43,8 +44,11 @@ function sceneOf(translate = (template: string) => template) {
       inputs.at(index)?.(data),
     userCloses: (index = closers.length - 1) => closers.at(index)?.(),
     /** Hands the writer for the run's CLI stdin to the presenter, as a CLI run does. */
-    attach: (write: (data: string) => void) => {
-      presenter.attachStdin(write);
+    attach: (
+      write: (data: string) => void,
+      presentation: StdinPresentation,
+    ) => {
+      presenter.attachStdin(write, presentation);
     },
   };
 }
@@ -94,11 +98,11 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
   });
 
   /** A scene whose run has emitted the raw line `a\n` and captures every key its stdin writer would get. */
-  function stdinScene() {
+  function stdinScene(presentation: StdinPresentation = 'plain') {
     const scene = sceneOf();
     const delivered: string[] = [];
     scene.presenter.output(eventOf('raw', 'a\n'), 0);
-    scene.attach(data => delivered.push(data));
+    scene.attach(data => delivered.push(data), presentation);
     return {scene, delivered};
   }
 
@@ -295,6 +299,32 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
     ]);
   });
 
+  it('F-0415 7.E6: an echoed run forwards each key, a line and a control key, raw to its stdin', () => {
+    const {scene, delivered} = stdinScene('echoed');
+    scene.typed('ab');
+    scene.typed('\r');
+    scene.typed('\u0003');
+    scene.typed('\u001b[3~');
+    deepStrictEqual(
+      [delivered, scene.record.slice(1)],
+      [
+        ['ab', '\r', '\u0003', '\u001b[3~'],
+        [`write ${JSON.stringify('a\r\n')}`],
+      ],
+    );
+  });
+
+  it('F-0415 7.E6, AC-33: an echoed run forwards until it ends, and the next key after the end closes it', () => {
+    const {scene, delivered} = stdinScene('echoed');
+    scene.typed('x');
+    scene.presenter.ended();
+    scene.typed('y');
+    deepStrictEqual(
+      [delivered, scene.record.slice(2)],
+      [['x'], [`write ${JSON.stringify(S153)}`, 'close']],
+    );
+  });
+
   it('F-0415 7.E6, AC-33: after the run has ended, a key closes the terminal and goes nowhere', () => {
     const {scene, delivered} = stdinScene();
     scene.presenter.ended();
@@ -310,11 +340,11 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
     const first: string[] = [];
     const second: string[] = [];
     scene.presenter.output(eventOf('raw', 'one\n'), 0);
-    scene.attach(data => first.push(data));
+    scene.attach(data => first.push(data), 'plain');
     scene.presenter.ended();
     scene.presenter.backgroundStarted();
     scene.presenter.output(eventOf('raw', 'two\n'), 0);
-    scene.attach(data => second.push(data));
+    scene.attach(data => second.push(data), 'plain');
     scene.typed('y\r', 1);
     scene.typed('z', 0);
     deepStrictEqual(
