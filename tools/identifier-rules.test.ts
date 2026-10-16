@@ -260,12 +260,17 @@ describe('identifier-rules', () => {
       ]);
     });
 
-    it('reports a served id with no flag and no onCommand event', () => {
+    it('reports a served id that asks for activation and names no onCommand event', () => {
       const outcome = checkPackageRules(
         syntheticSources({
           declared: {
             internal: [
-              {id: 'remote-internal.get', role: 'served', kind: 'query'},
+              {
+                id: 'remote-internal.get',
+                role: 'served',
+                kind: 'query',
+                activates: true,
+              },
             ],
           },
         }),
