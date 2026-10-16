@@ -936,13 +936,17 @@ async function keyInFolderDialog(
   await pressKey(await pageOf(name), name, key);
 }
 
-/** One key as the protocol's `Input.dispatchKeyEvent` takes it; `text` is what its key down inserts, when the key types one. */
+/**
+ * One key as the protocol's `Input.dispatchKeyEvent` takes it; `text` is what its key down inserts, when the key types
+ * one, and `modifiers` the held modifier keys (2 is Control).
+ */
 interface KeyStroke {
   key: string;
   code: string;
   windowsVirtualKeyCode: number;
   nativeVirtualKeyCode: number;
   text?: string;
+  modifiers?: number;
 }
 
 /** Presses the `stroke` in the page at protocol address `address`, as the keyboard does, with its key down and up. */
@@ -1111,6 +1115,18 @@ export async function focusTerminal(name: string): Promise<void> {
       return 'focused';
     })()`,
   );
+}
+
+/** Presses Ctrl+C in window `name`, wherever its page has focus, as the keyboard does: a `c` with Control held. */
+export async function pressControlC(name: string): Promise<void> {
+  await pressStroke(await pageOf(name), name, {
+    key: 'c',
+    code: 'KeyC',
+    windowsVirtualKeyCode: 67,
+    nativeVirtualKeyCode: 67,
+    modifiers: 2,
+    text: '\u0003',
+  });
 }
 
 /**

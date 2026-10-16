@@ -28,13 +28,26 @@ interface OpenTerminal {
   close(): void;
 }
 
+/** A terminal's size, in whole rows and columns. */
+interface TerminalSize {
+  rows: number;
+  columns: number;
+}
+
+/** The size a run gets before any terminal has reported one: `node-pty`'s own default. */
+const DEFAULT_SIZE: TerminalSize = {rows: 24, columns: 80};
+
 /** What the presenter needs of the editor's terminals. */
 export interface TerminalPort {
-  /** Creates and shows the terminal named `name`, focused; `onInput` gets each key; `onClosed` fires when the user closes it. */
+  /**
+   * Creates and shows the terminal named `name`, focused; `onInput` gets each key; `onClosed` fires when the user
+   * closes it; `onDimensions` gets its size when it opens and on each change.
+   */
   open(
     name: string,
     onInput: (data: string) => void,
     onClosed: () => void,
+    onDimensions: (size: TerminalSize) => void,
   ): OpenTerminal;
 }
 
@@ -87,6 +100,7 @@ export function lifecyclePresenterOf(
   translate: Translate,
 ): LifecyclePresenter {
   let latest = newRun();
+  let size = DEFAULT_SIZE;
 
   /** The run now, or a new one once the last has ended. */
   function current(): Run {
@@ -173,6 +187,9 @@ export function lifecyclePresenterOf(
         own.open = undefined;
         own.closedByUser = true;
       },
+      reported => {
+        size = reported;
+      },
     );
     return own.open;
   }
@@ -218,5 +235,6 @@ export function lifecyclePresenterOf(
       current().stdin = write;
       current().presentation = presentation;
     },
+    terminalSize: () => size,
   };
 }

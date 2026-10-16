@@ -360,6 +360,7 @@ export function sceneOf(
       backgroundStarted: () => undefined,
       ended: () => undefined,
       attachStdin: () => undefined,
+      terminalSize: () => ({rows: 24, columns: 80}),
     },
     settings: () => ({
       dockerPath: scene.dockerPath,

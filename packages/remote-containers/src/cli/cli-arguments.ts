@@ -20,6 +20,8 @@ export interface CliTarget {
   /** `--mount` values for `up`. */
   mounts: readonly string[];
   logLevel: 'info' | 'debug' | 'trace';
+  /** The size of the terminal the run's lifecycle commands show in, whole rows and columns of at least one. */
+  terminalSize?: {rows: number; columns: number};
 }
 
 /** What `up` may be asked to do beyond the target. */
@@ -30,7 +32,7 @@ export interface UpOptions {
   workspaceMountConsistency: string;
 }
 
-/** The arguments every subcommand starts with, up to the log format. */
+/** The arguments every subcommand starts with, up to the log format and the terminal size. */
 function commonArguments(subcommand: string, target: CliTarget): string[] {
   return [
     subcommand,
@@ -54,6 +56,14 @@ function commonArguments(subcommand: string, target: CliTarget): string[] {
     target.logLevel,
     '--log-format',
     'json',
+    ...(target.terminalSize === undefined
+      ? []
+      : [
+          '--terminal-rows',
+          String(target.terminalSize.rows),
+          '--terminal-columns',
+          String(target.terminalSize.columns),
+        ]),
   ];
 }
 

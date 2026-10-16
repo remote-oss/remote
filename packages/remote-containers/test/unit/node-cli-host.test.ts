@@ -13,7 +13,13 @@ const PATHS = {
   node: '/usr/bin/node',
   entry: '/ext/dist/devcontainers-cli/devcontainer.js',
   preload: '/ext/dist/cli-preload.js',
+  editorModules: '/app/node_modules.asar',
 };
+
+/** The preload's marker line, saying whether it loaded `node-pty`. */
+function markerLine(loaded: boolean): string {
+  return `${JSON.stringify({marker: 'remote-oss-cli-preload', nodePty: {loaded, from: loaded ? 'editor' : 'none'}})}\n`;
+}
 
 /** What a test sees of the fake system. */
 interface Fake {
@@ -109,7 +115,11 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
           shell: false,
           detached: true,
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: {HOME: '/home/u', ELECTRON_RUN_AS_NODE: '1'},
+          env: {
+            HOME: '/home/u',
+            ELECTRON_RUN_AS_NODE: '1',
+            REMOTE_OSS_EDITOR_MODULES: '/app/node_modules.asar',
+          },
         },
       },
     ]);
@@ -257,49 +267,38 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
     );
   }
 
-  /** A run over `fake` that captures the stdin writer the host offers; `writer` gives it once it has. */
-  function capturingRun(fake: Fake): {
+  /**
+   * A run over `fake` that captures the stdin writer the host offers and the presentation it hands with it, and the
+   * CLI lines it tells; `stderr` is written first, which the preload's marker line usually begins.
+   */
+  function capturingRun(
+    fake: Fake,
+    stderr: string,
+  ): {
     running: Promise<CliRun>;
     writer: () => ((data: string) => void) | undefined;
+    presentations: StdinPresentation[];
+    lines: CliLine[];
   } {
     let writer: ((data: string) => void) | undefined;
+    const presentations: StdinPresentation[] = [];
+    const lines: CliLine[] = [];
     const running = nodeCliHost(PATHS, {}, fake.ports).run(
       [],
-      () => undefined,
+      line => lines.push(line),
       new AbortController().signal,
-      write => {
+      (write, presentation) => {
         writer = write;
+        presentations.push(presentation);
       },
     );
-    return {running, writer: () => writer};
-  }
-
-  /** Runs `fake` with a stdin and returns whether the host offered a writer, and the presentation it handed. */
-  async function presentedStdin(
-    fake: Fake,
-    presentation?: StdinPresentation,
-  ): Promise<[boolean, StdinPresentation | undefined]> {
-    let write: ((data: string) => void) | undefined;
-    let given: StdinPresentation | undefined;
-    const running = nodeCliHost(PATHS, {}, fake.ports).run(
-      [],
-      () => undefined,
-      new AbortController().signal,
-      (writer, givenPresentation) => {
-        write = writer;
-        given = givenPresentation;
-      },
-      presentation,
-    );
-    await new Promise(resolve => setImmediate(resolve));
-    fake.exit(0);
-    await running;
-    return [write !== undefined, given];
+    fake.stderr.write(stderr);
+    return {running, writer: () => writer, presentations, lines};
   }
 
   it('F-0415 7.E6: onStdin gets a writer that delivers to the stdin of the CLI, an Enter as LF', async () => {
     const fake = fakeSystem();
-    const {running, writer} = capturingRun(fake);
+    const {running, writer} = capturingRun(fake, markerLine(false));
     await new Promise(resolve => setImmediate(resolve));
     writer()?.('yes\r\n');
     await new Promise(resolve => setImmediate(resolve));
@@ -322,7 +321,7 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
 
   it('F-0415 7.E6: a write after the CLI has ended is dropped, without an error', async () => {
     const fake = fakeSystem();
-    const {running, writer} = capturingRun(fake);
+    const {running, writer} = capturingRun(fake, markerLine(false));
     await new Promise(resolve => setImmediate(resolve));
     fake.stdin.destroy();
     fake.exit(0);
@@ -330,15 +329,124 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
     deepStrictEqual(await running, {kind: 'ran', result: undefined, status: 0});
   });
 
-  it('F-0415 7.E6: a run hands its stdin writer and its presentation, plain by default or as given', async () => {
-    const plain = await presentedStdin(fakeSystem(), undefined);
-    const echoed = await presentedStdin(fakeSystem(), 'echoed');
+  it('ADR-0011: the marker line sets echoed, and is not told as a CLI line', async () => {
+    const fake = fakeSystem();
+    const {running, presentations, lines} = capturingRun(
+      fake,
+      markerLine(true),
+    );
+    fake.stderr.write('{"type":"text","level":2,"text":"hi"}\n');
+    await new Promise(resolve => setImmediate(resolve));
+    fake.exit(0);
+    await running;
     deepStrictEqual(
-      [plain, echoed],
+      [presentations, lines],
       [
-        [true, 'plain'],
-        [true, 'echoed'],
+        ['echoed'],
+        [{stream: 'stderr', line: '{"type":"text","level":2,"text":"hi"}'}],
       ],
+    );
+  });
+
+  it('ADR-0011: a marker that says not loaded gives plain', async () => {
+    const fake = fakeSystem();
+    const {running, presentations} = capturingRun(fake, markerLine(false));
+    await new Promise(resolve => setImmediate(resolve));
+    fake.exit(0);
+    await running;
+    deepStrictEqual(presentations, ['plain']);
+  });
+
+  /** A run over `fake` whose stderr is `text` and no marker; the host offers no writer until the run has ended. */
+  async function markerlessRun(
+    fake: Fake,
+    text: string,
+  ): Promise<{presentations: StdinPresentation[]; lines: CliLine[]}> {
+    const {running, presentations, lines} = capturingRun(fake, text);
+    await new Promise(resolve => setImmediate(resolve));
+    const before = [...presentations];
+    fake.exit(0);
+    await running;
+    deepStrictEqual(before, []);
+    return {presentations, lines};
+  }
+
+  it('ADR-0011: no marker gives plain at the end of the run, once', async () => {
+    const {presentations} = await markerlessRun(fakeSystem(), '');
+    deepStrictEqual(presentations, ['plain']);
+  });
+
+  it('ADR-0011: a line that mentions the marker inside other text is a CLI line, not the marker', async () => {
+    const mentions = '{"type":"text","text":"remote-oss-cli-preload"}';
+    const prefixed = `prefix ${markerLine(true).trim()}`;
+    const {presentations, lines} = await markerlessRun(
+      fakeSystem(),
+      `${mentions}\n${prefixed}\n`,
+    );
+    deepStrictEqual(
+      [presentations, lines.map(line => line.line)],
+      [['plain'], [mentions, prefixed]],
+    );
+  });
+
+  it('ADR-0011: a JSON line that is not an object, or names another marker, is a CLI line', async () => {
+    const other = '{"marker":"another","nodePty":{"loaded":true}}';
+    const {presentations, lines} = await markerlessRun(
+      fakeSystem(),
+      `42\nnull\n${other}\n`,
+    );
+    deepStrictEqual(
+      [presentations, lines.map(line => line.line)],
+      [['plain'], ['42', 'null', other]],
+    );
+  });
+
+  it('ADR-0011: a marker with no nodePty, or nodePty not an object, gives plain', async () => {
+    const results = [];
+    for (const text of [
+      '{"marker":"remote-oss-cli-preload"}',
+      '{"marker":"remote-oss-cli-preload","nodePty":null}',
+      '{"marker":"remote-oss-cli-preload","nodePty":{}}',
+    ]) {
+      const fake = fakeSystem();
+      const presentations: StdinPresentation[] = [];
+      const running = nodeCliHost(PATHS, {}, fake.ports).run(
+        [],
+        () => undefined,
+        new AbortController().signal,
+        (write, presentation) => {
+          presentations.push(presentation);
+        },
+      );
+      fake.stderr.write(`${text}\n`);
+      await new Promise(resolve => setImmediate(resolve));
+      results.push([...presentations]);
+      fake.exit(0);
+      await running;
+    }
+    deepStrictEqual(results, [['plain'], ['plain'], ['plain']]);
+  });
+
+  it("ADR-0011: an echoed run's CR reaches the CLI's stdin as typed", async () => {
+    const fake = fakeSystem();
+    const {running, writer} = capturingRun(fake, markerLine(true));
+    await new Promise(resolve => setImmediate(resolve));
+    writer()?.('yes\r');
+    await new Promise(resolve => setImmediate(resolve));
+    fake.exit(0);
+    await running;
+    deepStrictEqual(fake.stdinWrote, ['yes\r']);
+  });
+
+  it("ADR-0011: the spawn's environment carries REMOTE_OSS_EDITOR_MODULES from the paths", async () => {
+    const fake = fakeSystem();
+    const running = bareRun(fake);
+    fake.exit(0);
+    await running;
+    deepStrictEqual(
+      (fake.spawns[0]?.options as {env: Record<string, string>}).env
+        .REMOTE_OSS_EDITOR_MODULES,
+      PATHS.editorModules,
     );
   });
 });

@@ -43,7 +43,12 @@ describe('the contract rows of the CLI bridge (card containers-04)', () => {
     const environment = {GITHUB_TOKEN: 's3cr3t-token'};
     const bridge = cliBridgeOf(
       nodeCliHost(
-        {node: '/n', entry: '/e.js', preload: '/p.js'},
+        {
+          node: '/n',
+          entry: '/e.js',
+          preload: '/p.js',
+          editorModules: '/app/node_modules.asar',
+        },
         environment,
         ports,
       ),

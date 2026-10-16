@@ -267,6 +267,25 @@ export function activate(context: vscode.ExtensionContext): void {
         );
       },
     ),
+    vscode.commands.registerCommand(
+      'acceptance.agent.terminalBuffer',
+      async () => {
+        await vscode.commands.executeCommand('workbench.action.terminal.focus');
+        await vscode.commands.executeCommand(
+          'workbench.action.terminal.selectAll',
+        );
+        await vscode.commands.executeCommand(
+          'workbench.action.terminal.copySelection',
+        );
+        await vscode.commands.executeCommand(
+          'workbench.action.terminal.clearSelection',
+        );
+        report(agentFolder, name, {
+          event: 'terminalBuffer',
+          text: await vscode.env.clipboard.readText(),
+        });
+      },
+    ),
     vscode.commands.registerCommand('acceptance.agent.statFolder', async () => {
       const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (folder === undefined) {

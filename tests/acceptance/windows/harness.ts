@@ -44,7 +44,8 @@ export interface AgentEvent {
     | 'setting'
     | 'forwarded'
     | 'commands'
-    | 'extension';
+    | 'extension'
+    | 'terminalBuffer';
   time: number;
   id?: string;
   message?: string;
@@ -73,6 +74,8 @@ export interface AgentEvent {
   terminals?: string[];
   /** The file of the window's active text editor, or null, as a `state` event saw it. */
   activeEditor?: string | null;
+  /** The whole buffer of the window's active terminal, scrollback included, as a `terminalBuffer` event copied it. */
+  text?: string;
 }
 
 /** One line of the record the extensions append to. */
@@ -928,6 +931,24 @@ export async function userSettings(
     : {};
   writeFileSync(file, JSON.stringify({...current, ...change}, null, 2));
   await new Promise(resolve => setTimeout(resolve, 1000));
+}
+
+/**
+ * The whole buffer of window `name`'s active terminal, scrollback included: the agent focuses the terminal, selects
+ * all of it and copies it, and reports the clipboard's text.
+ */
+export async function terminalBuffer(name: string): Promise<string> {
+  const before = countOf(name, 'terminalBuffer');
+  await inWindow(name, 'acceptance.agent.terminalBuffer');
+  await waitUntil(
+    `window ${name} to report its terminal buffer`,
+    () => countOf(name, 'terminalBuffer') > before,
+  );
+  return (
+    windowEvents(name)
+      .filter(each => each.event === 'terminalBuffer')
+      .at(-1)?.text ?? ''
+  );
 }
 
 /** The value window `name` reads for the setting `settingId`, or null when it reads none. */

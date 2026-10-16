@@ -187,7 +187,7 @@ function treeItemOf(
 /** The editor's terminals as the lifecycle presenter uses them: a pseudoterminal that is transient and takes focus. */
 function terminalPortOf(): TerminalPort {
   return {
-    open: (name, onInput, onClosed) => {
+    open: (name, onInput, onClosed, onDimensions) => {
       const written = new vscode.EventEmitter<string>();
       const early: string[] = [];
       let ready = false;
@@ -197,7 +197,13 @@ function terminalPortOf(): TerminalPort {
         // eslint-disable-next-line id-length -- the editor's name for the option
         pty: {
           onDidWrite: written.event,
-          open: () => {
+          open: (initialDimensions: vscode.TerminalDimensions | undefined) => {
+            if (initialDimensions !== undefined) {
+              onDimensions({
+                rows: initialDimensions.rows,
+                columns: initialDimensions.columns,
+              });
+            }
             ready = true;
             for (const text of early.splice(0)) {
               written.fire(text);
@@ -205,6 +211,9 @@ function terminalPortOf(): TerminalPort {
           },
           close: onClosed,
           handleInput: onInput,
+          setDimensions: (dimensions: vscode.TerminalDimensions) => {
+            onDimensions({rows: dimensions.rows, columns: dimensions.columns});
+          },
         },
       });
       terminal.show(false);
@@ -269,7 +278,10 @@ export async function activate(
   ): CliBridge {
     return cliBridgeOf(
       nodeCliHost(
-        {...cliPathsOf(context.extensionPath), node: process.execPath},
+        {
+          ...cliPathsOf(context.extensionPath, vscode.env.appRoot),
+          node: process.execPath,
+        },
         environment,
         systemCliPorts,
       ),

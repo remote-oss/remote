@@ -73,6 +73,8 @@ export interface LifecyclePresenter {
     write: (data: string) => void,
     presentation: StdinPresentation,
   ): void;
+  /** The size a run's lifecycle commands get: the last size a "Configuring..." terminal reported, or 24×80. */
+  terminalSize(): {rows: number; columns: number};
 }
 
 /** Finds or creates the container of a folder. */
@@ -277,13 +279,12 @@ export function containerLifecycleOf(dependencies: {
     presenter.backgroundStarted();
     void bridge
       .runUserCommands(
-        target,
+        {...target, terminalSize: presenter.terminalSize()},
         containerId,
         onCliEvent,
         own.signal,
         // eslint-disable-next-line @typescript-eslint/unbound-method -- the presenter's method holds no this
         presenter.attachStdin,
-        'plain',
       )
       .then(result => {
         if (background === own && !own.signal.aborted) {
@@ -372,7 +373,7 @@ export function containerLifecycleOf(dependencies: {
       );
     }
     const upResult = await bridge.up(
-      target,
+      {...target, terminalSize: presenter.terminalSize()},
       {
         removeExistingContainer: rebuilding,
         buildNoCache: request.rebuild?.buildNoCache ?? false,
@@ -382,7 +383,6 @@ export function containerLifecycleOf(dependencies: {
       cancellation,
       // eslint-disable-next-line @typescript-eslint/unbound-method -- the presenter's method holds no this
       presenter.attachStdin,
-      'plain',
     );
     if (upResult.kind !== 'up') {
       if (

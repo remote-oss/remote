@@ -213,6 +213,38 @@ describe('the arguments of the dev container CLI (card containers-04)', () => {
     );
   });
 
+  it('ADR-0011: a terminal size adds --terminal-rows and --terminal-columns after the log format, for the three subcommands', () => {
+    const sized: CliTarget = {...TARGET, terminalSize: {rows: 24, columns: 80}};
+    const builders = [
+      (target: CliTarget) => upArguments(target, PLAIN),
+      (target: CliTarget) => runUserCommandsArguments(target, 'c1'),
+      (target: CliTarget) => readConfigurationArguments(target, 'c1'),
+    ];
+    deepStrictEqual(
+      builders.map(build => {
+        const withSize = build(sized);
+        const format = withSize.indexOf('--log-format');
+        return [
+          withSize.slice(format, format + 6),
+          build(TARGET).includes('--terminal-rows'),
+          build(TARGET).includes('--terminal-columns'),
+        ];
+      }),
+      builders.map(() => [
+        [
+          '--log-format',
+          'json',
+          '--terminal-rows',
+          '24',
+          '--terminal-columns',
+          '80',
+        ],
+        false,
+        false,
+      ]),
+    );
+  });
+
   it('C3: no builder emits --remote-env or --secrets-file', () => {
     const lists = [
       upArguments(TARGET, {
