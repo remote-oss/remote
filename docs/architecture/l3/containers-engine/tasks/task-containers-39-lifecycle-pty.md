@@ -45,7 +45,7 @@ and are exercised by the existing rows on the platforms that stay `plain`.
 6. **The rows**: the preload rows, C3's rows, the lifecycle wiring, and the 7.E6 acceptance rows re-pointed at the
    pty's own echo, plus `read -s`, `read -p` and Ctrl+C rows.
 
-## 2. What was measured (Linux, VS Code 1.105 / Electron 43 / Node 24.20, the pinned CLI 0.89.0, Docker 29)
+## 2. What was measured (Linux, VS Code 1.139.1 (04c0d99f4f) / Electron 43.6 / Node 24.20, the pinned CLI 0.89.0, Docker 29)
 
 All measured on this card's draft, with a preload equal to §3.1 and the CLI driven as `node-cli-host.ts` drives it
 (`ELECTRON_RUN_AS_NODE=1`, stdin piped, `--log-format json`):
@@ -196,18 +196,24 @@ passes `vscode.env.appRoot`. This is the one place that names the folder (ADR-00
 ### 3.5 `src/lifecycle/container-lifecycle.ts`
 
 - The two `'plain'` arguments handed to `bridge.up` and `bridge.runUserCommands` go away (the host decides).
-- `LifecyclePresenter` gains `terminalSize(): {rows: number; columns: number} | undefined`: the "Configuring..."
-  terminal's size when it is open, else the editor's default for a new one; `undefined` when nothing is known.
+- `LifecyclePresenter` gains `terminalSize(): {rows: number; columns: number}`: the last size a "Configuring..."
+  terminal reported, or `{rows: 24, columns: 80}` when none has reported yet. It never gives `undefined`.
 - The lifecycle's `CliTarget` for `up` and `run-user-commands` sets `terminalSize: presenter.terminalSize()`, read
   when each run starts. `readConfiguration` passes none.
+- Why the fallback: the terminal opens on a run's first output, so for `up` it opens with the `initializeCommand`
+  itself, after the size was read. Without a fallback the host-side run would never get the flags. `24×80` is
+  `node-pty`'s own default (`DEFAULT_ROWS = 24`, `DEFAULT_COLS = 80` in the editor's copy), so the fallback gives
+  the size the pty would take anyway, and both runs get the flags (ADR-0011 decision 5). A first run that gets
+  `24×80` while the panel is wider is the accepted gap of decision 5: the size isn't updated after the run starts.
 
 ### 3.6 `src/surfaces/lifecycle-terminal.ts` and `src/extension.ts`
 
 - `TerminalPort.open` gains a fourth parameter `onDimensions: (size: {rows: number; columns: number}) => void`,
   which the adapter calls from the pseudoterminal's `open(initialDimensions)` when it is defined, and from
-  `setDimensions` (the stable `Pseudoterminal.setDimensions`) on each change. The presenter keeps the last size per
-  run in `Run.size` and returns it from `terminalSize()`; before any terminal has opened it returns `undefined`.
-  A later change doesn't reach a running pty (ADR-0011 decision 5, accepted).
+  `setDimensions` (the stable `Pseudoterminal.setDimensions`) on each change. The presenter keeps the last reported
+  size in one variable of its own, shared by every run (a later run's terminal opens in the same panel), starting at
+  `{rows: 24, columns: 80}`, and returns it from `terminalSize()` (§3.5). A later change doesn't reach a running
+  pty (ADR-0011 decision 5, accepted).
 - `extension.ts` `terminalPortOf()` wires `open: initialDimensions => { ...; if (initialDimensions) onDimensions(initialDimensions); }`
   and `setDimensions: onDimensions`. Both fields are stable API (`vscode.Pseudoterminal`).
 - `attachStdin` is unchanged: the presenter already takes `(write, presentation)` and branches on it (containers-38).
@@ -255,7 +261,7 @@ read-configuration hand their presentation to the host` row in `cli-bridge.test.
 | `node-cli-host.test.ts` | `ADR-0011: the spawn's environment carries REMOTE_OSS_EDITOR_MODULES from the paths` | the recorded `spawnOptions.env.REMOTE_OSS_EDITOR_MODULES` equals `paths.editorModules` |
 | `cli-arguments.test.ts` | `ADR-0011: a terminal size adds --terminal-rows and --terminal-columns after the log format, for the three subcommands` | with `terminalSize: {rows: 24, columns: 80}`: `[..., '--log-format', 'json', '--terminal-rows', '24', '--terminal-columns', '80', ...]`; without it, neither flag |
 | `container-lifecycle.test.ts` | `ADR-0011: up and run-user-commands carry the presenter's terminal size, read-configuration none` | the presenter fake's `terminalSize` gives `{rows: 30, columns: 100}`: `bridge.ups[0]?.target.terminalSize` and `bridge.runs[0]?.target.terminalSize` are that; the read's target has none |
-| `lifecycle-terminal.test.ts` | `ADR-0011: terminalSize is the open terminal's last reported size, and undefined before one opens` | before any output `terminalSize()` is `undefined`; after the terminal opens and the port reports `{rows: 24, columns: 80}` then `{rows: 24, columns: 120}`, it's the latter |
+| `lifecycle-terminal.test.ts` | `ADR-0011: terminalSize is 24×80 before any terminal reports, then the last reported size, kept for the next run` | before any output `terminalSize()` is `{rows: 24, columns: 80}`; after the terminal opens and the port reports `{rows: 30, columns: 100}` then `{rows: 30, columns: 120}`, it's the latter; after `ended()`, a new run's `terminalSize()` before its terminal opens is still `{rows: 30, columns: 120}` |
 | `cli-paths.test.ts` (new if absent) | `ADR-0011: editorModules is the editor's node_modules.asar` | `cliPathsOf('/ext', '/app').editorModules` is `/app/node_modules.asar` |
 
 ## 5. Catalogue (`docs/architecture/catalogue/coverage-containers-r1.tsv`)
