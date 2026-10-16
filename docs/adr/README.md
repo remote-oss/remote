@@ -16,6 +16,7 @@ and does not re-decide it.
 | [0008](0008-public-surface-and-voice.md) | The public surface speaks as a product and carries nothing of the process | accepted (D-59, R-85) |
 | [0009](0009-dev-container-cli-bridge.md) | Drive the dev container CLI as a pinned, spawned program, and bend it without forking | accepted |
 | [0010](0010-output-read-only-through-markers.md) | What we read from a shell or a program is read only through our markers or its documented form | accepted |
+| [0011](0011-lifecycle-runs-in-a-terminal.md) | Lifecycle commands run in a real terminal, through the editor's own node-pty | accepted (the user, 2026-10-16) |
 
 Planned, in this order (titles may change):
 
