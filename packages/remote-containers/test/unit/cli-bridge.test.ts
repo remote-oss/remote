@@ -375,6 +375,89 @@ describe('the CLI bridge (card containers-04)', () => {
     ]);
   });
 
+  /** A run that prints `first` to stderr, waits for the test to tick, then prints `rest` and ends. */
+  async function idleRun(
+    first: readonly string[],
+    milliseconds: number,
+    rest: readonly string[],
+  ): Promise<{whileWaiting: string[]; atEnd: string[]}> {
+    mock.timers.enable({apis: ['setTimeout']});
+    try {
+      const events: CliEvent[] = [];
+      const scripted: {
+        print: (line: string) => void;
+        finish: () => void;
+      } = {print: () => undefined, finish: () => undefined};
+      const {bridge} = setup(
+        (cliArguments, onLine) => {
+          scripted.print = line => {
+            onLine({stream: 'stderr', line});
+          };
+          first.forEach(scripted.print);
+          return new Promise(resolve => {
+            scripted.finish = () => {
+              resolve({kind: 'ran', result: UP_LINE, status: 0});
+            };
+          });
+        },
+        {
+          configText: '{"containerEnv": {"T": "${localEnv:GITHUB_TOKEN}"}}',
+          environment: {GITHUB_TOKEN: 's3cr3t-token'},
+        },
+      );
+      function texts(): string[] {
+        return events.map(event =>
+          event.kind === 'log' ? event.text : event.name,
+        );
+      }
+      const running = bridge.up(
+        TARGET,
+        UP_OPTIONS,
+        event => events.push(event),
+        NEVER,
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      mock.timers.tick(milliseconds);
+      const whileWaiting = texts();
+      rest.forEach(scripted.print);
+      scripted.finish();
+      await running;
+      return {whileWaiting, atEnd: texts()};
+    } finally {
+      mock.timers.reset();
+    }
+  }
+
+  it('remote-oss/remote-containers#126: a prompt with no newline reaches the caller once its command prints nothing more, before the run reads its answer', async () => {
+    deepStrictEqual(
+      await idleRun([rawLine('Open the URL? [Y/n] > ')], 50, [
+        rawLine('got=y\n'),
+      ]),
+      {
+        whileWaiting: ['Open the URL? [Y/n] > '],
+        atEnd: ['Open the URL? [Y/n] > ', 'got=y\n'],
+      },
+    );
+  });
+
+  it('remote-oss/remote-containers#126: an unfinished line still waits while its command is printing', async () => {
+    deepStrictEqual(
+      await idleRun([rawLine('Open the URL? ')], 49, [rawLine('[Y/n] > ')]),
+      {whileWaiting: [], atEnd: ['Open the URL? [Y/n] > ']},
+    );
+  });
+
+  it('R-26: a value split across two chunks of one burst is joined and scrubbed before the idle release', async () => {
+    deepStrictEqual(
+      await idleRun([rawLine('echo s3cr3t-'), rawLine('token')], 50, []),
+      {
+        whileWaiting: ['echo ${localEnv:GITHUB_TOKEN}'],
+        atEnd: ['echo ${localEnv:GITHUB_TOKEN}'],
+      },
+    );
+  });
+
   it('ADR-0010: stderr noise that looks like a result is a log event and never the result', async () => {
     const noise = 'npm WARN {"outcome":"success","containerId":"x"}';
     const events: CliEvent[] = [];

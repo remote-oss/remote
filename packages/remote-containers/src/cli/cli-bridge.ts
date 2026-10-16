@@ -37,6 +37,12 @@ const COLOUR_CODES = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 /** How long the CLI may keep running after its result line before it is ended. */
 const GUARD_MILLISECONDS = 30_000;
 
+/**
+ * How long a lifecycle command's unfinished line waits for more of itself: a prompt that waits for its answer prints
+ * nothing more, and shows once this has passed; a value the CLI writes as one burst is joined well within it.
+ */
+const TAIL_IDLE_MILLISECONDS = 50;
+
 /** What the components call. */
 export interface CliBridge {
   up(
@@ -185,6 +191,7 @@ export function cliBridgeOf(
         onEvent(event);
       }
       let guard: NodeJS.Timeout | undefined;
+      let idle: NodeJS.Timeout | undefined;
       try {
         const finished = await host.run(
           argumentsOf(prepared),
@@ -201,6 +208,10 @@ export function cliBridgeOf(
             const read = readStderrLine(line);
             if (read.isRaw && read.event.kind === 'log') {
               rawHold.push(read.event).forEach(deliver);
+              clearTimeout(idle);
+              idle = setTimeout(() => {
+                rawHold.releaseAll().forEach(deliver);
+              }, TAIL_IDLE_MILLISECONDS);
               return;
             }
             rawHold.release(read.channel).forEach(deliver);
@@ -226,6 +237,7 @@ export function cliBridgeOf(
         );
       } finally {
         clearTimeout(guard);
+        clearTimeout(idle);
         cancellation.removeEventListener('abort', forward);
       }
     } finally {

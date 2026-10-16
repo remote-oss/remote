@@ -1,7 +1,8 @@
 /**
  * @fileoverview Holds what lifecycle commands print by line. The CLI streams it as `raw` events, chunk by chunk, so a
  * value a command prints can straddle two events; each complete line goes out at once and an unfinished tail waits for
- * its newline, per channel.
+ * its newline, a non-raw event on its channel, the end of the process, or 50 ms with no further raw chunk (released by
+ * the bridge), per channel.
  */
 
 import type {CliEvent} from './cli-lines.ts';
@@ -15,7 +16,7 @@ export interface RawHold {
   push(chunk: RawEvent): RawEvent[];
   /** Gives the held tail of `channel`, if there is one: the channel has said something else. */
   release(channel: string | undefined): RawEvent[];
-  /** Gives every held tail: the process has ended. */
+  /** Gives every held tail: the process has ended, or its output has been idle (the bridge's 50 ms release). */
   releaseAll(): RawEvent[];
 }
 

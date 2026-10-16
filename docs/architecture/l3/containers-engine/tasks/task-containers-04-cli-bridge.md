@@ -357,10 +357,13 @@ hook prints can straddle two events. C3 **buffers `raw` text by line**, per chan
 - it holds an unfinished tail until the next `\n` on that channel;
 - it flushes a held tail, scrubbed, when a non-`raw` event arrives on the same channel (a `progress` `succeeded` or
   `failed`), and when the process ends.
-- So a single-line value is never split across a line break. A multi-line value is handled line by line, by the
-  entries above.
-- The cost: output without a newline, such as a progress bar drawn with `\r`, shows at its next newline or flush. The
-  log terminal of F-0415 5.0 step 10 accepts that.
+- it also flushes every held tail, scrubbed, once 50 ms pass with no further `raw` event
+  (remote-oss/remote-containers#126), so a prompt that waits for its answer shows.
+- So a single-line value is never split across a line break, nor across chunks the command writes within 50 ms of each
+  other. A value written in pieces more than 50 ms apart can be split and is then not scrubbed; this is accepted. A
+  multi-line value is handled line by line, by the entries above.
+- The cost: output without a newline, such as a progress bar drawn with `\r`, shows after 50 ms with no output, at its
+  next newline, or at a flush. The log terminal of F-0415 5.0 step 10 accepts that.
 
 **What isn't C3's.**
 - A value the user writes literally into `containerEnv`, rather than referencing from the editor's environment, isn't

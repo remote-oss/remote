@@ -137,6 +137,34 @@ describe('the input of the "Configuring..." terminal', function () {
     await closeWindow('lineedit');
   });
 
+  it('F-0415 AC-36 (prompt-shown): a prompt with no newline shows in the terminal before its answer is typed (remote-oss/remote-containers#126)', async () => {
+    const answer = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'prompt-answer.txt',
+    );
+    const command = [
+      `mark=PROMPT; mark="$mark"SHOWN`,
+      `printf '%s? [Y/n] > ' "$mark"`,
+      `read -r a`,
+      `printf 'answered: %s\\n' "$a" > ${answer}`,
+    ].join(' && ');
+    const folder = devContainerFolder('promptshown', {
+      initializeCommand: command,
+    });
+    const window = await openFolderWindow(folder);
+    const opening = inWindow(window, 'remote-containers.openFolder');
+    opening.catch(() => undefined);
+    await answerFolderDialog(window, folder);
+    await untilText(window, 'PROMPTSHOWN? [Y/n] > ', 60_000);
+    await typeInTerminal(window, 'Y\n');
+    await until('the initializeCommand to write its answer', () =>
+      existsSync(answer),
+    );
+    deepStrictEqual(readFileSync(answer, 'utf8'), 'answered: Y\n');
+    await connectedToContainer('promptshown');
+    await closeWindow('promptshown');
+  });
+
   it('F-0415 AC-36 (postcreate-echo): the keys typed in the terminal reach the in-container postCreateCommand, and each is echoed once (remote-oss/remote-containers#124)', async () => {
     const answer = path.join(
       variable('HARNESS_RUN_FOLDER'),
