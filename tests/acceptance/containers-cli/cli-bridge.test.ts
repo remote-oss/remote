@@ -142,7 +142,7 @@ describe('the dev container CLI through the bridge, on local Docker (card contai
   function bridge(): ReturnType<typeof cliBridgeOf> {
     return cliBridgeOf(
       nodeCliHost(
-        {node: process.execPath, ...cliPathsOf(PACKAGE)},
+        {node: process.execPath, ...cliPathsOf(PACKAGE, '/nowhere')},
         environment,
         systemCliPorts,
       ),

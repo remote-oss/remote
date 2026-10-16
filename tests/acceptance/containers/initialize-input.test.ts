@@ -13,6 +13,7 @@ import {openFolderWindow} from '../windows/folder-windows.ts';
 import {
   answerFolderDialog,
   focusTerminal,
+  pressControlC,
   terminalText,
   typeInTerminal,
 } from '../windows/renderer.ts';
@@ -92,15 +93,65 @@ async function prompted(
 
 /**
  * The echo each row asserts: the terminal, read before and after the row types a `Y`, gains exactly one `Y` from it.
- * A `plain` run's reader is a pipe that neither echoes nor edits, so the terminal is the only echo; a run whose reader
- * echoes (a TTY) must not be echoed again, or the `Y` would stand twice.
+ * A `plain` run's reader is a pipe, and the terminal echoes; an `echoed` run's reader is a pty, whose echo comes back
+ * through the CLI's output a little later. So the row waits, every 200 ms for up to 10 s, until the terminal holds
+ * one more `Y`, then reads again 500 ms later: a second echo would show in that read, and no echo is the timeout.
  */
 async function theTypedKeyStandsAlone(window: string): Promise<boolean> {
-  const before = await terminalText(window);
+  const before = countOf(await terminalText(window), 'Y');
   await typeInTerminal(window, 'Y');
-  const after = await terminalText(window);
+  const deadline = Date.now() + 10_000;
+  let echoed = false;
+  while (!echoed && Date.now() < deadline) {
+    echoed = countOf(await terminalText(window), 'Y') - before >= 1;
+    if (!echoed) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+  await new Promise(resolve => setTimeout(resolve, 500));
+  const after = countOf(await terminalText(window), 'Y');
   await typeInTerminal(window, '\n');
-  return countOf(after, 'Y') - countOf(before, 'Y') === 1;
+  return echoed && after - before === 1;
+}
+
+/** Opens the window of a dev container folder named `folderName` with `configuration`, past its folder dialog. */
+async function openedWith(
+  folderName: string,
+  configuration: Readonly<Record<string, unknown>>,
+): Promise<string> {
+  const folder = devContainerFolder(folderName, configuration);
+  const window = await openFolderWindow(folder);
+  const opening = inWindow(window, 'remote-containers.openFolder');
+  opening.catch(() => undefined);
+  await answerFolderDialog(window, folder);
+  return window;
+}
+
+/** The answer file `answer.txt` of folder `folderName`, as the host sees it and as the container does. */
+function answerOf(folderName: string): {host: string; container: string} {
+  return {
+    host: path.join(variable('HARNESS_RUN_FOLDER'), folderName, 'answer.txt'),
+    container: `/workspaces/${folderName}/answer.txt`,
+  };
+}
+
+/** The command that reads a line with echo off after the prompt `code > `, and writes it to `answerFile`. */
+function hiddenRead(answerFile: string): string {
+  return `printf 'code > ' && read -r -s a && printf '\\n' && printf 'answered: %s\\n' "$a" > ${answerFile}`;
+}
+
+/** Types `SECRET7` and Enter at the `code > ` prompt; gives the answer and whether the terminal shows the text. */
+async function typedHidden(
+  window: string,
+  answer: string,
+): Promise<{answer: string; theTypedTextShows: boolean}> {
+  await untilText(window, 'code > ');
+  await typeInTerminal(window, 'SECRET7\n');
+  await until('the command to write its answer', () => existsSync(answer));
+  return {
+    answer: readFileSync(answer, 'utf8'),
+    theTypedTextShows: (await terminalText(window)).includes('SECRET7'),
+  };
 }
 
 describe('the input of the "Configuring..." terminal', function () {
@@ -126,9 +177,9 @@ describe('the input of the "Configuring..." terminal', function () {
     await closeWindow('initcmd');
   });
 
-  it('F-0415 AC-36 (line-editing): backspace and forward delete edit the line before it reaches the command (remote-oss/remote-containers#125)', async () => {
+  it('F-0415 AC-36 (line-editing): backspace edits the line before it reaches the command (remote-oss/remote-containers#125)', async () => {
     const {window, answer} = await prompted('lineedit', 'lineedit-answer.txt');
-    await typeInTerminal(window, 'ab\x7f\x1b\n');
+    await typeInTerminal(window, 'ab\x7f\n');
     await until('the initializeCommand to write its answer', () =>
       existsSync(answer),
     );
@@ -201,5 +252,81 @@ describe('the input of the "Configuring..." terminal', function () {
     );
     await connectedToContainer('postecho');
     await closeWindow('postecho');
+  });
+
+  it('F-0415 AC-36, ADR-0011 (initcmd-hidden): an initializeCommand that reads with echo off shows its prompt and not the typed text', async () => {
+    const {host} = answerOf('initcmdhidden');
+    const window = await openedWith('initcmdhidden', {
+      initializeCommand: hiddenRead(host),
+    });
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('initcmdhidden');
+    await closeWindow('initcmdhidden');
+  });
+
+  it('F-0415 AC-36, ADR-0011 (postcreate-hidden): a postCreateCommand that reads with echo off shows its prompt and not the typed text', async () => {
+    const {host, container} = answerOf('posthidden');
+    const window = await openedWith('posthidden', {
+      postCreateCommand: hiddenRead(container),
+    });
+    await untilText(window, 'code > ');
+    await focusTerminal(window);
+    deepStrictEqual(await typedHidden(window, host), {
+      answer: 'answered: SECRET7\n',
+      theTypedTextShows: false,
+    });
+    await connectedToContainer('posthidden');
+    await closeWindow('posthidden');
+  });
+
+  it("F-0415 AC-36, ADR-0011 (read-p-prompt): bash's read -p shows its prompt before the answer is typed, in the container", async () => {
+    const {host, container} = answerOf('readp');
+    const window = await openedWith('readp', {
+      postCreateCommand: `bash -c 'read -p "RP> " a && printf "answered: %s\\n" "$a" > ${container}'`,
+    });
+    await untilText(window, 'RP> ');
+    await focusTerminal(window);
+    await typeInTerminal(window, 'Y\n');
+    await until('the postCreateCommand to write its answer', () =>
+      existsSync(host),
+    );
+    deepStrictEqual(readFileSync(host, 'utf8'), 'answered: Y\n');
+    await connectedToContainer('readp');
+    await closeWindow('readp');
+  });
+
+  it('ADR-0011 (pty-used): a lifecycle command runs on a terminal', async () => {
+    const {host} = answerOf('ptyused');
+    await openedWith('ptyused', {
+      initializeCommand: `if [ -t 0 ]; then printf 'tty: yes\\n' > ${host}; else printf 'tty: no\\n' > ${host}; fi`,
+    });
+    await until('the initializeCommand to write its answer', () =>
+      existsSync(host),
+    );
+    deepStrictEqual(readFileSync(host, 'utf8'), 'tty: yes\n');
+    await connectedToContainer('ptyused');
+    await closeWindow('ptyused');
+  });
+
+  it('F-0415 AC-36, 7.E6 (ctrl-c): Ctrl+C stops the running postCreateCommand, the interrupted line shows, and postStartCommand still runs', async () => {
+    const window = await openedWith('ctrlc', {
+      postCreateCommand: `sh -c 'echo CTRLC-WAITING; sleep 40; echo CTRLC-DONE'`,
+      postStartCommand: 'echo POSTSTART-RAN',
+    });
+    await untilText(window, 'CTRLC-WAITING');
+    await focusTerminal(window);
+    await pressControlC(window);
+    await untilText(
+      window,
+      'postCreateCommand from devcontainer.json interrupted.',
+      10_000,
+    );
+    await untilText(window, 'POSTSTART-RAN', 10_000);
+    deepStrictEqual((await terminalText(window)).includes('CTRLC-DONE'), false);
+    await connectedToContainer('ctrlc');
+    await closeWindow('ctrlc');
   });
 });

@@ -3,7 +3,7 @@ import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {CliBridge} from '../../src/cli/cli-bridge.ts';
-import type {StdinOf, StdinPresentation} from '../../src/cli/cli-host.ts';
+import type {StdinOf} from '../../src/cli/cli-host.ts';
 import type {CliTarget, UpOptions} from '../../src/cli/cli-arguments.ts';
 import type {
   CliEvent,
@@ -156,13 +156,12 @@ interface FakeBridge extends CliBridge {
     target: CliTarget;
     options: UpOptions;
     stdin: StdinOf | undefined;
-    presentation: StdinPresentation | undefined;
   }>;
   runs: Array<{
+    target: CliTarget;
     containerId: string;
     signal: AbortSignal;
     stdin: StdinOf | undefined;
-    presentation: StdinPresentation | undefined;
   }>;
   upResult: UpResult;
   runResult: Promise<RunUserCommandsResult>;
@@ -179,21 +178,14 @@ function fakeBridge(): FakeBridge {
     runResult: Promise.resolve({kind: 'done'}),
     upEvents: [],
     runEvents: [],
-    up: (target, options, onEvent, signal, onStdin, presentation) => {
-      bridge.ups.push({target, options, stdin: onStdin, presentation});
+    up: (target, options, onEvent, signal, onStdin) => {
+      bridge.ups.push({target, options, stdin: onStdin});
       onStdin?.(() => undefined, 'plain');
       bridge.upEvents.forEach(onEvent);
       return Promise.resolve(bridge.upResult);
     },
-    runUserCommands: (
-      target,
-      containerId,
-      onEvent,
-      signal,
-      onStdin,
-      presentation,
-    ) => {
-      bridge.runs.push({containerId, signal, stdin: onStdin, presentation});
+    runUserCommands: (target, containerId, onEvent, signal, onStdin) => {
+      bridge.runs.push({target, containerId, signal, stdin: onStdin});
       onStdin?.(() => undefined, 'plain');
       bridge.runEvents.forEach(onEvent);
       return bridge.runResult;
@@ -238,6 +230,7 @@ function recordingPresenter(): {
         calls.push('attach-stdin');
         writers.push(write);
       },
+      terminalSize: () => ({rows: 30, columns: 100}),
     },
   };
 }
@@ -415,6 +408,7 @@ describe('containerLifecycleOf', () => {
               mountGitWorktreeCommonDir: false,
               mounts: ['type=volume,source=vscode,target=/vscode'],
               logLevel: 'info',
+              terminalSize: {rows: 30, columns: 100},
             },
             options: {
               removeExistingContainer: false,
@@ -1345,11 +1339,28 @@ describe('containerLifecycleOf', () => {
         outcome.kind,
         bridge.ups[0]?.stdin === presenter.attachStdin,
         bridge.runs[0]?.stdin === presenter.attachStdin,
-        bridge.ups[0]?.presentation,
-        bridge.runs[0]?.presentation,
         calls.filter(call => call === 'attach-stdin'),
       ],
-      ['ready', true, true, 'plain', 'plain', ['attach-stdin', 'attach-stdin']],
+      ['ready', true, true, ['attach-stdin', 'attach-stdin']],
+    );
+  });
+
+  it("ADR-0011: up and run-user-commands carry the presenter's terminal size, read-configuration none", async () => {
+    const bridge = fakeBridge();
+    const {lifecycle} = lifecycleOver(bridge);
+    await lifecycle.prepare(
+      REQUEST,
+      () => undefined,
+      () => undefined,
+      new AbortController().signal,
+    );
+    await settle();
+    deepStrictEqual(
+      [bridge.ups[0]?.target.terminalSize, bridge.runs[0]?.target.terminalSize],
+      [
+        {rows: 30, columns: 100},
+        {rows: 30, columns: 100},
+      ],
     );
   });
 });

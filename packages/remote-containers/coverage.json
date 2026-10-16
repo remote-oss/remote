@@ -3,7 +3,7 @@
     "src/extension.ts": "loads the editor",
     "src/engine/engine-host.ts": "types only; no executable code",
     "src/cli/cli-host.ts": "types only; no executable code",
-    "src/programs/cli-preload.ts": "runs as a preload in the CLI's own process; the preload row covers it",
+    "src/programs/cli-preload.ts": "runs as a preload in the CLI's own process; the preload rows cover it",
     "src/engine/node-engine-host.ts": "spawns real processes; the server acceptance rows cover it",
     "src/open/reopen-ports.ts": "types only; no executable code"
   },

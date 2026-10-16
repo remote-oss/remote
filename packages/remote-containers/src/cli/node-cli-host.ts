@@ -17,6 +17,37 @@ import type {NodeCliPorts, SpawnedCli} from './node-cli-ports.ts';
 /** How long the CLI has to end after SIGTERM before it is killed. */
 const KILL_AFTER_MILLISECONDS = 5000;
 
+/** The name of the marker line the CLI preload writes on stderr (ADR-0010 rule 1). */
+const PRELOAD_MARKER = 'remote-oss-cli-preload';
+
+/**
+ * The run's presentation that a stderr line says, when the whole line is the preload's marker: `echoed` when the
+ * preload loaded `node-pty`, so the run's reader is a pty, `plain` when it didn't; undefined for any other line.
+ */
+function presentationOfMarker(line: string): StdinPresentation | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !('marker' in parsed) ||
+    parsed.marker !== PRELOAD_MARKER
+  ) {
+    return undefined;
+  }
+  const nodePty = 'nodePty' in parsed ? parsed.nodePty : undefined;
+  return typeof nodePty === 'object' &&
+    nodePty !== null &&
+    'loaded' in nodePty &&
+    nodePty.loaded === true
+    ? 'echoed'
+    : 'plain';
+}
+
 /** The CLI host: `node` is the editor's own executable, run as plain Node. */
 export function nodeCliHost(
   paths: CliPaths & {node: string},
@@ -51,7 +82,6 @@ export function nodeCliHost(
       onLine: (line: CliLine) => void,
       cancellation: AbortSignal,
       onStdin?: StdinOf,
-      presentation?: StdinPresentation,
     ): Promise<CliRun> => {
       const spawned = await ports.spawn(
         paths.node,
@@ -60,35 +90,55 @@ export function nodeCliHost(
           shell: false,
           detached: true,
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: {...editorEnvironment, ELECTRON_RUN_AS_NODE: '1'},
+          env: {
+            ...editorEnvironment,
+            ELECTRON_RUN_AS_NODE: '1',
+            REMOTE_OSS_EDITOR_MODULES: paths.editorModules,
+          },
         },
       );
       if (spawned.kind === 'failed') {
         return {kind: 'spawnFailed', message: spawned.message};
       }
       const {process} = spawned;
-      if (onStdin !== undefined) {
-        // The CLI's stdin is a pipe, not a TTY: it does not turn an Enter's CR into the LF a reading shell waits
-        // for, so the host does what the TTY driver would.
+      process.stdin.on('error', () => undefined);
+      let offered = false;
+      /** Hands the writer for the CLI's stdin to `onStdin`, once, when the run's presentation is known. */
+      function offerStdin(presentation: StdinPresentation): void {
+        if (offered || onStdin === undefined) {
+          return;
+        }
+        offered = true;
+        // A `plain` run's stdin is a pipe, not a TTY: it does not turn an Enter's CR into the LF a reading shell
+        // waits for, so the host does what the TTY driver would. An `echoed` run's stdin reaches a pty, which does
+        // it itself.
         function deliver(data: string): void {
           const stdin = process.stdin;
           if (stdin.destroyed) {
             return;
           }
           try {
-            stdin.write(data.replace(/\r/gu, '\n'));
+            stdin.write(
+              presentation === 'plain' ? data.replace(/\r/gu, '\n') : data,
+            );
           } catch {
             // The CLI ended between the check and the write: nothing to deliver.
           }
         }
-        process.stdin.on('error', () => undefined);
-        onStdin(deliver, presentation ?? 'plain');
+        onStdin(deliver, presentation);
       }
       let result: string | undefined;
       function lineOf(
         stream: CliLine['stream'],
       ): ReturnType<typeof lineSplitter> {
         return lineSplitter(line => {
+          if (stream === 'stderr') {
+            const presentation = presentationOfMarker(line);
+            if (presentation !== undefined) {
+              offerStdin(presentation);
+              return;
+            }
+          }
           if (stream === 'stdout' && result === undefined) {
             result = line;
           }
@@ -114,6 +164,7 @@ export function nodeCliHost(
       cancellation.removeEventListener('abort', end);
       printed.flush();
       errors.flush();
+      offerStdin('plain');
       return {
         kind: 'ran',
         result,

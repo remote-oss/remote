@@ -159,13 +159,9 @@ if the file gets too wide)
 
 ### 3.3 The mapping is a fact of the pinned CLI version
 
-The release-1 mode values follow the pinned CLI's actual presentation: `plain` for both operations, measured in
-1. If a future CLI's presentation changes, the modes flip at the lifecycle's wiring, one operation at a time,
-before the bump lands: a CLI that bundles `node-pty` gives the host-side runs a TTY (the `ptyExec` path's line
-discipline echoes the typed input), so `up`'s mode becomes `echoed`; the in-container runs take the `pty: true`
-path with a TTY for the command (a `docker exec -it`, whose TTY driver echoes), so `runUserCommands`' mode
-becomes `echoed` too. The `echoed` member and the presenter's branch for it ship in this card and are tested,
-so the flip is the wiring line. No mode flip lands without the re-verification.
+Since ADR-0011 (card containers-39) the mode isn't wired per operation: C3 reads it per run from the preload's
+marker. On Linux both operations are `echoed` when the editor's `node-pty` loaded, `plain` otherwise and on every
+other platform. The 7.E6 rows assert one echo per typed key in both modes.
 
 ## 4. Gates and review
 

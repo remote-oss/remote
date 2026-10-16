@@ -17,12 +17,14 @@ function sceneOf(translate = (template: string) => template) {
   const record: string[] = [];
   const inputs: Array<(data: string) => void> = [];
   const closers: Array<() => void> = [];
+  const resizers: Array<(size: {rows: number; columns: number}) => void> = [];
   const terminal: TerminalPort = {
-    open: (name, onInput, onClosed) => {
+    open: (name, onInput, onClosed, onDimensions) => {
       record.push(`open ${name}`);
       const index = inputs.length;
       inputs.push(onInput);
       closers.push(onClosed);
+      resizers.push(onDimensions);
       return {
         write: text => record.push(`write ${JSON.stringify(text)}`),
         close: () =>
@@ -43,6 +45,8 @@ function sceneOf(translate = (template: string) => template) {
     typed: (data: string, index = inputs.length - 1) =>
       inputs.at(index)?.(data),
     userCloses: (index = closers.length - 1) => closers.at(index)?.(),
+    /** The last terminal opened reports its size, as the editor does when it opens or the panel changes. */
+    resized: (size: {rows: number; columns: number}) => resizers.at(-1)?.(size),
     /** Hands the writer for the run's CLI stdin to the presenter, as a CLI run does. */
     attach: (
       write: (data: string) => void,
@@ -492,6 +496,25 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
     scene.presenter.ended();
     scene.typed('x');
     deepStrictEqual(scene.record.slice(2), []);
+  });
+
+  it('ADR-0011: terminalSize is 24×80 before any terminal reports, then the last reported size, kept for the next run', () => {
+    const scene = sceneOf();
+    const before = scene.presenter.terminalSize();
+    scene.presenter.output(eventOf('raw', 'a\n'), 0);
+    scene.resized({rows: 24, columns: 80});
+    scene.resized({rows: 24, columns: 120});
+    const reported = scene.presenter.terminalSize();
+    scene.presenter.ended();
+    scene.presenter.output(eventOf('raw', 'b\n'), 0);
+    deepStrictEqual(
+      [before, reported, scene.presenter.terminalSize()],
+      [
+        {rows: 24, columns: 80},
+        {rows: 24, columns: 120},
+        {rows: 24, columns: 120},
+      ],
+    );
   });
 
   it('contracts: the names and titles are translated', () => {
