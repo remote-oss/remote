@@ -97,6 +97,18 @@ describe('the "Configuring..." terminal (card containers-20)', () => {
     );
   });
 
+  it('remote-oss/remote-containers#126: a raw prompt with no newline is written at once, and the echo of its answer follows it on its line', () => {
+    const scene = sceneOf();
+    scene.presenter.output(eventOf('raw', 'Open the URL? [Y/n] > '), 0);
+    scene.attach(() => undefined, 'plain');
+    scene.typed('y');
+    deepStrictEqual(scene.record, [
+      'open Configuring...',
+      `write ${JSON.stringify('Open the URL? [Y/n] > ')}`,
+      `write ${JSON.stringify('y')}`,
+    ]);
+  });
+
   /** A scene whose run has emitted the raw line `a\n` and captures every key its stdin writer would get. */
   function stdinScene(presentation: StdinPresentation = 'plain') {
     const scene = sceneOf();
