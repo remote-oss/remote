@@ -4,6 +4,7 @@
  * the progress entry shows from the background's first output. Each run has its own terminal and state.
  */
 
+import type {StdinPresentation} from '../cli/cli-host.ts';
 import type {CliEvent} from '../cli/cli-lines.ts';
 import type {LifecyclePresenter} from '../lifecycle/container-lifecycle.ts';
 import {lifecycleTextOf} from '../lifecycle/lifecycle-text.ts';
@@ -59,6 +60,8 @@ interface Run {
   pendingEscape: boolean;
   /** The run is inside a key sequence (an Escape and its opener); its bytes are not the line's. */
   inSequence: boolean;
+  /** How the run's input is presented: an `echoed` run's reader echoes the keys, so the terminal only forwards them. */
+  presentation: StdinPresentation;
 }
 
 function newRun(): Run {
@@ -73,6 +76,7 @@ function newRun(): Run {
     line: '',
     pendingEscape: false,
     inSequence: false,
+    presentation: 'plain',
   };
 }
 
@@ -101,11 +105,15 @@ export function lifecyclePresenterOf(
           own.open = undefined;
           return;
         }
-        // A key of the run. The CLI's child reads its input from a pipe that neither echoes nor edits, so the
-        // terminal takes the TTY driver's line jobs: it echoes the printable keys and the tab, it edits the
-        // run's line on backspace, and it hands the child the line as a whole when Enter ends it. An Escape is
-        // the child's own key until a '[' or an 'O' follows it and opens a key sequence, whose bytes are the
-        // driver's.
+        // A key of the run. An `echoed` run's reader is a TTY: it echoes the typed keys and edits the line itself,
+        // so the terminal only forwards them. A `plain` run's reader is a pipe that neither echoes nor edits, so
+        // the terminal takes the TTY driver's line jobs: it echoes the printable keys and the tab, it edits the
+        // run's line on backspace, and it hands the child the line as a whole when Enter ends it. An Escape is the
+        // child's own key until a '[' or an 'O' follows it and opens a key sequence, whose bytes are the driver's.
+        if (own.presentation === 'echoed') {
+          own.stdin?.(data);
+          return;
+        }
         for (const character of data) {
           const code = character.codePointAt(0);
           if (code === undefined) {
@@ -206,8 +214,9 @@ export function lifecyclePresenterOf(
         `\r\n${BOLD}${translate(LIFECYCLE_TEMPLATES.S153)}${RESET}`,
       );
     },
-    attachStdin: write => {
+    attachStdin: (write, presentation) => {
       current().stdin = write;
+      current().presentation = presentation;
     },
   };
 }

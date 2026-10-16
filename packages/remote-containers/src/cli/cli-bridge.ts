@@ -12,7 +12,7 @@ import {
   upArguments,
   type UpOptions,
 } from './cli-arguments.ts';
-import type {CliHost} from './cli-host.ts';
+import type {CliHost, StdinOf, StdinPresentation} from './cli-host.ts';
 import {
   type CliEvent,
   type CliFailure,
@@ -37,9 +37,6 @@ const COLOUR_CODES = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'gu');
 /** How long the CLI may keep running after its result line before it is ended. */
 const GUARD_MILLISECONDS = 30_000;
 
-/** The writer for a CLI run's stdin: the keys of the "Configuring..." terminal go through it to a command's input. */
-type StdinOf = (write: (data: string) => void) => void;
-
 /** What the components call. */
 export interface CliBridge {
   up(
@@ -48,6 +45,7 @@ export interface CliBridge {
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
     onStdin?: StdinOf,
+    presentation?: StdinPresentation,
   ): Promise<UpResult>;
   runUserCommands(
     target: CliTarget,
@@ -55,6 +53,7 @@ export interface CliBridge {
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
     onStdin?: StdinOf,
+    presentation?: StdinPresentation,
   ): Promise<RunUserCommandsResult>;
   readConfiguration(
     target: CliTarget,
@@ -62,6 +61,7 @@ export interface CliBridge {
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
     onStdin?: StdinOf,
+    presentation?: StdinPresentation,
   ): Promise<ConfigurationResult | CliFailure>;
 }
 
@@ -145,6 +145,7 @@ export function cliBridgeOf(
     onEvent: (event: CliEvent) => void,
     cancellation: AbortSignal,
     onStdin?: StdinOf,
+    presentation?: StdinPresentation,
   ): Promise<Result | CliFailure> {
     const configText = await files.readText(target.configFile).catch(() => '');
     const secrets = referencedSecrets(configText, editorEnvironment);
@@ -207,6 +208,7 @@ export function cliBridgeOf(
           },
           own.signal,
           onStdin,
+          presentation,
         );
         rawHold.releaseAll().forEach(deliver);
         if (finished.kind === 'spawnFailed') {
@@ -239,7 +241,7 @@ export function cliBridgeOf(
 
   return {
     // eslint-disable-next-line id-length -- the bridge's method is named up
-    up: (target, options, onEvent, cancellation, onStdin) =>
+    up: (target, options, onEvent, cancellation, onStdin, presentation) =>
       drive(
         target,
         prepared => upArguments(prepared, options),
@@ -247,8 +249,16 @@ export function cliBridgeOf(
         onEvent,
         cancellation,
         onStdin,
+        presentation,
       ),
-    runUserCommands: (target, containerId, onEvent, cancellation, onStdin) =>
+    runUserCommands: (
+      target,
+      containerId,
+      onEvent,
+      cancellation,
+      onStdin,
+      presentation,
+    ) =>
       drive(
         target,
         prepared => runUserCommandsArguments(prepared, containerId),
@@ -256,8 +266,16 @@ export function cliBridgeOf(
         onEvent,
         cancellation,
         onStdin,
+        presentation,
       ),
-    readConfiguration: (target, containerId, onEvent, cancellation, onStdin) =>
+    readConfiguration: (
+      target,
+      containerId,
+      onEvent,
+      cancellation,
+      onStdin,
+      presentation,
+    ) =>
       drive(
         target,
         prepared => readConfigurationArguments(prepared, containerId),
@@ -266,6 +284,7 @@ export function cliBridgeOf(
         onEvent,
         cancellation,
         onStdin,
+        presentation,
       ),
   };
 }

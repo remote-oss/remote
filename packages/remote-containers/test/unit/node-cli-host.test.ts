@@ -1,7 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {mock} from 'node:test';
 import {PassThrough} from 'node:stream';
-import type {CliLine, CliRun} from '../../src/cli/cli-host.ts';
+import type {
+  CliLine,
+  CliRun,
+  StdinPresentation,
+} from '../../src/cli/cli-host.ts';
 import {nodeCliHost} from '../../src/cli/node-cli-host.ts';
 import type {NodeCliPorts} from '../../src/cli/node-cli-ports.ts';
 
@@ -270,6 +274,29 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
     return {running, writer: () => writer};
   }
 
+  /** Runs `fake` with a stdin and returns whether the host offered a writer, and the presentation it handed. */
+  async function presentedStdin(
+    fake: Fake,
+    presentation?: StdinPresentation,
+  ): Promise<[boolean, StdinPresentation | undefined]> {
+    let write: ((data: string) => void) | undefined;
+    let given: StdinPresentation | undefined;
+    const running = nodeCliHost(PATHS, {}, fake.ports).run(
+      [],
+      () => undefined,
+      new AbortController().signal,
+      (writer, givenPresentation) => {
+        write = writer;
+        given = givenPresentation;
+      },
+      presentation,
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    fake.exit(0);
+    await running;
+    return [write !== undefined, given];
+  }
+
   it('F-0415 7.E6: onStdin gets a writer that delivers to the stdin of the CLI, an Enter as LF', async () => {
     const fake = fakeSystem();
     const {running, writer} = capturingRun(fake);
@@ -301,5 +328,17 @@ describe('the CLI host over a spawned node (card containers-04)', () => {
     fake.exit(0);
     writer()?.('late\r\n');
     deepStrictEqual(await running, {kind: 'ran', result: undefined, status: 0});
+  });
+
+  it('F-0415 7.E6: a run hands its stdin writer and its presentation, plain by default or as given', async () => {
+    const plain = await presentedStdin(fakeSystem(), undefined);
+    const echoed = await presentedStdin(fakeSystem(), 'echoed');
+    deepStrictEqual(
+      [plain, echoed],
+      [
+        [true, 'plain'],
+        [true, 'echoed'],
+      ],
+    );
   });
 });
