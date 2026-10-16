@@ -255,7 +255,7 @@ describe('the input of the "Configuring..." terminal', function () {
     await closeWindow('postecho');
   });
 
-  it('F-0415 AC-36, ADR-0011 (initcmd-hidden): an initializeCommand that reads with echo off shows its prompt and not the typed text', async () => {
+  it('F-0415 AC-36 (initcmd-hidden): an initializeCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
     const {host} = answerOf('initcmdhidden');
     const window = await openedWith('initcmdhidden', {
       initializeCommand: hiddenRead(host),
@@ -268,7 +268,7 @@ describe('the input of the "Configuring..." terminal', function () {
     await closeWindow('initcmdhidden');
   });
 
-  it('F-0415 AC-36, ADR-0011 (postcreate-hidden): a postCreateCommand that reads with echo off shows its prompt and not the typed text', async () => {
+  it('F-0415 AC-36 (postcreate-hidden): a postCreateCommand that reads with echo off shows its prompt and not the typed text (ADR-0011)', async () => {
     const {host, container} = answerOf('posthidden');
     const window = await openedWith('posthidden', {
       postCreateCommand: hiddenRead(container),
@@ -283,7 +283,7 @@ describe('the input of the "Configuring..." terminal', function () {
     await closeWindow('posthidden');
   });
 
-  it("F-0415 AC-36, ADR-0011 (read-p-prompt): the shell's read -p shows its prompt before the answer is typed, in the container", async () => {
+  it("F-0415 AC-36 (read-p-prompt): the shell's read -p shows its prompt before the answer is typed, in the container (ADR-0011)", async () => {
     const {host, container} = answerOf('readp');
     const window = await openedWith('readp', {
       postCreateCommand: `read -p "RP> " a && printf "answered: %s\\n" "$a" > ${container}`,
@@ -312,7 +312,7 @@ describe('the input of the "Configuring..." terminal', function () {
     await closeWindow('ptyused');
   });
 
-  it('F-0415 AC-36, 7.E6 (ctrl-c): Ctrl+C stops the running postCreateCommand, the interrupted line shows, and postStartCommand still runs', async () => {
+  it('F-0415 AC-36 (ctrl-c): Ctrl+C stops the running postCreateCommand, the interrupted line shows, and postStartCommand still runs (7.E6)', async () => {
     const window = await openedWith('ctrlc', {
       postCreateCommand: `sh -c 'word=CTRLC; echo "$word"-WAITING; sleep 40; echo "$word"-DONE'`,
       postStartCommand: 'echo POSTSTART-RAN',
