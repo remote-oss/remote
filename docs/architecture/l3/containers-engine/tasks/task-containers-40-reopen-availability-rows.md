@@ -4,6 +4,8 @@ Issue: #1044. Milestone 0.4, containers release 1. Size: S. Builder: `task:local
 out below. The expected values of part B were measured on main (4984f4c5) with the pinned CLI and Docker 29 on
 2026-10-19. If something on main does not match this card, stop and report it on the card's issue (§5).
 
+**Build after** #1046 (the connect progress shows each stage once) is on main; part B's row fails without it.
+
 **What this card is:** tests only (one unit file, one acceptance file, one title edit, the catalogue lines). No product
 code changes. Don't change the product or an expected value.
 
@@ -52,7 +54,7 @@ One more row, for `holds`'s own branch, named `F-0401 AC-1: holds throws on a te
 New file `tests/acceptance/containers/reopen-command.test.ts`, `describe('F-0401 the reopen command (card
 containers-40)')`, `this.timeout(600_000)`. Use the helpers of `tests/acceptance/windows/` that
 `tests/acceptance/containers/gate.test.ts` imports (`devContainerFolder`, `reopenInContainer`, `closeWindow`,
-`windowState`, `devContainersOf`, `openFolderWindow`, `notifications`, `statusItem`, `windowTitle`); write no helper
+`windowState`, `devContainersOf`, `openFolderWindow`, `removeContainers`, `notifications`, `statusItem`, `windowTitle`); write no helper
 that duplicates one.
 
 One row:
@@ -70,10 +72,11 @@ stopped after it, each sample in a `try`, a failed sample skipped because the wi
 
 Collect the samples. Assertions:
 
-1. **A toast was seen.** At least one sample has a text that starts with `Connecting to Dev Container (show log)`.
+1. **A toast was seen.** At least one sample has a text that starts with `Connecting to Dev Container`.
 2. **Never two.** No sample has more than one text that starts with `Connecting to Dev Container`.
-3. **The suffix, when there is one, follows a colon.** Every text that starts with `Connecting to Dev Container (show
-   log)` is, after that prefix, either empty or starts with `: `.
+3. **Each text is one of three, exactly, so the link never doubles.** Every text that starts with `Connecting to Dev
+   Container` is one of `Connecting to Dev Container (show log)`, `Connecting to Dev Container (show log): Installing
+   server` and `Connecting to Dev Container (show log): Starting server` (F-0408 §5, BR-2; F-0503 AC-2).
 4. **The end state.** After `reopenInContainer` returns, take one more sample: `title` is `[c40-reopen [Dev Container:
    Reopen One]]`, `indicator` is `Dev Container: Reopen One`, `texts` has no text that starts with `Connecting`, and
    `devContainersOf(folder)` has one id.
@@ -81,13 +84,13 @@ Collect the samples. Assertions:
 `console.log` the distinct texts seen (`JSON.stringify([...new Set(texts)])`), one line, starting `containers-40 b1:`.
 Close the window and `removeContainers(folder)` in `finally`.
 
-**What was measured** (a warm engine, the image present, the server cached; the connect takes about 5 s): the toast
-texts were, in order, `Connecting to Dev Container (show log): Connecting to Dev Container (show log)` and then
-`Connecting to Dev Container (show log): Connecting to Dev Container (show log): Starting server`; then none. The
-title was `[c40-reopen]` while the first toast showed and `[c40-reopen [Dev Container: Reopen One]]` after, and the
-indicator was `Opening Remote...` throughout the connect and `Dev Container: Reopen One` at the end. Assertions 1–4
-hold for these texts. The repeated prefix is not asserted either way: it's a question for athena, and this row
-neither requires nor forbids it (§5 row 2).
+**What was measured** on the branch of #1046 (a warm engine, the image present, the server cached; the connect takes
+about 5 s): the toast texts were `Connecting to Dev Container (show log)`, then `Connecting to Dev Container (show
+log): Starting server`; then none. `Installing server` shows only when the server is not cached. The title was
+`[c40-reopen]` while the toasts showed and `[c40-reopen [Dev Container: Reopen One]]` after, and the indicator was
+`Opening Remote...` throughout the connect and `Dev Container: Reopen One` at the end. Before #1046 the texts were
+`Connecting to Dev Container (show log): Connecting to Dev Container (show log)`, and assertion 3 fails on them: that
+is the defect athena ruled on (the stage text is the message; core joins it to the start title), and #1046 fixes it.
 
 Don't assert the intermediate samples' titles or indicators, only the end state: how many samples fall in each stage
 depends on timing.
@@ -116,6 +119,6 @@ assigns the peer.
 
 **Open rows (stop and report on the issue, with the row's output):**
 1. A `when` clause on main has a term other than `!name` and `name != 0` (A-rows throw).
-2. B1 shows a text starting `Connecting` that does not start with `Connecting to Dev Container (show log)`, or two
-   such texts in one sample, or no such text at all. The repeated prefix is not one of these.
+2. B1 shows a text starting `Connecting` that is not one of the three of assertion 3, or two such texts in one sample,
+   or no such text at all, with #1046 on main.
 3. B1's end title or indicator differs from §2 assertion 4.
