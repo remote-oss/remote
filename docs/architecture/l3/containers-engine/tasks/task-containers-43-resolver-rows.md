@@ -22,7 +22,7 @@ lib-authority's resolver host; cards containers-08 (C10) and containers-19 (reus
    token value (`docker exec <id> cat /proc/<pid>/cmdline` and `environ`), and that the server reads
    `--connection-token-file`.
 3. **Telemetry:** F-0502 AC-15 expects telemetry on; R-28 and ruling 11 keep it off. Tag AC-15 `acceptance` against
-   our behaviour, with the row named `F-0502 AC-15 (R-28, ruling 11): …`, asserting `--telemetry-level off` on the
+   our behaviour, with the row named `F-0502 AC-15 (ruling-11): …` (R-28 goes in the rest of the name), asserting `--telemetry-level off` on the
    server's command line. That the spec text differs is already athena's spec question (brief ruling 11).
 4. **The shutdown half is increment 2** (F-0417, F-0502 BR-10): a criterion that needs the container stopped when its
    last window closes is `deferred` with `containers release 1: increment 2 (shutdown)`.
