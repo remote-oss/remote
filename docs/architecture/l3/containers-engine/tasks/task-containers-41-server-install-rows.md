@@ -55,7 +55,9 @@ when it changes what is asserted:
 4. **Telemetry is off** for every server start (R-28, brief ruling 11).
 5. **Redirects and credentials** follow server-22 and server-23 (#1036, #1037) once they merge; until then, no row
    asserts a cross-host redirect or a 401.
-6. **Interrupted installs** (AC-23, AC-25): lib-server's install script writes `<commit>_<epoch-ms>` and renames it;
+6. **AC-45 is `core`** (athena on #1049): `remoteEnv`'s `HOME` doesn't move the server folder, which holds while
+   release 1 ignores `remoteEnv`. Reason: `core: remoteEnv is not applied in release 1 (#1049)`.
+7. **Interrupted installs** (AC-23, AC-25): lib-server's install script writes `<commit>_<epoch-ms>` and renames it;
    assert the names it writes (`packages/lib-server/src/scripts/`), not the reference's.
 
 ## 3. Writing the rows

@@ -30,14 +30,16 @@ isn't made (`updateRemoteUserUID`, 6.2, 6.6, root or numeric targets, the collis
 7.E7) with the F-0410 dialog they reach. These rows are acceptance rows in the `containers` launch, asserting what
 `docker inspect`, `docker exec <id> id -u <user>` and the window show.
 
-**Group B, the environment (hold until athena rules).** `containerEnv`, `remoteEnv`, `userEnvProbe` and the `HOME`
-and `SHELL` overrides (6.4, 6.7, 6.10, 7.E1, 7.E1a, 7.E5, 7.E6, VS-6, VS-7, VS-9). `containerEnv` is the CLI's and
-reaches the container itself, so its rows are group A. But **our server start applies no `remoteEnv` and runs no
-`userEnvProbe`** today: `server-steps.ts` passes `environmentSetup: ''`, and nothing in `remote-containers/src`
-reads either property. Whether release 1 carries them is a scope question; daedalus has put it to athena on the
-design issue. Until she rules, tag nothing in group B except `containerEnv`'s own criteria, and leave the rest `todo`
-with no reason. If she rules them in, daedalus cards the server-environment change, and this card's group B rows
-follow it; if out, they become `deferred` with her reason.
+**Group B, the environment: `deferred` (athena on #1049, 2026-10-19, in `brief-release-1.md` via #1055).**
+`remoteEnv`, `userEnvProbe` and the terminal and task environment aren't in release 1: the CLI applies them only to
+the lifecycle commands it runs, and our server start applies neither (`connector.ts` returns `extensionHostEnv: {}`,
+`server-steps.ts` passes `environmentSetup: ''`). Tag these `deferred` with the reason
+`containers release 1: later (the remote environment, F-0416)`: AC-14, AC-17, AC-18, AC-22, AC-23, AC-25, AC-27,
+AC-28, AC-29, AC-31, AC-42, AC-43, AC-44, AC-45, AC-46 and AC-47, and the terminal halves of AC-15 and AC-32. A
+criterion with a terminal half and a `containerEnv` or user half (AC-15, AC-32) is tagged by the half this release
+proves: write the row for the other half and tag it `acceptance`; say so in the PR. `containerEnv`'s own criteria
+(the variable reaches the container itself) are group A. Moving the half into release 1 is the user's call (hermes
+has it); if it comes in, it is a product card first, and these lines move with it.
 
 ## 3. Writing the rows
 
@@ -56,8 +58,8 @@ follow it; if out, they become `deferred` with her reason.
 
 ## 4. PRs
 
-(a) Group A's user resolution and the UID image; (b) group A's errors and reload cases, and the tags. Group B comes
-after athena's ruling, in this card or the follow-up. Each PR moves only its own lines of the coverage file. PR
+(a) Group A's user resolution and the UID image; (b) group A's errors and reload cases, group B's `deferred` tags and
+the rest of the tags. Each PR moves only its own lines of the coverage file. PR
 titles: `tests: F-0416's <subject> rows (card containers-42, #1051)`. Request athena only; hermes assigns the peer.
 
 ## 5. Gates
@@ -70,5 +72,5 @@ All gates; the changed files at 100 %; `node tools/check-coverage.ts` green; the
 1. The CLI or the window does something other than the criterion. Post the row, its output and the criterion;
    daedalus decides between a bridge change (a card), a spec question, or a `deferred`.
 2. A criterion needs a harness capability that `tests/acceptance/windows/` lacks. Report it; daedalus adds it.
-3. A group B criterion turns out to be decided by the CLI alone (so not held by the question): post why, and tag it
+3. A group B criterion turns out to be decided by the CLI alone (so not the remote environment): post why, and tag it
    with group A.
