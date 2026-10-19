@@ -8,11 +8,18 @@ import {
   closeWindow,
   devContainerFolder,
   devContainersOf,
+  inWindow,
   reopenInContainer,
   runLabelArguments,
   variable,
+  waitFor,
 } from '../windows/harness.ts';
-import {notifications} from '../windows/renderer.ts';
+import {
+  focusTerminal,
+  notifications,
+  terminalText,
+  typeInTerminal,
+} from '../windows/renderer.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
 
 const execFileAsync = promisify(execFile);
@@ -155,6 +162,23 @@ async function usersRunning(
     .filter(line => line.includes(fragment))
     .map(line => line.trim().split(/\s+/)[0] ?? '');
   return [...new Set(users)].sort();
+}
+
+/** The account window `name`'s new integrated terminal runs as: it types `id -un` and reads the marked answer. */
+async function terminalUserOf(name: string): Promise<string> {
+  await inWindow(name, 'workbench.action.terminal.new');
+  await focusTerminal(name);
+  await typeInTerminal(name, 'echo "terminal-user=$(id -un)"\n');
+  let user = '';
+  await waitFor(
+    `the terminal of window ${name} to answer`,
+    async () => {
+      user = /^terminal-user=(\S+)$/m.exec(await terminalText(name))?.[1] ?? '';
+      return user !== '';
+    },
+    60_000,
+  );
+  return user;
 }
 
 describe('F-0416 users and the UID image (card containers-42)', function () {
@@ -432,12 +456,14 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
       const name = await reopened(folder);
       const containerId = await containerOf(folder);
       const serverUsers = await usersRunning(containerId, 'server');
+      const terminalUser = await terminalUserOf(name);
       const builder = await idsOf(containerId, 'builder');
       await closeWindow(name);
       deepStrictEqual(
-        {serverUsers, builder},
+        {serverUsers, terminalUser, builder},
         {
           serverUsers: ['tester'],
+          terminalUser: 'tester',
           builder: `${String(THIRD_ID)}:${String(THIRD_ID)}`,
         },
       );
