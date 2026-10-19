@@ -162,6 +162,27 @@ describe('the server steps: plan', () => {
     );
   });
 
+  it("server-22: the download plan carries the resolution's redirect rule", () => {
+    const steps = createServerSteps(
+      dependencies({
+        override: undefined,
+        profile: {
+          ...PROFILE,
+          serverDownloadUrlTemplate:
+            'https://product.invalid/${os}-${arch}-${commit}.tar.gz',
+          serverDownloadRedirectHosts: ['cdn.product.invalid'],
+        },
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    deepStrictEqual(
+      'plan' in result && result.plan.kind === 'download'
+        ? result.plan.redirect
+        : result,
+      {kind: 'hosts', hosts: ['product.invalid', 'cdn.product.invalid']},
+    );
+  });
+
   it('names the host an Alpine one when it runs musl', () => {
     const steps = createServerSteps(dependencies());
     const result = steps.plan(INPUT, {...HOST, libc: 'musl'});
@@ -417,6 +438,41 @@ describe("the server steps: the CLI's install and start", () => {
       call.operation === 'runScript' ? [call.request] : [],
     );
   }
+
+  it("server-22: the CLI's client download is handed the product-template rule of its address", async () => {
+    const requests: Array<{redirect: unknown}> = [];
+    const steps = createServerSteps(
+      dependencies({
+        profile: {
+          ...PROFILE,
+          cliDownloadUrlTemplate: CLI_TEMPLATE,
+          serverDownloadRedirectHosts: ['cdn.example.invalid'],
+        },
+        download: {
+          download: request => {
+            requests.push(request);
+            return Promise.resolve({kind: 'failed', detail: 'stop here'});
+          },
+        },
+      }),
+    );
+    const result = steps.plan(INPUT, HOST);
+    if (!('plan' in result) || result.plan.kind !== 'cli') {
+      throw new Error('the plan should take the CLI path');
+    }
+    await steps.installCli(
+      INPUT,
+      leaseOn(channelAnswering(lines('Ok'))),
+      HOST,
+      {...result.plan, where: 'client', clientFallback: false, download: true},
+      () => undefined,
+      new AbortController().signal,
+    );
+    deepStrictEqual(
+      requests.map(request => request.redirect),
+      [{kind: 'hosts', hosts: ['example.invalid', 'cdn.example.invalid']}],
+    );
+  });
 
   it('F-3902 rule 5 (i): a CLI already on the host is reported where the plan puts it', async () => {
     const {steps, cliPlan} = cliSteps();

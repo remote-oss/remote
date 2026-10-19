@@ -168,7 +168,11 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       installPathSetting: undefined,
       placement: SSH_POLICY.downloadPlacement,
       useExecServerSetting: false,
-      source: {kind: 'resolved', address: resolution.address},
+      source: {
+        kind: 'resolved',
+        address: resolution.address,
+        redirect: resolution.redirect,
+      },
     });
     if ('failure' in planned || planned.plan.kind !== 'download') {
       throw new Error(`no download plan: ${JSON.stringify(planned)}`);

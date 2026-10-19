@@ -37,7 +37,7 @@ function requestFor(
     address,
     destination: path.join(folder, 'part', 'archive'),
     cancellation: new AbortController().signal,
-    allowedHosts: ['127.0.0.1'],
+    redirect: {kind: 'hosts', hosts: ['127.0.0.1']},
     onPercent: () => undefined,
     deadlineMilliseconds: 10_000,
     stallMilliseconds: 5_000,
@@ -143,6 +143,108 @@ describe('the download of a server archive over fetch (V4)', () => {
         );
       },
     );
+  });
+
+  /** The port over a function that answers each address by the table: a redirect target, or the body `ok`. */
+  function portAnswering(redirects: Record<string, string>) {
+    const requested: string[] = [];
+    const port = downloadPortOf(address => {
+      requested.push(address);
+      const location = redirects[address];
+      return Promise.resolve(
+        location === undefined
+          ? new Response('ok', {status: 200, headers: {'content-length': '2'}})
+          : new Response(null, {status: 302, headers: {location}}),
+      );
+    });
+    return {port, requested};
+  }
+
+  it('server-22: the rule any follows a redirect to a foreign https host', async () => {
+    const {port, requested} = portAnswering({
+      'https://source.example.invalid/a': 'https://cdn.foreign.invalid/b',
+    });
+    await serving(
+      () => undefined,
+      async (ignored, folder) => {
+        const outcome = await port.download(
+          requestFor('https://source.example.invalid/a', folder, {
+            redirect: {kind: 'any'},
+          }),
+        );
+        deepStrictEqual(
+          [outcome.kind, requested],
+          [
+            'downloaded',
+            [
+              'https://source.example.invalid/a',
+              'https://cdn.foreign.invalid/b',
+            ],
+          ],
+        );
+      },
+    );
+  });
+
+  it('server-22: a hop from https to http is refused with its host, also under any', async () => {
+    const {port} = portAnswering({
+      'https://source.example.invalid/a': 'http://cdn.foreign.invalid/b',
+    });
+    await serving(
+      () => undefined,
+      async (ignored, folder) => {
+        deepStrictEqual(
+          await port.download(
+            requestFor('https://source.example.invalid/a', folder, {
+              redirect: {kind: 'any'},
+            }),
+          ),
+          {
+            kind: 'failed',
+            detail: 'redirected to cdn.foreign.invalid over http',
+          },
+        );
+      },
+    );
+  });
+
+  /** The outcome kind and the last address asked, for a download from an http source that redirects to `target`. */
+  async function fromHttpSource(
+    target: string,
+  ): Promise<[string, string | undefined]> {
+    const {port, requested} = portAnswering({
+      'http://source.example.invalid/a': target,
+    });
+    let result: [string, string | undefined] = ['', undefined];
+    await serving(
+      () => undefined,
+      async (ignored, folder) => {
+        const outcome = await port.download(
+          requestFor('http://source.example.invalid/a', folder, {
+            redirect: {
+              kind: 'hosts',
+              hosts: ['source.example.invalid', 'cdn.example.invalid'],
+            },
+          }),
+        );
+        result = [outcome.kind, requested.at(-1)];
+      },
+    );
+    return result;
+  }
+
+  it('server-22: an http source that redirects to another http host in the list is followed', async () => {
+    deepStrictEqual(await fromHttpSource('http://cdn.example.invalid/b'), [
+      'downloaded',
+      'http://cdn.example.invalid/b',
+    ]);
+  });
+
+  it('server-22: an http source that redirects to an https host the rule allows is followed', async () => {
+    deepStrictEqual(await fromHttpSource('https://cdn.example.invalid/b'), [
+      'downloaded',
+      'https://cdn.example.invalid/b',
+    ]);
   });
 
   it('V4: more than ten redirects fail', async () => {

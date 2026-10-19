@@ -3,6 +3,7 @@ import path from 'node:path';
 import type {ChannelFailure} from 'lib-host';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
+import type {RedirectRule} from 'lib-product';
 import {
   RecordingChannel,
   type CopyAnswer,
@@ -26,6 +27,11 @@ import {
 import {parametersFor} from './fake-host.ts';
 
 const ADDRESS = 'https://download.example.invalid/server.tar.gz';
+
+const SOURCE_ONLY: RedirectRule = {
+  kind: 'hosts',
+  hosts: ['download.example.invalid'],
+};
 
 const CLIENT_FOLDER = '/client/tmp';
 
@@ -89,6 +95,7 @@ function plan(overrides: Partial<DownloadPlan> = {}): DownloadPlan {
     where: 'host',
     clientFallback: false,
     address: ADDRESS,
+    redirect: SOURCE_ONLY,
     installFolder: INSTALL_FOLDER,
     installTree: '',
     dataFolder: '/home/user/.server-data',
@@ -1159,22 +1166,13 @@ describe('the bounds of a download (R-79)', () => {
     );
   });
 
-  it('R-79: the request names the hosts the download may end on', async () => {
+  it('R-79: the request carries the redirect rule of the plan', async () => {
     const {downloads} = await runTransfer({
-      plan: {
-        where: 'client',
-        address: 'https://github.com/example/releases/download/1/server.tar.gz',
-      },
+      plan: {where: 'client', redirect: SOURCE_ONLY},
     });
     deepStrictEqual(
-      downloads.map(request => request.allowedHosts),
-      [
-        [
-          'github.com',
-          'objects.githubusercontent.com',
-          'release-assets.githubusercontent.com',
-        ],
-      ],
+      downloads.map(request => request.redirect),
+      [SOURCE_ONLY],
     );
   });
 
@@ -1294,6 +1292,14 @@ describe('the bounds of a download (R-79)', () => {
 describe('the host of the final response (contracts V4, redirects)', () => {
   const CLIENT: Setup = {plan: {where: 'client'}};
   const GITHUB = 'https://github.com/example/releases/download/1/server.tar.gz';
+  const GITHUB_RULE: RedirectRule = {
+    kind: 'hosts',
+    hosts: [
+      'github.com',
+      'objects.githubusercontent.com',
+      'release-assets.githubusercontent.com',
+    ],
+  };
 
   function endingAt(finalAddress: string): DownloadResult {
     return {kind: 'downloaded', facts: {}, finalAddress};
@@ -1320,7 +1326,7 @@ describe('the host of the final response (contracts V4, redirects)', () => {
 
   it('V4: release assets of github.com may come from the hosts the table lists', async () => {
     const {outcome} = await runTransfer({
-      plan: {where: 'client', address: GITHUB},
+      plan: {where: 'client', address: GITHUB, redirect: GITHUB_RULE},
       downloadResults: [
         endingAt('https://release-assets.githubusercontent.com/x'),
       ],
@@ -1330,7 +1336,7 @@ describe('the host of the final response (contracts V4, redirects)', () => {
 
   it('V4: a host the table does not list for github.com is refused', async () => {
     const {outcome} = await runTransfer({
-      plan: {where: 'client', address: GITHUB},
+      plan: {where: 'client', address: GITHUB, redirect: GITHUB_RULE},
       downloadResults: [endingAt('https://cdn.example.invalid/x')],
     });
     deepStrictEqual(failureOf(outcome), {
@@ -1365,7 +1371,7 @@ describe('the host of the final response (contracts V4, redirects)', () => {
 
   it('V4: a download from https must not end over http on a host the table lists', async () => {
     const {outcome} = await runTransfer({
-      plan: {where: 'client', address: GITHUB},
+      plan: {where: 'client', address: GITHUB, redirect: GITHUB_RULE},
       downloadResults: [
         endingAt('http://release-assets.githubusercontent.com/x'),
       ],
@@ -1383,6 +1389,47 @@ describe('the host of the final response (contracts V4, redirects)', () => {
       downloadResults: [endingAt(address)],
     });
     deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('server-22: an override plan may end on a foreign https host', async () => {
+    const {outcome} = await runTransfer({
+      plan: {where: 'client', redirect: {kind: 'any'}},
+      downloadResults: [endingAt('https://cdn.elsewhere.invalid/x')],
+    });
+    deepStrictEqual(outcome.kind, 'transferred');
+  });
+
+  it('server-22: an override plan may not end on http', async () => {
+    const {outcome} = await runTransfer({
+      plan: {where: 'client', redirect: {kind: 'any'}},
+      downloadResults: [endingAt('http://cdn.elsewhere.invalid/x')],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'serverDownload',
+      cause: 'redirectHost',
+    });
+  });
+
+  it('server-22: a product template plan passes on its listed hosts and fails on another', async () => {
+    const plan = {
+      where: 'client' as const,
+      redirect: {
+        kind: 'hosts' as const,
+        hosts: ['download.example.invalid', 'cdn.example.invalid'],
+      },
+    };
+    const listed = await runTransfer({
+      plan,
+      downloadResults: [endingAt('https://cdn.example.invalid/x')],
+    });
+    const unlisted = await runTransfer({
+      plan,
+      downloadResults: [endingAt('https://other.example.invalid/x')],
+    });
+    deepStrictEqual(
+      [listed.outcome.kind, failureOf(unlisted.outcome)],
+      ['transferred', {kind: 'serverDownload', cause: 'redirectHost'}],
+    );
   });
 
   it('V4: a download from http may end over https', async () => {

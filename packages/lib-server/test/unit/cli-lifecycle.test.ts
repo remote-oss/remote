@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import type {RedirectRule} from 'lib-product';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
@@ -18,6 +19,11 @@ import {parametersFor} from './fake-host.ts';
 import {answering, block, runOnce} from './scripted-steps.fixture.ts';
 
 const ADDRESS = 'https://download.example.invalid/cli.tar.gz';
+
+const REDIRECT: RedirectRule = {
+  kind: 'hosts',
+  hosts: ['download.example.invalid', 'cdn.example.invalid'],
+};
 
 const NEVER_CANCELLED = new AbortController().signal;
 
@@ -276,6 +282,7 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
           ...overrides,
         },
         address: ADDRESS,
+        redirect: REDIRECT,
         transfer: {
           clientFolder: '/client/tmp',
           cache: {kind: 'none'},
@@ -296,6 +303,7 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
       outcome: Awaited<ReturnType<typeof installCli>>;
       channel: RecordingChannel;
       downloads: number;
+      redirects: RedirectRule[];
       phases: string[];
     }
 
@@ -311,13 +319,15 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
         copies: [{matches: () => true, ending: {kind: 'copied'}}],
       });
       let downloads = 0;
+      const redirects: RedirectRule[] = [];
       const phases: string[] = [];
       const results = [...downloadResults];
       const dependencies: TransferDependencies = {
         channel,
         download: {
-          download: () => {
+          download: request => {
             downloads += 1;
+            redirects.push(request.redirect);
             return Promise.resolve(results.shift() ?? DOWNLOADED);
           },
         },
@@ -340,7 +350,7 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
         dependencies,
         NEVER_CANCELLED,
       );
-      return {outcome, channel, downloads, phases};
+      return {outcome, channel, downloads, redirects, phases};
     }
 
     const PLACED = block('Ok', `cli.path=${CLI_PATH}`);
@@ -361,6 +371,11 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
         ],
         [1, 0, 1, []],
       );
+    });
+
+    it('server-22: the client download of the CLI is handed the redirect rule of the placement', async () => {
+      const installed = await install({where: 'client'}, [PLACED]);
+      deepStrictEqual(installed.redirects, [REDIRECT]);
     });
 
     it('§S10: every run of the install has an empty environment', async () => {

@@ -1,4 +1,5 @@
 import {deepStrictEqual, throws} from 'node:assert';
+import type {RedirectRule} from 'lib-product';
 import {
   plan,
   type DownloadPlacement,
@@ -8,6 +9,16 @@ import {
   type PlanFailure,
   type PlanInput,
 } from '../../src/index.ts';
+
+// The redirect rule the rows hand the planner, which carries it to the download plan unchanged.
+const ANY_HOST: RedirectRule = {kind: 'any'};
+
+// The source most rows plan a download from.
+const SOURCE: PlanInput['source'] = {
+  kind: 'resolved',
+  address: 'https://x/s.tgz',
+  redirect: ANY_HOST,
+};
 
 // The host every row of this file runs on unless a row says otherwise.
 const facts: HostFacts = {
@@ -59,7 +70,7 @@ function placementRow(
   const result = plan(
     input({
       placement,
-      source: {kind: 'resolved', address: 'https://x/s.tgz'},
+      source: SOURCE,
     }),
   );
   const planOf = asPlan(result);
@@ -69,6 +80,17 @@ function placementRow(
 }
 
 describe('install planner (card server-04 table)', () => {
+  it("server-22: the download plan carries the source's redirect rule", () => {
+    const redirect: RedirectRule = {kind: 'hosts', hosts: ['x']};
+    const result = plan(
+      input({source: {...SOURCE, kind: 'resolved', redirect}}),
+    );
+    deepStrictEqual(
+      (asPlan(result) as Plan & {kind: 'download'}).redirect,
+      redirect,
+    );
+  });
+
   it("installPathSetting '   ' -> failure invalidInstallPath, reason empty", () => {
     deepStrictEqual(plan(input({installPathSetting: '   '})), {
       failure: {kind: 'invalidInstallPath', reason: 'empty'},
@@ -96,7 +118,7 @@ describe('install planner (card server-04 table)', () => {
           homeFolder: 'C:/Users/u',
         },
         installPathSetting: 'C:\\srv',
-        source: {kind: 'resolved', address: 'https://x/s.tgz'},
+        source: SOURCE,
       }),
     );
     deepStrictEqual(
@@ -107,7 +129,9 @@ describe('install planner (card server-04 table)', () => {
 
   it('installPathSetting undefined, home /home/u -> dataFolder /home/u/.vscode-server', () => {
     const result = plan(
-      input({source: {kind: 'resolved', address: 'https://x/s.tgz'}}),
+      input({
+        source: SOURCE,
+      }),
     );
     deepStrictEqual(
       (asPlan(result) as Plan & {kind: 'download'}).dataFolder,
@@ -119,7 +143,7 @@ describe('install planner (card server-04 table)', () => {
     const result = plan(
       input({
         installPathSetting: '~/srv',
-        source: {kind: 'resolved', address: 'https://x/s.tgz'},
+        source: SOURCE,
       }),
     );
     deepStrictEqual(
@@ -132,7 +156,7 @@ describe('install planner (card server-04 table)', () => {
     const result = plan(
       input({
         installPathSetting: '~',
-        source: {kind: 'resolved', address: 'https://x/s.tgz'},
+        source: SOURCE,
       }),
     );
     deepStrictEqual(
@@ -172,7 +196,7 @@ describe('install planner (card server-04 table)', () => {
     const result = plan(
       input({
         facts: {...facts, existingLayouts: [binLayout('other')]},
-        source: {kind: 'resolved', address: 'https://x/s.tgz'},
+        source: SOURCE,
       }),
     );
     deepStrictEqual(asPlan(result).kind, 'download');
@@ -212,7 +236,9 @@ describe('install planner (card server-04 table)', () => {
 
   it('hostFirst auto, resolved source -> download, where host, clientFallback true', () => {
     const result = plan(
-      input({source: {kind: 'resolved', address: 'https://x/s.tgz'}}),
+      input({
+        source: SOURCE,
+      }),
     );
     const planOf = asPlan(result) as Plan & {kind: 'download'};
     deepStrictEqual(
@@ -251,7 +277,9 @@ describe('install planner (card server-04 table)', () => {
 
   it('installFolder for commit abc, dataFolder /home/u/.vscode-server -> /home/u/.vscode-server/bin/abc', () => {
     const result = plan(
-      input({source: {kind: 'resolved', address: 'https://x/s.tgz'}}),
+      input({
+        source: SOURCE,
+      }),
     );
     deepStrictEqual(
       (asPlan(result) as Plan & {kind: 'download'}).installFolder,
@@ -261,7 +289,9 @@ describe('install planner (card server-04 table)', () => {
 
   it('lockPlace -> /home/u/.vscode-server/bin/abc', () => {
     const result = plan(
-      input({source: {kind: 'resolved', address: 'https://x/s.tgz'}}),
+      input({
+        source: SOURCE,
+      }),
     );
     deepStrictEqual(
       (asPlan(result) as Plan & {kind: 'download'}).lockPlace,
@@ -273,7 +303,7 @@ describe('install planner (card server-04 table)', () => {
     const result = plan(
       input({
         useExecServerSetting: true,
-        source: {kind: 'resolved', address: 'https://x/s.tgz'},
+        source: SOURCE,
       }),
     );
     deepStrictEqual((asPlan(result) as Plan & {kind: 'download'}).notes, []);
@@ -291,14 +321,18 @@ describe('install planner (card server-04 table)', () => {
 
   it('useExecServerSetting false -> notes empty', () => {
     const result = plan(
-      input({source: {kind: 'resolved', address: 'https://x/s.tgz'}}),
+      input({
+        source: SOURCE,
+      }),
     );
     deepStrictEqual((asPlan(result) as Plan & {kind: 'download'}).notes, []);
   });
 
   it('address is copied from the resolved source', () => {
     const result = plan(
-      input({source: {kind: 'resolved', address: 'https://x/s.tgz'}}),
+      input({
+        source: SOURCE,
+      }),
     );
     deepStrictEqual(
       (asPlan(result) as Plan & {kind: 'download'}).address,
@@ -335,7 +369,7 @@ function cliInput(mutations: Partial<PlanInput>): PlanInput {
     cliMode,
     cliName: 'editor-abc',
     cliPresentOnHost: false,
-    source: {kind: 'resolved', address: 'https://x/s.tgz'},
+    source: SOURCE,
     ...mutations,
   });
 }
@@ -515,7 +549,11 @@ describe('install planner, the CLI mode (card cli-02 table)', () => {
         input({
           installTree: '/vscode/codium-server/bin/linux-x64/abc',
           placement: {kind: 'clientOnly'},
-          source: {kind: 'resolved', address: 'https://a.test/x.tar.gz'},
+          source: {
+            kind: 'resolved',
+            address: 'https://a.test/x.tar.gz',
+            redirect: ANY_HOST,
+          },
         }),
       ),
     );
@@ -541,7 +579,11 @@ describe('install planner, the CLI mode (card cli-02 table)', () => {
     const result = asPlan(
       plan(
         input({
-          source: {kind: 'resolved', address: 'https://a.test/x.tar.gz'},
+          source: {
+            kind: 'resolved',
+            address: 'https://a.test/x.tar.gz',
+            redirect: ANY_HOST,
+          },
         }),
       ),
     );

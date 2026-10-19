@@ -115,7 +115,7 @@ async function installFrom(
       mode: options.clientFallback === true ? 'auto' : 'off',
     },
     useExecServerSetting: false,
-    source: {kind: 'resolved', address},
+    source: {kind: 'resolved', address, redirect: {kind: 'any'}},
   });
   if ('failure' in planned || planned.plan.kind !== 'download') {
     throw new Error(`no download plan: ${JSON.stringify(planned)}`);

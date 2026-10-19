@@ -34,10 +34,15 @@ export {
   serverDataFolderNameOrDefault,
 } from './profile.ts';
 export {
+  cliRedirectRule,
+  type RedirectRule,
+  redirectAllows,
+} from './redirect-rule.ts';
+export {type ResolutionStep} from './resolution-step.ts';
+export {
   type ArchiveResolution,
   type HostPlatform,
   type OverrideValue,
-  type ResolutionStep,
   resolveServerArchive,
   type SkippedSource,
   type TemplateProblem,

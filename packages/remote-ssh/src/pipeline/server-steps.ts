@@ -9,6 +9,7 @@ import {
   type ArchiveResolution,
   BASE_PLACEHOLDERS,
   classifyLicence,
+  cliRedirectRule,
   expand,
   type OverridePolicy,
   type LicenceFacts,
@@ -123,7 +124,11 @@ type ServerStepNames =
 function sourceOf(resolution: ArchiveResolution): PlanInput['source'] {
   switch (resolution.kind) {
     case 'resolved':
-      return {kind: 'resolved', address: resolution.address};
+      return {
+        kind: 'resolved',
+        address: resolution.address,
+        redirect: resolution.redirect,
+      };
     case 'noSource':
       return {kind: 'noSource'};
     default:
@@ -438,6 +443,7 @@ export function createServerSteps(
         {
           plan: cliPlan,
           address: plannedCliAddress(),
+          redirect: cliRedirectRule(profile, plannedCliAddress()),
           transfer: {
             clientFolder: dependencies.clientFolder,
             cache: dependencies.archiveCache,

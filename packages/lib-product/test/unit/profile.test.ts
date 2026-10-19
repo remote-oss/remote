@@ -29,6 +29,7 @@ describe('readProfile', () => {
       downloadUrl: '',
       serverLicense: [],
       serverLicenseUrl: '',
+      serverDownloadRedirectHosts: [],
     });
   });
 
@@ -55,8 +56,30 @@ describe('readProfile', () => {
         downloadUrl: '',
         serverLicense: [],
         serverLicenseUrl: '',
+        serverDownloadRedirectHosts: [],
       },
     });
+  });
+
+  it('server-22: reads the redirect hosts as written, and names the field when it is not a list of strings', () => {
+    const reading = readProfile(
+      '{"serverDownloadRedirectHosts": ["cdn.example.com", "CDN.Example.com"]}',
+    );
+    deepStrictEqual(
+      [
+        reading.kind === 'profile'
+          ? reading.profile.serverDownloadRedirectHosts
+          : reading,
+        readProfile('{"serverDownloadRedirectHosts": [7]}'),
+      ],
+      [
+        ['cdn.example.com', 'CDN.Example.com'],
+        {
+          kind: 'unreadable',
+          reason: 'serverDownloadRedirectHosts is not a list of strings',
+        },
+      ],
+    );
   });
 
   it('brief §3: reads the CLI download template the product names', () => {
@@ -99,6 +122,14 @@ describe('readProfile', () => {
     ['JSON that is not an object', '[]'],
     ['a string field of another type', '{"commit": 7}'],
     ['a licence that is not a list of strings', '{"serverLicense": "yes"}'],
+    [
+      'a redirect host list that is not a list',
+      '{"serverDownloadRedirectHosts": "cdn.example.com"}',
+    ],
+    [
+      'a redirect host list with a non-string',
+      '{"serverDownloadRedirectHosts": ["cdn.example.com", 7]}',
+    ],
     ['a gallery that is not an object', '{"extensionsGallery": []}'],
   ];
   for (const [scenario, text] of unreadable) {

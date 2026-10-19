@@ -26,6 +26,8 @@ export interface ProductProfile {
   /** The licence lines the server shows; empty when the product's server needs no acceptance. */
   readonly serverLicense: readonly string[];
   readonly serverLicenseUrl: string;
+  /** The hosts besides the template's own that the product's server download may be redirected to; empty when none. */
+  readonly serverDownloadRedirectHosts: readonly string[];
   /** The extension gallery the product names, as product.json writes it; absent when it names none. */
   readonly gallery?: Readonly<Record<string, unknown>>;
 }
@@ -64,6 +66,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isAbsentOrStrings(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every(line => typeof line === 'string'))
+  );
+}
+
 function wrongType(fields: Record<string, unknown>): string | undefined {
   const field = STRING_FIELDS.find(
     name => name in fields && typeof fields[name] !== 'string',
@@ -72,11 +81,11 @@ function wrongType(fields: Record<string, unknown>): string | undefined {
     return `${field} is not a string`;
   }
   const licence = fields.serverLicense;
-  if (
-    licence !== undefined &&
-    !(Array.isArray(licence) && licence.every(line => typeof line === 'string'))
-  ) {
+  if (!isAbsentOrStrings(licence)) {
     return 'serverLicense is not a list of strings';
+  }
+  if (!isAbsentOrStrings(fields.serverDownloadRedirectHosts)) {
+    return 'serverDownloadRedirectHosts is not a list of strings';
   }
   if (
     fields.extensionsGallery !== undefined &&
@@ -131,6 +140,8 @@ export function readProfile(productJsonText: string): ProfileReading {
       downloadUrl: textOf(parsed, 'downloadUrl'),
       serverLicense: (parsed.serverLicense as string[] | undefined) ?? [],
       serverLicenseUrl: textOf(parsed, 'serverLicenseUrl'),
+      serverDownloadRedirectHosts:
+        (parsed.serverDownloadRedirectHosts as string[] | undefined) ?? [],
       ...(gallery === undefined ? {} : {gallery}),
     },
   };

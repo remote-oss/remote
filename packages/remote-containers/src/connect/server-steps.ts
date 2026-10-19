@@ -353,7 +353,11 @@ export async function runServerSteps(
     installTree,
     source:
       resolution.kind === 'resolved'
-        ? {kind: 'resolved', address: resolution.address}
+        ? {
+            kind: 'resolved',
+            address: resolution.address,
+            redirect: resolution.redirect,
+          }
         : resolution.kind === 'noSource'
           ? {kind: 'noSource'}
           : {kind: 'invalidOverride', problem: resolution.problem},
