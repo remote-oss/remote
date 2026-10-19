@@ -219,8 +219,8 @@ reviewed yet.
     2026-10-19 on #737).
     - F-0303 isn't in the cut. F-0416 AC-25, AC-31, AC-34 and AC-35 answer that notification with "Ignore", and
       with no notification a reload already leaves it alone, as AC-34's own wording allows.
-    - The rows reload and assert the rest of each criterion, and each row's label is `(ruling-15)` (`check-coverage`
-      reads only `[a-z0-9-]` there).
+    - The rows reload and assert the rest of each criterion. Each row keeps its own label and cites the ruling after
+      the colon, as #1069 does, for example `F-0416 AC-25 (u25): by ruling 15, …`.
     - `release-1-notes.md` says, as interim behaviour, that an edit of the configuration shows no rebuild prompt
       until F-0303 comes.
 16. **Switching `remoteUser` to another account and reloading connects** (F-0416 6.11, 7.E4, AC-35; ruled
