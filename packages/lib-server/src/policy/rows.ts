@@ -51,7 +51,7 @@ export const CONTAINERS_POLICY: ServerPolicyRecord = frozen({
   verification: ['none'],
   environmentSetup: undefined,
   requirementsCheck: 'bundledHelper',
-  allowedExtraStartOptions: ['useHostProxy'],
+  allowedExtraStartOptions: ['useHostProxy', 'forceDisableUserEnv'],
   extensionEntries: 'asWritten',
   installUmask: '022',
   cleanup: {kind: 'onlyCurrentKeepLeftovers'},

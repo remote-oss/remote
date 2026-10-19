@@ -366,6 +366,9 @@ export async function startOrReuse(
           : 0,
       useHostProxy:
         startPolicy.allowedExtraStartOptions.includes('useHostProxy'),
+      forceDisableUserEnv: startPolicy.allowedExtraStartOptions.includes(
+        'forceDisableUserEnv',
+      ),
       requirementsHelper: startPolicy.requirementsCheck === 'bundledHelper',
       readySeconds: options.readySeconds,
       socketMode: options.socketMode,
