@@ -48,6 +48,29 @@ Two features outside the P0 list are in, because core ACs of the P0 features ass
 - **F-0416, the UID image.** The pinned dev container CLI produces the `-uid` image as part of `up`. The CLI bridge owns
   it, so its coverage has an owner. F-0401 AC-15, F-0403 AC-11/26, F-0405 AC-5/7/8, F-0412 AC-3/7/43 and F-0501
   AC-21 depend on it.
+  - **F-0416's environment half isn't in release 1** (ruled 2026-10-19, #1049 and #737). This covers `userEnvProbe`,
+    `remoteEnv` and the terminal and task environment (5.0 steps 7–8, BR-9 to BR-11b, 6.10, 7.E5–7.E7). No P0
+    criterion asserts it. F-0503 AC-45 only says that `remoteEnv`'s `HOME` doesn't move the server folder, and that
+    holds while `remoteEnv` is ignored, so it's a core row now and stays one. Until the user moves the half in, its
+    criteria are `deferred` with the reason `containers release 1: later (the remote environment, F-0416)`, AC-46
+    and AC-47 included: their 10-second limit and their "connects with no dialog" belong to our probe (BR-11b), and
+    only AC-47's terminal message is core's. Today the server and everything it starts see only the container's own
+    environment (`containerEnv`).
+  - **The design, for when it comes in.** It's ours. The CLI applies both properties only to the lifecycle commands
+    it runs itself, and the server keeps the environment it's started with. C10 builds the environment once per
+    connection, so a reload with a reused server picks up an edit (6.10):
+    1. C3 reads `remoteEnv` and `userEnvProbe` from the CLI's merged configuration with the container id, so image
+       metadata and interpolation (BR-9) come from the CLI.
+    2. Unless `userEnvProbe` is `none`, the probe runs over C11's exec as `remoteUser`: the account's
+       `/etc/passwd` shell in the mode the value names, printing its environment between our whole-line markers
+       (R-111). A probe that fails, can't start or takes longer than 10 s is dropped with its log lines (BR-11b,
+       7.E6), and the connect goes on.
+    3. The result is the merge of BR-11a (container < probe < `remoteEnv`; a `null` entry removes the variable),
+       returned as `Connected.extensionHostEnv`. Core applies that environment to the remote extension host and
+       the processes it starts. The card cites the `[oss]` path that gives it to terminals and tasks, and an
+       acceptance row proves it on a terminal.
+    4. It isn't `environmentSetup`: that is sourced once at the server's start, so a reused server would keep the
+       old environment.
 - **F-0419, the server-cache half of the `vscode` volume.** F-0503's main path (5.0 steps 4–5, BR-1 to BR-4) installs
   into `/vscode/vscode-server/bin/<platform>/<commit>` with a symlink from `~/.vscode-server/bin/<commit>`. F-0201 AC-1
   asserts the volume, and F-0419 is one of the three recorded containers suites. The extension-cache half goes to
