@@ -3,7 +3,7 @@
 - Status: accepted (the user's constraint, 2026-10-05: "VSCodium won't be our only editor, so we have to expect
   that the editor configures the URL patterns for the REH and CLI binaries"; the resolution orders below are the
   lead's design under R-47 and the user may change them)
-- Date: 2026-10-05
+- Date: 2026-10-05 (decision 7 added 2026-10-16)
 - Deciders: the user; design by `remote-architect`
 - Scope: every package that downloads, installs or starts a server (REH) or the editor CLI on a remote side:
   Remote-SSH, WSL, Dev Containers, Remote - Tunnels, and the shared server-lifecycle library
@@ -40,8 +40,8 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
 1. **One product profile, read once per session from the running editor's `product.json`**, in a shared library
    (`lib-product`, the only place a product name may appear in code). It carries: `applicationName`, `quality`,
    `commit`, `version`, `serverApplicationName`, `serverDataFolderName`, `dataFolderName`, `tunnelApplicationName`,
-   `updateUrl`, `downloadUrl`, `urlProtocol`, the gallery, the licence fields, and the two templates below. Every
-   resolver and the Tunnels extension take their names, folders, URLs and scheme from the profile; none of them
+   `updateUrl`, `downloadUrl`, `urlProtocol`, the gallery, the licence fields, the two templates below and
+   `serverDownloadRedirectHosts` (decision 7). Every resolver and the Tunnels extension take their names, folders, URLs and scheme from the profile; none of them
    reads `product.json` itself or knows a product by name.
 2. **Server (REH) archive URL**, R-47 rule 4 unchanged: (a) the extension's user-override setting (F-1402,
    F-3902); (b) the product's `serverDownloadUrlTemplate`; (c) the built-in table for products that declare none,
@@ -73,7 +73,16 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
    layer, a base URL or a template, F-1402; Remote-SSH: `remote.SSH.serverDownloadUrlTemplate`, user layer only,
    F-3902), so `lib-product` takes a per-extension override policy (key, allowed layers, accepted forms) from one
    table and applies the same resolution order to all. (Revised 2026-10-06.)
-7. **Conformance**: the suite's profiles include at least two real products (genuine VS Code with the explicit
+7. **Redirects follow the source's step** (added 2026-10-16, #1031). A server download may end on another host
+   only when whoever chose the source allows it. The user's override may redirect to any host: the user chose and
+   trusts that source. A product's template may redirect to its own host, the hosts its `product.json` lists in
+   `serverDownloadRedirectHosts` (an array of host names, our invented field; a product that serves its archives
+   from a CDN declares the CDN there, as it declares the template), and the hosts the table lists for the
+   template's host. A built-in table source may redirect only to the hosts the table lists. No setting widens
+   this, and no prompt asks. No step allows a weaker scheme. The licence classification stays tied to the
+   template's host (R-80). The rule is in `lib-product` and applies to every extension through `lib-server`
+   (contracts §5 V4). When `cliDownloadUrlTemplate` returns (decision 3), it uses the same field.
+8. **Conformance**: the suite's profiles include at least two real products (genuine VS Code with the explicit
    server URL; VSCodium) and one synthetic `product.json` with made-up names and both templates, so a build that
    hard-codes any product fails a case.
 
@@ -113,5 +122,5 @@ Lint: the strings `codium`, `vscodium`, `code.visualstudio.com`, `vscode-server`
 `update.code.visualstudio.com` may appear only in `lib-product`'s table file and its tests (a `no-restricted-syntax`
 literal check or a grep in `tools/check-layout`). That table therefore also holds the licence-host list of F-3902
 rule 11, the VSCodium release prefixes, the dev tunnels service domain (constraint A7) and the allowed redirect
-hosts per source host (github.com → its release-asset hosts; 2026-10-08). Conformance: the
-synthetic-product profile passes.
+hosts per source host (github.com → its release-asset hosts; 2026-10-08; a product's own list comes from its
+`product.json`, decision 7). Conformance: the synthetic-product profile passes.

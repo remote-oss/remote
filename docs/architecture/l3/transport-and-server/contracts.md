@@ -589,12 +589,18 @@ Rules:
 - Verification follows the record: the download port reports the facts of the final response of the redirect chain
   (the final URL, the HTTP status, `content-length` when present, a digest header only when the policy table names
   one and the server sends it), and V4 applies the first rule whose facts are present (card server-09). Redirects: the
-  licence classification (R-80) is tied to the TEMPLATE's host, never the final one; the final host must be the
-  template's host or one of the allowed redirect hosts the product table lists per source host (for example
-  `github.com` → `objects.githubusercontent.com`, `release-assets.githubusercontent.com`, the GitHub release-asset
-  hosts); any other final host is a `serverDownload` failure with a reason; the final URL is logged (origin and
-  path only). A response that gives the facts of no rule and whose record lists no `none` rule counts as verified:
-  there is nothing to check against, and the record's order already says what to prefer (ruled 2026-10-08, #158). A
+  licence classification (R-80) is tied to the TEMPLATE's host, never the final one; which final hosts are
+  allowed follows the resolution step that produced the address, because whoever chose the source decides where it
+  may send the download (ruled 2026-10-16, #1031): for the user's override (`override`) any host; for the product's
+  template (`productTemplate`) the template's host, the hosts the product's `product.json` lists in
+  `serverDownloadRedirectHosts`, and the hosts the product table lists for the template's host; for the built-in
+  table (`builtInTable`) the template's host and the hosts the product table lists for it (for example `github.com`
+  → `objects.githubusercontent.com`, `release-assets.githubusercontent.com`, the GitHub release-asset hosts). Under
+  every step a redirect never lowers the scheme (an https source never ends on http). `lib-product` turns the
+  resolution and the profile into the redirect rule (`any` or a host list); the plan carries it and V4 and the
+  download port apply it, so no other package looks at the step or the table. Any other final host is a
+  `serverDownload` failure with a reason; the final URL is logged (origin and path only). A response that gives the facts of no rule and
+  whose record lists no `none` rule counts as verified: there is nothing to check against, and the record's order already says what to prefer (ruled 2026-10-08, #158). A
   kept entry the host cannot unpack is deleted and downloaded once more, so one bad entry does not fail every later
   connect; the transfer deletes a kept entry in no other case (ruled 2026-10-08, #158). (Ruled
   2026-10-08, corrected the same day: a plain same-host rule would fail every GitHub release download.)
