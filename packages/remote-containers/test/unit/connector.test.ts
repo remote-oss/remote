@@ -18,6 +18,7 @@ import {
   REBUILD_INTENTS_KEY,
   storeRebuildIntent,
 } from '../../src/open/rebuild-intent.ts';
+import {storePausedRetry} from '../../src/state/paused-retry.ts';
 
 function tick(): Promise<unknown> {
   return new Promise(resolve => setImmediate(resolve));
@@ -250,6 +251,127 @@ describe('the container connector: the connect (card containers-08)', () => {
       ),
       ['the rebuild intent could not be read: quota'],
     );
+  });
+
+  /** The memento of a scene, as the connector's store. */
+  function mementoOf(scene: Scene) {
+    return {
+      get: () => scene.intentStore,
+      update: (key: string, value: unknown) => {
+        scene.intentStore = value;
+        return Promise.resolve();
+      },
+    };
+  }
+
+  it('F-0409 AC-22, ruling 12: C7 is handed the paused retry, which is taken once and logged', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    await storePausedRetry(mementoOf(scene), 'a'.repeat(64), 0);
+    const retry = scene.prepared[0]?.pausedRetry;
+    deepStrictEqual(
+      [
+        await retry?.('b'.repeat(64)),
+        await retry?.('a'.repeat(64)),
+        await retry?.('a'.repeat(64)),
+        messages(scene).filter(line => line.includes('retry the paused')),
+      ],
+      [
+        false,
+        true,
+        false,
+        ['the window asked to retry the paused container aaaaaaaaaaaa'],
+      ],
+    );
+  });
+
+  it('F-0409 ruling 12: a store that cannot be read gives no retry, with one warning, whatever it throws', async () => {
+    const scene = sceneOf();
+    await connected(scene);
+    const retry = scene.prepared[0]?.pausedRetry;
+    scene.intentError = new Error('store gone');
+    const broken = await retry?.('a'.repeat(64));
+    scene.intentError = 'quota' as unknown as Error;
+    const refused = await retry?.('a'.repeat(64));
+    deepStrictEqual(
+      [
+        broken,
+        refused,
+        messages(scene).filter(line =>
+          line.startsWith('the paused retry could not be read'),
+        ),
+      ],
+      [
+        false,
+        false,
+        [
+          'the paused retry could not be read: store gone',
+          'the paused retry could not be read: quota',
+        ],
+      ],
+    );
+  });
+
+  it('F-0409 AC-7, ruling 12: a paused container fails as containerPaused, with the same reason, and the window knows it was paused', async () => {
+    const scene = sceneOf();
+    scene.outcome = {kind: 'unusable', containerId: 'p1', status: 'paused'};
+    const result = await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(
+      [
+        failedKind(result),
+        'reason' in result ? result.reason : undefined,
+        scene.connector.failedContainer(),
+      ],
+      ['containerPaused', {id: 'S034'}, {containerId: 'p1', paused: true}],
+    );
+  });
+
+  it('F-0409 AC-34, ruling 14: an unusable container that is not paused, or a failure of up that kept a container, names it; one that found none names none', async () => {
+    const named = [];
+    for (const outcome of [
+      {kind: 'unusable', containerId: 'r1', status: 'restarting'},
+      {kind: 'buildFailed', message: 'x', foundContainerId: 'e1'},
+      {kind: 'buildFailed', message: 'x'},
+    ] as const) {
+      const scene = sceneOf();
+      scene.outcome = outcome;
+      await scene.connector.connect(inputOf(PAYLOAD));
+      named.push(scene.connector.failedContainer());
+    }
+    deepStrictEqual(named, [
+      {containerId: 'r1', paused: false},
+      {containerId: 'e1', paused: false},
+      undefined,
+    ]);
+  });
+
+  it('F-0409 AC-34: a failure after the container was ready names it, and a connect that succeeds clears it', async () => {
+    const scene = sceneOf();
+    scene.relayOutcome = {
+      kind: 'relayFailed',
+      retryable: false,
+      silent: false,
+      userAlreadyNotified: false,
+      hints: [],
+      diagnostics: [],
+    };
+    await scene.connector.connect(inputOf(PAYLOAD));
+    const afterFailure = scene.connector.failedContainer();
+    scene.relayOutcome = 'open';
+    await connected(scene);
+    deepStrictEqual(
+      [afterFailure, scene.connector.failedContainer()],
+      [{containerId: READY.containerId, paused: false}, undefined],
+    );
+  });
+
+  it('F-0409 AC-34: a connect that fails before it finds a container clears what the one before found', async () => {
+    const scene = sceneOf();
+    scene.outcome = {kind: 'unusable', containerId: 'p1', status: 'paused'};
+    await scene.connector.connect(inputOf(PAYLOAD));
+    scene.outcome = {kind: 'cancelled'};
+    await scene.connector.connect(inputOf(PAYLOAD));
+    deepStrictEqual(scene.connector.failedContainer(), undefined);
   });
 
   it('F-0409: an ordinary open hands C7 no rebuild', async () => {

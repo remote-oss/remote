@@ -12,7 +12,11 @@ import type {CommandHost} from 'lib-identifiers';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {devContainerPayloadOf} from '../../src/authority/payload.ts';
-import {containerSetupFailed} from '../../src/connect/failures.ts';
+import {
+  containerSetupFailed,
+  containerUnusable,
+  type FailedContainer,
+} from '../../src/connect/failures.ts';
 import {inertRecoveryPorts} from './inert-recovery-ports.ts';
 import type {ContainerConnector} from '../../src/connect/connector.ts';
 import {registerContainerResolver} from '../../src/connect/register-connector.ts';
@@ -41,6 +45,8 @@ async function registered(
     /** What the user does with a failure dialog: a button, Escape, or leaves it open until `closeDialog`. */
     dialog?: {button: string} | 'escape' | 'open';
     identity?: {name: string | undefined; context: string | undefined};
+    /** The container the connector says its last connect found. */
+    failedContainer?: FailedContainer;
     canonical?: (
       authority: string,
       path: string,
@@ -48,6 +54,7 @@ async function registered(
   } = {},
 ) {
   const warned: string[] = [];
+  const stored: string[] = [];
   const answers = [...(options.answers ?? [])];
   let identity = options.identity;
   const dialogHold: {close: (choice: string | undefined) => void} = {
@@ -76,6 +83,7 @@ async function registered(
     onHeldChanged: () => () => undefined,
     revealDetails: () => undefined,
     heldConnection: () => undefined,
+    failedContainer: () => options.failedContainer,
     heldIdentity: () => identity,
     canonicalPathOf: options.canonical ?? (() => Promise.resolve(undefined)),
     onPhase: listener => {
@@ -120,6 +128,10 @@ async function registered(
       },
       commands: host,
       presenter: inertRecoveryPorts({
+        storePausedRetry: containerId => {
+          stored.push(containerId);
+          return Promise.resolve();
+        },
         showError: (message, detail, buttons) => {
           shown.push(buttons.map(button => button.title));
           if (options.dialog === 'open') {
@@ -161,6 +173,7 @@ async function registered(
     recording,
     revealed: () => revealed,
     warned,
+    stored,
     identify: (next: typeof identity) => {
       identity = next;
     },
@@ -399,6 +412,16 @@ describe('the registration of the container connector (card containers-08)', () 
     });
     await settledResolve(seen, 1);
     deepStrictEqual(seen.formatters, []);
+  });
+
+  it('F-0409 AC-22, ruling 12: Retry stores the paused retry for the container the connector says its last connect found', async () => {
+    const seen = await registered({
+      failure: containerUnusable('paused'),
+      failedContainer: {containerId: 'e'.repeat(64), paused: true},
+      dialog: {button: 'Retry'},
+    });
+    await settledResolve(seen, 1);
+    deepStrictEqual(seen.stored, ['e'.repeat(64)]);
   });
 
   it('F-0410 5.0 step 4: Edit Locally leaves the authority, so no label is registered', async () => {

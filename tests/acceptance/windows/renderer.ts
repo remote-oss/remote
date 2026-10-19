@@ -860,6 +860,34 @@ export async function waitForQuickPick(
   );
 }
 
+/**
+ * Chooses the item labelled `label` of the quick pick open in window `name`: it types the label into the pick's input,
+ * which leaves that item alone and active, and presses Enter. It fails naming the items when the pick lacks the label.
+ */
+export async function chooseQuickPickItem(
+  name: string,
+  label: string,
+): Promise<void> {
+  const shown = await waitForQuickPick(name, 30_000);
+  if (!shown.items.includes(label)) {
+    throw new Error(
+      `window ${name}: no item ${JSON.stringify(label)} among ${JSON.stringify(shown.items)}`,
+    );
+  }
+  await evaluate<null>(
+    name,
+    `(() => {
+      const input = document.querySelector('${QUICK_WIDGET} .quick-input-box input');
+      input.focus();
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(input, ${JSON.stringify(label)});
+      input.dispatchEvent(new Event('input', {bubbles: true}));
+      return null;
+    })()`,
+  );
+  await pressKey(await pageOf(name), name, 'Enter');
+}
+
 /** Whether the status bar of window `name` has an item whose DOM id is `itemId`. */
 export async function hasStatusItem(
   name: string,

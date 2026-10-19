@@ -43,6 +43,7 @@ const REQUEST: ContainerRequest = {
   cacheVolume: true,
   workspaceMountConsistency: 'cached',
   mountGitWorktreeCommonDir: false,
+  pausedRetry: () => Promise.resolve(false),
 };
 const UP: UpResult = {
   kind: 'up',
@@ -683,6 +684,182 @@ describe('containerLifecycleOf', () => {
     deepStrictEqual(
       result.lines.filter(line => line.includes('was chosen')),
       [],
+    );
+  });
+
+  /** An open of a paused container whose retry is `retried`, over `listing`; the CLI gives `NEW`. */
+  function retried(
+    listing: Record<string, EngineRunOutcome[]>,
+    script: Record<string, EngineRunOutcome[]> = {},
+    options: {request?: Partial<ContainerRequest>; abort?: boolean} = {},
+  ) {
+    const asked: string[] = [];
+    const controller = new AbortController();
+    return prepared(
+      scriptedEngine(
+        {
+          ...listing,
+          [`stop ${OLD}`]: [ran('')],
+          [`inspect --type container ${NEW}`]: [
+            ran(inspected([[NEW, 'running']])),
+          ],
+          ...script,
+        },
+        options.abort === true ? {controller, on: `stop ${OLD}`} : undefined,
+      ),
+      fakeBridge(),
+      controller.signal,
+      {
+        ...REQUEST,
+        pausedRetry: containerId => {
+          asked.push(containerId);
+          return Promise.resolve(true);
+        },
+        ...options.request,
+      },
+    ).then(result => ({...result, asked}));
+  }
+
+  it("F-0409 AC-22, ruling 12 (C7's half): a paused container whose retry is taken is stopped, then started by up under its own labels", async () => {
+    const result = await retried(standardListing('paused'));
+    deepStrictEqual(
+      {
+        asked: result.asked,
+        outcome: result.outcome.kind,
+        steps: result.steps,
+        stops: result.bridge.ups.length,
+        idLabels: targetIdLabels(result),
+        lines: result.lines.filter(line => line.includes('retrying')),
+      },
+      {
+        asked: [OLD],
+        outcome: 'ready',
+        steps: ['findingContainer', 'startingContainer', 'containerReady'],
+        stops: 1,
+        idLabels: idLabels(FOLDER, CONFIG),
+        lines: ['info: retrying: stopped the paused container aaaaaaaaaaaa'],
+      },
+    );
+  });
+
+  it("F-0409 AC-22, ruling 12: the stop is the engine's stop of the full id, and comes before up", async () => {
+    const engine = scriptedEngine({
+      ...standardListing('paused'),
+      [`stop ${OLD}`]: [ran('')],
+      [`inspect --type container ${NEW}`]: [ran(inspected([[NEW, 'running']]))],
+    });
+    await prepared(engine, fakeBridge(), new AbortController().signal, {
+      ...REQUEST,
+      pausedRetry: () => Promise.resolve(true),
+    });
+    deepStrictEqual(engine.commands.slice(-2), [
+      `stop ${OLD}`,
+      `inspect --type container ${NEW}`,
+    ]);
+  });
+
+  it('F-0409 AC-22: a paused legacy container whose retry is taken is started under the legacy labels', async () => {
+    const result = await retried({
+      [LISTING]: [ran('')],
+      [LEGACY_LISTING]: [ran(`${OLD}\n`)],
+      [`inspect --type container ${OLD}`]: [
+        ran(legacyInspected([[OLD, 'paused']])),
+      ],
+    });
+    deepStrictEqual(
+      [result.outcome.kind, targetIdLabels(result)],
+      ['ready', legacyIdLabels(FOLDER)],
+    );
+  });
+
+  it('F-0409 AC-7, ruling 12: without a retry a paused container stays unusable, and the retry is asked only for a paused one on an ordinary open', async () => {
+    const asked: string[] = [];
+    const request: ContainerRequest = {
+      ...REQUEST,
+      pausedRetry: containerId => {
+        asked.push(containerId);
+        return Promise.resolve(false);
+      },
+    };
+    const paused = await prepared(
+      scriptedEngine(standardListing('paused')),
+      fakeBridge(),
+      new AbortController().signal,
+      request,
+    );
+    const restarting = await prepared(
+      scriptedEngine(standardListing('restarting')),
+      fakeBridge(),
+      new AbortController().signal,
+      request,
+    );
+    const rebuilt = await prepared(
+      scriptedEngine({
+        ...standardListing('paused'),
+        [`inspect --type container ${NEW}`]: [
+          ran(inspected([[NEW, 'running']])),
+        ],
+      }),
+      fakeBridge(),
+      new AbortController().signal,
+      {...request, rebuild: {buildNoCache: false}},
+    );
+    deepStrictEqual(
+      [paused.outcome, restarting.outcome.kind, rebuilt.outcome.kind, asked],
+      [
+        {kind: 'unusable', containerId: OLD, status: 'paused'},
+        'unusable',
+        'ready',
+        [OLD],
+      ],
+    );
+  });
+
+  it('F-0409 ruling 12: a stop that fails ends the connect without calling the CLI, with the line that says why', async () => {
+    const result = await retried(standardListing('paused'), {
+      [`stop ${OLD}`]: [exited('Error response from daemon: cannot stop')],
+    });
+    deepStrictEqual(
+      [result.outcome, result.bridge.ups.length],
+      [
+        {
+          kind: 'discoveryFailed',
+          detail:
+            "the paused container aaaaaaaaaaaa couldn't be stopped: Error response from daemon: cannot stop",
+        },
+        0,
+      ],
+    );
+  });
+
+  it('F-0409 ruling 12: a connect cancelled while the stop runs is cancelled, and calls no CLI', async () => {
+    const result = await retried(standardListing('paused'), {}, {abort: true});
+    deepStrictEqual(
+      [result.outcome, result.bridge.ups.length],
+      [{kind: 'cancelled'}, 0],
+    );
+  });
+
+  it('F-0409 AC-34, ruling 14: a failure of up names the container the connect found and kept, and a rebuild names none', async () => {
+    function failing(rebuild?: {buildNoCache: boolean}) {
+      const bridge = fakeBridge();
+      bridge.upResult = {kind: 'buildFailed', message: 'm'};
+      return prepared(
+        scriptedEngine(standardListing('exited')),
+        bridge,
+        new AbortController().signal,
+        rebuild === undefined ? REQUEST : {...REQUEST, rebuild},
+      );
+    }
+    deepStrictEqual(
+      [
+        (await failing()).outcome,
+        (await failing({buildNoCache: false})).outcome,
+      ],
+      [
+        {kind: 'buildFailed', message: 'm', foundContainerId: OLD},
+        {kind: 'buildFailed', message: 'm'},
+      ],
     );
   });
 

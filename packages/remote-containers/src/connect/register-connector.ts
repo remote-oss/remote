@@ -76,6 +76,7 @@ export async function registerContainerResolver(
   const dialogPresenter = recoveryPresenterOf(
     {...host.presenter, disconnected: registerUnnamedLabel},
     () => currentTarget(),
+    () => connector.failedContainer(),
     translate,
   );
   const registration = await registerResolver(

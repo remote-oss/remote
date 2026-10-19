@@ -17,7 +17,9 @@ import {
   idLabels,
   isLegacy,
   legacyDiscoveryArguments,
+  legacyIdLabels,
   type ContainerFacts,
+  type Decision,
 } from './labels.ts';
 
 const VOLUME_MOUNT = 'type=volume,source=vscode,target=/vscode';
@@ -41,6 +43,8 @@ export interface ContainerRequest {
   workspaceMountConsistency: string;
   /** Whether the Git worktree's common dir is mounted (`dev.containers.experimentalMountGitWorktreeCommonDir`). */
   mountGitWorktreeCommonDir: boolean;
+  /** Takes, once, the retry the failure dialog left for the paused container `containerId`; whether there was one. */
+  pausedRetry: (containerId: string) => Promise<boolean>;
 }
 
 /** How the preparation ended. */
@@ -54,8 +58,10 @@ export type ContainerOutcome =
       created: boolean;
     }
   | {kind: 'unusable'; containerId: string; status: string}
-  | {kind: 'discoveryFailed'; detail: string}
-  | CliFailure;
+  | (({kind: 'discoveryFailed'; detail: string} | CliFailure) & {
+      /** The container the connect found and kept, for the failure's pick; absent when it found none. */
+      foundContainerId?: string;
+    });
 
 /** What C7 shows of a run's lifecycle commands; C10 hands it in, and `extension.ts` implements it over the editor. */
 export interface LifecyclePresenter {
@@ -300,6 +306,47 @@ export function containerLifecycleOf(dependencies: {
       });
   }
 
+  /** Stops the paused container the user asked to retry; the decision then is to use it as an exited one. */
+  async function stoppedForRetry(
+    containerId: string,
+    containers: readonly ContainerFacts[],
+    request: ContainerRequest,
+    cancellation: AbortSignal,
+  ): Promise<
+    | Extract<Decision, {kind: 'use'}>
+    | {kind: 'cancelled'}
+    | {kind: 'discoveryFailed'; detail: string}
+  > {
+    const stopped = await askEngine(
+      engine,
+      ['stop', containerId],
+      cancellation,
+    );
+    if (isAborted(cancellation)) {
+      return {kind: 'cancelled'};
+    }
+    if (stopped.kind === 'failed') {
+      return {
+        kind: 'discoveryFailed',
+        detail: `the paused container ${containerId.slice(0, IDENTIFIER_LENGTH)} couldn't be stopped: ${stopped.detail}`,
+      };
+    }
+    logger.info(
+      `retrying: stopped the paused container ${containerId.slice(0, IDENTIFIER_LENGTH)}`,
+    );
+    return {
+      kind: 'use',
+      containerId,
+      status: 'exited',
+      idLabels: containers.some(
+        container =>
+          container.id === containerId && isLegacy(request.folder, container),
+      )
+        ? legacyIdLabels(request.folder)
+        : idLabels(request.folder, request.configFile),
+    };
+  }
+
   async function prepare(
     request: ContainerRequest,
     onStep: (step: ContainerStep) => void,
@@ -318,11 +365,37 @@ export function containerLifecycleOf(dependencies: {
     if (discovery.kind !== 'found') {
       return discovery;
     }
-    const decision = decide(folder, configFile, discovery.containers);
-    if (decision.kind === 'unusable' && request.rebuild === undefined) {
-      return decision;
+    const decided = decide(folder, configFile, discovery.containers);
+    const paused =
+      request.rebuild === undefined &&
+      decided.kind === 'unusable' &&
+      decided.status === 'paused'
+        ? decided
+        : undefined;
+    const retry =
+      paused !== undefined && (await request.pausedRetry(paused.containerId))
+        ? paused
+        : undefined;
+    if (
+      decided.kind === 'unusable' &&
+      request.rebuild === undefined &&
+      retry === undefined
+    ) {
+      return decided;
     }
     onStep('startingContainer');
+    const decision =
+      retry === undefined
+        ? decided
+        : await stoppedForRetry(
+            retry.containerId,
+            discovery.containers,
+            request,
+            cancellation,
+          );
+    if (decision.kind === 'cancelled' || decision.kind === 'discoveryFailed') {
+      return decision;
+    }
     const rebuilding = request.rebuild !== undefined;
     // a rebuild replaces the container with the current labels; a use keeps the labels its tier chose
     const targetIdLabels = rebuilding
@@ -391,7 +464,9 @@ export function containerLifecycleOf(dependencies: {
       ) {
         end();
       }
-      return upResult;
+      return !rebuilding && decision.kind === 'use'
+        ? {...upResult, foundContainerId: decision.containerId}
+        : upResult;
     }
     if (
       !rebuilding &&

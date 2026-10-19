@@ -20,7 +20,9 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  chooseQuickPickItem,
   dialogOf,
+  pressEscape,
   type ShownDialog,
   statusItem,
   waitForDialog,
@@ -29,6 +31,7 @@ import {
   waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
+  activations,
   openFolderWindow,
   removeContainers,
   setUserSetting,
@@ -138,6 +141,39 @@ async function rebuiltWithoutDocker(
   } finally {
     await setUserSetting('dev.containers.dockerPath', undefined);
   }
+}
+
+/** Unpauses container `containerId`; a container that is not paused, or is gone, is not a failure. */
+async function unpaused(containerId: string): Promise<void> {
+  try {
+    await execFileAsync('docker', ['unpause', containerId]);
+  } catch {
+    // the row's own assertions say what state the container was left in
+  }
+}
+
+/** Opens a local window on `folder`, reopens it in its container, and gives the window and the dialog that shows. */
+async function failedWindowOf(
+  folder: string,
+): Promise<{name: string; dialog: ShownDialog}> {
+  const name = await openFolderWindow(folder);
+  await reopenStarted(name);
+  return {name, dialog: await waitForDialog(name, DIALOG_MILLISECONDS)};
+}
+
+/** Answers `label` on the dialog of window `name`, waits for the reload it causes, and gives the dialog that shows next. */
+async function nextDialogAfter(
+  name: string,
+  label: string,
+): Promise<ShownDialog> {
+  const before = activations(name);
+  await answerDialog(name, label);
+  await waitFor(
+    `window ${name} to activate again`,
+    () => activations(name) > before,
+    60_000,
+  );
+  return waitForDialog(name, DIALOG_MILLISECONDS);
 }
 
 /** A dialog as the rows compare it: its message, its detail and its buttons in sorted order. */
@@ -811,6 +847,132 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
           configFile: path.join(folder, '.devcontainer', 'devcontainer.json'),
           metadataIsArray: true,
           vscodeLabels: [],
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it("F-0409 AC-22 (p22): Retry on the paused container's dialog connects to the same container, now running", async () => {
+    const folder = devContainerFolder('c47-paused-retry', {name: 'Paused'});
+    let containerId: string | undefined;
+    try {
+      containerId = await containerLeftBy(folder);
+      await execFileAsync('docker', ['pause', containerId]);
+      const {name} = await failedWindowOf(folder);
+      await answerDialog(name, 'Retry');
+      await connectedToContainer(name, DIALOG_MILLISECONDS);
+      const containers = await devContainersOf(folder);
+      const {status} = await inspectOf(containerId);
+      await closeWindow(name);
+      deepStrictEqual(
+        {containers, status},
+        {containers: [containerId], status: 'running'},
+      );
+    } finally {
+      if (containerId !== undefined) {
+        await unpaused(containerId);
+      }
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0409 AC-7 (p7b): by ruling 12, without Retry, a second reload of a paused container fails again and leaves it paused', async () => {
+    const folder = devContainerFolder('c47-paused-reload', {name: 'Paused'});
+    let containerId: string | undefined;
+    try {
+      containerId = await containerLeftBy(folder);
+      await execFileAsync('docker', ['pause', containerId]);
+      const {name, dialog} = await failedWindowOf(folder);
+      await answerDialog(name, 'More Actions...');
+      await waitForQuickPick(name, 30_000);
+      await pressEscape(name);
+      await reloadWindow(name);
+      const again = await waitForDialog(name, DIALOG_MILLISECONDS);
+      const {status} = await inspectOf(containerId);
+      await closeWindow(name);
+      deepStrictEqual(
+        {first: dialogText(dialog), again: dialogText(again), status},
+        {
+          first: ['', S034, RECOVERY_BUTTONS],
+          again: ['', S034, RECOVERY_BUTTONS],
+          status: 'paused',
+        },
+      );
+    } finally {
+      if (containerId !== undefined) {
+        await unpaused(containerId);
+      }
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0409 AC-34, F-0410 AC-6, AC-11b (p34b): More Actions... offers Rebuild Container when the container exists, Retry keeps the same container, and Rebuild connects the window to a new one', async () => {
+    const source = path.join(variable('HARNESS_RUN_FOLDER'), 'c47-bind-src');
+    mkdirSync(source, {recursive: true});
+    const folder = devContainerFolder('c47-rebuild-item', {
+      name: 'Rebuildable',
+      mounts: [`source=${source},target=/bind,type=bind`],
+    });
+    try {
+      const containerId = await containerLeftBy(folder);
+      await execFileAsync('docker', ['stop', containerId]);
+      rmSync(source, {recursive: true, force: true});
+      writeFileSync(
+        path.join(folder, '.devcontainer', 'devcontainer.json'),
+        JSON.stringify({
+          image: variable('HARNESS_DEVCONTAINER_IMAGE'),
+          runArgs: runLabelArguments(),
+          name: 'Rebuildable',
+        }),
+      );
+      const {name, dialog} = await failedWindowOf(folder);
+      const title = await windowTitle(name);
+      const again = await nextDialogAfter(name, 'Retry');
+      const kept = {
+        containers: await devContainersOf(folder),
+        status: (await inspectOf(containerId)).status,
+      };
+      await answerDialog(name, 'More Actions...');
+      const pick = await waitForQuickPick(name, 30_000);
+      await chooseQuickPickItem(name, 'Rebuild Container');
+      await connectedToContainer(name, DIALOG_MILLISECONDS);
+      const rebuilt = await devContainersOf(folder);
+      const {stdout: leftover} = await execFileAsync('docker', [
+        'ps',
+        '--all',
+        '--quiet',
+        '--filter',
+        `id=${containerId}`,
+      ]);
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          first: dialogText(dialog),
+          title: title.startsWith(
+            '[c47-rebuild-item [Dev Container: Rebuildable]]',
+          ),
+          again: dialogText(again),
+          kept,
+          items: pick.items,
+          rebuiltAnew: rebuilt.length === 1 && rebuilt[0] !== containerId,
+          oldGone: leftover.trim(),
+        },
+        {
+          first: ['', S018, RECOVERY_BUTTONS],
+          title: true,
+          again: ['', S018, RECOVERY_BUTTONS],
+          kept: {containers: [containerId], status: 'exited'},
+          items: [
+            'Reload Window',
+            'Rebuild Container',
+            'Edit devcontainer.json Locally',
+            'Open Recent...',
+            'Open Documentation',
+          ],
+          rebuiltAnew: true,
+          oldGone: '',
         },
       );
     } finally {

@@ -39,6 +39,7 @@ import {
 } from '../extensions/extension-list.ts';
 import {idLabels} from '../lifecycle/labels.ts';
 import {takeRebuildIntent} from '../open/rebuild-intent.ts';
+import {takePausedRetry} from '../state/paused-retry.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
 import {
   ensureTrusted,
@@ -53,6 +54,7 @@ import {
   containerSetupFailed,
   containerUnusable,
   engineCheckFailed,
+  type FailedContainer,
   malformedAuthority,
   remoteEngine,
   transportLost,
@@ -96,6 +98,8 @@ export interface HeldConnection {
 
 /** The connector, with the identity the window's label reads. */
 export interface ContainerConnector extends Connector {
+  /** The container the window's last connect found and ended without a connection; nothing once a connect succeeds. */
+  failedContainer(): FailedContainer | undefined;
   /** The identity of the connection the window holds; nothing before the first connect. */
   heldIdentity(): WindowIdentity | undefined;
   /** The connection the window holds; nothing before the first connect, and nothing once it is given back. */
@@ -295,6 +299,7 @@ export function containerConnectorOf(
   let running: AbortController | undefined;
   let lifecycle: ContainerLifecycle | undefined;
   let held: Held | undefined;
+  let failedContainer: FailedContainer | undefined;
   let checking = false;
   /** The folder each payload's container shows, read once per payload for the canonical requests (windows contracts §3.2). */
   const reads = new Map<string, Promise<string | undefined>>();
@@ -398,7 +403,17 @@ export function containerConnectorOf(
       return cancelled();
     }
     if (outcome.kind === 'unusable') {
-      return containerUnusable();
+      failedContainer = {
+        containerId: outcome.containerId,
+        paused: outcome.status === 'paused',
+      };
+      return containerUnusable(outcome.status);
+    }
+    if (outcome.foundContainerId !== undefined) {
+      failedContainer = {
+        containerId: outcome.foundContainerId,
+        paused: false,
+      };
     }
     return containerSetupFailed(
       outcome.kind === 'setupFailed' ? outcome.refusal : undefined,
@@ -468,6 +483,28 @@ export function containerConnectorOf(
         `the rebuild intent could not be read: ${error instanceof Error ? error.message : String(error)}`,
       );
       return undefined;
+    }
+  }
+
+  /** Takes the retry the failure dialog left for the paused container `containerId`; a store that fails is no retry. */
+  async function takenPausedRetry(containerId: string): Promise<boolean> {
+    try {
+      const retried = await takePausedRetry(
+        dependencies.intents,
+        containerId,
+        dependencies.clock(),
+      );
+      if (retried) {
+        logger.info(
+          `the window asked to retry the paused container ${shortId(containerId)}`,
+        );
+      }
+      return retried;
+    } catch (error) {
+      logger.warn(
+        `the paused retry could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
     }
   }
 
@@ -617,6 +654,7 @@ export function containerConnectorOf(
     input: ConnectInput,
   ): Promise<Connected | Failed> {
     const cancellation = controller.signal;
+    failedContainer = undefined;
     const tools = toolsOf(folder);
     const {settings, dockerPath, configFile, engine, bridge} = tools;
     await readWithinCap(payload, folder, tools);
@@ -656,6 +694,7 @@ export function containerConnectorOf(
         mountGitWorktreeCommonDir: mountGitWorktreeCommonDirOf(
           settings.mountGitWorktreeCommonDir,
         ),
+        pausedRetry: takenPausedRetry,
         ...(rebuild === undefined
           ? {}
           : {rebuild: {buildNoCache: rebuild.buildNoCache}}),
@@ -669,6 +708,7 @@ export function containerConnectorOf(
     if (prepared.kind !== 'ready') {
       return failureOf(prepared);
     }
+    failedContainer = {containerId: prepared.containerId, paused: false};
     if (isAborted(cancellation)) {
       return cancelled();
     }
@@ -776,6 +816,7 @@ export function containerConnectorOf(
     };
     const connection = held;
     owner.connection = connection;
+    failedContainer = undefined;
     heldChanges.tell();
     relay.onClosed(() => {
       if (held === connection) {
@@ -829,6 +870,7 @@ export function containerConnectorOf(
     revealDetails() {
       dependencies.revealLog();
     },
+    failedContainer: () => failedContainer,
     heldIdentity: () => held?.identity,
     heldConnection: () =>
       held === undefined
