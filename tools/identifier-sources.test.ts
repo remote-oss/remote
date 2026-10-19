@@ -290,6 +290,70 @@ describe('identifier-sources', () => {
       deepStrictEqual(declaredOf(content), content);
     });
 
+    it('reads an explicit activates flag of true and false back', () => {
+      deepStrictEqual(
+        declaredOf({
+          source: 'x#1',
+          standsDownFor: 'r',
+          internal: [
+            {
+              id: 'remote-internal.a',
+              role: 'served',
+              kind: 'query',
+              activates: true,
+            },
+            {
+              id: 'remote-internal.b',
+              role: 'served',
+              kind: 'push',
+              activates: false,
+            },
+          ],
+        }).internal,
+        [
+          {
+            id: 'remote-internal.a',
+            role: 'served',
+            kind: 'query',
+            activates: true,
+          },
+          {
+            id: 'remote-internal.b',
+            role: 'served',
+            kind: 'push',
+            activates: false,
+          },
+        ],
+      );
+    });
+
+    it('keeps an absent activates flag absent, not defaulted', () => {
+      deepStrictEqual(
+        declaredOf({
+          source: 'x#1',
+          standsDownFor: 'r',
+          internal: [
+            {id: 'remote-internal.get', role: 'served', kind: 'query'},
+          ],
+        }).internal,
+        [{id: 'remote-internal.get', role: 'served', kind: 'query'}],
+      );
+    });
+
+    it('fails on an internal command with a non-boolean activates', () => {
+      throws(
+        () =>
+          declaredOf({
+            source: 'x',
+            standsDownFor: 'r',
+            internal: [
+              {id: 'i', role: 'served', kind: 'push', activates: 'no'},
+            ],
+          }),
+        {message: 'declared.internal[0].activates must be a boolean'},
+      );
+    });
+
     it('fails on an unknown top-level field', () => {
       throws(() => declaredOf({source: 'x', standsDownFor: 'r', extra: 1}), {
         message: 'declared has unknown fields: extra',
