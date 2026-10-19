@@ -100,11 +100,6 @@ const RECOVERY_BUTTONS = [
 /** The dialog of a failed connect takes the build or the second check, after the reload. */
 const DIALOG_MILLISECONDS = 180_000;
 
-/** A dialog's buttons, sorted, without the Cancel core adds until C8 marks its close affordance (containers-35). */
-function recoveryButtonsOf(dialog: ShownDialog): string[] {
-  return dialog.buttons.filter(button => button !== 'Cancel').sort();
-}
-
 /** Whether container `containerId` mounts something at `/vscode`, the cache volume (F-0419). */
 async function vscodeMounted(containerId: string): Promise<boolean> {
   const {stdout} = await execFileAsync('docker', [
@@ -351,7 +346,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       deepStrictEqual(
         {
           details: dialog.details,
-          buttons: recoveryButtonsOf(dialog),
+          buttons: [...dialog.buttons].sort(),
           containers,
           items: pick.items,
         },
@@ -386,7 +381,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       deepStrictEqual(
         {
           details: dialog.details,
-          buttons: recoveryButtonsOf(dialog),
+          buttons: [...dialog.buttons].sort(),
           containers,
         },
         {details: S339, buttons: RECOVERY_BUTTONS, containers: [kept]},
@@ -410,7 +405,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       deepStrictEqual(
         {
           details: dialog.details,
-          buttons: recoveryButtonsOf(dialog),
+          buttons: [...dialog.buttons].sort(),
           indicator,
           containers,
         },
