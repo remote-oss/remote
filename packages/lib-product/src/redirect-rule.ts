@@ -37,3 +37,14 @@ export function redirectRuleFor(
   );
   return {kind: 'hosts', hosts: [...new Set(hosts)]};
 }
+
+/**
+ * The redirect rule of the CLI archive's download from `address`: the CLI's only source is the product's template
+ * (ADR-0006 decision 7), so it is the product-template rule for the address's host.
+ */
+export function cliRedirectRule(
+  profile: Pick<ProductProfile, 'serverDownloadRedirectHosts'>,
+  address: string,
+): RedirectRule {
+  return redirectRuleFor(profile, 'productTemplate', new URL(address).hostname);
+}

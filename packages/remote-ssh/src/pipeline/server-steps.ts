@@ -9,12 +9,12 @@ import {
   type ArchiveResolution,
   BASE_PLACEHOLDERS,
   classifyLicence,
+  cliRedirectRule,
   expand,
   type OverridePolicy,
   type LicenceFacts,
   type OverrideValue,
   type ProductProfile,
-  redirectRuleFor,
   resolveServerArchive,
 } from 'lib-product';
 import {
@@ -443,11 +443,7 @@ export function createServerSteps(
         {
           plan: cliPlan,
           address: plannedCliAddress(),
-          redirect: redirectRuleFor(
-            profile,
-            'productTemplate',
-            new URL(plannedCliAddress()).hostname,
-          ),
+          redirect: cliRedirectRule(profile, plannedCliAddress()),
           transfer: {
             clientFolder: dependencies.clientFolder,
             cache: dependencies.archiveCache,

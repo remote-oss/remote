@@ -1,5 +1,6 @@
 import {deepStrictEqual, strictEqual} from 'node:assert';
-import {redirectAllows, redirectRuleFor} from '../../src/index.ts';
+import {cliRedirectRule, redirectAllows} from '../../src/index.ts';
+import {redirectRuleFor} from '../../src/redirect-rule.ts';
 
 const LISTED = {
   serverDownloadRedirectHosts: ['CDN.example.com', 'cdn.example.com'],
@@ -68,6 +69,26 @@ describe('redirectRuleFor (card server-22)', () => {
         redirectAllows(rule, 'x.invalid'),
       ],
       [true, false],
+    );
+  });
+});
+
+describe('cliRedirectRule (card server-22, athena on #1047)', () => {
+  it("is the product-template rule for the address's host, with the listed hosts and the table's", () => {
+    deepStrictEqual(
+      cliRedirectRule(
+        LISTED,
+        'https://GitHub.com/example/releases/download/1/cli.tar.gz',
+      ),
+      {
+        kind: 'hosts',
+        hosts: [
+          'github.com',
+          'objects.githubusercontent.com',
+          'release-assets.githubusercontent.com',
+          'cdn.example.com',
+        ],
+      },
     );
   });
 });
