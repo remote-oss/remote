@@ -240,7 +240,9 @@ argument, as the palette does.
 **Ruled (a), 2026-10-19, on remote-ssh#28** (the spec side's recommendation):
 - The Remotes-view route shows nothing: no notification, no dialog, and no switch to the Extensions view.
 - The palette route keeps core's error dialog (F-2201 AC-19).
-- F-5102 7.E5 is republished to match. F-2201 and F-5102 AC-36 are unchanged.
+- F-5102 7.E5 was republished to match on remote-oss/remote-explorer#9 (2026-10-19). Its test plan's
+  broken-configuration entry now expects nothing shown on that route for AC-36. F-2201 and F-5102 AC-36 are
+  unchanged.
 - (b), a parse error of remote-ssh's own on every route, was declined: it would change the palette route too and
   show a message no observed run showed (R-60).
 
