@@ -235,14 +235,12 @@ describe('the registration of the container connector (card containers-08)', () 
     );
   });
 
-  it('F-0503 AC-2 (our half): a stage the connector reports is the title after the link, and the progress shows the details link', async () => {
+  it('F-0503 AC-2 (our half): a stage the connector reports is the message after the title, which core joins with a colon', async () => {
     const seen = await registered();
     await seen.recording.registered()?.resolve(AUTHORITY, {resolveAttempt: 1});
     deepStrictEqual(
       seen.events.filter(event => event.startsWith('phase')),
-      [
-        'phase [Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal): Installing server',
-      ],
+      ['phase Installing server'],
     );
   });
 
