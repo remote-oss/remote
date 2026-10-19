@@ -192,6 +192,29 @@ reviewed yet.
     - Every engine command is spawned without a shell (F-0201).
 11. **Telemetry is off** for every server start (R-28, R-83; F-0503 BR-17, AC-52). F-0502 AC-15 says otherwise, and
     that's a spec question.
+12. **A paused container is restarted on Retry only** (F-0409 BR-4, 7.E1, AC-7, AC-22; ruled 2026-10-19 on #737).
+    - Every connect that finds the matching container paused fails into F-0410's dialog with S034, as AC-7 says,
+      and leaves the container paused.
+    - Retry reloads the window. Before it does, C8 records that container's id in containers-11's timed store
+      (`globalState`, 5 minutes).
+    - The next connect that finds that container paused with its id recorded stops it (which ends the pause),
+      starts it, connects (AC-22), and clears the entry.
+    - A plain reload, or any other way in, still fails as AC-7 says. No connect stops a paused container on its
+      own, because stopping ends the processes the user paused.
+    - C7 tells a paused container from the other start failures from its inspected state.
+13. **F-0409 AC-4's `devcontainer.metadata` is the pinned CLI's** (ruled 2026-10-19 on #737).
+    - ADR-0009 hands the CLI the configuration unchanged. Putting the resolved `remoteUser` into the label would
+      mean resolving it before `up`, which repeats the CLI's own resolution. So C3 adds no pre-pass.
+    - The row asserts the two path labels, that `devcontainer.metadata` is a JSON array, and that there's no
+      `vsch.*` label. It's named `F-0409 AC-4 (ruling 13: the metadata label is the CLI's)` and tagged
+      `acceptance`, like ruling 11's telemetry row.
+14. **"Rebuild Container" is in release 1's More Actions... pick** (F-0410 BR-4, AC-6; F-0409 BR-13, AC-34; ruled
+    2026-10-19 on #737). This reverses containers-11 §3.5's deferral: P0 criteria assert the item, and for a
+    container Docker refuses to start it's the only way out from the dialog (BR-13).
+    - C8 puts it right after "Reload Window" when a container for the folder and configuration exists at the
+      moment of failure. C7's failure says whether one does.
+    - It runs containers-14's `remote-containers.rebuildContainer`.
+    - Rulings 12 and 14 are both C8 changes, so one card carries them.
 
 ## 4. What must exist before the first card
 
