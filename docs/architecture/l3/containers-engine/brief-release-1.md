@@ -50,12 +50,13 @@ Two features outside the P0 list are in, because core ACs of the P0 features ass
   AC-21 depend on it.
   - **F-0416's environment half isn't in release 1** (ruled 2026-10-19, #1049 and #737). This covers `userEnvProbe`,
     `remoteEnv` and the terminal and task environment (5.0 steps 7–8, BR-9 to BR-11b, 6.10, 7.E5–7.E7). No P0
-    criterion asserts it. F-0503 AC-45 only says that `remoteEnv`'s `HOME` doesn't move the server folder, and that
-    holds while `remoteEnv` is ignored, so it's a core row now and stays one. Until the user moves the half in, its
-    criteria are `deferred` with the reason `containers release 1: later (the remote environment, F-0416)`, AC-46
-    and AC-47 included: their 10-second limit and their "connects with no dialog" belong to our probe (BR-11b), and
-    only AC-47's terminal message is core's. Today the server and everything it starts see only the container's own
-    environment (`containerEnv`).
+    criterion asserts it. Until the user moves the half in, a criterion that needs it applied is `deferred` with the
+    reason `containers release 1: later (the remote environment, F-0416)`. That includes AC-46, whose 10-second
+    delay is our probe's (BR-11b). A criterion whose assertion holds and means something with the half absent gets
+    its row in this release, and keeps it when the half comes in:
+    - F-0503 AC-45: `remoteEnv`'s `HOME` doesn't move the server folder, and no `HOME` folder is made;
+    - F-0416 AC-47: the window connects with no dialog from us, and the terminal's message is core's.
+    Today the server and everything it starts see only the container's own environment (`containerEnv`).
   - **The design, for when it comes in.** It's ours. The CLI applies both properties only to the lifecycle commands
     it runs itself, and the server keeps the environment it's started with. C10 builds the environment once per
     connection, so a reload with a reused server picks up an edit (6.10):
