@@ -6,7 +6,7 @@ reverses containers-11 §3.5 (the four-item pick). Card containers-46 (#1060) ha
 criteria; this card brings AC-22's rows and the rest of AC-34's.
 
 Sources: F-0409 (remote-oss/remote-containers#23) 6.3, 6.5, 7.E1, 7.E6, BR-4, BR-13, AC-7, AC-22, AC-34; F-0410
-AC-5; cards containers-11 (C8, the timed store), containers-14 (the rebuild commands and their intent).
+(#28) 5.0 step 4, 7.E2, BR-4, BR-8, AC-5, AC-6, AC-11b, AC-12b; cards containers-11 (C8, the timed store), containers-14 (the rebuild commands and their intent).
 
 ## 1. The rules
 
@@ -57,9 +57,8 @@ export interface FailedContainer {
   and `rebuildContainer(): PromiseLike<unknown>`. On Retry, when the holder says `paused`, it stores the entry and
   then returns `'reload'`; a failed store is logged and the reload still happens. `quickPickOf` takes whether a
   container exists, and adds the item; `showQuickPick` runs `rebuildContainer()` for it.
-- `surfaces/failure-strings.ts`: the item's label. Take its string id from the F-0202 or F-0410 string table (the
-  pick's other items are there: S289, S260, S256); if neither table has it, use the rebuild command's own title
-  (the `commands.Rebuildcontainer.title` key, `Rebuild Container`) through `translate`, and say so in the PR.
+- `surfaces/failure-strings.ts`: the item's label is S285, `Rebuild Container` (F-0410 BR-4; the id containers-11
+  §3.5 names).
 - `extension.ts`: the two new ports (the timed store over `context.globalState`; `vscode.commands.executeCommand(
   'remote-containers.rebuildContainer')`).
 
@@ -78,8 +77,18 @@ cleared on success. Every branch of the changed files at 100 %.
 | P2 | `F-0409 AC-7, ruling 12 (p7b): without Retry, a second reload of a paused container fails again and leaves it paused` | P1's setup up to the dialog; then answer `More Actions...`, Escape the pick, and reload the window | the same dialog again; the container is `paused` |
 | P3 | `F-0409 AC-34 (p34b): More Actions... offers Rebuild Container when the container exists, and it connects the window to a new container` | containers-46 R5's setup (exited, bind source gone, the S018 dialog); delete the `mounts` entry from the configuration; `answerDialog(name, 'More Actions...')` | the pick's items are `Reload Window`, `Rebuild Container`, `Edit devcontainer.json Locally`, `Open Recent...`, `Open Documentation`; choosing `Rebuild Container` (the pick helper of `windows/renderer.ts`; add one that chooses an item by label if it has none) connects the window; `devContainersOf(folder)` is one id other than `<id>`, and `<id>` no longer exists |
 
-Then F-0409 AC-22 and AC-34 become `acceptance` in `coverage-containers-r1.tsv`, and containers-11's pick rows
-(`recovery.test.ts`, r4) keep their four items: they fail before a container exists.
+| P4 | `F-0410 AC-12b (p12b): after a port conflict leaves a created container, Retry starts that same container` | containers-11's r3 setup (`recovery.test.ts`: a port already published, the S019 dialog, the `Created` container left); then `answerDialog(name, 'Retry')` | measure first. The spec expects the same container id started, and the window connected or the S019 dialog again; assert what the product does if it is one of those two, else it's an open row |
+
+P3 also cites F-0410 AC-6 and AC-11b (its name starts `F-0409 AC-34, F-0410 AC-6, AC-11b (p34b): …`). The "absent"
+half of F-0410 AC-6 is containers-11's r4 row and the b25 row of `reuse.test.ts` (F-0405 AC-25): both fail before a
+container exists (a rebuild removes the old container first, F-0405 BR-17), so their four items stay right. Add
+`F-0410 AC-6` to the start of r4's name.
+
+**The catalogue (`coverage-containers-r1.tsv`):** F-0409 AC-22 and AC-34 and F-0410 AC-6, AC-11b and AC-12b become
+`acceptance` (their `deferred` reason, "the More Actions... rebuild item is the recovery path, later", goes).
+
+**containers-11's card:** in `task-containers-11-recovery-dialog.md` §3.5, replace the "Not in release 1" bullet with
+one line: `"Rebuild Container" (S285) is added by containers-47 (#1064), athena's ruling 14 on #737.`
 
 ## 4. Gates, review and open rows
 
@@ -87,5 +96,5 @@ All gates; the `containers` launch locally. PR title: `remote-containers: Retry 
 Actions... offers Rebuild Container (card containers-47, #1064)`. Request athena only; hermes assigns the peer.
 
 **Open rows (stop and report on the issue):** `docker stop` refuses a paused container on the run's engine; the
-rebuild command doesn't run in a window whose connect failed; r4's container-less failure turns out to have a
-container.
+rebuild command doesn't run in a window whose connect failed; r4's or b25's failure turns out to have a container;
+P4 shows neither outcome.
