@@ -609,8 +609,9 @@ Rules:
   connect; the transfer deletes a kept entry in no other case (ruled 2026-10-08, #158). (Ruled
   2026-10-08, corrected the same day: a plain same-host rule would fail every GitHub release download.)
 - Credentials (ruled 2026-10-16, #1033). A client download reads credentials from the client's netrc file only:
-  the file `NETRC` names, else `~/.netrc`, else on Windows `%USERPROFILE%\_netrc`. Each request of the redirect chain
-  gets Basic `Authorization` only when its host has its own `machine` entry, its scheme is https, and the user
+  when `NETRC` is set and not empty, the file it names and no other (a missing file there means no credentials);
+  else `~/.netrc`, else on Windows `%USERPROFILE%\_netrc`. Each request of the redirect chain gets Basic
+  `Authorization` only when its host has its own `machine` entry, its scheme is https, and the user
   name and password are both present. The header is built per request and never carried to another host. The
   `default` entry and `macdef` are ignored, because `default` would send the credential to any host, a redirect
   target included. A matching entry on an http request is not sent, and the log says so once. The file is read once
@@ -618,11 +619,12 @@ Rules:
   credentials. A source that takes a query token keeps working through the template form of the override. A
   host-side download (`hostFirst`) runs the host's own tools and is not changed. Logs never show the header, the
   password or the file's contents.
-- A final response of 401 or 403 fails at once as `localDownload`, cause `unauthorized`, with its status. Like every
-  client download failure it gets no retry (F-2405 AC-12); V3's placement fallback is unchanged. Its STR:S071 {0}
-  starts as for any HTTP error, `Server returned 401` or `Server returned 403` (F-2405 AC-12), then says the source
-  asked for credentials and names the host and both ways to provide them (a netrc `machine` entry, or a token in
-  the template).
+- A final response of 401 or 403 fails at once as `localDownload`, cause `unauthorized`, with its status. It is not
+  retried, because a retry can't succeed: Remote-SSH retries no client download anyway (F-2405 AC-12), and Dev
+  Containers skips, for this cause only, the one retry it gives every other `localDownload` (F-0503 7.E2). V3's
+  placement fallback is unchanged. Its STR:S071 {0} starts as for any HTTP error, `Server returned 401` or `Server
+  returned 403` (F-2405 AC-12), then a colon and the hint: the source asked for credentials, the host, and both ways
+  to provide them (a netrc `machine` entry, or a token in the template).
 - Bounds are the library's (R-79): `DownloadRequest` carries `deadlineMilliseconds` (the whole transfer),
   `stallMilliseconds` (no bytes for that long ends it) and `maximumBytes` (the content length when known, else the
   library's default ceiling, 1 GiB; the values are lib-server's named defaults, ruled on #253 Q7), plus cancellation; the port implements them and the library proves them with a fake port
