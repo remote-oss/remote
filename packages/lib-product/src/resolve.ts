@@ -5,8 +5,10 @@
 
 import {type Expansion, expand, type PlaceholderValues} from './expand.ts';
 import type {OverridePolicy, SettingsLayer} from './policies.ts';
+import type {ResolutionStep} from './resolution-step.ts';
 import {BUILT_IN_SOURCES} from './product-table.ts';
 import type {ProductProfile} from './profile.ts';
+import {type RedirectRule, redirectRuleFor} from './redirect-rule.ts';
 
 /** The host's platform, as the server archives name it. */
 export interface HostPlatform {
@@ -19,9 +21,6 @@ export interface OverrideValue {
   readonly value: string;
   readonly layer: SettingsLayer;
 }
-
-/** The step that produced the URL. */
-export type ResolutionStep = 'override' | 'productTemplate' | 'builtInTable';
 
 /** Why a template gave no URL. */
 export type TemplateProblem = Exclude<Expansion, {kind: 'url'}>;
@@ -38,6 +37,8 @@ export type ArchiveResolution =
       readonly kind: 'resolved';
       readonly address: string;
       readonly step: ResolutionStep;
+      /** The hosts the download may be redirected to, by the step that chose the source. */
+      readonly redirect: RedirectRule;
       /** The facts the licence gate needs. */
       readonly urlHost: string;
       readonly serverLicenseEmpty: boolean;
@@ -71,11 +72,13 @@ function resolvedAt(
   step: ResolutionStep,
   skipped: readonly SkippedSource[],
 ): ArchiveResolution {
+  const urlHost = new URL(address).hostname;
   return {
     kind: 'resolved',
     address,
     step,
-    urlHost: new URL(address).hostname,
+    redirect: redirectRuleFor(profile, step, urlHost),
+    urlHost,
     serverLicenseEmpty: profile.serverLicense.length === 0,
     skipped,
   };

@@ -162,6 +162,17 @@ describe('the server steps: plan', () => {
     );
   });
 
+  it("server-22: the download plan carries the resolution's redirect rule", () => {
+    const steps = createServerSteps(dependencies());
+    const result = steps.plan(INPUT, HOST);
+    deepStrictEqual(
+      'plan' in result && result.plan.kind === 'download'
+        ? result.plan.redirect
+        : result,
+      {kind: 'any'},
+    );
+  });
+
   it('names the host an Alpine one when it runs musl', () => {
     const steps = createServerSteps(dependencies());
     const result = steps.plan(INPUT, {...HOST, libc: 'musl'});

@@ -41,6 +41,7 @@ export const PROFILE: ProductProfile = {
   dataFolderName: '.fixture',
   tunnelApplicationName: 'fixture-tunnel',
   urlProtocol: 'fixture',
+  serverDownloadRedirectHosts: [],
   serverDownloadUrlTemplate: '',
   cliDownloadUrlTemplate: '',
   updateUrl: '',

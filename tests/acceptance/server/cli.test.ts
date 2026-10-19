@@ -114,6 +114,7 @@ describe('V7a the CLI on a real host', function () {
         notes: [],
       },
       address: ADDRESS,
+      redirect: {kind: 'any'},
       transfer: {
         clientFolder: process.env.TMPDIR ?? '/tmp',
         cache: {kind: 'none'},

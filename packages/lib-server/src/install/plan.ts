@@ -1,4 +1,4 @@
-import type {TemplateProblem} from 'lib-product';
+import type {RedirectRule, TemplateProblem} from 'lib-product';
 import {
   type CliModeInput,
   decideCliMode,
@@ -39,7 +39,7 @@ export interface PlanInput {
   /** V9's server tree, when the server installs into one; its complete state is the `tree` layout. */
   installTree?: string;
   source:
-    | {kind: 'resolved'; address: string}
+    | {kind: 'resolved'; address: string; redirect: RedirectRule}
     | {kind: 'noSource'}
     | {kind: 'invalidOverride'; problem: TemplateProblem};
 }
@@ -59,6 +59,8 @@ export type Plan =
       where: 'host' | 'client';
       clientFallback: boolean;
       address: string;
+      /** The hosts the download may be redirected to. */
+      redirect: RedirectRule;
       installFolder: string;
       /** The tree the script extracts into and links to; empty for an install in the data folder. */
       installTree: string;
@@ -174,6 +176,7 @@ export function plan(input: PlanInput): {plan: Plan} | {failure: PlanFailure} {
       where: placement.where,
       clientFallback: placement.clientFallback,
       address: input.source.address,
+      redirect: input.source.redirect,
       installFolder: `${dataFolder}/bin/${input.commit}`,
       installTree: input.installTree ?? '',
       dataFolder,

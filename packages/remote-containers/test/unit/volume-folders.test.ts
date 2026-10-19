@@ -37,6 +37,7 @@ const PROFILE: ProductProfile = {
   quality: 'stable',
   serverApplicationName: 'codium-server',
   serverDataFolderName: '.vscodium-server',
+  serverDownloadRedirectHosts: [],
   serverDownloadUrlTemplate: '',
   serverLicense: [],
   serverLicenseUrl: '',

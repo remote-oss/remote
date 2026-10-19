@@ -4,6 +4,7 @@
  */
 
 import type {HostChannel} from 'lib-host';
+import type {RedirectRule} from 'lib-product';
 import type {Plan} from '../install/plan.ts';
 import type {ScriptParameters} from '../scripts/bootstrap.ts';
 import {
@@ -44,6 +45,8 @@ export interface CliPlacement {
   plan: Extract<Plan, {kind: 'cli'}>;
   /** The CLI archive's address. */
   address: string;
+  /** The hosts the CLI's download may be redirected to. */
+  redirect: RedirectRule;
   /** The transfer's own inputs: the client side's folders, limits and checks. */
   transfer: Omit<
     TransferInput,
@@ -79,6 +82,7 @@ export async function installCli(
       where: plan.where,
       clientFallback: plan.clientFallback,
       address: placement.address,
+      redirect: placement.redirect,
       installFolder: plan.cliPath,
       installTree: '',
       dataFolder: plan.dataFolder,

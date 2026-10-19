@@ -37,6 +37,7 @@ const PROFILE: ProductProfile = {
   quality: 'stable',
   serverApplicationName: 'fixture-server',
   serverDataFolderName: '.fixture-server',
+  serverDownloadRedirectHosts: [],
   serverDownloadUrlTemplate: '',
   serverLicense: [],
   serverLicenseUrl: '',
@@ -420,6 +421,27 @@ describe('the server steps of a connect (card containers-08)', () => {
       'https://example.invalid/server-linux-x64.tar.gz',
       'https://product.invalid/linux-x64-abc123.tar.gz',
       'https://github.com/VSCodium/vscodium/releases/download/1.2.3/vscodium-reh-linux-x64-1.2.3.tar.gz',
+    ]);
+  });
+
+  it("server-22: the download is handed the resolution's redirect rule", async () => {
+    const withTemplate: ProductProfile = {
+      ...PROFILE,
+      serverDownloadUrlTemplate:
+        'https://product.invalid/${os}-${arch}-${commit}.tar.gz',
+      serverDownloadRedirectHosts: ['cdn.product.invalid'],
+    };
+    const rules = [];
+    for (const [profile, override] of [
+      [PROFILE, OVERRIDE],
+      [withTemplate, undefined],
+    ] as const) {
+      const {seen} = await runSteps(channelOf(), {profile, override});
+      rules.push(seen.downloads[0]?.redirect);
+    }
+    deepStrictEqual(rules, [
+      {kind: 'any'},
+      {kind: 'hosts', hosts: ['product.invalid', 'cdn.product.invalid']},
     ]);
   });
 

@@ -7,7 +7,7 @@
 import path from 'node:path';
 import {hostPathOf, type ChannelFailure, type HostChannel} from 'lib-host';
 import type {Logger} from 'lib-log';
-import {allowedRedirectHosts} from 'lib-product';
+import {redirectAllows} from 'lib-product';
 import type {Plan} from '../install/plan.ts';
 import {runStep, type StepRun} from '../lifecycle/run-step.ts';
 import {
@@ -446,35 +446,17 @@ function schemeStrength(address: URL): number {
   return address.protocol === 'http:' ? 1 : 0;
 }
 
-/**
- * Whether a final address is on the source's host or on a host the product table lists for that source, and not
- * reached over a weaker scheme than the source's.
- */
-function isAllowedFinalHost(
-  sourceAddress: string,
-  finalAddress: string,
-): boolean {
-  if (!URL.canParse(finalAddress) || !URL.canParse(sourceAddress)) {
+/** Whether a final address is on a host the plan's redirect rule allows, and not reached over a weaker scheme than the source's. */
+function isAllowedFinalHost(plan: DownloadPlan, finalAddress: string): boolean {
+  if (!URL.canParse(finalAddress) || !URL.canParse(plan.address)) {
     return false;
   }
-  const source = new URL(sourceAddress);
+  const source = new URL(plan.address);
   const final = new URL(finalAddress);
-  const finalHost = final.hostname.toLowerCase();
-  const sourceHost = source.hostname.toLowerCase();
   return (
     schemeStrength(final) >= Math.max(schemeStrength(source), 1) &&
-    (finalHost === sourceHost ||
-      allowedRedirectHosts(sourceHost).includes(finalHost))
+    redirectAllows(plan.redirect, final.hostname)
   );
-}
-
-/** The hosts a download from the source address may end on: the source's own and the ones the table lists for it. */
-function allowedHostsOf(sourceAddress: string): readonly string[] {
-  if (!URL.canParse(sourceAddress)) {
-    return [];
-  }
-  const sourceHost = new URL(sourceAddress).hostname.toLowerCase();
-  return [sourceHost, ...allowedRedirectHosts(sourceHost)];
 }
 
 /** An address for the log: its origin and path, never the query, the fragment or a user name, which may hold a token. */
@@ -488,7 +470,7 @@ function addressForLog(address: string): string {
 
 /**
  * Downloads the archive to `destination` and checks it. The failure when it did not work, or nothing when the file is
- * good. The time and the size are bounded, the final host must be the source's or one the table lists for it, and
+ * good. The time and the size are bounded, the final host must be one the plan's redirect rule allows, and
  * the final address is logged.
  */
 async function fetchVerified(
@@ -505,7 +487,7 @@ async function fetchVerified(
       address: input.plan.address,
       destination,
       cancellation: limit,
-      allowedHosts: allowedHostsOf(input.plan.address),
+      redirect: input.plan.redirect,
       ...input.downloadBounds,
       onPercent: percent => {
         dependencies.onPhase({kind: 'progress', step: 'download', percent});
@@ -523,7 +505,7 @@ async function fetchVerified(
   dependencies.logger.info(
     `downloaded from ${addressForLog(downloaded.finalAddress)}`,
   );
-  if (!isAllowedFinalHost(input.plan.address, downloaded.finalAddress)) {
+  if (!isAllowedFinalHost(input.plan, downloaded.finalAddress)) {
     return failed({kind: 'serverDownload', cause: 'redirectHost'});
   }
   if (

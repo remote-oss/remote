@@ -14,6 +14,7 @@ import {
   type LicenceFacts,
   type OverrideValue,
   type ProductProfile,
+  redirectRuleFor,
   resolveServerArchive,
 } from 'lib-product';
 import {
@@ -123,7 +124,11 @@ type ServerStepNames =
 function sourceOf(resolution: ArchiveResolution): PlanInput['source'] {
   switch (resolution.kind) {
     case 'resolved':
-      return {kind: 'resolved', address: resolution.address};
+      return {
+        kind: 'resolved',
+        address: resolution.address,
+        redirect: resolution.redirect,
+      };
     case 'noSource':
       return {kind: 'noSource'};
     default:
@@ -438,6 +443,11 @@ export function createServerSteps(
         {
           plan: cliPlan,
           address: plannedCliAddress(),
+          redirect: redirectRuleFor(
+            profile,
+            'productTemplate',
+            new URL(plannedCliAddress()).hostname,
+          ),
           transfer: {
             clientFolder: dependencies.clientFolder,
             cache: dependencies.archiveCache,

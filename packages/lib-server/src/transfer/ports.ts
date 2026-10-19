@@ -1,3 +1,5 @@
+import type {RedirectRule} from 'lib-product';
+
 /** What the download's response announced about the body, to check it against. */
 export interface DownloadFacts {
   /** The hex SHA-256 the redirect chain announced, in any letter case. */
@@ -50,7 +52,7 @@ export interface DownloadRequest extends DownloadBounds {
    * The hosts the download may be redirected through and end on. The port stops at the first redirect to another
    * host; the library checks the final address again.
    */
-  allowedHosts: readonly string[];
+  redirect: RedirectRule;
   /** Receives the share downloaded so far, an integer from 0 to 100, while the body arrives. */
   onPercent: (percent: number) => void;
 }

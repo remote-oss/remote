@@ -9,6 +9,7 @@ import {mkdir} from 'node:fs/promises';
 import path from 'node:path';
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
+import {redirectAllows} from 'lib-product';
 import type {DownloadPort, DownloadRequest, DownloadResult} from './ports.ts';
 
 /** The one HTTP call the download makes: a GET that follows no redirect by itself. */
@@ -25,9 +26,14 @@ async function finalResponse(
   request: DownloadRequest,
 ): Promise<{response: Response; address: string} | {refused: string}> {
   let address = request.address;
+  const firstProtocol = new URL(address).protocol;
   for (let redirects = 0; redirects <= MAXIMUM_REDIRECTS; redirects++) {
-    if (!request.allowedHosts.includes(new URL(address).hostname)) {
-      return {refused: `redirected to ${new URL(address).hostname}`};
+    const {hostname, protocol} = new URL(address);
+    if (!redirectAllows(request.redirect, hostname)) {
+      return {refused: `redirected to ${hostname}`};
+    }
+    if (protocol !== firstProtocol && protocol === 'http:') {
+      return {refused: `redirected to ${hostname} over http`};
     }
     const response = await httpGet(address, {
       redirect: 'manual',
@@ -38,7 +44,6 @@ async function finalResponse(
       return {response, address};
     }
     await response.body?.cancel();
-    // A redirect from https to http is not refused here; the library checks the final address.
     address = new URL(next, address).toString();
   }
   return {refused: 'too many redirects'};

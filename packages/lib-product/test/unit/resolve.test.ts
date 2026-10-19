@@ -24,11 +24,95 @@ const SSH_POLICY = policyOf('remote-ssh');
 const CONTAINERS_POLICY = policyOf('remote-containers');
 const LINUX_X64 = {operatingSystem: 'linux', architecture: 'x64'};
 
+const GITHUB_RULE = {
+  kind: 'hosts',
+  hosts: [
+    'github.com',
+    'objects.githubusercontent.com',
+    'release-assets.githubusercontent.com',
+  ],
+};
+
+function redirectOf(resolution: ArchiveResolution): unknown {
+  return resolution.kind === 'resolved' ? resolution.redirect : resolution.kind;
+}
+
 function resolvedAddress(resolution: ArchiveResolution): string {
   return resolution.kind === 'resolved' ? resolution.address : resolution.kind;
 }
 
 describe('resolveServerArchive', () => {
+  describe('the redirect rule (card server-22)', () => {
+    const OVERRIDE = {layer: 'defaultProfileUser'} as const;
+
+    it('an override gives any host, in the base-URL form and the template form', () => {
+      const profile = fixtureProfile('vscodium-reduced');
+      deepStrictEqual(
+        [
+          'https://archives.example.invalid',
+          'https://archives.example.invalid/${os}-${arch}.tar.gz',
+        ].map(value =>
+          redirectOf(
+            resolveServerArchive(profile, LINUX_X64, CONTAINERS_POLICY, {
+              ...OVERRIDE,
+              value,
+            }),
+          ),
+        ),
+        [{kind: 'any'}, {kind: 'any'}],
+      );
+    });
+
+    it("a product template gives its host, the product's listed hosts lower-cased without repeats, and the table's", () => {
+      deepStrictEqual(
+        redirectOf(
+          resolveServerArchive(
+            fixtureProfile('synthetic', {
+              serverDownloadUrlTemplate:
+                'https://dl.example.com/${commit}/server-${os}-${arch}.tar.gz',
+              serverDownloadRedirectHosts: [
+                'cdn.example.com',
+                'CDN.Example.com',
+              ],
+            }),
+            LINUX_X64,
+            SSH_POLICY,
+          ),
+        ),
+        {kind: 'hosts', hosts: ['dl.example.com', 'cdn.example.com']},
+      );
+    });
+
+    it('a product template on github.com with no list gives github.com and the two table hosts', () => {
+      deepStrictEqual(
+        redirectOf(
+          resolveServerArchive(
+            fixtureProfile('vscodium-reduced'),
+            LINUX_X64,
+            SSH_POLICY,
+          ),
+        ),
+        GITHUB_RULE,
+      );
+    });
+
+    it("a built-in table source ignores the profile's list", () => {
+      deepStrictEqual(
+        redirectOf(
+          resolveServerArchive(
+            fixtureProfile('vscodium-reduced', {
+              serverDownloadUrlTemplate: '',
+              serverDownloadRedirectHosts: ['cdn.example.com'],
+            }),
+            LINUX_X64,
+            SSH_POLICY,
+          ),
+        ),
+        GITHUB_RULE,
+      );
+    });
+  });
+
   describe('resolution order (F-3902 rule 1, F-1402 rule 4)', () => {
     it('takes the override first', () => {
       deepStrictEqual(
@@ -45,6 +129,7 @@ describe('resolveServerArchive', () => {
           kind: 'resolved',
           address: 'https://archives.example.invalid/linux-x64.tar.gz',
           step: 'override',
+          redirect: {kind: 'any'},
           urlHost: 'archives.example.invalid',
           serverLicenseEmpty: true,
           skipped: [],
@@ -280,6 +365,7 @@ describe('resolveServerArchive', () => {
           address:
             'https://github.com/VSCodium/vscodium/releases/download/1.135.06055/vscodium-reh-linux-x64-1.135.06055.tar.gz',
           step: 'builtInTable',
+          redirect: GITHUB_RULE,
           urlHost: 'github.com',
           serverLicenseEmpty: true,
           skipped: [
