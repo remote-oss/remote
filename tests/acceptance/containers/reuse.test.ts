@@ -678,13 +678,16 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
             dialog: dialogTexts,
             containers: await devContainersOf(folder),
             status: (await inspectOf(containerId)).status,
-            mount,
+            mount:
+              mount === undefined
+                ? undefined
+                : [mount.Type, mount.Source, mount.Destination],
           },
           {
             dialog: ['', S018, RECOVERY_BUTTONS],
             containers: [containerId],
             status: 'running',
-            mount: {Type: 'bind', Source: source, Destination: '/bind'},
+            mount: ['bind', source, '/bind'],
           },
         );
         await closeWindow(name);
