@@ -11,7 +11,7 @@ Who chose the source decides which hosts a redirect may reach:
 
 | Resolution step | Hosts the download may follow and end on |
 |---|---|
-| `override` | any host, over https |
+| `override` | any host |
 | `productTemplate` | the template's own host, the hosts `product.json` lists in `serverDownloadRedirectHosts`, and `allowedRedirectHosts(templateHost)` from the table |
 | `builtInTable` | the source host and `allowedRedirectHosts(sourceHost)`, as today |
 

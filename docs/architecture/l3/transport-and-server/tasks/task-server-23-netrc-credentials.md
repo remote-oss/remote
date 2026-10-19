@@ -6,8 +6,9 @@ it before starting. **Start after server-22 (#1036) merges**: both cards edit `D
 
 ## 1. The rule
 
-- **Source:** the client's netrc file: `NETRC` when set and not empty, else `~/.netrc`, else on Windows
-  `%USERPROFILE%\_netrc`. The first of these files that exists is read.
+- **Source:** the client's netrc file. When `NETRC` is set and not empty, the file it names is the only one read: a
+  missing file there gives no credentials, with no fallback to `~/.netrc`. Otherwise `~/.netrc`, and on Windows, when
+  that does not exist, `%USERPROFILE%\_netrc`.
 - **Match:** a `machine` entry whose name equals the request's host (`URL.hostname`, ignoring case; the port is
   ignored) and that has both `login` and `password`, neither empty. The first matching entry wins. `default` and
   `macdef` are ignored.
@@ -53,9 +54,10 @@ export interface CredentialsPort {
 
 `transfer/node-netrc.ts` (new, exported from `index.ts`):
 `nodeCredentialsPort(places: {environment: Readonly<Record<string, string | undefined>>; platform: NodeJS.Platform; homeFolder: string}): CredentialsPort`.
-It tries, in order, `environment.NETRC` (when not empty), `<homeFolder>/.netrc`, and on `win32` also
-`<homeFolder>/_netrc`; the first that reads gives its text; `ENOENT` goes to the next and ends in `undefined`; any
-other error is thrown.
+When `environment.NETRC` is set and not empty, that path is the only candidate: its text, or `undefined` on `ENOENT`
+(never `~/.netrc` then). Otherwise it tries `<homeFolder>/.netrc`, and on `win32` also `<homeFolder>/_netrc`, in that
+order; the first that reads gives its text, `ENOENT` goes to the next and ends in `undefined`. Any other error is
+thrown.
 
 ### 2.3 The transfer and the download
 
@@ -80,7 +82,7 @@ other error is thrown.
 - `transfer.ts`: `TransferFailure`'s `localDownload` cause union gains `'unauthorized'`; `downloadFailure` maps the
   port's cause to it, keeping `status` and `detail`.
 - `remote-ssh/src/pipeline/failure.ts` (`localDownloadValue`): `unauthorized` returns
-  `Server returned <status>. <detail>` (athena on #1033, contracts §5 V4 in #1042): it starts as for any HTTP error
+  `Server returned <status>: <detail>` (athena on #1033, contracts §5 V4 in #1042): it starts as for any HTTP error
   (`Server returned 401`, F-2405 AC-12), then the hint. So connect-38 R4's list of S071 `{0}` forms gets a fourth
   case. `remote-containers/src/connect/server-steps.ts`: the one retry of a `localDownload` runs only when the
   failure's cause is not `unauthorized`; the log line `the server was not installed: localDownload (unauthorized):
@@ -95,7 +97,7 @@ any host; an entry with only a login, or an empty password, dropped; `account` s
 with no token; empty text. `authorizationOf`: a host matched ignoring case gets `Basic …` of the exact bytes; another
 host gets none; an http address gets none, and the log line is written once for two http addresses.
 
-`lib-server/test/unit/node-netrc.test.ts` (real temporary folder): `NETRC` wins over `~/.netrc`; `~/.netrc`; `_netrc`
+`lib-server/test/unit/node-netrc.test.ts` (real temporary folder): `NETRC` wins over `~/.netrc`; `NETRC` naming a missing file gives `undefined` even when `~/.netrc` exists; an empty `NETRC` is ignored; `~/.netrc`; `_netrc`
 only on `win32`; none gives `undefined`; an unreadable path (a folder) throws.
 
 `lib-server/test/unit/http-download.test.ts` (fake `httpGet`): the header is set on a hop whose host has an entry;
@@ -108,7 +110,7 @@ logged and the download goes on; an `unauthorized` result is a `localDownload` /
 status; an `unauthorized` failure follows the same placement fallback as `httpStatus` (the existing fallback row, repeated for it); a log capture shows neither the password nor the login nor the file's text in any row above.
 
 `remote-containers` server-steps test: a first failure with cause `unauthorized` is not retried (one transfer call);
-an `httpStatus` failure still is. `remote-ssh` `failure.test.ts`: S071's value for 401 is `Server returned 401. ` followed by the detail, for 403 likewise with `403`; the other three forms are unchanged.
+an `httpStatus` failure still is. `remote-ssh` `failure.test.ts`: S071's value for 401 is `Server returned 401: ` followed by the detail, for 403 likewise with `403`; the other three forms are unchanged.
 
 **Mutations** (list them in the PR): build the header once for the chain and the other-host row fails; drop the
 scheme test and the http row fails; let `default` match and the default row fails; drop the 401 branch and the retry
