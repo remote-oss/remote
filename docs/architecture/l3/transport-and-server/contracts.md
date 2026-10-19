@@ -618,9 +618,11 @@ Rules:
   credentials. A source that takes a query token keeps working through the template form of the override. A
   host-side download (`hostFirst`) runs the host's own tools and is not changed. Logs never show the header, the
   password or the file's contents.
-- A final response of 401 or 403 fails at once as `localDownload`, cause `unauthorized`, with its status, and is not
-  retried: the retry can't succeed. Its STR:S071 detail says the source asked for credentials and names the host
-  and both ways to provide them (a netrc `machine` entry, or a token in the template).
+- A final response of 401 or 403 fails at once as `localDownload`, cause `unauthorized`, with its status. Like every
+  client download failure it gets no retry (F-2405 AC-12); V3's placement fallback is unchanged. Its STR:S071 {0}
+  starts as for any HTTP error, `Server returned 401` or `Server returned 403` (F-2405 AC-12), then says the source
+  asked for credentials and names the host and both ways to provide them (a netrc `machine` entry, or a token in
+  the template).
 - Bounds are the library's (R-79): `DownloadRequest` carries `deadlineMilliseconds` (the whole transfer),
   `stallMilliseconds` (no bytes for that long ends it) and `maximumBytes` (the content length when known, else the
   library's default ceiling, 1 GiB; the values are lib-server's named defaults, ruled on #253 Q7), plus cancellation; the port implements them and the library proves them with a fake port
