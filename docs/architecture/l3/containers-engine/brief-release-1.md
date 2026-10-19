@@ -69,6 +69,11 @@ Two features outside the P0 list are in, because core ACs of the P0 features ass
        acceptance row proves it on a terminal.
     4. It isn't `environmentSetup`: that is sourced once at the server's start, so a reused server would keep the
        old environment.
+    5. Core's server resolves a login-shell environment of its own for the extension host and terminals
+       (`buildUserEnvironment`, `getResolvedShellEnv` [oss]). Left on, `userEnvProbe: none` couldn't hide a login-only
+       variable. So every Containers server start passes `--force-disable-user-env` (`forceDisableUserEnv`, the
+       remote-containers row of the transport contracts' §5.0 allow-list; proteus and athena on #737), whatever
+       `userEnvProbe` says, and our probe is the only source. remote-ssh has no probe and keeps core's resolution.
 - **F-0419, the server-cache half of the `vscode` volume.** F-0503's main path (5.0 steps 4–5, BR-1 to BR-4) installs
   into `/vscode/vscode-server/bin/<platform>/<commit>` with a symlink from `~/.vscode-server/bin/<commit>`. F-0201 AC-1
   asserts the volume, and F-0419 is one of the three recorded containers suites. The extension-cache half goes to
