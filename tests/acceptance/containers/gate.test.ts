@@ -55,7 +55,7 @@ const PRE_RELOAD_TOAST = 'Connecting to Dev Container (show log)';
 describe('Dev Containers release 1 gate rows (card containers-09)', function () {
   this.timeout(600_000);
 
-  it('F-0201 AC-2 (gate-row-8): a bogus dockerPath shows the pre-flight dialog before any reload, twice, and changes nothing', async () => {
+  it('F-0201 AC-2, F-0401 AC-13 (gate-row-8): a bogus dockerPath shows the pre-flight dialog before any reload, twice, and changes nothing', async () => {
     const bogus = path.join(variable('HARNESS_RUN_FOLDER'), 'no-such-docker');
     const folder = devContainerFolder('gate-docker', {name: 'Gate Eight'});
     await setUserSetting('dev.containers.dockerPath', bogus);
