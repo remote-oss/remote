@@ -230,21 +230,21 @@ C0.
 - **remote-ssh's `identifiers.json`** gains `setActiveFolders` as called (push) and corrects `sshHostsChanged` to
   `push` (section 2 ruling 6).
 
-## 5. One spec question, which blocks no explorer card
+## 5. A failed "New Remote": ruled (a), shows nothing
 
-**"New Remote" into a configuration file that doesn't parse.**
-- F-5102 7.E5 (reviewed) says the companion's own parse error shows, as it does from the companion's palette
-  command.
-- F-2201 7.E1 and AC-32 (draft), with my Q1(a) ruling of 2026-10-14 on remote-ssh#28, say the Remotes-view route
-  shows nothing.
-- The explorer calls `opensshremotes.addNewSshHost` with no argument, exactly as the palette does, so remote-ssh
-  can't tell the two routes apart. The specs ask one command for two behaviours.
-- Under Q1(a) the command throws: core shows the error on the palette route, and on the Remotes-view route the
-  error lands in the explorer's awaited call, which shows nothing.
-- The question for the spec side: should remote-ssh show its parse error itself, on every route?
-- The explorer's card is the same under either answer (section 4.3), and F-5102 AC-36 tests only safety. So the
-  question holds only remote-ssh's wording in F-2201, and Q1(a) stands until it's answered. It's filed on
-  remote-ssh#28 and goes to the spec side through hermes.
+The specs disagreed when "New Remote" meets a configuration file that doesn't parse. F-5102 7.E5 said the
+companion's own parse error shows. F-2201 7.E1 and AC-32, with my Q1(a) of 2026-10-14, said the Remotes-view route
+shows nothing. remote-ssh can't tell the two routes apart: the explorer calls `opensshremotes.addNewSshHost` with no
+argument, as the palette does.
+
+**Ruled (a), 2026-10-19, on remote-ssh#28** (the spec side's recommendation):
+- The Remotes-view route shows nothing: no notification, no dialog, and no switch to the Extensions view.
+- The palette route keeps core's error dialog (F-2201 AC-19).
+- F-5102 7.E5 is republished to match. F-2201 and F-5102 AC-36 are unchanged.
+- (b), a parse error of remote-ssh's own on every route, was declined: it would change the palette route too and
+  show a message no observed run showed (R-60).
+
+The explorer side is section 4.3 as written: it awaits the call, swallows the rejection and shows nothing.
 
 ## 6. Cards, in this order
 
