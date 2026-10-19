@@ -29,7 +29,7 @@ behaviour over a table, because a library never imports an extension (layout rul
 | settings | name, key, scope, legacy twin key and the winning side if any | `contributes.configuration`, F-0102 BR-4 |
 | contextKeys | name, key, `extensionSet` or `core` | the identity decision's list |
 | views, authorities, languages | name, id | `contributes.views`, `activationEvents`, `contributes.languages` |
-| internalCommands | id, `served` or `called`, kind `query`, `change` or `push` | the companion and internal list (F-5902 §5) |
+| internalCommands | id, `served` or `called`, kind `query`, `change` or `push`, and for a served id `activates` (absent means true): the identifier check asks for `onCommand:<id>` unless it is false, and reports a false one that names the event (ruling 6 on #636, card #638) | the companion and internal list (F-5902 §5) |
 | runtimeCommands | id, purpose | reference command ids a spec names that the extension registers at runtime only: never contributed, no palette entry, no activation event (a keybinding in a window where the extension never ran gets core's "not found", R-46). The check verifies the namespace and that the id is not contributed; the generator emits them into the table, so code registers the generated id, never a literal (ruled 2026-10-12, #253 Q4; first entry `opensshremotes.showDetails`, F-2304 BR-12) |
 | invented | id, kind, spec, date | the ledger (R-27) |
 
