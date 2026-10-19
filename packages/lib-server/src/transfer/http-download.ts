@@ -20,7 +20,7 @@ export type HttpGet = (
 
 const MAXIMUM_REDIRECTS = 10;
 
-/** The final response of a download and the address it came from, following redirects only through allowed hosts. */
+/** The final response of a download and the address it came from, following redirects only to hosts the rule allows. */
 async function finalResponse(
   httpGet: HttpGet,
   request: DownloadRequest,

@@ -208,10 +208,14 @@ describe('the download of a server archive over fetch (V4)', () => {
     );
   });
 
-  it('server-22: an http source that redirects to another http host in the list is followed', async () => {
+  /** The outcome kind and the last address asked, for a download from an http source that redirects to `target`. */
+  async function fromHttpSource(
+    target: string,
+  ): Promise<[string, string | undefined]> {
     const {port, requested} = portAnswering({
-      'http://source.example.invalid/a': 'http://cdn.example.invalid/b',
+      'http://source.example.invalid/a': target,
     });
+    let result: [string, string | undefined] = ['', undefined];
     await serving(
       () => undefined,
       async (ignored, folder) => {
@@ -223,12 +227,24 @@ describe('the download of a server archive over fetch (V4)', () => {
             },
           }),
         );
-        deepStrictEqual(
-          [outcome.kind, requested.at(-1)],
-          ['downloaded', 'http://cdn.example.invalid/b'],
-        );
+        result = [outcome.kind, requested.at(-1)];
       },
     );
+    return result;
+  }
+
+  it('server-22: an http source that redirects to another http host in the list is followed', async () => {
+    deepStrictEqual(await fromHttpSource('http://cdn.example.invalid/b'), [
+      'downloaded',
+      'http://cdn.example.invalid/b',
+    ]);
+  });
+
+  it('server-22: an http source that redirects to an https host the rule allows is followed', async () => {
+    deepStrictEqual(await fromHttpSource('https://cdn.example.invalid/b'), [
+      'downloaded',
+      'https://cdn.example.invalid/b',
+    ]);
   });
 
   it('V4: more than ten redirects fail', async () => {

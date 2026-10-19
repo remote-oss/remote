@@ -49,8 +49,8 @@ export interface DownloadRequest extends DownloadBounds {
   /** Ends the download: the caller's cancellation, and the deadline. */
   cancellation: AbortSignal;
   /**
-   * The hosts the download may be redirected through and end on. The port stops at the first redirect to another
-   * host; the library checks the final address again.
+   * The hosts the download may be redirected through and end on: any host, or only the listed ones. The port stops
+   * at the first redirect to a host the rule does not allow; the library checks the final address again.
    */
   redirect: RedirectRule;
   /** Receives the share downloaded so far, an integer from 0 to 100, while the body arrives. */
