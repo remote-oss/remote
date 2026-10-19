@@ -215,6 +215,23 @@ reviewed yet.
       moment of failure. C7's failure says whether one does.
     - It runs containers-14's `remote-containers.rebuildContainer`.
     - Rulings 12 and 14 are both C8 changes, so one card carries them.
+15. **F-0303's rebuild notification doesn't exist in release 1, so a step that answers it is vacuous** (ruled
+    2026-10-19 on #737).
+    - F-0303 isn't in the cut. F-0416 AC-25, AC-31, AC-34 and AC-35 answer that notification with "Ignore", and
+      with no notification a reload already leaves it alone, as AC-34's own wording allows.
+    - The rows reload and assert the rest of each criterion, and each row's name cites this ruling.
+    - `release-1-notes.md` says, as interim behaviour, that an edit of the configuration shows no rebuild prompt
+      until F-0303 comes.
+16. **Switching `remoteUser` to another account and reloading connects** (F-0416 6.11, 7.E4, AC-35; ruled
+    2026-10-19 on #737).
+    - 7.E4's failure (S034 after about ten seconds, an exited container) is the reference's own defect: permission
+      errors on `/tmp` files the previous account made. Our server keeps its files per user, so it doesn't arise.
+    - We don't build that failure on purpose (R-60).
+    - AC-35 gets an `acceptance` row that asserts ours: the window connects to the same container as the new
+      account, with no dialog. It's named `F-0416 AC-35 (ruling 16: the switch connects)`, as ruling 11's telemetry
+      row is.
+    - The deviation goes in `release-1-notes.md`, and a spec question on remote-oss/remote-containers#63 asks
+      whether 7.E4 and AC-35 should describe the failure as a requirement at all.
 
 ## 4. What must exist before the first card
 
