@@ -9,15 +9,35 @@ Size: about 1.5 agent-days.
 - explorer-03a/b/c (#629–#631), explorer-04 (#640), explorer-05 (#641) and ssh-provider-01 (#635);
 - tooling-30 (#633) and coverage-25a (#644);
 - tooling-28 (#609): window claims, so an empty window is `local`, `empty-1`, `empty-2` in claim order;
-- for row 7, coverage-23's (#602) reference stand-in, written as coverage-23 specifies (athena's ruling on #603).
+- for row 7, nothing more: the run writes the reference stand-in for its launch before the editor starts (the
+  launch-level `standIns` of `tools/acceptance-launches.ts`, as `containers-standdown` uses it; amended 2026-10-19,
+  replacing the stand-in written while the editor runs).
 
 ## 1. Where the rows live
 
 | Launch | File | Rows |
 |---|---|---|
-| `explorer` | `tests/acceptance/explorer/gate.test.ts` | 1, 2, 3, 4, 5, 7, in this order |
+| `explorer` | `tests/acceptance/explorer/gate.test.ts` | 1, 2, 3, 4, 5, in this order |
+| `explorer-standdown` | `tests/acceptance/explorer-standdown/gate.test.ts` | 7 |
 | `explorer-alone` | `tests/acceptance/explorer-alone/gate.test.ts` | 6 |
 | `explorer-no-proposals` | `tests/acceptance/explorer-no-proposals/gate.test.ts` | 8 |
+
+**The stand-down launch (row 7).** Add it to `tools/acceptance-launches.ts`, right after `explorer-no-proposals`:
+
+```ts
+{
+  ...EXPLORER_LAUNCH,
+  label: 'explorer-standdown',
+  suite: 'explorer-standdown',
+  standIns: ['ms-vscode.remote-explorer'],
+},
+```
+
+The run writes the stand-in into this launch's own extensions folder before the editor starts (`writeStandIns` in
+`tools/acceptance-plain.ts`), so the explorer meets it at its first activation. Add a row to
+`tools/acceptance-launches.test.ts` beside the `containers-standdown` one: the launch exists, installs Remote
+Explorer, and has exactly that stand-in. The suite folder `tests/acceptance/explorer-standdown/` gets the
+`tsconfig.json` of `tests/acceptance/explorer-alone/`, unchanged.
 
 **Helpers** come from `windows/harness.ts` (`inWindow`, `windowEvents`, `windowState`, `recordLines`, `closeWindow`,
 `onHost`) and `windows/renderer.ts` (`viewRows`, `rowAction`, `titleAction`, `notifications`).
@@ -52,7 +72,7 @@ that says what the row checks, write the row with the feature's closest AC and l
 | 4 | `explorer` | in `empty-2`, show the view | the `harness` row's `description` is `connected`; every other host row's is `''`; nothing fails | F-5103 BR-6 and its AC (the marker), F-5902 (the pull decides) |
 | 5 | `explorer` | append `Host gate-added` + `  HostName 127.0.0.1` to the run's `ssh_config` (keep the file's bytes so you can restore them); `titleAction('empty-2', VIEW, REFRESH)` | the rows are row 1's with `gate-added` last among the hosts, and `harness` still marked; nothing fails. Restore the file in a `finally`, then click Refresh again and see `gate-added` gone | F-5101 (Refresh), F-5102 (host list) |
 | 6 | `explorer-alone` | in `local`, show the view; click `REFRESH` | `viewRows('local', VIEW)` is `[]` before and after; nothing fails (F-5902's absent-companion state: no group, no message) | F-5101 7.E1 and its AC, F-5902 AC-2 |
-| 7 | `explorer` | close `empty-2` (row 3's window), write the reference stand-in with the id `ms-vscode.remote-explorer` into this launch's extensions folder (`<run>/extensions-explorer`) as coverage-23 does, open a local window on a new folder `gate-standdown` of the run's folder, show the view there, and run `inWindow('gate-standdown', 'remote-explorer.refresh')` | the coexistence warning is among `notifications('gate-standdown')` (F-5001 3.4, with athena's ruling on #636 that it names no Microsoft id: take the text from explorer-03b's card); `viewRows('gate-standdown', VIEW)` has no `SSH` row; the refresh command fails with `not found` (nothing registered). Remove the stand-in in a `finally` | F-5001 (stand-down), F-5901 (coexistence) |
+| 7 | `explorer-standdown` | in `local`, show the view, and run `inWindow('local', 'remote-explorer.refresh')` | the coexistence warning is among `notifications('local')` (F-5001 3.4, with athena's ruling on #636 that it names no Microsoft id: take the text from explorer-03b's card); `viewRows('local', VIEW)` has no `SSH` row; the refresh command fails with `not found` (nothing registered) | F-5001 (stand-down), F-5901 (coexistence) |
 | 8 | `explorer-no-proposals` | in `local`, run `inWindow('local', 'remote-explorer.refresh')` and `inWindow('local', 'opensshremotes.openEmptyWindow', {host: 'harness'})`, waiting for each to finish or fail | `viewRows('local', VIEW)` is `undefined` (core drops the view without `contribViewsRemote`); at most one setup notice of the family in the record (surface `notice`, the setup text of F-1403 as connect-31 writes it), and none from the explorer itself; `notifications('local')` has no error. The family notice covers the explorer: explorer-03b's `familySetupPortsOf` lists `remote-oss.remote-explorer` among the ids the notice offers. Read where that list reaches the record (03b's card and connect-31's), and assert it | F-3903 (the family gate), F-5001 |
 
 **If a row fails because the product does something else, don't change the row: report it on #645.** These are
@@ -67,13 +87,13 @@ kit's recording can find them.
 ## 4. Gates and review
 
 All gates and `xvfb-run --auto-servernum pnpm -s test:acceptance:vscodium` with every launch green. Paste the summary
-of the three explorer launches. PR title `tests: the eight gate rows of explorer slice 1 (card coverage-25b, #645)`.
+of the four explorer launches. PR title `tests: the eight gate rows of explorer slice 1 (card coverage-25b, #645)`.
 themis or triton reviews; athena checks that the rows are the brief's. proteus then makes the manual check on the
 built VSIX (open the Remote Explorer, see the hosts, connect from a row).
 
 ## 5. Open rows (stop and report on #645)
 
-1. The stand-in isn't picked up by the editor when it's written into `extensions-explorer` while the editor runs.
-   Report what coverage-23 found; don't restart the editor by hand.
+1. Row 7's window shows no coexistence warning, or the explorer registers its commands beside the stand-in: report
+   what the record and the window show.
 2. Row 8's family notice doesn't name the explorer anywhere observable: report what the record shows.
 3. A host of `HOSTS` that the view doesn't list, or lists elsewhere: report both lists.
