@@ -46,7 +46,7 @@ when it changes what is asserted:
    template, then the built-in table on `applicationName`. A criterion that expects
    `https://update.code.visualstudio.com` as the default (AC-27) is tested against F-1402's order instead, as a unit
    row: with no override, `resolveServerArchive` gives the built-in table's address for `codium`. Add the cite to the
-   existing row of `packages/lib-product/test/unit/resolve.test.ts` that proves it, as `F-0503 AC-27 (F-1402 rule 4)`,
+   existing row of `packages/lib-product/test/unit/resolve.test.ts` that proves it, starting its name `F-0503 AC-27 (f1402-rule-4): `,
    and tag it `unit`. No acceptance row clears the override: the containers launch sets it to the run's download host
    (`${HARNESS_DOWNLOADS_LOCAL}/ok`), and the built-in table's host is on the internet.
 3. **The policy row** (transport contracts §5.0): `clientOnly`, `cache: kept`, `verification: none`,

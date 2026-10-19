@@ -101,8 +101,8 @@ fakes the tests need.
 
 | # | Name | Setup | Assertions |
 |---|---|---|---|
-| E1 | `F-0416 BR-11, BR-11a (e1): a terminal gets the probe's and remoteEnv's variables, remoteEnv winning` | a Dockerfile from the run's image that writes `export C45_PROFILE=profile` and `export C45_BOTH=profile` to `/etc/profile`; `remoteEnv: {C45_REMOTE: 'remote', C45_BOTH: 'remote'}` | after the connect, open a terminal and run `printf '%s|%s|%s\n' "$C45_PROFILE" "$C45_REMOTE" "$C45_BOTH"` with the harness's terminal helpers (`typeInTerminal`, `terminalBuffer`): the buffer has `profile|remote|remote` |
-| E2 | `F-0416 6.10 (e2): editing userEnvProbe to none takes effect on reload, without a rebuild` | E1's folder, then set `userEnvProbe: 'none'` in its configuration and reload the window | the same container id; the terminal's line is `|remote|remote` |
+| E1 | `containers-45 (e1): by F-0416 BR-11 and BR-11a, a terminal gets the probe's and remoteEnv's variables, remoteEnv winning` | a Dockerfile from the run's image that writes `export C45_PROFILE=profile` and `export C45_BOTH=profile` to `/etc/profile`; `remoteEnv: {C45_REMOTE: 'remote', C45_BOTH: 'remote'}` | after the connect, open a terminal and run `printf '%s|%s|%s\n' "$C45_PROFILE" "$C45_REMOTE" "$C45_BOTH"` with the harness's terminal helpers (`typeInTerminal`, `terminalBuffer`): the buffer has `profile|remote|remote` |
+| E2 | `containers-45 (e2): by F-0416 6.10, editing userEnvProbe to none takes effect on reload, without a rebuild` | E1's folder, then set `userEnvProbe: 'none'` in its configuration and reload the window | the same container id; the terminal's line is `|remote|remote` |
 
 Measure both against the branch first; if core gives the terminal another environment than the extension host's,
 that's an open row.
