@@ -72,6 +72,8 @@ interface InternalCommand {
   id: string;
   role: 'served' | 'called';
   kind: 'query' | 'change' | 'push';
+  /** Whether the id activates the package: a served id that is false asks for no `onCommand:` event. */
+  activates?: boolean;
 }
 
 /** A command id the extension registers at runtime only, never contributed. */
@@ -176,6 +178,12 @@ class JsonCursor {
   nonEmptyString(): string {
     const text = this.string();
     return text.trim() === '' ? this.fail('a non-empty string') : text;
+  }
+
+  boolean(): boolean {
+    return typeof this.value === 'boolean'
+      ? this.value
+      : this.fail('a boolean');
   }
 
   string(): string {
@@ -426,11 +434,21 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
     internal: declared
       .field('internal')
       .optionalItems()
-      .map(entry => ({
-        id: entry.onlyFields(['id', 'role', 'kind']).field('id').string(),
-        role: entry.field('role').oneOf(['served', 'called'] as const),
-        kind: entry.field('kind').oneOf(['query', 'change', 'push'] as const),
-      })),
+      .map(entry => {
+        const cursor = entry.onlyFields(['id', 'role', 'kind', 'activates']);
+        const command: InternalCommand = {
+          id: cursor.field('id').string(),
+          role: cursor.field('role').oneOf(['served', 'called'] as const),
+          kind: cursor
+            .field('kind')
+            .oneOf(['query', 'change', 'push'] as const),
+        };
+        const activates = cursor.field('activates');
+        if (!activates.isAbsent()) {
+          command.activates = activates.boolean();
+        }
+        return command;
+      }),
     runtimeCommands: declared
       .field('runtimeCommands')
       .optionalItems()

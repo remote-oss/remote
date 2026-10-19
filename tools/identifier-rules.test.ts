@@ -260,6 +260,67 @@ describe('identifier-rules', () => {
       ]);
     });
 
+    it('reports a served id that asks for activation and names no onCommand event', () => {
+      const outcome = checkPackageRules(
+        syntheticSources({
+          declared: {
+            internal: [
+              {
+                id: 'remote-internal.get',
+                role: 'served',
+                kind: 'query',
+                activates: true,
+              },
+            ],
+          },
+        }),
+      );
+      deepStrictEqual(outcome.problems, [
+        "served internal id 'remote-internal.get' has no 'onCommand:remote-internal.get' activation event (F-5902 AC-1, AC-24, AC-33)",
+      ]);
+    });
+
+    it('passes a served id that asks for no activation and names no onCommand event', () => {
+      const outcome = checkPackageRules(
+        syntheticSources({
+          declared: {
+            internal: [
+              {
+                id: 'remote-internal.changed',
+                role: 'served',
+                kind: 'push',
+                activates: false,
+              },
+            ],
+          },
+        }),
+      );
+      deepStrictEqual(outcome.problems, []);
+    });
+
+    it('reports a served id that asks for no activation yet names its onCommand event', () => {
+      const outcome = checkPackageRules(
+        syntheticSources({
+          manifest: {
+            activationEvents: ['onCommand:remote-internal.changed'],
+          },
+          declared: {
+            internal: [
+              {
+                id: 'remote-internal.changed',
+                role: 'served',
+                kind: 'push',
+                activates: false,
+              },
+            ],
+          },
+        }),
+      );
+      deepStrictEqual(outcome.problems, [
+        "served internal id 'remote-internal.changed' asks for no activation, yet has the 'onCommand:remote-internal.changed' activation event",
+      ]);
+    });
+
     it('reports an internal id that is contributed and in a menu', () => {
       const outcome = checkPackageRules(
         syntheticSources({

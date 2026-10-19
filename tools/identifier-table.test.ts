@@ -252,7 +252,12 @@ describe('identifier-table', () => {
           },
           declared: {
             internal: [
-              {id: 'remote-internal.get', role: 'served', kind: 'query'},
+              {
+                id: 'remote-internal.get',
+                role: 'served',
+                kind: 'query',
+                activates: true,
+              },
             ],
           },
         }),
@@ -333,7 +338,12 @@ describe('identifier-table', () => {
             manifest: {languages: ['ssh_config']},
             declared: {
               internal: [
-                {id: 'remote-internal.get', role: 'called', kind: 'query'},
+                {
+                  id: 'remote-internal.get',
+                  role: 'called',
+                  kind: 'query',
+                  activates: true,
+                },
               ],
             },
           }),

@@ -86,10 +86,18 @@ function internalProblems(sources: PackageSources): string[] {
     if (inMenus.has(command.id)) {
       problems.push(`internal id '${command.id}' is in a menu`);
     }
-    if (command.role === 'served' && !events.has(`onCommand:${command.id}`)) {
-      problems.push(
-        `served internal id '${command.id}' has no 'onCommand:${command.id}' activation event (F-5902 AC-1, AC-24, AC-33)`,
-      );
+    if (command.role === 'served') {
+      const event = `onCommand:${command.id}`;
+      if (command.activates !== false && !events.has(event)) {
+        problems.push(
+          `served internal id '${command.id}' has no '${event}' activation event (F-5902 AC-1, AC-24, AC-33)`,
+        );
+      }
+      if (command.activates === false && events.has(event)) {
+        problems.push(
+          `served internal id '${command.id}' asks for no activation, yet has the '${event}' activation event`,
+        );
+      }
     }
   }
   return problems;
