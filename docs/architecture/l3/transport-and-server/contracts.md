@@ -60,7 +60,7 @@ Never: depend on any transport, the editor API, or lib-server.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `readProfile` | the text of `<appRoot>/product.json` (the editor adapter reads the file once per session) | a profile with these fields: `applicationName`, `version`, `commit`, `quality`, `release` (empty when absent), `serverApplicationName`, `serverDataFolderName` (fallback `.vscode-server` only where a spec says so, F-0503), `dataFolderName`, `tunnelApplicationName`, `urlProtocol`, `serverDownloadUrlTemplate`, `serverLicense`, `serverLicenseUrl`, gallery | `unreadable` (the extension cannot run its resolvers; the log names the path) |
+| `readProfile` | the text of `<appRoot>/product.json` (the editor adapter reads the file once per session) | a profile with these fields: `applicationName`, `version`, `commit`, `quality`, `release` (empty when absent), `serverApplicationName`, `serverDataFolderName` (fallback `.vscode-server` only where a spec says so, F-0503), `dataFolderName`, `tunnelApplicationName`, `urlProtocol`, `serverDownloadUrlTemplate`, `serverDownloadRedirectHosts` (empty when absent; ADR-0006 decision 7, #1031), `serverLicense`, `serverLicenseUrl`, gallery | `unreadable` (the extension cannot run its resolvers; the log names the path) |
 
 Rules:
 - Commit and quality may also come from `env.appCommit` and `env.appQuality` under `resolvers`. The file is the
@@ -82,7 +82,7 @@ Rules:
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `resolveServerArchive` | profile, host platform tokens (`os`, `arch`), the extension's override policy, the override value with the layer it came from | the URL, the step that produced it (`override`, `productTemplate`, `builtInTable`) and the facts V6 needs (URL host, `serverLicense` empty or not) | `noSource` (the `applicationName` and the setting key); `invalidOverride` (the setting key and the problem from P2) |
+| `resolveServerArchive` | profile, host platform tokens (`os`, `arch`), the extension's override policy, the override value with the layer it came from | the URL, the step that produced it (`override`, `productTemplate`, `builtInTable`), the redirect rule V4 applies (`any` or a host list, from the step, the profile and P4; ADR-0006 decision 7, #1031) and the facts V6 needs (URL host, `serverLicense` empty or not) | `noSource` (the `applicationName` and the setting key); `invalidOverride` (the setting key and the problem from P2) |
 
 Override policies (one table entry per extension, ADR-0006 decision 5):
 
@@ -103,6 +103,7 @@ Rules:
 A data module holding:
 - the two built-in table entries with their release repositories and asset shape (F-3902 rule 1(c), F-1402);
 - the licence hosts of F-3902 rule 11(i);
+- the allowed redirect hosts per source host (`github.com` → its release-asset hosts; V4, ADR-0006 decision 7);
 - the VSCodium release prefixes of rule 11(ii);
 - the licence rules `clientLicence` and `sourceBased` and the active set, evaluated by `classifyLicence`;
 - the dev tunnels service domain, once the Tunnels ruling lands.
@@ -563,7 +564,7 @@ keeps a case for it.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `plan` | host facts, profile, P3's result or failure, install path setting, download mode, existing layouts reported by the probe | a plan: reuse (`bin/<commit>` or the reused CLI layout of F-3902 rule 10), or download (where, URL), plus data folder, launcher, lock place | `noSource`, `invalidOverride`, `invalidInstallPath` (F-2407 BR-3, before any ssh) |
+| `plan` | host facts, profile, P3's result or failure, install path setting, download mode, existing layouts reported by the probe | a plan: reuse (`bin/<commit>` or the reused CLI layout of F-3902 rule 10), or download (where, URL, the redirect rule from P3), plus data folder, launcher, lock place | `noSource`, `invalidOverride`, `invalidInstallPath` (F-2407 BR-3, before any ssh) |
 
 Rules:
 - Reuse is checked before the source is resolved, so a host with a server needs no source (F-3902 rule 8, exception).
