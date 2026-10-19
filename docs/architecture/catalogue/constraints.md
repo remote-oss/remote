@@ -353,7 +353,7 @@ Entry format: statement. Source. Binds. Kind.
   per machine and product, never caches failure and offers no opt-out (it quotes an older F-1403 revision).
 - **K4 Override setting.** Containers uses `remote.serverDownloadBaseUrl` (any layer, base URL or template), ssh an
   invented `remote.SSH.serverDownloadUrlTemplate` (user layer only, template only, F-3902 Q2 open); R-47 rule 4(a)
-  names only the first. ADR-0006 decision 5 assumes one override table in lib-product.
+  names only the first. ADR-0006 decision 6 assumes one override table in lib-product.
 - **K5 R-68 detection.** F-1402 decides "Microsoft-licensed" from the client's `serverLicense` and remembers per
   profile; F-3902 rule 11 decides from download host plus `serverLicense` and keys acceptance by licence URL. A shared
   server library needs one rule.
