@@ -75,14 +75,17 @@ other error is thrown.
 - `DownloadFailureCause` gains `'unauthorized'`; `http-download.ts` returns, for a final response with status 401
   or 403 (checked before the generic `httpStatus`):
   `{kind: 'failed', cause: 'unauthorized', status, detail}` with the detail
-  `HTTP <status> from <host>: the source asks for credentials. Add a "machine <host>" entry with a login and a password to your netrc file, or put the token in the address template of the server download setting (?token=...)`
-  (`<host>` of the final response's address).
+  `the source asks for credentials. Add a "machine <host>" entry with a login and a password to your netrc file, or put the token in the address template of the server download setting (?token=...)`
+  (`<host>` of the final response's address). The status is not in the detail: S071 puts it first (below).
 - `transfer.ts`: `TransferFailure`'s `localDownload` cause union gains `'unauthorized'`; `downloadFailure` maps the
   port's cause to it, keeping `status` and `detail`.
-- `remote-ssh/src/pipeline/failure.ts` (`localDownloadValue`): `unauthorized` returns `failure.detail`, so the S071
-  text carries it. `remote-containers/src/connect/server-steps.ts`: the retry runs only when the failure's cause is
-  not `unauthorized`; the log line `the server was not installed: localDownload (unauthorized): <detail>` already
-  carries the text.
+- `remote-ssh/src/pipeline/failure.ts` (`localDownloadValue`): `unauthorized` returns
+  `Server returned <status>. <detail>` (athena on #1033, contracts §5 V4 in #1042): it starts as for any HTTP error
+  (`Server returned 401`, F-2405 AC-12), then the hint. So connect-38 R4's list of S071 `{0}` forms gets a fourth
+  case. `remote-containers/src/connect/server-steps.ts`: the one retry of a `localDownload` runs only when the
+  failure's cause is not `unauthorized`; the log line `the server was not installed: localDownload (unauthorized):
+  <detail>` already carries the hint. V3's placement fallback is unchanged: `unauthorized` falls back exactly as the
+  other `localDownload` causes do, and the row for it says so (§3).
 
 ## 3. Rows
 
@@ -102,10 +105,10 @@ no `headers` key; 401 and 403 give `unauthorized` with the status and the detail
 
 `lib-server/test/unit/transfer.test.ts`: a fake `CredentialsPort` is read once per transfer; a throwing port is
 logged and the download goes on; an `unauthorized` result is a `localDownload` / `unauthorized` failure with the
-status; a log capture shows neither the password nor the login nor the file's text in any row above.
+status; an `unauthorized` failure follows the same placement fallback as `httpStatus` (the existing fallback row, repeated for it); a log capture shows neither the password nor the login nor the file's text in any row above.
 
 `remote-containers` server-steps test: a first failure with cause `unauthorized` is not retried (one transfer call);
-an `httpStatus` failure still is. `remote-ssh` `failure.test.ts`: S071's value for `unauthorized` is the detail.
+an `httpStatus` failure still is. `remote-ssh` `failure.test.ts`: S071's value for 401 is `Server returned 401. ` followed by the detail, for 403 likewise with `403`; the other three forms are unchanged.
 
 **Mutations** (list them in the PR): build the header once for the chain and the other-host row fails; drop the
 scheme test and the http row fails; let `default` match and the default row fails; drop the 401 branch and the retry
