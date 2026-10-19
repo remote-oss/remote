@@ -72,7 +72,11 @@ Facts checked in VS Code OSS and the VSCodium build on 2026-10-05 ([oss] `src/vs
    specs give each extension its own override policy (Dev Containers: `remote.serverDownloadBaseUrl`, any settings
    layer, a base URL or a template, F-1402; Remote-SSH: `remote.SSH.serverDownloadUrlTemplate`, user layer only,
    F-3902), so `lib-product` takes a per-extension override policy (key, allowed layers, accepted forms) from one
-   table and applies the same resolution order to all. (Revised 2026-10-06.)
+   table and applies the same resolution order to all. (Revised 2026-10-06.) Each extension that downloads the server
+   has exactly one override key, and it accepts the same template as the product's `serverDownloadUrlTemplate`, with
+   the same placeholders: Remote-SSH's and Remote-WSL's keys are templates only (WSL:
+   `remote.WSL.serverDownloadUrlTemplate`, F-7902 draft, R-88), and a Dev Containers value containing `${` is a
+   template. No second key and no key shared by the extensions is added (ruled 2026-10-19, #1039).
 7. **Redirects follow the source's step** (added 2026-10-16, #1031). A server download may end on another host
    only when whoever chose the source allows it. The user's override may redirect to any host: the user chose and
    trusts that source. A product's template may redirect to its own host, the hosts its `product.json` lists in

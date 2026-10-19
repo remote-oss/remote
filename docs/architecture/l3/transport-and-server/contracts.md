@@ -84,16 +84,19 @@ Rules:
 |---|---|---|---|
 | `resolveServerArchive` | profile, host platform tokens (`os`, `arch`), the extension's override policy, the override value with the layer it came from | the URL, the step that produced it (`override`, `productTemplate`, `builtInTable`) and the facts V6 needs (URL host, `serverLicense` empty or not) | `noSource` (the `applicationName` and the setting key); `invalidOverride` (the setting key and the problem from P2) |
 
-Override policies (one table entry per extension, ADR-0006 decision 5):
+Override policies (one table entry per extension, ADR-0006 decision 6):
 
 | Extension | Key | Layers | Forms |
 |---|---|---|---|
 | remote-ssh | `remote.SSH.serverDownloadUrlTemplate` | user layer of the default profile only (F-3902 rule 1) | template |
 | remote-containers | `remote.serverDownloadBaseUrl` | any layer (F-1402 rule 4) | template, or a base URL to which `/commit:{commit}/server-{platform}/{quality}` is appended |
-| remote-wsl | from the WSL drafts | to be added | to be added |
+| remote-wsl | `remote.WSL.serverDownloadUrlTemplate` (F-7902 draft, R-88) | user layer of the default profile only (F-7902 draft) | template |
 
 Rules:
 - "Set" means the allowed layers hold a value, never "differs from the default" (F-3902 rule 1).
+- The key in this table is the extension's only way to set the server's download template; no second or shared key
+  exists (ADR-0006 decision 6, #1039). Its value is step `override` whatever its form, so V4's redirect rule for
+  `override` applies to it.
 - A bad product template is logged and skipped; resolution falls through (ADR-0006 as revised).
 - The built-in table matches `applicationName` exactly. It has two entries, `codium` and `codium-insiders`, and no
   entry for VS Code (ADR-0006 decision 2).
