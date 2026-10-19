@@ -495,7 +495,7 @@ F-0412.AC-41	acceptance
 F-0412.AC-42	todo	
 F-0412.AC-43	todo	
 F-0412.AC-44	deferred	containers release 1: core's JSON validation; release 1 contributes no schema (brief ruling 8)
-F-0415.AC-1	todo	
+F-0415.AC-1	acceptance	
 F-0415.AC-2	acceptance	
 F-0415.AC-3	acceptance	
 F-0415.AC-4	acceptance	
@@ -505,29 +505,29 @@ F-0415.AC-7	todo
 F-0415.AC-8	todo	
 F-0415.AC-9	todo	
 F-0415.AC-9b	todo	
-F-0415.AC-10	todo	
+F-0415.AC-10	acceptance	
 F-0415.AC-11	todo	
 F-0415.AC-12	todo	
-F-0415.AC-13	todo	
-F-0415.AC-14	todo	
+F-0415.AC-13	acceptance	
+F-0415.AC-14	acceptance	
 F-0415.AC-15	acceptance	
 F-0415.AC-16	acceptance	
-F-0415.AC-17	todo	
-F-0415.AC-18	todo	
-F-0415.AC-18b	todo	
-F-0415.AC-19	todo	
+F-0415.AC-17	acceptance	
+F-0415.AC-18	acceptance	
+F-0415.AC-18b	acceptance	
+F-0415.AC-19	acceptance	
 F-0415.AC-20	acceptance	
-F-0415.AC-21	todo	
+F-0415.AC-21	acceptance	
 F-0415.AC-22	deferred	containers release 1: later (remote engines)
-F-0415.AC-23	todo	
+F-0415.AC-23	acceptance	
 F-0415.AC-24	todo	
 F-0415.AC-25	deferred	containers release 1: later (attach)
 F-0415.AC-26	deferred	containers release 1: later (Windows, WSL and macOS)
 F-0415.AC-27	todo	
 F-0415.AC-28	todo	
 F-0415.AC-29	deferred	containers release 1: later (volumes and Clone in Volume)
-F-0415.AC-30	todo	
-F-0415.AC-31	todo	
+F-0415.AC-30	acceptance	
+F-0415.AC-31	acceptance	
 F-0415.AC-32	deferred	containers release 1: later (personalization and relays)
 F-0415.AC-33	unit	
 F-0415.AC-34	todo	
