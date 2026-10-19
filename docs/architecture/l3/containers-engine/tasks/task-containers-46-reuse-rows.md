@@ -9,8 +9,8 @@ No product code changes. Don't change the product or an expected value.
 
 **Build after** #1046 is on main (row R6 asserts the connecting toast's exact texts).
 
-Sources: F-0409 (remote-oss/remote-containers#23): 6.1, 6.3, 6.5, 6.10, 7.E1, 7.E6, BR-6; AC-7, AC-26, AC-34, AC-35,
-AC-44, AC-45.
+Sources: F-0409 (remote-oss/remote-containers#23): 6.1, 6.3, 6.5, 6.10, 7.E1, 7.E6, BR-6, section 9; AC-4, AC-7, AC-26,
+AC-34, AC-35, AC-44, AC-45; athena's rulings 12 to 14 on #737 (`brief-release-1.md` §3, #1062).
 
 ## 1. Where and with what
 
@@ -43,19 +43,21 @@ const S018 =
 | R4 | `F-0409 AC-35 (p35): with the bind source restored, Retry connects to the same container, with its bind mount` | its own `it`, with its own folder `c46-bind-back` and source `<run>/c46-bind-back-src`, set up as R3 up to the first dialog. Then `mkdirSync(<source>)`, `answerDialog(name, 'Retry')`, `connectedToContainer(name, DIALOG_MILLISECONDS)` | `devContainersOf(folder)` is `[<id>]`; `inspectOf(id).status` is `running`; `docker inspect -f '{{json .Mounts}}' <id>` has a mount with `Type` `bind`, `Source` `<source>`, `Destination` `/bind` |
 | R5 | `F-0409 AC-34 (p34, the dialog half): an exited container whose bind source is gone is started, Docker's refusal shows S018, and no container is made` | `c46-bind-gone`, set up as R3 up to the first dialog | `dialogText(dialog)` is `['', S018, RECOVERY_BUTTONS]`; `devContainersOf(folder)` is `[<id>]`. Then `answerDialog(name, 'More Actions...')`, `waitForQuickPick(name, 30_000)`, and `console.log` its items, one line starting `containers-46 p34:` (not asserted; see §3) |
 | R6 | `F-0409 AC-45 (p45): reopening an exited container shows no build phase, only the connecting toast and its server stage` | `c46-exited`; `const id = await containerLeftBy(folder)`; `docker stop <id>`; `openFolderWindow`. While `reopenInContainer(name)` runs, sample `notifications(name)` every 100 ms (each in a `try`; a failed sample is the reload) and collect every text | every collected text that starts with `Connecting to Dev Container` is `Connecting to Dev Container (show log)` or `Connecting to Dev Container (show log): Starting server`; at least one such text was seen; `devContainersOf(folder)` is `[<id>]` |
+| R7 | `F-0409 AC-4 (ruling 13: the metadata label is the CLI's)` | `devContainerFolder('c46-labels', {name: 'Labels'})`; `const id = await containerLeftBy(folder)` | `inspectOf(id).labels`: `devcontainer.local_folder` is the folder, `devcontainer.config_file` is `<folder>/.devcontainer/devcontainer.json`, `devcontainer.metadata` parses as a JSON array (`Array.isArray(JSON.parse(…))`; measured `[]`, which is the pinned CLI's, ruling 13), and no label's name starts with `vsch.` |
 
 `waitForQuickPick` comes from `windows/renderer.ts`; import it. R1's `containerLeftBy` leaves the container running
 (release 1 has no shutdown), so `docker pause` works on it. In R3–R5, `docker stop` makes the container exited before
 the source goes.
 
 **What was measured:** R1 to R4 and R6 as written. R5's quick pick listed `Reload Window`, `Edit devcontainer.json
-Locally`, `Open Recent...`, `Open Documentation`; AC-34 asks for `Rebuild Container` too, which is a question on the
-issue (§3).
+Locally`, `Open Recent...`, `Open Documentation`; `Rebuild Container` comes with containers-47 (ruling 14), so R5
+doesn't assert the items.
 
 ## 3. The catalogue (`coverage-containers-r1.tsv`)
 
-F-0409 AC-7, AC-26, AC-35, AC-44 and AC-45 become `acceptance`. AC-34 stays `todo`: R5 proves its dialog half, and
-its quick-pick and rebuild halves wait for athena's answer on the issue. Run `node tools/check-coverage.ts`.
+F-0409 AC-4, AC-7, AC-26, AC-35, AC-44 and AC-45 become `acceptance`. AC-34 stays `todo`: R5 proves its dialog
+half, and containers-47 (#1064) adds Rebuild Container to the pick and the rest of its rows (athena's ruling 14).
+AC-22 is containers-47's too (ruling 12). Run `node tools/check-coverage.ts`.
 
 ## 4. Gates, review and open rows
 
