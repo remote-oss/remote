@@ -19,6 +19,7 @@ import {
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  dialogOf,
   focusTerminal,
   notifications,
   type ShownDialog,
@@ -737,7 +738,7 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
     }
   });
 
-  it('F-0416 AC-25 (u25): changing only remoteUser to root and reloading keeps the container and the images, and the terminal runs as root', async () => {
+  it('F-0416 AC-25 (u25): changing only remoteUser to root and reloading keeps the container and the images, and the terminal runs as root (ruling 15: the reload is the step, athena on #1068)', async () => {
     const lines = `${freeHostIdsLines()}${accountLines('tester', OTHER_ID)}`;
     const folder = dockerfileFolder('c42-reload-root', lines, {
       remoteUser: 'tester',
@@ -770,7 +771,7 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
     }
   });
 
-  it('F-0416 AC-34 (u34): switching remoteUser to another account in the image and reloading leaves that account its own ids', async () => {
+  it('F-0416 AC-34 (u34): switching remoteUser to another account in the image and reloading leaves that account its own ids (ruling 15: the reload is the step, athena on #1068)', async () => {
     const lines = `${freeHostIdsLines()}${accountLines('tester', OTHER_ID)}${accountLines('builder', THIRD_ID)}`;
     const folder = dockerfileFolder('c42-reload-switch', lines, {
       remoteUser: 'tester',
@@ -781,17 +782,39 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
       editConfiguration(folder, 'remoteUser', 'builder');
       await reloadWindow(name);
       await connectedToContainer(name);
-      const terminalUser = await terminalUserOf(name);
-      const status = (await stateOf(containerId)).status;
       await docker('start', containerId);
       const builder = await idsOf(containerId, 'builder');
       await closeWindow(name);
+      deepStrictEqual(builder, `${String(THIRD_ID)}:${String(THIRD_ID)}`);
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-35 (ruling-16): the switch connects: switching remoteUser to another account and reloading connects to the same container, running, as the new account, with no dialog (a recorded deviation, athena ruling 16 on #1068)', async () => {
+    const lines = `${freeHostIdsLines()}${accountLines('tester', OTHER_ID)}${accountLines('builder', THIRD_ID)}`;
+    const folder = dockerfileFolder('c42-switch-connects', lines, {
+      remoteUser: 'tester',
+    });
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      editConfiguration(folder, 'remoteUser', 'builder');
+      await reloadWindow(name);
+      await connectedToContainer(name);
+      const terminalUser = await terminalUserOf(name);
+      const status = (await stateOf(containerId)).status;
+      const dialog = await dialogOf(name);
+      const containers = await devContainersOf(folder);
+      await closeWindow(name);
       deepStrictEqual(
-        {terminalUser, status, builder},
+        {terminalUser, status, dialog, containers},
         {
           terminalUser: 'builder',
           status: 'running',
-          builder: `${String(THIRD_ID)}:${String(THIRD_ID)}`,
+          dialog: undefined,
+          containers: [containerId],
         },
       );
     } finally {
