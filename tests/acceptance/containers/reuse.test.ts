@@ -696,7 +696,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it("F-0409 AC-34 (p34): the dialog half: an exited container whose bind source is gone is started, Docker's refusal shows S018, and no container is made", async () => {
+  it("F-0409 AC-34 (p34): the dialog half, an exited container whose bind source is gone is started, Docker's refusal shows S018, and no container is made", async () => {
     const source = path.join(
       variable('HARNESS_RUN_FOLDER'),
       'c46-bind-gone-src',
@@ -787,7 +787,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it("F-0409 AC-4 (r13): the metadata label is the CLI's", async () => {
+  it("F-0409 AC-4 (ruling-13): the labels name the folder and the configuration, and the metadata label is the CLI's", async () => {
     const folder = devContainerFolder('c46-labels', {name: 'Labels'});
     try {
       const containerId = await containerLeftBy(folder);
