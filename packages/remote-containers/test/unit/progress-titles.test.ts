@@ -24,27 +24,27 @@ describe('the titles of the connect progress (card containers-08)', () => {
     );
   });
 
-  it('F-0503 AC-2: installing and starting the server follow the link after a colon', () => {
+  it('F-0503 AC-2: installing and starting the server give only their own text, which core shows after the title and a colon', () => {
     deepStrictEqual(
       [
         phaseTitleOf({name: 'installing'}, template => template),
         phaseTitleOf({name: 'startingServer'}, template => template),
       ],
-      [`${START}: Installing server`, `${START}: Starting server`],
+      ['Installing server', 'Starting server'],
     );
   });
 
-  it('F-0408 BR-2: every other stage keeps the start title', () => {
+  it('F-0408 BR-2: every other stage gives an empty message, never the start title again', () => {
     deepStrictEqual(
       OTHER_PHASES.map(name => phaseTitleOf({name}, template => template)),
-      OTHER_PHASES.map(() => START),
+      OTHER_PHASES.map(() => ''),
     );
   });
 
-  it('F-0503 AC-2: each part is translated on its own', () => {
+  it('F-0503 AC-2: the stage text is translated on its own', () => {
     deepStrictEqual(
       phaseTitleOf({name: 'installing'}, template => `<${template}>`),
-      '<[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)>: <Installing server>',
+      '<Installing server>',
     );
   });
 });

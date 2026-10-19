@@ -168,11 +168,11 @@ The resolver host gives core no tunnel factory and no tunnel features (contracts
 
 Slice 1 reports three phases through `onPhase`:
 
-| Moment | Phase | The resolver host's title (`titleOf`) |
+| Moment | Phase | The resolver host's message (`titleOf`), which core shows after `startTitle` and a colon |
 |---|---|---|
-| step 4, before the second check | `{name: 'initializing'}` | `[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)` (S087) |
-| §3.5, before the transfer, only when the plan is `download` | `{name: 'installing'}` | S087's link, then `: Installing server` (S209) |
-| §3.5, before the start | `{name: 'startingServer'}` | S087's link, then `: Starting server` (S334) |
+| step 4, before the second check | `{name: 'initializing'}` | `''` (core shows the start title alone) |
+| §3.5, before the transfer, only when the plan is `download` | `{name: 'installing'}` | `Installing server` (S209) |
+| §3.5, before the start | `{name: 'startingServer'}` | `Starting server` (S334) |
 
 **The rules:**
 - `startTitle` is the same S087 link.
@@ -184,7 +184,9 @@ Slice 1 reports three phases through `onPhase`:
 
 `progress-titles.ts` exports:
 - `startTitleOf(translate): string`;
-- `phaseTitleOf(phase, translate): string`. Any other `PhaseName` gives the start title.
+- `phaseTitleOf(phase, translate): string`: only the stage's text, as remote-ssh's does. Any other `PhaseName` gives `''`.
+  (Corrected by athena's ruling on the doubled toast, 2026-10-19: this section's "title" column was the message, and
+  core had joined the whole title to the start title a second time.)
 
 ### 3.4 What the window's log shows (F-0502 BR-1, BR-3, BR-11; F-0408 BR-6)
 
@@ -473,8 +475,8 @@ All unit rows are over fakes. Every spawn site's argv is checked against the fix
 | File | Cite | Given | Expected |
 |---|---|---|---|
 | `progress-titles.test.ts` | F-0408 3.4 S087 | `startTitleOf(t => t)` | `[Connecting to Dev Container (show log)](command:remote-containers.revealLogTerminal)` |
-| | F-0503 AC-2 (our half) | `phaseTitleOf({name: 'installing'})`, then `startingServer` | the link, then `: Installing server`; the link, then `: Starting server` |
-| | F-0408 BR-2 | every other `PhaseName` | the start title |
+| | F-0503 AC-2 (our half) | `phaseTitleOf({name: 'installing'})`, then `startingServer` | `Installing server`, then `Starting server` |
+| | F-0408 BR-2 | every other `PhaseName` | `''` |
 | `window-identity.test.ts` | F-0504 AC-1, AC-3 (our half: the suffix) | `name` `Proj`; no `name`; `""` | `Dev Container: Proj`; `Dev Container`; `Dev Container` |
 | | F-0504 AC-29, AC-30, AC-22 | `name` `"   "`; `weird ] name [test` | `Dev Container:    ` (spaces kept); the name verbatim |
 | | F-0504 AC-31 | `name` `Ctx Test`, context `f0504ctx`; no name and the same context | `Dev Container: Ctx Test @ f0504ctx`; `Dev Container @ f0504ctx` |
