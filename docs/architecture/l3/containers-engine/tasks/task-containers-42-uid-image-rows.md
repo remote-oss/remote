@@ -30,16 +30,14 @@ isn't made (`updateRemoteUserUID`, 6.2, 6.6, root or numeric targets, the collis
 7.E7) with the F-0410 dialog they reach. These rows are acceptance rows in the `containers` launch, asserting what
 `docker inspect`, `docker exec <id> id -u <user>` and the window show.
 
-**Group B, the environment: `deferred` (athena on #1049, 2026-10-19, in `brief-release-1.md` via #1055).**
-`remoteEnv`, `userEnvProbe` and the terminal and task environment aren't in release 1: the CLI applies them only to
-the lifecycle commands it runs, and our server start applies neither (`connector.ts` returns `extensionHostEnv: {}`,
-`server-steps.ts` passes `environmentSetup: ''`). Tag these `deferred` with the reason
-`containers release 1: later (the remote environment, F-0416)`: AC-14, AC-17, AC-18, AC-22, AC-23, AC-25, AC-27,
-AC-28, AC-29, AC-31, AC-42, AC-43, AC-44, AC-45, AC-46 and AC-47, and the terminal halves of AC-15 and AC-32. A
-criterion with a terminal half and a `containerEnv` or user half (AC-15, AC-32) is tagged by the half this release
-proves: write the row for the other half and tag it `acceptance`; say so in the PR. `containerEnv`'s own criteria
-(the variable reaches the container itself) are group A. Moving the half into release 1 is the user's call (hermes
-has it); if it comes in, it is a product card first, and these lines move with it.
+**Group B, the environment (rows after the server-environment card).** The user brought `remoteEnv`,
+`userEnvProbe` and the terminal and task environment into release 1 (#1049; design in #1055). Our product applies
+neither today (`connector.ts` returns `extensionHostEnv: {}`); the server-environment card (#1059) builds it:
+C10 makes the environment per connection and returns it as `Connected.extensionHostEnv`. Group B's criteria (AC-14,
+AC-17, AC-18, AC-22, AC-23, AC-25, AC-27, AC-28, AC-29, AC-31, AC-42 to AC-47, and the terminal halves of AC-15 and
+AC-32) stay `todo` with no reason until that card merges; then their rows come, in this card. AC-46 and AC-47 are our
+probe's (only AC-47's terminal message is core's); AC-47's half that says the window connects with no dialog of ours
+can come with group A now. `containerEnv`'s own criteria (the variable reaches the container itself) are group A.
 
 ## 3. Writing the rows
 
@@ -58,8 +56,8 @@ has it); if it comes in, it is a product card first, and these lines move with i
 
 ## 4. PRs
 
-(a) Group A's user resolution and the UID image; (b) group A's errors and reload cases, group B's `deferred` tags and
-the rest of the tags. Each PR moves only its own lines of the coverage file. PR
+(a) Group A's user resolution and the UID image; (b) group A's errors and reload cases, and group A's tags; (c) group
+B's rows, after the server-environment card merges. Each PR moves only its own lines of the coverage file. PR
 titles: `tests: F-0416's <subject> rows (card containers-42, #1051)`. Request athena only; hermes assigns the peer.
 
 ## 5. Gates
