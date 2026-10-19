@@ -1,26 +1,36 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {mkdirSync, writeFileSync} from 'node:fs';
+import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {
   closeWindow,
+  connectedToContainer,
   devContainerFolder,
   devContainersOf,
   inWindow,
+  reloadWindow,
   reopenInContainer,
+  reopenStarted,
   runLabelArguments,
   variable,
   waitFor,
 } from '../windows/harness.ts';
 import {
+  answerDialog,
   focusTerminal,
   notifications,
+  type ShownDialog,
   terminalText,
   typeInTerminal,
+  waitForDialog,
 } from '../windows/renderer.ts';
-import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
+import {
+  activations,
+  openFolderWindow,
+  removeContainers,
+} from '../windows/folder-windows.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -179,6 +189,84 @@ async function terminalUserOf(name: string): Promise<string> {
     60_000,
   );
   return user;
+}
+
+/** The string of the editor's table that the failed-setup dialog shows. */
+const S034 = 'An error occurred setting up the container.';
+
+/** F-0410's three buttons, sorted. */
+const RECOVERY_BUTTONS = [
+  'Edit devcontainer.json Locally',
+  'More Actions...',
+  'Retry',
+];
+
+/** How long a connect that ends in a dialog takes: the build, the start and the failed step. */
+const DIALOG_MILLISECONDS = 180_000;
+
+/** The window's saying and buttons: the dialog's details and its buttons, sorted. */
+function sayingAndButtons(dialog: ShownDialog): {
+  details: string;
+  buttons: string[];
+} {
+  return {details: dialog.details, buttons: [...dialog.buttons].sort()};
+}
+
+/** Opens `folder`, starts Reopen in Container, and gives the window's name and the dialog that ends the connect. */
+async function failedConnect(
+  folder: string,
+): Promise<{name: string; dialog: ShownDialog}> {
+  const name = await openFolderWindow(folder);
+  await reopenStarted(name);
+  return {name, dialog: await waitForDialog(name, DIALOG_MILLISECONDS)};
+}
+
+/** The state and the creation time of container `containerId`, from `docker inspect`. */
+async function stateOf(
+  containerId: string,
+): Promise<{status: string; created: string}> {
+  const text = await docker(
+    'inspect',
+    '-f',
+    '{{.State.Status}} {{.Created}}',
+    containerId,
+  );
+  const [status = '', created = ''] = text.split(' ');
+  return {status, created};
+}
+
+/** The value of the variable `variableName` in container `containerId`'s `Config.Env`, or undefined when it has none. */
+async function configuredEnvOf(
+  containerId: string,
+  variableName: string,
+): Promise<string | undefined> {
+  const text = await docker(
+    'inspect',
+    '-f',
+    '{{json .Config.Env}}',
+    containerId,
+  );
+  const entries = JSON.parse(text) as string[];
+  return entries
+    .find(entry => entry.startsWith(`${variableName}=`))
+    ?.slice(variableName.length + 1);
+}
+
+/** The value of `variableName` in a plain `docker exec` of container `containerId`, empty when it has none. */
+function execEnvOf(containerId: string, variableName: string): Promise<string> {
+  return docker('exec', containerId, 'printenv', variableName).catch(() => '');
+}
+
+/** Sets `key` of `folder`'s devcontainer.json to `value`, or removes it when `value` is undefined. */
+function editConfiguration(folder: string, key: string, value: unknown): void {
+  const file = path.join(folder, '.devcontainer', 'devcontainer.json');
+  const others = Object.entries(
+    JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>,
+  ).filter(([name]) => name !== key);
+  const configuration = Object.fromEntries(
+    value === undefined ? others : [...others, [key, value]],
+  );
+  writeFileSync(file, JSON.stringify(configuration));
 }
 
 describe('F-0416 users and the UID image (card containers-42)', function () {
@@ -470,6 +558,245 @@ describe('F-0416 users and the UID image (card containers-42)', function () {
     } finally {
       await removeContainers(folder);
       await removeImages(folder, [base]);
+    }
+  });
+
+  it('F-0416 AC-11 (u11): a containerUser the image lacks shows F-0410’s dialog and leaves one container, created and never started', async () => {
+    const folder = devContainerFolder('c42-bad-container-user', {
+      containerUser: 'doesnotexist123',
+    });
+    try {
+      const {name, dialog} = await failedConnect(folder);
+      const containers = await devContainersOf(folder);
+      const states = await Promise.all(containers.map(stateOf));
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          saying: sayingAndButtons(dialog),
+          states: states.map(each => each.status),
+        },
+        {
+          saying: {details: S034, buttons: RECOVERY_BUTTONS},
+          states: ['created'],
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-12 (u12): Retry starts the same container again and shows the same dialog; the Reload Window and Rebuild halves wait for ruling 14’s pick item', async () => {
+    const folder = devContainerFolder('c42-bad-user-retry', {
+      containerUser: 'doesnotexist123',
+    });
+    try {
+      const {name, dialog} = await failedConnect(folder);
+      const [containerId = ''] = await devContainersOf(folder);
+      const before = await stateOf(containerId);
+      const activated = activations(name);
+      await answerDialog(name, 'Retry');
+      await waitFor(
+        `window ${name} to activate again`,
+        () => activations(name) > activated,
+        60_000,
+      );
+      const again = await waitForDialog(name, DIALOG_MILLISECONDS);
+      const containers = await devContainersOf(folder);
+      const after = await stateOf(containerId);
+      await closeWindow(name);
+      deepStrictEqual(
+        {dialog: sayingAndButtons(again), containers, after},
+        {
+          dialog: sayingAndButtons(dialog),
+          containers: [containerId],
+          after: before,
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-24 (u24): a remoteUser the image lacks shows F-0410’s dialog and leaves a running container', async () => {
+    const folder = devContainerFolder('c42-bad-remote-user', {
+      remoteUser: 'doesnotexist456',
+    });
+    try {
+      const {name, dialog} = await failedConnect(folder);
+      const containers = await devContainersOf(folder);
+      const states = await Promise.all(containers.map(stateOf));
+      await closeWindow(name);
+      deepStrictEqual(
+        {
+          saying: sayingAndButtons(dialog),
+          states: states.map(each => each.status),
+        },
+        {
+          saying: {details: S034, buttons: RECOVERY_BUTTONS},
+          states: ['running'],
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-15 (u15): containerEnv reaches a plain docker exec, with the editor’s variables resolved', async () => {
+    const folder = devContainerFolder('c42-container-env', {
+      containerEnv: {
+        MY_CONTAINER_VAR: 'container-value',
+        MY_CONTAINER_VAR2: '${localEnv:HARNESS_RUN_ID}',
+      },
+    });
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      const plain = {
+        first: await execEnvOf(containerId, 'MY_CONTAINER_VAR'),
+        second: await execEnvOf(containerId, 'MY_CONTAINER_VAR2'),
+      };
+      await closeWindow(name);
+      deepStrictEqual(plain, {
+        first: 'container-value',
+        second: variable('HARNESS_RUN_ID'),
+      });
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-16 (u16): a containerEnv variable from the editor’s environment that is not set is the empty string, with no error', async () => {
+    const folder = devContainerFolder('c42-container-env-unset', {
+      containerEnv: {MY_CONTAINER_VAR2: '${localEnv:F0416_LOCAL_VAR}'},
+    });
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      const configured = await configuredEnvOf(
+        containerId,
+        'MY_CONTAINER_VAR2',
+      );
+      const plain = await execEnvOf(containerId, 'MY_CONTAINER_VAR2');
+      const toasts = await notifications(name);
+      await closeWindow(name);
+      deepStrictEqual(
+        {configured, plain, toasts},
+        {configured: '', plain: '', toasts: []},
+      );
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-30 (u30): a containerEnv entry that refers to another with containerEnv keeps the literal text in Config.Env and in a process', async () => {
+    const folder = devContainerFolder('c42-container-env-literal', {
+      containerEnv: {
+        FIRST_VAR: 'first-value',
+        SECOND_VAR: '${containerEnv:FIRST_VAR}',
+      },
+    });
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      const configured = await configuredEnvOf(containerId, 'SECOND_VAR');
+      const plain = await execEnvOf(containerId, 'SECOND_VAR');
+      await closeWindow(name);
+      deepStrictEqual(
+        {configured, plain},
+        {
+          configured: '${containerEnv:FIRST_VAR}',
+          plain: '${containerEnv:FIRST_VAR}',
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-32 (u32): a containerEnv default is used when the editor’s variable is unset, as seen by a plain docker exec', async () => {
+    const folder = devContainerFolder('c42-container-env-default', {
+      containerEnv: {
+        MY_CONTAINER_VAR2: '${localEnv:F0416_LOCAL_VAR:my-default}',
+      },
+    });
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      const plain = await execEnvOf(containerId, 'MY_CONTAINER_VAR2');
+      await closeWindow(name);
+      deepStrictEqual(plain, 'my-default');
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-25 (u25): changing only remoteUser to root and reloading keeps the container and the images, and the terminal runs as root', async () => {
+    const lines = `${freeHostIdsLines()}${accountLines('tester', OTHER_ID)}`;
+    const folder = dockerfileFolder('c42-reload-root', lines, {
+      remoteUser: 'tester',
+    });
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      const before = await stateOf(containerId);
+      const imagesBefore = await folderImagesOf(folder);
+      editConfiguration(folder, 'remoteUser', 'root');
+      await reloadWindow(name);
+      await connectedToContainer(name);
+      const terminalUser = await terminalUserOf(name);
+      const after = await stateOf(containerId);
+      const imagesAfter = await folderImagesOf(folder);
+      const containers = await devContainersOf(folder);
+      await closeWindow(name);
+      deepStrictEqual(
+        {terminalUser, created: after.created, imagesAfter, containers},
+        {
+          terminalUser: 'root',
+          created: before.created,
+          imagesAfter: imagesBefore,
+          containers: [containerId],
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
+    }
+  });
+
+  it('F-0416 AC-34 (u34): switching remoteUser to another account in the image and reloading leaves that account its own ids', async () => {
+    const lines = `${freeHostIdsLines()}${accountLines('tester', OTHER_ID)}${accountLines('builder', THIRD_ID)}`;
+    const folder = dockerfileFolder('c42-reload-switch', lines, {
+      remoteUser: 'tester',
+    });
+    try {
+      const name = await reopened(folder);
+      const containerId = await containerOf(folder);
+      editConfiguration(folder, 'remoteUser', 'builder');
+      await reloadWindow(name);
+      await connectedToContainer(name);
+      const terminalUser = await terminalUserOf(name);
+      const status = (await stateOf(containerId)).status;
+      await docker('start', containerId);
+      const builder = await idsOf(containerId, 'builder');
+      await closeWindow(name);
+      deepStrictEqual(
+        {terminalUser, status, builder},
+        {
+          terminalUser: 'builder',
+          status: 'running',
+          builder: `${String(THIRD_ID)}:${String(THIRD_ID)}`,
+        },
+      );
+    } finally {
+      await removeContainers(folder);
+      await removeImages(folder);
     }
   });
 });
