@@ -131,6 +131,8 @@ interface TransferRun {
   renames: string[];
   /** The log lines of the transfer, as `level message`. */
   logLines: string[];
+  /** How many times the transfer read the netrc. */
+  netrcReads: number;
 }
 
 /** What a run is set up with: each install run's output in order, and how the client side behaves. */
@@ -168,6 +170,8 @@ interface Setup {
   renameResult?: {kind: 'renamed'} | {kind: 'failed'; detail: string};
   /** Collects the deleted client files even when the transfer throws. */
   removed?: string[];
+  /** The text of the client's netrc, or the error reading it throws; there is no file when absent. */
+  netrc?: string | Error;
 }
 
 async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
@@ -188,6 +192,7 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
   const renames: string[] = [];
   const sink = new MemorySink();
   const results = [...(setup.downloadResults ?? [DOWNLOADED])];
+  let netrcReads = 0;
   const outcome = await transfer(
     {
       plan: plan(setup.plan),
@@ -206,6 +211,14 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
     },
     {
       channel,
+      credentials: {
+        readNetrc: () => {
+          netrcReads += 1;
+          return setup.netrc instanceof Error
+            ? Promise.reject(setup.netrc)
+            : Promise.resolve(setup.netrc);
+        },
+      },
       download: {
         download: request => {
           downloads.push(request);
@@ -255,6 +268,7 @@ async function runTransfer(setup: Setup = {}): Promise<TransferRun> {
     removed,
     renames,
     logLines: sink.lines.map(line => `${line.level} ${line.message}`),
+    netrcReads,
   };
 }
 
@@ -1603,6 +1617,122 @@ describe("the names of the transfer's files (F-6301.BR-14)", () => {
     deepStrictEqual(
       downloads.map(request => request.destination),
       [path.join(CLIENT_FOLDER, 'server-abc123-1700000000000-b.tar.gz')],
+    );
+  });
+});
+
+describe('the transfer with credentials (card server-23)', () => {
+  const CLIENT = {where: 'client'} as const;
+  const NETRC = 'machine files.example.invalid login alice password s3cret-pw';
+
+  it('server-23: the netrc is read once per transfer, and the download is given the authorization it builds', async () => {
+    const {downloads, netrcReads} = await runTransfer({
+      plan: CLIENT,
+      netrc: NETRC,
+    });
+    deepStrictEqual(
+      [
+        netrcReads,
+        downloads.map(request => [
+          request.authorizationFor('https://files.example.invalid/a'),
+          request.authorizationFor('https://other.example.invalid/a'),
+        ]),
+      ],
+      [
+        1,
+        [
+          [
+            `Basic ${Buffer.from('alice:s3cret-pw').toString('base64')}`,
+            undefined,
+          ],
+        ],
+      ],
+    );
+  });
+
+  it('server-23: a missing netrc gives no credentials', async () => {
+    const {downloads} = await runTransfer({plan: CLIENT});
+    deepStrictEqual(
+      downloads.map(request =>
+        request.authorizationFor('https://files.example.invalid/a'),
+      ),
+      [undefined],
+    );
+  });
+
+  it('server-23: a netrc that cannot be read is logged by its code, and the download goes on without credentials', async () => {
+    const reading = Object.assign(new Error('EISDIR: /home/user/.netrc'), {
+      code: 'EISDIR',
+    });
+    const {outcome, downloads, logLines} = await runTransfer({
+      plan: CLIENT,
+      netrc: reading,
+    });
+    deepStrictEqual(
+      [
+        outcome.kind,
+        downloads.map(request =>
+          request.authorizationFor('https://files.example.invalid/a'),
+        ),
+        logLines.filter(line => line.includes('netrc')),
+      ],
+      [
+        'transferred',
+        [undefined],
+        ['warn the netrc file could not be read (EISDIR)'],
+      ],
+    );
+  });
+
+  it('server-23: a read that fails with no code is logged as unknown', async () => {
+    const {logLines} = await runTransfer({
+      plan: CLIENT,
+      netrc: new Error('boom'),
+    });
+    deepStrictEqual(
+      logLines.filter(line => line.includes('netrc')),
+      ['warn the netrc file could not be read (unknown)'],
+    );
+  });
+
+  it('server-23: an unauthorized answer is a localDownload failure of that cause, with the status and the detail', async () => {
+    const {outcome} = await runTransfer({
+      plan: CLIENT,
+      downloadResults: [
+        {
+          kind: 'failed',
+          detail:
+            'Server returned 401: the source at files.example.invalid asks for credentials.',
+          cause: 'unauthorized',
+          status: 401,
+        },
+      ],
+    });
+    deepStrictEqual(failureOf(outcome), {
+      kind: 'localDownload',
+      cause: 'unauthorized',
+      detail:
+        'Server returned 401: the source at files.example.invalid asks for credentials.',
+      status: 401,
+    });
+  });
+
+  it('server-23: the log shows neither the password nor the login nor the file’s text', async () => {
+    const {logLines} = await runTransfer({
+      plan: CLIENT,
+      netrc: `${NETRC}\n`,
+      downloadResults: [
+        {kind: 'failed', detail: 'HTTP 404', cause: 'httpStatus', status: 404},
+      ],
+    });
+    deepStrictEqual(
+      logLines.filter(
+        line =>
+          line.includes('s3cret-pw') ||
+          line.includes('alice') ||
+          line.includes('machine'),
+      ),
+      [],
     );
   });
 });

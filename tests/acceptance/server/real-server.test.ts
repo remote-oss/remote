@@ -199,6 +199,7 @@ describe('F-2403 the real server on the Alpine host (VSCodium, musl)', function 
       },
       {
         channel: host.channel,
+        credentials: {readNetrc: () => Promise.resolve(undefined)},
         download: downloadPortOf(fetch),
         files: nodeClientFiles,
         lockLoop: lockLoop(),

@@ -13,7 +13,7 @@ import {nodeTimer} from 'lib-helper';
 import {identifierHost} from 'lib-identifiers';
 import type {Logger} from 'lib-log';
 import {profileOf} from 'lib-product';
-import {downloadPortOf, nodeClientFiles} from 'lib-server';
+import {downloadPortOf, nodeClientFiles, nodeCredentialsPort} from 'lib-server';
 import {standDownHost} from 'lib-standdown';
 import {activateContainers} from './activation.ts';
 import {serializedUriOf} from './authority/payload.ts';
@@ -655,6 +655,11 @@ export async function activate(
             store: acceptances,
             modal,
             download,
+            credentials: nodeCredentialsPort({
+              environment: process.env,
+              platform: process.platform,
+              homeFolder: os.homedir(),
+            }),
             files: nodeClientFiles,
             clock,
             newTemporaryToken: () =>

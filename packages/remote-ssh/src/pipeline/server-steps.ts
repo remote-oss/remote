@@ -24,6 +24,7 @@ import {
   classifyServerLicence,
   type DownloadBounds,
   type DirectReason,
+  type CredentialsPort,
   type DownloadPort,
   ensureAccepted,
   installExtensions,
@@ -84,6 +85,7 @@ export interface ServerStepDependencies {
   store: AcceptanceStore;
   modal: LicenceModal;
   download: DownloadPort;
+  credentials: CredentialsPort;
   files: ClientFilePort;
   lockLoop: HostLockLoop;
   /** The client's temporary folder, where a downloaded archive that is not kept waits. */
@@ -417,6 +419,7 @@ export function createServerSteps(
         {
           channel: lease.channel,
           download: dependencies.download,
+          credentials: dependencies.credentials,
           files: dependencies.files,
           lockLoop: dependencies.lockLoop,
           logger: dependencies.logger,
@@ -458,6 +461,7 @@ export function createServerSteps(
         {
           channel: lease.channel,
           download: dependencies.download,
+          credentials: dependencies.credentials,
           files: dependencies.files,
           lockLoop: dependencies.lockLoop,
           logger: dependencies.logger,

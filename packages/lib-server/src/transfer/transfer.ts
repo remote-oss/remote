@@ -26,10 +26,12 @@ import {
 import type {ScriptStatus} from '../scripts/result-block.ts';
 import type {
   ClientFilePort,
+  CredentialsPort,
   DownloadBounds,
   DownloadPort,
   DownloadResult,
 } from './ports.ts';
+import {authorizationOf, parseNetrc} from './netrc.ts';
 import {verifyArchive} from './verify.ts';
 
 /** The plan of an install that needs an archive. */
@@ -88,6 +90,7 @@ export interface TransferInput {
 export interface TransferDependencies {
   channel: HostChannel;
   download: DownloadPort;
+  credentials: CredentialsPort;
   files: ClientFilePort;
   lockLoop: HostLockLoop;
   logger: Logger;
@@ -105,7 +108,7 @@ export type TransferFailure =
   | {
       kind: 'localDownload';
       /** What failed: the request on the network, an HTTP error status, or the client's file for the archive. */
-      cause: 'network' | 'httpStatus' | 'clientFile';
+      cause: 'network' | 'httpStatus' | 'unauthorized' | 'clientFile';
       detail: string;
       status?: number;
     }
@@ -404,7 +407,9 @@ function downloadFailure(
   return failed({
     kind: 'localDownload',
     cause:
-      failure.cause === 'httpStatus' || failure.cause === 'clientFile'
+      failure.cause === 'httpStatus' ||
+      failure.cause === 'unauthorized' ||
+      failure.cause === 'clientFile'
         ? failure.cause
         : 'network',
     detail: failure.detail,
@@ -468,6 +473,25 @@ function addressForLog(address: string): string {
   return `${parsed.origin}${parsed.pathname}`;
 }
 
+/** The `Authorization` value of each address, from the client's netrc; a file that cannot be read gives none, and is logged without its text. */
+async function authorizationsOf(
+  dependencies: TransferDependencies,
+): Promise<(address: string) => string | undefined> {
+  const {credentials, logger} = dependencies;
+  try {
+    return authorizationOf(
+      parseNetrc((await credentials.readNetrc()) ?? ''),
+      logger,
+    );
+  } catch (caught) {
+    const {code} = caught as NodeJS.ErrnoException;
+    logger.warn(
+      `the netrc file could not be read (${typeof code === 'string' ? code : 'unknown'})`,
+    );
+    return () => undefined;
+  }
+}
+
 /**
  * Downloads the archive to `destination` and checks it. The failure when it did not work, or nothing when the file is
  * good. The time and the size are bounded, the final host must be one the plan's redirect rule allows, and
@@ -478,6 +502,7 @@ async function fetchVerified(
   dependencies: TransferDependencies,
   destination: string,
 ): Promise<TransferOutcome | undefined> {
+  const authorizationFor = await authorizationsOf(dependencies);
   const limit = AbortSignal.any([
     input.cancellation,
     AbortSignal.timeout(input.downloadBounds.deadlineMilliseconds),
@@ -488,6 +513,7 @@ async function fetchVerified(
       destination,
       cancellation: limit,
       redirect: input.plan.redirect,
+      authorizationFor,
       ...input.downloadBounds,
       onPercent: percent => {
         dependencies.onPhase({kind: 'progress', step: 'download', percent});
