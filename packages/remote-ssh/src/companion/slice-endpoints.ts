@@ -1,8 +1,8 @@
 /**
  * @fileoverview The commands Remote - SSH serves to Remote Explorer: the configured hosts, the window's active remote
  * and the opening of a window on a host. Each is answered from what the window already knows, shows nothing and
- * writes no history; a foreign or newer-version argument never reaches a handler. The other commands of the
- * interface are not registered.
+ * writes no history; a foreign or newer-version argument never reaches a handler. The history commands are served in
+ * `history-endpoints.ts`.
  */
 
 import {type LastResolve, type OpenerHost, openRemote} from 'lib-authority';
@@ -19,6 +19,7 @@ import {
 } from 'lib-companion';
 import type {Logger} from 'lib-log';
 import type {HostListResult} from 'lib-ssh';
+import {allOf} from './registrations.ts';
 
 /** What the three endpoints take from the editor and the window. */
 export interface SliceEndpointPorts {
@@ -110,15 +111,5 @@ export function serveSliceEndpoints(
       },
     }),
   ];
-  let disposed = false;
-  return {
-    dispose: () => {
-      if (!disposed) {
-        disposed = true;
-        for (const registration of registrations) {
-          registration.dispose();
-        }
-      }
-    },
-  };
+  return allOf(registrations);
 }

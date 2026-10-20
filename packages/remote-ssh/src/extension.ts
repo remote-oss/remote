@@ -47,6 +47,11 @@ import {
   mismatchLine,
   serveSliceEndpoints,
 } from './companion/slice-endpoints.ts';
+import {serveHistoryEndpoints} from './companion/history-endpoints.ts';
+import {
+  recordOnFirstResolve,
+  type WindowWorkspace,
+} from './companion/history-recorder.ts';
 import {nodeConfigReader} from './connect/node-config-reader.ts';
 import {connectAssemblyOf} from './connect-ports.ts';
 import {editorOperationsOf} from './editor-operations.ts';
@@ -300,6 +305,17 @@ export async function activate(
       result.logger.warn(mismatchLine(mismatch));
     },
   });
+  const history = serveHistoryEndpoints(companion, context.globalState);
+  recordOnFirstResolve(
+    {
+      onFirstResolveSettled: listener => {
+        connect.onFirstResolveSettled(listener);
+      },
+      lastResolve: () => connect.activeConnection()?.lastResolve ?? 'none',
+    },
+    workspaceOf(vscode),
+    context.globalState,
+  );
   const endpoints = serveSliceEndpoints(companion, {
     listHosts: () => configuredHosts(host),
     activeConnection: () => connect.activeConnection(),
@@ -309,8 +325,18 @@ export async function activate(
   context.subscriptions.push({
     dispose: () => {
       endpoints.dispose();
+      history.dispose();
     },
   });
+}
+
+/** What the history recorder reads of the window: its workspace file and its folders. */
+function workspaceOf(editor: typeof vscode): WindowWorkspace {
+  return {
+    workspaceFile: () => editor.workspace.workspaceFile,
+    workspaceFolders: () =>
+      (editor.workspace.workspaceFolders ?? []).map(folder => folder.uri),
+  };
 }
 
 /** The hosts of the files in effect, read at each call: the host pick's and the companion commands' one reading. */
