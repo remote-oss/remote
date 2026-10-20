@@ -87,7 +87,7 @@ its content:
    - `cache: kept`;
    - `verification: none` (until the room names one);
    - `environmentSetup: none`;
-   - `requirementsCheck: serverBundled`;
+   - `requirementsCheck: bundledHelper` (containers-21, #903);
    - `allowedExtraStartOptions: [useHostProxy]`: every server start runs in host-proxy mode (F-0503 BR-18, #122 Q6), so
      the container's extensions take the local proxy and, with `http.systemCertificates`, its certificates;
    - `cleanup: onlyCurrentKeepLeftovers` (the volume is shared by every dev container);
