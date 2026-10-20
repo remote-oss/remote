@@ -658,7 +658,7 @@ F-0501.AC-23	deferred	containers release 1: later (the attach, Kubernetes and Ap
 F-0501.AC-24	deferred	containers release 1: later (the recovery container)
 F-0501.AC-25	deferred	containers release 1: later (volumes and Clone in Volume)
 F-0501.AC-26	todo	
-F-0501.AC-27	todo	
+F-0501.AC-27	deferred	containers release 1: later (Reopen Folder Locally)
 F-0501.AC-28	deferred	containers release 1: later (remote engines)
 F-0502.AC-1	todo	
 F-0502.AC-2	todo	
