@@ -111,7 +111,7 @@ describe('the Details tree (card containers-33)', () => {
     deepStrictEqual(rows, [[], ['/tmp/y/devcontainer.json']]);
   });
 
-  it('F-0903 BR-9, AC-10: a container with no mount has no Mounts section', () => {
+  it('F-0903 AC-10: F-0903 BR-9: a container with no mount has no Mounts section', () => {
     deepStrictEqual(
       detailsTreeOf({...BOUND, mounts: []}, identity).sections.map(
         section => section.label,

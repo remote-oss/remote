@@ -938,16 +938,16 @@ F-0902.AC-52	deferred	containers 0.4: C12 attach later
 F-0902.AC-53	deferred	containers 0.4: C12 attach later
 F-0902.AC-54	todo	
 F-0902.AC-55	todo	
-F-0903.AC-1	todo	
+F-0903.AC-1	acceptance	
 F-0903.AC-2	deferred	containers 0.4: F-0903 toolbar commands later
 F-0903.AC-3	deferred	containers 0.4: C13 volumes later
 F-0903.AC-4	deferred	containers 0.4: C12 attach later
 F-0903.AC-5	deferred	containers 0.4: C12 attach later
 F-0903.AC-6	todo	
 F-0903.AC-7	deferred	containers 0.4: F-0903 toolbar commands later
-F-0903.AC-8	todo	
+F-0903.AC-8	acceptance	
 F-0903.AC-9	todo	
-F-0903.AC-10	todo	
+F-0903.AC-10	unit	
 F-0903.AC-11	deferred	containers 0.4: C13 volumes later
 F-0903.AC-12	deferred	containers 0.4: C13 volumes later
 F-0903.AC-13	todo	
@@ -955,10 +955,10 @@ F-0903.AC-14	deferred	containers 0.4: C13 volumes later
 F-0903.AC-15	deferred	containers 0.4: Windows, WSL and macOS later
 F-0903.AC-16	deferred	containers 0.4: Compose later
 F-0903.AC-17	deferred	containers 0.4: C12 attach later
-F-0903.AC-18	todo	
+F-0903.AC-18	core	core: the generated Focus on Details command and its listing in the palette
 F-0903.AC-19	deferred	containers 0.4: C12 attach later
 F-0903.AC-20	deferred	containers 0.4: F-0410 recovery container later
-F-0903.AC-21	todo	
+F-0903.AC-21	deferred	containers 0.4: F-0406 later
 F-0903.AC-22	deferred	containers 0.4: Windows, WSL and macOS later
 F-0903.AC-23	todo	
 F-0903.AC-24	deferred	containers 0.4: C13 volumes later
@@ -967,12 +967,12 @@ F-0903.AC-26	todo
 F-0903.AC-27	todo	
 F-0903.AC-28	todo	
 F-0903.AC-29	todo	
-F-0903.AC-30	todo	
+F-0903.AC-30	acceptance	
 F-0903.AC-31	deferred	containers 0.4: F-0903 toolbar commands later
 F-0903.AC-32	deferred	containers 0.4: F-0903 toolbar commands later
 F-0903.AC-33	todo	
-F-0903.AC-34	todo	
-F-0903.AC-35	todo	
+F-0903.AC-34	unit	
+F-0903.AC-35	acceptance	
 F-0903.AC-36	todo	
 F-0906.AC-1	todo	
 F-0906.AC-2	deferred	containers 0.4: F-0904 later
@@ -985,18 +985,18 @@ F-0906.AC-8	deferred	containers 0.4: C12 attach later
 F-0906.AC-9	deferred	containers 0.4: C12 attach later
 F-0906.AC-10	deferred	containers 0.4: C12 attach later
 F-0906.AC-11	deferred	containers 0.4: Kubernetes later
-F-0906.AC-12	todo	
-F-0906.AC-13	todo	
-F-0906.AC-14	todo	
-F-0906.AC-15	todo	
+F-0906.AC-12	core	core: the target-type filter, the dropdown and the indicator menu of a window with Remote - SSH
+F-0906.AC-13	core	core: the dropdown, the stored remote.explorerType and its restore
+F-0906.AC-14	core	core: the target-type filter of a virtual workspace
+F-0906.AC-15	core	core: a stored remote.explorerType that matches no view
 F-0906.AC-16	todo	
 F-0906.AC-17	deferred	containers 0.4: F-0504 BR-8 later
 F-0906.AC-18	deferred	containers 0.4: F-0904 later
 F-0906.AC-19	deferred	containers 0.4: C12 attach later
-F-0906.AC-20	todo	
+F-0906.AC-20	core	core: the activity bar item of an empty viewlet
 F-0906.AC-21	deferred	containers 0.4: Windows, WSL and macOS later
 F-0906.AC-22	deferred	containers 0.4: F-0904 later
-F-0906.AC-23	todo	
+F-0906.AC-23	core	core: the remote indicator menu's recommendation row
 F-1402.AC-1	todo	
 F-1402.AC-2	todo	
 F-1402.AC-3	todo	
