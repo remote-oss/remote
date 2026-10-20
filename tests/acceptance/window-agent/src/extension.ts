@@ -147,6 +147,19 @@ function visibleOutputChannelOf(
   return shown === undefined ? null : shown.path.replace(/^.*-#\d+-/, '');
 }
 
+/** The active tab of the window when it holds a text file: its URI and whether it is a preview; null for any other tab. */
+function activeTabOf(
+  current: vscode.Tab | undefined,
+): {uri: string; preview: boolean} | null {
+  if (
+    current === undefined ||
+    !(current.input instanceof vscode.TabInputText)
+  ) {
+    return null;
+  }
+  return {uri: current.input.uri.toString(), preview: current.isPreview};
+}
+
 /** Starts the agent: reports the window's activation, registers its own commands and polls for the test's commands. */
 export function activate(context: vscode.ExtensionContext): void {
   const agentFolder = agentFolderOf();
@@ -202,8 +215,22 @@ export function activate(context: vscode.ExtensionContext): void {
         terminals: vscode.window.terminals.map(terminal => terminal.name),
         activeEditor:
           vscode.window.activeTextEditor?.document.uri.fsPath ?? null,
+        activeTab: activeTabOf(
+          vscode.window.tabGroups.activeTabGroup.activeTab,
+        ),
+        dirtyDocuments: vscode.workspace.textDocuments
+          .filter(document => document.isDirty)
+          .map(document => document.uri.toString()),
       });
     }),
+    vscode.commands.registerCommand(
+      'acceptance.agent.openUntitled',
+      async (content: string) => {
+        await vscode.window.showTextDocument(
+          await vscode.workspace.openTextDocument({content}),
+        );
+      },
+    ),
     vscode.commands.registerCommand(
       'acceptance.agent.setting',
       (settingId: string) => {

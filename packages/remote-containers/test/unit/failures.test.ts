@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
 import {
   cancelled,
+  configurationInvalid,
   containerGone,
   containerSetupFailed,
   containerUnusable,
@@ -43,6 +44,19 @@ describe('the failures of the container connector (card containers-08)', () => {
         ['engineCheckFailed', {id: 'S104'}, false, false, false],
         ['containerUnusable', {id: 'S034'}, false, false, false],
         ['containerSetupFailed', {id: 'S034'}, false, false, false],
+      ],
+    );
+  });
+
+  it("F-0301 AC-11 (card containers-57): an image or Dockerfile of the wrong type names S081 with the configuration's path", () => {
+    deepStrictEqual(
+      shape(configurationInvalid('/w/.devcontainer/devcontainer.json')),
+      [
+        'configurationInvalid',
+        {id: 'S081', values: ['/w/.devcontainer/devcontainer.json']},
+        false,
+        false,
+        false,
       ],
     );
   });

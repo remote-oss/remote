@@ -46,6 +46,8 @@ const CLAUSE = `viewItem == remote-explorer.tunnelRemoteTarget && ${GATE} || vie
 
 const FOLDER_CLAUSE = `viewItem == remote-explorer.remoteFolder && ${GATE} || viewItem == remote-explorer.tunnelWsl && ${GATE}`;
 
+const GROUP_CLAUSE = `viewItem == remote-explorer.sshGroup && ${GATE}`;
+
 const REMOVE_CLAUSE = `viewItem == remote-explorer.remoteFolder && ${GATE}`;
 
 const STRINGS_TABLE = {
@@ -69,6 +71,8 @@ const STRINGS_TABLE = {
     'Display folders in alphabetical order',
   'settings.collapseRecentFolders.description':
     'Collapse the recent folders under Remote targets in the Remote Explorer.',
+  'commands.configureSsh.title': 'Open SSH Config File',
+  'commands.add.title': 'New Remote',
 };
 
 /** Every `%key%` the manifest uses. */
@@ -191,7 +195,7 @@ describe('the manifest of the Remote Explorer package', () => {
     );
   });
 
-  it('F-5103.AC-1, F-5902.AC-1, AC-14: F-5002.3.1: the six commands, in order, with a title and an icon and no category or enablement', () => {
+  it('F-5103.AC-1, F-5902.AC-1, AC-14: F-5002.3.1: the eight commands, in order, with a title and an icon and no category or enablement', () => {
     deepStrictEqual(CONTRIBUTES.commands, [
       {
         command: 'remote-explorer.refresh',
@@ -223,6 +227,16 @@ describe('the manifest of the Remote Explorer package', () => {
         title: '%commands.deleteFolderHistoryItem.title%',
         icon: '$(remove)',
       },
+      {
+        command: 'remote-explorer.configureSsh',
+        title: '%commands.configureSsh.title%',
+        icon: '$(gear)',
+      },
+      {
+        command: 'remote-explorer.add',
+        title: '%commands.add.title%',
+        icon: '$(plus)',
+      },
     ]);
   });
 
@@ -240,6 +254,8 @@ describe('the manifest of the Remote Explorer package', () => {
         when: 'false',
       },
       {command: 'remote-explorer.deleteFolderHistoryItem', when: 'false'},
+      {command: 'remote-explorer.configureSsh', when: 'false'},
+      {command: 'remote-explorer.add', when: 'false'},
     ]);
   });
 
@@ -253,7 +269,7 @@ describe('the manifest of the Remote Explorer package', () => {
     ]);
   });
 
-  it('F-5001.AC-24, F-5103.AC-1, AC-8, AC-26: F-5103.3.1: the connect commands are inline and in the context menu of the host and folder rows, and the removal is in the menu of the folder rows', () => {
+  it('F-5001.AC-24, F-5103.AC-1, AC-8, AC-26: F-5103.3.1: the connect commands are inline and in the context menu of the host and folder rows, the removal is in the menu of the folder rows, and the two hand-overs are inline and in the menu of the SSH group row', () => {
     deepStrictEqual(MENUS['view/item/context'], [
       {
         command: 'remote-explorer.connectToRemoteInCurrentWindow',
@@ -300,6 +316,26 @@ describe('the manifest of the Remote Explorer package', () => {
         group: 'navigation@3',
         when: REMOVE_CLAUSE,
       },
+      {
+        command: 'remote-explorer.configureSsh',
+        group: 'inline@1',
+        when: GROUP_CLAUSE,
+      },
+      {
+        command: 'remote-explorer.configureSsh',
+        group: 'navigation@1',
+        when: GROUP_CLAUSE,
+      },
+      {
+        command: 'remote-explorer.add',
+        group: 'inline@2',
+        when: GROUP_CLAUSE,
+      },
+      {
+        command: 'remote-explorer.add',
+        group: 'navigation@2',
+        when: GROUP_CLAUSE,
+      },
     ]);
   });
 
@@ -315,7 +351,7 @@ describe('the manifest of the Remote Explorer package', () => {
             alternative.split(GATE).length === 2,
         ),
       ),
-      Array.from({length: 18}, () => true),
+      Array.from({length: 22}, () => true),
     );
   });
 
@@ -367,7 +403,7 @@ describe('the manifest of the Remote Explorer package', () => {
     });
   });
 
-  it('F-5001.BR-9: the strings table has the thirteen keys, and the manifest uses only those', () => {
+  it('F-5001.BR-9: the strings table has the fifteen keys, and the manifest uses only those', () => {
     deepStrictEqual(
       [jsonOf('package.nls.json'), [...new Set(nlsKeysUsed(MANIFEST))].sort()],
       [STRINGS_TABLE, Object.keys(STRINGS_TABLE).sort()],

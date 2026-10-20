@@ -4,6 +4,7 @@ import {
   FAMILY_COMPANIONS,
   SSH_COMPANION_ID,
   SSH_ENDPOINTS,
+  SSH_HAND_OVERS,
 } from '../../src/index.ts';
 
 describe('the endpoint ids', () => {
@@ -43,6 +44,19 @@ describe('the endpoint ids', () => {
             kind: 'push',
           },
         },
+      ],
+    );
+  });
+
+  it('F-5902.5.contract: F-5102.BR-12: the hand-over commands are the two the group row runs, frozen', () => {
+    deepStrictEqual(
+      [SSH_HAND_OVERS, Object.isFrozen(SSH_HAND_OVERS)],
+      [
+        {
+          openConfigFile: 'opensshremotes.openConfigFile',
+          addNewSshHost: 'opensshremotes.addNewSshHost',
+        },
+        true,
       ],
     );
   });

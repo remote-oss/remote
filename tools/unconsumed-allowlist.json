@@ -17,22 +17,6 @@
       "decision": "D-60"
     },
     {
-      "package": "remote-explorer",
-      "kind": "internalCommands",
-      "key": "setActiveFolders",
-      "card": "#745",
-      "slice": "0.3 explorer increment 2",
-      "decision": "explorer brief 2026-10-13: increment 2"
-    },
-    {
-      "package": "remote-explorer",
-      "kind": "internalCommands",
-      "key": "sshHostsChanged",
-      "card": "#745",
-      "slice": "0.3 explorer increment 2",
-      "decision": "explorer brief 2026-10-13: increment 2"
-    },
-    {
       "package": "remote-containers",
       "kind": "contextKeys",
       "key": "hideConnectCommands",
@@ -47,6 +31,14 @@
       "card": "#884",
       "slice": "containers release 1",
       "decision": "F-0405 3.2 (2026-09-27): defined, never set"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/shutdown/effective-action.ts",
+      "card": "#1225",
+      "slice": "containers increment 2",
+      "decision": "read by the window's connect, card containers-69 (#1226)"
     }
   ]
 }

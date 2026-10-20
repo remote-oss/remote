@@ -158,7 +158,7 @@ files and two launches never mix their windows. The agent appends `activated`, `
 every 200 ms for `{id, command, args}` lines it has not accepted yet, so a command written while the window starts or
 reloads is not lost. The deactivation is reported once, by the first of the extension's deactivate or the process's
 own end that reaches it, so a window the harness ends still reports it. Its own commands are
-`acceptance.agent.openWindow(uri)`, `acceptance.agent.writeFile(name, text)` and `acceptance.agent.state()`; an
+`acceptance.agent.openWindow(uri)`, `acceptance.agent.writeFile(name, text)`, `acceptance.agent.openUntitled(content)` (opens an untitled editor holding `content`, which makes it dirty) and `acceptance.agent.state()`, whose report lists the uris of the documents with unsaved changes in `dirtyDocuments`; an
 `openWindow` whose uri names an authority but no folder opens an empty window on it, the way the connect commands do,
 and one with a folder opens a folder window.
 
@@ -415,6 +415,21 @@ runs once on the default host, in `pnpm test:acceptance:server`.
 all eight), each in its own mocha run on its own host: `server/login-shell-variant.test.ts` pins the shell the host
 reports, and `server/login-shells.test.ts`, `server/start.test.ts` and `server/shared-session.test.ts` prove that every
 session hands its commands to POSIX `sh` whatever the login shell is.
+
+## Rows that fail in some runs
+
+Each launch of a run starts with a line `acceptance: launch <label>`, so a run's log splits by launch.
+`tools/flake-ledger.ts` reads the rows of the acceptance jobs from a run's job log, as `gh run view <id> --log` prints
+it:
+
+    node tools/flake-ledger.ts record <run id> <log file>   one run, into docs/qa/runs/<run id>.json
+    node tools/flake-ledger.ts render                       docs/qa/flakes.md, from the recorded runs
+
+A recorded run keeps its failed rows in full (title, launch, the first line of the failure) and a short key for each row
+that passed. The folder keeps the newest 30 runs. The ledger lists each row that failed in a recorded run over its
+latest 10 runs: those that failed and passed, and those that failed every time. A row that failed in two or more of
+them is marked "(issue)". The recorded runs and the ledger are kept on the branch `qa/flakes`, updated after each
+scheduled run, not on main.
 
 ## Download host
 

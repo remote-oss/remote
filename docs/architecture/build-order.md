@@ -55,7 +55,7 @@ user asked for. The card replaces that stub's failing branch with the runner. It
 stub's tests for the no-script path, and adds no second step.
 - *Component:* `ssh.preconnect-runner` in `remote-ssh` (catalogue). `ports.settings.preconnect` (`connect-ports.ts`)
   already supplies the setting's value, so a `PreconnectPorts` port adds only a file reader (content and executable
-  bit), a process spawner and the approval memory. It needs no new library: the spawn goes through `lib-host`'s local process port, and the lines through
+  bit), a process spawner and the approval memory. It needs no new library: the spawn goes through `lib-ssh`'s `ProcessSpawner` (`machine.spawner`), and the lines through
   `lib-log` with its masking.
 - *Which script:* `remote.SSH.preconnect` as F-2108 resolves it: one path, or a map from host alias to path. That
   includes workspace-file and remote-folder settings and Restricted Mode (BR-15). The confirmation dialog is what
@@ -66,7 +66,8 @@ stub's tests for the no-script path, and adds no second step.
   message. Nothing else of the script is stored.
 - *During the run:* F-2304's progress text "Running pre-connection script (show log)", and every output line in the log
   as `[preconnect] <line>`, masked like any line (R-26).
-- *Outcomes:* Skip continues, and Cancel ends the connect as F-2304's cancel. Exit non-zero, no start, unreadable or not
+- *Outcomes:* Skip continues, and so does Cancel (F-2108 6.2, AC-10). A modal warning can't tell Cancel, Escape and the
+  close button apart. Exit non-zero, no start, unreadable or not
   found go to F-2601's failure dialog with the spec's reason. The `PreconnectScriptFailure` row of the troubleshooting
   terminal is F-2605's, so its criteria are `deferred` with D-86's reason.
 - *Rows:* unit on the alias map, the hash memory and every outcome. Acceptance in a launch with a local script fixture,

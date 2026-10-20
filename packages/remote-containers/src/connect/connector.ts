@@ -21,9 +21,14 @@ import {
 } from '../authority/payload.ts';
 import type {CliTarget} from '../cli/cli-arguments.ts';
 import type {CliBridge} from '../cli/cli-bridge.ts';
-import {type CliEvent, withoutControlSequences} from '../cli/cli-lines.ts';
+import {
+  type ConfigurationResult,
+  type CliEvent,
+  withoutControlSequences,
+} from '../cli/cli-lines.ts';
 import type {EngineHost} from '../engine/engine-host.ts';
 import {executableOf} from '../engine/executable.ts';
+import {sourceTypesValid} from '../config/source-types.ts';
 import {type PreflightDependencies, secondCheck} from '../engine/preflight.ts';
 import {execChannelOf} from '../exec/exec-channel.ts';
 import {
@@ -58,6 +63,7 @@ import {
 } from './remote-environment.ts';
 import {
   cancelled,
+  configurationInvalid,
   containerGone,
   containerSetupFailed,
   containerUnusable,
@@ -388,8 +394,8 @@ export function containerConnectorOf(
   let held: Held | undefined;
   let failedContainer: FailedContainer | undefined;
   let checking = false;
-  /** The folder each payload's container shows, read once per payload for the canonical requests (windows contracts §3.2). */
-  const reads = new Map<string, Promise<string | undefined>>();
+  /** Each payload's configuration as read without a container, read once per payload for the canonical requests and the connect's check (windows contracts §3.2). */
+  const reads = new Map<string, Promise<ConfigurationResult | undefined>>();
 
   /** Gives back the connection the window holds, and stops hearing its relay. */
   function releaseHeld(): void {
@@ -650,7 +656,7 @@ export function containerConnectorOf(
     payload: string,
     folder: DevContainerFolder,
     tools?: Tools,
-  ): Promise<string | undefined> {
+  ): Promise<ConfigurationResult | undefined> {
     const kept = reads.get(payload);
     if (kept !== undefined) {
       return kept;
@@ -671,7 +677,7 @@ export function containerConnectorOf(
           );
           return undefined;
         }
-        return result.workspaceFolder;
+        return result;
       });
     reads.set(payload, reading);
     return reading;
@@ -682,7 +688,7 @@ export function containerConnectorOf(
     payload: string,
     folder: DevContainerFolder,
     tools?: Tools,
-  ): Promise<string | undefined> {
+  ): Promise<ConfigurationResult | undefined> {
     return new Promise(resolve => {
       const stop = dependencies.preflight.setTimer(
         CANONICAL_READ_MILLISECONDS,
@@ -715,7 +721,7 @@ export function containerConnectorOf(
       connection === undefined
         ? await readWithinCap(payload, decoded)
         : undefined;
-    const root = connection?.remoteWorkspaceFolder ?? read;
+    const root = connection?.remoteWorkspaceFolder ?? read?.workspaceFolder;
     const local =
       root === undefined ? undefined : mappedPath(root, decoded.hostPath, path);
     if (local !== undefined) {
@@ -785,7 +791,7 @@ export function containerConnectorOf(
     failedContainer = undefined;
     const tools = toolsOf(folder);
     const {settings, dockerPath, configFile, engine, bridge} = tools;
-    await readWithinCap(payload, folder, tools);
+    const read = await readWithinCap(payload, folder, tools);
     if (!(await trustedFolder(folder, cancellation))) {
       return trustDeclined();
     }
@@ -801,6 +807,14 @@ export function containerConnectorOf(
     );
     if (checked.kind === 'failed') {
       return engineCheckFailed(checked.detail);
+    }
+    if (read !== undefined && !sourceTypesValid(read.configuration)) {
+      // The next attempt reads the file again, so a fix the user saves is seen by Retry.
+      reads.delete(payload);
+      logger.error(
+        `the configuration ${configFile} is not valid: its image or Dockerfile entry is not a string`,
+      );
+      return configurationInvalid(configFile);
     }
     lifecycle = dependencies.lifecycleFor(
       engine,

@@ -29,6 +29,8 @@ import tempfile
 import time
 
 import caselib
+import clientlisteners
+import clientports
 import driver
 import fixture
 import gitfixture
@@ -337,6 +339,9 @@ class Run:
         # may carry one, and folder pickers over the profile then list it (remote-oss/remote#72 triage). Never provision it.
         self.sh(["find", f"{self.slot_dir}/user-data", "-name", "state.vscdb.backup", "-delete"], check=True)
         settings_path = f"{self.slot_dir}/user-data/User/settings.json"
+        # the case's client ports (kit #289, K1), before the settings, files and state scripts that name ${PORT_<NAME>}
+        if fx.get("client_ports"):
+            self.provision_client_ports(fx["client_ports"])
         extra = self.provision_settings(settings_path, fx)
         ids = []
         # An SSH window needs the Remote - SSH extensions: a profile that names nothing besides the extension under test
@@ -492,6 +497,13 @@ class Run:
             raise ProvisionError("keybindings.json: the profile's file is not a plain JSON list: "
                                  + (p.stderr or p.stdout).strip()[-200:])
 
+    def client_listeners(self):
+        """The listening addresses and ports of this window's editor and every process below it, with each holder's
+        name (kit #289, K2), read from this machine's process and socket tables."""
+        if self.remote:
+            return {"error": "client_listeners: the window runs on another host, and its sockets are read on this one"}
+        return clientlisteners.window_listeners(f"{self.slot_dir}/user-data")
+
     def read_user_settings(self, keys):
         """athena on kit #227 (item 3): the named keys of the slot profile's settings.json, as {key: value}, with a key
         the file lacks as absent ({"absent": [...]}); never the rest of the file."""
@@ -506,6 +518,33 @@ class Run:
         if any(k not in data for k in keys):
             out["absent"] = [k for k in keys if k not in data]
         return out
+
+    def free_client_ports(self):
+        """`client_ports: free` (kit #289, F-2104 AC-16): ends the case's client port holder, so every port it held is
+        unbound from here to the case's end; each keeps its ${PORT_<NAME>}. Fails when a port is still bound after it."""
+        planned = getattr(self, "client_ports", None)
+        if not planned:
+            return {"ok": False, "error": "client_ports: free needs the case's own fixture.client_ports"}
+        clientports.stop(caselib.SLOTS_DIR, self.slot)
+        left = clientports.still_held(planned)
+        if left:
+            return {"ok": False, "error": "client_ports: free: still bound after the holder ended: " + ", ".join(left)}
+        return {"ok": True, "freed": [clientports.placeholder(p["name"]) for p in planned if p["kind"] in clientports.PLACES]}
+
+    def provision_client_ports(self, ports):
+        """fixture.client_ports (kit #289, K1): the ports on this machine, each bound as ${PORT_<NAME>}, held by a
+        detached holder until teardown. Checked first (the slot's range, the ephemeral range, ::1, a privileged port that
+        refuses): a port that can't be made here ends the provisioning, with the reason, before anything listens."""
+        if self.remote:
+            raise ProvisionError("fixture.client_ports: the ports are made on this machine, and this run's window is not")
+        try:
+            planned = clientports.plan(ports, self.slot)
+            clientports.start(planned, caselib.SLOTS_DIR, self.slot, self.run_id)
+        except clientports.PortError as e:
+            raise ProvisionError(f"fixture.client_ports: {e}")
+        self.client_ports = planned
+        self.ph.update(clientports.placeholders(planned))
+        self.step("client-ports", ports={p["name"]: p["kind"] for p in planned})
 
     def provision_settings(self, settings_path, fx):
         """Step 4's user settings and keybindings, over the profile snapshot just unpacked into the slot; returns the
@@ -745,6 +784,8 @@ class Run:
         p = subprocess.run([caselib.LAB_CODE, "stop"], capture_output=True, text=True, timeout=120,
                            env=dict(driver.BASE_ENV, **env))
         out["window_stopped"] = p.returncode == 0
+        if getattr(self, "client_ports", None):   # K1: after its window, so nothing it held is cut while it ran
+            out["client_ports_removed"] = clientports.stop(caselib.SLOTS_DIR, self.slot)
         code = "import sys; sys.path.insert(0, %r); import labiso; labiso.docker_down(%r)" % (LABISO_DIR, self.fid)
         p = self.sh(["python3", "-c", code], timeout=300)
         left = self.sh(["docker", "ps", "-aq", "--filter", f"name=labdind-{self.fid}"]).stdout.strip()
