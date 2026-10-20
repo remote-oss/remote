@@ -10,7 +10,11 @@ import {
   terminalNamed,
   waitFor,
 } from '../windows/harness.ts';
-import {dismissals, INSTALL_MILLISECONDS} from '../windows/maintenance.ts';
+import {
+  closeAllButLocal,
+  dismissals,
+  INSTALL_MILLISECONDS,
+} from '../windows/maintenance.ts';
 
 /** Writes `text` as `file` under the home folder of host user `user`; the text goes through base64, so any text is safe. */
 export async function writeHomeFile(
@@ -149,4 +153,13 @@ export async function failedOn(
       milliseconds: (line?.time ?? began) - began,
     },
   };
+}
+
+/**
+ * Makes the next connect of host user `user` start everything again: every window but the local one is closed and the
+ * shared SSH helper with it, so that no layer one captured earlier is kept, and the user's server is stopped.
+ */
+export async function freshServer(user: string): Promise<void> {
+  await closeAllButLocal();
+  await stopServer(user);
 }

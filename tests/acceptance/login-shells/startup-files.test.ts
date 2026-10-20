@@ -8,7 +8,7 @@ import {
 import {
   newTerminalIs,
   removeHomeFiles,
-  stopServer,
+  freshServer,
   surfaceLines,
   taskEnvironment,
   withWindow,
@@ -26,7 +26,7 @@ describe('login shells and their startup files: which files the connect reads (F
   this.timeout(900_000);
 
   it('F-2704 AC-1 (bash-default): a bash host in the default mode connects with no notice and no dialog', async () => {
-    await stopServer('harness-bash');
+    await freshServer('harness-bash');
     const state = await withWindow('harness-bash', 'sf-ac1', async () => ({
       remoteName: (await windowState('sf-ac1')).remoteName,
       notices: surfaceLines('sf-ac1', 'notice'),
@@ -42,7 +42,7 @@ describe('login shells and their startup files: which files the connect reads (F
   it('F-2704 AC-2 (zsh-terminal): a zsh host without a startup file, and with an empty .zshrc, connects and opens a zsh terminal that does not run the new-user setup', async () => {
     const seen: Array<[boolean, boolean]> = [];
     for (const runCommands of [undefined, '# mine\n']) {
-      await stopServer('harness-zsh');
+      await freshServer('harness-zsh');
       if (runCommands !== undefined) {
         await writeHomeFile('harness-zsh', '.zshrc', runCommands);
       }
@@ -66,7 +66,7 @@ describe('login shells and their startup files: which files the connect reads (F
   });
 
   it('F-2704 AC-4 (bash-files): the .profile and the .bashrc above and below its non-interactive guard each export a variable, and all three reach a task', async () => {
-    await stopServer('harness-bash');
+    await freshServer('harness-bash');
     await writeHomeFile(
       'harness-bash',
       '.profile',
@@ -92,7 +92,7 @@ describe('login shells and their startup files: which files the connect reads (F
   });
 
   it('F-2704 AC-5 (zsh-files): the .zshenv, .zprofile and .zshrc exports reach a task and a terminal, and a .profile export does not', async () => {
-    await stopServer('harness-zsh');
+    await freshServer('harness-zsh');
     await writeHomeFile('harness-zsh', '.zshenv', 'export F2704_ZSHENV=1\n');
     await writeHomeFile(
       'harness-zsh',
@@ -140,7 +140,7 @@ describe('login shells and their startup files: which files the connect reads (F
   });
 
   it('F-2704 AC-6 (dash-files): the .profile export and the export of the file ENV names reach a task', async () => {
-    await stopServer('harness-dash');
+    await freshServer('harness-dash');
     await writeHomeFile(
       'harness-dash',
       '.profile',
@@ -161,7 +161,7 @@ describe('login shells and their startup files: which files the connect reads (F
   });
 
   it('F-2704 AC-7 (noisy-startup): startup files that print 200 lines to stdout and one to stderr still connect, with no notice and no dialog', async () => {
-    await stopServer('harness-bash');
+    await freshServer('harness-bash');
     await writeHomeFile(
       'harness-bash',
       '.profile',
@@ -180,6 +180,67 @@ describe('login shells and their startup files: which files the connect reads (F
       });
     } finally {
       await removeHomeFiles('harness-bash', '.profile');
+    }
+  });
+
+  it('F-2704 AC-8 (shell-from-profile): a bash host whose .profile sets SHELL to zsh opens a zsh terminal, and the .zshrc export reaches a task', async () => {
+    await freshServer('harness-bash');
+    await writeHomeFile('harness-bash', '.profile', 'export SHELL=/bin/zsh\n');
+    await writeHomeFile('harness-bash', '.zshrc', 'export F2704_ZSHRC=1\n');
+    try {
+      const seen = await withWindow('harness-bash', 'sf-ac8', async () => {
+        const environment = await taskEnvironment(
+          'sf-ac8',
+          'harness-bash',
+          'sf-ac8',
+        );
+        return {
+          task: marked(environment, 'F2704_'),
+          terminal: await newTerminalIs('sf-ac8', 'zsh'),
+        };
+      });
+      deepStrictEqual(seen, {task: ['F2704_ZSHRC'], terminal: true});
+    } finally {
+      await removeHomeFiles('harness-bash', '.profile', '.zshrc');
+    }
+  });
+
+  it('F-2704 AC-9 (exec-into-zsh): a .bash_profile that ends by running zsh in place connects with no notice, the .profile export reaches a task, and the .bashrc and .zshrc exports do not', async () => {
+    await freshServer('harness-bash');
+    await writeHomeFile(
+      'harness-bash',
+      '.bash_profile',
+      '. "$HOME/.profile"\nexec zsh\n',
+    );
+    await writeHomeFile('harness-bash', '.profile', 'export F2704_PROFILE=1\n');
+    await writeHomeFile('harness-bash', '.bashrc', 'export F2704_BASHRC=1\n');
+    await writeHomeFile('harness-bash', '.zshrc', 'export F2704_ZSHRC=1\n');
+    try {
+      const seen = await withWindow('harness-bash', 'sf-ac9', async () => {
+        const environment = await taskEnvironment(
+          'sf-ac9',
+          'harness-bash',
+          'sf-ac9',
+        );
+        return {
+          task: marked(environment, 'F2704_'),
+          notices: surfaceLines('sf-ac9', 'notice'),
+          dialogs: surfaceLines('sf-ac9', 'failureDialog'),
+        };
+      });
+      deepStrictEqual(seen, {
+        task: ['F2704_PROFILE'],
+        notices: [],
+        dialogs: [],
+      });
+    } finally {
+      await removeHomeFiles(
+        'harness-bash',
+        '.bash_profile',
+        '.profile',
+        '.bashrc',
+        '.zshrc',
+      );
     }
   });
 });
