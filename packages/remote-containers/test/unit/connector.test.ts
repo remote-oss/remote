@@ -831,6 +831,29 @@ describe('the container connector: the connect (card containers-08)', () => {
     );
   });
 
+  it('F-0405 AC-10: a failed lifecycle command’s line is logged as an error without its colour codes and line end', async () => {
+    deepStrictEqual(
+      await loggedFor(
+        [
+          cliLog(
+            5,
+            'text',
+            '\u001b[1m\u001b[31mpostCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.\u001b[39m\u001b[22m\r',
+          ),
+        ],
+        [
+          'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.',
+        ],
+      ),
+      [
+        [
+          'error',
+          'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.',
+        ],
+      ],
+    );
+  });
+
   it('F-0408 BR-6: a progress event is logged as a debug line', async () => {
     const scene = sceneOf();
     scene.cliEvents = [

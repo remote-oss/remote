@@ -477,27 +477,28 @@ export function containerConnectorOf(
 
   /**
    * Writes a CLI event to the log: Docker's and BuildKit's own output (`raw`) as info lines, one per line of its text
-   * and without control sequences or empty lines; a text by its level (info, warning, error, else debug); progress as debug.
+   * and without control sequences or empty lines; a text by its level (info, warning, error, else debug), also without control sequences; progress as debug.
    */
   function logCliEvent(event: CliEvent): void {
     if (event.kind === 'progress') {
       logger.debug(`${event.name}: ${event.status}`);
-    } else if (event.type === 'raw') {
-      for (const line of withoutControlSequences(event.text).split(
-        /\r?\n|\r/u,
-      )) {
+      return;
+    }
+    const text = withoutControlSequences(event.text).trimEnd();
+    if (event.type === 'raw') {
+      for (const line of text.split(/\r?\n|\r/u)) {
         if (line.trim() !== '') {
           logger.info(line);
         }
       }
     } else if (event.level >= CLI_ERROR_LEVEL) {
-      logger.error(event.text);
+      logger.error(text);
     } else if (event.level >= CLI_WARNING_LEVEL) {
-      logger.warn(event.text);
+      logger.warn(text);
     } else if (event.level >= CLI_INFO_LEVEL && event.type === 'text') {
-      logger.info(event.text);
+      logger.info(text);
     } else {
-      logger.debug(event.text);
+      logger.debug(text);
     }
   }
 
