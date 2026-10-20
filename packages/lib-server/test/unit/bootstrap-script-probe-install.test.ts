@@ -305,6 +305,38 @@ describe('the POSIX bootstrap script', () => {
         {status: 'Ok', 'server.installed': 'yes'},
       );
     });
+
+    for (const [root, folder] of [
+      ['~/srv', ['srv', '.server-data', 'bin', 'abc123']],
+      ['~', ['.server-data', 'bin', 'abc123']],
+    ] as const) {
+      it(`F-2407 AC-7 (ruling-1277-tilde): the install root ${root} stands for the host's home folder`, () => {
+        deepStrictEqual(
+          statusAndFacts(
+            host,
+            single('probe'),
+            {...parametersFor(), installRoot: root},
+            ['server.installDir'],
+          ),
+          {
+            status: 'Ok',
+            'server.installDir': path.join(host.home, ...folder),
+          },
+        );
+      });
+    }
+
+    it('F-2407 AC-7 (ruling-1277-tilde): a ~ that is not the start of the install root stays as written', () => {
+      deepStrictEqual(
+        statusAndFacts(
+          host,
+          single('probe'),
+          {...parametersFor(), installRoot: '/a/~/b'},
+          ['server.installDir'],
+        ),
+        {status: 'Ok', 'server.installDir': '/a/~/b/.server-data/bin/abc123'},
+      );
+    });
   });
 
   describe('install', () => {
