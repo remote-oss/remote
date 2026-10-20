@@ -5,19 +5,28 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {volumeServerFolder} from 'lib-product';
 import {
+  activeEditorOf,
   closeWindow,
   devContainerFolder,
   connectedToContainer,
   devContainersOf,
   editorProduct,
+  OLD_GLIBC_IMAGE,
   reopenInContainer,
   reopenStarted,
+  runLabelArguments,
   variable,
+  waitFor,
 } from '../windows/harness.ts';
 import {
   answerDialog,
+  dialogOf,
   notifications,
+  pressEscape,
+  quickPickOf,
+  statusItem,
   waitForDialog,
+  waitForQuickPick,
 } from '../windows/renderer.ts';
 import {
   openFolderWindow,
@@ -34,6 +43,9 @@ const STARTING = 'Starting server';
 
 /** The notice text of S157, which no dialog or notification of a failed download may show. */
 const S157 = 'Waiting for other windows to connect';
+
+/** The recovery quick pick's placeholder (S272). */
+const S272 = 'Pick an action to help resolve the problem.';
 
 /** The generic failure dialog's detail (S034). */
 const S034 = 'An error occurred setting up the container.';
@@ -88,13 +100,16 @@ async function removeImagesOf(folderName: string): Promise<void> {
   }
 }
 
-/** What `script` prints when run as the remote user in container `containerId`. */
+/** What `script` prints when run as `user` (root unless said) in container `containerId`. */
 async function inContainer(
   containerId: string,
   script: string,
+  user = 'root',
 ): Promise<string> {
   const {stdout} = await execFileAsync('docker', [
     'exec',
+    '--user',
+    user,
     containerId,
     'sh',
     '-c',
@@ -550,5 +565,194 @@ describe('F-0503 server install (card containers-41)', function () {
     } finally {
       await setUserSetting('remote.serverDownloadFolder', downloadFolder);
     }
+  });
+
+  /** The failure dialog of a connect to a container whose glibc is too old, with the window it is in. */
+  async function requirementsDialog(name: string): Promise<string> {
+    const folder = folderOf(name, {image: OLD_GLIBC_IMAGE});
+    const window = await openFolderWindow(folder);
+    opened.push(window);
+    await reopenStarted(window);
+    await waitForDialog(window, 180_000);
+    return window;
+  }
+
+  it('F-0503 AC-6 (s12): the link is in the remote user’s own home, for root and for another remote user', async () => {
+    const product = editorProduct();
+    const rows: Array<[string, string]> = [];
+    for (const [name, user] of [
+      ['c41-home-root', 'root'],
+      ['c41-home-user', 'node'],
+    ] as const) {
+      const connected = await connect(
+        folderOf(name, user === 'root' ? {} : {remoteUser: user}),
+      );
+      const home = await inContainer(
+        connected.containerId,
+        `getent passwd ${user} | cut -d: -f6`,
+      );
+      rows.push([
+        home,
+        await inContainer(
+          connected.containerId,
+          `readlink ${home}/${product.serverDataFolderName}/bin/${product.commit}`,
+        ),
+      ]);
+    }
+    const tree = await treeOfImage();
+    deepStrictEqual(rows, [
+      ['/root', tree],
+      ['/home/node', tree],
+    ]);
+  });
+
+  it('F-0503 AC-9 (s13): the server’s processes run as the remote user, and it listens on 127.0.0.1 only', async () => {
+    const connected = await connect(
+      folderOf('c41-processes', {remoteUser: 'node'}),
+    );
+    const owners = (
+      await inContainer(
+        connected.containerId,
+        `ps -o user,args | grep -E 'codium|server-main|node' | grep -v grep | cut -d' ' -f1 | sort -u`,
+      )
+    ).split('\n');
+    const listening = (await inContainer(connected.containerId, 'netstat -ltn'))
+      .split('\n')
+      .filter(line => line.startsWith('tcp'))
+      .map(line => line.split(/\s+/)[3]?.split(':')[0]);
+    deepStrictEqual(
+      [owners, [...new Set(listening)]],
+      [['node'], ['127.0.0.1']],
+    );
+  });
+
+  it('F-0503 AC-10, AC-29 (s14): an Alpine container gets the Alpine tree of its architecture with no dialog, and the progress notification is gone after the connect', async () => {
+    const connected = await connect(folderOf('c41-alpine'));
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const platform = await platformName();
+    deepStrictEqual(
+      {
+        tree: (await installedIn(connected.containerId, await treeOfImage()))
+          .productJson,
+        dialog: await dialogOf(connected.name),
+        connecting: (await notifications(connected.name)).filter(text =>
+          text.includes('Connecting to Dev Container'),
+        ),
+        platform: platform.startsWith('alpine-'),
+      },
+      {tree: true, dialog: undefined, connecting: [], platform: true},
+    );
+  });
+
+  it('F-0503 AC-11 (s15): with no network, a volume hit and a miss that needs a download both connect', async () => {
+    const results: Array<[string[], string]> = [];
+    for (const miss of [false, true]) {
+      if (miss) {
+        await removeTree();
+      }
+      const connected = await connect(
+        folderOf(`c41-network-${miss ? 'miss' : 'hit'}`, {
+          runArgs: [...runLabelArguments(), '--network', 'none'],
+        }),
+      );
+      results.push([
+        connected.phases,
+        await inContainer(connected.containerId, 'ls /sys/class/net'),
+      ]);
+    }
+    deepStrictEqual(results, [
+      [[STARTING], 'lo'],
+      [[INSTALLING, STARTING], 'lo'],
+    ]);
+  });
+
+  it('F-0503 AC-16, AC-18 (s16): More Actions... on the requirements dialog shows the disconnected status and the five-item recovery quick pick of ruling 14, and Escape on it closes it and leaves the window disconnected', async () => {
+    const window = await requirementsDialog('c41-requirements-pick');
+    await answerDialog(window, 'More Actions...');
+    const pick = await waitForQuickPick(window, 30_000);
+    const indicator = (await statusItem(window, 'status.host')).text;
+    await pressEscape(window);
+    deepStrictEqual(
+      {
+        pick,
+        indicator,
+        after: [
+          await dialogOf(window),
+          (await statusItem(window, 'status.host')).text,
+        ],
+      },
+      {
+        pick: {
+          placeholder: S272,
+          items: [
+            'Reload Window',
+            'Rebuild Container',
+            'Edit devcontainer.json Locally',
+            'Open Recent...',
+            'Open Documentation',
+          ],
+        },
+        indicator: 'Disconnected from Dev Container',
+        after: [undefined, 'Disconnected from Dev Container'],
+      },
+    );
+  });
+
+  it('F-0503 AC-17 (s17): Edit devcontainer.json Locally on the requirements dialog shows the configuration file as the active editor, with no quick pick', async () => {
+    const window = await requirementsDialog('c41-requirements-edit');
+    await answerDialog(window, 'Edit devcontainer.json Locally');
+    const configuration = path.join(
+      variable('HARNESS_RUN_FOLDER'),
+      'c41-requirements-edit',
+      '.devcontainer',
+      'devcontainer.json',
+    );
+    await waitFor(
+      `window ${window}'s active editor to be ${configuration}`,
+      async () => (await activeEditorOf(window)) === configuration,
+      10_000,
+    );
+    deepStrictEqual(await quickPickOf(window), undefined);
+  });
+
+  it('F-0503 AC-44 (s18): a containerEnv HOME the remote user cannot create fails the setup, and creates nothing in /opt or in the user’s own home', async () => {
+    const folder = folderOf('c41-home-env', {
+      remoteUser: 'node',
+      containerEnv: {HOME: '/opt/r14home'},
+    });
+    const window = await openFolderWindow(folder);
+    opened.push(window);
+    await reopenStarted(window);
+    const dialog = await failureDialog(window);
+    const containerId = (await devContainersOf(folder))[0] ?? '';
+    deepStrictEqual(
+      {
+        dialog,
+        optional: await inContainer(containerId, 'ls -A /opt'),
+        home: await inContainer(containerId, 'ls -A /home/node'),
+      },
+      {dialog: FAILED_SETUP, optional: '', home: ''},
+    );
+  });
+
+  it('F-0503 AC-45 (s19): a remoteEnv HOME does not move the server folder, which stays in the remote user’s passwd home, and the HOME path is not made', async () => {
+    const product = editorProduct();
+    const connected = await connect(
+      folderOf('c41-remote-env', {
+        remoteUser: 'node',
+        remoteEnv: {HOME: '/opt/r14renv'},
+      }),
+    );
+    const tree = await treeOfImage();
+    deepStrictEqual(
+      {
+        link: await inContainer(
+          connected.containerId,
+          `readlink /home/node/${product.serverDataFolderName}/bin/${product.commit}`,
+        ),
+        optional: await inContainer(connected.containerId, 'ls -A /opt'),
+      },
+      {link: tree, optional: ''},
+    );
   });
 });

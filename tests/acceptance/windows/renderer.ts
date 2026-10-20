@@ -446,7 +446,10 @@ export async function rowDetails(
   );
 }
 
-/** The welcome text view `viewName` shows in window `name`, with its links as their words; `undefined` when it shows none. */
+/**
+ * The welcome text view `viewName` shows in window `name`, with its links as their words and a line break between its
+ * blocks, as the user reads it; `undefined` when it shows none or an empty one.
+ */
 export async function welcomeText(
   name: string,
   viewName: string,
@@ -456,7 +459,7 @@ export async function welcomeText(
       name,
       `(() => {
       const pane = ${paneExpression(viewName)};
-      return pane?.querySelector('.welcome-view-content')?.textContent ?? null;
+      return pane?.querySelector('.welcome-view-content')?.innerText || null;
     })()`,
     )) ?? undefined
   );
@@ -860,7 +863,9 @@ const QUICK_PICK_EXPRESSION = `(() => {
 })()`;
 
 /** The quick pick open in window `name`, or `undefined` when none is. */
-async function quickPickOf(name: string): Promise<ShownQuickPick | undefined> {
+export async function quickPickOf(
+  name: string,
+): Promise<ShownQuickPick | undefined> {
   return (
     (await evaluate<ShownQuickPick | null>(name, QUICK_PICK_EXPRESSION)) ??
     undefined

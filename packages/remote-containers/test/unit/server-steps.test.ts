@@ -552,7 +552,7 @@ describe('the server steps of a connect (card containers-08)', () => {
     deepStrictEqual([seen.phases, seen.downloads], [['startingServer'], []]);
   });
 
-  it('F-0503 7.E3: an unsupported machine on Alpine and on glibc is S031 and S359, with the machine named, and a failed first probe runs no second one', async () => {
+  it('F-0503 AC-31, AC-32: F-0503 7.E3: an unsupported machine on Alpine and on glibc is S031 and S359, with the machine named, and a failed first probe runs no second one', async () => {
     const outcomes: unknown[] = [];
     for (const libc of ['musl', 'glibc']) {
       const channel = new RecordingChannel({
@@ -754,7 +754,7 @@ describe('the server steps of a connect (card containers-08)', () => {
     );
   });
 
-  it('F-1402 AC-2: a licence the user declines ends the connect as cancelled, with no transfer and no start', async () => {
+  it('F-1402 AC-2, F-0503 AC-50: a licence the user declines ends the connect as cancelled, with no transfer and no start', async () => {
     const licensed: ProductProfile = {...PROFILE, serverLicense: ['terms']};
     const channel = channelOf();
     const {result, seen} = await runSteps(channel, {
@@ -773,6 +773,24 @@ describe('the server steps of a connect (card containers-08)', () => {
         scriptsOf(channel).some(isStart),
       ],
       ['cancelled', [], [], false],
+    );
+  });
+
+  it('F-0503 AC-51 (f0503-q2): a licence the user declines on a complete tree on the volume ends the connect as cancelled before any start', async () => {
+    const licensed: ProductProfile = {...PROFILE, serverLicense: ['terms']};
+    const channel = channelOf({volume: true, treeComplete: true});
+    const {result, seen} = await runSteps(channel, {
+      volume: true,
+      profile: licensed,
+      override: {
+        value: 'https://update.code.visualstudio.com/x/${os}-${arch}.tar.gz',
+        layer: 'defaultProfileUser',
+      },
+      modal: {askUser: () => Promise.resolve('cancel')},
+    });
+    deepStrictEqual(
+      [failureKind(result), seen.downloads, scriptsOf(channel).some(isStart)],
+      ['cancelled', [], false],
     );
   });
 

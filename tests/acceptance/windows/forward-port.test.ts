@@ -92,7 +92,7 @@ describe('a port forwarded in a connected window (card connect-34)', function ()
     deepStrictEqual(held.greeting, GREETING);
   });
 
-  it('F-2507 AC-18 (host side): the connection to the port is opened by the VS Code Server, not by sshd', async () => {
+  it('F-2507 AC-18 (host-side): the connection to the port is opened by the VS Code Server, not by sshd', async () => {
     const held = await holdOpen(localPortOf('f1'));
     const programs = await connectingPrograms();
     held.release();

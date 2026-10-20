@@ -5,5 +5,12 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 ## Deviations
 
-None yet. (The fish entry of #1101 left on 2026-10-20: F-2411 and F-2412 AC-24 now state the outcome under an explicit
-`sh`, remote-oss/remote-ssh#56 and #57, so it's no longer a deviation.)
+- **A server download that the client makes and that gets an HTTP 404 always says "Server returned 404"**, whether
+  or not the answer carries an `Access-Control-Allow-Origin` header.
+  - F-2405 AC-29 describes the reference reading "Failed to fetch" for a 404 without that header, as a browser's fetch
+    does. Ours runs in the extension host, where no such header matters (athena on #253; spec question on
+    remote-oss/remote-ssh#50).
+- **A server archive that the client downloads isn't kept on the client**, after a success or a failure.
+  - F-2405 AC-17 describes the reference leaving a `vscode_server_<time>` folder with the archive in the client's
+    temporary folder after a successful download. Ours copies the archive to the host and removes it, under Remote -
+    SSH's no-cache policy (athena on #253; spec question on remote-oss/remote-ssh#50).

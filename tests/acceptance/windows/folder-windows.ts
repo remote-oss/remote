@@ -9,11 +9,15 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {promisify} from 'node:util';
 import {
+  closeWindow,
   devContainersOf,
   inWindow,
+  isOpen,
   settingIn,
+  variable,
   waitFor,
   windowEvents,
+  windowNames,
 } from './harness.ts';
 
 const execFileAsync = promisify(execFile);
@@ -84,4 +88,35 @@ export async function removeContainers(folder: string): Promise<void> {
   if (containerIds.length > 0) {
     await execFileAsync('docker', ['rm', '-f', ...containerIds]);
   }
+}
+
+/** Removes every container of the run. */
+async function removeRunContainers(): Promise<void> {
+  const {stdout} = await execFileAsync('docker', [
+    'ps',
+    '--all',
+    '--quiet',
+    '--filter',
+    `label=remote-oss.acceptance.run=${variable('HARNESS_RUN_ID')}`,
+  ]);
+  const containerIds = stdout.split('\n').filter(line => line !== '');
+  if (containerIds.length > 0) {
+    await execFileAsync('docker', ['rm', '-f', ...containerIds]);
+  }
+}
+
+/**
+ * Closes the windows the earlier rows left open, then removes the containers of the run. The rows of a view read the
+ * rows the view draws, and a list that outgrows the view's panel draws only the first of them, so each starts with no
+ * container left by an earlier row. The windows go first: one left open would try to reconnect to a container removed
+ * under it.
+ */
+export async function clearEarlierRows(): Promise<void> {
+  for (const name of windowNames()) {
+    if (name !== 'local' && isOpen(name)) {
+      // Best effort: a window that does not close belongs to a row that has failed already, and must not fail this one.
+      await closeWindow(name).catch(() => undefined);
+    }
+  }
+  await removeRunContainers();
 }
