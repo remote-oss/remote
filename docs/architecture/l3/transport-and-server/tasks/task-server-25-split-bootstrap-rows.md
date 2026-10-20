@@ -33,6 +33,15 @@ Proteus tried `--parallel` inside c8, and it's no faster and changes c8's branch
    `readySeconds: 2`. A row whose point *is* the wait (it asserts that the script waited so long) keeps its value. A
    wait that's a constant in the script stays as it is: no product change for test speed. List each changed value in
    the PR, with the row's point.
+4. **Polls for fixed sleeps (amended on #1135, proteus).** A fixed sleep in the rows may become a poll, under three
+   conditions agreed through hermes and checked at the design check:
+   1. A row whose point is that something does *not* happen within a time (a server left alone, a lock not taken,
+      nothing printed) keeps its wait. A poll can only prove that something happened.
+   2. Every poll has a bound at least as long as the sleep it replaces, and fails with a message naming what it
+      waited for.
+   3. The four files pass five runs in a row with the c8 totals unchanged.
+
+   A sleep that can't meet 1 or 2 stays a sleep.
 
 ## 3. Rows and gates
 
