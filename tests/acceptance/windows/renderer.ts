@@ -869,6 +869,27 @@ export async function quickPickOf(
   );
 }
 
+/** One row of a quick pick: its label, its description, the buttons beside it, and whether the list has it focused. */
+export interface QuickPickRow {
+  label: string;
+  description: string;
+  buttons: string[];
+  focused: boolean;
+}
+
+/** The rows of the quick pick open in window `name`, with what each shows; none when no quick pick is open. */
+export async function quickPickRows(name: string): Promise<QuickPickRow[]> {
+  return evaluate<QuickPickRow[]>(
+    name,
+    `[...document.querySelectorAll('${QUICK_WIDGET} .quick-input-list .monaco-list-row')].map(row => ({
+      label: row.querySelector('.label-name')?.textContent ?? '',
+      description: row.querySelector('.label-description')?.textContent ?? '',
+      buttons: [...row.querySelectorAll('.quick-input-list-entry .action-label')].map(each => each.getAttribute('aria-label') ?? each.getAttribute('title') ?? ''),
+      focused: row.classList.contains('focused'),
+    }))`,
+  );
+}
+
 /** Waits until window `name` shows a quick pick and returns it. */
 export async function waitForQuickPick(
   name: string,
@@ -912,6 +933,25 @@ export async function chooseQuickPickItem(
     })()`,
   );
   await pressKey(await pageOf(name), name, 'Enter');
+}
+
+/** One editor tab: its label, whether it is the active one, and whether it is a preview (shown in italics until kept). */
+export interface EditorTab {
+  label: string;
+  active: boolean;
+  preview: boolean;
+}
+
+/** The editor tabs of window `name`, in the order shown; read from the page, so it works while a modal dialog is open. */
+export async function editorTabs(name: string): Promise<EditorTab[]> {
+  return evaluate<EditorTab[]>(
+    name,
+    `[...document.querySelectorAll('.editor-group-container .tabs-container .tab')].map(tab => ({
+      label: tab.querySelector('.label-name')?.textContent ?? '',
+      active: tab.classList.contains('active'),
+      preview: tab.querySelector('.monaco-icon-label')?.classList.contains('italic') ?? false,
+    }))`,
+  );
 }
 
 /** Whether the status bar of window `name` has an item whose DOM id is `itemId`. */

@@ -545,7 +545,7 @@ describe('F-0411 workspace mount and folder (card containers-26)', function () {
     }
   });
 
-  it('F-0411 AC-7 (w8): a workspaceFolder alone keeps the default mount, and core says the workspace does not exist', async () => {
+  it('F-0411 AC-7, F-0301 AC-14 (w8): a workspaceFolder alone keeps the default mount, and core says the workspace does not exist', async () => {
     const folder = devContainerFolder('c26-folder-only', {
       workspaceFolder: '/workspaces/custom',
     });
