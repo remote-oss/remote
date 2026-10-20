@@ -103,6 +103,7 @@ function standardListing(status: string): Record<string, EngineRunOutcome[]> {
     [LISTING]: [ran(`${OLD}\n`)],
     [LEGACY_LISTING]: [ran('')],
     [`inspect --type container ${OLD}`]: [ran(inspected([[OLD, status]]))],
+    'volume create vscode': [ran('vscode')],
   };
 }
 
@@ -114,6 +115,7 @@ function legacyListing(): Record<string, EngineRunOutcome[]> {
     [`inspect --type container ${LEGACY}`]: [
       ran(legacyInspected([[LEGACY, 'running']])),
     ],
+    'volume create vscode': [ran('vscode')],
   };
 }
 
@@ -198,7 +200,11 @@ function fakeBridge(): FakeBridge {
   return bridge;
 }
 
-const EMPTY_LISTING = {[LISTING]: [ran('')], [LEGACY_LISTING]: [ran('')]};
+const EMPTY_LISTING = {
+  [LISTING]: [ran('')],
+  [LEGACY_LISTING]: [ran('')],
+  'volume create vscode': [ran('vscode')],
+};
 
 async function settle(): Promise<void> {
   await new Promise<void>(resolve => {
@@ -619,6 +625,7 @@ describe('containerLifecycleOf', () => {
         [`inspect --type container ${NEW}`]: [
           ran(inspected([[NEW, 'running']])),
         ],
+        'volume create vscode': [ran('vscode')],
       }),
       fakeBridge(),
       new AbortController().signal,
@@ -754,8 +761,9 @@ describe('containerLifecycleOf', () => {
       ...REQUEST,
       pausedRetry: () => Promise.resolve(true),
     });
-    deepStrictEqual(engine.commands.slice(-2), [
+    deepStrictEqual(engine.commands.slice(-3), [
       `stop ${OLD}`,
+      'volume create vscode',
       `inspect --type container ${NEW}`,
     ]);
   });
@@ -903,7 +911,7 @@ describe('containerLifecycleOf', () => {
     const result = await prepared(engine, bridge, controller.signal);
     deepStrictEqual(
       [result.outcome, engine.commands.length],
-      [{kind: 'cancelled'}, 3],
+      [{kind: 'cancelled'}, 4],
     );
   });
 
@@ -1060,7 +1068,7 @@ describe('containerLifecycleOf', () => {
         leaked: result.lines.filter(line => line.includes('s3cr3t-token')),
         environments: engine.environments,
       },
-      {leaked: [], environments: [undefined, undefined, undefined]},
+      {leaked: [], environments: [undefined, undefined, undefined, undefined]},
     );
   });
 
@@ -1115,6 +1123,7 @@ describe('containerLifecycleOf', () => {
           LISTING,
           LEGACY_LISTING,
           `inspect --type container ${OLD} ${NEW} ${LEGACY}`,
+          'volume create vscode',
           `inspect --type container ${NEW}`,
         ],
         kind: 'ready',
@@ -1232,6 +1241,64 @@ describe('containerLifecycleOf', () => {
       true,
     ]);
   });
+  /** A fresh connect's engine: an empty listing, and the CLI's `NEW` running with the volume mounted. */
+  function freshEngine(overrides: Record<string, EngineRunOutcome[]> = {}) {
+    return scriptedEngine({
+      ...EMPTY_LISTING,
+      [`inspect --type container ${NEW}`]: [ran(inspected([[NEW, 'running']]))],
+      ...overrides,
+    });
+  }
+
+  it('F-0419 AC-29: with cacheVolume on, the vscode volume is created before up', async () => {
+    const engine = freshEngine();
+    const bridge = fakeBridge();
+    await prepared(engine, bridge);
+    deepStrictEqual(
+      [engine.commands, bridge.ups.length],
+      [
+        [
+          LISTING,
+          LEGACY_LISTING,
+          'volume create vscode',
+          `inspect --type container ${NEW}`,
+        ],
+        1,
+      ],
+    );
+  });
+
+  it('F-0419 AC-3: with cacheVolume off, no volume is created', async () => {
+    const engine = freshEngine();
+    const bridge = fakeBridge();
+    await prepared(engine, bridge, new AbortController().signal, {
+      ...REQUEST,
+      cacheVolume: false,
+    });
+    deepStrictEqual(
+      [bridge.ups.length, engine.commands.includes('volume create vscode')],
+      [1, false],
+    );
+  });
+
+  it('F-0419 AC-29: a volume that can not be created is logged at warn, and up still runs', async () => {
+    const engine = freshEngine({
+      'volume create vscode': [exited('no space left on device')],
+    });
+    const bridge = fakeBridge();
+    const result = await prepared(engine, bridge);
+    deepStrictEqual(
+      [
+        result.lines.filter(line =>
+          line.startsWith(
+            'warn: the vscode volume could not be created before the build:',
+          ),
+        ).length,
+        bridge.ups.length,
+      ],
+      [1, 1],
+    );
+  });
 
   /** A rebuild `prepare` over the engine, with the default bridge and a fresh signal. */
   async function rebuilt(
@@ -1263,6 +1330,7 @@ describe('containerLifecycleOf', () => {
           LEGACY_LISTING,
           `inspect --type container ${LEGACY}`,
           `rm --force ${LEGACY}`,
+          'volume create vscode',
           `inspect --type container ${NEW}`,
         ],
         idLabels: idLabels(FOLDER, CONFIG),

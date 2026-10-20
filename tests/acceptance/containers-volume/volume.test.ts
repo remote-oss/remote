@@ -587,7 +587,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
     }
   });
 
-  it('F-0419 AC-29 (s29): a build that fails on a host without a vscode volume ends in the setup dialog, with no container for the folder and no vscode volume made', async () => {
+  it('F-0419 AC-29 (s29): a build that fails on a host without a vscode volume ends in the setup dialog, with no container for the folder and the vscode volume made, unattached', async () => {
     await clearVolume();
     await removeVolume();
     const folder = devContainerFolder('volume-build-fails', {
@@ -621,7 +621,7 @@ describe("C10's root step for the vscode volume (card containers-25)", function 
           held: holders === '' ? [] : holders.split('\n'),
           volumes,
         },
-        {detail: SETUP_FAILED, containers: [], held: [], volumes: []},
+        {detail: SETUP_FAILED, containers: [], held: [], volumes: ['vscode']},
       );
     } finally {
       await removeContainers(folder);

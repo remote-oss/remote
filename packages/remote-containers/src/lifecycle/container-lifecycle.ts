@@ -22,7 +22,9 @@ import {
   type Decision,
 } from './labels.ts';
 
-const VOLUME_MOUNT = 'type=volume,source=vscode,target=/vscode';
+/** The name of the shared cache volume. */
+const VOLUME_NAME = 'vscode';
+const VOLUME_MOUNT = `type=volume,source=${VOLUME_NAME},target=/vscode`;
 const IDENTIFIER_LENGTH = 12;
 
 /** The stages of a connection that the container takes part in. */
@@ -464,6 +466,19 @@ export function containerLifecycleOf(dependencies: {
       logger.info(
         `rebuilding: the dev container CLI removes ${discovery.containers.map(container => container.id.slice(0, IDENTIFIER_LENGTH)).join(', ') || 'no container'} first`,
       );
+    }
+    if (request.cacheVolume) {
+      // The cache volume exists once a connect has passed trust and the pre-flight, whatever the build does next.
+      const created = await askEngine(
+        engine,
+        ['volume', 'create', VOLUME_NAME],
+        cancellation,
+      );
+      if (created.kind === 'failed') {
+        logger.warn(
+          `the vscode volume could not be created before the build: ${created.detail}`,
+        );
+      }
     }
     const upResult = await bridge.up(
       {...target, terminalSize: presenter.terminalSize()},
