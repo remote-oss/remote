@@ -294,6 +294,24 @@ describe('the window side of the shared connection (S9)', () => {
     });
   });
 
+  it("F-2704 AC-25: a login shell that ended early fails the login with the helper's detail for the window's log", async () => {
+    const {outcome} = await connectFirst();
+    sshRuns.started[0]?.output('LAYER1-EXITED 1\n');
+    sshRuns.started[0]?.exit(1);
+    await drive();
+    deepStrictEqual(await outcome, {
+      kind: 'failed',
+      failure: {
+        kind: 'loginFailed',
+        failure: 'unknown',
+        hints: [],
+        exitStatus: 1,
+        detail:
+          "the SSH session ended before the host reported its platform: the login shell's startup exited with status 1",
+      },
+    });
+  });
+
   it('lets the waiting window take over a failed login and try again with a new ssh', async () => {
     await connectFirst();
     const second = await acquired();
