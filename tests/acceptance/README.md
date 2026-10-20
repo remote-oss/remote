@@ -120,7 +120,7 @@ own executable, which test-cli starts. test-cli runs once per label, in order:
 - `trust` and `trust-terminal`: plain launches with workspace trust on and a debugging port, and no extension of their own (see "Trust" under "Launches"); `trust-terminal` turns `remote.SSH.useLocalServer` off and names the host's platform.
 
 - `web-ui` and `web-ui-trust`: plain launches with a debugging port and a recording `xdg-open` first on the editor's PATH; the suite writes it into `<run>/browser-bin` and reads the addresses it was asked to open from `<run>/browser-urls` (`windows/web-ui-support.ts`), for the rows of Open Web UI. `web-ui-trust` has workspace trust on and core's startup trust prompt off, so a window opens in Restricted Mode and silent. A terminal-mode connect in it (`remote.SSH.useLocalServer` off) waits on core's trust question before its login terminal starts, and fails when nothing answers within the connect timeout, so its rows connect only through the local server.
-- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports` and `containers-shutdown`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view, and `containers-shutdown`, as `containers` is, for the rows of the shutdown helper that stops a container after its windows close.
+- `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-explorer`, `containers-ports`, `containers-features` and `containers-shutdown`: plain launches with Dev Containers installed in an extensions folder of their own and a debugging port (see "Dev containers" under "Launches"); `containers-standdown` has a stand-in carrying the other Dev Containers extension's id, `containers-no-proposals` starts without the proposed API, and `containers-trust` starts with workspace trust on and core's startup trust prompt off, so a folder opens untrusted and silent, `containers-explorer` also installs the Remote Explorer, for the rows on the two extensions' views side by side, and `containers-ports`, as `containers` is, is for the rows that read core's Ports view, `containers-features`, as `containers` is, for the rows of a build with Features (F-0414), which use the run's own Features and so run on the Alpine image the harness's server needs, and `containers-shutdown`, as `containers` is, for the rows of the shutdown helper that stops a container after its windows close.
 
 Every label runs even when an earlier one fails, and the run fails when any does. The tests run in the window's
 local extension host, also in a window on `ssh-remote`: they see the host through the editor API and `onHost`, and
@@ -361,7 +361,7 @@ listening on port" line yet.
 
 ## The run's registry
 
-A launch with `registry: true` (today `containers` and `containers-ports`) makes the run start a registry of its own before its
+A launch with `registry: true` (today `containers`, `containers-ports` and `containers-features`) makes the run start a registry of its own before its
 launches: the pinned `registry:2.8.3` image, by tag and by the digest of its index (`REGISTRY_IMAGE` in
 `tools/acceptance-registry.ts`), on a loopback port of the host, waited for until `GET /v2/` answers 200. Its address
 (`127.0.0.1:<port>`) is the variable `HARNESS_REGISTRY`; a run with no such launch starts none and sets no variable.
@@ -371,7 +371,7 @@ container label, so the run's clean-up and the stale sweep remove it with its an
 
 ## The run's templates
 
-A launch with `templates: true` (today only `containers`) makes the run start its registry, as `registry: true` does,
+A launch with `templates: true` (today `containers` and `containers-features`) makes the run start its registry, as `registry: true` does,
 and publish templates into it before its launches (`tools/acceptance-templates.ts`):
 - **Three of the specification's templates**, the smallest the rows need: `alpine`, `docker-existing-dockerfile` and
   `docker-in-docker` (`MIRRORED_TEMPLATES`; the last is the template F-0801 AC-40 applies). Each one's single layer is

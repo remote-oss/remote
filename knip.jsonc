@@ -68,6 +68,7 @@
         "containers-volume/*.test.ts",
         "containers-explorer/*.test.ts",
         "containers-ports/*.test.ts",
+        "containers-features/*.test.ts",
         "containers-shutdown/*.test.ts",
         "web-ui/*.test.ts",
         "web-ui-trust/*.test.ts",
