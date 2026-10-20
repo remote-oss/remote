@@ -17,6 +17,8 @@ const PROGRESS_TEMPLATES = {
 const STAGE_TEMPLATES = {
   installing: PROGRESS_TEMPLATES.S209,
   startingServer: PROGRESS_TEMPLATES.S334,
+  // The download is part of the install: the suffix stays until the next stage replaces it.
+  serverDownloadPercent: PROGRESS_TEMPLATES.S209,
 } as const;
 
 /** The title the progress starts with. */
@@ -32,7 +34,7 @@ export function phaseTitleOf(
   phase: Pick<ConnectPhase, 'name'>,
   translate: Translate,
 ): string {
-  return phase.name === 'installing' || phase.name === 'startingServer'
-    ? translate(STAGE_TEMPLATES[phase.name])
+  return phase.name in STAGE_TEMPLATES
+    ? translate(STAGE_TEMPLATES[phase.name as keyof typeof STAGE_TEMPLATES])
     : '';
 }

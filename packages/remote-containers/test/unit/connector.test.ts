@@ -390,6 +390,22 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(phases, ['initializing', 'startingServer']);
   });
 
+  it('containers-55: the percents of the server download reach the listeners as serverDownloadPercent phases', async () => {
+    const scene = sceneOf();
+    scene.phasesOfServer = ['installing'];
+    scene.percentsOfServer = [0, 40, 100];
+    const phases: ConnectPhase[] = [];
+    scene.connector.onPhase(phase => phases.push(phase));
+    await connected(scene);
+    deepStrictEqual(phases, [
+      {name: 'initializing'},
+      {name: 'installing'},
+      {name: 'serverDownloadPercent', percent: 0},
+      {name: 'serverDownloadPercent', percent: 40},
+      {name: 'serverDownloadPercent', percent: 100},
+    ]);
+  });
+
   it('F-0502 BR-21: a target with a context gives every engine call DOCKER_CONTEXT, gives the CLI the same, and leaves it out of every argument', async () => {
     const scene = sceneOf();
     const folder: DevContainerFolder = {...FOLDER, context: 'ctx1'};

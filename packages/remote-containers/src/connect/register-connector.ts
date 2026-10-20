@@ -95,6 +95,7 @@ export async function registerContainerResolver(
         },
       },
       cancellable: false,
+      determinateStages: true,
       allowsTrust: false,
       titleOf: phase => phaseTitleOf(phase, translate),
       startTitle: () => startTitleOf(translate),

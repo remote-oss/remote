@@ -89,9 +89,10 @@ function progressOf(
               request.onCancel();
             });
             try {
-              return await task((text, details) => {
+              return await task((text, details, increment) => {
                 progress.report({
                   message: phaseMessage(text, details, options.detailsCommand),
+                  ...(increment === undefined ? {} : {increment}),
                 });
               });
             } finally {
