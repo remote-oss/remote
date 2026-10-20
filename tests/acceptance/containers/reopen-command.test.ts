@@ -6,7 +6,13 @@ import {
   reopenInContainer,
 } from '../windows/harness.ts';
 import {openFolderWindow, removeContainers} from '../windows/folder-windows.ts';
-import {notifications, statusItem, windowTitle} from '../windows/renderer.ts';
+import {
+  INDICATOR_MILLISECONDS,
+  notifications,
+  statusItem,
+  statusItemText,
+  windowTitle,
+} from '../windows/renderer.ts';
 
 /** The stage texts the connect progress may show, each once after the start title (F-0408 BR-2, F-0503 AC-2). */
 const TOAST_TEXTS = [
@@ -56,6 +62,12 @@ describe('F-0401 the reopen command (card containers-40)', function () {
       let end: Sample | undefined;
       try {
         end = await sampleOf(name);
+        end.indicator = await statusItemText(
+          name,
+          'status.host',
+          'Dev Container: Reopen One',
+          INDICATOR_MILLISECONDS,
+        );
       } catch {
         end = undefined;
       }
