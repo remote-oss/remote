@@ -151,7 +151,7 @@ describe('the slice endpoints served to Remote Explorer (card ssh-provider-01)',
     );
   });
 
-  it('F-3906.5 rule 2: a second call reads the list again', () => {
+  it('F-5101.AC-14: F-3906.5 rule 2: a second call reads the list again', () => {
     const world = worldWith({
       hostList: () => ({hosts: [{name: 'one', file: '/c'}]}),
     });
@@ -164,7 +164,7 @@ describe('the slice endpoints served to Remote Explorer (card ssh-provider-01)',
     );
   });
 
-  it('F-5902.5.failure: a host list that cannot be read rejects with the parser message', () => {
+  it('F-5101.AC-14: F-5902.5.failure: a host list that cannot be read rejects with the parser message', () => {
     const world = worldWith({
       hostList: () => ({parseError: {file: '/c', reason: 'bad line 3'}}),
     });
@@ -198,7 +198,7 @@ describe('the slice endpoints served to Remote Explorer (card ssh-provider-01)',
     undefined,
     {interfaceVersion: {major: 2, minor: 0}},
   ]) {
-    it(`F-5902.5.foreign: the argument ${JSON.stringify(argument)} gets the empty answers and reads nothing`, () => {
+    it(`F-5902.AC-13: F-5902.5.foreign: the argument ${JSON.stringify(argument)} gets the empty answers and reads nothing`, () => {
       const world = worldWith();
       served(world);
       deepStrictEqual(
@@ -218,7 +218,7 @@ describe('the slice endpoints served to Remote Explorer (card ssh-provider-01)',
     });
   }
 
-  it('F-2503.BR-9: a connection whose last resolve succeeded is the active remote, answered synchronously', () => {
+  it('F-5103.AC-29, AC-32, AC-35: F-2503.BR-9: a connection whose last resolve succeeded is the active remote, answered synchronously', () => {
     const world = worldWith({
       connection: () => ({hostKey: 'Build-Box', lastResolve: 'succeeded'}),
     });
@@ -253,7 +253,7 @@ describe('the slice endpoints served to Remote Explorer (card ssh-provider-01)',
     ],
   ];
   for (const [name, connection] of NOT_CONNECTED) {
-    it(`F-2503.BR-9: ${name} is not connected, with no host key and no host list read`, () => {
+    it(`F-5902.AC-8, AC-23: F-2503.BR-9: ${name} is not connected, with no host key and no host list read`, () => {
       const world = worldWith({connection});
       served(world);
       const answer = call(world, ACTIVE, ENVELOPE);
@@ -268,7 +268,7 @@ describe('the slice endpoints served to Remote Explorer (card ssh-provider-01)',
     });
   }
 
-  it('F-3906.5 rule 6: a host opens in a new window and in the current one', async () => {
+  it('F-5103.AC-24: F-3906.5 rule 6: a host opens in a new window and in the current one', async () => {
     const world = worldWith();
     served(world);
     const answers = [

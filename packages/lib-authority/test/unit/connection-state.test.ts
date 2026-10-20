@@ -259,7 +259,7 @@ describe('how the last settled resolve ended (card ssh-provider-01)', () => {
     ['a success before any start, ignored', [SUCCEEDED], 'none'],
   ];
   for (const [step, events, expected] of STEPS) {
-    it(`F-5902.AC-27: ${step} gives ${expected}`, () => {
+    it(`F-5103.AC-34, F-5902.AC-27: ${step} gives ${expected}`, () => {
       deepStrictEqual(after(...events).tracker.lastResolve(), expected);
     });
   }

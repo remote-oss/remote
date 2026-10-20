@@ -91,7 +91,7 @@ describe('the companion detector', () => {
     });
   }
 
-  it('F-5101.AC-13: a companion that arrives is announced once and then present without another question', () => {
+  it('F-5101.AC-13, AC-26: a companion that arrives is announced once and then present without another question', () => {
     const lookup = lookupWith();
     const detector = createDetector(lookup);
     const heard = recordingListener();
