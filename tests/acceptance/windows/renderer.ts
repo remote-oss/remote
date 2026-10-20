@@ -92,6 +92,8 @@ async function debuggingPort(): Promise<number> {
 export interface PageState {
   folders: readonly string[];
   remoteName: string | null;
+  /** The window's workspace file, or null (or absent) for a folder window. */
+  workspaceFile?: string | null;
 }
 
 /** The window title's part of a folder: its name in the last path part, decoded from the URI's percent-encoding. */
@@ -106,22 +108,40 @@ function folderName(folder: string): string {
 }
 
 /**
- * The title of the page of a window with this state among `titles`: the folder name in brackets, `[]` for a local
- * window with no folder, and `[]` plus the remote name for a remote one. It fails when two titles match, naming both:
- * two folder-less windows of one kind can't be told apart, and the gate rows never have two.
+ * The name core gives a workspace window in its title, `<file name without .code-workspace> (Workspace)`, and
+ * `Untitled (Workspace)` for one that isn't saved ([oss] `src/vs/platform/workspace/common/workspace.ts`).
+ */
+function workspaceTitleName(workspaceFile: string): string {
+  if (workspaceFile.startsWith('untitled:')) {
+    return 'Untitled (Workspace)';
+  }
+  return `${folderName(workspaceFile).replace(/\.code-workspace$/, '')} (Workspace)`;
+}
+
+/**
+ * The title of the page of a window with this state among `titles`: the workspace's name for a workspace window, else
+ * the folder name in brackets, `[]` for a local window with no folder, and `[]` plus the remote name for a remote one.
+ * It fails when two titles match, naming both: two folder-less windows of one kind can't be told apart, and the gate
+ * rows never have two.
  */
 export function pageTitleFor(
   state: PageState,
   titles: readonly string[],
 ): string | undefined {
   const folder = state.folders[0];
+  const workspaceFile = state.workspaceFile ?? null;
+  const bracketed =
+    workspaceFile !== null
+      ? workspaceTitleName(workspaceFile)
+      : folder === undefined
+        ? undefined
+        : folderName(folder);
   const matching = titles.filter(title =>
-    folder === undefined
+    bracketed === undefined
       ? state.remoteName === null
         ? title === '[]'
         : title.startsWith('[]') && title !== '[]'
-      : title === `[${folderName(folder)}]` ||
-        title.startsWith(`[${folderName(folder)} [`),
+      : title === `[${bracketed}]` || title.startsWith(`[${bracketed} [`),
   );
   if (matching.length > 1) {
     throw new Error(
@@ -202,7 +222,11 @@ export async function pageOf(
         state === undefined
           ? undefined
           : pageTitleFor(
-              {folders: state.folders, remoteName: state.remoteName},
+              {
+                folders: state.folders,
+                remoteName: state.remoteName,
+                workspaceFile: state.workspaceFile,
+              },
               titles,
             );
       const chosen =

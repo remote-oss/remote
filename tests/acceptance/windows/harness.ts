@@ -52,6 +52,8 @@ export interface AgentEvent {
   remoteName?: string | null;
   remoteAuthority?: string | null;
   folders?: string[];
+  /** The window's workspace file, `untitled:` for an unsaved one, or null for a folder window, as `state` reports it. */
+  workspaceFile?: string | null;
   /** Whether the window's workspace is trusted, as `state` reports it. */
   trusted?: boolean;
   /** Whether the remote-ssh extension has activated in the window, as `state` reports it. */
@@ -671,6 +673,7 @@ export async function windowState(name: string): Promise<{
   remoteName: string | null;
   remoteAuthority: string | null;
   folders: string[];
+  workspaceFile: string | null;
   remoteSshActive: boolean;
 }> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
@@ -680,6 +683,7 @@ export async function windowState(name: string): Promise<{
       remoteName: last?.remoteName ?? null,
       remoteAuthority: last?.remoteAuthority ?? null,
       folders: last?.folders ?? [],
+      workspaceFile: last?.workspaceFile ?? null,
       remoteSshActive: last?.remoteSshActive ?? false,
     };
     if (
