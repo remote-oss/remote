@@ -666,7 +666,7 @@ describe('F-0503 server install (card containers-41)', function () {
     ]);
   });
 
-  it('F-0503 AC-16, AC-18 (s16): More Actions... on the requirements dialog shows the disconnected status and the recovery quick pick, and Escape on it closes it and leaves the window disconnected', async () => {
+  it('F-0503 AC-16, AC-18 (s16): More Actions... on the requirements dialog shows the disconnected status and the five-item recovery quick pick of ruling 14, and Escape on it closes it and leaves the window disconnected', async () => {
     const window = await requirementsDialog('c41-requirements-pick');
     await answerDialog(window, 'More Actions...');
     const pick = await waitForQuickPick(window, 30_000);
@@ -686,6 +686,7 @@ describe('F-0503 server install (card containers-41)', function () {
           placeholder: S272,
           items: [
             'Reload Window',
+            'Rebuild Container',
             'Edit devcontainer.json Locally',
             'Open Recent...',
             'Open Documentation',
