@@ -334,7 +334,13 @@ describe('connection handler (contracts §4 S9)', () => {
         [events, logged],
         [
           [
-            {type: 'loginFailed', kind: 'timeout', hints: [], exitStatus: 124},
+            {
+              type: 'loginFailed',
+              kind: 'timeout',
+              hints: [],
+              exitStatus: 124,
+              detail: 'the login shell did not finish its startup within 5 s',
+            },
             {type: 'ownerChanged', owner: 2},
           ],
           ['the login shell did not finish its startup within 5 s'],
@@ -350,7 +356,14 @@ describe('connection handler (contracts §4 S9)', () => {
         [events, logged],
         [
           [
-            {type: 'loginFailed', kind: 'unknown', hints: [], exitStatus: 1},
+            {
+              type: 'loginFailed',
+              kind: 'unknown',
+              hints: [],
+              exitStatus: 1,
+              detail:
+                "the SSH session ended before the host reported its platform: the login shell's startup exited with status 1",
+            },
             {type: 'ownerChanged', owner: 2},
           ],
           [

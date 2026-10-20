@@ -1,9 +1,17 @@
 import {deepStrictEqual} from 'node:assert';
-import {spawnSync} from 'node:child_process';
+import {execFile, spawnSync} from 'node:child_process';
 import {existsSync, mkdtempSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {variable} from '../windows/harness.ts';
+import {promisify} from 'node:util';
+import {
+  devContainerFolder,
+  devContainersOf,
+  variable,
+} from '../windows/harness.ts';
+import {removeContainers} from '../windows/folder-windows.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
+
+const execFileAsync = promisify(execFile);
 
 /** The dev container CLI the package bundles, which the run's templates were published with. */
 const BUNDLED_CLI = path.join(
@@ -187,5 +195,41 @@ describe("the run's template catalogue and registry (card tooling-57)", function
       ),
       ['./.devcontainer/devcontainer.json', './.github/dependabot.yml'],
     );
+  });
+
+  it("#1296: a Feature the run published builds into a container with its options, from the run's registry", async () => {
+    await runTemplatesReady();
+    const registry = variable('HARNESS_TEMPLATE_REGISTRY');
+    const folder = devContainerFolder('c1296-up', {
+      features: {
+        [`${registry}/remote-oss-run/features/lab-options:1`]: {level: 'high'},
+      },
+    });
+    try {
+      const started = spawnSync(
+        process.execPath,
+        [BUNDLED_CLI, 'up', '--workspace-folder', folder],
+        {encoding: 'utf8'},
+      );
+      const [container = ''] = await devContainersOf(folder);
+      const {stdout} = await execFileAsync('docker', [
+        'exec',
+        container,
+        'cat',
+        '/usr/local/share/remote-oss-run/lab-options.env',
+      ]);
+      deepStrictEqual(
+        [
+          started.status,
+          stdout
+            .split('\n')
+            .filter(line => ['ENABLED=true', 'LEVEL=high'].includes(line))
+            .sort(),
+        ],
+        [0, ['ENABLED=true', 'LEVEL=high']],
+      );
+    } finally {
+      await removeContainers(folder);
+    }
   });
 });

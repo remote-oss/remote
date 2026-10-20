@@ -36,6 +36,31 @@ function hostLaunchLabels(): string[] {
   );
 }
 
+/** The labels of the launches from the explorer ones on, in their order. */
+function labelsFromExplorer(): string[] {
+  return [
+    'explorer',
+    'explorer-alone',
+    'explorer-no-proposals',
+    'explorer-standdown',
+    'trust',
+    'trust-terminal',
+    'web-ui',
+    'web-ui-trust',
+    'containers',
+    'containers-standdown',
+    'containers-no-proposals',
+    'containers-trust',
+    'containers-volume',
+    'containers-explorer',
+    'containers-ports',
+    'containers-shutdown',
+    ...hostLaunchLabels(),
+    'genuine',
+    'ssh-no-proposals',
+  ];
+}
+
 describe('the launches of the VSCodium run', () => {
   it('tooling-53: every launch has one group from the table, and every group has a launch', () => {
     const launches = launchesOf(REPOSITORY_ROOT);
@@ -99,24 +124,7 @@ describe('the launches of the VSCodium run', () => {
         'config-files',
         'default-ports',
         'no-proposals',
-        'explorer',
-        'explorer-alone',
-        'explorer-no-proposals',
-        'explorer-standdown',
-        'trust',
-        'trust-terminal',
-        'web-ui',
-        'web-ui-trust',
-        'containers',
-        'containers-standdown',
-        'containers-no-proposals',
-        'containers-trust',
-        'containers-volume',
-        'containers-explorer',
-        'containers-ports',
-        ...hostLaunchLabels(),
-        'genuine',
-        'ssh-no-proposals',
+        ...labelsFromExplorer(),
       ],
     );
   });
@@ -243,6 +251,12 @@ describe('the launches of the VSCodium run', () => {
           true,
           ['ms-vscode-remote.remote-containers'],
         ],
+        [
+          'containers-shutdown',
+          ['remote-oss.remote-containers'],
+          true,
+          ['ms-vscode-remote.remote-containers'],
+        ],
         ['genuine', undefined, true, undefined],
         ['ssh-no-proposals', undefined, true, undefined],
       ],
@@ -316,6 +330,13 @@ describe('the launches of the VSCodium run', () => {
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ],
+        [
+          'containers-shutdown',
+          'containers-shutdown',
+          shared,
+          ['ms-vscode-remote.remote-containers'],
+          undefined,
+        ],
       ],
     );
   });
@@ -342,6 +363,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-volume',
         'containers-explorer',
         'containers-ports',
+        'containers-shutdown',
       ],
     );
   });
@@ -496,24 +518,7 @@ describe('the launches of the VSCodium run', () => {
         ...clientCases(REPOSITORY_ROOT).map(each => each.label),
         'terminal-pick',
         'default-ports',
-        'explorer',
-        'explorer-alone',
-        'explorer-no-proposals',
-        'explorer-standdown',
-        'trust',
-        'trust-terminal',
-        'web-ui',
-        'web-ui-trust',
-        'containers',
-        'containers-standdown',
-        'containers-no-proposals',
-        'containers-trust',
-        'containers-volume',
-        'containers-explorer',
-        'containers-ports',
-        ...hostLaunchLabels(),
-        'genuine',
-        'ssh-no-proposals',
+        ...labelsFromExplorer(),
       ],
     );
   });

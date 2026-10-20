@@ -32,6 +32,13 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     forwarded rows; the order is the one our resolver gives (athena on #1334; spec question on
     remote-oss/remote-containers#42).
 
+- **A dev container whose setup failed is stopped about ten seconds after the failure dialog**, unless its
+  `shutdownAction` is `none`; it is not left running. The dialog stays, and Retry or a reload starts the container
+  again.
+  - F-0415 AC-18b has the container keep running after the failure; F-0417 BR-5 stops a container whose window's
+    connection ended, and a failed connect ends it (athena's ruling on #1331; spec question on
+    remote-oss/remote-containers#32).
+
 ## Interim behaviour
 
 - **Editing the dev container configuration shows no rebuild prompt.** Reload the window, or run "Rebuild

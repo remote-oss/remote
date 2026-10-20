@@ -28,6 +28,7 @@ export interface OpenFolderPorts extends Pick<
   | 'progress'
   | 'bridge'
   | 'opener'
+  | 'shutdown'
   | 'logger'
 > {
   window: {

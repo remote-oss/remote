@@ -454,7 +454,14 @@ describe('#443, F-2704 BR-4: every login shell hands the session to POSIX sh', f
           ],
           [
             'failed',
-            {kind: 'loginFailed', failure: 'unknown', hints: [], exitStatus: 1},
+            {
+              kind: 'loginFailed',
+              failure: 'unknown',
+              hints: [],
+              exitStatus: 1,
+              detail:
+                "the SSH session ended before the host reported its platform: the login shell's startup exited with status 1",
+            },
             true,
           ],
         );

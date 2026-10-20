@@ -25,6 +25,10 @@ export interface ReloadPorts {
     currentContext(dockerFile: string): Promise<string | undefined>;
   };
   opener: OpenerHost;
+  shutdown: {
+    /** Tells the shutdown helper that this window leaves the container it holds, before the reload. */
+    leave(): Promise<void>;
+  };
   logger: Logger;
 }
 
@@ -74,6 +78,7 @@ export async function reloadIntoContainer(
     }
   }
   request.progress.close();
+  await ports.shutdown.leave();
   const opened = await openRemote(
     ports.opener,
     encodeAuthority({
