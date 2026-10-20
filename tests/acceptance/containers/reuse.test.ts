@@ -257,7 +257,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0409 AC-2 (gate-row-4): a stopped container is started again with the same id, and no dialog shows', async () => {
+  it('F-0408 AC-13, F-0409 AC-2 (gate-row-4): a stopped container is started again with the same id, and no dialog shows', async () => {
     const folder = devContainerFolder('reuse-stopped');
     try {
       const stopped = await inspectOf(await containerLeftBy(folder));
@@ -774,7 +774,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0409 AC-45 (p45): reopening an exited container shows no build phase, only the connecting toast and its server stage', async () => {
+  it('F-0408 AC-13, F-0409 AC-45 (p45): reopening an exited container shows no build phase, only the connecting toast and its server stage', async () => {
     const folder = devContainerFolder('c46-exited');
     try {
       const containerId = await containerLeftBy(folder);
