@@ -100,6 +100,15 @@ describe('the install folder setting', () => {
     );
   });
 
+  for (const entry of ['~', '~/', '~/My_Servers-1.0']) {
+    it(`F-2407 AC-7 (ruling-1277-tilde): ${JSON.stringify(entry)} is used as written, for the host to expand against its home folder`, () => {
+      deepStrictEqual(installFolderFor({devbox: entry}, 'devbox'), {
+        kind: 'folder',
+        folder: entry,
+      });
+    });
+  }
+
   it('means the default when there is no entry, the entry is empty, or it is not text', () => {
     deepStrictEqual(
       [
@@ -117,7 +126,21 @@ describe('the install folder setting', () => {
     );
   });
 
-  for (const entry of ['relative', '/a(b)', '/a\\b', '/a\tb', '/ä']) {
+  for (const entry of [
+    'relative',
+    '/a(b)',
+    '/a\\b',
+    '/a\tb',
+    '/ä',
+    '~x',
+    '~user/x',
+    '/a/~',
+    '/a/~/b',
+    '~~',
+    '~/a~',
+    '~/a(b)',
+    '$HOME/x',
+  ]) {
     it(`F-2407: ${JSON.stringify(entry)} is refused and keeps its value as it is stored`, () => {
       deepStrictEqual(installFolderFor({devbox: entry}, 'devbox'), {
         kind: 'invalid',

@@ -778,7 +778,8 @@ describe('the install cases (card coverage-17)', () => {
     'for i in $(seq 1 20); do ' +
     "pgrep -f '/home/harness/[.]vscodium-server-insiders/bin/' >/dev/null || exit 0; " +
     'sleep 0.5; done; exit 1';
-  const REMOVE = 'rm -rf /home/harness/.vscodium-server-insiders /tmp/srv';
+  const REMOVE =
+    'rm -rf /home/harness/.vscodium-server-insiders /tmp/srv /home/harness/inst';
 
   /** An install case of `fields`, with the label and cite every case has. */
   function installCase(fields: Partial<HostCase>): HostCase {

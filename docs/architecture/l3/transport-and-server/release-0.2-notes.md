@@ -40,3 +40,7 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 - **A pre-connection script that is still running when the connect gives up waiting is left to finish.** The five-minute
   bound ends the wait and the connect fails; the script is not killed, and an "Allow" given after that runs nothing.
   - F-2108 6.8 step 4 does not end a running script, and ending it would need a decision of its own (card connect-87).
+- **`remote.SSH.serverInstallPath` accepts `~` and a path that starts with `~/`**, meaning the remote user's home.
+  - F-2407 AC-7 describes the reference refusing such a value with "Provided: …". Ours installs under the home
+    folder, and every other value that doesn't start with `/` is still refused (athena on #1277, D-99; spec question
+    on remote-oss/remote-ssh#52).

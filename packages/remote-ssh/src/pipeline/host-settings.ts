@@ -40,8 +40,11 @@ export function exactEntry(setting: unknown, alias: string): unknown {
     : undefined;
 }
 
-/** The characters an install folder may hold: ASCII letters and digits, `/`, `-`, `_`, `.` and the space. */
-const INSTALL_FOLDER = /^\/[A-Za-z0-9/_. -]*$/;
+/**
+ * An install folder: absolute, or the remote user's home folder as `~` alone or `~/` and a path. The path holds ASCII
+ * letters and digits, `/`, `-`, `_`, `.` and the space.
+ */
+const INSTALL_FOLDER = /^(?:\/[A-Za-z0-9/_. -]*|~(?:\/[A-Za-z0-9/_. -]*)?)$/;
 
 /** The install folder setting for the alias: none, a usable folder, or a value that is not allowed. */
 export type InstallFolder =
@@ -51,8 +54,8 @@ export type InstallFolder =
 
 /**
  * Reads `remote.SSH.serverInstallPath` for the alias. An entry that is not text counts as none, an empty text means
- * the default, and a text that does not start with `/` or holds another character is invalid. The folder is kept
- * exactly as written.
+ * the default, and a text that does not start with `/`, is not `~` or `~/` and a path, or holds another character is
+ * invalid. The folder is kept exactly as written; the host expands a leading `~` against its user's home folder.
  */
 export function installFolderFor(
   setting: unknown,
