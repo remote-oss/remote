@@ -29,6 +29,7 @@ import {
   type TerminalLogin,
 } from 'lib-ssh';
 import {CONNECT_WAIT_TIMEOUT} from './failure.ts';
+import {logSshLines} from './ssh-log.ts';
 import type {
   ConnectInput,
   ConnectionLease,
@@ -246,6 +247,10 @@ export function openTerminalConnectionStep(
 
       const splitter = new LineSplitter(line => {
         lines.push(line);
+        // ssh's own lines, up to its authentication: after it the terminal holds the bootstrap's echo and the remote shell.
+        if (!authenticated) {
+          logSshLines(dependencies.logger, [line], undefined);
+        }
         if (
           !authenticated &&
           !finished &&

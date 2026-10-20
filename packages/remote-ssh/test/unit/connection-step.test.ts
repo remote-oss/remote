@@ -139,6 +139,7 @@ function fixture(
     | 'endpointUnreachable'
     | 'cancelled' = 'acquired',
   channelFailureMessage?: string,
+  level: Level = 'info',
 ): Fixture {
   const lease = new FakeLease();
   const requests: Array<ConnectionAcquireRequest<StepFailure>> = [];
@@ -209,7 +210,7 @@ function fixture(
       ]);
       return CHANNEL;
     },
-    logger: createLogger(sink, {minimumLevel: (): Level => 'info'}),
+    logger: createLogger(sink, {minimumLevel: (): Level => level}),
     attachLogin: (login, input) => {
       logins.attached += 1;
       logins.inputs.push(input);
@@ -256,6 +257,92 @@ async function loggedIn(
 }
 
 describe('the connection step', () => {
+  /** A fixture whose connect is under way at `level`, with the lines of `batches` heard from the helper. */
+  async function hearing(
+    level: Level,
+    batches: readonly string[][],
+  ): Promise<ReturnType<typeof fixture>> {
+    const ready = fixture('acquired', undefined, level);
+    const pending = ready.connecting();
+    await settled();
+    for (const lines of batches) {
+      ready.lease.emit({type: 'sshLines', lines});
+    }
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    await pending;
+    return ready;
+  }
+
+  /** The `[ssh]` lines of a fixture's log. */
+  function sshLogged(ready: ReturnType<typeof fixture>): string[] {
+    return ready.logged().filter(line => line.startsWith('[ssh] '));
+  }
+
+  it('F-2003 BR-6 item 6: the window logs each line once, in order', async () => {
+    const ready = await hearing('trace', [['debug1: a', 'b'], ['c']]);
+    deepStrictEqual(sshLogged(ready), [
+      '[ssh] debug1: a',
+      '[ssh] b',
+      '[ssh] c',
+    ]);
+  });
+
+  it('F-2003 BR-8: at debug the log keeps the lines without debug1, and BR-9 point 1: at trace it keeps all', async () => {
+    const lines = [
+      'debug1: Reading configuration data /x',
+      'Authenticated to h',
+    ];
+    deepStrictEqual(
+      [
+        sshLogged(await hearing('info', [lines])),
+        sshLogged(await hearing('trace', [lines])),
+      ],
+      [
+        ['[ssh] Authenticated to h'],
+        [
+          '[ssh] debug1: Reading configuration data /x',
+          '[ssh] Authenticated to h',
+        ],
+      ],
+    );
+  });
+
+  it('F-2003 BR-8: a line after the connection is set up is logged, until the connection is given back', async () => {
+    const ready = fixture('acquired', undefined, 'info');
+    const pending = ready.connecting();
+    await settled();
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    const outcome = await pending;
+    ready.lease.emit({
+      type: 'sshLines',
+      lines: ['channel 3: open failed: administratively prohibited'],
+    });
+    if (outcome.kind === 'done') {
+      outcome.value.release();
+    }
+    ready.lease.emit({type: 'sshLines', lines: ['after the release']});
+    deepStrictEqual(sshLogged(ready), [
+      '[ssh] channel 3: open failed: administratively prohibited',
+    ]);
+  });
+
+  it('F-2003 BR-14: the token of a record the helper holds is masked in the lines', async () => {
+    const ready = fixture('acquired', undefined, 'info');
+    ready.lease.storedRecord = {
+      remotePort: 1,
+      operatingSystem: 'linux',
+      architecture: 'x64',
+      temporaryFolder: '/tmp',
+      connectionToken: 'ab12-cd34',
+    };
+    const pending = ready.connecting();
+    await settled();
+    ready.lease.emit({type: 'connected', socksPort: 41000});
+    await pending;
+    ready.lease.emit({type: 'sshLines', lines: ['Warning: ab12-cd34']});
+    deepStrictEqual(sshLogged(ready), ['[ssh] Warning: aa11-aa11']);
+  });
+
   it("F-2501 BR-3: asks for the helper of the target's identity, with the connect cancellation", async () => {
     const {requests, connecting} = fixture();
     const controller = new AbortController();

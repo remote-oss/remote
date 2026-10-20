@@ -92,6 +92,7 @@ interface Fixture {
   questionsDisposed: number;
   runners: SessionRunner[];
   dependencies: TerminalConnectionDependencies;
+  logged(): string[];
   open(cancellation?: AbortSignal): Promise<StepResult<ConnectionLease>>;
 }
 
@@ -101,6 +102,7 @@ function fixture(
     reveal?: boolean;
     timeoutSeconds?: number;
     fromHost?: boolean;
+    level?: Level;
   } = {},
 ): Fixture {
   const {
@@ -108,11 +110,14 @@ function fixture(
     reveal = false,
     timeoutSeconds = 10,
     fromHost = false,
+    level = 'info',
   } = options;
   const clock = new FakeClock();
   const terminals = new RecordingTerminals();
+  const sink = new MemorySink();
   const made: Fixture = {
     clock,
+    logged: () => sink.lines.map(line => line.message),
     terminals,
     questions: [],
     questionsDisposed: 0,
@@ -154,7 +159,7 @@ function fixture(
       fromHost,
       unboundedWaitSeconds: 600,
     }),
-    logger: createLogger(new MemorySink(), {minimumLevel: (): Level => 'info'}),
+    logger: createLogger(sink, {minimumLevel: (): Level => level}),
   };
   return made;
 }
@@ -188,6 +193,39 @@ async function loggedIn(made: Fixture) {
 }
 
 describe('the connection in terminal mode (card connect-17 table)', () => {
+  /** The `[ssh]` lines the step logged. */
+  function sshLogged(made: Fixture): string[] {
+    return made.logged().filter(line => line.startsWith('[ssh] '));
+  }
+
+  it('F-2003 BR-6 item 6: terminal mode logs ssh’s lines up to its authentication as [ssh], once each, and not the bootstrap’s echo or the shell after it', async () => {
+    const made = fixture({level: 'trace'});
+    const {result, terminal} = await started(made);
+    terminal.write('debug1: connecting\nWarning: Permanently added h\n');
+    terminal.write(AUTHENTICATED_ONLY);
+    terminal.write("printf 'LAYER1-READY\\n'\nexec sh\n");
+    terminal.write('LAYER1-READY\n');
+    await result;
+    terminal.write('output of a script\n');
+    deepStrictEqual(sshLogged(made), [
+      '[ssh] debug1: connecting',
+      '[ssh] Warning: Permanently added h',
+      '[ssh] Authenticated to dev ([10.0.0.1]:22) using "publickey".',
+    ]);
+  });
+
+  it('F-2003 BR-8: at debug terminal mode keeps the lines without debug1, and the failing login’s refusal is among them', async () => {
+    const made = fixture({level: 'info'});
+    const {result, terminal} = await started(made);
+    terminal.write('debug1: connecting\n');
+    terminal.write('ssh: connect to host dev port 22: Connection refused\n');
+    terminal.end(255, 'process');
+    await result;
+    deepStrictEqual(sshLogged(made), [
+      '[ssh] ssh: connect to host dev port 22: Connection refused',
+    ]);
+  });
+
   it('F-2308 3.2: opens one terminal named install, revealed as the setting says', async () => {
     const made = fixture({reveal: true});
     const {terminal} = await started(made);

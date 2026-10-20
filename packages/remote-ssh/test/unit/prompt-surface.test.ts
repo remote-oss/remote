@@ -316,6 +316,15 @@ describe('the prompt surface: the login started (card connect-78)', () => {
   });
 });
 
+describe('the prompt surface: ssh’s lines (card connect-66)', () => {
+  it('F-2003 BR-6 item 6: the lines of ssh leave a question that is open, as they arrive every 100 ms while it waits', async () => {
+    const context = setup();
+    await question(context, 1, PASSWORD_TEXT);
+    context.lease.send({type: 'sshLines', lines: ['debug1: waiting']});
+    deepStrictEqual(context.editor.last().signal.aborted, false);
+  });
+});
+
 describe('the prompt surface: its end', () => {
   it('F-2305: ending it stops listening to the lease', () => {
     const context = setup();
