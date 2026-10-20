@@ -252,11 +252,17 @@ The explorer side is section 4.3 as written: it awaits the call, swallows the re
 
 | # | Card | Package | Content | After |
 |---|---|---|---|---|
-| 1 | ssh-provider-02 | remote-ssh | the history store and its recording (section 3.1), and the two history ids (3.2) | the slice-1 gate |
-| 2 | explorer-06 | remote-explorer | the recent folders (4.1): rows, presentation, the workspace rule fix, settings, expansion, builds, the three commands, Remove; built against lib-companion's recording fake, which already answers history and delete | the slice-1 gate; in parallel with 1 |
+| 1 | ssh-provider-02 | remote-ssh | the history store and its recording (section 3.1), and the two history ids (3.2) | nothing: it can start now |
+| 2 | explorer-06 | remote-explorer | the recent folders (4.1): rows, presentation, the workspace rule fix, settings, expansion, builds, the three commands, Remove; built against lib-companion's recording fake, which already answers history and delete | the slice-1 gate (#645) |
 | 3 | ssh-provider-03 | remote-ssh | the push (3.3), the signal on both triggers (3.4), and the `identifiers.json` fixes (4.4) | 1 |
 | 4 | explorer-07 | remote-explorer | the inbox (4.2), the two hand-overs (4.3), and the identifier and allowlist entries (4.4); against the fake, which already records the push's `outcome` | 2; in parallel with 3 |
 | 5 | coverage and gate | both | the tags of the increment-2 criteria and the gate rows below | 1 to 4 |
+
+**What waits for the slice-1 gate** (amended 2026-10-20, hermes's question on #745): only the explorer cards, 2
+and 4. They change the row model, the tree and the "SSH" group, which the gate's rows (#645) are still proving. Cards 1
+and 3 touch only remote-ssh and leave the slice-1 ids as they are, so they can be built now. Before the explorer
+serves its inbox, card 3's push and signal fail silently, and `fireAndForget` swallows that. All five can be written
+now.
 
 Each card cites the rules it implements, and each card's rows are unit rows over fakes plus the acceptance rows
 that need the editor. A criterion that needs the Windows or macOS path forms is deferred (section 1).
