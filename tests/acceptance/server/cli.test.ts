@@ -138,6 +138,7 @@ describe('V7a the CLI on a real host', function () {
       {
         channel: host.channel,
         download,
+        credentials: {readNetrc: () => Promise.resolve(undefined)},
         files: nodeClientFiles,
         lockLoop: lockLoop(),
         logger: createLogger(undefined, {minimumLevel: () => 'info'}),

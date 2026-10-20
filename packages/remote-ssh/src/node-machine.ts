@@ -11,7 +11,12 @@ import path from 'node:path';
 import {nodeLocalPort, nodePortProber} from 'lib-forwarding';
 import {nodeClientEnvironment, nodeTimer, runtimeFolder} from 'lib-helper';
 import type {ProductProfile} from 'lib-product';
-import {downloadPortOf, type HttpGet, nodeClientFiles} from 'lib-server';
+import {
+  downloadPortOf,
+  type HttpGet,
+  nodeClientFiles,
+  nodeCredentialsPort,
+} from 'lib-server';
 import {type ClientPlatform, nodeLocalFiles, nodeProcessSpawner} from 'lib-ssh';
 import {HELPER_CLIENT_WAITS} from './pipeline/bounds.ts';
 import type {ConnectMachine} from './connect-ports.ts';
@@ -114,6 +119,11 @@ export function nodeMachineOf(
     files: nodeLocalFiles,
     clientFiles: nodeClientFiles,
     download: downloadPortOf(places.httpGet),
+    credentials: nodeCredentialsPort({
+      environment: facts.environment,
+      platform: facts.platform,
+      homeFolder: facts.homeFolder,
+    }),
     scheduler: {setTimer: nodeTimer},
     clock: {
       now: Date.now,

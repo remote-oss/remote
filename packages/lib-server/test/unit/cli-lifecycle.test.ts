@@ -324,6 +324,7 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
       const results = [...downloadResults];
       const dependencies: TransferDependencies = {
         channel,
+        credentials: {readNetrc: () => Promise.resolve(undefined)},
         download: {
           download: request => {
             downloads += 1;

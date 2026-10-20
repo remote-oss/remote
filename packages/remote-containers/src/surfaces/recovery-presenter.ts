@@ -7,6 +7,7 @@
 import type {Failed, FailurePresenter} from 'lib-authority';
 import type {Logger} from 'lib-log';
 import type {DevContainerFolder} from '../authority/payload.ts';
+import type {FailedContainer} from '../connect/failures.ts';
 import type {Translate} from './engine-dialogs.ts';
 import {failureDialogOf, quickPickOf} from './failure-dialog.ts';
 import {reasonText} from './failure-strings.ts';
@@ -60,6 +61,10 @@ export interface RecoveryPorts {
   openLocally(folder: string): PromiseLike<unknown>;
   reloadWindow(): PromiseLike<unknown>;
   openRecent(): PromiseLike<unknown>;
+  /** Leaves the retry for the paused container `containerId`, which the connect after the reload takes once. */
+  storePausedRetry(containerId: string): PromiseLike<void>;
+  /** Runs the command that rebuilds the container: it leaves the rebuild intent and reloads the window. */
+  rebuildContainer(): PromiseLike<unknown>;
   openExternal(address: string): PromiseLike<unknown>;
   openSetting(settingId: string): PromiseLike<unknown>;
   /** Runs `task` once the current call stack has unwound. */
@@ -69,10 +74,11 @@ export interface RecoveryPorts {
   logger: Logger;
 }
 
-/** The presenter over `ports`; `target` is read each time something is shown. */
+/** The presenter over `ports`; `target` and `failedContainer` are read each time something is shown. */
 export function recoveryPresenterOf(
   ports: RecoveryPorts,
   target: () => DevContainerFolder | undefined,
+  failedContainer: () => FailedContainer | undefined,
   translate: Translate,
 ): FailurePresenter {
   /** Keeps the configuration file for the next window, then reopens the folder here; a failed keep is only logged. */
@@ -90,10 +96,29 @@ export function recoveryPresenterOf(
     await ports.openLocally(folder.hostPath);
   }
 
+  /** Leaves the retry for a paused container before the reload; a failed store is only logged. */
+  async function keepPausedRetry(): Promise<void> {
+    const failed = failedContainer();
+    if (failed?.paused !== true) {
+      return;
+    }
+    try {
+      await ports.storePausedRetry(failed.containerId);
+    } catch (caught) {
+      ports.logger.warn(
+        `the retry of the paused container could not be kept: ${caught instanceof Error ? caught.message : String(caught)}`,
+      );
+    }
+  }
+
   /** The quick pick of More Actions...; Open Documentation shows it again. */
   async function showQuickPick(): Promise<void> {
     const folder = target();
-    const pick = quickPickOf(folder, translate);
+    const pick = quickPickOf(
+      folder,
+      failedContainer() !== undefined,
+      translate,
+    );
     const chosen = await ports.pick(
       pick.placeholder,
       pick.items.map(item => item.label),
@@ -101,6 +126,8 @@ export function recoveryPresenterOf(
     const item = pick.items.find(each => each.label === chosen);
     if (item?.action === 'reload') {
       await ports.reloadWindow();
+    } else if (item?.action === 'rebuild') {
+      await ports.rebuildContainer();
     } else if (item?.action === 'editLocally') {
       await editLocally(item.folder);
     } else if (item?.action === 'openRecent') {
@@ -142,6 +169,7 @@ export function recoveryPresenterOf(
       // Escape chooses the close affordance, More Actions..., which the editor gives back as the choice.
       const button = dialog.buttons.find(each => each.label === chosen);
       if (button?.action === 'retry') {
+        await keepPausedRetry();
         return 'reload';
       }
       if (button?.action === 'editLocally') {

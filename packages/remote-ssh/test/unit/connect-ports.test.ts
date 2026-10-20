@@ -132,6 +132,7 @@ function assemblyInputs(
     },
     files: {} as unknown as ConnectMachine['files'],
     clientFiles: {} as unknown as ConnectMachine['clientFiles'],
+    credentials: {readNetrc: () => Promise.resolve(undefined)},
     download: {} as unknown as ConnectMachine['download'],
     scheduler: clock.scheduler(),
     clock: {now: () => clock.now(), wait: () => Promise.resolve()},

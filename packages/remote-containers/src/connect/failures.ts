@@ -6,6 +6,12 @@
 import type {FailureReason, Failed} from 'lib-authority';
 import type {DaemonRefusal} from '../cli/cli-lines.ts';
 
+/** The container a failed connect found, for the failure's recovery: its full id, and whether it was paused. */
+export interface FailedContainer {
+  containerId: string;
+  paused: boolean;
+}
+
 /** A failure of `kind`; none has a hint or a diagnostic of its own. */
 function failure(
   kind: string,
@@ -41,9 +47,13 @@ export function engineCheckFailed(stringId: 'S339' | 'S104' | 'S144'): Failed {
   return failure('engineCheckFailed', {}, {id: stringId});
 }
 
-/** The container found cannot be used. */
-export function containerUnusable(): Failed {
-  return failure('containerUnusable', {}, GENERIC);
+/** The container found cannot be used; a paused one has a kind of its own, with the same reason. */
+export function containerUnusable(status: string): Failed {
+  return failure(
+    status === 'paused' ? 'containerPaused' : 'containerUnusable',
+    {},
+    GENERIC,
+  );
 }
 
 /** The string of each refusal the Docker daemon words: a mount it rejects, a port that is already taken. */

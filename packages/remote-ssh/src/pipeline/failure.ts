@@ -68,7 +68,7 @@ const DOWNLOAD_FAILED: FailureReason = {id: 'S043'};
 
 /**
  * What a failed client download's reason names: `Failed to fetch` for the network, `Server returned <status>` for an
- * HTTP error status, and the file system's own text for the client's file.
+ * HTTP error status, the port's own text for a source that asks for credentials, and the file system's own text for the client's file.
  */
 function localDownloadValue(
   failure: Extract<TransferFailure, {kind: 'localDownload'}>,
@@ -76,7 +76,9 @@ function localDownloadValue(
   if (failure.cause === 'httpStatus') {
     return `Server returned ${String(failure.status)}`;
   }
-  return failure.cause === 'clientFile' ? failure.detail : 'Failed to fetch';
+  return failure.cause === 'clientFile' || failure.cause === 'unauthorized'
+    ? failure.detail
+    : 'Failed to fetch';
 }
 
 /** The failure of a host channel: a closed or timed out connection, a cancel, or a copy that did not work. */

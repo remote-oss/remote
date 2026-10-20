@@ -28,6 +28,7 @@ import {
   type ClientFilePort,
   CONTAINERS_POLICY,
   DISCARD_DEADLINE_MILLISECONDS,
+  type CredentialsPort,
   type DownloadPort,
   ensureAccepted,
   hostLockLoopOf,
@@ -76,6 +77,7 @@ export interface ServerStepDependencies {
   store: AcceptanceStore;
   modal: LicenceModal;
   download: DownloadPort;
+  credentials: CredentialsPort;
   files: ClientFilePort;
   clock: Clock;
   newTemporaryToken: () => string;
@@ -412,6 +414,7 @@ export async function runServerSteps(
         {
           channel,
           download: dependencies.download,
+          credentials: dependencies.credentials,
           files: dependencies.files,
           lockLoop: hostLockLoopOf(
             dependencies.clock,
@@ -426,7 +429,8 @@ export async function runServerSteps(
     let transferred = await attempt();
     if (
       transferred.kind === 'failed' &&
-      transferred.failure.kind === 'localDownload'
+      transferred.failure.kind === 'localDownload' &&
+      transferred.failure.cause !== 'unauthorized'
     ) {
       logger.info(retryLine(transferred.failure, address, archivePath));
       transferred = await attempt();

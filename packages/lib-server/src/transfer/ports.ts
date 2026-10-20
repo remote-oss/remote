@@ -10,7 +10,12 @@ export interface DownloadFacts {
 
 /** Why a download failed when a bound of the request ended it, rather than the network. */
 export type DownloadFailureCause =
-  'stalled' | 'deadline' | 'tooLarge' | 'httpStatus' | 'clientFile';
+  | 'stalled'
+  | 'deadline'
+  | 'tooLarge'
+  | 'httpStatus'
+  | 'unauthorized'
+  | 'clientFile';
 
 /** What a download on the client ended with. */
 export type DownloadResult =
@@ -24,7 +29,7 @@ export type DownloadResult =
       kind: 'failed';
       detail: string;
       cause?: DownloadFailureCause;
-      /** The HTTP status of an error answer, with the cause `httpStatus`. */
+      /** The HTTP status of an error answer, with the cause `httpStatus` or `unauthorized`. */
       status?: number;
     }
   | {kind: 'cancelled'};
@@ -53,6 +58,11 @@ export interface DownloadRequest extends DownloadBounds {
    * at the first redirect to a host the rule does not allow; the library checks the final address again.
    */
   redirect: RedirectRule;
+  /**
+   * The `Authorization` value for a request to `address`, or undefined when it gets none. The port asks for every
+   * request of the redirect chain, so that no credential crosses a host change.
+   */
+  authorizationFor: (address: string) => string | undefined;
   /** Receives the share downloaded so far, an integer from 0 to 100, while the body arrives. */
   onPercent: (percent: number) => void;
 }
@@ -89,4 +99,10 @@ export interface ClientFilePort {
     source: string,
     destination: string,
   ): Promise<{kind: 'renamed'} | {kind: 'failed'; detail: string}>;
+}
+
+/** The client's netrc, read by the extension; the library reads no file of its own. */
+export interface CredentialsPort {
+  /** The text of the netrc file, or undefined when there is none. */
+  readNetrc(): Promise<string | undefined>;
 }

@@ -246,6 +246,7 @@ function dependenciesOf(
       },
     },
     download,
+    credentials: {readNetrc: () => Promise.resolve(undefined)},
     files,
     clock: new FakeClock(),
     newTemporaryToken: () => 'token',
@@ -810,6 +811,54 @@ describe('the server steps of a connect (card containers-08)', () => {
         ],
       ],
     );
+  });
+
+  it('server-23: a download answered 401 or 403 is not tried again, and the log carries the text', async () => {
+    const outcomes = [];
+    for (const status of [401, 403]) {
+      const {result, seen} = await runSteps(channelOf(), {
+        downloads: [
+          {
+            kind: 'failed',
+            detail: `Server returned ${String(status)}: the source asks for credentials`,
+            cause: 'unauthorized',
+            status,
+          },
+        ],
+      });
+      outcomes.push([
+        failureKind(result),
+        seen.downloads.length,
+        seen.sink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('(unauthorized)')),
+      ]);
+    }
+    deepStrictEqual(outcomes, [
+      [
+        'serverFailed',
+        1,
+        [
+          'the server was not installed: localDownload (unauthorized): Server returned 401: the source asks for credentials',
+        ],
+      ],
+      [
+        'serverFailed',
+        1,
+        [
+          'the server was not installed: localDownload (unauthorized): Server returned 403: the source asks for credentials',
+        ],
+      ],
+    ]);
+  });
+
+  it('server-23: a download answered with another HTTP error is still tried again', async () => {
+    const {seen} = await runSteps(channelOf(), {
+      downloads: [
+        {kind: 'failed', detail: 'HTTP 503', cause: 'httpStatus', status: 503},
+      ],
+    });
+    deepStrictEqual(seen.downloads.length, 2);
   });
 
   it('F-0503 7.E2: a download that fails twice is serverFailed, after exactly two tries', async () => {

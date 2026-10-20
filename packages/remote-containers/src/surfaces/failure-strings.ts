@@ -22,6 +22,7 @@ export const FAILURE_TEMPLATES = {
   S256: 'Open Documentation',
   S260: 'Open Recent...',
   S272: 'Pick an action to help resolve the problem.',
+  S285: 'Rebuild Container',
   S289: 'Reload Window',
   S297: 'Retry',
   S339: "The 'docker' command was not found. Make sure Docker is installed.",

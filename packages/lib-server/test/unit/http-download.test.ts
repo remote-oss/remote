@@ -4,7 +4,12 @@ import {createServer, type Server} from 'node:http';
 import type {AddressInfo} from 'node:net';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {downloadPortOf, type DownloadRequest} from '../../src/index.ts';
+import {
+  downloadPortOf,
+  type DownloadRequest,
+  type DownloadResult,
+  type HttpGet,
+} from '../../src/index.ts';
 
 const fetchDownloadPort = downloadPortOf(fetch);
 
@@ -38,6 +43,7 @@ function requestFor(
     destination: path.join(folder, 'part', 'archive'),
     cancellation: new AbortController().signal,
     redirect: {kind: 'hosts', hosts: ['127.0.0.1']},
+    authorizationFor: () => undefined,
     onPercent: () => undefined,
     deadlineMilliseconds: 10_000,
     stallMilliseconds: 5_000,
@@ -468,5 +474,129 @@ describe('the download of a server archive over fetch (V4)', () => {
     } finally {
       rmSync(folder, {recursive: true, force: true});
     }
+  });
+});
+
+/** A redirect answer to `location`. */
+function redirectTo(location: string): Response {
+  return new Response(null, {status: 302, headers: {location}});
+}
+
+/** The authorization the rows give: Basic for the hosts of `ownHosts`, one value per host. */
+function authorizationOfHosts(
+  ownHosts: readonly string[],
+): DownloadRequest['authorizationFor'] {
+  return address => {
+    const {hostname} = new URL(address);
+    return ownHosts.includes(hostname) ? `Basic for-${hostname}` : undefined;
+  };
+}
+
+const SOURCE = 'https://source.example.invalid/a';
+const FOREIGN = 'https://cdn.foreign.invalid/b';
+
+/**
+ * Downloads `SOURCE` over a fake HTTP function that answers each address with `answers`, and gives the outcome and
+ * what the function was asked, as the address and the headers (`none` when the request carried no `headers` key).
+ */
+async function downloadAsked(
+  answers: Record<string, Response>,
+  parts: Partial<DownloadRequest> = {},
+): Promise<{
+  outcome: DownloadResult;
+  asked: Array<{address: string; headers: unknown}>;
+}> {
+  const asked: Array<{address: string; headers: unknown}> = [];
+  function httpGet(
+    address: string,
+    init: Parameters<HttpGet>[1],
+  ): Promise<Response> {
+    asked.push({address, headers: 'headers' in init ? init.headers : 'none'});
+    const answer = answers[address];
+    return answer === undefined
+      ? Promise.reject(new Error(`no answer for ${address}`))
+      : Promise.resolve(answer);
+  }
+  const folder = mkdtempSync(path.join(tmpdir(), 'node-download-'));
+  try {
+    const outcome = await downloadPortOf(httpGet).download(
+      requestFor(SOURCE, folder, {redirect: {kind: 'any'}, ...parts}),
+    );
+    return {outcome, asked};
+  } finally {
+    rmSync(folder, {recursive: true, force: true});
+  }
+}
+
+describe('the download with credentials (card server-23)', () => {
+  it('server-23: the header is built for every hop from that hop’s own host, and a hop with no entry carries none', async () => {
+    const {asked} = await downloadAsked(
+      {[SOURCE]: redirectTo(FOREIGN), [FOREIGN]: new Response('hello')},
+      {authorizationFor: authorizationOfHosts(['source.example.invalid'])},
+    );
+    deepStrictEqual(asked, [
+      {
+        address: SOURCE,
+        headers: {Authorization: 'Basic for-source.example.invalid'},
+      },
+      {address: FOREIGN, headers: 'none'},
+    ]);
+  });
+
+  it('server-23: a redirect to a host with its own entry carries that host’s header, not the first one’s', async () => {
+    const {asked} = await downloadAsked(
+      {[SOURCE]: redirectTo(FOREIGN), [FOREIGN]: new Response('hello')},
+      {
+        authorizationFor: authorizationOfHosts([
+          'source.example.invalid',
+          'cdn.foreign.invalid',
+        ]),
+      },
+    );
+    deepStrictEqual(
+      asked.map(each => each.headers),
+      [
+        {Authorization: 'Basic for-source.example.invalid'},
+        {Authorization: 'Basic for-cdn.foreign.invalid'},
+      ],
+    );
+  });
+
+  it('server-23: a request whose address gets no authorization has no headers key', async () => {
+    const {asked} = await downloadAsked({[SOURCE]: new Response('hello')});
+    deepStrictEqual(asked, [{address: SOURCE, headers: 'none'}]);
+  });
+
+  for (const status of [401, 403]) {
+    it(`server-23: a final ${String(status)} fails at once as unauthorized, with the status and the host, after one request per hop`, async () => {
+      const {outcome, asked} = await downloadAsked({
+        [SOURCE]: redirectTo(FOREIGN),
+        [FOREIGN]: new Response(null, {status}),
+      });
+      deepStrictEqual(
+        [outcome, asked.length],
+        [
+          {
+            kind: 'failed',
+            detail: `Server returned ${String(status)}: the source at cdn.foreign.invalid asks for credentials. Add a "machine cdn.foreign.invalid" entry with a login and a password to your netrc file, or put the token in the address template of the server download setting (?token=...)`,
+            cause: 'unauthorized',
+            status,
+          },
+          2,
+        ],
+      );
+    });
+  }
+
+  it('server-23: a 404 stays an httpStatus failure', async () => {
+    const {outcome} = await downloadAsked({
+      [SOURCE]: new Response(null, {status: 404}),
+    });
+    deepStrictEqual(outcome, {
+      kind: 'failed',
+      detail: 'HTTP 404',
+      cause: 'httpStatus',
+      status: 404,
+    });
   });
 });

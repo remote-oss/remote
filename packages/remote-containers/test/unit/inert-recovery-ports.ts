@@ -13,6 +13,8 @@ export function inertRecoveryPorts(
     openLocally: () => Promise.resolve(),
     reloadWindow: () => Promise.resolve(),
     openRecent: () => Promise.resolve(),
+    storePausedRetry: () => Promise.resolve(),
+    rebuildContainer: () => Promise.resolve(),
     openExternal: () => Promise.resolve(),
     openSetting: () => Promise.resolve(),
     later: () => undefined,
