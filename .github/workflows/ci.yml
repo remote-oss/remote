@@ -89,6 +89,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm identifiers # the git-ignored tables every later step reads
       - run: pnpm check-layout
+      - run: pnpm check-ci-gate # every job is one ci-gate needs (athena on #1076)
       - run: pnpm check-identifiers
       - run: pnpm check-consumed
         if: github.ref_type != 'tag'
@@ -259,7 +260,9 @@ jobs:
       group: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' && 'acceptance-vscodium-main' || format('acceptance-vscodium-{0}', github.ref)) || 'acceptance-vscodium' }}
       cancel-in-progress: false
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    # the whole VSCodium suite outgrew 30 minutes in October 2026: main's backstop was cut at 30 every time, so it never
+    # reported (050079f: started 23:38:16, cancelled 00:08:41)
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
