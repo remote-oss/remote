@@ -11,7 +11,6 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  statSync,
   writeFileSync,
 } from 'node:fs';
 import {
@@ -30,16 +29,23 @@ import {
 } from './acceptance-templates.ts';
 import {type CommandRunner, checked} from './command-runner.ts';
 
-/** The VSCodium server for Alpine the download host serves: the release the client is pinned to, by architecture. */
+/**
+ * The VSCodium servers the download host serves: the release the client is pinned to, by platform, `alpine-<arch>`
+ * (musl) or `linux-<arch>` (glibc).
+ */
 export const SERVER_ARCHIVE = {
   tagName: '1.140.06829-insider',
   repository: 'VSCodium/vscodium-insiders',
-  /** The release asset's sha256, by `alpine-<architecture>` of the host. */
+  /** The release asset's sha256, by platform; the release lists each asset's digest. */
   sha256: {
     'alpine-arm64':
       'e0f2b7bbd1760f1c6cf97e720f031a6c6415664bd589bba659d655323fec43e2',
     'alpine-x64':
       'df0678a1bd2f6640f527b497fa47d99795041c7774581761ada97f6eeaad5a00',
+    'linux-arm64':
+      '397a7c3bd38a5ea7f004253b2b5c08b7bdaa79d1f93a0f7f64d04c826a21481f',
+    'linux-x64':
+      'bbc2ced95874d47e61958909ac7267205ba85469c2835666fb5b74746569b7cd',
   },
 } as const;
 
@@ -66,35 +72,60 @@ const SLOW_TICK_MILLISECONDS = 100;
 /** The path that closes every connection `hang` holds. */
 export const DROP_HUNG_PATH = '/control/drop-hung';
 
-/** The file name of the server archive for an architecture. */
-export function serverArchiveName(architecture: string): string {
-  return `vscodium-reh-alpine-${architecture}-${SERVER_ARCHIVE.tagName}.tar.gz`;
+/** The file name of the server archive for a platform (`alpine-x64`, `linux-x64`, …). */
+export function serverArchiveName(platform: string): string {
+  return `vscodium-reh-${platform}-${SERVER_ARCHIVE.tagName}.tar.gz`;
+}
+
+/** The platforms a run serves for an architecture: the Alpine server, which a request naming none gets, then glibc's. */
+export function servedPlatforms(architecture: string): [string, string] {
+  return [`alpine-${architecture}`, `linux-${architecture}`];
+}
+
+/** A platform key: the operating system (`alpine` for musl) and the architecture. */
+const PLATFORM = /^(?:alpine|linux|darwin|win32|windows)-[a-z0-9]+$/;
+
+/**
+ * The platform a request for the server names, as an archive's key, or undefined when it names none: a path segment
+ * that is the template's `<os>-<arch>`, or the update service's `server-<platform>`, whose `linux-alpine` is Alpine on
+ * x64.
+ */
+export function requestedPlatform(url: string): string | undefined {
+  for (const segment of url.split('?')[0]?.split('/') ?? []) {
+    const service = /^server-(.+)$/.exec(segment)?.[1];
+    const named =
+      service === 'linux-alpine' ? 'alpine-x64' : (service ?? segment);
+    if (PLATFORM.test(named)) {
+      return named;
+    }
+  }
+  return undefined;
 }
 
 /** Downloads a file into memory; the run's own downloader, replaced by a test. */
 export type Download = (address: string) => Promise<Uint8Array>;
 
 /**
- * The server archive for `architecture` in `cacheFolder`, downloaded from the pinned release when it is missing or
- * does not match its checksum. Throws when the download does not match either.
+ * The server archive for `platform` in `cacheFolder`, downloaded from the pinned release when it is missing or does
+ * not match its checksum. Throws when the download does not match either.
  */
 export async function serverArchiveOf(
   cacheFolder: string,
-  architecture: string,
+  platform: string,
   download: Download,
   writeFile: (file: string, bytes: Uint8Array) => void,
   checksums: Readonly<Record<string, string>> = SERVER_ARCHIVE.sha256,
 ): Promise<string> {
-  const expected = checksums[`alpine-${architecture}`];
+  const expected = checksums[platform];
   if (expected === undefined) {
-    throw new Error(`no server archive is pinned for ${architecture}`);
+    throw new Error(`no server archive is pinned for ${platform}`);
   }
-  const file = path.join(cacheFolder, serverArchiveName(architecture));
+  const file = path.join(cacheFolder, serverArchiveName(platform));
   if (existsSync(file) && sha256Of(readFileSync(file)) === expected) {
     return file;
   }
   const archive = await download(
-    `https://github.com/${SERVER_ARCHIVE.repository}/releases/download/${SERVER_ARCHIVE.tagName}/${serverArchiveName(architecture)}`,
+    `https://github.com/${SERVER_ARCHIVE.repository}/releases/download/${SERVER_ARCHIVE.tagName}/${serverArchiveName(platform)}`,
   );
   if (sha256Of(archive) !== expected) {
     throw new Error('the server archive download does not match its checksum');
@@ -256,7 +287,9 @@ export function makeCertificate(folder: string): {
 export interface DownloadHostOptions {
   /** The addresses it listens on, each with the same two ports. */
   addresses: readonly string[];
-  archiveFile: string;
+  /** The server archives by platform; a request that names no platform gets `defaultPlatform`'s. */
+  archiveFiles: Readonly<Record<string, string>>;
+  defaultPlatform: string;
   certificateFile: string;
   keyFile: string;
   /** One line per request is appended here. */
@@ -350,18 +383,60 @@ function answerControl(
   response.end();
 }
 
+/**
+ * The archive a request gets: the one of the platform it names, the default platform's when it names none, and none for
+ * a platform the run serves no archive for.
+ */
+function archiveFileOf(
+  url: string,
+  options: Pick<DownloadHostOptions, 'archiveFiles' | 'defaultPlatform'>,
+): string | undefined {
+  return options.archiveFiles[
+    requestedPlatform(url) ?? options.defaultPlatform
+  ];
+}
+
+/**
+ * The archive's answers: whole (`ok`), cut after its first megabyte (`cut`) or in chunks at a slow pace (`slow`); 404
+ * when the run serves no archive for the platform asked.
+ */
+function answerArchive(
+  request: IncomingMessage,
+  response: ServerResponse,
+  archiveFile: string | undefined,
+): void {
+  if (archiveFile === undefined) {
+    response.writeHead(404, {'Content-Length': 0});
+    response.end();
+    return;
+  }
+  const body = readFileSync(archiveFile);
+  switch (String(request.url).split('/')[1]) {
+    case 'cut':
+      response.writeHead(200, {'Content-Length': body.length});
+      response.write(body.subarray(0, CUT_BYTES), () => {
+        request.socket.destroy();
+      });
+      return;
+    case 'slow':
+      sendSlowly(response, body);
+      return;
+    default:
+      response.writeHead(200, {'Content-Length': body.length});
+      response.end(body);
+  }
+}
+
 /** The answer to one request, chosen by the first segment of its path. */
 function answer(
   request: IncomingMessage,
   response: ServerResponse,
   options: Pick<
     DownloadHostOptions,
-    'archiveFile' | 'templatesFolder' | 'controlFolder'
+    'archiveFiles' | 'defaultPlatform' | 'templatesFolder' | 'controlFolder'
   >,
   held: Set<Socket>,
 ): void {
-  const {archiveFile} = options;
-  const archiveLength = statSync(archiveFile).size;
   switch (String(request.url).split('/')[1]) {
     case 'templates':
       answerTemplates(request, response, options.templatesFolder);
@@ -370,8 +445,13 @@ function answer(
       answerControl(request, response, options.controlFolder);
       return;
     case 'ok':
-      response.writeHead(200, {'Content-Length': archiveLength});
-      response.end(readFileSync(archiveFile));
+    case 'cut':
+    case 'slow':
+      answerArchive(
+        request,
+        response,
+        archiveFileOf(String(request.url), options),
+      );
       return;
     case 'missing':
       response.writeHead(404, {'Content-Length': 0});
@@ -395,15 +475,6 @@ function answer(
     case 'hang':
       held.add(request.socket);
       request.socket.once('close', () => held.delete(request.socket));
-      return;
-    case 'cut':
-      response.writeHead(200, {'Content-Length': archiveLength});
-      response.write(readFileSync(archiveFile).subarray(0, CUT_BYTES), () => {
-        request.socket.destroy();
-      });
-      return;
-    case 'slow':
-      sendSlowly(response, readFileSync(archiveFile));
       return;
     default:
       response.writeHead(404, {'Content-Length': 0});
@@ -562,8 +633,9 @@ export interface RunDownloads {
 }
 
 /**
- * Starts the download host of a run in `runFolder`: the server archive for this machine's architecture from the cache
- * under `root`, the run's certificate, and the two ports on the loopback address and on Docker's bridge gateway.
+ * Starts the download host of a run in `runFolder`: the Alpine and glibc server archives for this machine's
+ * architecture from the cache under `root`, the run's certificate, and the two ports on the loopback address and on
+ * Docker's bridge gateway.
  */
 export async function startRunDownloads(
   command: CommandRunner,
@@ -573,13 +645,17 @@ export async function startRunDownloads(
   architecture: string = process.arch,
   checksums: Readonly<Record<string, string>> = SERVER_ARCHIVE.sha256,
 ): Promise<RunDownloads> {
-  const archiveFile = await serverArchiveOf(
-    path.join(root, '.vscode-test', 'downloads'),
-    architecture,
-    download,
-    writeFileSync,
-    checksums,
-  );
+  const platforms = servedPlatforms(architecture);
+  const archiveFiles: Record<string, string> = {};
+  for (const platform of platforms) {
+    archiveFiles[platform] = await serverArchiveOf(
+      path.join(root, '.vscode-test', 'downloads'),
+      platform,
+      download,
+      writeFileSync,
+      checksums,
+    );
+  }
   const folder = path.join(runFolder, 'downloads');
   mkdirSync(folder, {recursive: true});
   const certificate = makeCertificate(folder);
@@ -589,7 +665,8 @@ export async function startRunDownloads(
   writeFileSync(tlsLogFile, '');
   const host = await startDownloadHost({
     addresses: ['127.0.0.1', bridgeGateway(command)],
-    archiveFile,
+    archiveFiles,
+    defaultPlatform: platforms[0],
     ...certificate,
     logFile,
     tlsLogFile,
