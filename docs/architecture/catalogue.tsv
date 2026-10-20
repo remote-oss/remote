@@ -144,7 +144,7 @@ F-2104	22	remote-ssh	feature	spec:draft	E21	SSH tunnel to the server, dynamic fo
 F-2105	23	remote-ssh	feature	spec:draft	E21	Connection timeouts	A	ssh.timeout-policy	lib-ssh	32	8	False	0	1	0	0	ssh-remote	resolvers	ssh	openssh	18
 F-2106	24	remote-ssh	feature	spec:draft	E21	PTY allocation	A	ssh.pty-flag	lib-ssh	17	4	False	0	1	0	0	ssh-remote		ssh (-T flag)	openssh	12
 F-2107	25	remote-ssh	feature	spec:draft	E21	RemoteCommand support	A	ssh.remote-command-gate	lib-ssh	27	11	False	0	1	0	0	ssh-remote	resolvers	ssh;ssh -G	openssh	14
-F-2108	26	remote-ssh	feature	spec:draft	E21	Pre-connection script	A	ssh.preconnect-runner	lib-ssh	41	9	False	0	1	0	0	ssh-remote	resolvers	user-configured script (.sh/executable; .ps1 on Windows)	openssh	13
+F-2108	26	remote-ssh	feature	spec:reviewed	E21	Pre-connection script	A	ssh.preconnect-runner	lib-ssh	42	9	False	0	1	0	0	ssh-remote	resolvers	user-configured script (.sh/executable; .ps1 on Windows)	openssh	13
 F-2109	27	remote-ssh	feature	spec:draft	E21	ssh_config keywords passed through to ssh	A	ssh.config-passthrough	lib-ssh	19	6	False	0	0	0	0	ssh-remote	resolvers	ssh	openssh	24
 F-2201	28	remote-ssh	feature	spec:draft	E22	Which SSH configuration files are read; remote.SSH.configFile; parse errors	A	ssh.config-source	lib-ssh	44	10	True	1	1	0	0		resolvers	ssh (-F option)	openssh	18
 F-2202	29	remote-ssh	feature	spec:draft	E22	Host list from the configuration: Host patterns, Include and Match	B	ssh.host-list	lib-ssh	34	6	False	1	1	0	0				openssh	11
@@ -185,7 +185,7 @@ F-2505	63	remote-ssh	feature	spec:draft	E25	Disconnect, reconnection and reconne
 F-2506	64	remote-ssh	feature	spec:draft	E25	Extensions on the SSH host and default extensions	A	ssh.default-extensions	lib-server	25	5	True	2	3	1	0		resolvers	VS Code Server install	editor-cli	11
 F-2507	65	remote-ssh	feature	spec:reviewed	E25	Port forwarding over the SSH connection	A	ssh.tunnel-factory	lib-forwarding	43	10	True	0	2	1	0		resolvers (tunnelFactory, port source);tunnels	ssh SOCKS forward	openssh	14
 F-2508	66	remote-ssh	feature	spec:draft	E25	VS Code core features in an SSH window	A	ssh.core-passthrough	none	37	4	True	9	0	0	0		resolvers	host shell;code CLI;node (debug)	editor-cli	15
-F-2509	67	remote-ssh	feature	spec:draft	E25	Open Web UI	A	ssh.open-web-ui	none	21	4	False	1	1	0	3					11
+F-2509	67	remote-ssh	feature	spec:reviewed	E25	Open Web UI	A	ssh.open-web-ui	none	21	4	False	1	1	0	3					11
 F-2601	68	remote-ssh	feature	spec:draft	E26	Connection failure notification and its buttons	B	ssh.failure-dialog	lib-authority	37	9	False	0	5	0	0	ssh-remote	resolvers	ssh		21
 F-2602	69	remote-ssh	feature	spec:draft	E26	Mitigation picker: More Actions..., settings fixes and resources	B	ssh.mitigation-picker	lib-authority	24	5	False	2	5	0	0	ssh-remote		ssh;scp;sshd		18
 F-2603	70	remote-ssh	feature	spec:draft	E26	Network-level connection errors	A	ssh.error-classifier.network	lib-ssh	27	9	False	0	4	0	0	ssh-remote	resolvers	ssh	openssh	16
@@ -195,7 +195,7 @@ F-2606	73	remote-ssh	feature	spec:draft	E26	The @remote-ssh chat participant	B	s
 F-2701	74	remote-ssh	feature	spec:needs-revision	E27	Windows SSH hosts	D	ssh.host-profile.windows	lib-server	18	8	False	1	9	0	0	ssh-remote	resolvers	ssh;powershell;sh;bash;busybox	openssh;editor-cli	18
 F-2702	75	remote-ssh	feature	spec:reviewed	E27	macOS SSH hosts	A	ssh.host-profile.macos	lib-server	39	6	False	2	9	0	0	ssh-remote	resolvers	ssh;zsh;tar;curl;wget;scp;sh;bash	openssh;editor-cli	22
 F-2703	76	remote-ssh	feature	spec:draft	E27	Minimal and non-glibc hosts: Alpine, BusyBox, no bash	A	ssh.host-profile.minimal	lib-server	34	7	False	0	3	0	0	ssh-remote	resolvers	ssh;bash;busybox;wget;sh;tar;scp;curl	openssh;editor-cli	17
-F-2704	77	remote-ssh	feature	spec:draft	E27	Login shells and profile scripts on the host	A	ssh.login-shell-compat	lib-ssh	32	6	False	1	7	0	0	ssh-remote	resolvers	ssh;zsh;bash;fish;sh;powershell	openssh	17
+F-2704	77	remote-ssh	feature	spec:reviewed	E27	Login shells and profile scripts on the host	A	ssh.login-shell-compat	lib-ssh	32	6	False	1	7	0	0	ssh-remote	resolvers	ssh;zsh;bash;fish;sh;powershell	openssh	17
 F-3901	78	remote-ssh	decision	spec:draft	E39	Decision: identity card and reference identifiers	B	ssh.identity-and-standdown	lib-identifiers	0	3	True	2	2	0	1	ssh-remote				17
 F-3902	79	remote-ssh	decision	spec:draft	E39	Decision: where the server comes from for SSH hosts	A	ssh.server-source-resolver	lib-server	23	8	True	1	7	0	0	ssh-remote	resolvers (for commit/quality)	ssh;scp;tar;curl;wget;server launcher bin/<serverApplicationName> --version;--accept-server-license-terms	openssh	15
 F-3903	80	remote-ssh	decision	spec:draft	E39	Decision: proposed APIs	A	ssh.proposed-api-gate	lib-product	0	5	True	1	2	0	0	ssh-remote	resolvers;tunnels;terminalDataWriteEvent;contribRemoteHelp;contribViewsRemote (not declared);terminalRemoteResolver (not declared);telemetry (not declared)			20

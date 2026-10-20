@@ -602,7 +602,7 @@
   "issue": 67,
   "repo": "remote-ssh",
   "kind": "feature",
-  "label": "spec:draft",
+  "label": "spec:reviewed",
   "title": "Open Web UI",
   "epic": "E25",
   "acCount": 21,
