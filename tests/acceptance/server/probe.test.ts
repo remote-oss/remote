@@ -80,7 +80,7 @@ describe('F-2401 the probe of a host', function () {
     const {home, loginShell, temporaryFolder} = await probed();
     deepStrictEqual(
       {home, loginShell, temporaryFolder},
-      {home: '/home/harness', loginShell: 'sh', temporaryFolder: '/tmp'},
+      {home: '/home/harness', loginShell: '/bin/sh', temporaryFolder: '/tmp'},
     );
   });
 

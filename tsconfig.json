@@ -186,6 +186,12 @@
     },
     {
       "path": "tests/acceptance/containers-ports"
+    },
+    {
+      "path": "tests/acceptance/web-ui"
+    },
+    {
+      "path": "tests/acceptance/web-ui-trust"
     }
   ]
 }

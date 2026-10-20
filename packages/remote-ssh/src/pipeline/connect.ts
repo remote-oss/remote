@@ -24,6 +24,7 @@ import {connectOverCli} from '../cli/cli-connect.ts';
 import type {ForwardingPlans} from '../environment/forwarding.ts';
 import {
   hostPlatformLine,
+  loginShellLine,
   listeningLine,
   resolvedLine,
   resolverLine,
@@ -351,6 +352,10 @@ async function runSteps(
   }
   const {host} = probed.value;
   options.logger.info(hostPlatformLine(host));
+  const shellLine = loginShellLine(host);
+  if (shellLine !== undefined) {
+    options.logger.info(shellLine);
+  }
   const forwarding = await steps.planForwarding(
     input,
     lease,

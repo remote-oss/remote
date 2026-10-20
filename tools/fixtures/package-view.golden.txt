@@ -19,6 +19,7 @@
 
   ⚡  remote-containers   → dist/extension.js
                           → dist/cli-preload.js
+                          → dist/helper-launcher.js
                           → dist/shutdown-helper.js
                           → dist/devcontainers-cli
   ⚡  remote-explorer     → dist/extension.js
@@ -34,7 +35,7 @@
       lib-server · lib-ssh · lib-standdown · lib-wsl
       remote-extensionpack · remote-server · remote-wsl
 
-  🔥 10 bundles forged                             1.31s
+  🔥 11 bundles forged                             1.31s
 
   ━━━ ③ PACKAGE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
