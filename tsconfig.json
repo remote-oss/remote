@@ -183,6 +183,9 @@
     },
     {
       "path": "tests/acceptance/containers-explorer"
+    },
+    {
+      "path": "tests/acceptance/containers-ports"
     }
   ]
 }

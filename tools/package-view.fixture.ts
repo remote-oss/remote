@@ -27,7 +27,7 @@ export const FIXTURE: PackageRun = {
     'lib-standdown: no src/extension.ts, skipped',
     'lib-wsl: no src/extension.ts, skipped',
     'remote-containers: dist/extension.js',
-    'remote-containers: dist/cli-preload.js',
+    'remote-containers: dist/cli-preload.js, dist/shutdown-helper.js',
     'remote-containers: dist/devcontainers-cli',
     'remote-explorer: dist/extension.js',
     'remote-explorer: dist/web/extension.js',

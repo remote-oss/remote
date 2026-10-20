@@ -66,6 +66,24 @@ describe('the failure dialog (card containers-11)', () => {
     );
   });
 
+  it("F-0301 AC-11 (card containers-57): an invalid configuration's dialog has no message, S081 with the path as detail, and the same three buttons", () => {
+    deepStrictEqual(
+      failureDialogOf(
+        failed('configurationInvalid', {
+          id: 'S081',
+          values: ['/w/.devcontainer/devcontainer.json'],
+        }),
+        TARGET,
+        identity,
+      ),
+      {
+        message: '',
+        detail: 'Configuration "/w/.devcontainer/devcontainer.json" not valid.',
+        buttons: [RETRY, EDIT, MORE],
+      },
+    );
+  });
+
   it('F-0410 AC-11, AC-12: S018 and S019 reach the detail', () => {
     deepStrictEqual(
       ['S018', 'S019'].map(

@@ -20,6 +20,10 @@ interface EditorOptions {
   focusListed?: boolean;
   /** The user values the editor reports for the two folder settings, by key. */
   userValues?: Record<string, unknown>;
+  /** Whether the SSH companion is installed; true when absent. */
+  companionPresent?: boolean;
+  /** The commands of the companion that reject when run. */
+  rejecting?: string[];
 }
 
 interface Registered {
@@ -37,6 +41,8 @@ interface Fixture {
   opened: unknown[];
   /** The arguments of the delete requests the bus saw. */
   deleted: unknown[];
+  /** The commands of the companion that were run, each with its arguments. */
+  handed: Array<[string, unknown[]]>;
 }
 
 class FakeEmitter {
@@ -56,10 +62,12 @@ function fixtureOf(options: EditorOptions): Fixture {
   const providers: Fixture['providers'] = [];
   const opened: unknown[] = [];
   const deleted: unknown[] = [];
+  const handed: Fixture['handed'] = [];
   const editor = {
     extensions: {
       getExtension: (extensionId: string) =>
-        extensionId === SSH_COMPANION_ID ||
+        (extensionId === SSH_COMPANION_ID &&
+          options.companionPresent !== false) ||
         (extensionId === REFERENCE_ID && options.referencePresent === true)
           ? {}
           : undefined,
@@ -111,6 +119,12 @@ function fixtureOf(options: EditorOptions): Fixture {
         if (command === DELETE) {
           deleted.push(commandArguments[0]);
           return Promise.resolve({interfaceVersion: VERSION, changed: true});
+        }
+        if (command.startsWith('opensshremotes.')) {
+          handed.push([command, commandArguments]);
+          return options.rejecting?.includes(command) === true
+            ? Promise.reject(new Error('rejected'))
+            : Promise.resolve();
         }
         events.push(`${command} ${commandArguments.join(' ')}`);
         return Promise.resolve();
@@ -170,6 +184,7 @@ function fixtureOf(options: EditorOptions): Fixture {
     providers,
     opened,
     deleted,
+    handed,
   };
 }
 
@@ -213,6 +228,14 @@ function refreshOf(fixture: Fixture): Registered['callback'] | undefined {
 
 const COMMAND_IDS = Object.values(commands).map(entry => entry.id);
 
+const INBOX = {
+  setActiveFolders: 'remote-internal.setActiveFolders',
+  sshHostsChanged: 'remote-internal.sshHostsChanged',
+};
+
+const OPEN_CONFIG = 'opensshremotes.openConfigFile';
+const ADD_HOST = 'opensshremotes.addNewSshHost';
+
 describe('the activation of a window (card explorer-03c)', () => {
   it('F-5001.BR-10: where the other runs, the key is set and the warning shows, and nothing else happens', async () => {
     const scenario = await activated({referencePresent: true});
@@ -243,6 +266,8 @@ describe('the activation of a window (card explorer-03c)', () => {
     }
     deepStrictEqual(scenario.events, [
       ...COMMAND_IDS.map(commandId => `unregister ${commandId}`),
+      `unregister ${INBOX.setActiveFolders}`,
+      `unregister ${INBOX.sshHostsChanged}`,
       'tree view disposed',
     ]);
   });
@@ -270,7 +295,7 @@ describe('the activation of a window (card explorer-03c)', () => {
         scenario.events.filter(event => event.startsWith('ask ')),
         scenario.context.subscriptions.length,
       ],
-      [1, ['ask pull', 'ask history', 'ask hosts'], 2],
+      [1, ['ask pull', 'ask history', 'ask hosts'], 3],
     );
   });
 
@@ -354,6 +379,15 @@ describe('the activation of a window (card explorer-03c)', () => {
     return {provider, host, folders};
   }
 
+  /** The group node the tree gives, once the first build settled. */
+  async function groupOf(fixture: Fixture) {
+    await Promise.resolve();
+    const [group] = [
+      ...((await fixture.providers[0]?.getChildren(undefined)) ?? []),
+    ];
+    return {group};
+  }
+
   it('F-5104.BR-1, BR-2, BR-3: the host the history names has one folder row per entry, repeats kept, and the key that names no host shows nowhere', async () => {
     const scenario = await activated({});
     const {folders} = await treeOf(scenario);
@@ -421,6 +455,151 @@ describe('the activation of a window (card explorer-03c)', () => {
     deepStrictEqual(
       folders.map(node => (node as {folderRow: {path: string}}).folderRow.path),
       ['/w/proj', '/w/proj', '/w/team.code-workspace'],
+    );
+  });
+
+  it('F-5102.AC-1, AC-2: the group row hands over to the two commands of the companion, each with no argument', async () => {
+    const scenario = await activated({});
+    const {group} = await groupOf(scenario);
+    await commandOf(scenario, commands.configureSsh.id)?.(group);
+    await commandOf(scenario, commands.remoteExplorerAdd.id)?.(group);
+    deepStrictEqual(scenario.handed, [
+      [OPEN_CONFIG, []],
+      [ADD_HOST, []],
+    ]);
+  });
+
+  it('F-5102.BR-12: F-5902.AC-22: a hand-over the companion rejects resolves undefined and shows nothing', async () => {
+    const scenario = await activated({rejecting: [OPEN_CONFIG, ADD_HOST]});
+    const {group} = await groupOf(scenario);
+    scenario.events.length = 0;
+    const outcomes = [
+      await commandOf(scenario, commands.configureSsh.id)?.(group),
+      await commandOf(scenario, commands.remoteExplorerAdd.id)?.(group),
+    ];
+    deepStrictEqual([outcomes, scenario.events], [[undefined, undefined], []]);
+  });
+
+  it('F-5102.7.E7: without the companion neither hand-over runs', async () => {
+    const scenario = await activated({companionPresent: false});
+    const lookAlike = {kind: 'sshGroup'};
+    await commandOf(scenario, commands.configureSsh.id)?.(lookAlike);
+    await commandOf(scenario, commands.remoteExplorerAdd.id)?.(lookAlike);
+    deepStrictEqual(scenario.handed, []);
+  });
+
+  it('F-5102.AC-15: an argument that is not the SSH group row runs neither hand-over', async () => {
+    const scenario = await activated({});
+    const {host} = await treeOf(scenario);
+    for (const argument of [undefined, 'x', {}, host]) {
+      await commandOf(scenario, commands.configureSsh.id)?.(argument);
+      await commandOf(scenario, commands.remoteExplorerAdd.id)?.(argument);
+    }
+    deepStrictEqual(scenario.handed, []);
+  });
+
+  it('F-5902.AC-30: setActiveFolders is served and does nothing with any outcome', async () => {
+    const scenario = await activated({});
+    await Promise.resolve();
+    const asked = scenario.events.length;
+    const outcomes = [];
+    for (const outcome of ['connected', 'failed', 'none']) {
+      outcomes.push(
+        await commandOf(
+          scenario,
+          INBOX.setActiveFolders,
+        )?.({
+          interfaceVersion: VERSION,
+          outcome,
+        }),
+      );
+    }
+    deepStrictEqual(
+      [outcomes, scenario.events.length - asked],
+      [[undefined, undefined, undefined], 0],
+    );
+  });
+
+  it('F-5001.AC-11: setActiveFolders given no argument or a foreign one is silent', async () => {
+    const scenario = await activated({});
+    await Promise.resolve();
+    const asked = scenario.events.length;
+    const outcomes = [
+      await commandOf(scenario, INBOX.setActiveFolders)?.(),
+      await commandOf(scenario, INBOX.setActiveFolders)?.({outcome: 'none'}),
+      await commandOf(scenario, INBOX.setActiveFolders)?.('x'),
+    ];
+    deepStrictEqual(
+      [outcomes, scenario.events.length - asked],
+      [[undefined, undefined, undefined], 0],
+    );
+  });
+
+  it('F-5902.AC-9, AC-29: each sshHostsChanged reads the host list once, and the folder rows keep the last history', async () => {
+    const scenario = await activated({});
+    const {folders} = await treeOf(scenario);
+    const before = scenario.events.filter(event => event.startsWith('ask '));
+    for (let call = 0; call < 2; call++) {
+      await commandOf(
+        scenario,
+        INBOX.sshHostsChanged,
+      )?.({
+        interfaceVersion: VERSION,
+      });
+      await Promise.resolve();
+    }
+    const {folders: kept} = await treeOf(scenario);
+    deepStrictEqual(
+      [
+        scenario.events
+          .filter(event => event.startsWith('ask '))
+          .slice(before.length),
+        kept.length,
+        folders.length,
+      ],
+      [['ask hosts', 'ask hosts'], 3, 3],
+    );
+  });
+
+  it('F-5902.AC-9: sshHostsChanged given no argument or a foreign one reads nothing', async () => {
+    const scenario = await activated({});
+    await treeOf(scenario);
+    const asked = scenario.events.length;
+    await commandOf(scenario, INBOX.sshHostsChanged)?.();
+    await commandOf(scenario, INBOX.sshHostsChanged)?.({});
+    deepStrictEqual(scenario.events.length - asked, 0);
+  });
+
+  it('F-5101.7.E5: the inbox is served and reads nothing when the view is not shown', async () => {
+    const scenario = await activated({focusListed: false});
+    const outcomes = [
+      await commandOf(
+        scenario,
+        INBOX.setActiveFolders,
+      )?.({
+        interfaceVersion: VERSION,
+        outcome: 'none',
+      }),
+      await commandOf(
+        scenario,
+        INBOX.sshHostsChanged,
+      )?.({
+        interfaceVersion: VERSION,
+      }),
+    ];
+    deepStrictEqual(
+      [outcomes, scenario.events.filter(event => event.startsWith('ask '))],
+      [[undefined, undefined], []],
+    );
+  });
+
+  it('F-5901.AC-19: where the other runs, the inbox is not served', async () => {
+    const scenario = await activated({referencePresent: true});
+    deepStrictEqual(
+      [INBOX.setActiveFolders, INBOX.sshHostsChanged].map(commandId =>
+        commandOf(scenario, commandId),
+      ),
+      [undefined, undefined],
     );
   });
 });

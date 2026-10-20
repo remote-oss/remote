@@ -534,6 +534,24 @@ describe('the targets of the Remotes view (card explorer-04)', () => {
     deepStrictEqual([early, (await waiting).length], [false, 1]);
   });
 
+  it('F-5102.7.E7: groupOf gives the group node while the companion is present, and nothing for any other value or without the companion', async () => {
+    const scenario = setup();
+    const [group] = await scenario.targets.children(undefined);
+    const [host] = await hostsFor(scenario, historyOf(['a', '/w/x']), 'a');
+    const present = scenario.targets.groupOf(group) === group;
+    const others = [
+      scenario.targets.groupOf(host),
+      scenario.targets.groupOf({...group}),
+      scenario.targets.groupOf('x'),
+      scenario.targets.groupOf(undefined),
+    ];
+    scenario.detector.present = false;
+    deepStrictEqual(
+      [present, others, scenario.targets.groupOf(group)],
+      [true, [undefined, undefined, undefined, undefined], undefined],
+    );
+  });
+
   it('F-5002.19: hostOf gives the node itself when it is a node of the current list, and nothing for any other value', async () => {
     const scenario = setup();
     void scenario.targets.rebuild();

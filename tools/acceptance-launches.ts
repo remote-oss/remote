@@ -510,11 +510,12 @@ function forwardingLaunch(
  * SSH disabled, the third without the proposed API, and the fourth with a stand-in carrying the other Remote
  * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
- * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume` and
- * `containers-explorer` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
+ * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume`,
+ * `containers-explorer` and `containers-ports` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
  * Containers extension's id, the third without the proposed API, the fourth with workspace trust on and core's startup
  * prompt off, the fifth for the rows that clear the `vscode` volume's server folder and the sixth with the Remote
- * Explorer installed beside it;
+ * Explorer installed beside it, and the seventh for the rows that read core's Ports view, with the other Dev Containers
+ * installed and disabled as in `containers`;
  * and each case of the host-case suites (suite-ports, then suite-install) runs after every other launch,
  * with its host setup and its own script.
  */
@@ -724,6 +725,18 @@ export function launchesOf(root: string): Launch[] {
         'remote-oss.remote-containers',
         'remote-oss.remote-explorer',
       ],
+    },
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-ports',
+      suite: 'containers-ports',
+      registry: true,
+      // A recording xdg-open the rows write into the run's folder comes first on the editor's PATH, so that opening a
+      // port in the browser opens nothing on the machine.
+      environment: {PATH: '<run>/xdg-bin:<path>'},
+      // The other Dev Containers, installed and disabled, as in `containers`: the Ports view's rows are core's.
+      standIns: ['ms-vscode-remote.remote-containers'],
+      disabledExtensions: ['ms-vscode-remote.remote-containers'],
     },
     ...HOST_CASE_SUITES.flatMap(suite =>
       hostCases(root, suite.suite).map((hostCase): Launch => ({

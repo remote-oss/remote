@@ -314,6 +314,17 @@ describe('the CLI bridge (card containers-04)', () => {
     );
   });
 
+  it('R-26, F-0412 AC-11: the build’s own raw output, which has no channel, reaches the log with a secret in it as its reference', async () => {
+    const build = JSON.stringify({
+      type: 'raw',
+      level: 2,
+      text: '#4 [2/3] RUN echo s3cr3t-token\n',
+    });
+    deepStrictEqual(await eventsOfStderr([build]), [
+      '-: #4 [2/3] RUN echo ${localEnv:GITHUB_TOKEN}\n',
+    ]);
+  });
+
   it('R-26: a held tail is flushed, scrubbed, when the progress of its channel succeeds', async () => {
     const succeeded = JSON.stringify({
       type: 'progress',

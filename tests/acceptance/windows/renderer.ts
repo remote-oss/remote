@@ -352,9 +352,12 @@ export async function viewRows(
         }
       };
       const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while the
+      // first stays, so the first alone does not tell that the list moved.
       const first = () => {
-        const row = pane.querySelector('[role="treeitem"]');
-        return row ? row.querySelector('.label-name')?.textContent ?? '' : '';
+        const rows = [...pane.querySelectorAll('[role="treeitem"]')];
+        const label = row => row?.querySelector('.label-name')?.textContent ?? '';
+        return label(rows[0]) + '\u0000' + label(rows.at(-1));
       };
       // A wheel moves the list with a smooth scroll, so the next wheel waits for the move to settle.
       const move = async delta => {
@@ -375,8 +378,10 @@ export async function viewRows(
       let down = 0;
       if (await move(-400)) {
         down = -400;
+        collect();
       } else if (await move(400)) {
         down = 400;
+        collect();
       }
       let steps = 0;
       while (down !== 0 && steps < 200) {
@@ -548,6 +553,180 @@ export async function rowContextMenu(
     );
   }
   return menu;
+}
+
+/** One row of core's Ports view. */
+export interface PortsRow {
+  /** The Port column as shown: `<label> (<port or key>)`, or the port or key alone. */
+  port: string;
+  forwardedAddress: string;
+  runningProcess: string;
+  origin: string;
+  /** The row icon's codicon class, e.g. `codicon-ports-forwarded-with-process-icon`. */
+  icon: string;
+  /** The row's hover, non-breaking spaces read as spaces, as `statusItem` reads a hover. */
+  tooltip: string;
+}
+
+/** The page-side lookup of the rows of core's Ports view, without its "Add Port" row, as each row's cells. */
+const PORTS_ROWS_EXPRESSION = `(() => {
+  const pane = ${paneExpression('Ports')};
+  return [...(pane?.querySelectorAll('.monaco-table-tr') ?? [])]
+    .map(row => ({
+      row,
+      cells: [...row.querySelectorAll('.monaco-table-td')].map(cell => (cell.textContent ?? '').replaceAll('\\u00a0', ' ').trim()),
+    }))
+    .filter(entry => entry.cells[1] !== 'Add Port');
+})()`;
+
+/**
+ * The rows of core's Ports view in window `name`, in the order shown. A table that overflows its container keeps only
+ * the rows of its viewport in the DOM, so it is read from its top, a viewport at a time, and scrolled back after.
+ */
+export async function portsRows(name: string): Promise<PortsRow[]> {
+  const rows = await evaluate<PortsRow[] | string>(
+    name,
+    `(async () => {
+      const pane = ${paneExpression('Ports')};
+      if (pane === undefined || pane.querySelector('.monaco-table') === null) {
+        return 'no Ports table';
+      }
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const seen = new Map();
+      const order = [];
+      const readRow = async ({row, cells}) => {
+        const icon = [...(row.querySelector('.codicon')?.classList ?? [])].find(each => each.startsWith('codicon-') && each !== 'codicon-modifier-spin') ?? '';
+        const target = row.querySelectorAll('.monaco-table-td')[1].querySelector('.monaco-icon-label');
+        for (const type of ['mouseenter', 'mouseover', 'mousemove']) {
+          target.dispatchEvent(new MouseEvent(type, {bubbles: true, clientX: target.getBoundingClientRect().left + 5, clientY: target.getBoundingClientRect().top + 5}));
+        }
+        let hover = '';
+        for (let tries = 0; tries < 30 && hover === ''; tries += 1) {
+          await wait(100);
+          hover = (document.querySelector('.workbench-hover, .monaco-hover')?.textContent ?? '').replaceAll('\\u00a0', ' ').trim();
+        }
+        for (const type of ['mouseleave', 'mouseout']) {
+          target.dispatchEvent(new MouseEvent(type, {bubbles: true}));
+        }
+        for (let tries = 0; tries < 20 && document.querySelector('.workbench-hover') !== null; tries += 1) {
+          await wait(100);
+        }
+        return {port: cells[1] ?? '', forwardedAddress: cells[2] ?? '', runningProcess: cells[3] ?? '', origin: cells[4] ?? '', icon, tooltip: hover};
+      };
+      const collect = async () => {
+        for (const entry of ${PORTS_ROWS_EXPRESSION}) {
+          const key = entry.cells.join('|');
+          if (!seen.has(key)) {
+            seen.set(key, await readRow(entry));
+            order.push(key);
+          }
+        }
+      };
+      const list = pane.querySelector('.monaco-table .monaco-list');
+      const first = () => (${PORTS_ROWS_EXPRESSION}[0]?.cells.join('|') ?? '');
+      // A wheel moves the list with a smooth scroll, so the next one waits for the move to settle; a step stays under
+      // the rows of a viewport so that no row passes unseen. The wheel's sign that scrolls down varies with the build.
+      const move = async delta => {
+        const before = first();
+        pane.querySelector('.monaco-table-tr').dispatchEvent(new WheelEvent('wheel', {bubbles: true, cancelable: true, deltaY: delta, deltaMode: 0}));
+        await wait(600);
+        return first() !== before;
+      };
+      const step = Math.max(44, Math.floor(list.clientHeight / 2));
+      const topFirst = first();
+      await collect();
+      let down = 0;
+      if (await move(-step)) {
+        down = -step;
+      } else if (await move(step)) {
+        down = step;
+      }
+      let steps = 0;
+      while (down !== 0 && steps < 100) {
+        await collect();
+        if (!(await move(down))) {
+          break;
+        }
+        steps += 1;
+      }
+      await collect();
+      while (down !== 0 && steps < 200 && first() !== topFirst) {
+        await move(-down);
+        steps += 1;
+      }
+      return order.map(key => seen.get(key));
+    })()`,
+  );
+  if (typeof rows === 'string') {
+    throw new Error(`window ${name}: ${rows}`);
+  }
+  return rows;
+}
+
+/** The titles of row `port`'s inline actions on hover, and of its context menu's items, in order. */
+export async function portRowActions(
+  name: string,
+  port: string,
+): Promise<{inline: string[]; menu: string[]}> {
+  const found = await evaluate<{inline: string[]; menu: string[]} | null>(
+    name,
+    `(async () => {
+      const entries = ${PORTS_ROWS_EXPRESSION};
+      const entry = entries.find(each => each.cells[1] === ${JSON.stringify(port)});
+      if (entry === undefined) {
+        return null;
+      }
+      entry.row.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const inline = [...entry.row.querySelectorAll('.actions-container .action-label')].map(label => (label.getAttribute('aria-label') ?? label.getAttribute('title') ?? label.textContent ?? '').replace(/ \\([^)]*\\)$/, ''));
+      const box = entry.row.getBoundingClientRect();
+      entry.row.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, button: 2, clientX: box.left + 20, clientY: box.top + 5}));
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const menu = [...document.querySelectorAll('.context-view .monaco-menu .action-label')].map(label => label.textContent ?? '').filter(label => label !== '');
+      for (const type of ['keydown', 'keyup']) {
+        (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, {key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true}));
+      }
+      entry.row.dispatchEvent(new MouseEvent('mouseout', {bubbles: true}));
+      return {inline, menu};
+    })()`,
+  );
+  if (found === null) {
+    throw new Error(`window ${name}: no Ports row for ${JSON.stringify(port)}`);
+  }
+  return found;
+}
+
+/** Clicks the inline action `title` of row `port` of core's Ports view, as a user's click on its icon. */
+export async function portRowAction(
+  name: string,
+  port: string,
+  title: string,
+): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const entry = ${PORTS_ROWS_EXPRESSION}.find(each => each.cells[1] === ${JSON.stringify(port)});
+      if (entry === undefined) {
+        return 'no Ports row for ' + ${JSON.stringify(port)};
+      }
+      const action = [...entry.row.querySelectorAll('.actions-container .action-label')].find(
+        label => (label.getAttribute('aria-label') ?? '').replace(/ \\([^)]*\\)$/, '') === ${JSON.stringify(title)},
+      );
+      if (action === undefined) {
+        return 'no action ' + ${JSON.stringify(title)};
+      }
+      action.click();
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
+}
+
+/** Types `text` into the input box a command of window `name` shows, and accepts it. */
+export function answerInputBox(name: string, text: string): Promise<void> {
+  return keyInFolderDialog(name, 'Enter', text);
 }
 
 /** What a row of a view shows beyond its text: its icon and the accessible label that carries its tooltip. */

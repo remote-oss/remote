@@ -2,10 +2,10 @@
  {
   "id": "F-1101",
   "issue": 42,
-  "label": "spec:draft",
+  "label": "spec:reviewed",
   "title": "Declared port forwarding",
   "epic": "E11",
-  "acCount": 39,
+  "acCount": 40,
   "surfaces": {
    "commands": [],
    "settings": [
@@ -85,10 +85,10 @@
  {
   "id": "F-1102",
   "issue": 58,
-  "label": "spec:draft",
+  "label": "spec:reviewed",
   "title": "Port forwarding mechanism and automatic forwarding",
   "epic": "E11",
-  "acCount": 27,
+  "acCount": 31,
   "surfaces": {
    "commands": [],
    "settings": [

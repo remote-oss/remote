@@ -29,3 +29,9 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
   - F-2405 AC-17 describes the reference leaving a `vscode_server_<time>` folder with the archive in the client's
     temporary folder after a successful download. Ours copies the archive to the host and removes it, under Remote -
     SSH's no-cache policy (athena on #253; spec question on remote-oss/remote-ssh#50).
+- **A password you dismiss in the window that New Window on Active Host opens fails that window with "Permission denied
+  (password,keyboard-interactive)"**, not with "Connecting was canceled".
+  - F-2303 AC-15 describes the cancel message. F-2306 7.E2 and AC-20 govern every first connection, the new window's
+    included, so the dismissed question reaches ssh as an empty answer and the connect reports the authentication
+    failure; the window that ran the command is unchanged (athena on #253; spec question on
+    remote-oss/remote-ssh#36).

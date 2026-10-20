@@ -6,8 +6,8 @@ import {
   agentClear,
   appendScript,
   closeWindow,
-  connectionLog,
   connectedWithin,
+  connectionLog,
   hostAliases,
   hostAnswer,
   inWindow,
@@ -17,9 +17,9 @@ import {
   recordLines,
   reloadWindow,
   settingIn,
+  terminalsOf,
   variable,
   waitFor,
-  windowEvents,
   windowState,
 } from './harness.ts';
 import {
@@ -118,14 +118,6 @@ async function removedWithin(file: string): Promise<void> {
       {cause: caught},
     );
   }
-}
-
-/** The names of window `name`'s terminals, as it reports them now. */
-async function terminalsOf(name: string): Promise<string[] | undefined> {
-  await inWindow(name, 'acceptance.agent.state');
-  return windowEvents(name)
-    .filter(each => each.event === 'state')
-    .at(-1)?.terminals;
 }
 
 /** The bytes of the run's keybindings file, or nothing when it doesn't exist. */

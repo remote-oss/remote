@@ -71,6 +71,15 @@ export function containerSetupFailed(refusal?: DaemonRefusal): Failed {
   );
 }
 
+/** The configuration's image or Dockerfile entry has the wrong type; `configFile` is the configuration's path. */
+export function configurationInvalid(configFile: string): Failed {
+  return failure(
+    'configurationInvalid',
+    {},
+    {id: 'S081', values: [configFile]},
+  );
+}
+
 /** No place is known to download the server from for this editor. */
 export function noServerSource(applicationName: string): Failed {
   return failure(

@@ -98,6 +98,19 @@ async function containerLeftBy(folder: string): Promise<string> {
   return containerId;
 }
 
+/** The payload and the in-container path that a dev container window's folder URI carries in its authority and path. */
+function identityOf(folderUri: string): {payload: unknown; path: string} {
+  const match = /^vscode-remote:\/\/dev-container%2B([0-9a-f]+)(\/.*)$/.exec(
+    folderUri,
+  );
+  return {
+    payload: JSON.parse(
+      Buffer.from(match?.[1] ?? '', 'hex').toString('utf8'),
+    ) as unknown,
+    path: decodeURIComponent(match?.[2] ?? ''),
+  };
+}
+
 /** F-0410's dialog details for a generic failure and for a missing docker, as `failure-strings.ts` has them. */
 /** F-0410's detail for a mount Docker refuses (S018), as `failure-strings.ts` has it. */
 const S018 =
@@ -1234,7 +1247,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0405 AC-10 (r10): a failing postCreateCommand on a rebuild leaves a connected window with no notification or dialog, and skips postStartCommand', async () => {
+  it('F-0405 AC-10 (r10): a failing postCreateCommand on a rebuild leaves a connected window with no notification or dialog, skips postStartCommand, and the log names the command, its exit code and the skip', async () => {
     const folder = devContainerFolder('c54-rebuild-poststart', {
       name: 'Rebuild Poststart',
       postCreateCommand: 'exit 7',
@@ -1257,8 +1270,8 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         '-c',
         'test -e /tmp/c54-poststart && echo yes || echo no',
       ]);
-      const lines = containersLogSince(mark).filter(line =>
-        line.includes('lifecycle'),
+      const lines = containersLogSince(mark).filter(
+        line => line.includes('postCreateCommand') && line.includes('failed'),
       );
       const centre = await notificationCentre(name);
       const dialog = await dialogOf(name);
@@ -1273,6 +1286,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         {
           started: 'no',
           lines: [
+            'postCreateCommand from devcontainer.json failed with exit code 7. Skipping any further user-provided commands.',
             'the lifecycle commands failed: lifecycleFailed (postCreateCommand)',
           ],
           centre: [],
@@ -1383,6 +1397,117 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       const containers = await devContainersOf(folder);
       await closeWindow(name);
       deepStrictEqual(containers.length, 1);
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0201 AC-1 (m1): Reopen in Container on a trusted folder with a pre-pulled image shows no dialog, makes the vscode volume, starts the container and connects the same window', async () => {
+    const folder = devContainerFolder('c54-first-reopen', {
+      name: 'First Reopen',
+    });
+    try {
+      const name = await reopened(folder);
+      const {labels, status} = await inspectOf(await containerOf(folder));
+      const volumes = (
+        await execFileAsync('docker', ['volume', 'ls', '--quiet'])
+      ).stdout.split('\n');
+      const state = {
+        remoteName: (await windowState(name)).remoteName,
+        title: (await windowTitle(name)).startsWith(
+          '[c54-first-reopen [Dev Container: First Reopen]]',
+        ),
+        indicator: (await statusItem(name, 'status.host')).text,
+        dialog: await dialogOf(name),
+        volume: volumes.includes('vscode'),
+        status,
+        folder: labels['devcontainer.local_folder'],
+      };
+      await closeWindow(name);
+      deepStrictEqual(state, {
+        remoteName: 'dev-container',
+        title: true,
+        indicator: 'Dev Container: First Reopen',
+        dialog: undefined,
+        volume: true,
+        status: 'running',
+        folder,
+      });
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0501 AC-1 (m2): the connected window’s folder URI carries the host path, localDocker false and the configuration file in its authority, and the title and indicator name the folder and the configuration', async () => {
+    const folder = devContainerFolder('c54-identity', {name: 'Identity Name'});
+    try {
+      const name = await reopened(folder);
+      const [uri = ''] = (await windowState(name)).folders;
+      const {payload, path: inside} = identityOf(uri);
+      const configuration = path.join(
+        folder,
+        '.devcontainer',
+        'devcontainer.json',
+      );
+      const state = {
+        inside,
+        payload,
+        title: (await windowTitle(name)).startsWith(
+          '[c54-identity [Dev Container: Identity Name]]',
+        ),
+        indicator: (await statusItem(name, 'status.host')).text,
+      };
+      await closeWindow(name);
+      deepStrictEqual(state, {
+        inside: '/workspaces/c54-identity',
+        payload: {
+          hostPath: folder,
+          localDocker: false,
+          configFile: {
+            $mid: 1,
+            fsPath: configuration,
+            external: `file://${configuration}`,
+            path: configuration,
+            scheme: 'file',
+          },
+        },
+        title: true,
+        indicator: 'Dev Container: Identity Name',
+      });
+    } finally {
+      await removeContainers(folder);
+    }
+  });
+
+  it('F-0501 AC-27 (m3): a host folder whose name has #, ? and % is mounted under its full name, its authority carries the full host path, and the window opens that folder with its full name in the title and no dialog', async () => {
+    const folder = devContainerFolder('c54-h #x?%', {name: 'Hash Name'});
+    try {
+      const name = await reopened(folder);
+      const [uri = ''] = (await windowState(name)).folders;
+      const {payload, path: inside} = identityOf(uri);
+      const {stdout: mounts} = await execFileAsync('docker', [
+        'inspect',
+        '--format',
+        '{{range .Mounts}}{{if eq .Type "bind"}}{{.Destination}}{{end}}{{end}}',
+        await containerOf(folder),
+      ]);
+      const state = {
+        hostPath: (payload as {hostPath?: string}).hostPath,
+        inside,
+        mount: mounts.trim(),
+        title: (await windowTitle(name)).startsWith(
+          '[c54-h #x?% [Dev Container: Hash Name]]',
+        ),
+        dialog: await dialogOf(name),
+      };
+      await closeWindow(name);
+      deepStrictEqual(state, {
+        hostPath: folder,
+        inside: '/workspaces/c54-h #x?%',
+        mount: '/workspaces/c54-h #x?%',
+        title: true,
+        dialog: undefined,
+      });
     } finally {
       await removeContainers(folder);
     }

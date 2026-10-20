@@ -14,6 +14,7 @@ export const FAILURE_TEMPLATES = {
   S019: 'A port the container is setup to bind to is already in use. See the Dev Containers terminal for details.',
   S031: "Alpine Linux is not supported on the hardware architecture '{0}' of the container.",
   S034: 'An error occurred setting up the container.',
+  S081: 'Configuration "{0}" not valid.',
   S104: "Current user does not have permission to run 'docker'. Try adding the user to the 'docker' group.",
   S144: 'Docker returned an error. Make sure the Docker daemon is running and select an option how to proceed.',
   S158: 'Edit {0} Locally',

@@ -28,6 +28,11 @@ export interface SpawnSpecification {
   stdio: 'ignore';
   windowsHide: true;
   environment: Record<string, string>;
+  /**
+   * Set when the command is a launcher that starts the helper and exits: the start has succeeded only once the
+   * launcher exits with 0.
+   */
+  waitForExit?: true;
 }
 
 /** Starts a process by its specification; rejects when the process cannot start. */
@@ -35,13 +40,16 @@ export type Spawner = (specification: SpawnSpecification) => Promise<void>;
 
 /**
  * The specification of a helper: `runtime` is the editor's executable, which runs the script as Node.js when
- * ELECTRON_RUN_AS_NODE is set; the parent's environment is kept, so the helper runs as the same user.
+ * ELECTRON_RUN_AS_NODE is set; the parent's environment is kept, so the helper runs as the same user. With a
+ * `launcher`, the runtime runs the launcher with the script as its one argument and the same environment, and the
+ * launcher starts the helper outside the starter's process tree.
  */
 export function spawnSpecification(
   runtime: string,
   script: string,
   parameters: HelperParameters,
   parentEnvironment: Readonly<Record<string, string | undefined>>,
+  launcher?: string,
 ): SpawnSpecification {
   const environment: Record<string, string> = {};
   for (const [name, value] of Object.entries(parentEnvironment)) {
@@ -51,7 +59,7 @@ export function spawnSpecification(
   }
   environment.ELECTRON_RUN_AS_NODE = '1';
   environment[PARAMETERS_VARIABLE] = JSON.stringify(parameters);
-  return {
+  const specification: SpawnSpecification = {
     command: runtime,
     commandArguments: [script],
     detached: true,
@@ -59,4 +67,11 @@ export function spawnSpecification(
     windowsHide: true,
     environment,
   };
+  return launcher === undefined
+    ? specification
+    : {
+        ...specification,
+        commandArguments: [launcher, script],
+        waitForExit: true,
+      };
 }

@@ -3,6 +3,7 @@ import {mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {
   closeWindow,
+  devContainersOf,
   waitFor,
   inWindow,
   reopenInContainer,
@@ -14,9 +15,11 @@ import {
   answerNotification,
   notificationCentre,
   dialogOf,
+  editorTabs,
   pressEscape,
   type QuickPickRow,
   quickPickOf,
+  pressQuickPickRowButton,
   quickPickRows,
   statusItem,
   waitForQuickPick,
@@ -139,7 +142,7 @@ describe('F-0301 configuration discovery and picker (card containers-50)', funct
     deepStrictEqual(reads, ['Dev Container: Dotted', 'Dev Container']);
   });
 
-  it('F-0301 AC-3 (c3): several configurations show the picker with the root first, each with its path and an Open File button and the first row focused, again after a choice and a return to the local folder', async () => {
+  it('F-0301 AC-3, F-0401 AC-7 (c3): several configurations show the picker with the root first, each with its path and an Open File button and the first row focused, again after a choice and a return to the local folder', async () => {
     const folder = configFolder('c50-several', {
       '.devcontainer.json': {name: 'Root'},
       '.devcontainer/a/devcontainer.json': {name: 'A'},
@@ -251,6 +254,57 @@ describe('F-0301 configuration discovery and picker (card containers-50)', funct
     deepStrictEqual(
       shown.rows.map(entry => entry.label),
       ['Project Root', 'Main', 'a'],
+    );
+  });
+
+  it('F-0401 AC-7 (c7): Open File on a row of the picker opens that configuration in a preview editor and starts no container; Escape then leaves the window unchanged', async () => {
+    const folder = configFolder('c50-open-file', {
+      '.devcontainer.json': {name: 'Root'},
+      '.devcontainer/a/devcontainer.json': {name: 'A'},
+    });
+    const window = await open(folder);
+    const shown = await pickOf(window);
+    await pressQuickPickRowButton(window, 'A', 'Open File');
+    async function opened(): Promise<string[]> {
+      return (await editorTabs(window))
+        .filter(entry => entry.preview && entry.label !== 'Welcome')
+        .map(entry => entry.label);
+    }
+    await waitFor(
+      `window ${window} to show the configuration`,
+      async () => (await opened()).length > 0,
+      30_000,
+    );
+    const afterOpen = {
+      tabs: await opened(),
+      containers: (await devContainersOf(folder)).length,
+    };
+    await pressEscape(window);
+    await shown.running.catch(() => undefined);
+    await waitFor(
+      `the picker of window ${window} to close`,
+      async () => (await quickPickOf(window)) === undefined,
+      10_000,
+    );
+    deepStrictEqual(
+      [
+        afterOpen,
+        (await windowState(window)).remoteName,
+        await windowTitle(window),
+        (await notificationCentre(window)).filter(
+          text => !text.startsWith(NOTICE_START),
+        ),
+        await dialogOf(window),
+        (await devContainersOf(folder)).length,
+      ],
+      [
+        {tabs: ['devcontainer'], containers: 0},
+        null,
+        '[c50-open-file]',
+        [],
+        undefined,
+        0,
+      ],
     );
   });
 });

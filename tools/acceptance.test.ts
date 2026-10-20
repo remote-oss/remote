@@ -68,6 +68,7 @@ import {
   type RunnerLaunch,
 } from './acceptance-launches.ts';
 import type {RunRegistry} from './acceptance-registry.ts';
+import {STOP_PROGRAM} from './acceptance-helper-stop.ts';
 import {acceptanceRunId} from './acceptance-run.ts';
 import type {CommandRunner} from './command-runner.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -92,8 +93,8 @@ class FakeHarness implements HarnessDependencies {
   /** The files of the run's folder as the first launch found them, by name. */
   readonly firstLaunchFiles = new Map<string, string>();
   readonly answers = new Map<string, CommandResult>();
-  /** What a launch with stand-ins found in its extensions folder when it started: the stand-in's manifest, the list's last entry. */
-  standInFound: [unknown, unknown] | undefined = undefined;
+  /** What each launch with stand-ins found in its extensions folder when it started, by label: the stand-in's manifest, the list's last entry. */
+  readonly standInFound = new Map<string, [unknown, unknown]>();
   /** What a client-search launch found in the run's folder when it started. */
   readonly clientLaunches: Array<{
     label: string;
@@ -223,7 +224,7 @@ class FakeHarness implements HarnessDependencies {
         variables.HARNESS_RUN_FOLDER,
         `extensions-${launch.label}`,
       );
-      this.standInFound = [
+      this.standInFound.set(launch.label, [
         JSON.parse(
           readFileSync(
             path.join(
@@ -239,7 +240,7 @@ class FakeHarness implements HarnessDependencies {
             readFileSync(path.join(folder, 'extensions.json'), 'utf8'),
           ) as unknown[]
         ).at(-1),
-      ];
+      ]);
     }
     return Promise.resolve(
       this.labelResults.get(launch.label) ?? this.testResult,
@@ -379,6 +380,7 @@ const LAUNCH_ORDER = [
   'containers-trust',
   'containers-volume',
   'containers-explorer',
+  'containers-ports',
   'ports-probe',
   'install-probe',
   'platform-probe',
@@ -976,6 +978,15 @@ describe('acceptance', () => {
             ],
             client: 'vscodium',
           },
+          {
+            folder: path.join('/run', 'extensions-containers-ports'),
+            files: [
+              '/dist/remote-ssh.vsix',
+              '/run/window-agent.vsix',
+              path.join(workspace.root, 'dist', 'remote-containers-0.1.0.vsix'),
+            ],
+            client: 'vscodium',
+          },
           ...['genuine', 'ssh-no-proposals'].map(label => ({
             folder: path.join('/run', `extensions-${label}`),
             files: ['/dist/remote-ssh.vsix', '/run/window-agent.vsix'],
@@ -1350,6 +1361,50 @@ describe('acceptance', () => {
         'ran remote',
         'ran the one configuration',
       ]);
+    });
+
+    it("each launch runs the helper stop program on the run's user-data folder once it has run, when it holds records", async () => {
+      const userData = path.join(workspace.root, 'user-data');
+      const namespaceFolder = path.join(
+        userData,
+        'User',
+        'globalStorage',
+        'ext.a',
+        'registry',
+        'watch',
+      );
+      mkdirSync(namespaceFolder, {recursive: true});
+      writeFileSync(
+        path.join(
+          namespaceFolder,
+          `${createHash('sha256').update('one').digest('hex').slice(0, 32)}.json`,
+        ),
+        JSON.stringify({
+          namespace: 'watch',
+          recordKey: 'one',
+          nonce: 'n1',
+          endpoint: '/run/one.sock',
+        }),
+      );
+      const {calls, command} = recordingCommand();
+      const {sleep} = recordingSleeper();
+      await runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [TERMINAL, REMOTE],
+        command,
+        '',
+        sleep,
+        launch => {
+          calls.push(`ran ${launch?.label ?? ''}`);
+          return Promise.resolve({exitCode: 0, output: ''});
+        },
+      );
+      const stopLine = [process.execPath, STOP_PROGRAM, userData].join(' ');
+      deepStrictEqual(
+        calls.filter(call => call.startsWith('ran ') || call === stopLine),
+        ['ran terminal', stopLine, 'ran remote', stopLine],
+      );
     });
 
     it('D-85: a launch with settings finds them over the base settings', async () => {
@@ -1941,7 +1996,7 @@ describe('acceptance', () => {
         'extensions-containers-standdown',
         'ms-vscode-remote.remote-containers-0.0.0',
       );
-      deepStrictEqual(harness.standInFound, [
+      deepStrictEqual(harness.standInFound.get('containers-standdown'), [
         {
           publisher: 'ms-vscode-remote',
           name: 'remote-containers',

@@ -214,7 +214,8 @@ def workspace_of(case_id):
     return f"{WS_BASE}/{case_id}"
 
 
-PLACEHOLDER = re.compile(r"\$\{([A-Z_]+|bind\.[a-z][a-z0-9_]*)\}")
+# a run value is upper-case letters, digits and _ from a letter on: K1's ${PORT_F3} too (the dirty side, 2026-10-20)
+PLACEHOLDER = re.compile(r"\$\{([A-Z][A-Z0-9_]*|bind\.[a-z][a-z0-9_]*)\}")
 
 
 MULTI_VALUED = ("SSH_TARGET_FINGERPRINT", "SSH_TARGET_FINGERPRINT_NEW")   # every key type's forms; a case gets the first
