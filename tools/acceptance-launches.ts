@@ -466,9 +466,10 @@ function forwardingLaunch(
  * activate in the remote extension host, which the harness copies to the host first; each `client-…` launch runs
  * suite-client with a `remote.SSH.path` of its own and fake clients on the run's `PATH`; `windows` starts the editor plainly, with no
  * runner and no folder, and drives its windows through the window agent from a Node run; `no-proposals` does the
- * same without enabling the proposed API; `explorer`, `explorer-alone` and `explorer-no-proposals` do the same with
- * Remote Explorer installed and a debugging port, the second with Remote - SSH disabled and the third without the
- * proposed API; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
+ * same without enabling the proposed API; `explorer`, `explorer-alone`, `explorer-no-proposals` and
+ * `explorer-standdown` do the same with Remote Explorer installed and a debugging port, the second with Remote -
+ * SSH disabled, the third without the proposed API, and the fourth with a stand-in carrying the other Remote
+ * Explorer extension's id; `trust` and `trust-terminal` do the same with workspace trust on and no extension of their own, the
  * first with core's startup trust prompt on, the second with core's defaults and `remote.SSH.useLocalServer` off;
  * `containers`, `containers-standdown`, `containers-no-proposals`, `containers-trust`, `containers-volume` and
  * `containers-explorer` do the same with Dev Containers installed, the second with a stand-in carrying the other Dev
@@ -609,6 +610,12 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-no-proposals',
       suite: 'explorer-no-proposals',
       proposedApi: false,
+    },
+    {
+      ...EXPLORER_LAUNCH,
+      label: 'explorer-standdown',
+      suite: 'explorer-standdown',
+      standIns: ['ms-vscode.remote-explorer'],
     },
     {
       ...TRUST_LAUNCH,

@@ -30,8 +30,9 @@ describe('the renderer helpers, on core’s file explorer (card tooling-30)', fu
     mkdirSync(folder, {recursive: true});
     writeFileSync(path.join(folder, 'a.txt'), 'a');
     writeFileSync(path.join(folder, 'b.txt'), 'b');
+    // The gate rows run before this one and reload `local` onto `empty-2`.
     await inWindow(
-      'local',
+      'empty-2',
       'acceptance.agent.openWindow',
       pathToFileURL(folder).href,
     );
