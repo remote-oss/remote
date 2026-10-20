@@ -172,6 +172,14 @@ const GENUINE_LAUNCH: PlainLaunch = {
   environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
 };
 
+/** The genuine client with the proposed API not enabled: what a user of VS Code sees before the family's setup. */
+const SSH_NO_PROPOSALS_LAUNCH: PlainLaunch = {
+  ...GENUINE_LAUNCH,
+  label: 'ssh-no-proposals',
+  suite: 'ssh-no-proposals',
+  proposedApi: false,
+};
+
 /** The form of a launch's label and of a failing connect's alias: lower-case letters, digits and hyphens, starting with a letter. */
 export const LABEL_FORM = /^[a-z][a-z0-9-]*$/;
 
@@ -729,6 +737,7 @@ export function launchesOf(root: string): Launch[] {
       })),
     ),
     GENUINE_LAUNCH,
+    SSH_NO_PROPOSALS_LAUNCH,
   ];
   return launches;
 }

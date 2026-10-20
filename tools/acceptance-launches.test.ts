@@ -37,7 +37,7 @@ function hostLaunchLabels(): string[] {
 describe('the launches of the VSCodium run', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
 
-  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the genuine launch last', () => {
+  it('D-85: the labels are local, remote, reconnect, agent, agent-off, x11, the failing connects in the order of the cases file, then terminal, socket, slow, the client searches, terminal-pick, windows, default-ports, no-proposals, the three explorer launches, the two trust launches, the five containers launches, the ports cases in the order of theirs and the two genuine launches last', () => {
     deepStrictEqual(
       launches.map(launch => launch.label),
       [
@@ -73,6 +73,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-explorer',
         ...hostLaunchLabels(),
         'genuine',
+        'ssh-no-proposals',
       ],
     );
   });
@@ -192,6 +193,7 @@ describe('the launches of the VSCodium run', () => {
           undefined,
         ],
         ['genuine', undefined, true, undefined],
+        ['ssh-no-proposals', undefined, true, undefined],
       ],
     );
   });
@@ -385,7 +387,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-51: no other launch is named only or starts VS Code', () => {
+  it('tooling-51, connect-84: only the two genuine launches are named only or start VS Code', () => {
     deepStrictEqual(
       launches
         .filter(
@@ -394,7 +396,7 @@ describe('the launches of the VSCodium run', () => {
             (launch.kind === 'plain' && launch.client !== undefined),
         )
         .map(launch => launch.label),
-      ['genuine'],
+      ['genuine', 'ssh-no-proposals'],
     );
   });
 
@@ -441,6 +443,7 @@ describe('the launches of the VSCodium run', () => {
         'containers-explorer',
         ...hostLaunchLabels(),
         'genuine',
+        'ssh-no-proposals',
       ],
     );
   });
@@ -960,12 +963,17 @@ describe('the launch with no runner', () => {
     );
   });
 
-  it('F-3903 §5 rule 4: only the three no-proposals launches leave the proposed API out', () => {
+  it('F-3903 §5 rule 4: only the four no-proposals launches leave the proposed API out', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.proposedApi === false)
         .map(launch => launch.label),
-      ['no-proposals', 'explorer-no-proposals', 'containers-no-proposals'],
+      [
+        'no-proposals',
+        'explorer-no-proposals',
+        'containers-no-proposals',
+        'ssh-no-proposals',
+      ],
     );
   });
 
